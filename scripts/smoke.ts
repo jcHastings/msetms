@@ -1888,18 +1888,21 @@ Continuous reefer. Two load locks.
   const howellId = queries.createDriver({
     name: "Christopher Howell",
     phone: "555-0032",
+    license: "TN-CDL-HOWELL",
     truck_id: truck32,
     status: "available",
   });
   const ellerId = queries.createDriver({
     name: "Steve Eller",
     phone: "555-0026",
+    license: "MS-CDL-ELLER",
     truck_id: truck26,
     status: "available",
   });
   const whaleyId = queries.createDriver({
     name: "Kelvin Whaley",
     phone: "555-0028",
+    license: "TN-CDL-WHALEY",
     truck_id: truck28,
     status: "available",
   });
@@ -1923,7 +1926,7 @@ Continuous reefer. Two load locks.
   assert.equal(queries.getDriver(howellId)?.name, "Christopher Howell");
   assert.equal(queries.getDriver(whaleyId)?.name, "Kelvin Whaley");
 
-  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const { StandardFonts } = await import("pdf-lib");
   const efsPdf = await PDFDocument.create();
   const efsPage = efsPdf.addPage([612, 792]);
   const efsFont = await efsPdf.embedFont(StandardFonts.Courier);
