@@ -5,7 +5,7 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. The dispatcher desk requires a username + password. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -15,13 +15,15 @@ On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **
 
 `node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` junctions or copies `data` and `.env` into `.next/standalone` (Windows `symlink` hits `EPERM` without those).
 
+Copy `.env.example` to `.env.local` and set `DISPATCH_PASSWORD` (at least 8 characters). That creates the `admin` dispatcher account on first start. Do **not** put that password in git.
+
 ```bash
 npm install
 npm run build
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
+Open [http://localhost:3000](http://localhost:3000) — you will be sent to `/login`. After sign-in, the board and desk work. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login) (PIN, not the dispatcher password).
 
 Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
 
@@ -31,7 +33,7 @@ Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo h
 docker compose up --build
 ```
 
-Then open `http://<this-box>:3000` for dispatch and `http://<this-box>:3000/driver/login` for the driver app.
+Then open `http://<this-box>:3000` for dispatch (sign in) and `http://<this-box>:3000/driver/login` for the driver app. Pass `DISPATCH_PASSWORD` into Compose from your shell; do not write a real password into `docker-compose.yml`.
 
 `npm start` and Docker both run the Next **standalone** server on port **3000**. SQLite and uploads persist in `./data` (Compose mounts that folder). The server binds `0.0.0.0` unless you set an explicit IP with `HOST` / `LISTEN_HOST` / `BIND_HOST`. It does **not** use the OS `HOSTNAME` (that is the machine name — on some boxes it is `cursor`, and nothing useful listens).
 
@@ -60,6 +62,19 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
+
+## Dispatcher login
+
+The board, loads, fleet, customers, settings, and company APIs are closed until a dispatcher signs in at `/login`.
+
+- Username + password (not a PIN, not a query-string secret)
+- Password stored as an **scrypt** hash
+- Session is an **httpOnly**, `SameSite=Lax` cookie (`tms_dispatcher`). It is not shown in the address bar.
+- First run with no users: if `DISPATCH_PASSWORD` is set, the app creates `admin` (or `DISPATCH_USERNAME`) from that value. Existing users are never overwritten.
+- **Log out** is on the left chrome.
+- Drivers keep PIN login at `/driver/login` and cannot open dispatcher pages.
+
+**HTTPS:** `npm start` on your LAN is usually plain HTTP, so the cookie is not marked `Secure` (otherwise the browser would drop it). If this app is on the public internet, put **HTTPS** in front of it (Caddy, nginx, IIS, Cloudflare) and set `TMS_COOKIE_SECURE=1` in gitignored `.env.local` so the session cookie is only sent over TLS.
 
 ## Dispatcher
 

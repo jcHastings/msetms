@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireDispatcher } from "./dispatch-auth";
 import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import {
   assignLoad,
@@ -179,6 +180,7 @@ export async function createCustomerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -198,6 +200,7 @@ export async function updateCustomerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -215,6 +218,7 @@ export async function createTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     const id = createTruck({
@@ -246,6 +250,7 @@ export async function updateTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     updateTruck(id, {
@@ -274,6 +279,7 @@ export async function createDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createDriver({
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -310,6 +316,7 @@ export async function updateDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -343,6 +350,7 @@ export async function createLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const input = parseLoadInput(formData);
     enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
     const id = createLoad(input);
@@ -365,6 +373,7 @@ export async function updateLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const input = parseLoadInput(formData);
     enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
     updateLoad(id, input);
@@ -382,6 +391,7 @@ export async function updateLoadAction(
 
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     const truckId = parseOptionalInt(formData.get("truck_id"));
     const driverId = parseOptionalInt(formData.get("driver_id"));
@@ -405,6 +415,7 @@ export async function refreshIftaAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const { refreshIftaForLoad } = await import("./integrations/ifta");
@@ -421,6 +432,7 @@ export async function sendToQuickbooksAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
@@ -435,6 +447,7 @@ export async function sendToQuickbooksAction(
 
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     const status = String(formData.get("status") ?? "");
     if (!loadId) throw new Error("Load is missing.");
@@ -460,6 +473,7 @@ export async function parseRateConAction(
   formData: FormData,
 ): Promise<RateConParseState> {
   try {
+    await requireDispatcher();
     const file = formData.get("rate_con");
     if (!(file instanceof File) || file.size === 0) {
       throw new Error("Choose a rate confirmation PDF or image.");
@@ -492,6 +506,7 @@ export async function attachFileFormAction(formData: FormData): Promise<void> {
 
 export async function attachFileAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const file = formData.get("file");
@@ -524,6 +539,7 @@ export async function importOrbcommReportAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const pasted = String(formData.get("report_text") ?? "").trim();
     const file = formData.get("file");
     let text = pasted;
@@ -554,6 +570,7 @@ export async function createTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createTrailer({
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -579,6 +596,7 @@ export async function updateTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateTrailer(id, {
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -603,6 +621,7 @@ export async function attachFleetDocFormAction(formData: FormData): Promise<void
 
 export async function attachFleetDocAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const ownerId = parseOptionalInt(formData.get("owner_id"));
     const ownerType = String(formData.get("owner_type") ?? "");
     if (!ownerId || !["driver", "truck", "trailer"].includes(ownerType)) {
@@ -636,6 +655,7 @@ export async function updateCompanyProfileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const { updateCompanyProfile } = await import("./company");
     updateCompanyProfile({
       company_name: requiredString(formData.get("company_name"), "Company name"),

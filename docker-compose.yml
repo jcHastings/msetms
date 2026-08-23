@@ -9,4 +9,6 @@ services:
       PORT: "3000"
       HOST: "0.0.0.0"
       TMS_DB_PATH: /app/data/tms.db
+      DISPATCH_PASSWORD: ${DISPATCH_PASSWORD:-}
+      TMS_COOKIE_SECURE: ${TMS_COOKIE_SECURE:-}
     restart: unless-stopped

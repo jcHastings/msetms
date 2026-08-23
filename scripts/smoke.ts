@@ -651,6 +651,47 @@ SPECIAL INSTRUCTIONS
   });
   assert.equal(browserPdf.subarray(0, 4).toString(), "%PDF");
 
+  const password = await import("../lib/password");
+  const hashed = password.hashPassword("desk-test-secret");
+  assert.match(hashed, /^scrypt\$/);
+  assert.equal(password.verifyPassword("desk-test-secret", hashed), true);
+  assert.equal(password.verifyPassword("wrong-secret", hashed), false);
+
+  const dispatchPaths = await import("../lib/dispatch-paths");
+  assert.equal(dispatchPaths.isPublicPath("/login"), true);
+  assert.equal(dispatchPaths.isPublicPath("/board"), false);
+  assert.equal(dispatchPaths.isDriverAppPath("/driver/login"), true);
+  assert.equal(dispatchPaths.isDriverAppPath("/board"), false);
+  assert.equal(dispatchPaths.isDriverSharedApi("/api/loads/13/confirmation"), true);
+  assert.equal(dispatchPaths.isDriverSharedApi("/api/fleet-docs/1"), false);
+  assert.equal(dispatchPaths.safeNextPath("/board"), "/board");
+  assert.equal(dispatchPaths.safeNextPath("//evil.example"), "/");
+  assert.equal(dispatchPaths.safeNextPath("/api/login"), "/");
+
+  const dispatchAuth = await import("../lib/dispatch-auth");
+  const { ensureBootstrapDispatcher } = await import("../lib/db");
+  assert.equal(dispatchAuth.dispatcherCount(), 0);
+  process.env.DISPATCH_PASSWORD = "short";
+  ensureBootstrapDispatcher(getDb());
+  assert.equal(dispatchAuth.dispatcherCount(), 0, "short DISPATCH_PASSWORD must not create admin");
+  process.env.DISPATCH_PASSWORD = "SmokeDesk.Pass9";
+  ensureBootstrapDispatcher(getDb());
+  assert.equal(dispatchAuth.dispatcherCount(), 1);
+  const admin = dispatchAuth.authenticateDispatcher("admin", "SmokeDesk.Pass9");
+  assert.ok(admin);
+  assert.equal(admin.username, "admin");
+  assert.equal(dispatchAuth.authenticateDispatcher("admin", "wrong-password"), null);
+  const sessionToken = dispatchAuth.createDispatcherSession(admin.id);
+  assert.ok(dispatchAuth.dispatcherFromToken(sessionToken));
+  assert.equal(dispatchAuth.dispatcherFromToken("not-a-session"), null);
+  dispatchAuth.revokeDispatcherSession(sessionToken);
+  assert.equal(dispatchAuth.dispatcherFromToken(sessionToken), null);
+  process.env.DISPATCH_PASSWORD = "OtherDesk.Pass9";
+  ensureBootstrapDispatcher(getDb());
+  assert.ok(dispatchAuth.authenticateDispatcher("admin", "SmokeDesk.Pass9"));
+  assert.equal(dispatchAuth.authenticateDispatcher("admin", "OtherDesk.Pass9"), null);
+  delete process.env.DISPATCH_PASSWORD;
+
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");
   assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));

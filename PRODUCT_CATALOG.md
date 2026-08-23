@@ -358,7 +358,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 281–300 · Admin, users, reporting
 
-281. [v1] Single-tenant local; no dispatcher login in v1.
+281. [v1] Single-tenant local; dispatcher username + password (scrypt, httpOnly session).
 282. Dispatcher vs manager roles.
 283. Audit log: who changed a load or reassigned a driver.
 284. Company profile (name, dispatcher, phone, email, fax) — [v1] for confirmations.

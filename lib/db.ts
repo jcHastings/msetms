@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Database } from "./sqlite";
 import { seedDatabase } from "./seed";
+import { hashPassword } from "./password";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
 
@@ -34,6 +35,7 @@ export function getDb(): Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   migrate(db);
+  ensureBootstrapDispatcher(db);
 
   const customerCount = db.prepare("SELECT COUNT(*) as count FROM customers").get() as {
     count: number;
@@ -247,6 +249,23 @@ export function migrate(db: Database): void {
       name TEXT NOT NULL DEFAULT '',
       miles REAL NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS dispatchers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dispatcher_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dispatcher_sessions_hash ON dispatcher_sessions(token_hash);
   `);
 }
 
@@ -358,6 +377,24 @@ function backfillDemoPins(db: Database): void {
   for (const [name, pin] of Object.entries(pins)) {
     update.run(pin, name);
   }
+}
+
+/** First run only: create admin from DISPATCH_PASSWORD. Never overwrites an existing user. */
+export function ensureBootstrapDispatcher(db: Database): void {
+  const row = db.prepare("SELECT COUNT(*) AS count FROM dispatchers").get() as { count: number };
+  if (Number(row.count) > 0) return;
+  const password = process.env.DISPATCH_PASSWORD?.trim() ?? "";
+  if (!password) return;
+  if (password.length < 8) {
+    console.error("DISPATCH_PASSWORD must be at least 8 characters. Dispatcher admin was not created.");
+    return;
+  }
+  const username = (process.env.DISPATCH_USERNAME?.trim() || "admin").toLowerCase();
+  db.prepare("INSERT INTO dispatchers (username, password_hash, created_at) VALUES (?, ?, ?)").run(
+    username,
+    hashPassword(password),
+    new Date().toISOString(),
+  );
 }
 
 function ensureColumn(

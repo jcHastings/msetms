@@ -1,3 +1,5 @@
+import { getSignedInDispatcher } from "@/lib/dispatch-auth";
+import { getSignedInDriver } from "@/lib/driver-session";
 import { buildConfirmationForLoad, renderConfirmationPdf } from "@/lib/load-confirmation";
 import { getLoad } from "@/lib/queries";
 
@@ -12,8 +14,11 @@ export async function GET(
   const load = getLoad(loadId);
   if (!load) return new Response("Not found", { status: 404 });
 
-  // Single-tenant local desk: leftover driver-app cookies must not 404 a
-  // dispatcher download for a load they just created (often still unassigned).
+  const dispatcher = await getSignedInDispatcher();
+  const driver = await getSignedInDriver();
+  const allowed = Boolean(dispatcher) || Boolean(driver && load.driver_id === driver.id);
+  if (!allowed) return new Response("Sign in to dispatch.", { status: 401 });
+
   const model = buildConfirmationForLoad(load.id);
   const pdf = await renderConfirmationPdf(model);
   const filename = `${load.load_number}-load-confirmation.pdf`;
