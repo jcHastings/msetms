@@ -57,6 +57,10 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
 }
 
+function parseActive(formData: FormData): number {
+  return String(formData.get("active") ?? "") === "1" ? 1 : 0;
+}
+
 function parseContacts(formData: FormData) {
   const raw = String(formData.get("contacts") ?? "[]");
   try {
@@ -251,9 +255,13 @@ export async function createTruckAction(
       plate: String(formData.get("plate") ?? "").trim(),
       year: String(formData.get("year") ?? "").trim(),
       make: String(formData.get("make") ?? "").trim(),
+      model: String(formData.get("model") ?? "").trim(),
+      notes: String(formData.get("notes") ?? "").trim(),
+      active: parseActive(formData),
+      assigned_driver_id: parseOptionalInt(formData.get("assigned_driver_id")),
     });
     refresh();
-    redirect("/fleet");
+    redirect("/fleet/trucks");
     return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
@@ -286,6 +294,10 @@ export async function updateTruckAction(
       plate: String(formData.get("plate") ?? "").trim(),
       year: String(formData.get("year") ?? "").trim(),
       make: String(formData.get("make") ?? "").trim(),
+      model: String(formData.get("model") ?? "").trim(),
+      notes: String(formData.get("notes") ?? "").trim(),
+      active: parseActive(formData),
+      assigned_driver_id: parseOptionalInt(formData.get("assigned_driver_id")),
     });
     refresh();
     return { ok: true, id };
@@ -302,6 +314,9 @@ export async function createDriverAction(
     const id = createDriver({
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
+      email: String(formData.get("email") ?? "").trim(),
+      notes: String(formData.get("notes") ?? "").trim(),
+      active: parseActive(formData),
       license: [
         String(formData.get("license_state") ?? "").trim().toUpperCase(),
         String(formData.get("license_number") ?? "").trim(),
@@ -321,7 +336,7 @@ export async function createDriverAction(
       status: parseDriverStatus(formData.get("status")),
     });
     refresh();
-    redirect("/fleet");
+    redirect("/fleet/drivers");
     return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
@@ -338,6 +353,9 @@ export async function updateDriverAction(
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
+      email: String(formData.get("email") ?? "").trim(),
+      notes: String(formData.get("notes") ?? "").trim(),
+      active: parseActive(formData),
       license: [
         String(formData.get("license_state") ?? "").trim().toUpperCase(),
         String(formData.get("license_number") ?? "").trim(),
@@ -605,9 +623,15 @@ export async function createTrailerAction(
       dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
       dot_expires: parseDateField(formData.get("dot_expires")),
       status: parseTruckStatus(formData.get("status")),
+      vin: String(formData.get("vin") ?? "").trim(),
+      plate: String(formData.get("plate") ?? "").trim(),
+      truck_id: parseOptionalInt(formData.get("truck_id")),
+      notes: String(formData.get("notes") ?? "").trim(),
+      reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
+      active: parseActive(formData),
     });
     refresh();
-    redirect("/fleet");
+    redirect("/fleet/trailers");
     return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
@@ -630,6 +654,12 @@ export async function updateTrailerAction(
       dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
       dot_expires: parseDateField(formData.get("dot_expires")),
       status: parseTruckStatus(formData.get("status")),
+      vin: String(formData.get("vin") ?? "").trim(),
+      plate: String(formData.get("plate") ?? "").trim(),
+      truck_id: parseOptionalInt(formData.get("truck_id")),
+      notes: String(formData.get("notes") ?? "").trim(),
+      reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
+      active: parseActive(formData),
     });
     refresh();
     return { ok: true, id };

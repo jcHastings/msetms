@@ -30,9 +30,11 @@ import {
   type Location,
   type Trailer,
   type TrailerType,
+  type TrailerWithTruck,
   type Truck,
   type TruckStatus,
   type TruckType,
+  type TruckWithDriver,
 } from "./types";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
@@ -252,24 +254,48 @@ function replaceContacts(
   }
 }
 
-export function listTrucks(): Truck[] {
+const TRUCK_SELECT = `SELECT trucks.*,
+      (SELECT id FROM drivers WHERE drivers.truck_id = trucks.id ORDER BY name LIMIT 1) AS assigned_driver_id,
+      (SELECT name FROM drivers WHERE drivers.truck_id = trucks.id ORDER BY name LIMIT 1) AS driver_name
+     FROM trucks`;
+
+const TRAILER_SELECT = `SELECT trailers.*, trucks.unit_number AS truck_unit
+     FROM trailers
+     LEFT JOIN trucks ON trucks.id = trailers.truck_id`;
+
+export function listTrucks(): TruckWithDriver[] {
   return getDb()
-    .prepare("SELECT * FROM trucks ORDER BY CAST(unit_number AS INTEGER), unit_number")
-    .all() as Truck[];
+    .prepare(`${TRUCK_SELECT} ORDER BY CAST(trucks.unit_number AS INTEGER), trucks.unit_number`)
+    .all() as TruckWithDriver[];
 }
 
-export function getTruck(id: number): Truck | null {
-  return (getDb().prepare("SELECT * FROM trucks WHERE id = ?").get(id) as Truck | undefined) ?? null;
+export function getTruck(id: number): TruckWithDriver | null {
+  return (
+    (getDb().prepare(`${TRUCK_SELECT} WHERE trucks.id = ?`).get(id) as TruckWithDriver | undefined) ?? null
+  );
 }
 
-export function listTrailers(): Trailer[] {
+export function listTrailers(): TrailerWithTruck[] {
   return getDb()
-    .prepare("SELECT * FROM trailers ORDER BY unit_number COLLATE NOCASE")
-    .all() as Trailer[];
+    .prepare(`${TRAILER_SELECT} ORDER BY trailers.unit_number COLLATE NOCASE`)
+    .all() as TrailerWithTruck[];
 }
 
-export function getTrailer(id: number): Trailer | null {
-  return (getDb().prepare("SELECT * FROM trailers WHERE id = ?").get(id) as Trailer | undefined) ?? null;
+export function getTrailer(id: number): TrailerWithTruck | null {
+  return (
+    (getDb().prepare(`${TRAILER_SELECT} WHERE trailers.id = ?`).get(id) as TrailerWithTruck | undefined) ??
+    null
+  );
+}
+
+export function assignDriverToTruck(truckId: number, driverId: number | null): void {
+  if (!getTruck(truckId)) throw new Error("Truck not found.");
+  const timestamp = now();
+  getDb().prepare("UPDATE drivers SET truck_id = NULL, updated_at = ? WHERE truck_id = ?").run(timestamp, truckId);
+  if (driverId) {
+    if (!getDriver(driverId)) throw new Error("Assigned driver not found.");
+    getDb().prepare("UPDATE drivers SET truck_id = ?, updated_at = ? WHERE id = ?").run(truckId, timestamp, driverId);
+  }
 }
 
 export function createTrailer(input: {
@@ -281,15 +307,23 @@ export function createTrailer(input: {
   dot_inspected_on?: string;
   dot_expires?: string;
   status?: TruckStatus;
+  vin?: string;
+  plate?: string;
+  truck_id?: number | null;
+  notes?: string;
+  reefer_setpoint_f?: number | null;
+  active?: number;
 }): number {
   const timestamp = now();
+  if (input.truck_id && !getTruck(input.truck_id)) throw new Error("Assigned truck not found.");
   try {
     const result = getDb()
       .prepare(
         `INSERT INTO trailers (
           unit_number, type, orbcomm_asset_id, registration_issued, registration_expires,
-          dot_inspected_on, dot_expires, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          dot_inspected_on, dot_expires, status, vin, plate, truck_id, notes, reefer_setpoint_f, active,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -300,6 +334,12 @@ export function createTrailer(input: {
         input.dot_inspected_on ?? "",
         input.dot_expires ?? "",
         input.status ?? "available",
+        input.vin ?? "",
+        input.plate ?? "",
+        input.truck_id ?? null,
+        input.notes ?? "",
+        input.reefer_setpoint_f ?? null,
+        input.active ?? 1,
         timestamp,
         timestamp,
       );
@@ -323,15 +363,23 @@ export function updateTrailer(
     dot_inspected_on?: string;
     dot_expires?: string;
     status?: TruckStatus;
+    vin?: string;
+    plate?: string;
+    truck_id?: number | null;
+    notes?: string;
+    reefer_setpoint_f?: number | null;
+    active?: number;
   },
 ): void {
   if (!getTrailer(id)) throw new Error("Trailer not found.");
+  if (input.truck_id && !getTruck(input.truck_id)) throw new Error("Assigned truck not found.");
   try {
     getDb()
       .prepare(
         `UPDATE trailers
          SET unit_number = ?, type = ?, orbcomm_asset_id = ?, registration_issued = ?,
-             registration_expires = ?, dot_inspected_on = ?, dot_expires = ?, status = ?, updated_at = ?
+             registration_expires = ?, dot_inspected_on = ?, dot_expires = ?, status = ?,
+             vin = ?, plate = ?, truck_id = ?, notes = ?, reefer_setpoint_f = ?, active = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -343,6 +391,12 @@ export function updateTrailer(
         input.dot_inspected_on ?? "",
         input.dot_expires ?? "",
         input.status ?? "available",
+        input.vin ?? "",
+        input.plate ?? "",
+        input.truck_id ?? null,
+        input.notes ?? "",
+        input.reefer_setpoint_f ?? null,
+        input.active ?? 1,
         now(),
         id,
       );
@@ -371,14 +425,18 @@ export function createTruck(input: {
   plate?: string;
   year?: string;
   make?: string;
+  model?: string;
+  notes?: string;
+  active?: number;
+  assigned_driver_id?: number | null;
 }): number {
   const timestamp = now();
   try {
     const result = getDb()
       .prepare(
         `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number,
-            registration_issued, registration_expires, dot_inspected_on, dot_expires, vin, plate, year, make, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            registration_issued, registration_expires, dot_inspected_on, dot_expires, vin, plate, year, make, model, notes, active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -397,10 +455,15 @@ export function createTruck(input: {
         input.plate ?? "",
         input.year ?? "",
         input.make ?? "",
+        input.model ?? "",
+        input.notes ?? "",
+        input.active ?? 1,
         timestamp,
         timestamp,
       );
-    return Number(result.lastInsertRowid);
+    const id = Number(result.lastInsertRowid);
+    if (input.assigned_driver_id != null) assignDriverToTruck(id, input.assigned_driver_id);
+    return id;
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
       throw new Error("A truck with that unit number already exists.");
@@ -428,6 +491,10 @@ export function updateTruck(
     plate?: string;
     year?: string;
     make?: string;
+    model?: string;
+    notes?: string;
+    active?: number;
+    assigned_driver_id?: number | null;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
@@ -438,7 +505,7 @@ export function updateTruck(
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
              samsara_vehicle_id = ?, samsara_trailer_id = ?, orbcomm_asset_id = ?, trailer_number = ?,
              registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ?,
-             vin = ?, plate = ?, year = ?, make = ?, updated_at = ?
+             vin = ?, plate = ?, year = ?, make = ?, model = ?, notes = ?, active = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -458,9 +525,13 @@ export function updateTruck(
         input.plate ?? "",
         input.year ?? "",
         input.make ?? "",
+        input.model ?? "",
+        input.notes ?? "",
+        input.active ?? 1,
         now(),
         id,
       );
+    if (input.assigned_driver_id !== undefined) assignDriverToTruck(id, input.assigned_driver_id);
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
       throw new Error("A truck with that unit number already exists.");
@@ -496,6 +567,9 @@ export function getDriver(id: number): DriverWithTruck | null {
 export function createDriver(input: {
   name: string;
   phone: string;
+  email?: string;
+  notes?: string;
+  active?: number;
   license: string;
   pin?: string;
   samsara_driver_id?: string;
@@ -516,14 +590,17 @@ export function createDriver(input: {
   const result = getDb()
     .prepare(
       `INSERT INTO drivers (
-        name, phone, license, license_number, license_state, license_expires,
+        name, phone, email, notes, active, license, license_number, license_state, license_expires,
         medical_issued, medical_expires, driver_type, pay_percent,
         pin, samsara_driver_id, truck_id, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
       input.phone,
+      input.email ?? "",
+      input.notes ?? "",
+      input.active ?? 1,
       input.license,
       input.license_number ?? "",
       input.license_state ?? "",
@@ -547,6 +624,9 @@ export function updateDriver(
   input: {
     name: string;
     phone: string;
+    email?: string;
+    notes?: string;
+    active?: number;
     license: string;
     pin?: string;
     samsara_driver_id?: string;
@@ -561,14 +641,16 @@ export function updateDriver(
     status: DriverStatus;
   },
 ): void {
-  if (!getDriver(id)) throw new Error("Driver not found.");
+  const current = getDriver(id);
+  if (!current) throw new Error("Driver not found.");
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
   }
+  const pin = input.pin != null && input.pin.trim() !== "" ? input.pin.trim() : current.pin;
   getDb()
     .prepare(
       `UPDATE drivers
-       SET name = ?, phone = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
+       SET name = ?, phone = ?, email = ?, notes = ?, active = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
            medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?,
            pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?, updated_at = ?
        WHERE id = ?`,
@@ -576,6 +658,9 @@ export function updateDriver(
     .run(
       input.name,
       input.phone,
+      input.email ?? "",
+      input.notes ?? "",
+      input.active ?? 1,
       input.license,
       input.license_number ?? "",
       input.license_state ?? "",
@@ -584,7 +669,7 @@ export function updateDriver(
       input.medical_expires ?? "",
       input.driver_type ?? "company_driver",
       input.pay_percent ?? null,
-      input.pin ?? "",
+      pin,
       input.samsara_driver_id ?? "",
       input.truck_id,
       input.status,
@@ -1229,7 +1314,7 @@ function syncAssignment(
 
 export function listAssignableTrucks(loadId?: number): Truck[] {
   return listTrucks().filter((truck) => {
-    if (truck.status === "maintenance" || truck.status === "out_of_service") return false;
+    if (truck.active === 0 || truck.status === "maintenance" || truck.status === "out_of_service") return false;
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
@@ -1242,7 +1327,7 @@ export function listAssignableTrucks(loadId?: number): Truck[] {
 
 export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
   return listDrivers().filter((driver) => {
-    if (driver.status === "off_duty") return false;
+    if (driver.active === 0 || driver.status === "off_duty") return false;
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
@@ -1314,7 +1399,7 @@ export function listMovingLoads(): LoadView[] {
 
 export function listAssignableTrailers(loadId?: number): Trailer[] {
   return listTrailers().filter((trailer) => {
-    if (trailer.status === "maintenance" || trailer.status === "out_of_service") return false;
+    if (trailer.active === 0 || trailer.status === "maintenance" || trailer.status === "out_of_service") return false;
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads

@@ -6,16 +6,18 @@ import {
   TRUCK_STATUSES,
   TRUCK_TYPES,
   type ActionResult,
+  type Driver,
   type Truck,
 } from "@/lib/types";
 
 type Props = {
-  truck?: Truck;
+  truck?: Truck & { assigned_driver_id?: number | null };
+  drivers?: Driver[];
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
 
-export function TruckForm({ truck, action, submitLabel }: Props) {
+export function TruckForm({ truck, drivers = [], action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
 
   return (
@@ -63,6 +65,21 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         <input id="make" name="make" defaultValue={truck?.make} />
       </div>
       <div className="field">
+        <label htmlFor="model">Model</label>
+        <input id="model" name="model" defaultValue={truck?.model} />
+      </div>
+      <div className="field">
+        <label htmlFor="assigned_driver_id">Assigned driver</label>
+        <select id="assigned_driver_id" name="assigned_driver_id" defaultValue={truck?.assigned_driver_id ?? ""}>
+          <option value="">None</option>
+          {drivers.map((driver) => (
+            <option key={driver.id} value={driver.id}>
+              {driver.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
         <label htmlFor="samsara_vehicle_id">Samsara vehicle ID (tractor GPS)</label>
         <input
           id="samsara_vehicle_id"
@@ -99,6 +116,14 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
           ))}
         </select>
       </div>
+      <div className="field md:col-span-2">
+        <label htmlFor="notes">Notes</label>
+        <textarea id="notes" name="notes" rows={3} defaultValue={truck?.notes} />
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="active" value="1" defaultChecked={truck ? truck.active !== 0 : true} />
+        Active
+      </label>
       <div className="flex justify-end">
         <button className="btn btn-primary" type="submit" disabled={pending}>
           {pending ? "Saving…" : submitLabel}

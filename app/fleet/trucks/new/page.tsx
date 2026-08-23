@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { TruckForm } from "@/components/truck-form";
 import { createTruckAction } from "@/lib/actions";
+import { listDrivers } from "@/lib/queries";
 
 export default function NewTruckPage() {
   return (
@@ -9,12 +10,12 @@ export default function NewTruckPage() {
       <PageHeader
         title="Add truck"
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trucks" className="btn btn-secondary">
+            Back to trucks
           </Link>
         }
       />
-      <TruckForm action={createTruckAction} submitLabel="Create truck" />
+      <TruckForm drivers={listDrivers()} action={createTruckAction} submitLabel="Create truck" />
     </>
   );
 }

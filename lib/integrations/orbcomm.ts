@@ -101,6 +101,22 @@ export function resetOrbcommCacheForTests(): void {
   cache = null;
 }
 
+export function latestReeferForTrailer(trailer: {
+  unit_number: string;
+  orbcomm_asset_id: string;
+}): ReeferReading | null {
+  const keys = [trailer.orbcomm_asset_id, trailer.unit_number].map(normalizeKey).filter(Boolean);
+  if (keys.length === 0) return null;
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM reefer_readings
+       WHERE trailer_id != ''
+       ORDER BY recorded_at DESC, id DESC`,
+    )
+    .all() as ReeferReading[];
+  return rows.find((row) => keys.includes(normalizeKey(row.trailer_id))) ?? null;
+}
+
 export function listLatestReeferReadings(source?: "demo" | "orbcomm"): ReeferReading[] {
   const rows = getDb()
     .prepare(

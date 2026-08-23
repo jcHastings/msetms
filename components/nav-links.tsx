@@ -19,6 +19,9 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
     title: "Fleet",
     items: [
       { href: "/fleet", label: "Fleet" },
+      { href: "/fleet/drivers", label: "Drivers" },
+      { href: "/fleet/trucks", label: "Trucks" },
+      { href: "/fleet/trailers", label: "Trailers" },
       { href: "/compliance", label: "Compliance" },
     ],
   },
@@ -61,7 +64,7 @@ export function NavLinks() {
           <div className="flex flex-col gap-0.5">
             {section.items.map((item) => {
               const active =
-                item.href === "/" || item.href === "/accounting"
+                item.href === "/" || item.href === "/accounting" || item.href === "/fleet"
                   ? pathname === item.href
                   : pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (

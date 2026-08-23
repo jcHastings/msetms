@@ -39,9 +39,12 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Fleet / admin
 
+- **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav (plus the Fleet overview).
+- Drivers: name, mobile, email, PIN (set/reset, never shown in the list), company vs owner-operator, OO %, CDL, medical card, assigned truck, notes, active flag, document uploads.
+- Trucks: unit #, year/make/model, plate, VIN, assigned driver, registration + DOT dates, Samsara vehicle id, notes, active flag, document uploads.
+- Trailers: unit #, type, VIN/plate, assigned truck, registration + DOT, ORBCOMM id, default reefer setpoint, last known reading stub, notes, active flag, document uploads.
 - Credit hold and payment terms on the customer.
-- VIN / plate / year / make on the truck.
-- Compliance page.
+- Compliance page uses the Settings alert windows.
 - Reports: revenue by customer, on-time, audit, loads CSV.
 
 ## Settings hub (`/settings`)

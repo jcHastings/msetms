@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { TrailerForm } from "@/components/trailer-form";
 import { createTrailerAction } from "@/lib/actions";
+import { listTrucks } from "@/lib/queries";
 
 export default function NewTrailerPage() {
   return (
@@ -9,12 +10,12 @@ export default function NewTrailerPage() {
       <PageHeader
         title="Add trailer"
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trailers" className="btn btn-secondary">
+            Back to trailers
           </Link>
         }
       />
-      <TrailerForm action={createTrailerAction} submitLabel="Create trailer" />
+      <TrailerForm trucks={listTrucks()} action={createTrailerAction} submitLabel="Create trailer" />
     </>
   );
 }

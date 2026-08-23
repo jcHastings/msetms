@@ -7,7 +7,7 @@ import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { updateTrailerAction } from "@/lib/actions";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
-import { getTrailer } from "@/lib/queries";
+import { getTrailer, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,8 @@ export default async function EditTrailerPage({
       <PageHeader
         title={`Trailer ${trailer.unit_number}`}
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trailers" className="btn btn-secondary">
+            Back to trailers
           </Link>
         }
       />
@@ -38,7 +38,7 @@ export default async function EditTrailerPage({
         inspectionExpires={trailer.dot_expires}
         alerts={trailerComplianceAlerts(trailer, complianceWindows())}
       />
-      <TrailerForm trailer={trailer} action={boundAction} submitLabel="Save trailer" />
+      <TrailerForm trailer={trailer} trucks={listTrucks()} action={boundAction} submitLabel="Save trailer" />
       <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />
     </>
   );

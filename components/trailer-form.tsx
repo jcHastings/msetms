@@ -2,15 +2,16 @@
 
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import { TRAILER_TYPES, TRUCK_STATUSES, type ActionResult, type Trailer } from "@/lib/types";
+import { TRAILER_TYPES, TRUCK_STATUSES, type ActionResult, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
   trailer?: Trailer;
+  trucks?: Truck[];
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
 
-export function TrailerForm({ trailer, action, submitLabel }: Props) {
+export function TrailerForm({ trailer, trucks = [], action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
 
   return (
@@ -31,12 +32,41 @@ export function TrailerForm({ trailer, action, submitLabel }: Props) {
         </select>
       </div>
       <div className="field">
+        <label htmlFor="vin">VIN</label>
+        <input id="vin" name="vin" defaultValue={trailer?.vin} />
+      </div>
+      <div className="field">
+        <label htmlFor="plate">Plate</label>
+        <input id="plate" name="plate" defaultValue={trailer?.plate} />
+      </div>
+      <div className="field">
+        <label htmlFor="truck_id">Assigned truck</label>
+        <select id="truck_id" name="truck_id" defaultValue={trailer?.truck_id ?? ""}>
+          <option value="">None</option>
+          {trucks.map((truck) => (
+            <option key={truck.id} value={truck.id}>
+              {truck.unit_number}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
         <label htmlFor="orbcomm_asset_id">ORBCOMM asset ID</label>
         <input
           id="orbcomm_asset_id"
           name="orbcomm_asset_id"
           defaultValue={trailer?.orbcomm_asset_id}
           placeholder="From Reefer Status Report"
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="reefer_setpoint_f">Default reefer setpoint (°F)</label>
+        <input
+          id="reefer_setpoint_f"
+          name="reefer_setpoint_f"
+          type="number"
+          step="0.1"
+          defaultValue={trailer?.reefer_setpoint_f ?? ""}
         />
       </div>
       <h2 className="text-sm font-semibold">Registration</h2>
@@ -67,6 +97,14 @@ export function TrailerForm({ trailer, action, submitLabel }: Props) {
           ))}
         </select>
       </div>
+      <div className="field md:col-span-2">
+        <label htmlFor="notes">Notes</label>
+        <textarea id="notes" name="notes" rows={3} defaultValue={trailer?.notes} />
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="active" value="1" defaultChecked={trailer ? trailer.active !== 0 : true} />
+        Active
+      </label>
       <div className="flex justify-end">
         <button className="btn btn-primary" type="submit" disabled={pending}>
           {pending ? "Saving…" : submitLabel}

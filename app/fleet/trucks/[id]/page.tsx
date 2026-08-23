@@ -7,7 +7,7 @@ import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { updateTruckAction } from "@/lib/actions";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
-import { getTruck } from "@/lib/queries";
+import { getTruck, listDrivers } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,8 @@ export default async function EditTruckPage({
       <PageHeader
         title={`Unit ${truck.unit_number}`}
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trucks" className="btn btn-secondary">
+            Back to trucks
           </Link>
         }
       />
@@ -38,7 +38,7 @@ export default async function EditTruckPage({
         inspectionExpires={truck.dot_expires}
         alerts={truckComplianceAlerts(truck, complianceWindows())}
       />
-      <TruckForm truck={truck} action={boundAction} submitLabel="Save truck" />
+      <TruckForm truck={truck} drivers={listDrivers()} action={boundAction} submitLabel="Save truck" />
       <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />
     </>
   );

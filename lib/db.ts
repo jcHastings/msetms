@@ -306,6 +306,18 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "year", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "make", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "model", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "drivers", "email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "trailers", "vin", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailers", "plate", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailers", "truck_id", "INTEGER");
+  ensureColumn(db, "trailers", "notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailers", "reefer_setpoint_f", "REAL");
+  ensureColumn(db, "trailers", "active", "INTEGER NOT NULL DEFAULT 1");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS load_stops (

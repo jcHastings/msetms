@@ -159,7 +159,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 106–130 · Fleet: trucks and trailers
 
-106. [v1] Trucks: unit #, type, capacity, status.
+106. [v1] Trucks: unit #, type, capacity, status, assigned driver, notes, active.
 107. [v1] Truck types: dry van, reefer, flatbed, box, power only.
 108. [v1] Truck status: available, in use, maintenance, out of service.
 109. [v1] Samsara vehicle ID on the truck.
@@ -170,15 +170,15 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 114. [v1] Trailer registration issued / expires (60-day window).
 115. [v1] DOT inspection completed / expires (30-day window).
 116. [v1] Fleet document uploads (registration, DOT, insurance).
-117. [v1] VIN, plate, year, make on the truck.
-118. Trailer VIN / plate.
+117. [v1] VIN, plate, year, make, model on the truck.
+118. [v1] Trailer VIN / plate.
 119. Next PM due (miles or date).
 120. Out-of-service reason.
 121. Trailer pool / yard location.
 122. Trailer inventory independent of power.
 123. Reefer hour meter.
 124. Trailer loaded / empty / dropped status.
-125. Hooked-to truck (current pairing).
+125. [v1] Hooked-to truck (current pairing).
 126. Ownership: company vs leased vs OO trailer.
 127. IFTA qualified vehicle flag.
 128. Fuel type / tank size.
@@ -187,7 +187,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 131–155 · Drivers, HOS, compliance
 
-131. [v1] Drivers: name, phone, license text, assigned truck, status.
+131. [v1] Drivers: name, phone, email, license, assigned truck, notes, active, status.
 132. [v1] Driver PIN login for the driver app.
 133. [v1] Samsara driver ID.
 134. [v1] License number, state, expiration (30-day window).

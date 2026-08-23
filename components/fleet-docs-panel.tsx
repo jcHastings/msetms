@@ -21,7 +21,11 @@ export function FleetDocsPanel({
         <div className="field min-w-40">
           <label htmlFor={`kind-${ownerType}-${ownerId}`}>Type</label>
           <select id={`kind-${ownerType}-${ownerId}`} name="kind" defaultValue={ownerType === "driver" ? "cdl" : "registration"}>
-            {FLEET_DOC_KINDS.map((kind) => (
+            {FLEET_DOC_KINDS.filter((kind) =>
+              ownerType === "driver"
+                ? ["cdl", "med_card", "insurance", "other"].includes(kind.value)
+                : ["registration", "dot_inspection", "insurance", "other"].includes(kind.value),
+            ).map((kind) => (
               <option key={kind.value} value={kind.value}>
                 {kind.label}
               </option>

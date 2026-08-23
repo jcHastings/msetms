@@ -74,7 +74,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
-- Fleet document uploads on driver / truck / trailer (CDL, medical card, registration, DOT, insurance) stored under `data/uploads/fleet`; the load page opens the assigned unit’s files in one click
+- **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav — add/edit records, compliance badges, document uploads (CDL, medical card, registration, DOT, insurance) under `data/uploads/fleet`. Driver PINs can be reset and are never shown in the list.
 - Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo)
 - Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report)
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record

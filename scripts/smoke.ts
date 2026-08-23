@@ -1228,6 +1228,49 @@ Send bills to billing@msloads.com
   });
   assert.ok(queries.listLoads({ status: "all" }).some((load) => load.load_number === "MSE-1042"));
 
+  const fleetDriverId = queries.createDriver({
+    name: "Fleet Smoke",
+    phone: "555-0144",
+    email: "fleet@msloads.com",
+    notes: "Nights",
+    license: "NE-CDL-FLEET",
+    pin: "3333",
+    truck_id: null,
+    status: "available",
+  });
+  queries.updateDriver(fleetDriverId, {
+    name: "Fleet Smoke",
+    phone: "555-0144",
+    email: "fleet@msloads.com",
+    notes: "Nights",
+    license: "NE-CDL-FLEET",
+    pin: "",
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.getDriver(fleetDriverId)?.pin, "3333");
+  assert.equal(queries.getDriver(fleetDriverId)?.email, "fleet@msloads.com");
+  const modelTruckId = queries.createTruck({
+    unit_number: "SMOKE-T",
+    type: "dry_van",
+    capacity_lbs: 40000,
+    status: "available",
+    model: "579",
+    assigned_driver_id: fleetDriverId,
+  });
+  assert.equal(queries.getTruck(modelTruckId)?.model, "579");
+  assert.equal(queries.getTruck(modelTruckId)?.driver_name, "Fleet Smoke");
+  const reeferTrailerId = queries.createTrailer({
+    unit_number: "R-SMOKE",
+    type: "reefer",
+    vin: "1TRAILER",
+    plate: "TRL-1",
+    truck_id: modelTruckId,
+    reefer_setpoint_f: -10,
+  });
+  assert.equal(queries.getTrailer(reeferTrailerId)?.truck_unit, "SMOKE-T");
+  assert.equal(queries.getTrailer(reeferTrailerId)?.reefer_setpoint_f, -10);
+
   closeDb();
   const reopened = getDb();
   const persisted = reopened

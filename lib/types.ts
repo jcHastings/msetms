@@ -253,8 +253,16 @@ export type Truck = {
   plate: string;
   year: string;
   make: string;
+  model: string;
+  notes: string;
+  active: number;
   created_at: string;
   updated_at: string;
+};
+
+export type TruckWithDriver = Truck & {
+  assigned_driver_id: number | null;
+  driver_name: string | null;
 };
 
 export type Trailer = {
@@ -267,14 +275,27 @@ export type Trailer = {
   dot_inspected_on: string;
   dot_expires: string;
   status: TruckStatus;
+  vin: string;
+  plate: string;
+  truck_id: number | null;
+  notes: string;
+  reefer_setpoint_f: number | null;
+  active: number;
   created_at: string;
   updated_at: string;
+};
+
+export type TrailerWithTruck = Trailer & {
+  truck_unit: string | null;
 };
 
 export type Driver = {
   id: number;
   name: string;
   phone: string;
+  email: string;
+  notes: string;
+  active: number;
   license: string;
   license_number: string;
   license_state: string;

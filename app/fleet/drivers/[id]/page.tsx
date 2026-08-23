@@ -25,8 +25,8 @@ export default async function EditDriverPage({
       <PageHeader
         title={driver.name}
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/drivers" className="btn btn-secondary">
+            Back to drivers
           </Link>
         }
       />

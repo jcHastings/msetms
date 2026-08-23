@@ -31,14 +31,14 @@ export default async function FleetPage({
         subtitle="Trucks, trailers, and drivers. Assign a unit to a load from the dispatch board."
         actions={
           <div className="flex gap-2">
-            <Link href="/fleet/trucks/new" className="btn btn-secondary">
-              Add truck
+            <Link href="/fleet/drivers" className="btn btn-secondary">
+              Drivers
             </Link>
-            <Link href="/fleet/trailers/new" className="btn btn-secondary">
-              Add trailer
+            <Link href="/fleet/trucks" className="btn btn-secondary">
+              Trucks
             </Link>
-            <Link href="/fleet/drivers/new" className="btn btn-primary">
-              Add driver
+            <Link href="/fleet/trailers" className="btn btn-secondary">
+              Trailers
             </Link>
           </div>
         }
@@ -164,7 +164,7 @@ export default async function FleetPage({
                   <td>
                     <ComplianceBadge alerts={driverComplianceAlerts(driver, windows)} />
                   </td>
-                  <td className="font-mono">{driver.pin || "—"}</td>
+                  <td>{driver.pin ? "Set" : "—"}</td>
                   <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>
                   <td>
                     <DriverStatusBadge status={driver.status} />

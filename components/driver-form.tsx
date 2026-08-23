@@ -23,8 +23,12 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
         <input id="name" name="name" required defaultValue={driver?.name} />
       </div>
       <div className="field">
-        <label htmlFor="phone">Phone</label>
+        <label htmlFor="phone">Mobile</label>
         <input id="phone" name="phone" defaultValue={driver?.phone} />
+      </div>
+      <div className="field">
+        <label htmlFor="email">Email</label>
+        <input id="email" name="email" type="email" defaultValue={driver?.email} />
       </div>
       <div className="field">
         <label htmlFor="driver_type">Driver type</label>
@@ -78,9 +82,23 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
         <input id="medical_expires" name="medical_expires" type="date" defaultValue={driver?.medical_expires} />
       </div>
       <div className="field">
-        <label htmlFor="pin">Driver app PIN</label>
-        <input id="pin" name="pin" defaultValue={driver?.pin} placeholder="4+ digits" />
+        <label htmlFor="pin">Driver app PIN {driver ? "(leave blank to keep)" : ""}</label>
+        <input
+          id="pin"
+          name="pin"
+          defaultValue=""
+          autoComplete="off"
+          placeholder={driver?.pin ? "PIN is set" : "4+ digits"}
+        />
       </div>
+      <div className="field md:col-span-2">
+        <label htmlFor="notes">Notes</label>
+        <textarea id="notes" name="notes" rows={3} defaultValue={driver?.notes} />
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="active" value="1" defaultChecked={driver ? driver.active !== 0 : true} />
+        Active
+      </label>
       <div className="field">
         <label htmlFor="samsara_driver_id">Samsara driver ID (HOS)</label>
         <input
