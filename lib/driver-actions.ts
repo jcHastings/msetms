@@ -65,7 +65,8 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
     if (!loadId) throw new Error("Load is missing.");
     const { getLoad } = await import("./queries");
     const load = getLoad(loadId);
-    if (!load || load.driver_id !== driver.id) {
+    const { driverAssignedToLoad } = await import("./relay-store");
+    if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
       throw new Error("This load is not on your dispatch.");
     }
     const file = formData.get("file");

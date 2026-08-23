@@ -35,6 +35,7 @@ export function formatLoadSummary(load: LoadSummaryInput): string {
   if (load.driver_type === "owner_operator" && (load.oo_pay != null || load.rate != null)) {
     lines.push(`Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`);
   }
+  // Relay pay and handoff cities stay off this customer/company packet.
   lines.push("Driver app: http://localhost:3000/driver (on the shop LAN, use this PC's IP in place of localhost)");
   return lines.join("\n");
 }

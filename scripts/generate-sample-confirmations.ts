@@ -70,6 +70,7 @@ const ooSample: ConfirmationModel = {
     description: "",
   },
   dispatchNotes: "",
+  internalLegs: "",
 };
 
 const companySample: ConfirmationModel = {
@@ -125,6 +126,7 @@ const companySample: ConfirmationModel = {
     description: "",
   },
   dispatchNotes: "",
+  internalLegs: "",
 };
 
 async function main(): Promise<void> {

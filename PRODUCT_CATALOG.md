@@ -87,7 +87,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 40. [v1] Status reason codes (wait, breakdown, rejected, rolled).
 41. [v1] Multi-stop loads (more than PU + DEL).
 42. [v1] Stop sequence reorder.
-43. Split / relay (hook and drop, second driver).
+43. [v1] Split / relay (hook and drop, second driver). Internal legs only — not on the customer invoice or customer confirmation.
 44. [v1] Team vs solo flag.
 45. [v1] Load templates by customer / lane.
 46. [v1] Duplicate a load.

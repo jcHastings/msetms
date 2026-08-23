@@ -130,7 +130,7 @@ export function listLoadLog(loadId: number): LoadAuditRow[] {
     .prepare(
       `SELECT * FROM load_audit
        WHERE load_id = ?
-         AND action IN ('status', 'check_call', 'cancel', 'docs_requested', 'sms')
+         AND action IN ('status', 'check_call', 'cancel', 'docs_requested', 'sms', 'relay')
        ORDER BY created_at DESC, id DESC`,
     )
     .all(loadId) as LoadAuditRow[];

@@ -8,6 +8,8 @@ import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
 import { getLoad, locationsForLoad } from "@/lib/queries";
+import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
+import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { isClosedStatus, labelForAttachmentKind } from "@/lib/types";
 
@@ -21,7 +23,8 @@ export default async function DriverLoadPage({
   const driver = await getSignedInDriver();
   if (!driver) redirect("/driver/login");
   const load = getLoad(Number.parseInt((await params).id, 10));
-  if (!load || load.driver_id !== driver.id) notFound();
+  if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) notFound();
+  const yourLeg = relayForDriver(load.id, driver.id);
   const reefer = await getLatestReeferForLoad(load.id);
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
@@ -39,6 +42,11 @@ export default async function DriverLoadPage({
       <p className="mt-1 text-lg font-medium">
         {load.origin} → {load.destination}
       </p>
+      {yourLeg ? (
+        <p className="mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-800">
+          Your leg: {formatRelayLane(yourLeg.pickup, yourLeg.delivery)}
+        </p>
+      ) : null}
       <p className="text-slate-500">{load.customer_name}</p>
       {load.docs_requested ? (
         <section className="mt-4 rounded-2xl bg-amber-50 p-4 text-amber-950">

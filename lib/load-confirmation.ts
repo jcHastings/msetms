@@ -3,6 +3,8 @@ import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
 import { formatLocationAddress, formatSchedulingSummary } from "./locations";
 import { getCustomer, getLoad, getLocation, getTrailer } from "./queries";
+import { formatInternalRelayLines, formatRelayLane } from "./relays";
+import { listRelays, relayForDriver } from "./relay-store";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import type { CompanyProfile, LoadView } from "./types";
 
@@ -44,6 +46,7 @@ export type ConfirmationModel = {
   shipper: ConfirmationStop;
   consignee: ConfirmationStop;
   dispatchNotes: string;
+  internalLegs: string;
 };
 
 export function confirmationStatus(load: LoadView): string {
@@ -172,13 +175,25 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
       description: load.commodity,
     },
     dispatchNotes: notes,
+    internalLegs: "",
   };
 }
 
-export function buildConfirmationForLoad(loadId: number): ConfirmationModel {
+export function buildConfirmationForLoad(
+  loadId: number,
+  options: { packet?: "customer" | "internal"; driverId?: number } = {},
+): ConfirmationModel {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  return buildConfirmationModel(load);
+  const model = buildConfirmationModel(load);
+  if (options.packet !== "internal") return model;
+  const relays = listRelays(load.id);
+  const yours = options.driverId ? relayForDriver(load.id, options.driverId) : null;
+  const lines = [
+    yours ? `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}` : "",
+    formatInternalRelayLines(relays),
+  ].filter(Boolean);
+  return { ...model, internalLegs: lines.join("\n") };
 }
 
 export async function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {
@@ -301,6 +316,18 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     const notesH = model.style === "owner_operator" ? 28 : 40;
     doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
     y = Math.min(y + notesH + 6, model.style === "owner_operator" ? 650 : 700);
+    if (model.internalLegs && y < 700) {
+      doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text("Internal legs (not billed):", left, y, {
+        lineBreak: false,
+      });
+      y += 11;
+      doc.font("Helvetica").fontSize(Math.max(7, bodySize - 2)).text(model.internalLegs, left, y, {
+        width,
+        height: 28,
+        lineBreak: true,
+      });
+      y += 30;
+    }
   }
 
   if (model.style === "owner_operator" && y < 668) {

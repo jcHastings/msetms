@@ -340,6 +340,24 @@ export function migrate(db: Database): void {
       notes TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS load_relays (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      sequence INTEGER NOT NULL,
+      pickup TEXT NOT NULL DEFAULT '',
+      delivery TEXT NOT NULL DEFAULT '',
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      trailer_id INTEGER REFERENCES trailers(id) ON DELETE SET NULL,
+      oo_percent REAL,
+      oo_pay REAL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_relays_load ON load_relays(load_id, sequence);
+    CREATE INDEX IF NOT EXISTS idx_load_relays_driver ON load_relays(driver_id);
+
     CREATE TABLE IF NOT EXISTS load_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

@@ -6,6 +6,8 @@ import { formatDateTime } from "@/lib/format";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
+import { relayForDriver } from "@/lib/relay-store";
+import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -67,6 +69,14 @@ export default async function DriverHomePage() {
                   <div className="mt-2 text-lg font-medium">
                     {load.origin} → {load.destination}
                   </div>
+                  {(() => {
+                    const leg = relayForDriver(load.id, driver.id);
+                    return leg ? (
+                      <div className="mt-1 text-sm font-medium text-slate-700">
+                        Your leg: {formatRelayLane(leg.pickup, leg.delivery)}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="mt-2 text-sm text-slate-600">{load.customer_name}</div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                     <div>

@@ -17,6 +17,7 @@ import {
 } from "./queries";
 import { createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
+import { addRelay, deleteRelay, moveRelay, updateRelay } from "./relay-store";
 import { addStop, deleteStop, moveStop } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
 import { isBillableStatus, type ActionResult } from "./types";
@@ -111,6 +112,56 @@ export async function saveLoadDetailsAction(formData: FormData): Promise<void> {
       appointment_confirmation: String(formData.get("appointment_confirmation") ?? ""),
       unload_type: String(formData.get("unload_type") ?? ""),
     });
+    refresh();
+  });
+}
+
+function parseRelayForm(formData: FormData) {
+  return {
+    pickup: requiredString(formData.get("pickup"), "Relay pickup"),
+    delivery: requiredString(formData.get("delivery"), "Relay delivery"),
+    driver_id: parseOptionalInt(formData.get("driver_id")),
+    truck_id: parseOptionalInt(formData.get("truck_id")),
+    trailer_id: parseOptionalInt(formData.get("trailer_id")),
+    oo_percent: parseOptionalFloat(formData.get("oo_percent")),
+    oo_pay: parseOptionalFloat(formData.get("oo_pay")),
+    notes: String(formData.get("notes") ?? "").trim(),
+  };
+}
+
+export async function addRelayAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    addRelay(loadId, parseRelayForm(formData));
+    refresh();
+  });
+}
+
+export async function updateRelayAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    const id = parseOptionalInt(formData.get("relay_id"));
+    if (!id) throw new Error("Relay is missing.");
+    updateRelay(id, parseRelayForm(formData));
+    refresh();
+  });
+}
+
+export async function deleteRelayAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    const id = parseOptionalInt(formData.get("relay_id"));
+    if (!id) throw new Error("Relay is missing.");
+    deleteRelay(id);
+    refresh();
+  });
+}
+
+export async function moveRelayAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    const id = parseOptionalInt(formData.get("relay_id"));
+    const direction = Number.parseInt(String(formData.get("direction") ?? "0"), 10);
+    if (!id || (direction !== 1 && direction !== -1)) throw new Error("Relay is missing.");
+    moveRelay(id, direction);
     refresh();
   });
 }

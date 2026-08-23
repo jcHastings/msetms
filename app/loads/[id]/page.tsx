@@ -9,6 +9,7 @@ import { LoadAuditSection } from "@/components/load-audit-section";
 import { LoadLogSection } from "@/components/load-log-section";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
+import { LoadRelaysPanel } from "@/components/load-relays-panel";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
@@ -28,6 +29,8 @@ import { parseLoadTab } from "@/lib/load-tabs";
 import { isTwilioConfigured } from "@/lib/env";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { getCustomer, getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
+import { listRelays } from "@/lib/relay-store";
+import { formatRelayLane } from "@/lib/relays";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { EQUIPMENT_REQUIRED, labelForAttachmentKind } from "@/lib/types";
@@ -64,6 +67,7 @@ export default async function LoadDetailPage({
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
   const claims = listClaims(load.id);
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
+  const relays = listRelays(load.id);
 
   return (
     <>
@@ -73,7 +77,7 @@ export default async function LoadDetailPage({
         actions={
           <div className="flex items-center gap-3">
             <LoadStatusBadge status={load.status} />
-            <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} />
+            <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
           </div>
         }
       />
@@ -107,6 +111,20 @@ export default async function LoadDetailPage({
 
         <LoadTabPanel when="basics">
           <LoadWatchRow load={load} />
+          {relays.length > 0 ? (
+            <section className="card mb-4 p-5">
+              <h2 className="text-sm font-semibold">Relay markers</h2>
+              <p className="mt-1 text-xs text-slate-500">Internal handoffs. Not billed customer stops.</p>
+              <ol className="mt-2 space-y-1 text-sm">
+                {relays.map((relay) => (
+                  <li key={relay.id}>
+                    <span className="font-medium">{formatRelayLane(relay.pickup, relay.delivery)}</span>
+                    <span className="text-slate-500"> · {relay.driver_name || "Unassigned"}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
         </LoadTabPanel>
 
         <LoadTabPanel when="assets">
@@ -137,6 +155,14 @@ export default async function LoadDetailPage({
             </div>
           </div>
           <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
+          <LoadRelaysPanel
+            loadId={load.id}
+            origin={load.origin}
+            destination={load.destination}
+            drivers={drivers}
+            trucks={trucks}
+            trailers={trailers}
+          />
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">

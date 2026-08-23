@@ -15,6 +15,7 @@ import {
   listUpcomingCompliance,
   listWatchedLoads,
 } from "@/lib/queries";
+import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function DashboardPage({
   const stats = getDashboardStats();
   const unassigned = listAttentionLoads();
   const moving = listMovingLoads();
+  const movingRelayLabels = extraRelayLabelsByLoad(moving);
   const trucks = listTrucks();
   const drivers = listDrivers();
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
@@ -259,7 +261,10 @@ export default async function DashboardPage({
                     </td>
                     <td>
                       {load.truck_unit ? `Unit ${load.truck_unit}` : "—"}
-                      <div className="text-xs text-slate-500">{load.driver_name ?? "Unassigned"}</div>
+                      <div className="text-xs text-slate-500">
+                        {load.driver_name ?? "Unassigned"}
+                        {movingRelayLabels.get(load.id) ? ` ${movingRelayLabels.get(load.id)}` : ""}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap">{formatDateTime(load.delivery_end)}</td>
                   </tr>

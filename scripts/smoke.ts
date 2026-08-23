@@ -39,6 +39,11 @@ async function main() {
   const loadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
   assert.match(loadPage, /LoadWorkspace/);
   assert.match(loadPage, /searchParams/);
+  assert.match(loadPage, /LoadRelaysPanel/);
+  assert.match(loadPage, /Relay markers/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /Add relay/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /not a billed customer stop/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
   assert.match(tabSource, /Load Basics/);
   assert.match(tabSource, /Customer Info/);
   assert.match(tabSource, /Carrier \/ Asset Info/);
@@ -1252,6 +1257,116 @@ Continuous reefer. Two load locks.
   assert.equal(freshOo.style, "owner_operator");
   const freshOoPdf = await confirmation.renderConfirmationPdf(freshOo);
   assert.equal(freshOoPdf.subarray(0, 4).toString(), "%PDF");
+
+  const { extraRelayCount, boardRelayLabel, formatRelayLane } = await import("../lib/relays");
+  const relayStore = await import("../lib/relay-store");
+  assert.equal(extraRelayCount(1, [{ driver_id: 1 }, { driver_id: 2 }]), 1);
+  assert.equal(boardRelayLabel(1), "+1 relay");
+  assert.equal(formatRelayLane("New York, NY", "Chicago, IL"), "New York, NY → Chicago, IL");
+  const relayTruckA = queries.createTruck({
+    unit_number: "RA-1",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const relayTruckB = queries.createTruck({
+    unit_number: "RB-1",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const relayDriverA = queries.createDriver({
+    name: "Relay Alpha",
+    phone: "555-0701",
+    license: "NY-CDL-RELAYA",
+    pin: "7001",
+    truck_id: relayTruckA,
+    status: "available",
+  });
+  const relayDriverB = queries.createDriver({
+    name: "Relay Bravo",
+    phone: "555-0702",
+    license: "CO-CDL-RELAYB",
+    pin: "7002",
+    truck_id: relayTruckB,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const relayLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "New York, NY",
+    destination: "Denver, CO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Relay freight",
+    rate: 3200,
+    notes: "",
+    special_instructions: "Call receiver.",
+    appointment_notes: "",
+    reference_number: "RC-RELAY",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: relayTruckA,
+    driver_id: relayDriverA,
+  });
+  relayStore.addRelay(relayLoadId, {
+    pickup: "New York, NY",
+    delivery: "Chicago, IL",
+    driver_id: relayDriverA,
+    truck_id: relayTruckA,
+  });
+  relayStore.addRelay(relayLoadId, {
+    pickup: "Chicago, IL",
+    delivery: "Denver, CO",
+    driver_id: relayDriverB,
+    truck_id: relayTruckB,
+    oo_percent: 40,
+    oo_pay: 900,
+  });
+  const relayRows = relayStore.listRelays(relayLoadId);
+  assert.equal(relayRows.length, 2);
+  assert.equal(relayRows[0]?.delivery, "Chicago, IL");
+  assert.equal(relayRows[1]?.driver_name, "Relay Bravo");
+  assert.equal(relayRows[1]?.oo_pay, 900);
+  assert.equal(queries.listLoadsForDriver(relayDriverA).some((load) => load.id === relayLoadId), true);
+  assert.equal(queries.listLoadsForDriver(relayDriverB).some((load) => load.id === relayLoadId), true);
+  assert.equal(relayStore.extraRelayLabelsByLoad([{ id: relayLoadId, driver_id: relayDriverA }]).get(relayLoadId), "+1 relay");
+  const customerPacket = confirmation.buildConfirmationForLoad(relayLoadId);
+  assert.equal(customerPacket.internalLegs, "");
+  assert.match(customerPacket.shipper.address, /New York/);
+  assert.equal(customerPacket.agreedAmount, null);
+  assert.doesNotMatch(customerPacket.dispatchNotes, /Chicago|internal \$900|Relay Bravo/i);
+  const internalPacket = confirmation.buildConfirmationForLoad(relayLoadId, {
+    packet: "internal",
+    driverId: relayDriverB,
+  });
+  assert.match(internalPacket.internalLegs, /Your leg: Chicago, IL → Denver, CO/);
+  assert.match(internalPacket.internalLegs, /Relay Bravo/);
+  assert.match(internalPacket.internalLegs, /900/);
+  assert.equal(internalPacket.shipper.title, "Shipper 1");
+  assert.equal(internalPacket.consignee.title, "Consignee 1");
+  assert.doesNotMatch(internalPacket.shipper.address, /Chicago/);
+  const qboPreview = (await import("../lib/integrations/quickbooks")).previewQuickbooksInvoice(
+    queries.getLoad(relayLoadId)!,
+  );
+  assert.equal(qboPreview.amount, 3200);
+  assert.equal(qboPreview.lane, "New York, NY → Denver, CO");
+  assert.doesNotMatch(qboPreview.memo, /Chicago|internal \$900|Relay Bravo/);
+  const { formatLoadSummary } = await import("../lib/load-summary");
+  const relaySms = formatLoadSummary(queries.getLoad(relayLoadId)!);
+  assert.match(relaySms, /New York, NY → Denver, CO/);
+  assert.doesNotMatch(relaySms, /Chicago|internal \$900|Relay Bravo/);
+  const relayAudit = audit.listLoadAudit(relayLoadId);
+  assert.ok(relayAudit.some((row) => row.action === "relay" && row.actor));
+  assert.ok(audit.listLoadLog(relayLoadId).some((row) => row.action === "relay"));
+  queries.updateDriverProgress(relayLoadId, relayDriverB, "en_route_pickup");
+  assert.equal(queries.getLoad(relayLoadId)?.status, "in_transit");
 
   const { pathToFileURL } = await import("node:url");
   const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);

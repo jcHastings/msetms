@@ -14,6 +14,7 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import { driverAssignedToLoad } from "./relay-store";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
@@ -759,8 +760,14 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
   return getDb()
     .prepare(
       `${LOAD_SELECT}
-       WHERE loads.driver_id = ?
-         AND loads.status != 'cancelled'
+       WHERE loads.status != 'cancelled'
+         AND (
+           loads.driver_id = ?
+           OR EXISTS (
+             SELECT 1 FROM load_relays
+             WHERE load_relays.load_id = loads.id AND load_relays.driver_id = ?
+           )
+         )
        ORDER BY CASE loads.status
          WHEN 'in_transit' THEN 0
          WHEN 'picked_up' THEN 0
@@ -773,7 +780,7 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
          ELSE 3
        END, loads.pickup_start ASC`,
     )
-    .all(driverId) as LoadView[];
+    .all(driverId, driverId) as LoadView[];
 }
 
 export function findOrCreateCustomer(name: string): number {
@@ -1464,9 +1471,14 @@ export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
-         WHERE driver_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
+         WHERE driver_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?
+         UNION
+         SELECT loads.id FROM load_relays
+         JOIN loads ON loads.id = load_relays.load_id
+         WHERE load_relays.driver_id = ? AND loads.status IN (${BUSY_STATUS_SQL}) AND loads.id != ?
+         LIMIT 1`,
       )
-      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1);
+      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1, driver.id, ...BUSY_STATUSES, loadId ?? -1);
     return !busy;
   });
 }
@@ -1474,7 +1486,7 @@ export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
 export function updateDriverProgress(loadId: number, driverId: number, progress: DriverProgress): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (load.driver_id !== driverId) {
+  if (!driverAssignedToLoad(loadId, driverId, load.driver_id)) {
     throw new Error("This load is not on your dispatch.");
   }
   if (load.status === "cancelled") {

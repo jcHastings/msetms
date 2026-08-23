@@ -10,6 +10,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
+import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -25,6 +26,7 @@ export default async function BoardPage({
   const date = params.date ?? "";
   const q = params.q ?? "";
   const loads = listLoads({ status, date, q });
+  const relayLabels = extraRelayLabelsByLoad(loads);
   const reefers = await getReeferSnapshots();
   const fleet = await getSamsaraFleet();
   const reeferByLoad = new Map<number, ReeferReading | null>();
@@ -110,7 +112,10 @@ export default async function BoardPage({
                               Trailer {load.trailer_unit || load.trailer_number}
                             </div>
                           ) : null}
-                          <div className="text-xs text-slate-500">{load.driver_name}</div>
+                          <div className="text-xs text-slate-500">
+                            {load.driver_name}
+                            {relayLabels.get(load.id) ? ` ${relayLabels.get(load.id)}` : ""}
+                          </div>
                           {load.driver_progress ? (
                             <div className="text-xs text-indigo-700">
                               {labelForDriverProgress(load.driver_progress)}
