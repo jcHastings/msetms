@@ -4,9 +4,22 @@ import { useActionState, useRef, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
+import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { parseRateConAction, createLoadAction } from "@/lib/actions";
+import type { ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { Customer, DriverWithTruck, Location, Trailer, Truck } from "@/lib/types";
+
+type LoadFormSettings = {
+  commodities: string[];
+  extraStatuses: Array<{ value: string; label: string }>;
+  defaultOoPercent: number;
+  weightUnit: "lb" | "kg";
+  currency: string;
+  targetMarginPercent: number;
+  placesEnabled: boolean;
+  alertWindows: ComplianceWindows;
+};
 
 export function RateConImport({
   customers,
@@ -21,16 +34,7 @@ export function RateConImport({
   trailers?: Trailer[];
   locations?: Location[];
   drivers: DriverWithTruck[];
-  formSettings?: {
-    commodities: string[];
-    extraStatuses: Array<{ value: string; label: string }>;
-    defaultOoPercent: number;
-    weightUnit: "lb" | "kg";
-    currency: string;
-    targetMarginPercent: number;
-    placesEnabled: boolean;
-    alertWindows: ComplianceWindows;
-  };
+  formSettings?: LoadFormSettings;
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
@@ -107,38 +111,80 @@ export function RateConImport({
       </form>
 
       {parsed && state && "inboxId" in state ? (
-        <div>
-          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Review the extracted fields, fix anything wrong, then save. The original file stays on
-            the load as a rate confirmation attachment.
-            {state.fileName ? <span className="mt-1 block font-mono text-xs">{state.fileName}</span> : null}
-          </div>
-          {state.warning ? (
-            <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-              {state.warning}
-            </div>
-          ) : null}
-          <LoadForm
-            customers={customers}
-            trucks={trucks}
-            trailers={trailers}
-            locations={locations}
-            drivers={drivers}
-            inboxId={state.inboxId}
-            defaults={parsed}
-            {...formSettings}
-            action={createLoadAction}
-            submitLabel="Save load from rate con"
-          />
-          {parsed.raw_text ? (
-            <details className="mt-4 text-sm text-slate-500">
-              <summary className="cursor-pointer font-medium">Extracted text</summary>
-              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs">
-                {parsed.raw_text}
-              </pre>
-            </details>
-          ) : null}
+        <RateConImportedLoad
+          parsed={parsed}
+          inboxId={state.inboxId}
+          fileName={state.fileName}
+          warning={state.warning}
+          customers={customers}
+          trucks={trucks}
+          trailers={trailers}
+          locations={locations}
+          drivers={drivers}
+          formSettings={formSettings}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function RateConImportedLoad({
+  parsed,
+  inboxId,
+  fileName,
+  warning,
+  customers,
+  trucks,
+  trailers,
+  locations,
+  drivers,
+  formSettings,
+}: {
+  parsed: ParsedRateCon;
+  inboxId: string;
+  fileName: string;
+  warning?: string;
+  customers: Customer[];
+  trucks: Truck[];
+  trailers: Trailer[];
+  locations: Location[];
+  drivers: DriverWithTruck[];
+  formSettings?: LoadFormSettings;
+}) {
+  const book = useRateConLocationBook(parsed, locations);
+  return (
+    <div>
+      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        Review the extracted fields, fix anything wrong, then save. The original file stays on
+        the load as a rate confirmation attachment.
+        {fileName ? <span className="mt-1 block font-mono text-xs">{fileName}</span> : null}
+      </div>
+      {warning ? (
+        <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {warning}
         </div>
+      ) : null}
+      {book.review}
+      <LoadForm
+        key={book.formKey}
+        customers={customers}
+        trucks={trucks}
+        trailers={trailers}
+        locations={book.book}
+        drivers={drivers}
+        inboxId={inboxId}
+        defaults={book.defaults}
+        {...formSettings}
+        action={createLoadAction}
+        submitLabel="Save load from rate con"
+      />
+      {parsed.raw_text ? (
+        <details className="mt-4 text-sm text-slate-500">
+          <summary className="cursor-pointer font-medium">Extracted text</summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs">
+            {parsed.raw_text}
+          </pre>
+        </details>
       ) : null}
     </div>
   );

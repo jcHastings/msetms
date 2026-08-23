@@ -14,7 +14,8 @@ import {
 import { formatMoney, toInputDateTime } from "@/lib/format";
 import { PlaceSearch } from "@/components/place-search";
 import { matchLocationForPlace } from "@/lib/places-shared";
-import { formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
+import { formatLocationAddress, formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
+import { formatParsedStop, type ParsedStop } from "@/lib/rate-con-shared";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import {
@@ -48,6 +49,10 @@ type Defaults = Partial<{
   po_number: string;
   reefer_setpoint_f: number | null;
   trailer_number: string;
+  shipper_location_id: number | null;
+  consignee_location_id: number | null;
+  shipper: ParsedStop;
+  consignee: ParsedStop;
 }>;
 
 type Props = {
@@ -102,9 +107,19 @@ export function LoadForm({
   const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
   const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
   const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
-  const [shipperId, setShipperId] = useState(load?.shipper_location_id ? String(load.shipper_location_id) : "");
+  const [shipperId, setShipperId] = useState(
+    load?.shipper_location_id
+      ? String(load.shipper_location_id)
+      : extraDefaults.shipper_location_id
+        ? String(extraDefaults.shipper_location_id)
+        : "",
+  );
   const [consigneeId, setConsigneeId] = useState(
-    load?.consignee_location_id ? String(load.consignee_location_id) : "",
+    load?.consignee_location_id
+      ? String(load.consignee_location_id)
+      : extraDefaults.consignee_location_id
+        ? String(extraDefaults.consignee_location_id)
+        : "",
   );
   const [origin, setOrigin] = useState(load?.origin ?? extraDefaults.origin ?? "");
   const [destination, setDestination] = useState(load?.destination ?? extraDefaults.destination ?? "");
@@ -227,7 +242,13 @@ export function LoadForm({
             ))}
           </select>
           {selectedShipper ? (
-            <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedShipper)}</p>
+            <>
+              <p className="text-xs text-slate-500">{formatLocationAddress(selectedShipper)}</p>
+              {selectedShipper.phone ? <p className="text-xs text-slate-500">{selectedShipper.phone}</p> : null}
+              <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedShipper)}</p>
+            </>
+          ) : extraDefaults.shipper?.name || extraDefaults.shipper?.street ? (
+            <p className="text-xs text-slate-500">From rate con: {formatParsedStop(extraDefaults.shipper)}</p>
           ) : null}
         </div>
         <div className="field">
@@ -251,7 +272,13 @@ export function LoadForm({
             ))}
           </select>
           {selectedConsignee ? (
-            <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedConsignee)}</p>
+            <>
+              <p className="text-xs text-slate-500">{formatLocationAddress(selectedConsignee)}</p>
+              {selectedConsignee.phone ? <p className="text-xs text-slate-500">{selectedConsignee.phone}</p> : null}
+              <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedConsignee)}</p>
+            </>
+          ) : extraDefaults.consignee?.name || extraDefaults.consignee?.street ? (
+            <p className="text-xs text-slate-500">From rate con: {formatParsedStop(extraDefaults.consignee)}</p>
           ) : null}
         </div>
         {placesEnabled ? (

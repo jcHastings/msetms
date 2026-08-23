@@ -4,9 +4,11 @@ import { useActionState, useRef, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
+import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
+import type { ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
-import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
+import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export function RateConApply({
   load,
@@ -110,33 +112,88 @@ export function RateConApply({
         </button>
       </form>
       {parsed && state && "inboxId" in state ? (
-        <LoadForm
-          standalone
+        <RateConAppliedLoad
+          parsed={parsed}
+          inboxId={state.inboxId}
+          load={load}
           customers={customers}
           trucks={trucks}
           trailers={trailers}
           locations={locations}
           drivers={drivers}
-          load={{
-            ...load,
-            origin: parsed.origin || load.origin,
-            destination: parsed.destination || load.destination,
-            commodity: parsed.commodity || load.commodity,
-            weight: parsed.weight ?? load.weight,
-            rate: parsed.rate ?? load.rate,
-            special_instructions: parsed.special_instructions || load.special_instructions,
-            appointment_notes: parsed.appointment_notes || load.appointment_notes,
-            reference_number: parsed.reference_number || load.reference_number,
-            po_number: parsed.po_number || load.po_number,
-            reefer_setpoint_f: parsed.reefer_setpoint_f ?? load.reefer_setpoint_f,
-          }}
-          inboxId={state.inboxId}
-          defaults={parsed}
-          {...formSettings}
+          formSettings={formSettings}
           action={boundAction}
-          submitLabel="Apply rate con to this load"
         />
       ) : null}
     </section>
+  );
+}
+
+function RateConAppliedLoad({
+  parsed,
+  inboxId,
+  load,
+  customers,
+  trucks,
+  trailers,
+  locations,
+  drivers,
+  formSettings,
+  action,
+}: {
+  parsed: ParsedRateCon;
+  inboxId: string;
+  load: Load;
+  customers: Customer[];
+  trucks: Truck[];
+  trailers: Trailer[];
+  locations: Location[];
+  drivers: DriverWithTruck[];
+  formSettings?: {
+    commodities: string[];
+    extraStatuses: Array<{ value: string; label: string }>;
+    defaultOoPercent: number;
+    weightUnit: "lb" | "kg";
+    currency: string;
+    targetMarginPercent: number;
+    placesEnabled: boolean;
+    alertWindows: ComplianceWindows;
+  };
+  action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+}) {
+  const book = useRateConLocationBook(parsed, locations);
+  return (
+    <>
+      {book.review}
+      <LoadForm
+        key={book.formKey}
+        standalone
+        customers={customers}
+        trucks={trucks}
+        trailers={trailers}
+        locations={book.book}
+        drivers={drivers}
+        load={{
+          ...load,
+          origin: parsed.origin || load.origin,
+          destination: parsed.destination || load.destination,
+          commodity: parsed.commodity || load.commodity,
+          weight: parsed.weight ?? load.weight,
+          rate: parsed.rate ?? load.rate,
+          special_instructions: parsed.special_instructions || load.special_instructions,
+          appointment_notes: parsed.appointment_notes || load.appointment_notes,
+          reference_number: parsed.reference_number || load.reference_number,
+          po_number: parsed.po_number || load.po_number,
+          reefer_setpoint_f: parsed.reefer_setpoint_f ?? load.reefer_setpoint_f,
+          shipper_location_id: book.defaults.shipper_location_id ?? load.shipper_location_id,
+          consignee_location_id: book.defaults.consignee_location_id ?? load.consignee_location_id,
+        }}
+        inboxId={inboxId}
+        defaults={book.defaults}
+        {...formSettings}
+        action={action}
+        submitLabel="Apply rate con to this load"
+      />
+    </>
   );
 }

@@ -10,6 +10,7 @@ import {
   createDriver,
   createLoad,
   createLocation,
+  getLocation,
   createSavedReport,
   createTrailer,
   createTruck,
@@ -43,6 +44,7 @@ import {
   type ActionResult,
   type DriverKind,
   type DriverStatus,
+  type Location,
   type LocationRole,
   type SchedulingType,
   type TrailerType,
@@ -545,7 +547,7 @@ export type RateConParseState = {
   inboxId: string;
   fileName: string;
   warning?: string;
-  parsed: import("./rate-con").ParsedRateCon;
+  parsed: import("./rate-con-shared").ParsedRateCon;
 } | ActionResult;
 
 export async function parseRateConAction(
@@ -570,7 +572,8 @@ export async function parseRateConAction(
     }
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
     const { extractDocumentText, parseRateConText, emptyParsedRateCon, textLooksLikeFilenameOnly } = await import("./rate-con");
-    const { listCustomers } = await import("./queries");
+    const { attachParsedLocationMatches } = await import("./rate-con-shared");
+    const { listCustomers, listLocations } = await import("./queries");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
     let text = "";
@@ -591,7 +594,7 @@ export async function parseRateConAction(
         parsed,
       };
     }
-    const parsed = parseRateConText(text, listCustomers(), file.name);
+    const parsed = attachParsedLocationMatches(parseRateConText(text, listCustomers(), file.name), listLocations());
     const thin =
       !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
     writeInboxParse(inboxId, parsed);
@@ -850,6 +853,29 @@ function parseLocationInput(formData: FormData) {
     latitude: parseOptionalFloat(formData.get("latitude")),
     longitude: parseOptionalFloat(formData.get("longitude")),
   };
+}
+
+export type SaveRateConLocationState =
+  | { ok: true; location: Location }
+  | { ok: false; error: string };
+
+export async function saveRateConLocationAction(
+  _prev: SaveRateConLocationState | null,
+  formData: FormData,
+): Promise<SaveRateConLocationState> {
+  try {
+    const id = createLocation({
+      ...parseLocationInput(formData),
+      notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
+      scheduling_type: parseSchedulingType(formData.get("scheduling_type") || "appointment"),
+    });
+    refresh();
+    const location = getLocation(id);
+    if (!location) throw new Error("Location was not saved.");
+    return { ok: true, location };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
 }
 
 export async function createLocationAction(

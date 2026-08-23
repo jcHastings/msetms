@@ -170,6 +170,17 @@ async function main() {
   assert.match(placeSearchSource, /Add a key to enable search/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/places["']/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/env["']/);
+  for (const file of [
+    "components/rate-con-import.tsx",
+    "components/rate-con-apply.tsx",
+    "components/rate-con-location-review.tsx",
+    "components/load-form.tsx",
+    "lib/rate-con-shared.ts",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
+  }
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [
@@ -689,6 +700,18 @@ Send bills to billing@msloads.com
   assert.match(ascend.destination, /Hastings/i);
   assert.match(ascend.special_instructions, /continuous reefer/i);
   assert.equal(ascend.customer_name, "", "broker packet has no shipper customer");
+  assert.equal(ascend.shipper.name, "Lineage Logistics - Avenel");
+  assert.match(ascend.shipper.street, /275 Blair/i);
+  assert.equal(ascend.shipper.city, "Avenel");
+  assert.equal(ascend.shipper.state, "NJ");
+  assert.equal(ascend.shipper.zip, "07001");
+  assert.equal(ascend.consignee.name, "Nebraska Cold Storage");
+  assert.match(ascend.consignee.street, /600 E 39th/i);
+  assert.equal(ascend.consignee.city, "Hastings");
+  assert.equal(ascend.consignee.state, "NE");
+  assert.match(ascend.consignee.zip, /68901/);
+  assert.equal(ascend.shipper_location_id, null);
+  assert.equal(ascend.consignee_location_id, null);
 
   const stackedAscend = parseRateConText(
     `
@@ -763,6 +786,36 @@ Load #45090 | Powered by AscendTMS.com
   assert.match(stackedAscend.special_instructions, /continuous reefer/i);
   assert.match(stackedAscend.special_instructions, /billing@msloads.com/i);
   assert.equal(stackedAscend.customer_name, "");
+  assert.equal(stackedAscend.shipper.name, "Lineage Logistics - Avenel");
+  assert.match(stackedAscend.shipper.street, /275 Blair/i);
+  assert.equal(stackedAscend.shipper.city, "Avenel");
+  assert.equal(stackedAscend.shipper.state, "NJ");
+  assert.equal(stackedAscend.shipper.zip, "07001");
+  assert.equal(stackedAscend.shipper.phone, "732-340-1600");
+  assert.equal(stackedAscend.consignee.name, "Nebraska Cold Storage");
+  assert.match(stackedAscend.consignee.street, /600 E 39th/i);
+  assert.equal(stackedAscend.consignee.city, "Hastings");
+  assert.equal(stackedAscend.consignee.state, "NE");
+  assert.match(stackedAscend.consignee.zip, /68901/);
+  assert.equal(stackedAscend.consignee.phone, "402-461-4442");
+  assert.equal(stackedAscend.shipper_location_id, null, "parse must not invent a location id");
+  assert.equal(stackedAscend.consignee_location_id, null, "parse must not invent a location id");
+
+  const withPhones = parseRateConText(
+    `
+LOAD CONFIRMATION
+Load # 45090
+Weight 42500 lbs
+Commodity FROZEN BEEF
+Rate $3200 / Flat Rate
+Pickup 03/03/25 Lineage Logistics - Avenel, 275 Blair rd, Avenel, NJ 07001 Phone: 732-750-5900
+Delivery 03/05/25 Nebraska Cold Storage, 600 E 39th St, Hastings, NE 68901 Phone: 402-461-4442
+`,
+  );
+  assert.equal(withPhones.shipper.phone, "732-750-5900");
+  assert.equal(withPhones.consignee.phone, "402-461-4442");
+  assert.equal(withPhones.shipper.street, "275 Blair rd");
+  assert.equal(withPhones.consignee.street, "600 E 39th St");
   const namedFile = parseRateConText(
     "Load confirmation for file Load_Confirmation_45090_20260823190045.pdf",
     [],
@@ -814,6 +867,42 @@ Continuous reefer. Two load locks.
   assert.ok(printed.pickup_start);
   assert.ok(printed.delivery_start);
   assert.match(printed.special_instructions, /Continuous reefer/i);
+  assert.equal(printed.shipper.name, "Lineage Logistics - Avenel");
+  assert.match(printed.shipper.street, /275 Blair/i);
+  assert.equal(printed.shipper.city, "Avenel");
+  assert.equal(printed.consignee.name, "Nebraska Cold Storage");
+  assert.match(printed.consignee.street, /600 E 39th/i);
+  assert.equal(printed.consignee.city, "Hastings");
+
+  const { attachParsedLocationMatches, matchLocationForParsedStop } = await import("../lib/rate-con-shared");
+  const locationsBeforeMatch = queries.listLocations().length;
+  const lineageId = queries.createLocation({
+    name: "Lineage Logistics - Avenel",
+    street: "275 Blair rd",
+    city: "Avenel",
+    state: "NJ",
+    zip: "07001",
+    phone: "732-340-1600",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+  });
+  const matchedBook = attachParsedLocationMatches(stackedAscend, queries.listLocations());
+  assert.equal(matchedBook.shipper_location_id, lineageId);
+  assert.equal(matchedBook.consignee_location_id, null, "unmatched consignee must wait for human confirm");
+  assert.equal(queries.listLocations().length, locationsBeforeMatch + 1, "matching must not insert locations");
+  assert.equal(
+    matchLocationForParsedStop(queries.listLocations(), stackedAscend.consignee, "receiver")?.id ?? null,
+    null,
+  );
+  const addressOnly = matchLocationForParsedStop(
+    queries.listLocations(),
+    { name: "Different Name LLC", street: "275 Blair Road", city: "Avenel", state: "NJ", zip: "07001", phone: "" },
+    "shipper",
+  );
+  assert.equal(addressOnly?.id, lineageId, "street+city+state should match even when the name differs");
 
   const emptyExtract = await (await import("../lib/actions")).parseRateConAction(null, new FormData());
   assert.equal(emptyExtract.ok, false);
@@ -852,9 +941,38 @@ Continuous reefer. Two load locks.
     assert.equal(extracted.parsed.rate, 3200);
     assert.match(extracted.parsed.origin, /Avenel/i);
     assert.match(extracted.parsed.destination, /Hastings/i);
+    assert.equal(extracted.parsed.shipper.name, "Lineage Logistics - Avenel");
+    assert.match(extracted.parsed.shipper.street, /275 Blair/i);
+    assert.equal(extracted.parsed.consignee.name, "Nebraska Cold Storage");
+    assert.match(extracted.parsed.consignee.street, /600 E 39th/i);
+    assert.equal(extracted.parsed.shipper_location_id, lineageId);
+    assert.equal(extracted.parsed.consignee_location_id, null);
     assert.ok(extracted.inboxId);
     assert.equal(extracted.fileName, "Load_Confirmation_45090_20260823190045.pdf");
   }
+
+  const locationsAfterParse = queries.listLocations().length;
+  const saveForm = new FormData();
+  saveForm.set("name", "Nebraska Cold Storage");
+  saveForm.set("street", "600 E 39th St");
+  saveForm.set("city", "Hastings");
+  saveForm.set("state", "NE");
+  saveForm.set("zip", "68901");
+  saveForm.set("phone", "402-461-4442");
+  saveForm.set("role", "receiver");
+  saveForm.set("scheduling_type", "appointment");
+  const savedStop = await (await import("../lib/actions")).saveRateConLocationAction(null, saveForm);
+  assert.equal(savedStop.ok, true);
+  if (savedStop.ok) {
+    assert.equal(savedStop.location.name, "Nebraska Cold Storage");
+    assert.match(savedStop.location.street, /600 E 39th/i);
+    assert.equal(savedStop.location.city, "Hastings");
+    assert.equal(savedStop.location.state, "NE");
+    assert.equal(savedStop.location.phone, "402-461-4442");
+    const afterConfirm = attachParsedLocationMatches(stackedAscend, queries.listLocations());
+    assert.equal(afterConfirm.consignee_location_id, savedStop.location.id);
+  }
+  assert.equal(queries.listLocations().length, locationsAfterParse + 1, "only the confirmed save adds a location");
 
   const blankPdf = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });
@@ -899,6 +1017,10 @@ Continuous reefer. Two load locks.
     assert.equal(ascendFromFile.rate, 3200);
     assert.equal(ascendFromFile.origin, "Avenel, NJ");
     assert.equal(ascendFromFile.destination, "Hastings, NE");
+    assert.equal(ascendFromFile.shipper.name, "Lineage Logistics - Avenel");
+    assert.match(ascendFromFile.shipper.street, /275 Blair/i);
+    assert.equal(ascendFromFile.consignee.name, "Nebraska Cold Storage");
+    assert.match(ascendFromFile.consignee.street, /600 E 39th/i);
     assert.match(ascendFromFile.commodity, /FROZEN BEEF/i);
     assert.match(ascendFromFile.special_instructions, /billing@msloads.com/i);
   }
