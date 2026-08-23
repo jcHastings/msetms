@@ -12,6 +12,13 @@ export function getDbPath(): string {
   return process.env.TMS_DB_PATH || DEFAULT_DB_PATH;
 }
 
+/** Project `data/` (or dirname of TMS_DB_PATH). Standalone cwd is `.next/standalone`. */
+export function getDataDir(): string {
+  if (process.env.TMS_DATA_DIR) return process.env.TMS_DATA_DIR;
+  if (process.env.TMS_DB_PATH) return path.dirname(process.env.TMS_DB_PATH);
+  return path.join(process.cwd(), "data");
+}
+
 export function getDb(): Database {
   const dbPath = getDbPath();
   if (connection && connectedPath === dbPath) {

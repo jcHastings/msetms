@@ -24,6 +24,59 @@ async function main() {
   assert.equal(listenAddress({ ...noBind, HOST: "127.0.0.1" }), "127.0.0.1");
   assert.equal(listenAddress({ ...noBind, LISTEN_HOST: "10.0.0.8" }), "10.0.0.8");
 
+  const { isSupportedNodeVersion, resolveNodeExecutable, windowsNodeInstalls } =
+    await import("../scripts/node-binary.mjs");
+  assert.equal(isSupportedNodeVersion("20.10.0"), false);
+  assert.equal(isSupportedNodeVersion("22.12.0"), false);
+  assert.equal(isSupportedNodeVersion("22.13.0"), true);
+  assert.equal(isSupportedNodeVersion("24.5.0"), true);
+  const currentNode = resolveNodeExecutable({
+    execPath: "/current/node",
+    version: "24.1.0",
+    platform: "win32",
+  });
+  assert.equal(currentNode.execPath, "/current/node", "prefer process.execPath when version is new enough");
+  assert.equal(currentNode.switched, false);
+  const programFiles = "C:\\Program Files\\nodejs\\node.exe";
+  const fromOldPath = resolveNodeExecutable({
+    execPath: "C:\\old\\node.exe",
+    version: "20.10.0",
+    platform: "win32",
+    env: { ProgramFiles: "C:\\Program Files" },
+    exists: (file) => file === programFiles,
+    readVersion: (file) => (file === programFiles ? "24.4.0" : null),
+  });
+  assert.equal(fromOldPath.execPath, programFiles);
+  assert.equal(fromOldPath.version, "24.4.0");
+  assert.equal(fromOldPath.switched, true);
+  assert.ok(windowsNodeInstalls({ ProgramFiles: "C:\\Program Files" }).includes(programFiles));
+
+  const { mirrorIntoStandalone } = await import("../scripts/standalone-link.mjs");
+  const linkRoot = path.join(os.tmpdir(), `tms-link-${Date.now()}`);
+  const projectData = path.join(linkRoot, "data");
+  const standaloneData = path.join(linkRoot, "standalone", "data");
+  const envFile = path.join(linkRoot, ".env");
+  const standaloneEnv = path.join(linkRoot, "standalone", ".env");
+  fs.mkdirSync(projectData, { recursive: true });
+  fs.writeFileSync(path.join(projectData, "tms.db"), "db");
+  fs.writeFileSync(envFile, "PLACEHOLDER=1\n");
+  const winData = mirrorIntoStandalone(projectData, standaloneData, { platform: "win32" });
+  const winEnv = mirrorIntoStandalone(envFile, standaloneEnv, { platform: "win32" });
+  assert.equal(winData.method, "copy", "win32 must not symlink data (EPERM / Developer Mode)");
+  assert.equal(winEnv.method, "copy", "win32 must not symlink .env");
+  assert.equal(fs.lstatSync(standaloneData).isSymbolicLink(), false);
+  assert.equal(fs.lstatSync(standaloneEnv).isSymbolicLink(), false);
+  assert.equal(fs.readFileSync(path.join(standaloneData, "tms.db"), "utf8"), "db");
+  assert.equal(fs.readFileSync(standaloneEnv, "utf8"), "PLACEHOLDER=1\n");
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+
+  const { getDataDir } = await import("../lib/db");
+  const previousDataDir = process.env.TMS_DATA_DIR;
+  process.env.TMS_DATA_DIR = projectData;
+  assert.equal(getDataDir(), projectData);
+  if (previousDataDir == null) delete process.env.TMS_DATA_DIR;
+  else process.env.TMS_DATA_DIR = previousDataDir;
+
   const { listExceptionInbox } = await import("../lib/exceptions");
   const inbox = listExceptionInbox();
   assert.ok(inbox.attentionCount >= 1, "seed exception inbox should not be empty");

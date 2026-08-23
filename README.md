@@ -13,6 +13,8 @@ Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is 
 
 On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
 
+`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` junctions or copies `data` and `.env` into `.next/standalone` (Windows `symlink` hits `EPERM` without those).
+
 ```bash
 npm install
 npm run build
@@ -55,7 +57,7 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires **Node.js 22.13+ or 24**. `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 

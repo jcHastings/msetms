@@ -7,25 +7,37 @@
  * Bind 0.0.0.0 unless HOST / LISTEN_HOST / BIND_HOST is an explicit IP.
  * Never use OS HOSTNAME (machine name, e.g. "cursor"). Does not require
  * Vercel. Never prints secret values.
+ *
+ * Windows: junction or copy project `data` / `.env` — never symlink (EPERM).
+ * Node: prefer process.execPath; if PATH is 20.x, try Program Files 22/24.
  */
 import { spawn } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  rmSync,
-  symlinkSync,
-} from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { config as loadEnv } from "dotenv";
 import { listenAddress } from "./listen-address.mjs";
+import { mirrorIntoStandalone } from "./standalone-link.mjs";
+import {
+  resolveNodeExecutable,
+  unsupportedNodeMessage,
+} from "./node-binary.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 require("./next-keep-alive.cjs");
+
+const resolvedNode = resolveNodeExecutable();
+if (resolvedNode.unsupported) {
+  console.error(unsupportedNodeMessage(resolvedNode.version, resolvedNode.execPath));
+  process.exit(1);
+}
+if (resolvedNode.switched) {
+  console.log(
+    `Using Node ${resolvedNode.version} at ${resolvedNode.execPath} (PATH had Node ${process.versions.node})`,
+  );
+}
 
 loadEnv({ path: join(root, ".env") });
 loadEnv({ path: join(root, ".env.local"), override: true });
@@ -40,46 +52,21 @@ if (!existsSync(serverJs)) {
   process.exit(1);
 }
 
-function copyTree(from, to) {
+function copyPublicAssets(from, to) {
   if (!existsSync(from)) return;
-  mkdirSync(dirname(to), { recursive: true });
-  cpSync(from, to, { recursive: true, force: true });
+  mirrorIntoStandalone(from, to);
 }
 
-function isSymlink(target) {
-  try {
-    return lstatSync(target).isSymbolicLink();
-  } catch {
-    return false;
-  }
-}
-
-/** Point standalone at the project path. Next file tracing can copy `data/`. */
-function forceLink(from, to) {
-  mkdirSync(dirname(to), { recursive: true });
-  if (isSymlink(to)) return;
-  if (existsSync(to)) {
-    rmSync(to, { recursive: true, force: true });
-  }
-  symlinkSync(from, to);
-}
-
-function linkIfPresent(from, to) {
-  if (!existsSync(from)) return;
-  forceLink(from, to);
-}
-
-// Next does not copy these into standalone; server.js serves them if present.
-copyTree(join(root, "public"), join(standaloneDir, "public"));
-copyTree(join(root, ".next", "static"), join(standaloneDir, ".next", "static"));
+copyPublicAssets(join(root, "public"), join(standaloneDir, "public"));
+copyPublicAssets(join(root, ".next", "static"), join(standaloneDir, ".next", "static"));
 
 // server.js chdir()s into standalone. Keep SQLite, uploads, and gitignored
 // env files on the project paths the rest of the app already uses.
 const projectData = join(root, "data");
 mkdirSync(projectData, { recursive: true });
-forceLink(projectData, join(standaloneDir, "data"));
-linkIfPresent(join(root, ".env"), join(standaloneDir, ".env"));
-linkIfPresent(join(root, ".env.local"), join(standaloneDir, ".env.local"));
+mirrorIntoStandalone(projectData, join(standaloneDir, "data"));
+mirrorIntoStandalone(join(root, ".env"), join(standaloneDir, ".env"));
+mirrorIntoStandalone(join(root, ".env.local"), join(standaloneDir, ".env.local"));
 
 const port = process.env.PORT || "3000";
 const hostname = listenAddress();
@@ -90,7 +77,7 @@ const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
 
 console.log(`Starting MSE TMS (standalone) on http://${hostname}:${port}`);
 
-const child = spawn(process.execPath, [serverJs], {
+const child = spawn(resolvedNode.execPath, [serverJs], {
   cwd: standaloneDir,
   env: {
     ...process.env,
@@ -99,6 +86,7 @@ const child = spawn(process.execPath, [serverJs], {
     NODE_ENV: "production",
     NODE_OPTIONS: nodeOptions,
     TMS_DB_PATH: join(projectData, "tms.db"),
+    TMS_DATA_DIR: projectData,
   },
   stdio: ["ignore", "inherit", "inherit"],
 });
