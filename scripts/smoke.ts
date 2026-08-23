@@ -151,6 +151,58 @@ SPECIAL INSTRUCTIONS
     const fromPdf = parseRateConText(pdfText, queries.listCustomers());
     assert.match(fromPdf.origin, /Atlanta/i);
     assert.match(fromPdf.special_instructions, /Appointment required/i);
+
+    const { fromInputDateTime } = await import("../lib/format");
+    const importedId = queries.createLoad({
+      customer_id: fromPdf.customer_id ?? queries.findOrCreateCustomer(fromPdf.customer_name || "Delta Cold Storage"),
+      origin: fromPdf.origin,
+      destination: fromPdf.destination,
+      pickup_start: fromInputDateTime(fromPdf.pickup_start),
+      pickup_end: fromInputDateTime(fromPdf.pickup_end),
+      delivery_start: fromInputDateTime(fromPdf.delivery_start),
+      delivery_end: fromInputDateTime(fromPdf.delivery_end),
+      weight: fromPdf.weight,
+      commodity: fromPdf.commodity,
+      rate: fromPdf.rate,
+      notes: "",
+      special_instructions: fromPdf.special_instructions,
+      appointment_notes: fromPdf.appointment_notes,
+      reference_number: fromPdf.reference_number,
+      po_number: fromPdf.po_number,
+      reefer_setpoint_f: fromPdf.reefer_setpoint_f,
+      trailer_number: "",
+      status: "available",
+      truck_id: null,
+      driver_id: null,
+    });
+    addAttachment({
+      loadId: importedId,
+      kind: "rate_con",
+      originalName: "sample-rate-con.pdf",
+      buffer: fs.readFileSync(samplePdf),
+      mimeType: "application/pdf",
+      uploadedBy: "dispatcher",
+    });
+    const imported = queries.getLoad(importedId);
+    assert.ok(imported);
+    assert.match(imported.special_instructions, /Lumper receipt/i);
+    assert.equal(listAttachments(importedId).some((file) => file.kind === "rate_con"), true);
+
+    const firstDriver = queries.listDrivers().find((driver) => driver.name === "Priya Shah");
+    const secondDriver = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
+    const freeTruck = queries.listAssignableTrucks().find((truck) => truck.unit_number === "101");
+    assert.ok(firstDriver && secondDriver && freeTruck);
+    queries.assignLoad(importedId, freeTruck.id, firstDriver.id);
+    const priyaView = queries.listLoadsForDriver(firstDriver.id).find((load) => load.id === importedId);
+    assert.ok(priyaView);
+    assert.match(priyaView.special_instructions, /call 60 minutes out/i);
+    assert.equal(priyaView.rate, 2150);
+
+    queries.assignLoad(importedId, freeTruck.id, secondDriver.id);
+    assert.equal(queries.listLoadsForDriver(firstDriver.id).some((load) => load.id === importedId), false);
+    const tyrellView = queries.listLoadsForDriver(secondDriver.id).find((load) => load.id === importedId);
+    assert.ok(tyrellView);
+    assert.match(tyrellView.special_instructions, /Driver assist unload/i);
   }
 
   const denise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
