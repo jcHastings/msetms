@@ -1,4 +1,5 @@
 import { formatDate } from "./format";
+import { getCompanySettings } from "./settings";
 import type { Driver, Trailer, Truck } from "./types";
 
 export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection";
@@ -13,9 +14,17 @@ export type ComplianceAlert = {
   message: string;
 };
 
-const DRIVER_WINDOW_DAYS = 30;
-const REGISTRATION_WINDOW_DAYS = 60;
-const DOT_WINDOW_DAYS = 30;
+function driverWindowDays(): number {
+  return getCompanySettings().alert_driver_days;
+}
+
+function registrationWindowDays(): number {
+  return getCompanySettings().alert_registration_days;
+}
+
+function dotWindowDays(): number {
+  return getCompanySettings().alert_dot_days;
+}
 
 export function daysUntil(dateStr: string, now = new Date()): number | null {
   const trimmed = dateStr.trim();
@@ -63,24 +72,24 @@ function alertFor(
 export function driverComplianceAlerts(driver: Driver): ComplianceAlert[] {
   const subject = driver.name;
   return [
-    alertFor(driver.license_expires, DRIVER_WINDOW_DAYS, subject, "driver license", "license"),
-    alertFor(driver.medical_expires, DRIVER_WINDOW_DAYS, subject, "medical card", "medical"),
+    alertFor(driver.license_expires, driverWindowDays(), subject, "driver license", "license"),
+    alertFor(driver.medical_expires, driverWindowDays(), subject, "medical card", "medical"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
 export function truckComplianceAlerts(truck: Truck): ComplianceAlert[] {
   const subject = `Unit ${truck.unit_number}`;
   return [
-    alertFor(truck.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(truck.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
+    alertFor(truck.registration_expires, registrationWindowDays(), subject, "registration", "registration"),
+    alertFor(truck.dot_expires, dotWindowDays(), subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
 export function trailerComplianceAlerts(trailer: Trailer): ComplianceAlert[] {
   const subject = `Trailer ${trailer.unit_number}`;
   return [
-    alertFor(trailer.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(trailer.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
+    alertFor(trailer.registration_expires, registrationWindowDays(), subject, "registration", "registration"),
+    alertFor(trailer.dot_expires, dotWindowDays(), subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 

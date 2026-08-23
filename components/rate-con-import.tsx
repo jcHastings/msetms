@@ -12,12 +12,21 @@ export function RateConImport({
   trailers = [],
   locations = [],
   drivers,
+  formSettings,
 }: {
   customers: Customer[];
   trucks: Truck[];
   trailers?: Trailer[];
   locations?: Location[];
   drivers: DriverWithTruck[];
+  formSettings?: {
+    commodities: string[];
+    extraStatuses: Array<{ value: string; label: string }>;
+    defaultOoPercent: number;
+    weightUnit: "lb" | "kg";
+    currency: string;
+    targetMarginPercent: number;
+  };
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const parsed = state && "parsed" in state && state.ok ? state.parsed : null;
@@ -56,6 +65,7 @@ export function RateConImport({
             drivers={drivers}
             inboxId={state.inboxId}
             defaults={parsed}
+            {...formSettings}
             action={createLoadAction}
             submitLabel="Save load from rate con"
           />

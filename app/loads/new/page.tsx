@@ -3,6 +3,7 @@ import { LoadForm } from "@/components/load-form";
 import { PageHeader } from "@/components/page-header";
 import { createLoadAction } from "@/lib/actions";
 import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { getCompanySettings, loadFormSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,8 @@ export default function NewLoadPage() {
           trailers={listTrailers()}
           locations={listLocations()}
           drivers={drivers}
+          defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
+          {...loadFormSettings()}
           action={createLoadAction}
           submitLabel="Create load"
         />

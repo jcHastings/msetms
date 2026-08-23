@@ -55,6 +55,12 @@ type Props = {
   load?: Load;
   defaults?: Defaults;
   inboxId?: string;
+  commodities?: string[];
+  extraStatuses?: Array<{ value: string; label: string }>;
+  defaultOoPercent?: number;
+  weightUnit?: string;
+  currency?: string;
+  targetMarginPercent?: number;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
@@ -68,6 +74,12 @@ export function LoadForm({
   load,
   defaults,
   inboxId,
+  commodities = [],
+  extraStatuses = [],
+  defaultOoPercent = 75,
+  weightUnit = "lb",
+  currency = "USD",
+  targetMarginPercent,
   action,
   submitLabel,
 }: Props) {
@@ -102,7 +114,9 @@ export function LoadForm({
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
   const parsedRate = rate.trim() ? Number.parseFloat(rate) : null;
-  const parsedPercent = ooPercent.trim() ? Number.parseFloat(ooPercent) : selectedDriver?.pay_percent ?? 75;
+  const parsedPercent = ooPercent.trim()
+    ? Number.parseFloat(ooPercent)
+    : selectedDriver?.pay_percent ?? defaultOoPercent;
   const liveOoPay =
     selectedDriver?.driver_type === "owner_operator"
       ? computeOwnerOperatorPay(parsedRate, parsedPercent)
@@ -141,6 +155,11 @@ export function LoadForm({
             {LOAD_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {labelForLoadStatus(status)}
+              </option>
+            ))}
+            {extraStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
               </option>
             ))}
           </select>
@@ -260,11 +279,19 @@ export function LoadForm({
           <input
             id="commodity"
             name="commodity"
+            list="commodity-suggestions"
             defaultValue={load?.commodity ?? extraDefaults.commodity ?? ""}
           />
+          {commodities.length > 0 ? (
+            <datalist id="commodity-suggestions">
+              {commodities.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
+          ) : null}
         </div>
         <div className="field">
-          <label htmlFor="weight">Weight (lbs)</label>
+          <label htmlFor="weight">Weight ({weightUnit})</label>
           <input
             id="weight"
             name="weight"
@@ -274,7 +301,7 @@ export function LoadForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="rate">Rate (USD)</label>
+          <label htmlFor="rate">Rate ({currency})</label>
           <input
             id="rate"
             name="rate"
@@ -390,7 +417,7 @@ export function LoadForm({
               const next = drivers.find((item) => String(item.id) === nextId);
               if (next?.driver_type === "owner_operator") {
                 const keepSaved = load?.driver_id === next.id && load.oo_percent != null;
-                setOoPercent(String(keepSaved ? load.oo_percent : next.pay_percent ?? 75));
+                setOoPercent(String(keepSaved ? load.oo_percent : next.pay_percent ?? defaultOoPercent));
               } else {
                 setOoPercent("");
               }
@@ -417,7 +444,7 @@ export function LoadForm({
                 min={0}
                 max={100}
                 step="0.1"
-                value={ooPercent || String(selectedDriver.pay_percent ?? 75)}
+                value={ooPercent || String(selectedDriver.pay_percent ?? defaultOoPercent)}
                 onChange={(event) => setOoPercent(event.target.value)}
               />
             </div>
@@ -429,6 +456,12 @@ export function LoadForm({
                   <span className="ml-1 text-slate-500">
                     ({parsedPercent}% of {formatMoney(parsedRate)})
                   </span>
+                ) : null}
+                {targetMarginPercent != null && parsedRate != null && liveOoPay != null ? (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Margin {Math.round(((parsedRate - liveOoPay) / parsedRate) * 1000) / 10}% · target{" "}
+                    {targetMarginPercent}%
+                  </div>
                 ) : null}
               </div>
             </div>

@@ -370,6 +370,10 @@ export type CompanyProfile = {
   dispatcher_phone: string;
   dispatcher_fax: string;
   dispatcher_email: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
 };
 
 export type FleetDocument = {
@@ -442,7 +446,7 @@ export type DashboardStats = {
 
 export type ActionResult = { ok: true; id?: number } | { ok: false; error: string };
 
-export function labelForLoadStatus(status: LoadStatus): string {
+export function labelForLoadStatus(status: string): string {
   switch (status) {
     case "available":
       return "Available";
@@ -470,6 +474,10 @@ export function labelForLoadStatus(status: LoadStatus): string {
       return "Completed";
     case "cancelled":
       return "Cancelled";
+    default:
+      return status
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 }
 

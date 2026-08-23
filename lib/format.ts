@@ -34,18 +34,18 @@ export function formatDate(iso: string): string {
   });
 }
 
-export function formatMoney(value: number | null | undefined): string {
+export function formatMoney(value: number | null | undefined, currency = "USD"): string {
   if (value == null) return "—";
   return value.toLocaleString("en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 0,
   });
 }
 
-export function formatWeight(value: number | null | undefined): string {
+export function formatWeight(value: number | null | undefined, unit = "lb"): string {
   if (value == null) return "—";
-  return `${value.toLocaleString("en-US")} lbs`;
+  return `${value.toLocaleString("en-US")} ${unit === "kg" ? "kg" : "lb"}`;
 }
 
 export function todayInputDate(): string {

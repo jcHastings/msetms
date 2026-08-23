@@ -361,10 +361,10 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 281. [v1] Single-tenant local; dispatcher PIN login (demo: Ana G / 4020).
 282. [v1] Dispatcher vs manager roles (stored; manager seeded).
 283. [v1] Audit log: clone and desk actions (local).
-284. Company profile (name, dispatcher, phone, email, fax) — [v1] for confirmations.
+284. [v1] Company profile (name, dispatcher, phone, email, fax, address, logo) for confirmations.
 285. Terminal / yard list.
-286. User invite / deactivate.
-287. Permissions: dispatch, billing, safety, driver-only.
+286. [v1] User add / deactivate (local PIN; no invite email).
+287. [v1] Roles admin/dispatcher/read-only plus light permission groups (dispatch, billing, safety).
 288. [v1] Data export (loads CSV).
 289. [v1] On-time report.
 290. [v1] Revenue by customer / lane.
@@ -374,7 +374,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 294. IFTA packet by quarter (all loads).
 295. Backup / restore of SQLite + uploads.
 296. Environment / demo reset.
-297. Localization / units (mi, °F).
+297. [v1] Currency (USD/CAD) and weight units (lb/kg).
 298. Mobile dispatcher layout (tablet).
 299. Help / how-we-dispatch short guide.
 300. Catalog + roadmap stay the source of truth; new work is a slice, not “build 300.”

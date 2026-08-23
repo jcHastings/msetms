@@ -5,7 +5,7 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020**). Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -68,6 +68,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch.
 - **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
 - **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
+- **Settings** — hub for company contact/logo, insurance, dropdown lists, currency/units, tax, alert windows, routing notes, OO pay defaults, document header/footer/terms, load number prefix, sample-data toggle, dispatcher users/roles, and integration status. Dispatcher login required. Saves to SQLite.
 - Richer load statuses, multi-stop, clone, templates, document checklist, claims
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
@@ -114,7 +115,7 @@ Layout references for the outbound confirmation (not used as live data):
 - [`public/samples/sample-load-confirmation-oo.pdf`](public/samples/sample-load-confirmation-oo.pdf) — owner-operator style
 - [`public/samples/sample-load-confirmation-company.pdf`](public/samples/sample-load-confirmation-company.pdf) — company driver style
 
-Live confirmations are generated from the load record. Company name / dispatcher / phone / email are set on **Settings**.
+Live confirmations are generated from the load record. Company name / dispatcher / phone / email / address / logo are set on **Settings → Company contact**.
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 

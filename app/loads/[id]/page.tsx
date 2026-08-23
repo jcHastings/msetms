@@ -20,6 +20,7 @@ import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
 import { LoadOps } from "@/components/load-ops";
 import { LocationSchedulingCard } from "@/components/location-scheduling";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
+import { loadFormSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,7 @@ export default async function LoadDetailPage({
         locations={listLocations()}
         drivers={listDrivers()}
         load={load}
+        {...loadFormSettings()}
         action={boundAction}
         submitLabel="Save load"
       />
@@ -130,6 +132,7 @@ export default async function LoadDetailPage({
         trailers={listTrailers()}
         locations={listLocations()}
         drivers={listDrivers()}
+        formSettings={loadFormSettings()}
       />
       <LoadOps load={load} />
       <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />

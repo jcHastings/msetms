@@ -10,6 +10,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
+import { customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -144,7 +145,11 @@ export default async function BoardPage({
                     </td>
                     <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>
                     <td>
-                      <LoadStatusSelect loadId={load.id} status={load.status} />
+                      <LoadStatusSelect
+                        loadId={load.id}
+                        status={load.status}
+                        extraStatuses={customLoadStatuses()}
+                      />
                     </td>
                     <td className="whitespace-nowrap">
                       <div className="flex justify-end gap-2">
@@ -155,6 +160,7 @@ export default async function BoardPage({
                             trucks={listAssignableTrucks(load.id)}
                             trailers={listAssignableTrailers(load.id)}
                             drivers={listAssignableDrivers(load.id)}
+                            defaultOoPercent={defaultOoPercent()}
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}

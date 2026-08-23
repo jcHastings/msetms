@@ -1,28 +1,31 @@
 import { cookies } from "next/headers";
-import { getDb } from "./db";
+import { getDispatcherUser, listDispatcherUsers } from "./settings";
+import {
+  canEditSettings,
+  canManageUsers,
+  roleLabel,
+  type DispatcherUser,
+} from "./settings-shared";
+
+export { canEditSettings, canManageUsers, roleLabel };
 
 const COOKIE = "tms_dispatcher_id";
 
-export type Dispatcher = {
-  id: number;
-  name: string;
-  pin: string;
-  role: string;
-};
+export type Dispatcher = DispatcherUser;
+
+export { canEditSettings, canManageUsers, roleLabel };
 
 export function listDispatchers(): Dispatcher[] {
-  return getDb().prepare("SELECT * FROM dispatchers ORDER BY name COLLATE NOCASE").all() as Dispatcher[];
+  return listDispatcherUsers(false);
 }
 
 export function getDispatcher(id: number): Dispatcher | null {
-  return (
-    (getDb().prepare("SELECT * FROM dispatchers WHERE id = ?").get(id) as Dispatcher | undefined) ?? null
-  );
+  return getDispatcherUser(id);
 }
 
 export function authenticateDispatcher(dispatcherId: number, pin: string): Dispatcher {
   const dispatcher = getDispatcher(dispatcherId);
-  if (!dispatcher || dispatcher.pin !== pin.trim()) {
+  if (!dispatcher || !dispatcher.active || dispatcher.pin !== pin.trim()) {
     throw new Error("Dispatcher or PIN is not recognized.");
   }
   return dispatcher;
@@ -33,7 +36,31 @@ export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
   const raw = jar.get(COOKIE)?.value;
   const id = raw ? Number.parseInt(raw, 10) : NaN;
   if (!id) return null;
-  return getDispatcher(id);
+  const dispatcher = getDispatcher(id);
+  if (!dispatcher?.active) return null;
+  return dispatcher;
+}
+
+export async function requireSignedInDispatcher(): Promise<Dispatcher> {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) throw new Error("Sign in as a dispatcher to continue.");
+  return dispatcher;
+}
+
+export async function requireSettingsEditor(): Promise<Dispatcher> {
+  const dispatcher = await requireSignedInDispatcher();
+  if (!canEditSettings(dispatcher.role)) {
+    throw new Error("Read-only users cannot change settings.");
+  }
+  return dispatcher;
+}
+
+export async function requireUserAdmin(): Promise<Dispatcher> {
+  const dispatcher = await requireSettingsEditor();
+  if (!canManageUsers(dispatcher.role)) {
+    throw new Error("Only an admin or manager can manage users.");
+  }
+  return dispatcher;
 }
 
 export async function setDispatcherSession(dispatcherId: number): Promise<void> {

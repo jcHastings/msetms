@@ -3,12 +3,14 @@ import { PageHeader } from "@/components/page-header";
 import { markReceivablePaidAction } from "@/lib/dispatcher-actions";
 import { listReceivables } from "@/lib/accounting";
 import { formatMoney } from "@/lib/format";
+import { getCompanySettings, taxOnAmount } from "@/lib/settings";
 import { LoadStatusBadge } from "@/components/status-badge";
 
 export const dynamic = "force-dynamic";
 
 export default function InvoicesPage() {
   const rows = listReceivables();
+  const settings = getCompanySettings();
   return (
     <>
       <PageHeader
@@ -27,13 +29,16 @@ export default function InvoicesPage() {
               <th>Load</th>
               <th>Customer</th>
               <th>Amount</th>
+              {settings.tax_enabled ? <th>Tax</th> : null}
               <th>Invoice</th>
               <th>Paid</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const tax = taxOnAmount(row.rate);
+              return (
               <tr key={row.id}>
                 <td>
                   <Link href={`/loads/${row.id}`} className="font-mono font-semibold underline">
@@ -44,7 +49,15 @@ export default function InvoicesPage() {
                   </div>
                 </td>
                 <td>{row.customer_name}</td>
-                <td>{formatMoney(row.rate)}</td>
+                <td>{formatMoney(row.rate, settings.currency)}</td>
+                {settings.tax_enabled ? (
+                  <td>
+                    {formatMoney(tax.tax, settings.currency)}
+                    <div className="text-xs text-slate-500">
+                      {tax.label} {tax.rate}%
+                    </div>
+                  </td>
+                ) : null}
                 <td className="text-slate-600">{row.invoiceLabel}</td>
                 <td>{row.paid ? "Paid" : "Open"}</td>
                 <td className="text-right">
@@ -58,7 +71,8 @@ export default function InvoicesPage() {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

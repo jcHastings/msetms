@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import type { Dispatcher } from "@/lib/dispatcher-session";
+import { roleLabel } from "@/lib/settings-shared";
 import type { ActionResult } from "@/lib/types";
 
 export function DispatcherLoginForm({
@@ -22,8 +23,7 @@ export function DispatcherLoginForm({
           <option value="">Select name</option>
           {dispatchers.map((person) => (
             <option key={person.id} value={person.id}>
-              {person.name}
-              {person.role === "manager" ? " · manager" : ""}
+              {person.name} · {roleLabel(person.role)}
             </option>
           ))}
         </select>

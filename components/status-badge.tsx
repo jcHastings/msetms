@@ -48,8 +48,12 @@ function Pill({ className, children }: { className: string; children: React.Reac
   );
 }
 
-export function LoadStatusBadge({ status }: { status: LoadStatus }) {
-  return <Pill className={LOAD_STYLES[status]}>{labelForLoadStatus(status)}</Pill>;
+export function LoadStatusBadge({ status }: { status: LoadStatus | string }) {
+  return (
+    <Pill className={LOAD_STYLES[status as LoadStatus] ?? "bg-slate-50 text-slate-700 ring-slate-200"}>
+      {labelForLoadStatus(status)}
+    </Pill>
+  );
 }
 
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {

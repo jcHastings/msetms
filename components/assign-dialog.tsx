@@ -19,16 +19,25 @@ type Props = {
   trailers: Trailer[];
   drivers: DriverWithTruck[];
   label?: string;
+  defaultOoPercent?: number;
 };
 
-export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, label = "Assign" }: Props) {
+export function AssignDialog({
+  loadId,
+  loadNumber,
+  trucks,
+  trailers,
+  drivers,
+  label = "Assign",
+  defaultOoPercent = 75,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [truckId, setTruckId] = useState("");
   const [trailerId, setTrailerId] = useState("");
   const [driverId, setDriverId] = useState("");
-  const [ooPercent, setOoPercent] = useState("75");
+  const [ooPercent, setOoPercent] = useState(String(defaultOoPercent));
   const [confirmed, setConfirmed] = useState(false);
 
   const driver = drivers.find((item) => String(item.id) === driverId);
@@ -45,7 +54,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
     if (next?.driver_type === "owner_operator") {
-      setOoPercent(String(next.pay_percent ?? 75));
+      setOoPercent(String(next.pay_percent ?? defaultOoPercent));
     }
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
       setTruckId(String(next.truck_id));

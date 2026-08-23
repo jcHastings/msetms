@@ -24,6 +24,8 @@ export default async function DispatcherLoginPage() {
       <div className="mt-6 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
         <div className="font-semibold text-slate-800">Demo PIN</div>
         <p className="mt-1">Ana G · 4020 (manager)</p>
+        <p className="mt-1">Jordan Lee · 4410 (dispatcher)</p>
+        <p className="mt-1">Riley Parks · 5500 (read-only)</p>
       </div>
     </div>
   );

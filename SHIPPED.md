@@ -44,6 +44,25 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 - Compliance page.
 - Reports: revenue by customer, on-time, audit, loads CSV.
 
+## Settings hub (`/settings`)
+
+Dispatcher login required. Saves to the local database. No secrets. No fake Ascend APIs.
+
+- **Company contact** — name, phone, email, address, logo (used on load confirmations)
+- **Insurance** — provider, policy, coverage, expiry
+- **Dropdown lists** — commodities, equipment types, custom load statuses
+- **Currency / units** — USD or CAD, lb vs kg
+- **Tax** — sales tax or GST toggle + rate (shown on AR invoices)
+- **Alerts** — 30/60 day (editable) compliance windows; email checkbox is a later stub
+- **Default routing notes** — prefill special instructions on a new load
+- **Pay and margin** — OO default %, carrier/OO pay method, target gross margin
+- **Document defaults** — header / footer / terms / font size for load & carrier confirmation, invoice, customer confirmation, BOL
+- **Load numbers** — prefix and next number; show sample data toggle (hides seeded demo loads)
+- **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups
+- **Integrations** — existing Samsara / ORBCOMM / QuickBooks / load-tracking stubs
+
+Skipped Ascend-exclusive: Pro Plan billing, Business Center legal/training/tax store, AscendCarrierPortal, DAT load-board, Master Loads.
+
 ## Windows
 
 - `npm start` copies `data` / `.env` on win32. No `better-sqlite3` compile. No symlink (`EPERM`).

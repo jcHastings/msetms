@@ -11,6 +11,7 @@ import {
 } from "@/lib/dispatcher-actions";
 import { requiredDocumentsForLoad, listClaims } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
+import { equipmentOptions } from "@/lib/settings";
 import { EQUIPMENT_REQUIRED, STATUS_REASONS, type LoadView } from "@/lib/types";
 import { labelForAttachmentKind } from "@/lib/types";
 
@@ -19,6 +20,8 @@ export function LoadOps({ load }: { load: LoadView }) {
   const attachments = listAttachments(load.id);
   const checklist = requiredDocumentsForLoad(load);
   const claims = listClaims(load.id);
+  const equipment = equipmentOptions();
+  const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : EQUIPMENT_REQUIRED;
 
   return (
     <div className="mt-6 space-y-4">
@@ -128,7 +131,7 @@ export function LoadOps({ load }: { load: LoadView }) {
           <div className="field">
             <label>Equipment required</label>
             <select name="equipment" defaultValue={load.equipment ?? ""}>
-              {EQUIPMENT_REQUIRED.map((item) => (
+              {equipmentChoices.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>

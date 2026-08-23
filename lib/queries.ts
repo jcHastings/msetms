@@ -10,7 +10,6 @@ import {
   ACTIVE_LOAD_STATUSES,
   ARCHIVED_LOAD_STATUSES,
   isClosedStatus,
-  isLoadStatus,
   isRollingStatus,
   LOAD_STATUSES,
   statusNeedsAssets,
@@ -37,6 +36,7 @@ import {
 } from "./types";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
+import { defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
 import {
   defaultSearchCriteria,
   type LoadSearchCriteria,
@@ -642,7 +642,7 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   if (filters.status === "active" || !filters.status) {
     clauses.push(`loads.status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})`);
     params.push(...ACTIVE_LOAD_STATUSES);
-  } else if (filters.status !== "all" && isLoadStatus(filters.status)) {
+  } else if (filters.status !== "all") {
     clauses.push("loads.status = ?");
     params.push(filters.status);
   }
@@ -658,6 +658,10 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
       `(loads.load_number LIKE ? OR customers.name LIKE ? OR loads.origin LIKE ? OR loads.destination LIKE ? OR loads.commodity LIKE ?)`,
     );
     params.push(term, term, term, term, term);
+  }
+
+  if (!showsSampleData()) {
+    clauses.push("loads.is_sample = 0");
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -688,7 +692,7 @@ export function getLoad(id: number): LoadView | null {
 }
 
 function searchStatuses(criteria: LoadSearchCriteria): string[] {
-  if (criteria.status && isLoadStatus(criteria.status)) {
+  if (criteria.status) {
     return [criteria.status];
   }
   const statuses: string[] = [];
@@ -740,6 +744,10 @@ export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[]
   if (criteria.dateTo) {
     clauses.push("date(loads.pickup_start, 'localtime') <= ?");
     params.push(criteria.dateTo);
+  }
+
+  if (!showsSampleData()) {
+    clauses.push("loads.is_sample = 0");
   }
 
   const where = `WHERE ${clauses.join(" AND ")}`;
@@ -795,13 +803,7 @@ export function deleteSavedReport(id: number): void {
 }
 
 export function nextLoadNumber(): string {
-  const row = getDb()
-    .prepare(`SELECT load_number FROM loads ORDER BY id DESC LIMIT 1`)
-    .get() as { load_number: string } | undefined;
-  if (!row) return "MSE-1001";
-  const match = row.load_number.match(/(\d+)$/);
-  const next = match ? Number.parseInt(match[1], 10) + 1 : 1001;
-  return `MSE-${next}`;
+  return takeNextLoadNumber();
 }
 
 export type LoadInput = {
@@ -827,7 +829,7 @@ export type LoadInput = {
   consignee_location_id?: number | null;
   oo_percent?: number | null;
   oo_pay?: number | null;
-  status: LoadStatus;
+  status: string;
   truck_id: number | null;
   driver_id: number | null;
 };
@@ -994,7 +996,7 @@ export function assignLoad(
 
   const ooPercent =
     driver.driver_type === "owner_operator"
-      ? settlement?.oo_percent ?? driver.pay_percent ?? 75
+      ? settlement?.oo_percent ?? driver.pay_percent ?? defaultOoPercent()
       : null;
   const ooPay = computeOwnerOperatorPay(load.rate, ooPercent);
 
@@ -1105,7 +1107,7 @@ export function markQboInvoice(
     .run(input.invoiceId, input.invoiceNumber, input.sentAt, input.source, input.sentAt, loadId);
 }
 
-export function updateLoadStatus(loadId: number, status: LoadStatus): void {
+export function updateLoadStatus(loadId: number, status: string): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   if (statusNeedsAssets(status) && (!load.truck_id || !load.driver_id)) {
@@ -1269,25 +1271,30 @@ export function updateDriverProgress(loadId: number, driverId: number, progress:
   })();
 }
 
+function sampleFilterSql(): string {
+  return showsSampleData() ? "" : " AND is_sample = 0";
+}
+
 export function getDashboardStats(): DashboardStats {
   const db = getDb();
+  const sample = sampleFilterSql();
   const openLoads = (
     db
       .prepare(
-        `SELECT COUNT(*) as count FROM loads WHERE status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})`,
+        `SELECT COUNT(*) as count FROM loads WHERE status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})${sample}`,
       )
       .get(...ACTIVE_LOAD_STATUSES) as { count: number }
   ).count;
   const inTransit = (
     db
-      .prepare(`SELECT COUNT(*) as count FROM loads WHERE status IN (${ROLLING_STATUS_SQL})`)
+      .prepare(`SELECT COUNT(*) as count FROM loads WHERE status IN (${ROLLING_STATUS_SQL})${sample}`)
       .get(...ROLLING_STATUSES) as { count: number }
   ).count;
   const availableTrucks = (
     db.prepare("SELECT COUNT(*) as count FROM trucks WHERE status = 'available'").get() as { count: number }
   ).count;
   const unassignedLoads = (
-    db.prepare("SELECT COUNT(*) as count FROM loads WHERE status = 'available'").get() as { count: number }
+    db.prepare(`SELECT COUNT(*) as count FROM loads WHERE status = 'available'${sample}`).get() as { count: number }
   ).count;
   return { openLoads, inTransit, availableTrucks, unassignedLoads };
 }

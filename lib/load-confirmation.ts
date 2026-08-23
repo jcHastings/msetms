@@ -3,6 +3,7 @@ import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
 import { formatLocationAddress, formatSchedulingSummary } from "./locations";
 import { getCustomer, getLoad, getLocation, getTrailer } from "./queries";
+import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import type { CompanyProfile, LoadView } from "./types";
 
 export type ConfirmationStop = {
@@ -197,14 +198,28 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const width = 540;
   const right = left + width;
   let y = 36;
+  const defaults = getDocumentDefaults("load_confirmation");
+  const bodySize = defaults.font_size || 10;
+  const logo = companyLogoPath();
+  if (logo) {
+    try {
+      doc.image(logo, left, y, { fit: [72, 40] });
+    } catch {
+      // Skip a bad logo file rather than failing the confirmation.
+    }
+  }
 
   const [brand, ...rest] = model.company.company_name.split(" ");
-  doc.font("Helvetica-Bold").fontSize(18).fillColor("#12315c").text(brand || "M&S", left, y, { continued: Boolean(rest.length) });
+  doc.font("Helvetica-Bold").fontSize(18).fillColor("#12315c").text(brand || "M&S", left + (logo ? 80 : 0), y, { continued: Boolean(rest.length) });
   if (rest.length) {
     doc.font("Helvetica-Bold").fillColor("#6b7c90").text(` ${rest.join(" ")}`);
   }
+  const address = formatCompanyAddress(getCompanySettings());
+  if (address) {
+    doc.font("Helvetica").fontSize(8).fillColor("#4b5563").text(address, left + (logo ? 80 : 0), y + 20, { width: 220 });
+  }
   doc.fillColor("#111827").font("Helvetica-Bold").fontSize(14);
-  doc.text("Rate & Load Confirmation", left, y + 2, { width, align: "center" });
+  doc.text(defaults.header_text || "Rate & Load Confirmation", left, y + 2, { width, align: "center" });
 
   const boxX = 332;
   const boxW = 244;
@@ -246,9 +261,9 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   y = drawStop(doc, left, y + 8, width, model.consignee);
 
   y += 12;
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text("Dispatch Notes:", left, y);
+  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y);
   y += 14;
-  doc.font("Helvetica").fontSize(9).fillColor("#111827");
+  doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
   doc.text(model.dispatchNotes || " ", left, y, { width, height: 48 });
   y = Math.max(y + 56, doc.y + 8);
 
@@ -270,8 +285,12 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
   }
 
+  if (defaults.terms_text) {
+    doc.font("Helvetica").fontSize(7).fillColor("#374151");
+    doc.text(defaults.terms_text, left, 720, { width, height: 28 });
+  }
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
-  doc.text("Page 1 of 1", left, 760, { width, align: "center" });
+  doc.text(defaults.footer_text || "Page 1 of 1", left, 760, { width, align: "center" });
   doc.rect(left, 28, width, 720).strokeColor("#d1d5db").lineWidth(0.4).stroke();
   void right;
 }

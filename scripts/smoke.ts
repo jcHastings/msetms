@@ -22,6 +22,7 @@ async function main() {
   assert.match(navSource, /QuickBooks/);
   assert.match(navSource, /href: "\/compliance"/);
   assert.match(navSource, /href: "\/loads\/templates"/);
+  assert.match(navSource, /href: "\/settings"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -1086,6 +1087,119 @@ SPECIAL INSTRUCTIONS
     qbo.resetQuickbooksForTests();
   }
 
+  const settings = await import("../lib/settings");
+  assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Company Settings"));
+  assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Users"));
+  settings.updateCompanyContact({
+    company_name: "M&S Loads",
+    dispatcher_name: "Ana G",
+    dispatcher_phone: "402-302-0097",
+    dispatcher_fax: "",
+    dispatcher_email: "ana@msloads.com",
+    street: "100 Fleet Way",
+    city: "Omaha",
+    state: "NE",
+    zip: "68102",
+  });
+  assert.equal(settings.getCompanySettings().street, "100 Fleet Way");
+  settings.updateInsuranceSettings({
+    insurance_provider: "Great West",
+    insurance_policy: "POL-100",
+    insurance_coverage: "Auto and cargo",
+    insurance_expires: "2027-06-01",
+  });
+  assert.equal(settings.getCompanySettings().insurance_policy, "POL-100");
+  settings.updateUnitSettings({ currency: "CAD", weight_unit: "kg" });
+  assert.equal(settings.getCompanySettings().currency, "CAD");
+  settings.updateTaxSettings({ tax_enabled: true, tax_kind: "gst", tax_rate: 5 });
+  assert.equal(settings.taxOnAmount(200).tax, 10);
+  settings.updateAlertSettings({
+    alert_driver_days: 14,
+    alert_registration_days: 45,
+    alert_dot_days: 21,
+    alert_emails_enabled: true,
+  });
+  assert.equal(settings.getCompanySettings().alert_driver_days, 14);
+  settings.updateRoutingNotes("Call 30 minutes out.");
+  settings.updatePaySettings({
+    default_oo_percent: 80,
+    default_gross_margin_percent: 20,
+    carrier_pay_method: "check",
+    carrier_pay_notes: "Friday after POD",
+  });
+  assert.equal(settings.defaultOoPercent(), 80);
+  settings.updateDocumentDefaults({
+    doc_type: "load_confirmation",
+    header_text: "Smoke confirmation",
+    footer_text: "Smoke footer",
+    terms_text: "Smoke terms",
+    font_size: 11,
+  });
+  assert.equal(settings.getDocumentDefaults("load_confirmation").header_text, "Smoke confirmation");
+  const commodityId = settings.addDropdownOption({ kind: "commodity", value: "", label: "Smoke commodity" });
+  assert.ok(settings.commoditySuggestions().includes("Smoke commodity"));
+  settings.setDropdownOptionActive(commodityId, false);
+  assert.equal(settings.commoditySuggestions().includes("Smoke commodity"), false);
+  settings.addDropdownOption({ kind: "load_status", value: "waiting_paper", label: "Waiting paper" });
+  assert.equal(settings.isKnownLoadStatus("waiting_paper"), true);
+  const userId = settings.createDispatcherUser({
+    name: "Smoke Desk",
+    pin: "7777",
+    role: "dispatcher",
+    email: "smoke@msloads.com",
+    permission_group: "billing",
+  });
+  assert.equal(settings.getDispatcherUser(userId)?.permission_group, "billing");
+  const jordan = session.listDispatchers().find((row) => row.name === "Jordan Lee");
+  assert.ok(jordan);
+  assert.equal(jordan.role, "dispatcher");
+  settings.updateLoadManagementSettings({
+    load_number_prefix: "ABC",
+    load_number_next: 2000,
+    show_sample_data: true,
+  });
+  assert.equal(settings.peekNextLoadNumber(), "ABC-2000");
+  const numberedId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 10000,
+    commodity: "Settings smoke",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(numberedId)?.load_number, "ABC-2000");
+  assert.equal(settings.peekNextLoadNumber(), "ABC-2001");
+  settings.updateLoadManagementSettings({
+    load_number_prefix: "ABC",
+    load_number_next: 2001,
+    show_sample_data: false,
+  });
+  assert.equal(
+    queries.listLoads({ status: "all" }).some((load) => load.load_number === "MSE-1042"),
+    false,
+    "sample loads hide when the toggle is off",
+  );
+  settings.updateLoadManagementSettings({
+    load_number_prefix: "MSE",
+    load_number_next: 3000,
+    show_sample_data: true,
+  });
+  assert.ok(queries.listLoads({ status: "all" }).some((load) => load.load_number === "MSE-1042"));
+
   closeDb();
   const reopened = getDb();
   const persisted = reopened
@@ -1099,7 +1213,7 @@ SPECIAL INSTRUCTIONS
   fs.rmSync(`${dbPath}-wal`, { force: true });
   fs.rmSync(`${dbPath}-shm`, { force: true });
   console.log(
-    "Smoke test passed: seed, locations, search, saved reports, customer, truck, driver, load, assign, persist.",
+    "Smoke test passed: seed, locations, search, settings hub, customer, truck, driver, load, assign, persist.",
   );
 }
 

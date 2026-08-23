@@ -31,18 +31,15 @@ import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   DRIVER_STATUSES,
-  LOAD_STATUSES,
   DRIVER_TYPES,
   TRAILER_TYPES,
   TRUCK_STATUSES,
   TRUCK_TYPES,
-  isLoadStatus,
   isLocationRole,
   isSchedulingType,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
-  type LoadStatus,
   type LocationRole,
   type SchedulingType,
   type TrailerType,
@@ -50,6 +47,7 @@ import {
   type TruckType,
 } from "./types";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
+import { defaultOoPercent, isKnownLoadStatus } from "./settings";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -90,7 +88,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   }
   if (!customerId) throw new Error("Pick a customer.");
   const statusValue = String(formData.get("status") ?? "available");
-  if (!isLoadStatus(statusValue)) throw new Error("Invalid load status.");
+  if (!isKnownLoadStatus(statusValue)) throw new Error("Invalid load status.");
   const truckId = parseOptionalInt(formData.get("truck_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
   const parsed: LoadInput = {
@@ -121,7 +119,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   };
   const driver = driverId ? getDriver(driverId) : null;
   if (driver?.driver_type === "owner_operator") {
-    const percent = parsed.oo_percent ?? driver.pay_percent ?? 75;
+    const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
     parsed.oo_percent = percent;
     parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);
   } else {
@@ -462,10 +460,10 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
     const loadId = parseOptionalInt(formData.get("load_id"));
     const status = String(formData.get("status") ?? "");
     if (!loadId) throw new Error("Load is missing.");
-    if (!isLoadStatus(status) || !LOAD_STATUSES.includes(status)) {
+    if (!isKnownLoadStatus(status)) {
       throw new Error("Invalid status.");
     }
-    updateLoadStatus(loadId, status as LoadStatus);
+    updateLoadStatus(loadId, status);
     refresh();
     return { ok: true, id: loadId };
   } catch (error) {
@@ -791,6 +789,10 @@ export async function updateCompanyProfileAction(
       dispatcher_phone: String(formData.get("dispatcher_phone") ?? "").trim(),
       dispatcher_fax: String(formData.get("dispatcher_fax") ?? "").trim(),
       dispatcher_email: String(formData.get("dispatcher_email") ?? "").trim(),
+      street: String(formData.get("street") ?? "").trim(),
+      city: String(formData.get("city") ?? "").trim(),
+      state: String(formData.get("state") ?? "").trim(),
+      zip: String(formData.get("zip") ?? "").trim(),
     });
     refresh();
     return { ok: true };

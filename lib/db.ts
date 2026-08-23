@@ -398,15 +398,208 @@ export function migrate(db: Database): void {
       detail TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS dropdown_lists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      value TEXT NOT NULL,
+      label TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(kind, value)
+    );
+
+    CREATE TABLE IF NOT EXISTS document_defaults (
+      doc_type TEXT PRIMARY KEY,
+      header_text TEXT NOT NULL DEFAULT '',
+      footer_text TEXT NOT NULL DEFAULT '',
+      terms_text TEXT NOT NULL DEFAULT '',
+      font_size INTEGER NOT NULL DEFAULT 10
+    );
   `);
 
+  for (const [column, definition] of [
+    ["street", "TEXT NOT NULL DEFAULT ''"],
+    ["city", "TEXT NOT NULL DEFAULT ''"],
+    ["state", "TEXT NOT NULL DEFAULT ''"],
+    ["zip", "TEXT NOT NULL DEFAULT ''"],
+    ["insurance_provider", "TEXT NOT NULL DEFAULT ''"],
+    ["insurance_policy", "TEXT NOT NULL DEFAULT ''"],
+    ["insurance_coverage", "TEXT NOT NULL DEFAULT ''"],
+    ["insurance_expires", "TEXT NOT NULL DEFAULT ''"],
+    ["logo_stored_name", "TEXT NOT NULL DEFAULT ''"],
+    ["logo_original_name", "TEXT NOT NULL DEFAULT ''"],
+    ["logo_mime_type", "TEXT NOT NULL DEFAULT ''"],
+    ["currency", "TEXT NOT NULL DEFAULT 'USD'"],
+    ["weight_unit", "TEXT NOT NULL DEFAULT 'lb'"],
+    ["tax_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["tax_kind", "TEXT NOT NULL DEFAULT 'sales_tax'"],
+    ["tax_rate", "REAL NOT NULL DEFAULT 0"],
+    ["alert_driver_days", "INTEGER NOT NULL DEFAULT 30"],
+    ["alert_registration_days", "INTEGER NOT NULL DEFAULT 60"],
+    ["alert_dot_days", "INTEGER NOT NULL DEFAULT 30"],
+    ["alert_emails_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["default_routing_notes", "TEXT NOT NULL DEFAULT ''"],
+    ["default_oo_percent", "REAL NOT NULL DEFAULT 75"],
+    ["default_gross_margin_percent", "REAL NOT NULL DEFAULT 18"],
+    ["carrier_pay_method", "TEXT NOT NULL DEFAULT 'ach'"],
+    ["carrier_pay_notes", "TEXT NOT NULL DEFAULT ''"],
+    ["load_number_prefix", "TEXT NOT NULL DEFAULT 'MSE'"],
+    ["load_number_next", "INTEGER NOT NULL DEFAULT 1001"],
+    ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
+  ] as const) {
+    ensureColumn(db, "company_profile", column, definition);
+  }
+
+  ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");
+  ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
+
   backfillDispatchers(db);
+  backfillSettingsUsers(db);
+  backfillDropdownLists(db);
+  backfillDocumentDefaults(db);
+  backfillLoadNumbering(db);
+  backfillSampleLoads(db);
 }
 
 function backfillDispatchers(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM dispatchers").get() as { count: number }).count;
   if (count > 0) return;
-  db.prepare("INSERT INTO dispatchers (name, pin, role) VALUES (?, ?, ?)").run("Ana G", "4020", "manager");
+  db.prepare("INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)").run(
+    "Ana G",
+    "4020",
+    "manager",
+    "ana@msloads.com",
+    "all",
+  );
+}
+
+function backfillSettingsUsers(db: Database): void {
+  const extras: Array<[string, string, string, string, string]> = [
+    ["Jordan Lee", "4410", "dispatcher", "jordan@msloads.com", "dispatch"],
+    ["Riley Parks", "5500", "read_only", "riley@msloads.com", "dispatch"],
+  ];
+  const find = db.prepare("SELECT id FROM dispatchers WHERE name = ?");
+  const insert = db.prepare(
+    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)",
+  );
+  for (const [name, pin, role, email, group] of extras) {
+    if (find.get(name)) continue;
+    insert.run(name, pin, role, email, group);
+  }
+}
+
+const SEED_LOAD_NUMBERS = [
+  "MSE-1042",
+  "MSE-1043",
+  "MSE-1044",
+  "MSE-1045",
+  "MSE-1046",
+  "MSE-1047",
+  "MSE-1048",
+  "MSE-1049",
+  "MSE-1050",
+  "MSE-1051",
+  "MSE-1052",
+  "MSE-1053",
+];
+
+function backfillSampleLoads(db: Database): void {
+  db.prepare(
+    `UPDATE loads SET is_sample = 1 WHERE load_number IN (${SEED_LOAD_NUMBERS.map(() => "?").join(", ")})`,
+  ).run(...SEED_LOAD_NUMBERS);
+}
+
+function backfillLoadNumbering(db: Database): void {
+  const row = db
+    .prepare("SELECT load_number_prefix, load_number_next FROM company_profile WHERE id = 1")
+    .get() as { load_number_prefix: string; load_number_next: number } | undefined;
+  if (!row) return;
+  const loads = db.prepare("SELECT load_number FROM loads").all() as Array<{ load_number: string }>;
+  let max = 0;
+  for (const load of loads) {
+    const match = load.load_number.match(/(\d+)$/);
+    if (match) max = Math.max(max, Number.parseInt(match[1], 10));
+  }
+  if (row.load_number_next === 1001 && max >= 1001) {
+    db.prepare("UPDATE company_profile SET load_number_next = ? WHERE id = 1").run(max + 1);
+  }
+}
+
+function backfillDropdownLists(db: Database): void {
+  const count = (db.prepare("SELECT COUNT(*) as count FROM dropdown_lists").get() as { count: number }).count;
+  if (count > 0) return;
+  const insert = db.prepare(
+    "INSERT INTO dropdown_lists (kind, value, label, sort_order, active) VALUES (?, ?, ?, ?, 1)",
+  );
+  const commodities = [
+    "Packaged grocery",
+    "Fresh produce",
+    "Frozen food",
+    "Paper rolls",
+    "Dry goods",
+    "Beverages",
+  ];
+  commodities.forEach((label, index) => {
+    insert.run("commodity", label.toLowerCase().replace(/\s+/g, "_"), label, index + 1);
+  });
+  const equipment = [
+    ["reefer_53", "53' Reefer"],
+    ["dry_van_53", "53' Dry Van"],
+    ["flatbed", "Flatbed"],
+    ["box", "Box Truck"],
+    ["power_only", "Power Only"],
+  ];
+  equipment.forEach(([value, label], index) => {
+    insert.run("equipment", value, label, index + 1);
+  });
+}
+
+function backfillDocumentDefaults(db: Database): void {
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO document_defaults (doc_type, header_text, footer_text, terms_text, font_size)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const rows: Array<[string, string, string, string, number]> = [
+    [
+      "load_confirmation",
+      "Rate & Load Confirmation",
+      "Thank you for hauling with us.",
+      "Carrier is responsible for cargo while in its possession. Report exceptions at pickup.",
+      10,
+    ],
+    [
+      "carrier_confirmation",
+      "Carrier Confirmation",
+      "Pay follows the agreed owner-operator percentage.",
+      "This confirmation is not a QuickBooks bill. Settlements stay in Driver pay.",
+      10,
+    ],
+    [
+      "invoice",
+      "Invoice",
+      "Payment due per customer terms.",
+      "Linehaul is the customer rate. Accessorials are billed separately when recorded.",
+      10,
+    ],
+    [
+      "customer_confirmation",
+      "Customer Confirmation",
+      "Questions? Call dispatch.",
+      "This is a shipment confirmation, not a customer portal login.",
+      10,
+    ],
+    [
+      "bol",
+      "Bill of Lading",
+      "Driver must sign and attach photos.",
+      "Seal numbers and piece counts belong on the BOL and the load record.",
+      10,
+    ],
+  ];
+  for (const row of rows) insert.run(...row);
 }
 
 function backfillDemoAccounting(db: Database): void {
