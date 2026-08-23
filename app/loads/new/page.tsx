@@ -17,9 +17,14 @@ export default function NewLoadPage() {
         title="New load"
         subtitle="Book freight against a customer, then assign it from the board."
         actions={
-          <Link href="/customers/new" className="btn btn-secondary">
-            New customer
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/loads/import" className="btn btn-secondary">
+              From rate con
+            </Link>
+            <Link href="/customers/new" className="btn btn-secondary">
+              New customer
+            </Link>
+          </div>
         }
       />
       {customers.length === 0 ? (

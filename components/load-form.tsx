@@ -13,26 +13,70 @@ import {
   type Truck,
 } from "@/lib/types";
 
+type Defaults = Partial<{
+  customer_id: number | null;
+  customer_name: string;
+  origin: string;
+  destination: string;
+  pickup_start: string;
+  pickup_end: string;
+  delivery_start: string;
+  delivery_end: string;
+  commodity: string;
+  weight: number | null;
+  rate: number | null;
+  notes: string;
+  special_instructions: string;
+  appointment_notes: string;
+  reference_number: string;
+  po_number: string;
+  reefer_setpoint_f: number | null;
+  trailer_number: string;
+}>;
+
 type Props = {
   customers: Customer[];
   trucks: Truck[];
   drivers: DriverWithTruck[];
   load?: Load;
+  defaults?: Defaults;
+  inboxId?: string;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
 
-export function LoadForm({ customers, trucks, drivers, load, action, submitLabel }: Props) {
+export function LoadForm({
+  customers,
+  trucks,
+  drivers,
+  load,
+  defaults,
+  inboxId,
+  action,
+  submitLabel,
+}: Props) {
   const [state, formAction, pending] = useActionState(action, null);
+  const extraDefaults = defaults ?? {};
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
       <FormBanner result={state} />
+      {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
+      <input type="hidden" name="customer_name" value={extraDefaults.customer_name ?? ""} />
       <div className="grid gap-4 md:grid-cols-2">
         <div className="field">
           <label htmlFor="customer_id">Customer</label>
-          <select id="customer_id" name="customer_id" required defaultValue={load?.customer_id ?? ""}>
-            <option value="">Select customer</option>
+          <select
+            id="customer_id"
+            name="customer_id"
+            required={!extraDefaults.customer_name}
+            defaultValue={load?.customer_id ?? extraDefaults.customer_id ?? ""}
+          >
+            <option value="">
+              {extraDefaults.customer_name
+                ? `Create “${extraDefaults.customer_name}”`
+                : "Select customer"}
+            </option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.name}
@@ -56,7 +100,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             id="origin"
             name="origin"
             required
-            defaultValue={load?.origin}
+            defaultValue={load?.origin ?? extraDefaults.origin ?? ""}
             placeholder="City, ST"
           />
         </div>
@@ -66,7 +110,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             id="destination"
             name="destination"
             required
-            defaultValue={load?.destination}
+            defaultValue={load?.destination ?? extraDefaults.destination ?? ""}
             placeholder="City, ST"
           />
         </div>
@@ -77,7 +121,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             name="pickup_start"
             type="datetime-local"
             required
-            defaultValue={load ? toInputDateTime(load.pickup_start) : ""}
+            defaultValue={load ? toInputDateTime(load.pickup_start) : extraDefaults.pickup_start ?? ""}
           />
         </div>
         <div className="field">
@@ -87,7 +131,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             name="pickup_end"
             type="datetime-local"
             required
-            defaultValue={load ? toInputDateTime(load.pickup_end) : ""}
+            defaultValue={load ? toInputDateTime(load.pickup_end) : extraDefaults.pickup_end ?? ""}
           />
         </div>
         <div className="field">
@@ -97,7 +141,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             name="delivery_start"
             type="datetime-local"
             required
-            defaultValue={load ? toInputDateTime(load.delivery_start) : ""}
+            defaultValue={load ? toInputDateTime(load.delivery_start) : extraDefaults.delivery_start ?? ""}
           />
         </div>
         <div className="field">
@@ -107,12 +151,16 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             name="delivery_end"
             type="datetime-local"
             required
-            defaultValue={load ? toInputDateTime(load.delivery_end) : ""}
+            defaultValue={load ? toInputDateTime(load.delivery_end) : extraDefaults.delivery_end ?? ""}
           />
         </div>
         <div className="field">
           <label htmlFor="commodity">Commodity</label>
-          <input id="commodity" name="commodity" defaultValue={load?.commodity} />
+          <input
+            id="commodity"
+            name="commodity"
+            defaultValue={load?.commodity ?? extraDefaults.commodity ?? ""}
+          />
         </div>
         <div className="field">
           <label htmlFor="weight">Weight (lbs)</label>
@@ -121,7 +169,7 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             name="weight"
             type="number"
             min={0}
-            defaultValue={load?.weight ?? ""}
+            defaultValue={load?.weight ?? extraDefaults.weight ?? ""}
           />
         </div>
         <div className="field">
@@ -132,12 +180,60 @@ export function LoadForm({ customers, trucks, drivers, load, action, submitLabel
             type="number"
             min={0}
             step="0.01"
-            defaultValue={load?.rate ?? ""}
+            defaultValue={load?.rate ?? extraDefaults.rate ?? ""}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reference_number">Reference / rate con #</label>
+          <input
+            id="reference_number"
+            name="reference_number"
+            defaultValue={load?.reference_number ?? extraDefaults?.reference_number ?? ""}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="po_number">PO number</label>
+          <input id="po_number" name="po_number" defaultValue={load?.po_number ?? extraDefaults?.po_number ?? ""} />
+        </div>
+        <div className="field">
+          <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
+          <input
+            id="reefer_setpoint_f"
+            name="reefer_setpoint_f"
+            type="number"
+            step="0.1"
+            defaultValue={load?.reefer_setpoint_f ?? extraDefaults?.reefer_setpoint_f ?? ""}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="trailer_number">Trailer #</label>
+          <input
+            id="trailer_number"
+            name="trailer_number"
+            defaultValue={load?.trailer_number ?? extraDefaults?.trailer_number ?? ""}
           />
         </div>
         <div className="field md:col-span-2">
-          <label htmlFor="notes">Notes</label>
-          <textarea id="notes" name="notes" rows={3} defaultValue={load?.notes} />
+          <label htmlFor="special_instructions">Special instructions (driver sees these)</label>
+          <textarea
+            id="special_instructions"
+            name="special_instructions"
+            rows={4}
+            defaultValue={load?.special_instructions ?? extraDefaults?.special_instructions ?? ""}
+          />
+        </div>
+        <div className="field md:col-span-2">
+          <label htmlFor="appointment_notes">Appointment notes</label>
+          <textarea
+            id="appointment_notes"
+            name="appointment_notes"
+            rows={2}
+            defaultValue={load?.appointment_notes ?? extraDefaults?.appointment_notes ?? ""}
+          />
+        </div>
+        <div className="field md:col-span-2">
+          <label htmlFor="notes">Internal notes</label>
+          <textarea id="notes" name="notes" rows={3} defaultValue={load?.notes ?? extraDefaults?.notes ?? ""} />
         </div>
         <div className="field">
           <label htmlFor="truck_id">Assigned truck</label>

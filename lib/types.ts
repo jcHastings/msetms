@@ -60,12 +60,36 @@ export type Contact = {
 
 export type CustomerWithContacts = Customer & { contacts: Contact[] };
 
+export const DRIVER_PROGRESS = [
+  { value: "en_route_pickup", label: "En route to pickup" },
+  { value: "loaded", label: "Loaded" },
+  { value: "en_route_delivery", label: "En route to delivery" },
+  { value: "delivered", label: "Delivered" },
+] as const;
+
+export type DriverProgress = (typeof DRIVER_PROGRESS)[number]["value"];
+
+export const ATTACHMENT_KINDS = [
+  { value: "rate_con", label: "Rate confirmation" },
+  { value: "bol", label: "BOL" },
+  { value: "pod", label: "POD" },
+  { value: "lumper", label: "Lumper" },
+  { value: "photo_trailer", label: "Trailer photo" },
+  { value: "photo_product", label: "Product photo" },
+  { value: "photo_seals", label: "Seal photo" },
+  { value: "other", label: "Other" },
+] as const;
+
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]["value"];
+
 export type Truck = {
   id: number;
   unit_number: string;
   type: TruckType;
   capacity_lbs: number;
   status: TruckStatus;
+  samsara_vehicle_id: string;
+  trailer_number: string;
   created_at: string;
   updated_at: string;
 };
@@ -75,6 +99,7 @@ export type Driver = {
   name: string;
   phone: string;
   license: string;
+  pin: string;
   truck_id: number | null;
   status: DriverStatus;
   created_at: string;
@@ -100,6 +125,13 @@ export type Load = {
   commodity: string;
   rate: number | null;
   notes: string;
+  special_instructions: string;
+  appointment_notes: string;
+  reference_number: string;
+  po_number: string;
+  reefer_setpoint_f: number | null;
+  trailer_number: string;
+  driver_progress: DriverProgress | "";
   status: LoadStatus;
   truck_id: number | null;
   driver_id: number | null;
@@ -111,7 +143,32 @@ export type LoadView = Load & {
   customer_name: string;
   truck_unit: string | null;
   truck_type: TruckType | null;
+  truck_samsara_id: string | null;
   driver_name: string | null;
+};
+
+export type Attachment = {
+  id: number;
+  load_id: number;
+  kind: AttachmentKind;
+  original_name: string;
+  stored_name: string;
+  mime_type: string;
+  uploaded_by: "dispatcher" | "driver";
+  created_at: string;
+};
+
+export type ReeferReading = {
+  id: number;
+  load_id: number | null;
+  truck_id: number | null;
+  trailer_id: string;
+  setpoint_f: number | null;
+  temperature_f: number | null;
+  door_open: number | null;
+  alarm: string;
+  source: "demo" | "samsara";
+  recorded_at: string;
 };
 
 export type DashboardStats = {
@@ -152,4 +209,16 @@ export function labelForDriverStatus(status: string): string {
 
 export function isLoadStatus(value: string): value is LoadStatus {
   return (LOAD_STATUSES as readonly string[]).includes(value);
+}
+
+export function isDriverProgress(value: string): value is DriverProgress {
+  return DRIVER_PROGRESS.some((item) => item.value === value);
+}
+
+export function labelForDriverProgress(value: string): string {
+  return DRIVER_PROGRESS.find((item) => item.value === value)?.label ?? value;
+}
+
+export function labelForAttachmentKind(value: string): string {
+  return ATTACHMENT_KINDS.find((item) => item.value === value)?.label ?? value;
 }

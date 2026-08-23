@@ -5,7 +5,10 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { ReeferBadge } from "@/components/reefer-badge";
+import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrucks, listLoads } from "@/lib/queries";
+import { labelForDriverProgress } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,7 @@ export default async function BoardPage({
                   <th>Pickup</th>
                   <th>Delivery</th>
                   <th>Unit</th>
+                  <th>Reefer</th>
                   <th>Rate</th>
                   <th>Move</th>
                   <th></th>
@@ -80,10 +84,21 @@ export default async function BoardPage({
                         <>
                           <div>Unit {load.truck_unit}</div>
                           <div className="text-xs text-slate-500">{load.driver_name}</div>
+                          {load.driver_progress ? (
+                            <div className="text-xs text-indigo-700">
+                              {labelForDriverProgress(load.driver_progress)}
+                            </div>
+                          ) : null}
                         </>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}
+                    </td>
+                    <td>
+                      <ReeferBadge
+                        setpoint={load.reefer_setpoint_f}
+                        reading={getLatestReeferForLoad(load.id)}
+                      />
                     </td>
                     <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>
                     <td>
@@ -91,12 +106,13 @@ export default async function BoardPage({
                     </td>
                     <td className="whitespace-nowrap">
                       <div className="flex justify-end gap-2">
-                        {load.status === "available" || load.status === "assigned" ? (
+                        {load.status === "available" || load.status === "assigned" || load.status === "in_transit" ? (
                           <AssignDialog
                             loadId={load.id}
                             loadNumber={load.load_number}
                             trucks={listAssignableTrucks(load.id)}
                             drivers={listAssignableDrivers(load.id)}
+                            label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}
                         <Link href={`/loads/${load.id}`} className="btn btn-ghost">

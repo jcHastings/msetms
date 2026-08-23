@@ -47,6 +47,19 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         />
       </div>
       <div className="field">
+        <label htmlFor="samsara_vehicle_id">Samsara vehicle ID</label>
+        <input
+          id="samsara_vehicle_id"
+          name="samsara_vehicle_id"
+          defaultValue={truck?.samsara_vehicle_id}
+          placeholder="Optional"
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="trailer_number">Default trailer #</label>
+        <input id="trailer_number" name="trailer_number" defaultValue={truck?.trailer_number} />
+      </div>
+      <div className="field">
         <label htmlFor="status">Status</label>
         <select id="status" name="status" defaultValue={truck?.status ?? "available"}>
           {TRUCK_STATUSES.map((status) => (

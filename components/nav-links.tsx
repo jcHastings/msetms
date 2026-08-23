@@ -9,6 +9,8 @@ const NAV = [
   { href: "/loads/new", label: "New load" },
   { href: "/fleet", label: "Fleet" },
   { href: "/customers", label: "Customers" },
+  { href: "/settings", label: "Integrations" },
+  { href: "/driver/login", label: "Driver app" },
 ];
 
 export function NavLinks() {

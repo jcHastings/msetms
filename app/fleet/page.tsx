@@ -73,6 +73,7 @@ export default function FleetPage() {
                 <th>Name</th>
                 <th>Phone</th>
                 <th>License</th>
+                <th>PIN</th>
                 <th>Truck</th>
                 <th>Status</th>
                 <th></th>
@@ -84,6 +85,7 @@ export default function FleetPage() {
                   <td className="font-semibold">{driver.name}</td>
                   <td className="whitespace-nowrap">{driver.phone || "—"}</td>
                   <td className="font-mono text-xs">{driver.license || "—"}</td>
+                  <td className="font-mono">{driver.pin || "—"}</td>
                   <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>
                   <td>
                     <DriverStatusBadge status={driver.status} />

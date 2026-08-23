@@ -9,9 +9,10 @@ type Props = {
   loadNumber: string;
   trucks: Truck[];
   drivers: DriverWithTruck[];
+  label?: string;
 };
 
-export function AssignDialog({ loadId, loadNumber, trucks, drivers }: Props) {
+export function AssignDialog({ loadId, loadNumber, trucks, drivers, label = "Assign" }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -42,7 +43,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, drivers }: Props) {
   return (
     <>
       <button className="btn btn-secondary" type="button" onClick={() => setOpen(true)}>
-        Assign
+        {label}
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6">

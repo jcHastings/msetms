@@ -10,6 +10,7 @@ import {
   type DriverStatus,
   type DriverWithTruck,
   type Load,
+  type DriverProgress,
   type LoadStatus,
   type LoadView,
   type Truck,
@@ -23,6 +24,7 @@ const LOAD_SELECT = `
     customers.name AS customer_name,
     trucks.unit_number AS truck_unit,
     trucks.type AS truck_type,
+    trucks.samsara_vehicle_id AS truck_samsara_id,
     drivers.name AS driver_name
   FROM loads
   JOIN customers ON customers.id = loads.customer_id
@@ -117,15 +119,26 @@ export function createTruck(input: {
   type: TruckType;
   capacity_lbs: number;
   status: TruckStatus;
+  samsara_vehicle_id?: string;
+  trailer_number?: string;
 }): number {
   const timestamp = now();
   try {
     const result = getDb()
       .prepare(
-        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, trailer_number, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.unit_number, input.type, input.capacity_lbs, input.status, timestamp, timestamp);
+      .run(
+        input.unit_number,
+        input.type,
+        input.capacity_lbs,
+        input.status,
+        input.samsara_vehicle_id ?? "",
+        input.trailer_number ?? "",
+        timestamp,
+        timestamp,
+      );
     return Number(result.lastInsertRowid);
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
@@ -142,6 +155,8 @@ export function updateTruck(
     type: TruckType;
     capacity_lbs: number;
     status: TruckStatus;
+    samsara_vehicle_id?: string;
+    trailer_number?: string;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
@@ -149,10 +164,20 @@ export function updateTruck(
     getDb()
       .prepare(
         `UPDATE trucks
-         SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?, updated_at = ?
+         SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
+             samsara_vehicle_id = ?, trailer_number = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .run(input.unit_number, input.type, input.capacity_lbs, input.status, now(), id);
+      .run(
+        input.unit_number,
+        input.type,
+        input.capacity_lbs,
+        input.status,
+        input.samsara_vehicle_id ?? "",
+        input.trailer_number ?? "",
+        now(),
+        id,
+      );
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
       throw new Error("A truck with that unit number already exists.");
@@ -189,6 +214,7 @@ export function createDriver(input: {
   name: string;
   phone: string;
   license: string;
+  pin?: string;
   truck_id: number | null;
   status: DriverStatus;
 }): number {
@@ -198,10 +224,19 @@ export function createDriver(input: {
   const timestamp = now();
   const result = getDb()
     .prepare(
-      `INSERT INTO drivers (name, phone, license, truck_id, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO drivers (name, phone, license, pin, truck_id, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(input.name, input.phone, input.license, input.truck_id, input.status, timestamp, timestamp);
+    .run(
+      input.name,
+      input.phone,
+      input.license,
+      input.pin ?? "",
+      input.truck_id,
+      input.status,
+      timestamp,
+      timestamp,
+    );
   return Number(result.lastInsertRowid);
 }
 
@@ -211,6 +246,7 @@ export function updateDriver(
     name: string;
     phone: string;
     license: string;
+    pin?: string;
     truck_id: number | null;
     status: DriverStatus;
   },
@@ -222,10 +258,54 @@ export function updateDriver(
   getDb()
     .prepare(
       `UPDATE drivers
-       SET name = ?, phone = ?, license = ?, truck_id = ?, status = ?, updated_at = ?
+       SET name = ?, phone = ?, license = ?, pin = ?, truck_id = ?, status = ?, updated_at = ?
        WHERE id = ?`,
     )
-    .run(input.name, input.phone, input.license, input.truck_id, input.status, now(), id);
+    .run(
+      input.name,
+      input.phone,
+      input.license,
+      input.pin ?? "",
+      input.truck_id,
+      input.status,
+      now(),
+      id,
+    );
+}
+
+export function authenticateDriver(driverId: number, pin: string): DriverWithTruck {
+  const driver = getDriver(driverId);
+  if (!driver || !driver.pin || driver.pin !== pin.trim()) {
+    throw new Error("Driver or PIN is not recognized.");
+  }
+  return driver;
+}
+
+export function listLoadsForDriver(driverId: number): LoadView[] {
+  return getDb()
+    .prepare(
+      `${LOAD_SELECT}
+       WHERE loads.driver_id = ?
+         AND loads.status IN ('assigned', 'in_transit', 'delivered')
+       ORDER BY CASE loads.status
+         WHEN 'in_transit' THEN 0
+         WHEN 'assigned' THEN 1
+         ELSE 2
+       END, loads.pickup_start ASC`,
+    )
+    .all(driverId) as LoadView[];
+}
+
+export function findOrCreateCustomer(name: string): number {
+  const existing = listCustomers().find(
+    (customer) => customer.name.toLowerCase() === name.trim().toLowerCase(),
+  );
+  if (existing) return existing.id;
+  return createCustomer({
+    name: name.trim(),
+    billing_notes: "Created from a rate confirmation import.",
+    contacts: [],
+  });
 }
 
 export type LoadFilters = {
@@ -300,6 +380,12 @@ export type LoadInput = {
   commodity: string;
   rate: number | null;
   notes: string;
+  special_instructions: string;
+  appointment_notes: string;
+  reference_number: string;
+  po_number: string;
+  reefer_setpoint_f: number | null;
+  trailer_number: string;
   status: LoadStatus;
   truck_id: number | null;
   driver_id: number | null;
@@ -339,9 +425,10 @@ export function createLoad(input: LoadInput): number {
         `INSERT INTO loads (
           load_number, customer_id, origin, destination,
           pickup_start, pickup_end, delivery_start, delivery_end,
-          weight, commodity, rate, notes, status, truck_id, driver_id,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          weight, commodity, rate, notes, special_instructions, appointment_notes,
+          reference_number, po_number, reefer_setpoint_f, trailer_number,
+          status, truck_id, driver_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         loadNumber,
@@ -356,6 +443,12 @@ export function createLoad(input: LoadInput): number {
         input.commodity,
         input.rate,
         input.notes,
+        input.special_instructions,
+        input.appointment_notes,
+        input.reference_number,
+        input.po_number,
+        input.reefer_setpoint_f,
+        input.trailer_number,
         input.status,
         input.truck_id,
         input.driver_id,
@@ -381,8 +474,10 @@ export function updateLoad(id: number, input: LoadInput): void {
       `UPDATE loads SET
         customer_id = ?, origin = ?, destination = ?,
         pickup_start = ?, pickup_end = ?, delivery_start = ?, delivery_end = ?,
-        weight = ?, commodity = ?, rate = ?, notes = ?, status = ?,
-        truck_id = ?, driver_id = ?, updated_at = ?
+        weight = ?, commodity = ?, rate = ?, notes = ?,
+        special_instructions = ?, appointment_notes = ?,
+        reference_number = ?, po_number = ?, reefer_setpoint_f = ?, trailer_number = ?,
+        status = ?, truck_id = ?, driver_id = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
       input.customer_id,
@@ -396,6 +491,12 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.commodity,
       input.rate,
       input.notes,
+      input.special_instructions,
+      input.appointment_notes,
+      input.reference_number,
+      input.po_number,
+      input.reefer_setpoint_f,
+      input.trailer_number,
       input.status,
       input.truck_id,
       input.driver_id,
@@ -427,9 +528,17 @@ export function assignLoad(loadId: number, truckId: number, driverId: number): v
   const db = getDb();
   db.transaction(() => {
     releaseAssetsIfNeeded(load);
+    const nextStatus = load.status === "in_transit" ? "in_transit" : "assigned";
     db.prepare(
-      `UPDATE loads SET truck_id = ?, driver_id = ?, status = ?, updated_at = ? WHERE id = ?`,
-    ).run(truckId, driverId, "assigned", now(), loadId);
+      `UPDATE loads SET truck_id = ?, driver_id = ?, status = ?, driver_progress = ?, updated_at = ? WHERE id = ?`,
+    ).run(
+      truckId,
+      driverId,
+      nextStatus,
+      nextStatus === "in_transit" ? load.driver_progress : "",
+      now(),
+      loadId,
+    );
     markAssetsOnDuty(truckId, driverId);
   })();
 }
@@ -566,6 +675,29 @@ export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
       .get(driver.id, loadId ?? -1);
     return !busy;
   });
+}
+
+export function updateDriverProgress(loadId: number, driverId: number, progress: DriverProgress): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  if (load.driver_id !== driverId) {
+    throw new Error("This load is not on your dispatch.");
+  }
+  if (load.status === "cancelled") {
+    throw new Error("This load was cancelled.");
+  }
+  const nextStatus: LoadStatus = progress === "delivered" ? "delivered" : "in_transit";
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE loads SET driver_progress = ?, status = ?, updated_at = ? WHERE id = ?`,
+    ).run(progress, nextStatus, now(), loadId);
+    if (nextStatus === "delivered") {
+      releaseAssetsIfNeeded({ ...load, status: nextStatus });
+    } else {
+      markAssetsOnDuty(load.truck_id, load.driver_id);
+    }
+  })();
 }
 
 export function getDashboardStats(): DashboardStats {

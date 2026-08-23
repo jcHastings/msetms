@@ -30,6 +30,10 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
         <input id="license" name="license" defaultValue={driver?.license} />
       </div>
       <div className="field">
+        <label htmlFor="pin">Driver app PIN</label>
+        <input id="pin" name="pin" defaultValue={driver?.pin} placeholder="4+ digits" />
+      </div>
+      <div className="field">
         <label htmlFor="truck_id">Assigned truck</label>
         <select id="truck_id" name="truck_id" defaultValue={driver?.truck_id ?? ""}>
           <option value="">None</option>

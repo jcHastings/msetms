@@ -33,6 +33,8 @@ export function getDb(): Database.Database {
   };
   if (customerCount.count === 0 && process.env.TMS_SKIP_SEED !== "1") {
     seedDatabase(db);
+  } else {
+    backfillDemoPins(db);
   }
 
   connection = db;
@@ -112,5 +114,69 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_loads_status ON loads(status);
     CREATE INDEX IF NOT EXISTS idx_loads_pickup ON loads(pickup_start);
     CREATE INDEX IF NOT EXISTS idx_contacts_customer ON contacts(customer_id);
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reefer_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER REFERENCES loads(id) ON DELETE CASCADE,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      trailer_id TEXT NOT NULL DEFAULT '',
+      setpoint_f REAL,
+      temperature_f REAL,
+      door_open INTEGER,
+      alarm TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'demo',
+      recorded_at TEXT NOT NULL
+    );
   `);
+
+  ensureColumn(db, "trucks", "samsara_vehicle_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "trailer_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "pin", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "special_instructions", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "appointment_notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "reference_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "po_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "reefer_setpoint_f", "REAL");
+  ensureColumn(db, "loads", "trailer_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "driver_progress", "TEXT NOT NULL DEFAULT ''");
+}
+
+function backfillDemoPins(db: Database.Database): void {
+  const pins: Record<string, string> = {
+    "Marcus Hale": "1024",
+    "Denise Ortega": "1125",
+    "James Whitaker": "1186",
+    "Cole Brennan": "2051",
+    "Priya Shah": "1010",
+    "Angela Ruiz": "1080",
+    "Tyrell Brooks": "3000",
+    "Sam Keene": "2100",
+  };
+  const update = db.prepare("UPDATE drivers SET pin = ? WHERE name = ? AND (pin IS NULL OR pin = '')");
+  for (const [name, pin] of Object.entries(pins)) {
+    update.run(pin, name);
+  }
+}
+
+function ensureColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((item) => item.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }

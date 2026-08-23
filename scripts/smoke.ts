@@ -33,7 +33,16 @@ async function main() {
     name: "Riley Smoke",
     phone: "555-0199",
     license: "TN-CDL-SMOKE",
+    pin: "4321",
     truck_id: truckId,
+    status: "available",
+  });
+  const otherDriverId = queries.createDriver({
+    name: "Casey Relay",
+    phone: "555-0111",
+    license: "AL-CDL-RELAY",
+    pin: "2222",
+    truck_id: null,
     status: "available",
   });
 
@@ -59,6 +68,12 @@ async function main() {
     commodity: "Paper rolls",
     rate: 1400,
     notes: "Smoke-test load",
+    special_instructions: "Call receiver 30 minutes out. Driver assist.",
+    appointment_notes: "Dock 2",
+    reference_number: "RC-SMOKE",
+    po_number: "PO-SMOKE",
+    reefer_setpoint_f: null,
+    trailer_number: "",
     status: "available",
     truck_id: null,
     driver_id: null,
@@ -78,8 +93,77 @@ async function main() {
   assert.equal(queries.getTruck(truckId)?.status, "in_use");
   assert.equal(queries.getDriver(driverId)?.status, "on_duty");
 
-  queries.updateLoadStatus(loadId, "in_transit");
+  queries.assignLoad(loadId, truckId, otherDriverId);
+  assert.equal(queries.getLoad(loadId)?.driver_id, otherDriverId);
+  assert.equal(queries.listLoadsForDriver(driverId).some((load) => load.id === loadId), false);
+  assert.equal(queries.listLoadsForDriver(otherDriverId).some((load) => load.id === loadId), true);
+
+  queries.updateDriverProgress(loadId, otherDriverId, "en_route_pickup");
   assert.equal(queries.getLoad(loadId)?.status, "in_transit");
+  queries.updateDriverProgress(loadId, otherDriverId, "loaded");
+  queries.updateDriverProgress(loadId, otherDriverId, "en_route_delivery");
+  queries.updateDriverProgress(loadId, otherDriverId, "delivered");
+  assert.equal(queries.getLoad(loadId)?.status, "delivered");
+
+  const { addAttachment } = await import("../lib/files");
+  addAttachment({
+    loadId,
+    kind: "pod",
+    originalName: "pod-smoke.pdf",
+    buffer: Buffer.from("%PDF-1.4 smoke"),
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  const { listAttachments } = await import("../lib/files");
+  assert.equal(listAttachments(loadId).some((file) => file.kind === "pod"), true);
+
+  const { parseRateConText } = await import("../lib/rate-con");
+  const parsed = parseRateConText(
+    `RATE CONFIRMATION
+Customer: Delta Cold Storage
+Origin: Atlanta, GA
+Destination: Jacksonville, FL
+Pickup Window: 08/25/2026 06:00 - 08/25/2026 10:00
+Delivery Window: 08/25/2026 16:00 - 08/25/2026 20:00
+Commodity: Frozen poultry
+Weight: 41500 lbs
+Rate: $2,150.00
+Ref #: RC-22018
+PO #: PO-77841
+Reefer Setpoint: 0 F
+SPECIAL INSTRUCTIONS
+- Appointment required at delivery; call 60 minutes out
+- Lumper receipt required
+`,
+    queries.listCustomers(),
+  );
+  assert.equal(parsed.origin, "Atlanta, GA");
+  assert.equal(parsed.destination, "Jacksonville, FL");
+  assert.equal(parsed.rate, 2150);
+  assert.equal(parsed.reefer_setpoint_f, 0);
+  assert.match(parsed.special_instructions, /Lumper/i);
+  assert.ok(parsed.customer_id, "sample customer should match Delta Cold Storage");
+
+  const samplePdf = path.join(process.cwd(), "public", "samples", "sample-rate-con.pdf");
+  if (fs.existsSync(samplePdf)) {
+    const { extractDocumentText } = await import("../lib/rate-con");
+    const pdfText = await extractDocumentText(fs.readFileSync(samplePdf), "application/pdf", "sample-rate-con.pdf");
+    const fromPdf = parseRateConText(pdfText, queries.listCustomers());
+    assert.match(fromPdf.origin, /Atlanta/i);
+    assert.match(fromPdf.special_instructions, /Appointment required/i);
+  }
+
+  const denise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
+  assert.ok(denise);
+  queries.authenticateDriver(denise.id, "1125");
+  const deniseLoads = queries.listLoadsForDriver(denise.id);
+  assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
+  const { getLatestReeferForLoad } = await import("../lib/integrations/samsara");
+  const reeferLoad = deniseLoads.find((load) => load.load_number === "MSE-1045");
+  assert.ok(reeferLoad);
+  const reading = getLatestReeferForLoad(reeferLoad.id);
+  assert.ok(reading, "seeded reefer load should have a demo temperature");
+  assert.equal(reading.source, "demo");
 
   queries.updateLoadStatus(loadId, "delivered");
   const delivered = queries.getLoad(loadId);
@@ -87,7 +171,7 @@ async function main() {
   assert.equal(delivered.status, "delivered");
   assert.equal(delivered.truck_id, truckId);
   assert.equal(queries.getTruck(truckId)?.status, "available");
-  assert.equal(queries.getDriver(driverId)?.status, "available");
+  assert.equal(queries.getDriver(otherDriverId)?.status, "available");
 
   const boardHit = queries
     .listLoads({ status: "delivered", q: "Smoke Test Shipper" })

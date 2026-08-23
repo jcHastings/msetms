@@ -9,6 +9,7 @@ import {
   createDriver,
   createLoad,
   createTruck,
+  findOrCreateCustomer,
   updateCustomer,
   updateDriver,
   updateLoad,
@@ -58,8 +59,14 @@ function parseContacts(formData: FormData) {
   }
 }
 
-function parseLoadInput(formData: FormData): LoadInput {
-  const customerId = parseOptionalInt(formData.get("customer_id"));
+function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
+  let customerId = parseOptionalInt(formData.get("customer_id"));
+  if (!customerId && requireCustomer) {
+    const extractedName = String(formData.get("customer_name") ?? "").trim();
+    if (extractedName) {
+      customerId = findOrCreateCustomer(extractedName);
+    }
+  }
   if (!customerId) throw new Error("Pick a customer.");
   const statusValue = String(formData.get("status") ?? "available");
   if (!isLoadStatus(statusValue)) throw new Error("Invalid load status.");
@@ -77,6 +84,12 @@ function parseLoadInput(formData: FormData): LoadInput {
     commodity: String(formData.get("commodity") ?? "").trim(),
     rate: parseOptionalFloat(formData.get("rate")),
     notes: String(formData.get("notes") ?? "").trim(),
+    special_instructions: String(formData.get("special_instructions") ?? "").trim(),
+    appointment_notes: String(formData.get("appointment_notes") ?? "").trim(),
+    reference_number: String(formData.get("reference_number") ?? "").trim(),
+    po_number: String(formData.get("po_number") ?? "").trim(),
+    reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
+    trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     status: statusValue,
     truck_id: truckId,
     driver_id: driverId,
@@ -155,6 +168,8 @@ export async function createTruckAction(
       type: parseTruckType(formData.get("type")),
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
+      samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();
     redirect("/fleet");
@@ -178,6 +193,8 @@ export async function updateTruckAction(
       type: parseTruckType(formData.get("type")),
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
+      samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();
     return { ok: true, id };
@@ -195,6 +212,7 @@ export async function createDriverAction(
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
       license: String(formData.get("license") ?? "").trim(),
+      pin: String(formData.get("pin") ?? "").trim(),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -217,6 +235,7 @@ export async function updateDriverAction(
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
       license: String(formData.get("license") ?? "").trim(),
+      pin: String(formData.get("pin") ?? "").trim(),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -233,6 +252,11 @@ export async function createLoadAction(
 ): Promise<ActionResult> {
   try {
     const id = createLoad(parseLoadInput(formData));
+    const inboxId = String(formData.get("inbox_id") ?? "").trim();
+    if (inboxId) {
+      const { attachInboxToLoad } = await import("./files");
+      attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+    }
     refresh();
     redirect(`/loads/${id}`);
   } catch (error) {
@@ -280,6 +304,76 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
       throw new Error("Invalid status.");
     }
     updateLoadStatus(loadId, status as LoadStatus);
+    refresh();
+    return { ok: true, id: loadId };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export type RateConParseState = {
+  ok: true;
+  inboxId: string;
+  parsed: import("./rate-con").ParsedRateCon;
+} | ActionResult;
+
+export async function parseRateConAction(
+  _prev: RateConParseState | null,
+  formData: FormData,
+): Promise<RateConParseState> {
+  try {
+    const file = formData.get("rate_con");
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Choose a rate confirmation PDF or image.");
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      throw new Error("File is over 15 MB.");
+    }
+    const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
+    const { extractDocumentText, parseRateConText } = await import("./rate-con");
+    const { listCustomers } = await import("./queries");
+    const buffer = await fileToBuffer(file);
+    const { inboxId } = saveInboxFile(file, buffer);
+    const text = await extractDocumentText(buffer, file.type, file.name);
+    if (!text) {
+      throw new Error("No text came out of that file. Try a text PDF, or type the load by hand.");
+    }
+    const parsed = parseRateConText(text, listCustomers());
+    writeInboxParse(inboxId, parsed);
+    refresh();
+    return { ok: true, inboxId, parsed };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function attachFileFormAction(formData: FormData): Promise<void> {
+  const result = await attachFileAction(formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function attachFileAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      throw new Error("Choose a file to upload.");
+    }
+    const kind = String(formData.get("kind") ?? "other");
+    const { addAttachment, fileToBuffer } = await import("./files");
+    const { ATTACHMENT_KINDS } = await import("./types");
+    if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
+      throw new Error("Pick an attachment type.");
+    }
+    await addAttachment({
+      loadId,
+      kind: kind as (typeof ATTACHMENT_KINDS)[number]["value"],
+      originalName: file.name,
+      buffer: await fileToBuffer(file),
+      mimeType: file.type,
+      uploadedBy: "dispatcher",
+    });
     refresh();
     return { ok: true, id: loadId };
   } catch (error) {
