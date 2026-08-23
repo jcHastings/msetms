@@ -425,7 +425,8 @@ Continuous reefer. Two load locks.
   if (blankExtract.ok && "parsed" in blankExtract) {
     assert.equal(blankExtract.parsed.weight, null, "empty PDF must not scrape 45090 from the filename");
     assert.equal(blankExtract.parsed.origin, "");
-    assert.match(blankExtract.warning ?? "", /text|read/i);
+    assert.equal(blankExtract.warning, "Couldn't read text from this PDF");
+    assert.equal(blankExtract.fileName, "Load_Confirmation_45090_20260823190045.pdf");
     assert.ok(blankExtract.inboxId);
   }
 

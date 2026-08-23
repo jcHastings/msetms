@@ -36,6 +36,7 @@ export function RateConApply({
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
+  const [chosenName, setChosenName] = useState("");
   const heldFile = useRef<File | null>(null);
   const parsed = state && "parsed" in state && state.ok ? state.parsed : null;
   const boundAction = updateLoadAction.bind(null, load.id);
@@ -82,10 +83,12 @@ export function RateConApply({
         ) : null}
         <RateConPicker
           inputId={`rate_con_${load.id}`}
-          fileName={state && "fileName" in state ? state.fileName : ""}
+          fileName={chosenName || (state && "fileName" in state ? state.fileName : "")}
           onFile={(file) => {
+            if (!file) return;
             heldFile.current = file;
-            if (file) setLocalError("");
+            setChosenName(file.name);
+            setLocalError("");
           }}
         />
         <button

@@ -34,6 +34,7 @@ export function RateConImport({
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
+  const [chosenName, setChosenName] = useState("");
   const heldFile = useRef<File | null>(null);
   const parsed = state && "parsed" in state && state.ok ? state.parsed : null;
   const serverError = state && !("parsed" in state && state.ok) ? state : null;
@@ -78,10 +79,12 @@ export function RateConImport({
           </div>
         ) : null}
         <RateConPicker
-          fileName={state && "fileName" in state ? state.fileName : ""}
+          fileName={chosenName || (state && "fileName" in state ? state.fileName : "")}
           onFile={(file) => {
+            if (!file) return;
             heldFile.current = file;
-            if (file) setLocalError("");
+            setChosenName(file.name);
+            setLocalError("");
           }}
         />
         <button

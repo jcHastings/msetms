@@ -32,25 +32,40 @@ export function RateConPicker({
     }
   }
 
-  function assignFile(file: File | null) {
+  function assignFile(file: File) {
     fileRef.current = file;
-    setName(file?.name ?? "");
+    setName(file.name);
     onFile?.(file);
-    if (file) putFileOnInput(file);
+    putFileOnInput(file);
+  }
+
+  function restoreHeldFile() {
+    if (fileRef.current && inputRef.current && (!inputRef.current.files || inputRef.current.files.length === 0)) {
+      putFileOnInput(fileRef.current);
+    }
+  }
+
+  function takeInputFiles(files: FileList | null) {
+    const file = files?.[0] ?? null;
+    if (!file) {
+      // React/Next resets the form after Extract and fires change with an empty list.
+      // Keep the chosen File and put it back on the input.
+      restoreHeldFile();
+      return;
+    }
+    assignFile(file);
   }
 
   useEffect(() => {
-    const input = inputRef.current;
-    const form = input?.form;
-    function restore() {
-      if (fileRef.current && input && (!input.files || input.files.length === 0)) {
-        putFileOnInput(fileRef.current);
-      }
-    }
-    restore();
+    restoreHeldFile();
+    const form = inputRef.current?.form;
     if (!form) return;
-    form.addEventListener("submit", restore, true);
-    return () => form.removeEventListener("submit", restore, true);
+    form.addEventListener("submit", restoreHeldFile, true);
+    form.addEventListener("reset", restoreHeldFile, true);
+    return () => {
+      form.removeEventListener("submit", restoreHeldFile, true);
+      form.removeEventListener("reset", restoreHeldFile, true);
+    };
   });
 
   return (
@@ -66,7 +81,8 @@ export function RateConPicker({
       onDrop={(event) => {
         event.preventDefault();
         setDrag(false);
-        assignFile(event.dataTransfer.files?.[0] ?? null);
+        const file = event.dataTransfer.files?.[0];
+        if (file) assignFile(file);
       }}
     >
       <p className="text-sm font-semibold">Rate con file</p>
@@ -80,8 +96,8 @@ export function RateConPicker({
         name="rate_con"
         type="file"
         className="sr-only"
-        onChange={(event) => assignFile(event.target.files?.[0] ?? null)}
-        onInput={(event) => assignFile(event.currentTarget.files?.[0] ?? null)}
+        onChange={(event) => takeInputFiles(event.target.files)}
+        onInput={(event) => takeInputFiles(event.currentTarget.files)}
       />
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button className="btn btn-secondary" type="button" onClick={() => inputRef.current?.click()}>

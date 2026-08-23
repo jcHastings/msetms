@@ -539,14 +539,11 @@ export async function parseRateConAction(
     if (!text || textLooksLikeFilenameOnly(text, file.name)) {
       const parsed = emptyParsedRateCon();
       writeInboxParse(inboxId, parsed);
-      refresh();
       return {
         ok: true,
         inboxId,
         fileName: file.name,
-        warning:
-          warning ||
-          "Couldn't read text from this PDF. The file is still attached — finish the fields by hand.",
+        warning: warning || "Couldn't read text from this PDF",
         parsed,
       };
     }
@@ -554,7 +551,6 @@ export async function parseRateConAction(
     const thin =
       !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
     writeInboxParse(inboxId, parsed);
-    refresh();
     return {
       ok: true,
       inboxId,
