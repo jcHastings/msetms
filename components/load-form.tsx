@@ -11,6 +11,7 @@ import {
   truckComplianceAlerts,
 } from "@/lib/compliance";
 import { formatMoney, toInputDateTime } from "@/lib/format";
+import { formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import {
   LOAD_STATUSES,
@@ -19,6 +20,7 @@ import {
   type Customer,
   type DriverWithTruck,
   type Load,
+  type Location,
   type Trailer,
   type Truck,
 } from "@/lib/types";
@@ -49,6 +51,7 @@ type Props = {
   trucks: Truck[];
   trailers?: Trailer[];
   drivers: DriverWithTruck[];
+  locations?: Location[];
   load?: Load;
   defaults?: Defaults;
   inboxId?: string;
@@ -61,6 +64,7 @@ export function LoadForm({
   trucks,
   trailers = [],
   drivers,
+  locations = [],
   load,
   defaults,
   inboxId,
@@ -72,7 +76,17 @@ export function LoadForm({
   const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
   const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
   const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
+  const [shipperId, setShipperId] = useState(load?.shipper_location_id ? String(load.shipper_location_id) : "");
+  const [consigneeId, setConsigneeId] = useState(
+    load?.consignee_location_id ? String(load.consignee_location_id) : "",
+  );
+  const [origin, setOrigin] = useState(load?.origin ?? extraDefaults.origin ?? "");
+  const [destination, setDestination] = useState(load?.destination ?? extraDefaults.destination ?? "");
   const [confirmed, setConfirmed] = useState(false);
+  const shippers = locations.filter((location) => locationMatchesRole(location, "shipper"));
+  const receivers = locations.filter((location) => locationMatchesRole(location, "receiver"));
+  const selectedShipper = locations.find((location) => String(location.id) === shipperId) ?? null;
+  const selectedConsignee = locations.find((location) => String(location.id) === consigneeId) ?? null;
   const [rate, setRate] = useState(
     load?.rate != null ? String(load.rate) : extraDefaults.rate != null ? String(extraDefaults.rate) : "",
   );
@@ -131,12 +145,61 @@ export function LoadForm({
           </select>
         </div>
         <div className="field">
+          <label htmlFor="shipper_location_id">Shipper location</label>
+          <select
+            id="shipper_location_id"
+            name="shipper_location_id"
+            value={shipperId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setShipperId(nextId);
+              const next = locations.find((location) => String(location.id) === nextId);
+              if (next) setOrigin(formatLocationCityState(next));
+            }}
+          >
+            <option value="">One-off — type origin</option>
+            {shippers.map((location) => (
+              <option key={location.id} value={location.id}>
+                {formatLocationLabel(location)}
+              </option>
+            ))}
+          </select>
+          {selectedShipper ? (
+            <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedShipper)}</p>
+          ) : null}
+        </div>
+        <div className="field">
+          <label htmlFor="consignee_location_id">Consignee location</label>
+          <select
+            id="consignee_location_id"
+            name="consignee_location_id"
+            value={consigneeId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setConsigneeId(nextId);
+              const next = locations.find((location) => String(location.id) === nextId);
+              if (next) setDestination(formatLocationCityState(next));
+            }}
+          >
+            <option value="">One-off — type destination</option>
+            {receivers.map((location) => (
+              <option key={location.id} value={location.id}>
+                {formatLocationLabel(location)}
+              </option>
+            ))}
+          </select>
+          {selectedConsignee ? (
+            <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedConsignee)}</p>
+          ) : null}
+        </div>
+        <div className="field">
           <label htmlFor="origin">Origin</label>
           <input
             id="origin"
             name="origin"
             required
-            defaultValue={load?.origin ?? extraDefaults.origin ?? ""}
+            value={origin}
+            onChange={(event) => setOrigin(event.target.value)}
             placeholder="City, ST"
           />
         </div>
@@ -146,7 +209,8 @@ export function LoadForm({
             id="destination"
             name="destination"
             required
-            defaultValue={load?.destination ?? extraDefaults.destination ?? ""}
+            value={destination}
+            onChange={(event) => setDestination(event.target.value)}
             placeholder="City, ST"
           />
         </div>

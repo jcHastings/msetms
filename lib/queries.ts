@@ -23,12 +23,21 @@ import {
   type IftaJurisdictionRow,
   type IftaReport,
   type LoadView,
+  type Location,
   type Trailer,
   type TrailerType,
   type Truck,
   type TruckStatus,
   type TruckType,
 } from "./types";
+import { extractStateCode } from "./locations";
+import type { LocationInput } from "./locations";
+import {
+  defaultSearchCriteria,
+  type LoadSearchCriteria,
+  type SavedReport,
+  type SearchColumnKey,
+} from "./search";
 
 const LOAD_SELECT = `
   SELECT
@@ -57,6 +66,91 @@ function now(): string {
 
 function asLoadView(row: LoadView | undefined): LoadView | null {
   return row ?? null;
+}
+
+export function listLocations(role?: "shipper" | "receiver"): Location[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM locations ORDER BY name COLLATE NOCASE")
+    .all() as Location[];
+  if (!role) return rows;
+  return rows.filter((location) => location.role === "both" || location.role === role);
+}
+
+export function getLocation(id: number): Location | null {
+  return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
+}
+
+export function createLocation(input: LocationInput): number {
+  const timestamp = now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO locations (
+        name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.name,
+      input.street,
+      input.city,
+      input.state,
+      input.zip,
+      input.phone,
+      input.notes,
+      input.role,
+      input.scheduling_type,
+      input.hours,
+      input.scheduling_notes,
+      timestamp,
+      timestamp,
+    );
+  return Number(result.lastInsertRowid);
+}
+
+export function updateLocation(id: number, input: LocationInput): void {
+  if (!getLocation(id)) throw new Error("Location not found.");
+  getDb()
+    .prepare(
+      `UPDATE locations
+       SET name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?, notes = ?,
+           role = ?, scheduling_type = ?, hours = ?, scheduling_notes = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      input.name,
+      input.street,
+      input.city,
+      input.state,
+      input.zip,
+      input.phone,
+      input.notes,
+      input.role,
+      input.scheduling_type,
+      input.hours,
+      input.scheduling_notes,
+      now(),
+      id,
+    );
+}
+
+export function deleteLocation(id: number): void {
+  if (!getLocation(id)) throw new Error("Location not found.");
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("UPDATE loads SET shipper_location_id = NULL WHERE shipper_location_id = ?").run(id);
+    db.prepare("UPDATE loads SET consignee_location_id = NULL WHERE consignee_location_id = ?").run(id);
+    db.prepare("DELETE FROM locations WHERE id = ?").run(id);
+  })();
+}
+
+export function locationsForLoad(load: {
+  shipper_location_id: number | null;
+  consignee_location_id: number | null;
+}): { shipper: Location | null; consignee: Location | null } {
+  return {
+    shipper: load.shipper_location_id ? getLocation(load.shipper_location_id) : null,
+    consignee: load.consignee_location_id ? getLocation(load.consignee_location_id) : null,
+  };
 }
 
 export function listCustomers(): Customer[] {
@@ -532,6 +626,113 @@ export function getLoad(id: number): LoadView | null {
   return asLoadView(getDb().prepare(`${LOAD_SELECT} WHERE loads.id = ?`).get(id) as LoadView | undefined);
 }
 
+function searchStatuses(criteria: LoadSearchCriteria): string[] {
+  if (criteria.status && isLoadStatus(criteria.status)) {
+    return [criteria.status];
+  }
+  const statuses: string[] = [];
+  if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES);
+  if (criteria.includeArchived) statuses.push("delivered");
+  if (criteria.includeCancelled) statuses.push("cancelled");
+  return statuses;
+}
+
+export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[] {
+  const criteria = { ...defaultSearchCriteria(), ...input };
+  const statuses = searchStatuses(criteria);
+  if (statuses.length === 0) return [];
+
+  const clauses: string[] = [`loads.status IN (${statuses.map(() => "?").join(", ")})`];
+  const params: Array<string | number> = [...statuses];
+
+  if (criteria.q.trim()) {
+    const term = `%${criteria.q.trim()}%`;
+    clauses.push(
+      `(loads.load_number LIKE ? OR customers.name LIKE ? OR loads.origin LIKE ? OR loads.destination LIKE ?
+        OR loads.commodity LIKE ? OR loads.reference_number LIKE ? OR loads.po_number LIKE ?
+        OR loads.notes LIKE ? OR loads.special_instructions LIKE ? OR loads.appointment_notes LIKE ?)`,
+    );
+    params.push(term, term, term, term, term, term, term, term, term, term);
+  }
+
+  if (criteria.customerId) {
+    clauses.push("loads.customer_id = ?");
+    params.push(criteria.customerId);
+  }
+  if (criteria.driverId) {
+    clauses.push("loads.driver_id = ?");
+    params.push(criteria.driverId);
+  }
+  if (criteria.truckId) {
+    clauses.push("loads.truck_id = ?");
+    params.push(criteria.truckId);
+  }
+  if (criteria.trailerId) {
+    clauses.push("loads.trailer_id = ?");
+    params.push(criteria.trailerId);
+  }
+
+  if (criteria.dateFrom) {
+    clauses.push("date(loads.pickup_start, 'localtime') >= ?");
+    params.push(criteria.dateFrom);
+  }
+  if (criteria.dateTo) {
+    clauses.push("date(loads.pickup_start, 'localtime') <= ?");
+    params.push(criteria.dateTo);
+  }
+
+  const where = `WHERE ${clauses.join(" AND ")}`;
+  const rows = getDb()
+    .prepare(
+      `${LOAD_SELECT} ${where}
+       ORDER BY loads.pickup_start ASC, loads.load_number`,
+    )
+    .all(...params) as LoadView[];
+
+  return rows.filter((load) => {
+    if (criteria.originState && extractStateCode(load.origin) !== criteria.originState.toUpperCase()) {
+      return false;
+    }
+    if (criteria.destState && extractStateCode(load.destination) !== criteria.destState.toUpperCase()) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function listSavedReports(): SavedReport[] {
+  return getDb()
+    .prepare("SELECT * FROM saved_reports ORDER BY name COLLATE NOCASE")
+    .all() as SavedReport[];
+}
+
+export function getSavedReport(id: number): SavedReport | null {
+  return (
+    (getDb().prepare("SELECT * FROM saved_reports WHERE id = ?").get(id) as SavedReport | undefined) ?? null
+  );
+}
+
+export function createSavedReport(input: {
+  name: string;
+  filters: LoadSearchCriteria;
+  columns: SearchColumnKey[];
+}): number {
+  const name = input.name.trim();
+  if (!name) throw new Error("Name the report.");
+  const timestamp = now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO saved_reports (name, filters_json, columns_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(name, JSON.stringify(input.filters), JSON.stringify(input.columns), timestamp, timestamp);
+  return Number(result.lastInsertRowid);
+}
+
+export function deleteSavedReport(id: number): void {
+  getDb().prepare("DELETE FROM saved_reports WHERE id = ?").run(id);
+}
+
 export function nextLoadNumber(): string {
   const row = getDb()
     .prepare(`SELECT load_number FROM loads ORDER BY id DESC LIMIT 1`)
@@ -561,6 +762,8 @@ export type LoadInput = {
   reefer_setpoint_f: number | null;
   trailer_number: string;
   trailer_id?: number | null;
+  shipper_location_id?: number | null;
+  consignee_location_id?: number | null;
   oo_percent?: number | null;
   oo_pay?: number | null;
   status: LoadStatus;
@@ -571,6 +774,12 @@ export type LoadInput = {
 function validateLoadInput(input: LoadInput): void {
   if (!getCustomer(input.customer_id)) {
     throw new Error("Pick a customer.");
+  }
+  if (input.shipper_location_id && !getLocation(input.shipper_location_id)) {
+    throw new Error("Shipper location was not found.");
+  }
+  if (input.consignee_location_id && !getLocation(input.consignee_location_id)) {
+    throw new Error("Consignee location was not found.");
   }
   if (new Date(input.pickup_end) < new Date(input.pickup_start)) {
     throw new Error("Pickup window end must be after the start.");
@@ -604,8 +813,9 @@ export function createLoad(input: LoadInput): number {
           pickup_start, pickup_end, delivery_start, delivery_end,
           weight, commodity, rate, notes, special_instructions, appointment_notes,
           reference_number, po_number, reefer_setpoint_f, trailer_number, trailer_id,
+          shipper_location_id, consignee_location_id,
           oo_percent, oo_pay, status, truck_id, driver_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         loadNumber,
@@ -627,6 +837,8 @@ export function createLoad(input: LoadInput): number {
         input.reefer_setpoint_f,
         input.trailer_number,
         input.trailer_id ?? null,
+        input.shipper_location_id ?? null,
+        input.consignee_location_id ?? null,
         input.oo_percent ?? null,
         input.oo_pay ?? null,
         input.status,
@@ -657,6 +869,7 @@ export function updateLoad(id: number, input: LoadInput): void {
         weight = ?, commodity = ?, rate = ?, notes = ?,
         special_instructions = ?, appointment_notes = ?,
         reference_number = ?, po_number = ?, reefer_setpoint_f = ?, trailer_number = ?, trailer_id = ?,
+        shipper_location_id = ?, consignee_location_id = ?,
         oo_percent = ?, oo_pay = ?, status = ?, truck_id = ?, driver_id = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
@@ -678,6 +891,8 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.reefer_setpoint_f,
       input.trailer_number,
       input.trailer_id ?? null,
+      input.shipper_location_id ?? null,
+      input.consignee_location_id ?? null,
       input.oo_percent ?? null,
       input.oo_pay ?? null,
       input.status,

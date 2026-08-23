@@ -2,7 +2,7 @@
  * Point .next/standalone at project data / .env files.
  *
  * Windows refuses user-mode symlinks (EPERM) unless Developer Mode or admin
- * is on. Never require those: junction a directory when we can, otherwise copy.
+ * is on. Never require those: always copy on win32 (never junction or symlink).
  */
 import {
   copyFileSync,
@@ -67,16 +67,8 @@ export function mirrorIntoStandalone(from, to, { platform = process.platform } =
   mkdirSync(dirname(to), { recursive: true });
   removeStandaloneDest(to);
 
-  // win32: never fs.symlink (needs Developer Mode / admin → EPERM).
+  // win32: never fs.symlink / junction (EPERM without Developer Mode or admin).
   if (platform === "win32") {
-    if (process.platform === "win32" && statSync(from).isDirectory()) {
-      try {
-        symlinkSync(from, to, "junction");
-        return { method: "junction" };
-      } catch {
-        // fall through to copy — no privilege prompt
-      }
-    }
     copyPath(from, to);
     return { method: "copy" };
   }

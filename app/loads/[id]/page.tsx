@@ -17,7 +17,8 @@ import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
-import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { LocationSchedulingCard } from "@/components/location-scheduling";
+import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export default async function LoadDetailPage({
   if (!load) notFound();
 
   const boundAction = updateLoadAction.bind(null, load.id);
+  const stopLocations = locationsForLoad(load);
   await ensureDemoIfta(load);
   const ifta = getIftaPanel(load);
 
@@ -76,6 +78,12 @@ export default async function LoadDetailPage({
           </div>
         </div>
       </div>
+      {stopLocations.shipper || stopLocations.consignee ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <LocationSchedulingCard title="Shipper scheduling" location={stopLocations.shipper} />
+          <LocationSchedulingCard title="Consignee scheduling" location={stopLocations.consignee} />
+        </div>
+      ) : null}
       {load.driver_type === "owner_operator" && load.oo_pay != null ? (
         <div className="mb-4 card p-4 text-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner-operator pay</div>
@@ -108,6 +116,7 @@ export default async function LoadDetailPage({
         customers={listCustomers()}
         trucks={listTrucks()}
         trailers={listTrailers()}
+        locations={listLocations()}
         drivers={listDrivers()}
         load={load}
         action={boundAction}
@@ -118,6 +127,7 @@ export default async function LoadDetailPage({
         customers={listCustomers()}
         trucks={listTrucks()}
         trailers={listTrailers()}
+        locations={listLocations()}
         drivers={listDrivers()}
       />
       <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />

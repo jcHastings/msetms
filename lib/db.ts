@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Database } from "./sqlite";
-import { seedDatabase } from "./seed";
+import { seedDatabase, seedDemoLocations } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
 
@@ -45,6 +45,7 @@ export function getDb(): Database {
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
     backfillDemoInboxExceptions(db);
+    backfillDemoLocations(db);
   }
 
   connection = db;
@@ -247,7 +248,36 @@ export function migrate(db: Database): void {
       name TEXT NOT NULL DEFAULT '',
       miles REAL NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'both',
+      scheduling_type TEXT NOT NULL DEFAULT 'fcfs',
+      hours TEXT NOT NULL DEFAULT '',
+      scheduling_notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS saved_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      filters_json TEXT NOT NULL,
+      columns_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  ensureColumn(db, "loads", "shipper_location_id", "INTEGER");
+  ensureColumn(db, "loads", "consignee_location_id", "INTEGER");
 }
 
 function isoDateOffset(offsetDays: number): string {
@@ -341,6 +371,13 @@ function backfillDemoInboxExceptions(db: Database): void {
       );
     }
   }
+}
+
+/** Existing demo databases created before Locations shipped. */
+function backfillDemoLocations(db: Database): void {
+  const count = (db.prepare("SELECT COUNT(*) as count FROM locations").get() as { count: number }).count;
+  if (count > 0) return;
+  seedDemoLocations(db);
 }
 
 function backfillDemoPins(db: Database): void {

@@ -20,6 +20,8 @@ Existing work only:
 - Dispatcher web desk and phone-width driver web app
 - **Exception inbox** on dispatch home (N fine / M need attention, ranked CRITICAL–LOW)
 - Loads: create, edit, board filters, assign / reassign truck + trailer + driver
+- **Locations** (shipper/receiver CRUD; pick on a load or type a one-off; scheduling notes on load + driver)
+- **Load Search** (criteria, live/archived/cancelled, saved reports)
 - Rate-con ingest (PDF / local OCR) with review before save
 - Load confirmation PDFs (owner-operator vs company-driver templates)
 - Compliance: CDL, medical card, truck/trailer registration, DOT inspection; assign-time alerts

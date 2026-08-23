@@ -8,17 +8,17 @@
  * Never use OS HOSTNAME (machine name, e.g. "cursor"). Does not require
  * Vercel. Never prints secret values.
  *
- * Windows: junction or copy project `data` / `.env` — never symlink (EPERM).
+ * Windows: copy or mkdir project `data` / copy `.env` — never symlink (EPERM).
  * Node: prefer process.execPath; if PATH is 20.x, try Program Files 22/24.
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { config as loadEnv } from "dotenv";
 import { listenAddress } from "./listen-address.mjs";
-import { mirrorIntoStandalone } from "./standalone-link.mjs";
+import { mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
 import {
   resolveNodeExecutable,
   unsupportedNodeMessage,
@@ -64,9 +64,37 @@ copyPublicAssets(join(root, ".next", "static"), join(standaloneDir, ".next", "st
 // env files on the project paths the rest of the app already uses.
 const projectData = join(root, "data");
 mkdirSync(projectData, { recursive: true });
-mirrorIntoStandalone(projectData, join(standaloneDir, "data"));
-mirrorIntoStandalone(join(root, ".env"), join(standaloneDir, ".env"));
-mirrorIntoStandalone(join(root, ".env.local"), join(standaloneDir, ".env.local"));
+stageIntoStandalone(projectData, join(standaloneDir, "data"), { mkdirIfMissing: true });
+stageIntoStandalone(join(root, ".env"), join(standaloneDir, ".env"));
+stageIntoStandalone(join(root, ".env.local"), join(standaloneDir, ".env.local"));
+
+/**
+ * On win32 never symlink or junction `data` / `.env` (EPERM without
+ * Developer Mode or admin). Copy files, or mkdir an empty data dir.
+ */
+function stageIntoStandalone(from, to, { mkdirIfMissing = false } = {}) {
+  if (process.platform === "win32") {
+    removeStandaloneDest(to);
+    if (!existsSync(from)) {
+      if (mkdirIfMissing) mkdirSync(to, { recursive: true });
+      return;
+    }
+    const fromStat = statSync(from);
+    if (fromStat.isDirectory()) {
+      mkdirSync(to, { recursive: true });
+      cpSync(from, to, { recursive: true, force: true });
+      return;
+    }
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(from, to);
+    return;
+  }
+  if (!existsSync(from)) {
+    if (mkdirIfMissing) mkdirSync(to, { recursive: true });
+    return;
+  }
+  mirrorIntoStandalone(from, to);
+}
 
 const port = process.env.PORT || "3000";
 const hostname = listenAddress();

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LoadForm } from "@/components/load-form";
 import { PageHeader } from "@/components/page-header";
 import { createLoadAction } from "@/lib/actions";
-import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,9 @@ export default function NewLoadPage() {
           <div className="flex gap-2">
             <Link href="/loads/import" className="btn btn-secondary">
               From rate con
+            </Link>
+            <Link href="/locations/new" className="btn btn-secondary">
+              New location
             </Link>
             <Link href="/customers/new" className="btn btn-secondary">
               New customer
@@ -40,6 +43,7 @@ export default function NewLoadPage() {
           customers={customers}
           trucks={trucks}
           trailers={listTrailers()}
+          locations={listLocations()}
           drivers={drivers}
           action={createLoadAction}
           submitLabel="Create load"

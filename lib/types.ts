@@ -41,6 +41,38 @@ export const DRIVER_STATUSES = [
 
 export type DriverStatus = (typeof DRIVER_STATUSES)[number]["value"];
 
+export const LOCATION_ROLES = [
+  { value: "shipper", label: "Shipper" },
+  { value: "receiver", label: "Receiver" },
+  { value: "both", label: "Shipper and receiver" },
+] as const;
+
+export type LocationRole = (typeof LOCATION_ROLES)[number]["value"];
+
+export const SCHEDULING_TYPES = [
+  { value: "appointment", label: "Appointment required" },
+  { value: "fcfs", label: "FCFS" },
+] as const;
+
+export type SchedulingType = (typeof SCHEDULING_TYPES)[number]["value"];
+
+export type Location = {
+  id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: LocationRole;
+  scheduling_type: SchedulingType;
+  hours: string;
+  scheduling_notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Customer = {
   id: number;
   name: string;
@@ -212,6 +244,8 @@ export type Load = {
   reefer_setpoint_f: number | null;
   trailer_number: string;
   trailer_id: number | null;
+  shipper_location_id: number | null;
+  consignee_location_id: number | null;
   oo_percent: number | null;
   oo_pay: number | null;
   driver_progress: DriverProgress | "";
@@ -359,4 +393,20 @@ export function labelForDriverProgress(value: string): string {
 
 export function labelForAttachmentKind(value: string): string {
   return ATTACHMENT_KINDS.find((item) => item.value === value)?.label ?? value;
+}
+
+export function isLocationRole(value: string): value is LocationRole {
+  return LOCATION_ROLES.some((item) => item.value === value);
+}
+
+export function isSchedulingType(value: string): value is SchedulingType {
+  return SCHEDULING_TYPES.some((item) => item.value === value);
+}
+
+export function labelForLocationRole(value: string): string {
+  return LOCATION_ROLES.find((item) => item.value === value)?.label ?? value;
+}
+
+export function labelForSchedulingType(value: string): string {
+  return SCHEDULING_TYPES.find((item) => item.value === value)?.label ?? value;
 }

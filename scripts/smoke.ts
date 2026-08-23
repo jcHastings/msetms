@@ -7,6 +7,12 @@ const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
 
 async function main() {
+  const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
+  assert.match(navSource, /href: "\/locations"/);
+  assert.match(navSource, /label: "Locations"/);
+  assert.match(navSource, /href: "\/search"/);
+  assert.match(navSource, /label: "Search"/);
+
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
 
@@ -756,6 +762,145 @@ SPECIAL INSTRUCTIONS
     .some((load) => load.id === loadId);
   assert.equal(boardHit, true, "delivered load should appear on the board when filtered");
 
+  const locations = queries.listLocations();
+  assert.ok(locations.length >= 1, "seed should include shipper/receiver locations");
+  const chicagoShipper = locations.find((location) => location.city === "Chicago" && location.role === "shipper");
+  assert.ok(chicagoShipper);
+  assert.equal(chicagoShipper.scheduling_type, "fcfs");
+  assert.match(chicagoShipper.scheduling_notes, /FCFS/i);
+  const indyReceiver = locations.find((location) => location.city === "Indianapolis");
+  assert.ok(indyReceiver);
+  assert.equal(indyReceiver.scheduling_type, "appointment");
+  const load1042 = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1042");
+  assert.ok(load1042);
+  assert.equal(load1042.shipper_location_id, chicagoShipper.id);
+  assert.equal(load1042.consignee_location_id, indyReceiver.id);
+  const stops = queries.locationsForLoad(load1042);
+  assert.ok(stops.shipper);
+  assert.ok(stops.consignee);
+  assert.match(stops.consignee.scheduling_notes, /Appointment required/i);
+
+  const oneOffShipper = queries.createLocation({
+    name: "Smoke One-Off Yard",
+    street: "100 Test Rd",
+    city: "Jackson",
+    state: "MS",
+    zip: "39201",
+    phone: "555-0100",
+    notes: "",
+    role: "both",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 07:00–15:00",
+    scheduling_notes: "Call the guard shack. Dock 3.",
+  });
+  const locatedId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Jackson, MS",
+    destination: "Birmingham, AL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 20000,
+    commodity: "Location smoke",
+    rate: 900,
+    notes: "Has a saved shipper",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "LOC-SMOKE",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    shipper_location_id: oneOffShipper,
+    consignee_location_id: null,
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const located = queries.getLoad(locatedId);
+  assert.ok(located);
+  assert.equal(located.shipper_location_id, oneOffShipper);
+  assert.equal(located.consignee_location_id, null);
+  assert.equal(queries.getLocation(oneOffShipper)?.city, "Jackson");
+  queries.updateLocation(oneOffShipper, {
+    name: "Smoke One-Off Yard",
+    street: "200 Test Rd",
+    city: "Jackson",
+    state: "MS",
+    zip: "39201",
+    phone: "555-0100",
+    notes: "Updated",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "24/7",
+    scheduling_notes: "FCFS after hours.",
+  });
+  assert.equal(queries.getLocation(oneOffShipper)?.scheduling_type, "fcfs");
+
+  const { extractStateCode } = await import("../lib/locations");
+  assert.equal(extractStateCode("Chicago, IL"), "IL");
+  assert.equal(extractStateCode("Dallas, TX 75215"), "TX");
+  const liveOnly = queries.searchLoads({ includeLive: true, includeArchived: false, includeCancelled: false });
+  assert.ok(liveOnly.every((load) => ["available", "assigned", "in_transit"].includes(load.status)));
+  assert.ok(liveOnly.some((load) => load.load_number === "MSE-1045"));
+  assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), false, "delivered is archived");
+  assert.equal(liveOnly.some((load) => load.load_number === "MSE-1049"), false, "cancelled excluded by default");
+  const archived = queries.searchLoads({
+    includeLive: false,
+    includeArchived: true,
+    includeCancelled: false,
+  });
+  assert.ok(archived.some((load) => load.load_number === "MSE-1047"));
+  const cancelled = queries.searchLoads({
+    includeLive: false,
+    includeArchived: false,
+    includeCancelled: true,
+  });
+  assert.ok(cancelled.some((load) => load.load_number === "MSE-1049"));
+  const illinoisOrigin = queries.searchLoads({
+    includeLive: true,
+    includeArchived: true,
+    includeCancelled: true,
+    originState: "IL",
+  });
+  assert.ok(illinoisOrigin.every((load) => extractStateCode(load.origin) === "IL"));
+  assert.ok(illinoisOrigin.some((load) => load.load_number === "MSE-1042"));
+  const heartlandSearch = queries.searchLoads({
+    includeLive: true,
+    includeArchived: true,
+    includeCancelled: true,
+    customerId: load1042.customer_id,
+    q: "MSE-1042",
+  });
+  assert.equal(heartlandSearch.some((load) => load.id === load1042.id), true);
+  const { weekDateRange, monthDateRange, defaultSearchColumns, defaultSearchCriteria } = await import("../lib/search");
+  const week = weekDateRange();
+  assert.match(week.dateFrom, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(week.dateTo, /^\d{4}-\d{2}-\d{2}$/);
+  const month = monthDateRange();
+  assert.ok(month.dateFrom <= month.dateTo);
+  const reportId = queries.createSavedReport({
+    name: "Live Illinois pickups",
+    filters: {
+      ...defaultSearchCriteria(),
+      originState: "IL",
+      includeLive: true,
+      includeArchived: false,
+      includeCancelled: false,
+    },
+    columns: defaultSearchColumns(),
+  });
+  const saved = queries.getSavedReport(reportId);
+  assert.ok(saved);
+  assert.equal(saved.name, "Live Illinois pickups");
+  assert.match(saved.filters_json, /"originState":"IL"/);
+  queries.deleteSavedReport(reportId);
+  assert.equal(queries.getSavedReport(reportId), null);
+
+  queries.deleteLocation(oneOffShipper);
+  assert.equal(queries.getLocation(oneOffShipper), null);
+  assert.equal(queries.getLoad(locatedId)?.shipper_location_id, null, "delete location unlinks loads");
+
   const qbo = await import("../lib/integrations/quickbooks");
   const qboEnvKeys = [
     "QUICKBOOKS_CLIENT_ID",
@@ -855,7 +1000,9 @@ SPECIAL INSTRUCTIONS
   fs.rmSync(dbPath, { force: true });
   fs.rmSync(`${dbPath}-wal`, { force: true });
   fs.rmSync(`${dbPath}-shm`, { force: true });
-  console.log("Smoke test passed: seed, customer, truck, driver, load, assign, in-transit, delivered, persist.");
+  console.log(
+    "Smoke test passed: seed, locations, search, saved reports, customer, truck, driver, load, assign, persist.",
+  );
 }
 
 main().catch((error) => {

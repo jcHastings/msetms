@@ -4,19 +4,21 @@ import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
-import type { Customer, DriverWithTruck, Load, Trailer, Truck } from "@/lib/types";
+import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export function RateConApply({
   load,
   customers,
   trucks,
   trailers = [],
+  locations = [],
   drivers,
 }: {
   load: Load;
   customers: Customer[];
   trucks: Truck[];
   trailers?: Trailer[];
+  locations?: Location[];
   drivers: DriverWithTruck[];
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
@@ -47,6 +49,7 @@ export function RateConApply({
           customers={customers}
           trucks={trucks}
           trailers={trailers}
+          locations={locations}
           drivers={drivers}
           load={{
             ...load,

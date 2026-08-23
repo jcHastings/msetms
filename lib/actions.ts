@@ -8,8 +8,12 @@ import {
   createCustomer,
   createDriver,
   createLoad,
+  createLocation,
+  createSavedReport,
   createTrailer,
   createTruck,
+  deleteLocation,
+  deleteSavedReport,
   findOrCreateCustomer,
   getDriver,
   getTrailer,
@@ -18,6 +22,7 @@ import {
   updateDriver,
   updateLoad,
   updateLoadStatus,
+  updateLocation,
   updateTrailer,
   updateTruck,
   type LoadInput,
@@ -32,14 +37,19 @@ import {
   TRUCK_STATUSES,
   TRUCK_TYPES,
   isLoadStatus,
+  isLocationRole,
+  isSchedulingType,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
   type LoadStatus,
+  type LocationRole,
+  type SchedulingType,
   type TrailerType,
   type TruckStatus,
   type TruckType,
 } from "./types";
+import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -102,6 +112,8 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
     trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     trailer_id: parseOptionalInt(formData.get("trailer_id")),
+    shipper_location_id: parseOptionalInt(formData.get("shipper_location_id")),
+    consignee_location_id: parseOptionalInt(formData.get("consignee_location_id")),
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
     status: statusValue,
     truck_id: truckId,
@@ -626,6 +638,120 @@ export async function attachFleetDocAction(formData: FormData): Promise<ActionRe
     });
     refresh();
     return { ok: true, id: ownerId };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+function parseLocationRole(value: FormDataEntryValue | null): LocationRole {
+  const role = String(value ?? "both");
+  if (!isLocationRole(role)) throw new Error("Pick shipper, receiver, or both.");
+  return role;
+}
+
+function parseSchedulingType(value: FormDataEntryValue | null): SchedulingType {
+  const type = String(value ?? "fcfs");
+  if (!isSchedulingType(type)) throw new Error("Pick appointment required or FCFS.");
+  return type;
+}
+
+function parseLocationInput(formData: FormData) {
+  return {
+    name: requiredString(formData.get("name"), "Location name"),
+    street: String(formData.get("street") ?? "").trim(),
+    city: requiredString(formData.get("city"), "City"),
+    state: requiredString(formData.get("state"), "State").toUpperCase(),
+    zip: String(formData.get("zip") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    notes: String(formData.get("notes") ?? "").trim(),
+    role: parseLocationRole(formData.get("role")),
+    scheduling_type: parseSchedulingType(formData.get("scheduling_type")),
+    hours: String(formData.get("hours") ?? "").trim(),
+    scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
+  };
+}
+
+export async function createLocationAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const id = createLocation(parseLocationInput(formData));
+    refresh();
+    redirect(`/locations/${id}`);
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateLocationAction(
+  id: number,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    updateLocation(id, parseLocationInput(formData));
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteLocationAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const id = parseOptionalInt(formData.get("location_id"));
+    if (!id) throw new Error("Location is missing.");
+    deleteLocation(id);
+    refresh();
+    redirect("/locations");
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+function parseReportFilters(formData: FormData) {
+  const filters = parseSavedFilters(String(formData.get("filters_json") ?? ""));
+  return { ...defaultSearchCriteria(), ...filters };
+}
+
+function parseReportColumns(formData: FormData): SearchColumnKey[] {
+  const raw = String(formData.get("columns_json") ?? "[]");
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is SearchColumnKey => typeof item === "string" && isSearchColumnKey(item));
+  } catch {
+    throw new Error("Visible columns could not be saved.");
+  }
+}
+
+export async function saveSearchReportAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const id = createSavedReport({
+      name: requiredString(formData.get("name"), "Report name"),
+      filters: parseReportFilters(formData),
+      columns: parseReportColumns(formData),
+    });
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteSearchReportAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const id = parseOptionalInt(formData.get("report_id"));
+    if (!id) throw new Error("Report is missing.");
+    deleteSavedReport(id);
+    refresh();
+    return { ok: true, id };
   } catch (error) {
     return fail(error);
   }

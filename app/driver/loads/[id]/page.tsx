@@ -6,7 +6,8 @@ import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
-import { getLoad } from "@/lib/queries";
+import { DriverSchedulingBlock } from "@/components/location-scheduling";
+import { getLoad, locationsForLoad } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForAttachmentKind } from "@/lib/types";
 
@@ -24,6 +25,7 @@ export default async function DriverLoadPage({
   const reefer = await getLatestReeferForLoad(load.id);
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
+  const stopLocations = locationsForLoad(load);
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-20 pt-5">
@@ -83,6 +85,9 @@ export default async function DriverLoadPage({
           {reefer?.alarm ? <div className="text-sm text-rose-700">{reefer.alarm}</div> : null}
         </section>
       )}
+
+      <DriverSchedulingBlock title="Pickup scheduling" location={stopLocations.shipper} />
+      <DriverSchedulingBlock title="Delivery scheduling" location={stopLocations.consignee} />
 
       {load.appointment_notes ? (
         <section className="mt-3 rounded-2xl bg-amber-50 p-4">

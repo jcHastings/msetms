@@ -73,7 +73,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 26. [v1] Load list with status, pickup, delivery, assigned truck/driver, dates.
 27. [v1] Filter board by status.
 28. [v1] Filter board by pickup date.
-29. [v1] Search by load #, customer, origin, destination, commodity.
+29. [v1] Search by load #, customer, origin, destination, commodity. Dedicated Search page: origin/dest state, first-pickup date range, This week/This month, customer/driver/truck/trailer/status, live/archived/cancelled, saved reports.
 30. [v1] Create a load: customer, origin, destination, PU/DEL windows, weight, commodity, rate, notes.
 31. [v1] Statuses: available, assigned, in transit, delivered, cancelled.
 32. [v1] Edit a load after it is created.
@@ -105,9 +105,9 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 56. [v1] Pickup window start/end.
 57. [v1] Delivery window start/end.
-58. Appointment-required flag per stop.
+58. [v1] Appointment-required flag per stop (on the location; shown on the load and driver).
 59. Appointment confirmation number.
-60. FCFS vs appointment.
+60. [v1] FCFS vs appointment (per location).
 61. Detention clock start / stop.
 62. Detention free time by customer.
 63. Auto-suggest detention from geofence dwell — later.
@@ -123,7 +123,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 73. Drop hook vs live unload.
 74. Pre-cool required before PU.
 75. Pulp / product temp at PU.
-76. Receiver hours of operation.
+76. [v1] Receiver (and shipper) hours of operation on the location.
 77. Closed-day calendar (no Saturday, etc.).
 78. Time-zone display per stop.
 79. Recurring dedicated lane schedule.
