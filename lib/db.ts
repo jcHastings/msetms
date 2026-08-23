@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Database } from "./sqlite";
-import { seedDatabase, seedLocations } from "./seed";
+import { seedAccounting, seedDatabase, seedLocations } from "./seed";
 import { hashPassword } from "./password";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -48,6 +48,7 @@ export function getDb(): Database {
     backfillDemoRegistration(db);
     backfillDemoInboxExceptions(db);
     backfillDemoLocations(db);
+    seedAccounting(db);
   }
 
   connection = db;
@@ -297,7 +298,30 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL UNIQUE REFERENCES loads(id) ON DELETE CASCADE,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      number TEXT NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      source TEXT NOT NULL DEFAULT 'local',
+      issued_at TEXT NOT NULL,
+      due_at TEXT NOT NULL DEFAULT '',
+      paid_at TEXT NOT NULL DEFAULT '',
+      qbo_invoice_id TEXT NOT NULL DEFAULT '',
+      qbo_invoice_number TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  ensureColumn(db, "customers", "commission_percent", "REAL");
+  ensureColumn(db, "loads", "commission_percent", "REAL");
+  ensureColumn(db, "loads", "commission_paid", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "driver_pay_paid", "INTEGER NOT NULL DEFAULT 0");
 
   ensureColumn(db, "loads", "shipper_location_id", "INTEGER");
   ensureColumn(db, "loads", "consignee_location_id", "INTEGER");

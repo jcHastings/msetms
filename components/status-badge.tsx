@@ -1,10 +1,12 @@
 import {
   labelForDriverKind,
   labelForDriverStatus,
+  labelForInvoiceStatus,
   labelForLoadStatus,
   labelForTruckStatus,
   type DriverKind,
   type DriverStatus,
+  type InvoiceStatus,
   type LoadStatus,
   type TruckStatus,
 } from "@/lib/types";
@@ -24,6 +26,12 @@ const TRUCK_STYLES: Record<TruckStatus, string> = {
   out_of_service: "bg-rose-50 text-rose-800 ring-rose-200",
 };
 
+const INVOICE_STYLES: Record<InvoiceStatus, string> = {
+  draft: "bg-slate-100 text-slate-600 ring-slate-200",
+  sent: "bg-sky-50 text-sky-800 ring-sky-200",
+  paid: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+};
+
 const DRIVER_STYLES: Record<DriverStatus, string> = {
   available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   on_duty: "bg-indigo-50 text-indigo-800 ring-indigo-200",
@@ -38,6 +46,10 @@ function Pill({ className, children }: { className: string; children: React.Reac
       {children}
     </span>
   );
+}
+
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  return <Pill className={INVOICE_STYLES[status]}>{labelForInvoiceStatus(status)}</Pill>;
 }
 
 export function LoadStatusBadge({ status }: { status: LoadStatus }) {

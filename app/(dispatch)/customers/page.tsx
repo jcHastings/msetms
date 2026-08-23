@@ -31,6 +31,7 @@ export default function CustomersPage() {
             <tr>
               <th>Name</th>
               <th>Primary contact</th>
+              <th>Commission %</th>
               <th>Billing notes</th>
               <th></th>
             </tr>
@@ -53,6 +54,11 @@ export default function CustomersPage() {
                       </div>
                     </>
                   ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
+                <td>
+                  {customer.commission_percent != null ? `${customer.commission_percent}%` : (
                     <span className="text-slate-400">—</span>
                   )}
                 </td>

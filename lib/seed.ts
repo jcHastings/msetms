@@ -1,3 +1,5 @@
+import { dueDateFromIssued } from "./accounting";
+import { computeOwnerOperatorPay } from "./settlement";
 import type { Database } from "./sqlite";
 
 function atHour(offsetDays: number, hour: number, minute = 0): string {
@@ -532,6 +534,94 @@ export function seedDatabase(db: Database): void {
   });
 
   seed();
+  seedAccounting(db);
+}
+
+export function seedAccounting(db: Database): void {
+  const existing = db.prepare("SELECT COUNT(*) AS count FROM invoices").get() as { count: number };
+  if (Number(existing.count) > 0) return;
+
+  const created = now();
+  const issuedAging = atHour(-45, 9, 0);
+  const issuedRecent = now();
+
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE customers SET commission_percent = 5, updated_at = ?
+       WHERE name = 'Heartland Foods Co.' AND commission_percent IS NULL`,
+    ).run(created);
+
+    db.prepare(
+      `UPDATE loads SET commission_percent = 3, updated_at = ?
+       WHERE load_number = 'MSE-1048' AND commission_percent IS NULL`,
+    ).run(created);
+
+    const cole = db.prepare("SELECT id FROM drivers WHERE name = 'Cole Brennan'").get() as
+      | { id: number }
+      | undefined;
+    const marcus = db.prepare("SELECT id FROM drivers WHERE name = 'Marcus Hale'").get() as
+      | { id: number }
+      | undefined;
+    const load1047 = db
+      .prepare("SELECT id, customer_id, rate, driver_id FROM loads WHERE load_number = 'MSE-1047'")
+      .get() as { id: number; customer_id: number; rate: number | null; driver_id: number | null } | undefined;
+    const load1048 = db
+      .prepare("SELECT id, customer_id, rate, driver_id FROM loads WHERE load_number = 'MSE-1048'")
+      .get() as { id: number; customer_id: number; rate: number | null; driver_id: number | null } | undefined;
+
+    if (load1047 && cole && load1047.driver_id == null) {
+      const ooPay = computeOwnerOperatorPay(load1047.rate, 75);
+      db.prepare(
+        `UPDATE loads SET driver_id = ?, oo_percent = 75, oo_pay = ?, driver_pay_paid = 0, updated_at = ?
+         WHERE id = ?`,
+      ).run(cole.id, ooPay, created, load1047.id);
+    }
+
+    if (load1048 && marcus && load1048.driver_id == null) {
+      db.prepare("UPDATE loads SET driver_id = ?, driver_pay_paid = 0, updated_at = ? WHERE id = ?").run(
+        marcus.id,
+        created,
+        load1048.id,
+      );
+    }
+
+    const insertInvoice = db.prepare(
+      `INSERT INTO invoices (
+        load_id, customer_id, number, amount, status, source, issued_at, due_at, paid_at,
+        qbo_invoice_id, qbo_invoice_number, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'local', ?, ?, '', '', '', ?, ?, ?)`,
+    );
+
+    if (load1047 && load1047.rate != null) {
+      insertInvoice.run(
+        load1047.id,
+        load1047.customer_id,
+        "INV-1047",
+        load1047.rate,
+        "sent",
+        issuedAging,
+        dueDateFromIssued(issuedAging),
+        "Customer rate for MSE-1047. Seeded unpaid invoice for AR aging.",
+        created,
+        created,
+      );
+    }
+
+    if (load1048 && load1048.rate != null) {
+      insertInvoice.run(
+        load1048.id,
+        load1048.customer_id,
+        "INV-1048",
+        load1048.rate,
+        "draft",
+        issuedRecent,
+        dueDateFromIssued(issuedRecent),
+        "Customer rate for MSE-1048. Seeded draft invoice.",
+        created,
+        created,
+      );
+    }
+  })();
 }
 
 export function seedLocations(db: Database): void {

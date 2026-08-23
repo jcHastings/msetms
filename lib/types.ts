@@ -45,6 +45,7 @@ export type Customer = {
   id: number;
   name: string;
   billing_notes: string;
+  commission_percent: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -282,6 +283,9 @@ export type Load = {
   trailer_id: number | null;
   oo_percent: number | null;
   oo_pay: number | null;
+  commission_percent: number | null;
+  commission_paid: number;
+  driver_pay_paid: number;
   driver_progress: DriverProgress | "";
   status: LoadStatus;
   truck_id: number | null;
@@ -296,6 +300,7 @@ export type Load = {
 
 export type LoadView = Load & {
   customer_name: string;
+  customer_commission_percent: number | null;
   truck_unit: string | null;
   truck_type: TruckType | null;
   truck_samsara_id: string | null;
@@ -436,6 +441,78 @@ export type SavedSearchReport = {
   created_at: string;
   updated_at: string;
 };
+
+export const INVOICE_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "paid", label: "Paid" },
+] as const;
+
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number]["value"];
+
+export type Invoice = {
+  id: number;
+  load_id: number;
+  customer_id: number;
+  customer_name: string;
+  load_number: string;
+  number: string;
+  amount: number;
+  status: InvoiceStatus;
+  source: "local" | "demo" | "quickbooks";
+  issued_at: string;
+  due_at: string;
+  paid_at: string;
+  qbo_invoice_id: string;
+  qbo_invoice_number: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Payable = {
+  load_id: number;
+  load_number: string;
+  driver_id: number | null;
+  driver_name: string | null;
+  customer_name: string;
+  amount: number;
+  paid: boolean;
+  delivered_at: string;
+};
+
+export type DriverPayRow = {
+  load_id: number;
+  load_number: string;
+  driver_id: number | null;
+  driver_name: string | null;
+  driver_type: DriverKind | null;
+  customer_name: string;
+  rate: number | null;
+  oo_percent: number | null;
+  oo_pay: number | null;
+  paid: boolean;
+  status: LoadStatus;
+};
+
+export type CommissionRow = {
+  load_id: number;
+  load_number: string;
+  customer_name: string;
+  rate: number | null;
+  percent: number;
+  source: "load" | "customer";
+  amount: number;
+  paid: boolean;
+};
+
+export function labelForInvoiceStatus(status: string): string {
+  return INVOICE_STATUSES.find((item) => item.value === status)?.label ?? status;
+}
+
+export function isInvoiceStatus(value: string): value is InvoiceStatus {
+  return INVOICE_STATUSES.some((item) => item.value === value);
+}
 
 export type ActionResult = { ok: true; id?: number } | { ok: false; error: string };
 

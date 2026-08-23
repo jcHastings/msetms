@@ -19,6 +19,54 @@ async function main() {
   assert.ok(queries.listLoads({ status: "in_transit" }).length >= 1, "seed should include in-transit loads");
   assert.ok(queries.listCustomers().length >= 1, "seed should include customers");
 
+  const accounting = await import("../lib/accounting");
+  const heartland = queries.listCustomers().find((customer) => customer.name === "Heartland Foods Co.");
+  assert.ok(heartland);
+  assert.equal(heartland.commission_percent, 5, "Heartland should seed a 5% commission default");
+  const invoices = queries.listInvoices();
+  const inv1047 = invoices.find((invoice) => invoice.number === "INV-1047");
+  const inv1048 = invoices.find((invoice) => invoice.number === "INV-1048");
+  assert.ok(inv1047, "seed should include INV-1047");
+  assert.ok(inv1048, "seed should include INV-1048");
+  assert.equal(inv1047.status, "sent");
+  assert.equal(inv1047.amount, 2250);
+  assert.equal(inv1048.status, "draft");
+  assert.equal(accounting.agingBucket(accounting.invoiceAgeDays(inv1047.issued_at)), "31-60");
+  const unpaidAr = queries.listUnpaidInvoices();
+  assert.ok(unpaidAr.some((invoice) => invoice.number === "INV-1047"));
+  assert.ok(accounting.agingTotals(unpaidAr)["31-60"] >= 2250);
+  const ooBill = queries.listPayables().find((row) => row.load_number === "MSE-1047");
+  assert.ok(ooBill, "AP stub should include Cole’s OO bill on MSE-1047");
+  assert.equal(ooBill.amount, 1687.5);
+  assert.equal(ooBill.paid, false);
+  assert.equal(ooBill.driver_name, "Cole Brennan");
+  const comm1048 = queries.listCommissions().find((row) => row.load_number === "MSE-1048");
+  assert.ok(comm1048, "commissions should include the MSE-1048 load override example");
+  assert.equal(comm1048.percent, 3);
+  assert.equal(comm1048.source, "load");
+  assert.equal(comm1048.amount, 43.5);
+  const heartlandLoad = queries.listLoads({ status: "available" }).find((load) => load.load_number === "MSE-1042");
+  assert.ok(heartlandLoad);
+  const heartlandCommission = accounting.effectiveCommission(heartlandLoad);
+  assert.equal(heartlandCommission?.percent, 5);
+  assert.equal(heartlandCommission?.source, "customer");
+  assert.throws(() => queries.createInvoiceFromLoad(heartlandLoad.id), /Delivered/);
+  const ooPay = queries.listDriverPay().find((row) => row.load_number === "MSE-1047");
+  assert.ok(ooPay);
+  assert.equal(ooPay.driver_type, "owner_operator");
+  assert.equal(ooPay.oo_percent, 75);
+  assert.equal(ooPay.oo_pay, 1687.5);
+  const companyPay = queries.listDriverPay().find((row) => row.load_number === "MSE-1048");
+  assert.ok(companyPay);
+  assert.equal(companyPay.driver_type, "company_driver");
+  queries.setDriverPayPaid(ooPay.load_id, true);
+  assert.equal(queries.listPayables().find((row) => row.load_number === "MSE-1047")?.paid, true);
+  queries.setDriverPayPaid(ooPay.load_id, false);
+  queries.setCommissionPaid(comm1048.load_id, true);
+  assert.equal(queries.listCommissions().find((row) => row.load_number === "MSE-1048")?.paid, true);
+  queries.setCommissionPaid(comm1048.load_id, false);
+  assert.equal(accounting.nextInvoiceNumber(["INV-1047", "INV-1048"]), "INV-1049");
+
   const { listenAddress } = await import("../scripts/listen-address.mjs");
   const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
   assert.equal(listenAddress(noBind), "0.0.0.0", "OS HOSTNAME must not become the bind address");
@@ -1095,6 +1143,20 @@ SPECIAL INSTRUCTIONS
   }
 
   queries.updateLoadStatus(loadId, "delivered");
+  const createdInvoiceId = queries.createInvoiceFromLoad(loadId);
+  assert.ok(createdInvoiceId);
+  const localInvoice = queries.getInvoiceByLoad(loadId);
+  assert.ok(localInvoice);
+  assert.equal(localInvoice.status, "draft");
+  assert.equal(localInvoice.amount, 1400);
+  assert.throws(() => queries.createInvoiceFromLoad(loadId), /already/);
+  queries.updateInvoiceStatus(localInvoice.id, "sent");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "sent");
+  queries.updateInvoiceStatus(localInvoice.id, "paid");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "paid");
+  assert.ok(queries.getInvoice(localInvoice.id)?.paid_at);
+  queries.updateInvoiceStatus(localInvoice.id, "sent");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "sent");
   const delivered = queries.getLoad(loadId);
   assert.ok(delivered);
   assert.equal(delivered.status, "delivered");
@@ -1152,6 +1214,12 @@ SPECIAL INSTRUCTIONS
     assert.equal(afterDemo.qbo_invoice_id, demoSent.invoiceId);
     assert.ok(afterDemo.qbo_sent_at);
     assert.equal(afterDemo.qbo_source, "demo");
+    const qboInvoice = queries.getInvoiceByLoad(loadId);
+    assert.ok(qboInvoice, "QBO send should upsert the accounting invoice");
+    assert.equal(qboInvoice.id, localInvoice.id);
+    assert.equal(qboInvoice.status, "sent");
+    assert.equal(qboInvoice.source, "demo");
+    assert.equal(qboInvoice.qbo_invoice_id, demoSent.invoiceId);
 
     await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId), /already sent/i);
 
@@ -1161,6 +1229,8 @@ SPECIAL INSTRUCTIONS
     const qboStatus = await qbo.getQuickbooksStatus();
     assert.equal(qboStatus.configured, false);
     assert.equal(qboStatus.status, "Demo");
+    assert.equal(qboStatus.clientIdSet, false);
+    assert.ok(!JSON.stringify(qboStatus).includes("test-not-a-real"));
 
     process.env.QUICKBOOKS_CLIENT_ID = "test-not-a-real-client-id";
     process.env.QUICKBOOKS_CLIENT_SECRET = "test-not-a-real-client-secret";
@@ -1178,6 +1248,7 @@ SPECIAL INSTRUCTIONS
       const failedStatus = await qbo.getQuickbooksStatus();
       assert.equal(failedStatus.status, "API error");
       assert.ok(failedStatus.error && /401/.test(failedStatus.error));
+      assert.ok(!JSON.stringify(failedStatus).includes("test-not-a-real-client-secret"));
     } finally {
       globalThis.fetch = originalQboFetch;
     }

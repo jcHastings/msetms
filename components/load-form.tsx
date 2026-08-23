@@ -222,6 +222,19 @@ export function LoadForm({
           />
         </div>
         <div className="field">
+          <label htmlFor="commission_percent">Commission % (optional)</label>
+          <input
+            id="commission_percent"
+            name="commission_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            defaultValue={load?.commission_percent ?? ""}
+            placeholder="Overrides the customer default"
+          />
+        </div>
+        <div className="field">
           <label htmlFor="reference_number">Reference / rate con #</label>
           <input
             id="reference_number"

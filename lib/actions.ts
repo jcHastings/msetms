@@ -12,13 +12,17 @@ import {
   createLocation,
   createSavedSearchReport,
   deleteSavedSearchReport,
+  createInvoiceFromLoad,
   createTrailer,
   createTruck,
   findOrCreateCustomer,
   getDriver,
   getTrailer,
   getTruck,
+  setCommissionPaid,
+  setDriverPayPaid,
   updateCustomer,
+  updateInvoiceStatus,
   updateDriver,
   updateLoad,
   updateLocation,
@@ -38,6 +42,7 @@ import {
   TRAILER_TYPES,
   TRUCK_STATUSES,
   TRUCK_TYPES,
+  isInvoiceStatus,
   isLoadStatus,
   type ActionResult,
   type DriverKind,
@@ -114,6 +119,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     trailer_id: parseOptionalInt(formData.get("trailer_id")),
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
+    commission_percent: parseCommissionPercent(formData.get("commission_percent")),
     status: statusValue,
     truck_id: truckId,
     driver_id: driverId,
@@ -126,6 +132,15 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   } else {
     parsed.oo_percent = null;
     parsed.oo_pay = null;
+  }
+  return parsed;
+}
+
+function parseCommissionPercent(value: FormDataEntryValue | null): number | null {
+  const parsed = parseOptionalFloat(value);
+  if (parsed == null) return null;
+  if (parsed < 0 || parsed > 100) {
+    throw new Error("Commission % must be between 0 and 100.");
   }
   return parsed;
 }
@@ -298,6 +313,7 @@ export async function createCustomerAction(
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
+      commission_percent: parseCommissionPercent(formData.get("commission_percent")),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -318,6 +334,7 @@ export async function updateCustomerAction(
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
+      commission_percent: parseCommissionPercent(formData.get("commission_percent")),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -762,6 +779,48 @@ export async function attachFleetDocAction(formData: FormData): Promise<ActionRe
   } catch (error) {
     return fail(error);
   }
+}
+
+export async function createInvoiceFromLoadAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Pick a delivered load.");
+    const id = createInvoiceFromLoad(loadId);
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateInvoiceStatusAction(formData: FormData): Promise<void> {
+  await requireDispatcher();
+  const invoiceId = parseOptionalInt(formData.get("invoice_id"));
+  const status = String(formData.get("status") ?? "");
+  if (!invoiceId) throw new Error("Invoice is missing.");
+  if (!isInvoiceStatus(status)) throw new Error("Invalid invoice status.");
+  updateInvoiceStatus(invoiceId, status);
+  refresh();
+}
+
+export async function setDriverPayPaidAction(formData: FormData): Promise<void> {
+  await requireDispatcher();
+  const loadId = parseOptionalInt(formData.get("load_id"));
+  if (!loadId) throw new Error("Load is missing.");
+  setDriverPayPaid(loadId, String(formData.get("paid")) === "1");
+  refresh();
+}
+
+export async function setCommissionPaidAction(formData: FormData): Promise<void> {
+  await requireDispatcher();
+  const loadId = parseOptionalInt(formData.get("load_id"));
+  if (!loadId) throw new Error("Load is missing.");
+  setCommissionPaid(loadId, String(formData.get("paid")) === "1");
+  refresh();
 }
 
 export async function updateCompanyProfileAction(

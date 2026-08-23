@@ -4,10 +4,17 @@ import {
   truckComplianceAlerts,
   type ComplianceAlert,
 } from "./compliance";
+import {
+  dueDateFromIssued,
+  effectiveCommission,
+  invoiceAmountForLoad,
+  nextInvoiceNumber,
+} from "./accounting";
 import { getDb } from "./db";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
+  isInvoiceStatus,
   isLoadStatus,
   type Contact,
   type Customer,
@@ -22,11 +29,16 @@ import {
   type LoadStatus,
   type IftaJurisdictionRow,
   type IftaReport,
+  type CommissionRow,
+  type DriverPayRow,
+  type Invoice,
+  type InvoiceStatus,
   type LoadView,
   type LoadSearchCriteria,
   type Location,
   type LocationInput,
   type LocationRole,
+  type Payable,
   type SavedSearchReport,
   type Trailer,
   type TrailerType,
@@ -46,6 +58,7 @@ const LOAD_SELECT = `
   SELECT
     loads.*,
     customers.name AS customer_name,
+    customers.commission_percent AS customer_commission_percent,
     trucks.unit_number AS truck_unit,
     trucks.type AS truck_type,
     trucks.samsara_vehicle_id AS truck_samsara_id,
@@ -196,16 +209,17 @@ function validateLocationInput(input: LocationInput): void {
 export function createCustomer(input: {
   name: string;
   billing_notes: string;
+  commission_percent?: number | null;
   contacts: Array<{ name: string; role: string; phone: string; email: string }>;
 }): number {
   const db = getDb();
   const timestamp = now();
   const result = db
     .prepare(
-      `INSERT INTO customers (name, billing_notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO customers (name, billing_notes, commission_percent, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(input.name, input.billing_notes, timestamp, timestamp);
+    .run(input.name, input.billing_notes, input.commission_percent ?? null, timestamp, timestamp);
   const id = Number(result.lastInsertRowid);
   replaceContacts(id, input.contacts);
   return id;
@@ -216,14 +230,17 @@ export function updateCustomer(
   input: {
     name: string;
     billing_notes: string;
+    commission_percent?: number | null;
     contacts: Array<{ name: string; role: string; phone: string; email: string }>;
   },
 ): void {
   const existing = getCustomer(id);
   if (!existing) throw new Error("Customer not found.");
   getDb()
-    .prepare("UPDATE customers SET name = ?, billing_notes = ?, updated_at = ? WHERE id = ?")
-    .run(input.name, input.billing_notes, now(), id);
+    .prepare(
+      "UPDATE customers SET name = ?, billing_notes = ?, commission_percent = ?, updated_at = ? WHERE id = ?",
+    )
+    .run(input.name, input.billing_notes, input.commission_percent ?? null, now(), id);
   replaceContacts(id, input.contacts);
 }
 
@@ -798,6 +815,7 @@ export type LoadInput = {
   trailer_id?: number | null;
   oo_percent?: number | null;
   oo_pay?: number | null;
+  commission_percent?: number | null;
   status: LoadStatus;
   truck_id: number | null;
   driver_id: number | null;
@@ -845,8 +863,8 @@ export function createLoad(input: LoadInput): number {
           pickup_start, pickup_end, delivery_start, delivery_end,
           weight, commodity, rate, notes, special_instructions, appointment_notes,
           reference_number, po_number, reefer_setpoint_f, trailer_number, trailer_id,
-          oo_percent, oo_pay, status, truck_id, driver_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          oo_percent, oo_pay, commission_percent, status, truck_id, driver_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         loadNumber,
@@ -872,6 +890,7 @@ export function createLoad(input: LoadInput): number {
         input.trailer_id ?? null,
         input.oo_percent ?? null,
         input.oo_pay ?? null,
+        input.commission_percent ?? null,
         input.status,
         input.truck_id,
         input.driver_id,
@@ -900,7 +919,7 @@ export function updateLoad(id: number, input: LoadInput): void {
         weight = ?, commodity = ?, rate = ?, notes = ?,
         special_instructions = ?, appointment_notes = ?,
         reference_number = ?, po_number = ?, reefer_setpoint_f = ?, trailer_number = ?, trailer_id = ?,
-        oo_percent = ?, oo_pay = ?, status = ?, truck_id = ?, driver_id = ?, updated_at = ?
+        oo_percent = ?, oo_pay = ?, commission_percent = ?, status = ?, truck_id = ?, driver_id = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
       input.customer_id,
@@ -925,6 +944,7 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.trailer_id ?? null,
       input.oo_percent ?? null,
       input.oo_pay ?? null,
+      input.commission_percent ?? null,
       input.status,
       input.truck_id,
       input.driver_id,
@@ -1064,14 +1084,57 @@ export function markQboInvoice(
     sentAt: string;
   },
 ): void {
-  if (!getLoad(loadId)) throw new Error("Load not found.");
-  getDb()
-    .prepare(
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  const db = getDb();
+  const timestamp = input.sentAt;
+  db.transaction(() => {
+    db.prepare(
       `UPDATE loads
        SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_sent_at = ?, qbo_source = ?, updated_at = ?
        WHERE id = ?`,
-    )
-    .run(input.invoiceId, input.invoiceNumber, input.sentAt, input.source, input.sentAt, loadId);
+    ).run(input.invoiceId, input.invoiceNumber, timestamp, input.source, timestamp, loadId);
+
+    const existing = getInvoiceByLoad(loadId);
+    if (existing) {
+      db.prepare(
+        `UPDATE invoices
+         SET status = CASE WHEN status = 'paid' THEN 'paid' ELSE 'sent' END,
+             source = ?, qbo_invoice_id = ?, qbo_invoice_number = ?,
+             due_at = CASE WHEN due_at = '' THEN ? ELSE due_at END,
+             updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        input.source,
+        input.invoiceId,
+        input.invoiceNumber,
+        dueDateFromIssued(existing.issued_at),
+        timestamp,
+        existing.id,
+      );
+      return;
+    }
+
+    db.prepare(
+      `INSERT INTO invoices (
+        load_id, customer_id, number, amount, status, source, issued_at, due_at, paid_at,
+        qbo_invoice_id, qbo_invoice_number, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'sent', ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+    ).run(
+      loadId,
+      load.customer_id,
+      input.invoiceNumber || nextInvoiceNumber(listInvoiceNumbers()),
+      invoiceAmountForLoad(load),
+      input.source,
+      timestamp,
+      dueDateFromIssued(timestamp),
+      input.invoiceId,
+      input.invoiceNumber,
+      `Sent via ${input.source === "demo" ? "demo QuickBooks" : "QuickBooks"}.`,
+      timestamp,
+      timestamp,
+    );
+  })();
 }
 
 export function updateLoadStatus(loadId: number, status: LoadStatus): void {
@@ -1286,4 +1349,200 @@ export function listUpcomingCompliance(): ComplianceAlert[] {
     ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck)),
     ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer)),
   ].sort((a, b) => a.days - b.days);
+}
+
+const INVOICE_SELECT = `
+  SELECT invoices.*, customers.name AS customer_name, loads.load_number AS load_number
+  FROM invoices
+  JOIN customers ON customers.id = invoices.customer_id
+  JOIN loads ON loads.id = invoices.load_id
+`;
+
+function asInvoice(row: Invoice | undefined): Invoice | null {
+  return row ?? null;
+}
+
+export function listInvoiceNumbers(): string[] {
+  return (getDb().prepare("SELECT number FROM invoices").all() as Array<{ number: string }>).map(
+    (row) => row.number,
+  );
+}
+
+export function listInvoices(): Invoice[] {
+  return getDb()
+    .prepare(`${INVOICE_SELECT} ORDER BY invoices.issued_at DESC, invoices.id DESC`)
+    .all() as Invoice[];
+}
+
+export function listUnpaidInvoices(): Invoice[] {
+  return getDb()
+    .prepare(
+      `${INVOICE_SELECT} WHERE invoices.status != 'paid' ORDER BY invoices.issued_at ASC, invoices.id ASC`,
+    )
+    .all() as Invoice[];
+}
+
+export function getInvoice(id: number): Invoice | null {
+  return asInvoice(
+    getDb().prepare(`${INVOICE_SELECT} WHERE invoices.id = ?`).get(id) as Invoice | undefined,
+  );
+}
+
+export function getInvoiceByLoad(loadId: number): Invoice | null {
+  return asInvoice(
+    getDb().prepare(`${INVOICE_SELECT} WHERE invoices.load_id = ?`).get(loadId) as Invoice | undefined,
+  );
+}
+
+export function listDeliveredLoadsWithoutInvoice(): LoadView[] {
+  return getDb()
+    .prepare(
+      `${LOAD_SELECT}
+       WHERE loads.status = 'delivered'
+         AND loads.rate IS NOT NULL
+         AND loads.rate > 0
+         AND NOT EXISTS (SELECT 1 FROM invoices WHERE invoices.load_id = loads.id)
+       ORDER BY loads.delivery_end DESC, loads.id DESC`,
+    )
+    .all() as LoadView[];
+}
+
+export function createInvoiceFromLoad(loadId: number): number {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  if (load.status !== "delivered") {
+    throw new Error("Mark the load Delivered before creating an invoice.");
+  }
+  if (getInvoiceByLoad(loadId)) {
+    throw new Error("This load already has an invoice.");
+  }
+  const amount = invoiceAmountForLoad(load);
+  const timestamp = now();
+  const number = nextInvoiceNumber(listInvoiceNumbers());
+  try {
+    const result = getDb()
+      .prepare(
+        `INSERT INTO invoices (
+          load_id, customer_id, number, amount, status, source, issued_at, due_at, paid_at,
+          qbo_invoice_id, qbo_invoice_number, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'draft', 'local', ?, ?, '', '', '', ?, ?, ?)`,
+      )
+      .run(
+        loadId,
+        load.customer_id,
+        number,
+        amount,
+        timestamp,
+        dueDateFromIssued(timestamp),
+        `Customer rate for ${load.load_number}.`,
+        timestamp,
+        timestamp,
+      );
+    return Number(result.lastInsertRowid);
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) {
+      throw new Error("This load already has an invoice.");
+    }
+    throw error;
+  }
+}
+
+export function updateInvoiceStatus(id: number, status: InvoiceStatus): void {
+  if (!isInvoiceStatus(status)) throw new Error("Invalid invoice status.");
+  const invoice = getInvoice(id);
+  if (!invoice) throw new Error("Invoice not found.");
+  const timestamp = now();
+  const paidAt = status === "paid" ? invoice.paid_at || timestamp : "";
+  getDb()
+    .prepare("UPDATE invoices SET status = ?, paid_at = ?, updated_at = ? WHERE id = ?")
+    .run(status, paidAt, timestamp, id);
+}
+
+export function listPayables(): Payable[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT
+         loads.id AS load_id,
+         loads.load_number,
+         loads.driver_id,
+         drivers.name AS driver_name,
+         customers.name AS customer_name,
+         loads.oo_pay AS amount,
+         loads.driver_pay_paid AS paid,
+         loads.delivery_end AS delivered_at
+       FROM loads
+       JOIN customers ON customers.id = loads.customer_id
+       LEFT JOIN drivers ON drivers.id = loads.driver_id
+       WHERE loads.oo_pay IS NOT NULL
+         AND loads.oo_pay > 0
+         AND loads.status != 'cancelled'
+       ORDER BY loads.delivery_end DESC, loads.id DESC`,
+    )
+    .all() as Array<Omit<Payable, "paid"> & { paid: number }>;
+  return rows.map((row) => ({ ...row, paid: Boolean(row.paid) }));
+}
+
+export function listDriverPay(): DriverPayRow[] {
+  const rows = getDb()
+    .prepare(
+      `${LOAD_SELECT}
+       WHERE loads.status = 'delivered'
+         AND loads.driver_id IS NOT NULL
+       ORDER BY loads.delivery_end DESC, loads.id DESC`,
+    )
+    .all() as LoadView[];
+  return rows.map((load) => ({
+    load_id: load.id,
+    load_number: load.load_number,
+    driver_id: load.driver_id,
+    driver_name: load.driver_name,
+    driver_type: load.driver_type,
+    customer_name: load.customer_name,
+    rate: load.rate,
+    oo_percent: load.oo_percent,
+    oo_pay: load.oo_pay,
+    paid: Boolean(load.driver_pay_paid),
+    status: load.status,
+  }));
+}
+
+export function listCommissions(): CommissionRow[] {
+  const loads = getDb()
+    .prepare(
+      `${LOAD_SELECT}
+       WHERE loads.status = 'delivered'
+         AND loads.rate IS NOT NULL
+       ORDER BY loads.delivery_end DESC, loads.id DESC`,
+    )
+    .all() as LoadView[];
+  const rows: CommissionRow[] = [];
+  for (const load of loads) {
+    const commission = effectiveCommission(load);
+    if (!commission) continue;
+    rows.push({
+      load_id: load.id,
+      load_number: load.load_number,
+      customer_name: load.customer_name,
+      rate: load.rate,
+      percent: commission.percent,
+      source: commission.source,
+      amount: commission.amount,
+      paid: Boolean(load.commission_paid),
+    });
+  }
+  return rows;
+}
+
+export function setDriverPayPaid(loadId: number, paid: boolean): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb()
+    .prepare("UPDATE loads SET driver_pay_paid = ?, updated_at = ? WHERE id = ?")
+    .run(paid ? 1 : 0, now(), loadId);
+}
+
+export function setCommissionPaid(loadId: number, paid: boolean): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb()
+    .prepare("UPDATE loads SET commission_paid = ?, updated_at = ? WHERE id = ?")
+    .run(paid ? 1 : 0, now(), loadId);
 }
