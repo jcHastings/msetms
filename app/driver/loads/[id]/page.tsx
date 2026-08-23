@@ -40,6 +40,14 @@ export default async function DriverLoadPage({
         {load.origin} → {load.destination}
       </p>
       <p className="text-slate-500">{load.customer_name}</p>
+      {load.docs_requested ? (
+        <section className="mt-4 rounded-2xl bg-amber-50 p-4 text-amber-950">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Documents requested</div>
+          <p className="mt-1 text-base">
+            Dispatch asked for BOL/POD/photos on this load. Upload them below.
+          </p>
+        </section>
+      ) : null}
 
       <div className="mt-4">
         <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation`}>

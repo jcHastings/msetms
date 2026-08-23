@@ -73,12 +73,14 @@ const LOAD_SELECT = `
     trailers.orbcomm_asset_id AS trailer_orbcomm_asset_id,
     drivers.name AS driver_name,
     drivers.phone AS driver_phone,
-    drivers.driver_type AS driver_type
+    drivers.driver_type AS driver_type,
+    dispatchers.name AS dispatcher_name
   FROM loads
   JOIN customers ON customers.id = loads.customer_id
   LEFT JOIN trucks ON trucks.id = loads.truck_id
   LEFT JOIN trailers ON trailers.id = loads.trailer_id
   LEFT JOIN drivers ON drivers.id = loads.driver_id
+  LEFT JOIN dispatchers ON dispatchers.id = loads.dispatcher_id
 `;
 
 function now(): string {
@@ -1547,6 +1549,53 @@ export function cloneLoad(loadId: number): number {
     unload_type: load.unload_type,
   });
   return id;
+}
+
+export function assignLoadDispatcher(loadId: number, dispatcherId: number | null): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  let nextName = "";
+  if (dispatcherId) {
+    const dispatcher = getDb()
+      .prepare("SELECT id, name FROM dispatchers WHERE id = ? AND active = 1")
+      .get(dispatcherId) as { id: number; name: string } | undefined;
+    if (!dispatcher) throw new Error("Pick an active dispatcher.");
+    nextName = dispatcher.name;
+  }
+  getDb()
+    .prepare("UPDATE loads SET dispatcher_id = ?, updated_at = ? WHERE id = ?")
+    .run(dispatcherId, now(), loadId);
+  recordLoadChanges(loadId, "update", [
+    { field: "dispatcher", oldValue: load.dispatcher_name, newValue: nextName },
+  ]);
+}
+
+export function setLoadDocsRequested(loadId: number, requested: boolean): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  if (!load.driver_id) throw new Error("Assign a driver before requesting documents.");
+  const timestamp = requested ? now() : "";
+  getDb()
+    .prepare("UPDATE loads SET docs_requested = ?, docs_requested_at = ?, updated_at = ? WHERE id = ?")
+    .run(requested ? 1 : 0, timestamp, now(), loadId);
+  recordLoadAudit({
+    loadId,
+    action: "docs_requested",
+    field: "docs_requested",
+    oldValue: load.docs_requested ? "requested" : "",
+    newValue: requested ? "requested" : "",
+  });
+}
+
+export function setLoadReadyToInvoice(loadId: number, ready: boolean): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  getDb()
+    .prepare("UPDATE loads SET ready_to_invoice = ?, updated_at = ? WHERE id = ?")
+    .run(ready ? 1 : 0, now(), loadId);
+  recordLoadChanges(loadId, "update", [
+    { field: "ready_to_invoice", oldValue: load.ready_to_invoice ? "ready" : "", newValue: ready ? "ready" : "" },
+  ]);
 }
 
 export function setLoadWatched(loadId: number, watched: boolean): void {

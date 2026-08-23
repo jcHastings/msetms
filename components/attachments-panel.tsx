@@ -24,7 +24,7 @@ export function AttachmentsPanel({
   const extraKinds = ATTACHMENT_KINDS.filter((kind) => !PRIMARY.has(kind.value));
 
   return (
-    <section className="card mt-6 p-6">
+    <section id="load-documents" className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Load documents</h2>
       <p className="mt-1 text-sm text-slate-500">
         Rate confirmation, customer invoice, carrier bill, BOL/POD, and other PDFs or images.

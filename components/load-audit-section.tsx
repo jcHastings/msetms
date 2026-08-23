@@ -4,7 +4,7 @@ import { listLoadAudit } from "@/lib/audit";
 export function LoadAuditSection({ loadId }: { loadId: number }) {
   const rows = listLoadAudit(loadId);
   return (
-    <section className="card mt-6 overflow-hidden">
+    <section id="accountability" className="card mt-6 overflow-hidden">
       <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
         <div>
           <h2 className="text-sm font-semibold">History</h2>

@@ -49,6 +49,21 @@ async function main() {
   assert.match(workspaceSource, /Dispatch and Tracking/);
   assert.match(workspaceSource, /Load Documents/);
   assert.match(workspaceSource, /Copy \/ Cancel \/ Archive/);
+  assert.match(workspaceSource, /Admin \/ Financials/);
+  assert.match(workspaceSource, /Log Check Call/);
+  assert.match(workspaceSource, /View Load Log/);
+  assert.match(workspaceSource, /Send Text Message/);
+  assert.match(workspaceSource, /Text Load Information/);
+  assert.match(workspaceSource, /Upload a Document/);
+  assert.match(workspaceSource, /Request Documents From Driver/);
+  assert.match(workspaceSource, /Send to Accounting/);
+  assert.match(workspaceSource, /View Accountability Log/);
+  assert.match(workspaceSource, /Copy This Load/);
+  assert.match(workspaceSource, /Archive This Load/);
+  assert.match(workspaceSource, /Cancel This Load/);
+  assert.doesNotMatch(workspaceSource, /AscendTracker/);
+  assert.doesNotMatch(workspaceSource, /Search Load Boards/);
+  assert.doesNotMatch(workspaceSource, /Customer Portal/);
   assert.match(workspaceSource, /form=\{formId\}/);
   assert.match(workspaceSource, /beforeunload/);
   const docsPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
@@ -440,6 +455,69 @@ async function main() {
   );
   assert.ok(history.some((row) => row.action === "rate_con" && row.new_value === "rate-con-smoke.pdf"));
   assert.ok(history.some((row) => row.action === "attachment" && row.old_value.includes("pod-MSE-SMOKE")));
+  const { formatLoadSummary } = await import("../lib/load-summary");
+  const companySummary = formatLoadSummary({
+    load_number: "MSE-TEST",
+    origin: "A",
+    destination: "B",
+    pickup_start: "2026-08-23T12:00:00.000Z",
+    pickup_end: "2026-08-23T14:00:00.000Z",
+    delivery_start: "2026-08-24T12:00:00.000Z",
+    delivery_end: "2026-08-24T16:00:00.000Z",
+    commodity: "Frozen",
+    reefer_setpoint_f: 34,
+    special_instructions: "Call ahead",
+    appointment_notes: "",
+    driver_name: "Priya Shah",
+    driver_phone: "555-0100",
+    driver_type: "company_driver",
+    rate: 2150,
+    oo_pay: null,
+  });
+  assert.match(companySummary, /MSE-TEST/);
+  assert.doesNotMatch(companySummary, /2150|\$2/);
+  const ooSummary = formatLoadSummary({
+    ...{
+      load_number: "MSE-OO",
+      origin: "A",
+      destination: "B",
+      pickup_start: "2026-08-23T12:00:00.000Z",
+      pickup_end: "2026-08-23T14:00:00.000Z",
+      delivery_start: "2026-08-24T12:00:00.000Z",
+      delivery_end: "2026-08-24T16:00:00.000Z",
+      commodity: "Frozen",
+      reefer_setpoint_f: null,
+      special_instructions: "",
+      appointment_notes: "",
+      driver_name: "Cole",
+      driver_phone: "555-0101",
+      driver_type: "owner_operator",
+      rate: 2000,
+      oo_pay: 1500,
+    },
+  });
+  assert.match(ooSummary, /1,500|1500/);
+  const { listDispatcherUsers } = await import("../lib/settings");
+  const dispatcher = listDispatcherUsers(false)[0];
+  assert.ok(dispatcher);
+  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+    audit.recordLoadAudit({
+      loadId,
+      action: "check_call",
+      field: "notes",
+      oldValue: "2026-08-23T18:00:00.000Z",
+      newValue: "Rolling I-80",
+    });
+    queries.setLoadDocsRequested(loadId, true);
+    queries.assignLoadDispatcher(loadId, dispatcher.id);
+    queries.setLoadReadyToInvoice(loadId, true);
+  });
+  const afterActions = queries.getLoad(loadId);
+  assert.ok(afterActions?.docs_requested);
+  assert.ok(afterActions?.ready_to_invoice);
+  assert.ok(afterActions?.dispatcher_id);
+  assert.ok(audit.listLoadLog(loadId).some((row) => row.action === "check_call" && row.new_value === "Rolling I-80"));
+  assert.ok(audit.listLoadLog(loadId).some((row) => row.action === "docs_requested"));
   assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
   assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
   const company = audit.listCompanyAudit({ loadNumber: created.load_number, user: "Ana G" });

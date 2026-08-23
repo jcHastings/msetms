@@ -1,24 +1,41 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 import { LoadEditProvider } from "@/components/load-edit-context";
-import { cloneLoadAction } from "@/lib/dispatcher-actions";
+import {
+  assignLoadDispatcherAction,
+  cloneLoadAction,
+  requestDriverDocumentsAction,
+  sendToAccountingAction,
+} from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
+import { SMS_LATER_NOTE } from "@/lib/load-summary";
 import { LOAD_TABS, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 
 export function LoadWorkspace({
   loadId,
-  loadNumber,
   status,
   initialTab,
+  loadSummary,
+  textDraft,
+  driverAssigned,
+  driverPhone,
+  dispatcherId,
+  dispatchers,
+  docsRequested,
   children,
 }: {
   loadId: number;
-  loadNumber: string;
   status: string;
   initialTab: string;
+  loadSummary: string;
+  textDraft: string;
+  driverAssigned: boolean;
+  driverPhone: string;
+  dispatcherId: number | null;
+  dispatchers: Array<{ id: number; name: string }>;
+  docsRequested: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -39,11 +56,15 @@ export function LoadWorkspace({
     setPending(state.pending);
   }, []);
 
-  const setTab = useCallback((next: LoadTab) => {
+  const setTab = useCallback((next: LoadTab, hash?: string) => {
     setTabState(next);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", next);
-    window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}`);
+    url.hash = hash ? hash.replace(/^#/, "") : "";
+    window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+    if (hash) {
+      window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
+    }
   }, []);
 
   useEffect(() => {
@@ -67,6 +88,28 @@ export function LoadWorkspace({
   function confirmLeave(href: string) {
     if (dirty && !window.confirm("You have unsaved load changes. Leave this page anyway?")) return;
     router.push(href);
+  }
+
+  async function copyText(label: string, body: string) {
+    const text = `${body}\n\n${SMS_LATER_NOTE}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert(`${label} copied. ${SMS_LATER_NOTE}`);
+    } catch {
+      window.prompt(`${label} — copy this text. ${SMS_LATER_NOTE}`, text);
+    }
+  }
+
+  function requireDriverPhone(): boolean {
+    if (!driverAssigned) {
+      window.alert("Assign a driver first.");
+      return false;
+    }
+    if (!driverPhone.trim()) {
+      window.alert("The assigned driver needs a mobile number.");
+      return false;
+    }
+    return true;
   }
 
   return (
@@ -104,44 +147,107 @@ export function LoadWorkspace({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Load Actions</span>
         <ActionMenu label="Load Log">
-          <button type="button" className="menu-item" onClick={() => setTab("log")}>
-            View load log
+          <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
+            Log Check Call
+          </button>
+          <button type="button" className="menu-item" onClick={() => setTab("log", "load-log")}>
+            View Load Log
           </button>
         </ActionMenu>
         <ActionMenu label="Dispatch and Tracking">
           <button type="button" className="menu-item" onClick={() => setTab("assets")}>
             Tracking and status
           </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              if (!requireDriverPhone()) return;
+              void copyText("Send Text Message", textDraft);
+            }}
+          >
+            Send Text Message
+          </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              if (!requireDriverPhone()) return;
+              void copyText("Text Load Information", loadSummary);
+            }}
+          >
+            Text Load Information
+          </button>
         </ActionMenu>
         <ActionMenu label="Load Documents">
-          <button type="button" className="menu-item" onClick={() => setTab("docs")}>
-            View load documents
+          <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
+            View load docs
           </button>
+          <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
+            Upload a Document
+          </button>
+          <MenuAction
+            label={docsRequested ? "Documents already requested" : "Request Documents From Driver"}
+            disabled={!driverAssigned || docsRequested}
+            run={async () => {
+              const formData = new FormData();
+              formData.set("load_id", String(loadId));
+              return requestDriverDocumentsAction(formData);
+            }}
+          />
+        </ActionMenu>
+        <ActionMenu label="Admin / Financials">
+          <MenuAction
+            label="Send to Accounting"
+            run={async () => {
+              const formData = new FormData();
+              formData.set("load_id", String(loadId));
+              return sendToAccountingAction(formData);
+            }}
+          />
+          <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
+            View Accountability Log
+          </button>
+          <form action={assignLoadDispatcherAction} className="border-t border-slate-100 px-3 py-2">
+            <input type="hidden" name="load_id" value={loadId} />
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Assign dispatcher
+            </label>
+            <select
+              name="dispatcher_id"
+              defaultValue={dispatcherId ?? ""}
+              className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {dispatchers.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
+            <button className="menu-item mt-1 w-full px-0 text-left" type="submit">
+              Save dispatcher
+            </button>
+          </form>
         </ActionMenu>
         <ActionMenu label="Copy / Cancel / Archive">
           <form action={cloneLoadAction}>
             <input type="hidden" name="load_id" value={loadId} />
             <button className="menu-item w-full text-left" type="submit">
-              Copy this load
+              Copy This Load
             </button>
           </form>
-          <StatusAction loadId={loadId} status="cancelled" label="Cancel this load" disabled={status === "cancelled"} />
           <StatusAction
             loadId={loadId}
             status="completed"
-            label="Archive this load"
+            label="Archive This Load"
             disabled={status === "completed" || status === "cancelled"}
           />
+          <StatusAction loadId={loadId} status="cancelled" label="Cancel This Load" disabled={status === "cancelled"} />
         </ActionMenu>
-        <Link href={`/audit?load=${encodeURIComponent(loadNumber)}`} className="text-xs text-slate-500 hover:underline">
-          Company audit
-        </Link>
       </div>
 
-      <div
-        onInput={() => setDirty(true)}
-        onChange={() => setDirty(true)}
-      >
+      <div onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
         {children}
       </div>
     </LoadEditProvider>
@@ -154,10 +260,41 @@ function ActionMenu({ label, children }: { label: string; children: React.ReactN
       <summary className="btn btn-secondary cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         {label}
       </summary>
-      <div className="absolute z-20 mt-1 min-w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+      <div className="absolute z-20 mt-1 min-w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
         {children}
       </div>
     </details>
+  );
+}
+
+function MenuAction({
+  label,
+  disabled,
+  run,
+}: {
+  label: string;
+  disabled?: boolean;
+  run: () => Promise<{ ok: true; message?: string } | { ok: false; error: string }>;
+}) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="menu-item w-full text-left disabled:opacity-50"
+      disabled={disabled}
+      onClick={async () => {
+        if (disabled) return;
+        const result = await run();
+        if (!result.ok) {
+          window.alert(result.error);
+          return;
+        }
+        if (result.message) window.alert(result.message);
+        router.refresh();
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

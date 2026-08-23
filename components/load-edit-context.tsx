@@ -5,7 +5,7 @@ import type { LoadTab } from "@/lib/load-tabs";
 
 export type LoadEditContextValue = {
   tab: LoadTab;
-  setTab: (tab: LoadTab) => void;
+  setTab: (tab: LoadTab, hash?: string) => void;
   dirty: boolean;
   markDirty: () => void;
   clearDirty: () => void;

@@ -3,11 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
-import { parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import { authenticateDispatcher, clearDispatcherSession, setDispatcherSession } from "./dispatcher-session";
 import {
+  assignLoadDispatcher,
   cloneLoad,
+  getLoad,
   markInvoicePaid,
+  setLoadDocsRequested,
+  setLoadReadyToInvoice,
   setLoadWatched,
   updateLoadDetails,
 } from "./queries";
@@ -15,7 +19,7 @@ import { createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
 import { addStop, deleteStop, moveStop } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
-import type { ActionResult } from "./types";
+import { isBillableStatus, type ActionResult } from "./types";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -243,4 +247,98 @@ export async function markReceivablePaidAction(formData: FormData): Promise<void
   if (!id) throw new Error("Load is missing.");
   markInvoicePaid(id, true);
   refresh();
+}
+
+export async function logCheckCallFormAction(formData: FormData): Promise<void> {
+  const result = await logCheckCallAction(formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function logCheckCallAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      if (!getLoad(loadId)) throw new Error("Load not found.");
+      const notes = requiredString(formData.get("notes"), "Check-call notes");
+      const calledAtRaw = String(formData.get("called_at") ?? "").trim();
+      const calledAt = calledAtRaw ? fromInputDateTime(calledAtRaw) : new Date().toISOString();
+      recordLoadAudit({
+        loadId,
+        action: "check_call",
+        field: "notes",
+        oldValue: calledAt,
+        newValue: notes,
+      });
+      refresh();
+      return { ok: true, id: loadId, message: "Check call logged." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function requestDriverDocumentsAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      setLoadDocsRequested(loadId, true);
+      refresh();
+      return { ok: true, id: loadId, message: "Driver will see a request for BOL/POD/photos on this load." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function assignLoadDispatcherAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
+      assignLoadDispatcher(loadId, dispatcherId);
+      refresh();
+      return { ok: true, id: loadId, message: dispatcherId ? "Dispatcher assigned." : "Dispatcher cleared." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function sendToAccountingAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      setLoadReadyToInvoice(loadId, true);
+      if (isBillableStatus(load.status) && load.rate != null) {
+        const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
+        try {
+          await sendLoadToQuickbooks(loadId, { confirmResend: String(formData.get("confirm_resend") ?? "") === "1" });
+          refresh();
+          return { ok: true, id: loadId, message: "Sent to accounting (QuickBooks stub) and marked ready to invoice." };
+        } catch (error) {
+          const text = error instanceof Error ? error.message : "QuickBooks send failed.";
+          if (/already sent/i.test(text)) {
+            refresh();
+            return { ok: true, id: loadId, message: "Already invoiced. Marked ready to invoice." };
+          }
+          refresh();
+          return { ok: false, error: text };
+        }
+      }
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message: "Marked ready to invoice. Send the QuickBooks stub from Financials after the load is delivered with a rate.",
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
 }

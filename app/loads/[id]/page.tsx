@@ -6,6 +6,7 @@ import { IftaPanel } from "@/components/ifta-panel";
 import { CustomerSnapshot } from "@/components/customer-snapshot";
 import { LoadExtraDetails, LoadWatchRow } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
+import { LoadLogSection } from "@/components/load-log-section";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
@@ -24,8 +25,9 @@ import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integra
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
 import { parseLoadTab } from "@/lib/load-tabs";
+import { formatLoadSummary, formatTextMessageDraft } from "@/lib/load-summary";
 import { getCustomer, getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
-import { equipmentOptions, loadFormSettings } from "@/lib/settings";
+import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { EQUIPMENT_REQUIRED, labelForAttachmentKind } from "@/lib/types";
 
@@ -60,6 +62,7 @@ export default async function LoadDetailPage({
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
   const claims = listClaims(load.id);
+  const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
 
   return (
     <>
@@ -73,7 +76,18 @@ export default async function LoadDetailPage({
           </div>
         }
       />
-      <LoadWorkspace loadId={load.id} loadNumber={load.load_number} status={load.status} initialTab={parseLoadTab(tab)}>
+      <LoadWorkspace
+        loadId={load.id}
+        status={load.status}
+        initialTab={parseLoadTab(tab)}
+        loadSummary={formatLoadSummary(load)}
+        textDraft={formatTextMessageDraft(load)}
+        driverAssigned={Boolean(load.driver_id)}
+        driverPhone={load.driver_phone ?? ""}
+        dispatcherId={load.dispatcher_id}
+        dispatchers={dispatchers}
+        docsRequested={Boolean(load.docs_requested)}
+      >
         <LoadForm
           customers={customers}
           trucks={trucks}
@@ -174,6 +188,7 @@ export default async function LoadDetailPage({
         <LoadExtraDetails load={load} equipmentChoices={equipmentChoices} claims={claims} />
 
         <LoadTabPanel when="log">
+          <LoadLogSection loadId={load.id} />
           <LoadAuditSection loadId={load.id} />
         </LoadTabPanel>
 

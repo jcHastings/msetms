@@ -59,6 +59,11 @@ export default async function DriverHomePage() {
                     <div className="font-mono text-lg font-semibold">{load.load_number}</div>
                     <LoadStatusBadge status={load.status} />
                   </div>
+                  {load.docs_requested ? (
+                    <div className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-sm font-medium text-amber-900">
+                      Dispatch asked for documents
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-lg font-medium">
                     {load.origin} → {load.destination}
                   </div>

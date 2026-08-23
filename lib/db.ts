@@ -301,6 +301,10 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "watched", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "cloned_from_id", "INTEGER");
   ensureColumn(db, "loads", "invoice_paid", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "dispatcher_id", "INTEGER");
+  ensureColumn(db, "loads", "docs_requested", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "docs_requested_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "ready_to_invoice", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "customers", "credit_hold", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");

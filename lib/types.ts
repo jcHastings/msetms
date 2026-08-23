@@ -380,6 +380,10 @@ export type Load = {
   watched: number;
   cloned_from_id: number | null;
   invoice_paid: number;
+  dispatcher_id: number | null;
+  docs_requested: number;
+  docs_requested_at: string;
+  ready_to_invoice: number;
   created_at: string;
   updated_at: string;
 };
@@ -396,6 +400,7 @@ export type LoadView = Load & {
   driver_name: string | null;
   driver_phone: string | null;
   driver_type: DriverKind | null;
+  dispatcher_name: string | null;
 };
 
 export type CompanyProfile = {
@@ -478,7 +483,7 @@ export type DashboardStats = {
   unassignedLoads: number;
 };
 
-export type ActionResult = { ok: true; id?: number } | { ok: false; error: string };
+export type ActionResult = { ok: true; id?: number; message?: string } | { ok: false; error: string };
 
 export function labelForLoadStatus(status: string): string {
   switch (status) {

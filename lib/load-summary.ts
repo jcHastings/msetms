@@ -1,0 +1,45 @@
+import { formatDateTime, formatMoney } from "./format";
+
+export type LoadSummaryInput = {
+  load_number: string;
+  origin: string;
+  destination: string;
+  pickup_start: string;
+  pickup_end: string;
+  delivery_start: string;
+  delivery_end: string;
+  commodity: string;
+  reefer_setpoint_f: number | null;
+  special_instructions: string;
+  appointment_notes: string;
+  driver_name: string | null;
+  driver_phone: string | null;
+  driver_type: string | null;
+  rate: number | null;
+  oo_pay: number | null;
+};
+
+export const SMS_LATER_NOTE = "SMS texting is not wired yet. Add Twilio keys in .env later.";
+
+export function formatLoadSummary(load: LoadSummaryInput): string {
+  const lines = [
+    `Load ${load.load_number}`,
+    `${load.origin} → ${load.destination}`,
+    `Pickup ${formatDateTime(load.pickup_start)} – ${formatDateTime(load.pickup_end)}`,
+    `Delivery ${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`,
+  ];
+  if (load.commodity) lines.push(`Commodity ${load.commodity}`);
+  if (load.reefer_setpoint_f != null) lines.push(`Reefer setpoint ${load.reefer_setpoint_f}°F`);
+  if (load.appointment_notes) lines.push(`Appointment: ${load.appointment_notes}`);
+  if (load.special_instructions) lines.push(`Special instructions: ${load.special_instructions}`);
+  if (load.driver_type === "owner_operator" && (load.oo_pay != null || load.rate != null)) {
+    lines.push(`Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`);
+  }
+  lines.push("Driver app: http://localhost:3000/driver");
+  return lines.join("\n");
+}
+
+export function formatTextMessageDraft(load: LoadSummaryInput): string {
+  const to = load.driver_phone?.trim() || "(no mobile on file)";
+  return `To: ${to}\n\n`;
+}

@@ -125,6 +125,17 @@ export function listLoadAudit(loadId: number): LoadAuditRow[] {
     .all(loadId) as LoadAuditRow[];
 }
 
+export function listLoadLog(loadId: number): LoadAuditRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM load_audit
+       WHERE load_id = ?
+         AND action IN ('status', 'check_call', 'cancel', 'docs_requested')
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(loadId) as LoadAuditRow[];
+}
+
 export function listCompanyAudit(filters: LoadAuditFilters = {}): LoadAuditRow[] {
   const loadNumber = (filters.loadNumber ?? "").trim();
   const actor = (filters.actor ?? "").trim();
