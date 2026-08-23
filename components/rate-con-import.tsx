@@ -41,14 +41,20 @@ export function RateConImport({
   return (
     <div className="space-y-6">
       <form
+        action={formAction}
         className="card space-y-4 p-6"
         onSubmit={(event) => {
-          event.preventDefault();
-          const next = extractRateConFormData(heldFile.current);
+          const input = event.currentTarget.elements.namedItem("rate_con");
+          const fromInput = input instanceof HTMLInputElement ? input.files?.[0] ?? null : null;
+          const file = heldFile.current ?? fromInput;
+          if (file && !heldFile.current) heldFile.current = file;
+          const next = extractRateConFormData(file);
           if ("error" in next) {
+            event.preventDefault();
             setLocalError(next.error);
             return;
           }
+          event.preventDefault();
           setLocalError("");
           formAction(next.data);
         }}
@@ -78,7 +84,21 @@ export function RateConImport({
             if (file) setLocalError("");
           }}
         />
-        <button className="btn btn-primary" type="submit" disabled={pending}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={pending}
+          onClick={(event) => {
+            if (heldFile.current) return;
+            const form = event.currentTarget.form;
+            const input = form?.elements.namedItem("rate_con");
+            const fromInput = input instanceof HTMLInputElement ? input.files?.[0] ?? null : null;
+            if (!fromInput) {
+              event.preventDefault();
+              setLocalError("Pick a file first.");
+            }
+          }}
+        >
           {pending ? "Reading…" : "Extract fields"}
         </button>
       </form>

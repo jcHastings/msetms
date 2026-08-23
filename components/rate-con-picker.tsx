@@ -81,6 +81,7 @@ export function RateConPicker({
         type="file"
         className="sr-only"
         onChange={(event) => assignFile(event.target.files?.[0] ?? null)}
+        onInput={(event) => assignFile(event.currentTarget.files?.[0] ?? null)}
       />
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button className="btn btn-secondary" type="button" onClick={() => inputRef.current?.click()}>
