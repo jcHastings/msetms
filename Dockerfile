@@ -1,11 +1,8 @@
 # MSE TMS — Node 22 standalone. Bind 0.0.0.0 via HOST (never OS HOSTNAME).
+# Persistence is Node's built-in SQLite. No Python / g++ / node-gyp.
 FROM node:22-bookworm
 
 WORKDIR /app
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 RUN npm ci

@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database } from "./sqlite";
 
 function atHour(offsetDays: number, hour: number, minute = 0): string {
   const date = new Date();
@@ -17,7 +17,7 @@ function isoDate(offsetDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function seedDatabase(db: Database.Database): void {
+export function seedDatabase(db: Database): void {
   const created = now();
 
   const insertCustomer = db.prepare(

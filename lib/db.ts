@@ -1,18 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { Database } from "./sqlite";
 import { seedDatabase } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
 
-let connection: Database.Database | null = null;
+let connection: Database | null = null;
 let connectedPath: string | null = null;
 
 export function getDbPath(): string {
   return process.env.TMS_DB_PATH || DEFAULT_DB_PATH;
 }
 
-export function getDb(): Database.Database {
+export function getDb(): Database {
   const dbPath = getDbPath();
   if (connection && connectedPath === dbPath) {
     return connection;
@@ -53,7 +53,7 @@ export function closeDb(): void {
   }
 }
 
-export function migrate(db: Database.Database): void {
+export function migrate(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,7 +249,7 @@ function isoDateOffset(offsetDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function backfillDemoDriverCompliance(db: Database.Database): void {
+function backfillDemoDriverCompliance(db: Database): void {
   const rows: Array<[string, string, string, string, string]> = [
     ["Denise Ortega", "772110", "TN", isoDateOffset(25), isoDateOffset(200)],
     ["Tyrell Brooks", "104552", "MS", isoDateOffset(400), isoDateOffset(-10)],
@@ -267,7 +267,7 @@ function backfillDemoDriverCompliance(db: Database.Database): void {
   }
 }
 
-function backfillDemoRegistration(db: Database.Database): void {
+function backfillDemoRegistration(db: Database): void {
   db.prepare(
     `UPDATE trucks
      SET registration_issued = CASE WHEN registration_issued = '' THEN ? ELSE registration_issued END,
@@ -289,7 +289,7 @@ function backfillDemoRegistration(db: Database.Database): void {
 }
 
 /** Keep the exception inbox non-empty on existing demo databases. */
-function backfillDemoInboxExceptions(db: Database.Database): void {
+function backfillDemoInboxExceptions(db: Database): void {
   const load1045 = db.prepare("SELECT id FROM loads WHERE load_number = 'MSE-1045'").get() as
     | { id: number }
     | undefined;
@@ -336,7 +336,7 @@ function backfillDemoInboxExceptions(db: Database.Database): void {
   }
 }
 
-function backfillDemoPins(db: Database.Database): void {
+function backfillDemoPins(db: Database): void {
   const pins: Record<string, string> = {
     "Marcus Hale": "1024",
     "Denise Ortega": "1125",
@@ -354,7 +354,7 @@ function backfillDemoPins(db: Database.Database): void {
 }
 
 function ensureColumn(
-  db: Database.Database,
+  db: Database,
   table: string,
   column: string,
   definition: string,

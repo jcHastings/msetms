@@ -9,13 +9,19 @@ Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and 
 
 ## Quick start
 
-**Node 22** (recommended):
+Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is the only toolchain this app needs.
+
+On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
 
 ```bash
 npm install
 npm run build
 npm start
 ```
+
+Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
+
+Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
 
 **Docker:**
 
@@ -36,13 +42,11 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
-
 The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 
 | Command | What it does |
 | --- | --- |
-| `npm install` | Install dependencies |
+| `npm install` | Install JavaScript dependencies (no native compile) |
 | `npm run build` | Production build (writes `.next/standalone`) |
 | `npm start` | Run the standalone server and keep it listening |
 | `docker compose up --build` | Build the Node 22 image and serve port 3000 |
@@ -51,7 +55,7 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires **Node.js 22**. `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
+Requires **Node.js 22.13+ or 24**. `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 
@@ -214,14 +218,20 @@ To use a live QuickBooks company later: create production keys, re-authorize aga
 - Uploads: `data/uploads/`
 - Rotated QuickBooks refresh token: `data/qbo-refresh.json` (gitignored)
 
-Reset:
+Reset (macOS / Linux):
 
 ```bash
 rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 ```
 
+Reset (Windows PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force data\tms.db, data\tms.db-wal, data\tms.db-shm, data\uploads -ErrorAction SilentlyContinue
+```
+
 ## Stack
 
-Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
+Next.js (App Router), TypeScript, Tailwind CSS, Node built-in SQLite (`node:sqlite`), `dotenv`, `unpdf`, optional `tesseract.js`. No `better-sqlite3` / node-gyp.
 
 See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.
