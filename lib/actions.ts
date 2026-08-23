@@ -23,6 +23,7 @@ import {
   type LoadInput,
 } from "./queries";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
+import { computeOwnerOperatorPay } from "./settlement";
 import {
   DRIVER_STATUSES,
   LOAD_STATUSES,
@@ -110,7 +111,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   if (driver?.driver_type === "owner_operator") {
     const percent = parsed.oo_percent ?? driver.pay_percent ?? 75;
     parsed.oo_percent = percent;
-    parsed.oo_pay = parsed.rate != null ? Math.round(parsed.rate * (percent / 100) * 100) / 100 : null;
+    parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);
   } else {
     parsed.oo_percent = null;
     parsed.oo_pay = null;

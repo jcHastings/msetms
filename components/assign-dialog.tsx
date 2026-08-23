@@ -28,6 +28,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
   const [truckId, setTruckId] = useState("");
   const [trailerId, setTrailerId] = useState("");
   const [driverId, setDriverId] = useState("");
+  const [ooPercent, setOoPercent] = useState("75");
   const [confirmed, setConfirmed] = useState(false);
 
   const driver = drivers.find((item) => String(item.id) === driverId);
@@ -43,6 +44,9 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
     setDriverId(value);
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
+    if (next?.driver_type === "owner_operator") {
+      setOoPercent(String(next.pay_percent ?? 75));
+    }
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
       setTruckId(String(next.truck_id));
     }
@@ -147,7 +151,8 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                     min={0}
                     max={100}
                     step="0.1"
-                    defaultValue={driver.pay_percent ?? 75}
+                    value={ooPercent}
+                    onChange={(event) => setOoPercent(event.target.value)}
                   />
                 </div>
               ) : null}

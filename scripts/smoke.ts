@@ -105,7 +105,7 @@ async function main() {
   queries.updateDriverProgress(loadId, otherDriverId, "delivered");
   assert.equal(queries.getLoad(loadId)?.status, "delivered");
 
-  const { addAttachment } = await import("../lib/files");
+  const { addAttachment, addFleetDocument, listAttachments, listFleetDocuments } = await import("../lib/files");
   addAttachment({
     loadId,
     kind: "pod",
@@ -114,7 +114,6 @@ async function main() {
     mimeType: "application/pdf",
     uploadedBy: "driver",
   });
-  const { addFleetDocument, listAttachments, listFleetDocuments } = await import("../lib/files");
   assert.equal(listAttachments(loadId).some((file) => file.kind === "pod"), true);
   addFleetDocument({
     ownerType: "driver",
@@ -361,6 +360,25 @@ SPECIAL INSTRUCTIONS
   assert.ok(cole);
   assert.equal(cole.driver_type, "owner_operator");
   assert.equal(cole.pay_percent, 75);
+  const { computeOwnerOperatorPay } = await import("../lib/settlement");
+  assert.equal(computeOwnerOperatorPay(2000, 75), 1500);
+  assert.equal(computeOwnerOperatorPay(2975, 75), 2231.25);
+  const coleLoad = queries.listLoads({ status: "all" }).find((load) => load.driver_id === cole.id);
+  assert.ok(coleLoad);
+  assert.ok(coleLoad.truck_id);
+  queries.assignLoad(coleLoad.id, coleLoad.truck_id, cole.id, coleLoad.trailer_id);
+  const coleAssigned = queries.getLoad(coleLoad.id);
+  assert.equal(coleAssigned?.oo_percent, 75);
+  assert.equal(coleAssigned?.oo_pay, computeOwnerOperatorPay(coleAssigned?.rate, 75));
+  const companyDriver = queries
+    .listAssignableDrivers(coleLoad.id)
+    .find((driver) => driver.driver_type === "company_driver");
+  assert.ok(companyDriver);
+  queries.assignLoad(coleLoad.id, coleLoad.truck_id, companyDriver.id, coleLoad.trailer_id);
+  const afterCompany = queries.getLoad(coleLoad.id);
+  assert.equal(afterCompany?.oo_percent, null);
+  assert.equal(afterCompany?.oo_pay, null);
+  queries.assignLoad(coleLoad.id, coleLoad.truck_id, cole.id, coleLoad.trailer_id);
   const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrell);
   const { collectAssignmentAlerts, requireAssignmentOverride, trailerComplianceAlerts, truckComplianceAlerts } =

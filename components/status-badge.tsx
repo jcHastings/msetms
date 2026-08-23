@@ -1,7 +1,9 @@
 import {
+  labelForDriverKind,
   labelForDriverStatus,
   labelForLoadStatus,
   labelForTruckStatus,
+  type DriverKind,
   type DriverStatus,
   type LoadStatus,
   type TruckStatus,
@@ -48,4 +50,19 @@ export function TruckStatusBadge({ status }: { status: TruckStatus }) {
 
 export function DriverStatusBadge({ status }: { status: DriverStatus }) {
   return <Pill className={DRIVER_STYLES[status]}>{labelForDriverStatus(status)}</Pill>;
+}
+
+export function DriverKindBadge({ type }: { type: DriverKind | string }) {
+  const kind = type === "owner_operator" ? "owner_operator" : "company_driver";
+  return (
+    <Pill
+      className={
+        kind === "owner_operator"
+          ? "bg-violet-50 text-violet-800 ring-violet-200"
+          : "bg-slate-100 text-slate-600 ring-slate-200"
+      }
+    >
+      {labelForDriverKind(kind)}
+    </Pill>
+  );
 }

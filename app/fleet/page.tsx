@@ -1,18 +1,26 @@
 import Link from "next/link";
 import { ComplianceBadge } from "@/components/compliance-badge";
 import { PageHeader } from "@/components/page-header";
-import { DriverStatusBadge, TruckStatusBadge } from "@/components/status-badge";
+import { DriverKindBadge, DriverStatusBadge, TruckStatusBadge } from "@/components/status-badge";
 import { driverComplianceAlerts, trailerComplianceAlerts, truckComplianceAlerts } from "@/lib/compliance";
 import { formatWeight } from "@/lib/format";
 import { listDrivers, listTrailers, listTrucks } from "@/lib/queries";
-import { labelForDriverKind, labelForTrailerType, labelForTruckType } from "@/lib/types";
+import { labelForTrailerType, labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default function FleetPage() {
+export default async function FleetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
+  const type = (await searchParams).type ?? "all";
   const trucks = listTrucks();
   const trailers = listTrailers();
-  const drivers = listDrivers();
+  const drivers = listDrivers().filter((driver) => {
+    if (type === "company_driver" || type === "owner_operator") return driver.driver_type === type;
+    return true;
+  });
 
   return (
     <>
@@ -108,8 +116,25 @@ export default function FleetPage() {
         </section>
 
         <section className="card overflow-hidden xl:col-span-2">
-          <header className="border-b border-slate-200 px-5 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Drivers</h2>
+            <div className="flex gap-2 text-xs">
+              <Link className={type === "all" ? "font-semibold" : "text-slate-500"} href="/fleet">
+                All
+              </Link>
+              <Link
+                className={type === "company_driver" ? "font-semibold" : "text-slate-500"}
+                href="/fleet?type=company_driver"
+              >
+                Company
+              </Link>
+              <Link
+                className={type === "owner_operator" ? "font-semibold" : "text-slate-500"}
+                href="/fleet?type=owner_operator"
+              >
+                Owner-operator
+              </Link>
+            </div>
           </header>
           <table className="table-grid">
             <thead>
@@ -128,7 +153,9 @@ export default function FleetPage() {
               {drivers.map((driver) => (
                 <tr key={driver.id}>
                   <td className="font-semibold">{driver.name}</td>
-                  <td className="text-xs">{labelForDriverKind(driver.driver_type)}</td>
+                  <td>
+                    <DriverKindBadge type={driver.driver_type} />
+                  </td>
                   <td className="font-mono text-xs">
                     {[driver.license_state, driver.license_number].filter(Boolean).join("-") || driver.license || "—"}
                   </td>

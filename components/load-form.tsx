@@ -10,7 +10,8 @@ import {
   trailerComplianceAlerts,
   truckComplianceAlerts,
 } from "@/lib/compliance";
-import { toInputDateTime } from "@/lib/format";
+import { formatMoney, toInputDateTime } from "@/lib/format";
+import { computeOwnerOperatorPay } from "@/lib/settlement";
 import {
   LOAD_STATUSES,
   labelForLoadStatus,
@@ -72,6 +73,12 @@ export function LoadForm({
   const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
   const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
   const [confirmed, setConfirmed] = useState(false);
+  const [rate, setRate] = useState(
+    load?.rate != null ? String(load.rate) : extraDefaults.rate != null ? String(extraDefaults.rate) : "",
+  );
+  const [ooPercent, setOoPercent] = useState(
+    load?.oo_percent != null ? String(load.oo_percent) : "",
+  );
   const selectedDriver = drivers.find((item) => String(item.id) === driverId);
   const selectedTruck = trucks.find((item) => String(item.id) === truckId);
   const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
@@ -80,6 +87,12 @@ export function LoadForm({
     [selectedDriver, selectedTruck, selectedTrailer],
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
+  const parsedRate = rate.trim() ? Number.parseFloat(rate) : null;
+  const parsedPercent = ooPercent.trim() ? Number.parseFloat(ooPercent) : selectedDriver?.pay_percent ?? 75;
+  const liveOoPay =
+    selectedDriver?.driver_type === "owner_operator"
+      ? computeOwnerOperatorPay(parsedRate, parsedPercent)
+      : null;
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
@@ -203,7 +216,8 @@ export function LoadForm({
             type="number"
             min={0}
             step="0.01"
-            defaultValue={load?.rate ?? extraDefaults.rate ?? ""}
+            value={rate}
+            onChange={(event) => setRate(event.target.value)}
           />
         </div>
         <div className="field">
@@ -305,8 +319,16 @@ export function LoadForm({
             name="driver_id"
             value={driverId}
             onChange={(event) => {
-              setDriverId(event.target.value);
+              const nextId = event.target.value;
+              setDriverId(nextId);
               setConfirmed(false);
+              const next = drivers.find((item) => String(item.id) === nextId);
+              if (next?.driver_type === "owner_operator") {
+                const keepSaved = load?.driver_id === next.id && load.oo_percent != null;
+                setOoPercent(String(keepSaved ? load.oo_percent : next.pay_percent ?? 75));
+              } else {
+                setOoPercent("");
+              }
             }}
           >
             <option value="">Unassigned</option>
@@ -330,18 +352,29 @@ export function LoadForm({
                 min={0}
                 max={100}
                 step="0.1"
-                defaultValue={load?.oo_percent ?? selectedDriver.pay_percent ?? 75}
+                value={ooPercent || String(selectedDriver.pay_percent ?? 75)}
+                onChange={(event) => setOoPercent(event.target.value)}
               />
             </div>
-            {load?.oo_pay != null ? (
-              <div className="field">
-                <label>Computed OO pay</label>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  ${load.oo_pay.toLocaleString()}
-                </div>
+            <div className="field">
+              <label>Computed OO pay</label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                {formatMoney(liveOoPay)}
+                {parsedRate != null ? (
+                  <span className="ml-1 text-slate-500">
+                    ({parsedPercent}% of {formatMoney(parsedRate)})
+                  </span>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </>
+        ) : selectedDriver ? (
+          <div className="field">
+            <label>Owner-operator pay</label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+              N/A — company driver
+            </div>
+          </div>
         ) : null}
       </div>
       {alerts.length > 0 ? (

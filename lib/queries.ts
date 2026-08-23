@@ -5,6 +5,7 @@ import {
   type ComplianceAlert,
 } from "./compliance";
 import { getDb } from "./db";
+import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
   isLoadStatus,
@@ -716,7 +717,7 @@ export function assignLoad(
     driver.driver_type === "owner_operator"
       ? settlement?.oo_percent ?? driver.pay_percent ?? 75
       : null;
-  const ooPay = ooPercent != null && load.rate != null ? Math.round(load.rate * (ooPercent / 100) * 100) / 100 : null;
+  const ooPay = computeOwnerOperatorPay(load.rate, ooPercent);
 
   const db = getDb();
   db.transaction(() => {
