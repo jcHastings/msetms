@@ -5,7 +5,7 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020**). Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -21,7 +21,7 @@ npm run build
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
+Open [http://localhost:3000](http://localhost:3000) for dispatch (sign in as Ana G / 4020). Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
 
 Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
 
@@ -63,10 +63,12 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 
 ## Dispatcher
 
-- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
-- Dashboard counts, dispatch board with status / pickup-date filters
+- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Ack / snooze / resolve. Seeded demo data keeps the list from being empty.
+- Dashboard counts, shift handoff, watch list, daily recap, dispatch board with status / pickup-date filters
 - **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch.
 - **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
+- **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
+- Richer load statuses, multi-stop, clone, templates, document checklist, claims
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen

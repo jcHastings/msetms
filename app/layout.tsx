@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ShellSwitch } from "@/components/shell-switch";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,14 +19,15 @@ export const metadata: Metadata = {
   description: "Transportation management for a small trucking fleet",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const dispatcher = await getSignedInDispatcher();
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ShellSwitch>{children}</ShellSwitch>
+        <ShellSwitch dispatcher={dispatcher}>{children}</ShellSwitch>
       </body>
     </html>
   );

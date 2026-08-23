@@ -108,7 +108,7 @@ export async function sendLoadToQuickbooks(
 ): Promise<QboSendResult> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (load.status !== "delivered") {
+  if (load.status !== "delivered" && load.status !== "completed") {
     throw new Error("Mark the load Delivered before sending an invoice.");
   }
   if (load.qbo_invoice_id && !options.confirmResend) {

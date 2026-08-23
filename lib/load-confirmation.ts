@@ -49,7 +49,7 @@ export function confirmationStatus(load: LoadView): string {
   if (load.status === "in_transit" || load.driver_progress) return "On Route";
   if (load.status === "assigned") return "Dispatched";
   if (load.status === "available") return "Available";
-  if (load.status === "delivered") return "Delivered";
+  if (load.status === "delivered" || load.status === "completed") return "Delivered";
   if (load.status === "cancelled") return "Cancelled";
   return load.status;
 }

@@ -4,13 +4,27 @@ import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { ComplianceList } from "@/components/compliance-badge";
-import { listExceptionInbox } from "@/lib/exceptions";
-import { getDashboardStats, listAttentionLoads, listDrivers, listMovingLoads, listTrucks, listUpcomingCompliance } from "@/lib/queries";
+import { dailyRecap, getHandoffNote, listLiveExceptionInbox } from "@/lib/desk";
+import { saveHandoffAction } from "@/lib/dispatcher-actions";
+import {
+  getDashboardStats,
+  listAttentionLoads,
+  listDrivers,
+  listMovingLoads,
+  listTrucks,
+  listUpcomingCompliance,
+  listWatchedLoads,
+} from "@/lib/queries";
 import { labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ kind?: string; q?: string }>;
+}) {
+  const params = await searchParams;
   const stats = getDashboardStats();
   const unassigned = listAttentionLoads();
   const moving = listMovingLoads();
@@ -19,7 +33,10 @@ export default function DashboardPage() {
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
   const onDuty = drivers.filter((driver) => driver.status === "on_duty");
   const expirations = listUpcomingCompliance();
-  const inbox = listExceptionInbox();
+  const inbox = listLiveExceptionInbox({ kind: params.kind, q: params.q });
+  const recap = dailyRecap();
+  const watched = listWatchedLoads();
+  const handoff = getHandoffNote();
 
   return (
     <>
@@ -33,11 +50,11 @@ export default function DashboardPage() {
         }
       />
 
-      <ExceptionInboxCard inbox={inbox} />
+      <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} />
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Open loads" value={stats.openLoads} hint="Available, assigned, in transit" href="/board" />
-        <Kpi label="In transit" value={stats.inTransit} hint="Rolling now" href="/board?status=in_transit" />
+        <Kpi label="Open loads" value={stats.openLoads} hint="Not delivered, completed, or cancelled" href="/board" />
+        <Kpi label="Rolling" value={stats.inTransit} hint="Dispatched through unloading" href="/board?status=in_transit" />
         <Kpi
           label="Available trucks"
           value={stats.availableTrucks}
@@ -50,6 +67,66 @@ export default function DashboardPage() {
           hint="Need a truck and driver"
           href="/board?status=available"
         />
+      </div>
+
+      <div className="mb-6 grid gap-4 xl:grid-cols-3">
+        <section className="card p-5">
+          <h2 className="text-sm font-semibold">Shift handoff</h2>
+          <p className="mt-1 text-sm text-slate-500">What’s on fire for the next desk.</p>
+          <form action={saveHandoffAction} className="mt-3">
+            <textarea
+              name="handoff_note"
+              rows={4}
+              defaultValue={handoff}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Late PU on MSE-1045, reefer alarm, Tyrell med card expired…"
+            />
+            <button className="btn btn-secondary mt-2" type="submit">
+              Save handoff
+            </button>
+          </form>
+        </section>
+        <section className="card p-5">
+          <h2 className="text-sm font-semibold">Daily recap</h2>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Delivered today</dt>
+              <dd className="font-semibold">{recap.delivered}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Late</dt>
+              <dd className="font-semibold">{recap.late}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">On-time %</dt>
+              <dd className="font-semibold">{recap.onTimePct}%</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-500">Claims opened</dt>
+              <dd className="font-semibold">{recap.claims}</dd>
+            </div>
+          </dl>
+          <Link href="/reports" className="mt-3 inline-block text-sm font-medium text-slate-600 hover:text-slate-900">
+            Open reports
+          </Link>
+        </section>
+        <section className="card p-5">
+          <h2 className="text-sm font-semibold">Watch list</h2>
+          {watched.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">Pin a load from its page.</p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm">
+              {watched.map((load) => (
+                <li key={load.id} className="flex justify-between gap-2">
+                  <Link href={`/loads/${load.id}`} className="font-mono font-semibold hover:underline">
+                    {load.load_number}
+                  </Link>
+                  <LoadStatusBadge status={load.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -128,7 +205,11 @@ export default function DashboardPage() {
         <section className="card p-5 xl:col-span-3">
           <h2 className="text-sm font-semibold">Upcoming / expired documents</h2>
           <p className="mt-1 text-sm text-slate-500">
-            License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days.
+            License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days. Full list on{" "}
+            <Link href="/compliance" className="font-medium underline">
+              Compliance
+            </Link>
+            .
           </p>
           <div className="mt-3">
             {expirations.length === 0 ? (
@@ -141,7 +222,7 @@ export default function DashboardPage() {
 
         <section className="card overflow-hidden xl:col-span-3">
           <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-            <h2 className="text-sm font-semibold">In transit</h2>
+            <h2 className="text-sm font-semibold">On the road</h2>
             <Link href="/board?status=in_transit" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               All moving loads
             </Link>

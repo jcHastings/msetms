@@ -10,7 +10,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
-import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
+import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +148,7 @@ export default async function BoardPage({
                     </td>
                     <td className="whitespace-nowrap">
                       <div className="flex justify-end gap-2">
-                        {load.status === "available" || load.status === "assigned" || load.status === "in_transit" ? (
+                        {!isClosedStatus(load.status) ? (
                           <AssignDialog
                             loadId={load.id}
                             loadNumber={load.load_number}

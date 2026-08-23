@@ -8,7 +8,12 @@ import { getDb } from "./db";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
+  ARCHIVED_LOAD_STATUSES,
+  isClosedStatus,
   isLoadStatus,
+  isRollingStatus,
+  LOAD_STATUSES,
+  statusNeedsAssets,
   type Contact,
   type Customer,
   type CustomerWithContacts,
@@ -38,6 +43,11 @@ import {
   type SavedReport,
   type SearchColumnKey,
 } from "./search";
+
+const BUSY_STATUSES = ACTIVE_LOAD_STATUSES.filter((status) => statusNeedsAssets(status));
+const BUSY_STATUS_SQL = BUSY_STATUSES.map(() => "?").join(", ");
+const ROLLING_STATUSES = LOAD_STATUSES.filter((status) => isRollingStatus(status));
+const ROLLING_STATUS_SQL = ROLLING_STATUSES.map(() => "?").join(", ");
 
 const LOAD_SELECT = `
   SELECT
@@ -169,16 +179,25 @@ export function getCustomer(id: number): CustomerWithContacts | null {
 export function createCustomer(input: {
   name: string;
   billing_notes: string;
+  credit_hold?: boolean;
+  payment_terms?: string;
   contacts: Array<{ name: string; role: string; phone: string; email: string }>;
 }): number {
   const db = getDb();
   const timestamp = now();
   const result = db
     .prepare(
-      `INSERT INTO customers (name, billing_notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(input.name, input.billing_notes, timestamp, timestamp);
+    .run(
+      input.name,
+      input.billing_notes,
+      input.credit_hold ? 1 : 0,
+      input.payment_terms ?? "",
+      timestamp,
+      timestamp,
+    );
   const id = Number(result.lastInsertRowid);
   replaceContacts(id, input.contacts);
   return id;
@@ -189,14 +208,25 @@ export function updateCustomer(
   input: {
     name: string;
     billing_notes: string;
+    credit_hold?: boolean;
+    payment_terms?: string;
     contacts: Array<{ name: string; role: string; phone: string; email: string }>;
   },
 ): void {
   const existing = getCustomer(id);
   if (!existing) throw new Error("Customer not found.");
   getDb()
-    .prepare("UPDATE customers SET name = ?, billing_notes = ?, updated_at = ? WHERE id = ?")
-    .run(input.name, input.billing_notes, now(), id);
+    .prepare(
+      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, updated_at = ? WHERE id = ?",
+    )
+    .run(
+      input.name,
+      input.billing_notes,
+      input.credit_hold ? 1 : 0,
+      input.payment_terms ?? existing.payment_terms ?? "",
+      now(),
+      id,
+    );
   replaceContacts(id, input.contacts);
 }
 
@@ -332,14 +362,18 @@ export function createTruck(input: {
   registration_expires?: string;
   dot_inspected_on?: string;
   dot_expires?: string;
+  vin?: string;
+  plate?: string;
+  year?: string;
+  make?: string;
 }): number {
   const timestamp = now();
   try {
     const result = getDb()
       .prepare(
         `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number,
-            registration_issued, registration_expires, dot_inspected_on, dot_expires, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            registration_issued, registration_expires, dot_inspected_on, dot_expires, vin, plate, year, make, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -354,6 +388,10 @@ export function createTruck(input: {
         input.registration_expires ?? "",
         input.dot_inspected_on ?? "",
         input.dot_expires ?? "",
+        input.vin ?? "",
+        input.plate ?? "",
+        input.year ?? "",
+        input.make ?? "",
         timestamp,
         timestamp,
       );
@@ -381,6 +419,10 @@ export function updateTruck(
     registration_expires?: string;
     dot_inspected_on?: string;
     dot_expires?: string;
+    vin?: string;
+    plate?: string;
+    year?: string;
+    make?: string;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
@@ -390,7 +432,8 @@ export function updateTruck(
         `UPDATE trucks
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
              samsara_vehicle_id = ?, samsara_trailer_id = ?, orbcomm_asset_id = ?, trailer_number = ?,
-             registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ?, updated_at = ?
+             registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ?,
+             vin = ?, plate = ?, year = ?, make = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -406,6 +449,10 @@ export function updateTruck(
         input.registration_expires ?? "",
         input.dot_inspected_on ?? "",
         input.dot_expires ?? "",
+        input.vin ?? "",
+        input.plate ?? "",
+        input.year ?? "",
+        input.make ?? "",
         now(),
         id,
       );
@@ -554,11 +601,17 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
     .prepare(
       `${LOAD_SELECT}
        WHERE loads.driver_id = ?
-         AND loads.status IN ('assigned', 'in_transit', 'delivered')
+         AND loads.status != 'cancelled'
        ORDER BY CASE loads.status
          WHEN 'in_transit' THEN 0
-         WHEN 'assigned' THEN 1
-         ELSE 2
+         WHEN 'picked_up' THEN 0
+         WHEN 'at_delivery' THEN 0
+         WHEN 'unloading' THEN 0
+         WHEN 'dispatched' THEN 1
+         WHEN 'at_pickup' THEN 1
+         WHEN 'loading' THEN 1
+         WHEN 'assigned' THEN 2
+         ELSE 3
        END, loads.pickup_start ASC`,
     )
     .all(driverId) as LoadView[];
@@ -613,10 +666,18 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
       `${LOAD_SELECT} ${where}
        ORDER BY CASE loads.status
          WHEN 'in_transit' THEN 0
-         WHEN 'assigned' THEN 1
-         WHEN 'available' THEN 2
-         WHEN 'delivered' THEN 3
-         ELSE 4
+         WHEN 'picked_up' THEN 0
+         WHEN 'at_delivery' THEN 0
+         WHEN 'unloading' THEN 0
+         WHEN 'dispatched' THEN 1
+         WHEN 'at_pickup' THEN 1
+         WHEN 'loading' THEN 1
+         WHEN 'assigned' THEN 2
+         WHEN 'available' THEN 3
+         WHEN 'hold' THEN 4
+         WHEN 'delivered' THEN 5
+         WHEN 'completed' THEN 5
+         ELSE 6
        END, loads.pickup_start ASC`,
     )
     .all(...params) as LoadView[];
@@ -632,7 +693,7 @@ function searchStatuses(criteria: LoadSearchCriteria): string[] {
   }
   const statuses: string[] = [];
   if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES);
-  if (criteria.includeArchived) statuses.push("delivered");
+  if (criteria.includeArchived) statuses.push(...ARCHIVED_LOAD_STATUSES);
   if (criteria.includeCancelled) statuses.push("cancelled");
   return statuses;
 }
@@ -787,7 +848,7 @@ function validateLoadInput(input: LoadInput): void {
   if (new Date(input.delivery_end) < new Date(input.delivery_start)) {
     throw new Error("Delivery window end must be after the start.");
   }
-  if ((input.status === "assigned" || input.status === "in_transit") && (!input.truck_id || !input.driver_id)) {
+  if (statusNeedsAssets(input.status) && (!input.truck_id || !input.driver_id)) {
     throw new Error("Assign a truck and driver before setting this status.");
   }
 }
@@ -914,7 +975,7 @@ export function assignLoad(
 ): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (load.status === "delivered" || load.status === "cancelled") {
+  if (isClosedStatus(load.status)) {
     throw new Error("Cannot assign a closed load.");
   }
   const truck = getTruck(truckId);
@@ -940,7 +1001,7 @@ export function assignLoad(
   const db = getDb();
   db.transaction(() => {
     releaseAssetsIfNeeded(load);
-    const nextStatus = load.status === "in_transit" ? "in_transit" : "assigned";
+    const nextStatus = isRollingStatus(load.status) ? load.status : "assigned";
     db.prepare(
       `UPDATE loads SET truck_id = ?, driver_id = ?, trailer_id = ?, trailer_number = ?,
          oo_percent = ?, oo_pay = ?, status = ?, driver_progress = ?, updated_at = ?
@@ -953,7 +1014,7 @@ export function assignLoad(
       ooPercent,
       ooPay,
       nextStatus,
-      nextStatus === "in_transit" ? load.driver_progress : "",
+      isRollingStatus(nextStatus) ? load.driver_progress : "",
       now(),
       loadId,
     );
@@ -1047,7 +1108,7 @@ export function markQboInvoice(
 export function updateLoadStatus(loadId: number, status: LoadStatus): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if ((status === "assigned" || status === "in_transit") && (!load.truck_id || !load.driver_id)) {
+  if (statusNeedsAssets(status) && (!load.truck_id || !load.driver_id)) {
     throw new Error("Assign a truck and driver first.");
   }
   const db = getDb();
@@ -1059,9 +1120,9 @@ export function updateLoadStatus(loadId: number, status: LoadStatus): void {
         loadId,
       );
       releaseAssetsIfNeeded(load);
-    } else if (status === "assigned" || status === "in_transit") {
+    } else if (statusNeedsAssets(status)) {
       markAssetsOnDuty(load.truck_id, load.driver_id);
-    } else {
+    } else if (status !== "hold") {
       releaseAssetsIfNeeded(load);
     }
   })();
@@ -1077,11 +1138,11 @@ function assertAssetFree(
     .prepare(
       `SELECT load_number FROM loads
        WHERE id != ?
-         AND status IN ('assigned', 'in_transit')
+         AND status IN (${BUSY_STATUS_SQL})
          AND (truck_id = ? OR driver_id = ? OR (? IS NOT NULL AND trailer_id = ?))
        LIMIT 1`,
     )
-    .get(exceptLoadId, truckId, driverId, trailerId ?? null, trailerId ?? null) as
+    .get(exceptLoadId, ...BUSY_STATUSES, truckId, driverId, trailerId ?? null, trailerId ?? null) as
     | { load_number: string }
     | undefined;
   if (conflict) {
@@ -1107,9 +1168,9 @@ function releaseAssetsIfNeeded(load: Load): void {
     const stillUsed = db
       .prepare(
         `SELECT id FROM loads
-         WHERE id != ? AND truck_id = ? AND status IN ('assigned', 'in_transit')`,
+         WHERE id != ? AND truck_id = ? AND status IN (${BUSY_STATUS_SQL})`,
       )
-      .get(load.id, load.truck_id);
+      .get(load.id, load.truck_id, ...BUSY_STATUSES);
     if (!stillUsed) {
       const truck = getTruck(load.truck_id);
       if (truck && truck.status === "in_use") {
@@ -1124,9 +1185,9 @@ function releaseAssetsIfNeeded(load: Load): void {
     const stillUsed = db
       .prepare(
         `SELECT id FROM loads
-         WHERE id != ? AND driver_id = ? AND status IN ('assigned', 'in_transit')`,
+         WHERE id != ? AND driver_id = ? AND status IN (${BUSY_STATUS_SQL})`,
       )
-      .get(load.id, load.driver_id);
+      .get(load.id, load.driver_id, ...BUSY_STATUSES);
     if (!stillUsed) {
       const driver = getDb().prepare("SELECT * FROM drivers WHERE id = ?").get(load.driver_id) as
         | Driver
@@ -1147,13 +1208,13 @@ function syncAssignment(
   truckId: number | null,
   driverId: number | null,
 ): void {
-  if (status === "assigned" || status === "in_transit") {
+  if (statusNeedsAssets(status)) {
     if (!truckId || !driverId) {
       throw new Error("Assign a truck and driver before setting this status.");
     }
     assertAssetFree(truckId, driverId, loadId);
     markAssetsOnDuty(truckId, driverId);
-  } else {
+  } else if (status !== "hold") {
     const load = getLoad(loadId);
     if (load) releaseAssetsIfNeeded(load);
   }
@@ -1165,9 +1226,9 @@ export function listAssignableTrucks(loadId?: number): Truck[] {
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
-         WHERE truck_id = ? AND status IN ('assigned', 'in_transit') AND id != ?`,
+         WHERE truck_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
       )
-      .get(truck.id, loadId ?? -1);
+      .get(truck.id, ...BUSY_STATUSES, loadId ?? -1);
     return !busy;
   });
 }
@@ -1178,9 +1239,9 @@ export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
-         WHERE driver_id = ? AND status IN ('assigned', 'in_transit') AND id != ?`,
+         WHERE driver_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
       )
-      .get(driver.id, loadId ?? -1);
+      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1);
     return !busy;
   });
 }
@@ -1218,7 +1279,9 @@ export function getDashboardStats(): DashboardStats {
       .get(...ACTIVE_LOAD_STATUSES) as { count: number }
   ).count;
   const inTransit = (
-    db.prepare("SELECT COUNT(*) as count FROM loads WHERE status = 'in_transit'").get() as { count: number }
+    db
+      .prepare(`SELECT COUNT(*) as count FROM loads WHERE status IN (${ROLLING_STATUS_SQL})`)
+      .get(...ROLLING_STATUSES) as { count: number }
   ).count;
   const availableTrucks = (
     db.prepare("SELECT COUNT(*) as count FROM trucks WHERE status = 'available'").get() as { count: number }
@@ -1234,7 +1297,7 @@ export function listAttentionLoads(): LoadView[] {
 }
 
 export function listMovingLoads(): LoadView[] {
-  return listLoads({ status: "in_transit" });
+  return listLoads({ status: "all" }).filter((load) => isRollingStatus(load.status));
 }
 
 export function listAssignableTrailers(loadId?: number): Trailer[] {
@@ -1243,9 +1306,9 @@ export function listAssignableTrailers(loadId?: number): Trailer[] {
     const busy = getDb()
       .prepare(
         `SELECT id FROM loads
-         WHERE trailer_id = ? AND status IN ('assigned', 'in_transit') AND id != ?`,
+         WHERE trailer_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
       )
-      .get(trailer.id, loadId ?? -1);
+      .get(trailer.id, ...BUSY_STATUSES, loadId ?? -1);
     return !busy;
   });
 }
@@ -1256,4 +1319,112 @@ export function listUpcomingCompliance(): ComplianceAlert[] {
     ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck)),
     ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer)),
   ].sort((a, b) => a.days - b.days);
+}
+
+export function cloneLoad(loadId: number): number {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  const id = createLoad({
+    customer_id: load.customer_id,
+    origin: load.origin,
+    destination: load.destination,
+    pickup_start: load.pickup_start,
+    pickup_end: load.pickup_end,
+    delivery_start: load.delivery_start,
+    delivery_end: load.delivery_end,
+    weight: load.weight,
+    commodity: load.commodity,
+    rate: load.rate,
+    notes: load.notes,
+    special_instructions: load.special_instructions,
+    appointment_notes: load.appointment_notes,
+    reference_number: load.reference_number,
+    po_number: load.po_number,
+    reefer_setpoint_f: load.reefer_setpoint_f,
+    trailer_number: load.trailer_number,
+    trailer_id: null,
+    shipper_location_id: load.shipper_location_id,
+    consignee_location_id: load.consignee_location_id,
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET cloned_from_id = ? WHERE id = ?").run(loadId, id);
+  updateLoadDetails(id, {
+    equipment: load.equipment,
+    hazmat: Boolean(load.hazmat),
+    commodity_class: load.commodity_class,
+    team: Boolean(load.team),
+    lumper_expected: load.lumper_expected,
+    unload_type: load.unload_type,
+  });
+  return id;
+}
+
+export function setLoadWatched(loadId: number, watched: boolean): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb().prepare("UPDATE loads SET watched = ?, updated_at = ? WHERE id = ?").run(watched ? 1 : 0, now(), loadId);
+}
+
+export function listWatchedLoads(): LoadView[] {
+  return listLoads({ status: "all" }).filter((load) => load.watched);
+}
+
+export function updateLoadDetails(
+  loadId: number,
+  details: {
+    status_reason?: string;
+    cancel_reason?: string;
+    cover_by?: string;
+    equipment?: string;
+    hazmat?: boolean;
+    commodity_class?: string;
+    seal_numbers?: string;
+    pallet_count?: number | null;
+    case_count?: number | null;
+    team?: boolean;
+    lumper_expected?: number | null;
+    lumper_actual?: number | null;
+    detention_started_at?: string;
+    detention_ended_at?: string;
+    appointment_confirmation?: string;
+    unload_type?: string;
+  },
+): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  getDb()
+    .prepare(
+      `UPDATE loads SET
+        status_reason = ?, cancel_reason = ?, cover_by = ?, equipment = ?, hazmat = ?,
+        commodity_class = ?, seal_numbers = ?, pallet_count = ?, case_count = ?, team = ?,
+        lumper_expected = ?, lumper_actual = ?, detention_started_at = ?, detention_ended_at = ?,
+        appointment_confirmation = ?, unload_type = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      details.status_reason ?? load.status_reason ?? "",
+      details.cancel_reason ?? load.cancel_reason ?? "",
+      details.cover_by ?? load.cover_by ?? "",
+      details.equipment ?? load.equipment ?? "",
+      (details.hazmat ?? Boolean(load.hazmat)) ? 1 : 0,
+      details.commodity_class ?? load.commodity_class ?? "",
+      details.seal_numbers ?? load.seal_numbers ?? "",
+      details.pallet_count ?? load.pallet_count,
+      details.case_count ?? load.case_count,
+      (details.team ?? Boolean(load.team)) ? 1 : 0,
+      details.lumper_expected ?? load.lumper_expected,
+      details.lumper_actual ?? load.lumper_actual,
+      details.detention_started_at ?? load.detention_started_at ?? "",
+      details.detention_ended_at ?? load.detention_ended_at ?? "",
+      details.appointment_confirmation ?? load.appointment_confirmation ?? "",
+      details.unload_type ?? load.unload_type ?? "",
+      now(),
+      loadId,
+    );
+}
+
+export function markInvoicePaid(loadId: number, paid: boolean): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb().prepare("UPDATE loads SET invoice_paid = ?, updated_at = ? WHERE id = ?").run(paid ? 1 : 0, now(), loadId);
 }

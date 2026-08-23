@@ -9,7 +9,7 @@ import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integ
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
 import { getLoad, locationsForLoad } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { labelForAttachmentKind } from "@/lib/types";
+import { isClosedStatus, labelForAttachmentKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +116,7 @@ export default async function DriverLoadPage({
         loadId={load.id}
         loadNumber={load.load_number}
         current={load.driver_progress}
-        closed={load.status === "delivered"}
+        closed={isClosedStatus(load.status)}
       />
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">

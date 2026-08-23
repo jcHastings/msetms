@@ -1,8 +1,16 @@
 export const LOAD_STATUSES = [
   "available",
+  "hold",
   "assigned",
+  "dispatched",
+  "at_pickup",
+  "loading",
+  "picked_up",
   "in_transit",
+  "at_delivery",
+  "unloading",
   "delivered",
+  "completed",
   "cancelled",
 ] as const;
 
@@ -10,9 +18,63 @@ export type LoadStatus = (typeof LOAD_STATUSES)[number];
 
 export const ACTIVE_LOAD_STATUSES: LoadStatus[] = [
   "available",
+  "hold",
   "assigned",
+  "dispatched",
+  "at_pickup",
+  "loading",
+  "picked_up",
   "in_transit",
+  "at_delivery",
+  "unloading",
 ];
+
+export const ARCHIVED_LOAD_STATUSES: LoadStatus[] = ["delivered", "completed"];
+
+export const STATUS_REASONS = [
+  { value: "", label: "None" },
+  { value: "wait", label: "Waiting" },
+  { value: "breakdown", label: "Breakdown" },
+  { value: "rejected", label: "Rejected" },
+  { value: "rolled", label: "Rolled" },
+] as const;
+
+export const EQUIPMENT_REQUIRED = [
+  { value: "", label: "Any" },
+  { value: "reefer_53", label: "53' Reefer" },
+  { value: "dry_van_53", label: "53' Dry Van" },
+  { value: "flatbed", label: "Flatbed" },
+  { value: "box", label: "Box Truck" },
+  { value: "power_only", label: "Power Only" },
+] as const;
+
+export function isClosedStatus(status: string): boolean {
+  return status === "delivered" || status === "completed" || status === "cancelled";
+}
+
+export function isBillableStatus(status: string): boolean {
+  return status === "delivered" || status === "completed";
+}
+
+export function isIftaEligibleStatus(status: string): boolean {
+  return isRollingStatus(status) || isBillableStatus(status);
+}
+
+export function isRollingStatus(status: string): boolean {
+  return (
+    status === "dispatched" ||
+    status === "at_pickup" ||
+    status === "loading" ||
+    status === "picked_up" ||
+    status === "in_transit" ||
+    status === "at_delivery" ||
+    status === "unloading"
+  );
+}
+
+export function statusNeedsAssets(status: string): boolean {
+  return status === "assigned" || isRollingStatus(status);
+}
 
 export const TRUCK_TYPES = [
   { value: "dry_van", label: "Dry Van" },
@@ -77,6 +139,8 @@ export type Customer = {
   id: number;
   name: string;
   billing_notes: string;
+  credit_hold: number;
+  payment_terms: string;
   created_at: string;
   updated_at: string;
 };
@@ -110,6 +174,9 @@ export const ATTACHMENT_KINDS = [
   { value: "photo_product", label: "Product photo" },
   { value: "photo_seals", label: "Seal photo" },
   { value: "ifta", label: "IFTA report" },
+  { value: "temp_log", label: "Temp log" },
+  { value: "scale_ticket", label: "Scale ticket" },
+  { value: "claim", label: "Claim evidence" },
   { value: "other", label: "Other" },
 ] as const;
 
@@ -180,6 +247,10 @@ export type Truck = {
   registration_expires: string;
   dot_inspected_on: string;
   dot_expires: string;
+  vin: string;
+  plate: string;
+  year: string;
+  make: string;
   created_at: string;
   updated_at: string;
 };
@@ -256,6 +327,25 @@ export type Load = {
   qbo_invoice_number: string;
   qbo_sent_at: string;
   qbo_source: "demo" | "quickbooks" | "";
+  status_reason: string;
+  cancel_reason: string;
+  cover_by: string;
+  equipment: string;
+  hazmat: number;
+  commodity_class: string;
+  seal_numbers: string;
+  pallet_count: number | null;
+  case_count: number | null;
+  team: number;
+  lumper_expected: number | null;
+  lumper_actual: number | null;
+  detention_started_at: string;
+  detention_ended_at: string;
+  appointment_confirmation: string;
+  unload_type: string;
+  watched: number;
+  cloned_from_id: number | null;
+  invoice_paid: number;
   created_at: string;
   updated_at: string;
 };
@@ -356,12 +446,28 @@ export function labelForLoadStatus(status: LoadStatus): string {
   switch (status) {
     case "available":
       return "Available";
+    case "hold":
+      return "Hold";
     case "assigned":
       return "Assigned";
+    case "dispatched":
+      return "Dispatched";
+    case "at_pickup":
+      return "At PU";
+    case "loading":
+      return "Loading";
+    case "picked_up":
+      return "Picked up";
     case "in_transit":
       return "In Transit";
+    case "at_delivery":
+      return "At DEL";
+    case "unloading":
+      return "Unloading";
     case "delivered":
       return "Delivered";
+    case "completed":
+      return "Completed";
     case "cancelled":
       return "Cancelled";
   }

@@ -194,6 +194,8 @@ export async function createCustomerAction(
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
+      credit_hold: String(formData.get("credit_hold") ?? "") === "1",
+      payment_terms: String(formData.get("payment_terms") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -213,6 +215,8 @@ export async function updateCustomerAction(
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
+      credit_hold: String(formData.get("credit_hold") ?? "") === "1",
+      payment_terms: String(formData.get("payment_terms") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -242,6 +246,10 @@ export async function createTruckAction(
       registration_expires: parseDateField(formData.get("registration_expires")),
       dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
       dot_expires: parseDateField(formData.get("dot_expires")),
+      vin: String(formData.get("vin") ?? "").trim(),
+      plate: String(formData.get("plate") ?? "").trim(),
+      year: String(formData.get("year") ?? "").trim(),
+      make: String(formData.get("make") ?? "").trim(),
     });
     refresh();
     redirect("/fleet");
@@ -273,6 +281,10 @@ export async function updateTruckAction(
       registration_expires: parseDateField(formData.get("registration_expires")),
       dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
       dot_expires: parseDateField(formData.get("dot_expires")),
+      vin: String(formData.get("vin") ?? "").trim(),
+      plate: String(formData.get("plate") ?? "").trim(),
+      year: String(formData.get("year") ?? "").trim(),
+      make: String(formData.get("make") ?? "").trim(),
     });
     refresh();
     return { ok: true, id };

@@ -11,9 +11,17 @@ import {
 
 const LOAD_STYLES: Record<LoadStatus, string> = {
   available: "bg-sky-50 text-sky-800 ring-sky-200",
+  hold: "bg-orange-50 text-orange-900 ring-orange-200",
   assigned: "bg-amber-50 text-amber-800 ring-amber-200",
+  dispatched: "bg-blue-50 text-blue-800 ring-blue-200",
+  at_pickup: "bg-violet-50 text-violet-800 ring-violet-200",
+  loading: "bg-violet-50 text-violet-800 ring-violet-200",
+  picked_up: "bg-indigo-50 text-indigo-800 ring-indigo-200",
   in_transit: "bg-indigo-50 text-indigo-800 ring-indigo-200",
+  at_delivery: "bg-fuchsia-50 text-fuchsia-800 ring-fuchsia-200",
+  unloading: "bg-fuchsia-50 text-fuchsia-800 ring-fuchsia-200",
   delivered: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  completed: "bg-emerald-100 text-emerald-900 ring-emerald-300",
   cancelled: "bg-slate-100 text-slate-600 ring-slate-200",
 };
 

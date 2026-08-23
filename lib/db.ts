@@ -47,6 +47,7 @@ export function getDb(): Database {
     backfillDemoInboxExceptions(db);
     backfillDemoLocations(db);
   }
+  backfillDemoAccounting(db);
 
   connection = db;
   connectedPath = dbPath;
@@ -278,6 +279,179 @@ export function migrate(db: Database): void {
 
   ensureColumn(db, "loads", "shipper_location_id", "INTEGER");
   ensureColumn(db, "loads", "consignee_location_id", "INTEGER");
+  ensureColumn(db, "loads", "status_reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "cancel_reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "cover_by", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "equipment", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "hazmat", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "commodity_class", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "seal_numbers", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pallet_count", "INTEGER");
+  ensureColumn(db, "loads", "case_count", "INTEGER");
+  ensureColumn(db, "loads", "team", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "lumper_expected", "REAL");
+  ensureColumn(db, "loads", "lumper_actual", "REAL");
+  ensureColumn(db, "loads", "detention_started_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "detention_ended_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "appointment_confirmation", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "unload_type", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "watched", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "cloned_from_id", "INTEGER");
+  ensureColumn(db, "loads", "invoice_paid", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "customers", "credit_hold", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "year", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "make", "TEXT NOT NULL DEFAULT ''");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_stops (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      sequence INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      location_id INTEGER,
+      name TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      window_start TEXT NOT NULL DEFAULT '',
+      window_end TEXT NOT NULL DEFAULT '',
+      confirmation TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS load_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      customer_id INTEGER,
+      origin TEXT NOT NULL DEFAULT '',
+      destination TEXT NOT NULL DEFAULT '',
+      commodity TEXT NOT NULL DEFAULT '',
+      weight INTEGER,
+      rate REAL,
+      notes TEXT NOT NULL DEFAULT '',
+      special_instructions TEXT NOT NULL DEFAULT '',
+      appointment_notes TEXT NOT NULL DEFAULT '',
+      equipment TEXT NOT NULL DEFAULT '',
+      reefer_setpoint_f REAL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vendor TEXT NOT NULL,
+      memo TEXT NOT NULL DEFAULT '',
+      amount REAL NOT NULL,
+      load_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS settlements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      load_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      paid_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS dispatchers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      pin TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'dispatcher'
+    );
+
+    CREATE TABLE IF NOT EXISTS exception_states (
+      exception_key TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      until TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS desk_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      handoff_note TEXT NOT NULL DEFAULT ''
+    );
+    INSERT OR IGNORE INTO desk_state (id, handoff_note) VALUES (1, '');
+
+    CREATE TABLE IF NOT EXISTS claims (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      claim_number TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'osd',
+      status TEXT NOT NULL DEFAULT 'open',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor TEXT NOT NULL DEFAULT 'dispatcher',
+      action TEXT NOT NULL,
+      entity TEXT NOT NULL,
+      entity_id INTEGER,
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  backfillDispatchers(db);
+}
+
+function backfillDispatchers(db: Database): void {
+  const count = (db.prepare("SELECT COUNT(*) as count FROM dispatchers").get() as { count: number }).count;
+  if (count > 0) return;
+  db.prepare("INSERT INTO dispatchers (name, pin, role) VALUES (?, ?, ?)").run("Ana G", "4020", "manager");
+}
+
+function backfillDemoAccounting(db: Database): void {
+  const bills = (db.prepare("SELECT COUNT(*) as count FROM bills").get() as { count: number }).count;
+  if (bills === 0) {
+    const delivered = db.prepare("SELECT id FROM loads WHERE status = 'delivered' LIMIT 1").get() as
+      | { id: number }
+      | undefined;
+    db.prepare(
+      `INSERT INTO bills (vendor, memo, amount, load_id, status, created_at)
+       VALUES (?, ?, ?, ?, 'open', ?)`,
+    ).run(
+      "Atlanta DC Lumper",
+      "Demo lumper bill — not a live AP feed",
+      150,
+      delivered?.id ?? null,
+      new Date().toISOString(),
+    );
+  }
+  const templates = (db.prepare("SELECT COUNT(*) as count FROM load_templates").get() as { count: number }).count;
+  if (templates === 0) {
+    const customer = db.prepare("SELECT id FROM customers ORDER BY id LIMIT 1").get() as { id: number } | undefined;
+    if (customer) {
+      db.prepare(
+        `INSERT INTO load_templates (
+          name, customer_id, origin, destination, commodity, weight, rate, notes,
+          special_instructions, appointment_notes, equipment, reefer_setpoint_f, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "Heartland Chicago → Indianapolis grocery",
+        customer.id,
+        "Chicago, IL",
+        "Indianapolis, IN",
+        "Packaged grocery",
+        38400,
+        1850,
+        "Template from the demo lane.",
+        "Live unload.",
+        "",
+        "dry_van_53",
+        null,
+        new Date().toISOString(),
+      );
+    }
+  }
 }
 
 function isoDateOffset(offsetDays: number): string {

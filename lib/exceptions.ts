@@ -2,7 +2,7 @@ import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
 import { formatDateTime } from "./format";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
-import type { LoadView, ReeferReading } from "./types";
+import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
 
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
@@ -115,7 +115,7 @@ function withLoad(
 }
 
 function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxException[] {
-  if (load.status === "cancelled" || load.status === "delivered") return [];
+  if (isClosedStatus(load.status)) return [];
   const setpoint = load.reefer_setpoint_f ?? reading?.setpoint_f ?? null;
   const temp = reading?.temperature_f ?? null;
   const alarm = reading?.alarm?.trim() ?? "";
@@ -153,13 +153,17 @@ function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxE
 }
 
 function lateExceptions(load: LoadView, now: Date): InboxException[] {
-  if (load.status === "cancelled" || load.status === "delivered") return [];
+  if (isClosedStatus(load.status)) return [];
 
   const pickupEndHours = hoursUntil(load.pickup_end, now);
   const deliveryEndHours = hoursUntil(load.delivery_end, now);
   const notPicked =
     load.status === "available" ||
+    load.status === "hold" ||
     load.status === "assigned" ||
+    load.status === "dispatched" ||
+    load.status === "at_pickup" ||
+    load.status === "loading" ||
     load.driver_progress === "" ||
     load.driver_progress === "en_route_pickup";
 
@@ -175,7 +179,7 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
     ];
   }
 
-  if (load.status === "in_transit" && deliveryEndHours != null && deliveryEndHours < 0) {
+  if (isRollingStatus(load.status) && !notPicked && deliveryEndHours != null && deliveryEndHours < 0) {
     return [
       withLoad(
         load,
@@ -187,7 +191,7 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
     ];
   }
 
-  if (load.status === "in_transit" && deliveryEndHours != null && deliveryEndHours >= 0 && deliveryEndHours <= 2) {
+  if (isRollingStatus(load.status) && !notPicked && deliveryEndHours != null && deliveryEndHours >= 0 && deliveryEndHours <= 2) {
     return [
       withLoad(
         load,
@@ -215,7 +219,7 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
 }
 
 function complianceExceptions(load: LoadView): InboxException[] {
-  if (load.status !== "assigned" && load.status !== "in_transit") return [];
+  if (!statusNeedsAssets(load.status)) return [];
   const alerts = collectAssignmentAlerts({
     driver: load.driver_id ? getDriver(load.driver_id) : null,
     truck: load.truck_id ? getTruck(load.truck_id) : null,
@@ -269,7 +273,7 @@ function unassignedExceptions(load: LoadView, now: Date): InboxException[] {
 
 export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const active = listLoads({ status: "active" });
-  const delivered = listLoads({ status: "delivered" });
+  const delivered = listLoads({ status: "all" }).filter((load) => isBillableStatus(load.status));
   const pods = loadIdsWithPod();
   const readings = latestReadingByLoad();
   const items: InboxException[] = [];

@@ -45,21 +45,21 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 1. [v1] Home counts: open loads, in transit, available trucks, unassigned loads.
 2. [v1] Dispatch inbox ranked by exception severity (the “7 loads need attention” list).
 3. [v1] Exception types in this slice: late to PU/DEL, window at risk, reefer vs setpoint, missing POD, compliance expiring, unassigned covering today. (HOS short is later.)
-4. Acknowledge / snooze / resolve an exception with a reason.
+4. [v1] Acknowledge / snooze / resolve an exception with a reason.
 5. Exception history on the load.
-6. Shift handoff note (“what’s on fire”).
-7. Watch list of loads a dispatcher pinned.
+6. [v1] Shift handoff note (“what’s on fire”).
+7. [v1] Watch list of loads a dispatcher pinned.
 8. [v1] Silent loads (in transit, no exception) stay off the inbox.
 9. Map is a drill-in, not the home screen.
 10. Sound / badge only for new high-severity exceptions.
-11. Filter inbox by exception type.
-12. Filter inbox by customer or lane.
+11. [v1] Filter inbox by exception type.
+12. [v1] Filter inbox by customer or lane (find box).
 13. Filter inbox by driver or truck.
 14. Saved inbox views per dispatcher.
 15. [v1] “All quiet” empty state when nothing is on fire.
-16. Daily recap: delivered, late, claims opened.
+16. [v1] Daily recap: delivered, late, claims opened.
 17. Weekly recap: on-time %, temp claims, detention.
-18. Command-center KPI strip (on-time, open exceptions, trucks available).
+18. [v1] Command-center KPI strip (open loads, rolling, trucks available, unassigned).
 19. Click-through from a KPI to the matching load list.
 20. After-hours on-call queue.
 21. Escalation if an exception sits untouched.
@@ -75,7 +75,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 28. [v1] Filter board by pickup date.
 29. [v1] Search by load #, customer, origin, destination, commodity. Dedicated Search page: origin/dest state, first-pickup date range, This week/This month, customer/driver/truck/trailer/status, live/archived/cancelled, saved reports.
 30. [v1] Create a load: customer, origin, destination, PU/DEL windows, weight, commodity, rate, notes.
-31. [v1] Statuses: available, assigned, in transit, delivered, cancelled.
+31. [v1] Statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.
 32. [v1] Edit a load after it is created.
 33. [v1] Special instructions travel with the load.
 34. [v1] Appointment notes and refs / PO on the load.
@@ -83,22 +83,22 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 36. [v1] Assign truck + trailer + driver from the board.
 37. [v1] Change unit after dispatch; old driver loses the load.
 38. [v1] Assign-time compliance warnings; expired docs require confirm.
-39. Richer statuses: dispatched, at PU, loading, picked up, at DEL, unloading, completed.
-40. Status reason codes (wait, breakdown, rejected, rolled).
-41. Multi-stop loads (more than PU + DEL).
-42. Stop sequence reorder.
+39. [v1] Richer statuses: dispatched, at PU, loading, picked up, at DEL, unloading, completed.
+40. [v1] Status reason codes (wait, breakdown, rejected, rolled).
+41. [v1] Multi-stop loads (more than PU + DEL).
+42. [v1] Stop sequence reorder.
 43. Split / relay (hook and drop, second driver).
-44. Team vs solo flag.
-45. Load templates by customer / lane.
-46. Duplicate a load.
-47. Cancel with reason and notify driver.
-48. Hold / pending customer confirmation.
-49. Cover-by date vs pickup window.
-50. Equipment required (53' reefer, dry van, flatbed, power only).
+44. [v1] Team vs solo flag.
+45. [v1] Load templates by customer / lane.
+46. [v1] Duplicate a load.
+47. [v1] Cancel with reason (stored on the load; driver notify later).
+48. [v1] Hold / pending customer confirmation.
+49. [v1] Cover-by date vs pickup window.
+50. [v1] Equipment required (53' reefer, dry van, flatbed, power only).
 51. Temperature required vs actual setpoint mismatch alert.
-52. Commodity class / hazmat flag.
-53. Seal numbers on the load.
-54. Pallet / case counts.
+52. [v1] Commodity class / hazmat flag.
+53. [v1] Seal numbers on the load.
+54. [v1] Pallet / case counts.
 55. Load profit snapshot (rate vs OO pay vs estimated fuel) — later.
 
 ## 56–80 · Windows, appointments, detention
@@ -106,21 +106,21 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 56. [v1] Pickup window start/end.
 57. [v1] Delivery window start/end.
 58. [v1] Appointment-required flag per stop (on the location; shown on the load and driver).
-59. Appointment confirmation number.
+59. [v1] Appointment confirmation number.
 60. [v1] FCFS vs appointment (per location).
-61. Detention clock start / stop.
+61. [v1] Detention clock start / stop.
 62. Detention free time by customer.
 63. Auto-suggest detention from geofence dwell — later.
-64. Lumper expected / actual.
-65. Driver assist / unload type.
-66. Scale tickets.
+64. [v1] Lumper expected / actual.
+65. [v1] Driver assist / unload type.
+66. [v1] Scale tickets (document type on the load).
 67. Arrival / departure timestamps (manual).
 68. Arrival / departure from geofence (Samsara) — later.
 69. Late risk forecast vs appointment.
 70. Reschedule a stop.
 71. Notify customer of ETA change — later (portal / email).
 72. Yard dwell.
-73. Drop hook vs live unload.
+73. [v1] Drop hook vs live unload (unload type on the load).
 74. Pre-cool required before PU.
 75. Pulp / product temp at PU.
 76. [v1] Receiver (and shipper) hours of operation on the location.
@@ -136,8 +136,8 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 83. [v1] Pick a customer when creating a load.
 84. [v1] Create customer from a rate-con import if the name is new.
 85. Bill-to vs shipper vs consignee parties.
-86. Credit hold.
-87. Default payment terms.
+86. [v1] Credit hold.
+87. [v1] Default payment terms.
 88. Customer-required documents (POD, temp log, seals).
 89. Customer accessorial tariff (lumper, detention, layover).
 90. Fuel surcharge schedule.
@@ -170,7 +170,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 114. [v1] Trailer registration issued / expires (60-day window).
 115. [v1] DOT inspection completed / expires (30-day window).
 116. [v1] Fleet document uploads (registration, DOT, insurance).
-117. VIN, plate, year, make on the truck.
+117. [v1] VIN, plate, year, make on the truck.
 118. Trailer VIN / plate.
 119. Next PM due (miles or date).
 120. Out-of-service reason.
@@ -251,7 +251,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 186. [v1] Load confirmation PDF from the live load (OO vs company template).
 187. [v1] Company header editable on Settings.
 188. [v1] IFTA report CSV attached to the load documents.
-189. Document checklist per load (what’s still missing).
+189. [v1] Document checklist per load (what’s still missing).
 190. POD required before invoice.
 191. Temp log required before invoice (reefer).
 192. Photo requirements (seals, product, trailer) per customer.
@@ -318,12 +318,12 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 244. [v1] Recalc OO pay when the driver or rate changes.
 245. [v1] Confirmation PDF: OO shows agreed amount / carrier pay; company does not.
 246. [v1] QBO invoices the **customer rate**, never OO pay.
-247. Weekly settlement worksheet.
+247. [v1] Settlement worksheet (delivered OO loads; mark paid locally).
 248. Accessorials on the settlement (detention, layover, lumper advance).
 249. Deductions (insurance, escrow, advances).
 250. Per-diem vs taxable pay.
 251. Statement PDF for the OO.
-252. Mark settlement paid.
+252. [v1] Mark settlement paid.
 253. 1099 export — later.
 254. Company driver payroll hours export — later.
 255. Empty move / deadhead pay.
@@ -335,8 +335,8 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 261–280 · Claims, OS&D, safety
 
-261. OS&D record on the load.
-262. Claim number and status.
+261. [v1] OS&D record on the load.
+262. [v1] Claim number and status.
 263. Photos + temp log linked to the claim.
 264. Cargo insurance notice.
 265. Rejected load workflow.
@@ -358,16 +358,16 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 281–300 · Admin, users, reporting
 
-281. [v1] Single-tenant local; no dispatcher login in v1.
-282. Dispatcher vs manager roles.
-283. Audit log: who changed a load or reassigned a driver.
+281. [v1] Single-tenant local; dispatcher PIN login (demo: Ana G / 4020).
+282. [v1] Dispatcher vs manager roles (stored; manager seeded).
+283. [v1] Audit log: clone and desk actions (local).
 284. Company profile (name, dispatcher, phone, email, fax) — [v1] for confirmations.
 285. Terminal / yard list.
 286. User invite / deactivate.
 287. Permissions: dispatch, billing, safety, driver-only.
-288. Data export (loads CSV).
-289. On-time report.
-290. Revenue by customer / lane.
+288. [v1] Data export (loads CSV).
+289. [v1] On-time report.
+290. [v1] Revenue by customer / lane.
 291. Empty miles report.
 292. Exception volume report.
 293. Compliance expiration report — [v1] upcoming list exists.
@@ -389,11 +389,11 @@ These sit **on top of** the core 300. Do not start them until the ROADMAP phase 
 
 - Customer invoice from a delivered load (linehaul = customer rate). [v1 stub: QBO send / demo invoice]
 - Invoice accessorials (lumper, detention, fuel surcharge).
-- Payments / AR aging.
+- Payments / AR aging. [v1 local mark-paid on invoices; no aging buckets yet]
 - Credit memos.
 - QBO customer find/create by name. [v1]
 - QBO invoice id + timestamp on the load; no double-send without confirm. [v1]
-- Bills for vendor / lumper (not OO settlement by default).
+- Bills for vendor / lumper (not OO settlement by default). [v1 local AP]
 - OO settlement is **not** a QBO bill unless a later slice says so.
 - Sync payments back from QBO.
 - Multi-entity / multiple QBO realms — not v1.
@@ -468,6 +468,8 @@ These sit **on top of** the core 300. Do not start them until the ROADMAP phase 
 
 ## v1 slice (this PR) — already shipping
 
-Dispatcher + driver web, loads, assign/reassign, rate-con ingest, load confirmation PDFs, compliance docs/alerts, company vs OO pay, QBO stub (demo or live invoice), Samsara/ORBCOMM stubs (demo or live), IFTA attach (demo or Samsara refresh).
+See [SHIPPED.md](./SHIPPED.md) for the working-screen checklist. Dispatcher PIN login, Locations, Search, richer load statuses, multi-stop, clone/templates, exception inbox actions, Accounting (AR/AP/pay/commissions/QBO), compliance page, claims, reports.
 
-Everything else waits for the next ROADMAP phase.
+Stubs + UI + seed when credentials/APIs are missing. No invented live third-party data.
+
+Skipped for later: native iOS/Android stores, EDI VAN, live fuel cards, replacing Samsara, pixel-perfect Ascend.

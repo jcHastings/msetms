@@ -17,6 +17,7 @@ import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
+import { LoadOps } from "@/components/load-ops";
 import { LocationSchedulingCard } from "@/components/location-scheduling";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
 
@@ -94,7 +95,7 @@ export default async function LoadDetailPage({
           <p className="mt-1 text-slate-600">Settled outside QuickBooks. Customer invoices use the load rate.</p>
         </div>
       ) : null}
-      {(load.status === "in_transit" || load.status === "delivered" || ifta.report) ? (
+      {(load.status === "in_transit" || load.status === "picked_up" || load.status === "at_delivery" || load.status === "unloading" || load.status === "delivered" || load.status === "completed" || ifta.report) ? (
         <IftaPanel
           loadId={load.id}
           report={ifta.report}
@@ -103,7 +104,7 @@ export default async function LoadDetailPage({
           reason={ifta.reason}
         />
       ) : null}
-      {load.status === "delivered" ? (
+      {load.status === "delivered" || load.status === "completed" ? (
         load.rate != null ? (
           <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
         ) : (
@@ -130,6 +131,7 @@ export default async function LoadDetailPage({
         locations={listLocations()}
         drivers={listDrivers()}
       />
+      <LoadOps load={load} />
       <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
     </>

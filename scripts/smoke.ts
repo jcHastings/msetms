@@ -7,11 +7,21 @@ const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
 
 async function main() {
+  assert.equal(fs.existsSync(path.join(process.cwd(), "SHIPPED.md")), true, "SHIPPED.md checklist");
   const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
   assert.match(navSource, /href: "\/locations"/);
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
   assert.match(navSource, /label: "Search"/);
+  assert.match(navSource, /title: "Accounting"/);
+  assert.match(navSource, /href: "\/accounting"/);
+  assert.match(navSource, /Invoices \(AR\)/);
+  assert.match(navSource, /Bills \(AP\)/);
+  assert.match(navSource, /Driver pay/);
+  assert.match(navSource, /Commissions/);
+  assert.match(navSource, /QuickBooks/);
+  assert.match(navSource, /href: "\/compliance"/);
+  assert.match(navSource, /href: "\/loads\/templates"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -840,8 +850,12 @@ SPECIAL INSTRUCTIONS
   const { extractStateCode } = await import("../lib/locations");
   assert.equal(extractStateCode("Chicago, IL"), "IL");
   assert.equal(extractStateCode("Dallas, TX 75215"), "TX");
+  const { ACTIVE_LOAD_STATUSES, LOAD_STATUSES, isClosedStatus } = await import("../lib/types");
+  assert.ok(LOAD_STATUSES.includes("dispatched"));
+  assert.ok(LOAD_STATUSES.includes("at_pickup"));
+  assert.ok(LOAD_STATUSES.includes("completed"));
   const liveOnly = queries.searchLoads({ includeLive: true, includeArchived: false, includeCancelled: false });
-  assert.ok(liveOnly.every((load) => ["available", "assigned", "in_transit"].includes(load.status)));
+  assert.ok(liveOnly.every((load) => (ACTIVE_LOAD_STATUSES as readonly string[]).includes(load.status)));
   assert.ok(liveOnly.some((load) => load.load_number === "MSE-1045"));
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), false, "delivered is archived");
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1049"), false, "cancelled excluded by default");
@@ -896,6 +910,90 @@ SPECIAL INSTRUCTIONS
   assert.match(saved.filters_json, /"originState":"IL"/);
   queries.deleteSavedReport(reportId);
   assert.equal(queries.getSavedReport(reportId), null);
+
+  const clonedId = queries.cloneLoad(load1042.id);
+  const cloned = queries.getLoad(clonedId);
+  assert.ok(cloned);
+  assert.equal(cloned.status, "available");
+  assert.equal(cloned.origin, load1042.origin);
+  assert.equal(cloned.destination, load1042.destination);
+  assert.equal(cloned.cloned_from_id, load1042.id);
+  queries.updateLoadStatus(clonedId, "hold");
+  assert.equal(queries.getLoad(clonedId)?.status, "hold");
+  queries.updateLoadDetails(clonedId, {
+    status_reason: "wait",
+    equipment: "reefer_53",
+    hazmat: true,
+    team: true,
+    seal_numbers: "S-SMOKE",
+    appointment_confirmation: "APPT-1",
+  });
+  const detailed = queries.getLoad(clonedId);
+  assert.equal(detailed?.status_reason, "wait");
+  assert.equal(detailed?.equipment, "reefer_53");
+  assert.equal(detailed?.hazmat, 1);
+  assert.equal(detailed?.team, 1);
+  assert.equal(detailed?.seal_numbers, "S-SMOKE");
+
+  const loadStops = await import("../lib/stops");
+  const defaultStops = loadStops.ensureDefaultStops(clonedId);
+  assert.ok(defaultStops.length >= 2);
+  loadStops.addStop(clonedId, { kind: "stopoff", name: "Nashville DC", city: "Nashville", state: "TN" });
+  assert.equal(loadStops.listStops(clonedId).length, defaultStops.length + 1);
+
+  const templates = await import("../lib/templates");
+  const listedTemplates = templates.listTemplates();
+  assert.ok(listedTemplates.some((row) => /Heartland/i.test(row.name)));
+  const bookedFromTemplate = templates.createLoadFromTemplate(listedTemplates[0].id);
+  assert.ok(queries.getLoad(bookedFromTemplate));
+
+  const session = await import("../lib/dispatcher-session");
+  const ana = session.listDispatchers().find((row) => row.name === "Ana G");
+  assert.ok(ana);
+  assert.equal(session.authenticateDispatcher(ana.id, "4020").role, "manager");
+  assert.throws(() => session.authenticateDispatcher(ana.id, "0000"));
+
+  const accounting = await import("../lib/accounting");
+  assert.ok(accounting.listBills().some((bill) => /Lumper/i.test(bill.vendor)));
+  assert.ok(accounting.listReceivables().length >= 1);
+  assert.ok(accounting.listCommissions().length >= 1);
+
+  const desk = await import("../lib/desk");
+  const firstException = inbox.items[0];
+  desk.setExceptionState(firstException.id, "resolved", "smoke");
+  const liveInbox = desk.listLiveExceptionInbox();
+  assert.equal(liveInbox.items.some((item) => item.id === firstException.id), false);
+  desk.setHandoffNote("Smoke handoff");
+  assert.equal(desk.getHandoffNote(), "Smoke handoff");
+  queries.setLoadWatched(load1042.id, true);
+  assert.ok(queries.listWatchedLoads().some((load) => load.id === load1042.id));
+
+  const holdCustomer = queries.getCustomer(customerId);
+  assert.ok(holdCustomer);
+  queries.updateCustomer(customerId, {
+    name: holdCustomer.name,
+    billing_notes: holdCustomer.billing_notes,
+    credit_hold: true,
+    payment_terms: "Net 15",
+    contacts: holdCustomer.contacts,
+  });
+  assert.equal(queries.getCustomer(customerId)?.credit_hold, 1);
+  assert.equal(queries.getCustomer(customerId)?.payment_terms, "Net 15");
+
+  const smokeTruck = queries.getTruck(truckId);
+  assert.ok(smokeTruck);
+  queries.updateTruck(truckId, {
+    unit_number: smokeTruck.unit_number,
+    type: smokeTruck.type,
+    capacity_lbs: smokeTruck.capacity_lbs,
+    status: smokeTruck.status,
+    vin: "1FTSW21P04EB12345",
+    plate: "TN-SMOKE",
+    year: "2022",
+    make: "Freightliner",
+  });
+  assert.equal(queries.getTruck(truckId)?.vin, "1FTSW21P04EB12345");
+  assert.equal(isClosedStatus("completed"), true);
 
   queries.deleteLocation(oneOffShipper);
   assert.equal(queries.getLocation(oneOffShipper), null);

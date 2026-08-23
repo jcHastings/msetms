@@ -47,6 +47,22 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         />
       </div>
       <div className="field">
+        <label htmlFor="vin">VIN</label>
+        <input id="vin" name="vin" defaultValue={truck?.vin} />
+      </div>
+      <div className="field">
+        <label htmlFor="plate">Plate</label>
+        <input id="plate" name="plate" defaultValue={truck?.plate} />
+      </div>
+      <div className="field">
+        <label htmlFor="year">Year</label>
+        <input id="year" name="year" defaultValue={truck?.year} />
+      </div>
+      <div className="field">
+        <label htmlFor="make">Make</label>
+        <input id="make" name="make" defaultValue={truck?.make} />
+      </div>
+      <div className="field">
         <label htmlFor="samsara_vehicle_id">Samsara vehicle ID (tractor GPS)</label>
         <input
           id="samsara_vehicle_id"
