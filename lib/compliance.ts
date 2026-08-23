@@ -72,7 +72,7 @@ export function truckComplianceAlerts(truck: Truck): ComplianceAlert[] {
   const subject = `Unit ${truck.unit_number}`;
   return [
     alertFor(truck.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(truck.dot_expires, DOT_WINDOW_DAYS, subject, "DLT / DOT inspection", "dot_inspection"),
+    alertFor(truck.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
@@ -80,7 +80,7 @@ export function trailerComplianceAlerts(trailer: Trailer): ComplianceAlert[] {
   const subject = `Trailer ${trailer.unit_number}`;
   return [
     alertFor(trailer.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(trailer.dot_expires, DOT_WINDOW_DAYS, subject, "DLT / DOT inspection", "dot_inspection"),
+    alertFor(trailer.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 

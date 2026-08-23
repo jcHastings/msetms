@@ -385,7 +385,7 @@ SPECIAL INSTRUCTIONS
   assert.ok(truckDot);
   assert.equal(truckDot.severity, "expiring");
   assert.match(truckDot.message, /Unit 108/);
-  assert.match(truckDot.message, /DLT \/ DOT inspection/);
+  assert.match(truckDot.message, /DOT inspection/);
   const bothWindows = truckComplianceAlerts({
     ...truck108,
     registration_expires: truck210.registration_expires,

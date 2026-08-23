@@ -21,7 +21,7 @@ export function UnitComplianceCard({
 }) {
   return (
     <section className="card mb-4 p-5">
-      <h2 className="text-sm font-semibold">Registration & DLT / DOT inspection</h2>
+      <h2 className="text-sm font-semibold">Registration & DOT inspection</h2>
       <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
         <div>
           <dt className="text-slate-500">Registration issued</dt>
@@ -32,11 +32,11 @@ export function UnitComplianceCard({
           <dd className="font-semibold">{formatDay(registrationExpires)}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">DLT / DOT inspection completed</dt>
+          <dt className="text-slate-500">DOT inspection completed</dt>
           <dd className="font-semibold">{formatDay(inspectedOn)}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">DLT / DOT inspection expires (30-day warning)</dt>
+          <dt className="text-slate-500">DOT inspection expires (30-day warning)</dt>
           <dd className="font-semibold">{formatDay(inspectionExpires)}</dd>
         </div>
       </dl>
@@ -46,7 +46,7 @@ export function UnitComplianceCard({
         </div>
       ) : (
         <p className="mt-3 text-sm text-slate-500">
-          No registration (60 days) or DLT / DOT inspection (30 days) dates in the warning windows.
+          No registration (60 days) or DOT inspection (30 days) dates in the warning windows.
         </p>
       )}
     </section>

@@ -109,7 +109,7 @@ export default async function LoadDetailPage({
             {load.truck_id ? (
               <li>
                 <Link className="underline" href={`/fleet/trucks/${load.truck_id}`}>
-                  Truck registration / DLT / DOT
+                  Truck registration / DOT
                 </Link>
                 {listFleetDocuments("truck", load.truck_id).length
                   ? ` · ${listFleetDocuments("truck", load.truck_id).length} file(s)`
