@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV = [
-  { href: "/", label: "Dashboard" },
+const NAV: Array<{ href: string; label: string; exact?: boolean }> = [
+  { href: "/", label: "Dashboard", exact: true },
   { href: "/board", label: "Dispatch board" },
-  { href: "/loads/new", label: "New load" },
+  { href: "/loads/search", label: "Load search" },
+  { href: "/loads/new", label: "New load", exact: true },
   { href: "/fleet", label: "Fleet" },
   { href: "/customers", label: "Customers" },
   { href: "/locations", label: "Locations" },
@@ -20,8 +21,9 @@ export function NavLinks() {
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
       {NAV.map((item) => {
-        const active =
-          item.href === "/"
+        const active = item.exact
+          ? pathname === item.href
+          : item.href === "/"
             ? pathname === "/"
             : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (

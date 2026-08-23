@@ -384,6 +384,59 @@ export type DashboardStats = {
   unassignedLoads: number;
 };
 
+export type SearchColumnId =
+  | "load_id"
+  | "pickups"
+  | "deliveries"
+  | "customer"
+  | "driver"
+  | "truck"
+  | "trailer"
+  | "refs"
+  | "notes"
+  | "status";
+
+export const SEARCH_COLUMNS: Array<{ id: SearchColumnId; label: string }> = [
+  { id: "load_id", label: "Load ID" },
+  { id: "pickups", label: "Pickups" },
+  { id: "deliveries", label: "Deliveries" },
+  { id: "customer", label: "Customer" },
+  { id: "driver", label: "Driver" },
+  { id: "truck", label: "Truck" },
+  { id: "trailer", label: "Trailer" },
+  { id: "refs", label: "Refs" },
+  { id: "notes", label: "Notes" },
+  { id: "status", label: "Status" },
+];
+
+export type LoadSearchCriteria = {
+  q: string;
+  originState: string;
+  destState: string;
+  dateFrom: string;
+  dateTo: string;
+  datePreset: "" | "this_week" | "this_month";
+  searchBy: "pickup";
+  customerId: number | null;
+  driverId: number | null;
+  truckId: number | null;
+  trailerId: number | null;
+  status: "" | LoadStatus;
+  includeLive: boolean;
+  includeArchived: boolean;
+  includeCancelled: boolean;
+  columns: SearchColumnId[];
+  reportId: number | null;
+};
+
+export type SavedSearchReport = {
+  id: number;
+  name: string;
+  filters: LoadSearchCriteria;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ActionResult = { ok: true; id?: number } | { ok: false; error: string };
 
 export function labelForLoadStatus(status: LoadStatus): string {

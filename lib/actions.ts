@@ -10,6 +10,8 @@ import {
   createDriver,
   createLoad,
   createLocation,
+  createSavedSearchReport,
+  deleteSavedSearchReport,
   createTrailer,
   createTruck,
   findOrCreateCustomer,
@@ -25,6 +27,7 @@ import {
   updateTruck,
   type LoadInput,
 } from "./queries";
+import { loadSearchHref, parseLoadSearchParams } from "./load-search";
 import { locationInputFromStop, parseLocationRole, parseLocationScheduling } from "./locations";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
 import { computeOwnerOperatorPay } from "./settlement";
@@ -180,6 +183,41 @@ function parseDriverStatus(value: FormDataEntryValue | null): DriverStatus {
     throw new Error("Invalid driver status.");
   }
   return status as DriverStatus;
+}
+
+function formDataToParams(formData: FormData): Record<string, string> {
+  const params: Record<string, string> = {};
+  for (const [key, value] of formData.entries()) {
+    if (typeof value === "string") params[key] = value;
+  }
+  return params;
+}
+
+export async function saveSearchReportAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    const filters = parseLoadSearchParams({ ...formDataToParams(formData), searched: "1" });
+    const id = createSavedSearchReport({
+      name: requiredString(formData.get("report_name"), "Report name"),
+      filters: { ...filters, reportId: null },
+    });
+    refresh();
+    redirect(loadSearchHref({ ...filters, reportId: id }));
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function deleteSearchReportAction(formData: FormData): Promise<void> {
+  await requireDispatcher();
+  const id = parseOptionalInt(formData.get("report_id"));
+  if (id) deleteSavedSearchReport(id);
+  refresh();
+  redirect("/loads/search");
 }
 
 function resolveStopLocation(

@@ -23,15 +23,24 @@ import {
   type IftaJurisdictionRow,
   type IftaReport,
   type LoadView,
+  type LoadSearchCriteria,
   type Location,
   type LocationInput,
   type LocationRole,
+  type SavedSearchReport,
   type Trailer,
   type TrailerType,
   type Truck,
   type TruckStatus,
   type TruckType,
 } from "./types";
+import {
+  criteriaFromReportFilters,
+  loadMatchesDateRange,
+  loadMatchesStateFilters,
+  resolveSearchDates,
+  statusesForSearch,
+} from "./load-search";
 
 const LOAD_SELECT = `
   SELECT
@@ -52,6 +61,14 @@ const LOAD_SELECT = `
   LEFT JOIN trucks ON trucks.id = loads.truck_id
   LEFT JOIN trailers ON trailers.id = loads.trailer_id
   LEFT JOIN drivers ON drivers.id = loads.driver_id
+`;
+
+const SEARCH_SELECT = `${LOAD_SELECT.replace(
+  "SELECT",
+  "SELECT shipper_loc.state AS shipper_state, consignee_loc.state AS consignee_state,",
+)}
+  LEFT JOIN locations shipper_loc ON shipper_loc.id = loads.shipper_location_id
+  LEFT JOIN locations consignee_loc ON consignee_loc.id = loads.consignee_location_id
 `;
 
 function now(): string {
@@ -630,6 +647,118 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
        END, loads.pickup_start ASC`,
     )
     .all(...params) as LoadView[];
+}
+
+export type SearchLoadRow = LoadView & {
+  shipper_state: string | null;
+  consignee_state: string | null;
+};
+
+export function searchLoads(criteria: LoadSearchCriteria): SearchLoadRow[] {
+  const statuses = statusesForSearch(criteria);
+  if (statuses.length === 0) return [];
+  const dates = resolveSearchDates(criteria);
+  const clauses: string[] = [`loads.status IN (${statuses.map(() => "?").join(", ")})`];
+  const params: Array<string | number> = [...statuses];
+
+  if (criteria.customerId) {
+    clauses.push("loads.customer_id = ?");
+    params.push(criteria.customerId);
+  }
+  if (criteria.driverId) {
+    clauses.push("loads.driver_id = ?");
+    params.push(criteria.driverId);
+  }
+  if (criteria.truckId) {
+    clauses.push("loads.truck_id = ?");
+    params.push(criteria.truckId);
+  }
+  if (criteria.trailerId) {
+    clauses.push("loads.trailer_id = ?");
+    params.push(criteria.trailerId);
+  }
+  if (criteria.q.trim()) {
+    const term = `%${criteria.q.trim()}%`;
+    clauses.push(
+      `(loads.load_number LIKE ? OR customers.name LIKE ? OR loads.origin LIKE ? OR loads.destination LIKE ?
+        OR loads.commodity LIKE ? OR loads.notes LIKE ? OR loads.special_instructions LIKE ?
+        OR loads.appointment_notes LIKE ? OR loads.reference_number LIKE ? OR loads.po_number LIKE ?)`,
+    );
+    params.push(term, term, term, term, term, term, term, term, term, term);
+  }
+
+  const rows = getDb()
+    .prepare(
+      `${SEARCH_SELECT}
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY loads.pickup_start DESC, loads.id DESC`,
+    )
+    .all(...params) as SearchLoadRow[];
+
+  return rows
+    .map((row) => ({
+      ...row,
+      shipper_state: row.shipper_state ?? null,
+      consignee_state: row.consignee_state ?? null,
+    }))
+    .filter((row) => loadMatchesStateFilters(row, criteria))
+    .filter((row) => loadMatchesDateRange(row, dates.from, dates.to));
+}
+
+export function listSavedSearchReports(): SavedSearchReport[] {
+  return (getDb().prepare("SELECT * FROM saved_search_reports ORDER BY name COLLATE NOCASE").all() as Array<{
+    id: number;
+    name: string;
+    filters_json: string;
+    created_at: string;
+    updated_at: string;
+  }>).map(asSavedSearchReport);
+}
+
+export function getSavedSearchReport(id: number): SavedSearchReport | null {
+  const row = getDb().prepare("SELECT * FROM saved_search_reports WHERE id = ?").get(id) as
+    | { id: number; name: string; filters_json: string; created_at: string; updated_at: string }
+    | undefined;
+  return row ? asSavedSearchReport(row) : null;
+}
+
+export function createSavedSearchReport(input: { name: string; filters: LoadSearchCriteria }): number {
+  const name = input.name.trim();
+  if (!name) throw new Error("Report name is required.");
+  const timestamp = now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO saved_search_reports (name, filters_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(name, JSON.stringify(input.filters), timestamp, timestamp);
+  return Number(result.lastInsertRowid);
+}
+
+export function deleteSavedSearchReport(id: number): void {
+  getDb().prepare("DELETE FROM saved_search_reports WHERE id = ?").run(id);
+}
+
+function asSavedSearchReport(row: {
+  id: number;
+  name: string;
+  filters_json: string;
+  created_at: string;
+  updated_at: string;
+}): SavedSearchReport {
+  let parsed: unknown = {};
+  try {
+    parsed = JSON.parse(row.filters_json);
+  } catch {
+    parsed = {};
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    filters: { ...criteriaFromReportFilters(parsed), reportId: row.id },
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 export function getLoad(id: number): LoadView | null {

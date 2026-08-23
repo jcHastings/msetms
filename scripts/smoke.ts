@@ -145,6 +145,56 @@ async function main() {
   });
   assert.ok(queries.getLocation(bookId));
 
+  const search = await import("../lib/load-search");
+  const week = search.datePresetRange("this_week", new Date("2026-08-23T12:00:00"));
+  assert.ok(week);
+  assert.equal(week.from, "2026-08-23");
+  assert.equal(week.to, "2026-08-29");
+  const month = search.datePresetRange("this_month", new Date("2026-08-23T12:00:00"));
+  assert.ok(month);
+  assert.equal(month.from, "2026-08-01");
+  assert.equal(month.to, "2026-08-31");
+  const liveOnly = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    originState: "TN",
+    destState: "TX",
+  });
+  assert.ok(
+    liveOnly.some((load) => load.load_number === "MSE-1045"),
+    "TN→TX live search should find the in-transit dairy load",
+  );
+  assert.equal(liveOnly.some((load) => load.status === "delivered"), false);
+  const archived = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    includeLive: false,
+    includeArchived: true,
+  });
+  assert.ok(archived.some((load) => load.status === "delivered"));
+  assert.equal(archived.some((load) => load.status === "in_transit"), false);
+  const cancelled = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    includeLive: false,
+    includeCancelled: true,
+  });
+  assert.ok(cancelled.some((load) => load.load_number === "MSE-1049"));
+  const byRef = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    q: "RC-1045",
+    includeLive: true,
+  });
+  assert.ok(byRef.some((load) => load.load_number === "MSE-1045"));
+  const hiddenNotes = search.parseLoadSearchParams({ cols: "load_id,status", searched: "1" });
+  assert.deepEqual(hiddenNotes.columns, ["load_id", "status"]);
+  const reportId = queries.createSavedSearchReport({
+    name: "TN live reefers",
+    filters: { ...search.defaultLoadSearchCriteria(), originState: "TN" },
+  });
+  const saved = queries.getSavedSearchReport(reportId);
+  assert.ok(saved);
+  assert.equal(saved.name, "TN live reefers");
+  assert.equal(saved.filters.originState, "TN");
+  assert.match(search.loadSearchHref(saved.filters), /origin_state=TN/);
+
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
     billing_notes: "Net 15",

@@ -80,6 +80,7 @@ The board, loads, fleet, customers, settings, and company APIs are closed until 
 
 - **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
 - Dashboard counts, dispatch board with status / pickup-date filters
+- **Load search** (`/loads/search`): Ascend-style criteria — terms, origin/destination state, pickup date range (this week / this month), customer / driver / truck / trailer, status, and live / archived / cancelled. Results table; click a row to open the load. Save a named report (filters + visible columns) in local SQLite.
 - **Locations** directory for shippers and receivers (name, street/city/state/zip, phone, notes, role, appointment vs FCFS, hours, scheduling notes, email/portal). Search and edit from the nav. On a load, pick from the book or type a one-off address; saving can add that stop to Locations. Pickup/delivery scheduling shows on the load and the driver’s dispatch.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen

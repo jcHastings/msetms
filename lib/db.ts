@@ -289,6 +289,14 @@ export function migrate(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);
     CREATE INDEX IF NOT EXISTS idx_locations_city ON locations(city);
+
+    CREATE TABLE IF NOT EXISTS saved_search_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      filters_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn(db, "loads", "shipper_location_id", "INTEGER");
