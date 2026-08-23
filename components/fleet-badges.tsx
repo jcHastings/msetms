@@ -41,6 +41,9 @@ export function HosBadge({ hos }: { hos: HosClock | null }) {
   return (
     <div className="text-sm">
       <div className="font-semibold tabular-nums">{formatDurationMs(hos.driveRemainingMs)} drive</div>
+      <div className="text-[11px] text-slate-500">
+        {formatDurationMs(hos.shiftRemainingMs)} shift · {formatDurationMs(hos.cycleRemainingMs)} cycle
+      </div>
       <div className="text-[11px] uppercase tracking-wide text-slate-400">
         {hos.source} · {formatDutyStatus(hos.dutyStatus)}
       </div>

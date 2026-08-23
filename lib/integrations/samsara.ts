@@ -1,10 +1,8 @@
-import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import { isSamsaraTokenSet } from "../env";
 import { listDrivers, listLoads, listTrucks } from "../queries";
+import { publicSamsaraError, samsaraPaginate } from "./samsara-client";
 
-const SAMSARA_BASE = "https://api.samsara.com";
 const CACHE_TTL_MS = 45_000;
-const MAX_PAGES = 20;
-const FETCH_TIMEOUT_MS = 15_000;
 
 export type VehicleLocation = {
   truckId: number | null;
@@ -45,15 +43,6 @@ export type SamsaraFleetResult = {
 type CacheEntry = { expiresAt: number; result: SamsaraFleetResult };
 let cache: CacheEntry | null = null;
 
-class SamsaraHttpError extends Error {
-  status: number;
-  constructor(status: number) {
-    super(samsaraStatusMessage(status));
-    this.name = "SamsaraHttpError";
-    this.status = status;
-  }
-}
-
 export function isSamsaraConfigured(): boolean {
   return isSamsaraTokenSet();
 }
@@ -91,8 +80,8 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
 
   try {
     const [vehicles, clocks] = await Promise.all([
-      fetchAllPages("/fleet/vehicles/stats", "gps"),
-      fetchAllPages("/fleet/hos/clocks"),
+      samsaraPaginate("/fleet/vehicles/stats", "vehicle GPS", { types: "gps" }),
+      samsaraPaginate("/fleet/hos/clocks", "HOS clocks"),
     ]);
     return {
       mode: "samsara",
@@ -127,7 +116,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
     return {
       ...demo,
       tokenSet: true,
-      error: publicSamsaraError(error),
+      error: publicSamsaraError(error, "Showing demo GPS/HOS."),
     };
   }
 }
@@ -326,40 +315,6 @@ export function mapHosClocks(input: {
   return clocks;
 }
 
-async function fetchAllPages(pathname: string, types?: string): Promise<Array<Record<string, unknown>>> {
-  const token = getSamsaraApiToken();
-  if (!token) throw new Error("SAMSARA_API_TOKEN is not set.");
-
-  const items: Array<Record<string, unknown>> = [];
-  let after: string | undefined;
-
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const url = new URL(pathname, SAMSARA_BASE);
-    if (types) url.searchParams.set("types", types);
-    if (after) url.searchParams.set("after", after);
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-
-    if (!response.ok) throw new SamsaraHttpError(response.status);
-
-    const body = (await response.json()) as {
-      data?: Array<Record<string, unknown>>;
-      pagination?: { endCursor?: string; hasNextPage?: boolean };
-    };
-    items.push(...(body.data ?? []));
-    if (!body.pagination?.hasNextPage || !body.pagination.endCursor) break;
-    after = body.pagination.endCursor;
-  }
-
-  return items;
-}
 
 export function formatDurationMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return "—";
@@ -397,18 +352,3 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
-function samsaraStatusMessage(status: number): string {
-  if (status === 401 || status === 403) {
-    return `Samsara rejected the API token (HTTP ${status}). Check SAMSARA_API_TOKEN and token scopes, then restart. Showing demo GPS/HOS.`;
-  }
-  if (status === 429) return "Samsara rate-limited the request. Showing demo GPS/HOS.";
-  return `Samsara request failed (HTTP ${status}). Showing demo GPS/HOS.`;
-}
-
-function publicSamsaraError(error: unknown): string {
-  if (error instanceof SamsaraHttpError) return error.message;
-  if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "Samsara request timed out. Showing demo GPS/HOS.";
-  }
-  return "Samsara request failed. Showing demo GPS/HOS.";
-}

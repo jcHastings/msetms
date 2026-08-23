@@ -1,10 +1,9 @@
-import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import { isSamsaraTokenSet } from "../env";
 import { addAttachment } from "../files";
 import { getIftaReport, getLoad, getTruck, saveIftaReport } from "../queries";
 import type { IftaJurisdictionRow, IftaReport, LoadView } from "../types";
+import { SamsaraHttpError, samsaraDownloadText, samsaraRequest } from "./samsara-client";
 
-const SAMSARA_BASE = "https://api.samsara.com";
-const FETCH_TIMEOUT_MS = 15_000;
 const DETAIL_POLL_ATTEMPTS = 8;
 const DETAIL_POLL_MS = 1_200;
 const METERS_PER_MILE = 1609.344;
@@ -31,14 +30,6 @@ export type IftaPanel = {
   reason: string;
 };
 
-class IftaHttpError extends Error {
-  status: number;
-  constructor(status: number, context: string) {
-    super(iftaStatusMessage(status, context));
-    this.name = "IftaHttpError";
-    this.status = status;
-  }
-}
 
 export function resetIftaForTests(): void {
   // Reserved for request-level cache if added later.
@@ -358,7 +349,7 @@ async function fetchIftaDetailJob(input: {
           note: `Samsara IFTA detail job completed with no segments for ${startHour}–${endHour}.`,
         };
       }
-      const csv = await downloadText(url);
+      const csv = await samsaraDownloadText(url, "IFTA detail download");
       return {
         rows: parseIftaDetailCsv(csv),
         vehicleId: input.vehicleId,
@@ -414,35 +405,6 @@ async function fetchIftaVehicleMonths(input: {
   };
 }
 
-async function samsaraRequest<T>(pathname: string, init: RequestInit, context: string): Promise<T> {
-  const token = getSamsaraApiToken();
-  if (!token) throw new Error("SAMSARA_API_TOKEN is not set.");
-  const url = pathname.startsWith("http") ? pathname : `${SAMSARA_BASE}${pathname}`;
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new IftaHttpError(response.status, context);
-  return (await response.json()) as T;
-}
-
-async function downloadText(url: string): Promise<string> {
-  const token = getSamsaraApiToken();
-  const response = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    cache: "no-store",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw new IftaHttpError(response.status, "IFTA detail download");
-  return response.text();
-}
 
 function monthsInRange(startIso: string, endIso: string): Array<{ year: number; month: string }> {
   const start = new Date(startIso);
@@ -489,15 +451,7 @@ function splitCsvLine(line: string): string[] {
 }
 
 function isAuthError(error: unknown): boolean {
-  return error instanceof IftaHttpError && (error.status === 401 || error.status === 403);
-}
-
-function iftaStatusMessage(status: number, context: string): string {
-  if (status === 401 || status === 403) {
-    return `Samsara ${context} failed (HTTP ${status}). Check SAMSARA_API_TOKEN and the Read IFTA (US) / Write IFTA (US) scopes.`;
-  }
-  if (status === 429) return `Samsara rate-limited the ${context} request.`;
-  return `Samsara ${context} failed (HTTP ${status}).`;
+  return error instanceof SamsaraHttpError && (error.status === 401 || error.status === 403);
 }
 
 function sleep(ms: number): Promise<void> {
