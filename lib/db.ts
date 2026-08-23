@@ -465,6 +465,8 @@ export function migrate(db: Database): void {
       category TEXT NOT NULL DEFAULT '',
       unit_number TEXT NOT NULL DEFAULT '',
       driver_name_raw TEXT NOT NULL DEFAULT '',
+      invoice_number TEXT NOT NULL DEFAULT '',
+      prompt_data TEXT NOT NULL DEFAULT '',
       dedup_key TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL
     );
@@ -511,6 +513,8 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
+  ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

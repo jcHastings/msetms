@@ -13,8 +13,9 @@ export function FuelCsvImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Daily fuel-card import</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Upload a CSV. Columns are mapped by name (date, time, driver, unit, location, gallons, price,
-          total, card). Extra columns are ignored. Re-uploading the same day does not double-count.
+          Upload a CSV or a Transaction Activity Report PDF. Lines map date, card, category, unit, prompt,
+          invoice, location, qty, PPG, and total. Driver comes from the name on the row or the NName
+          block. Re-uploading the same invoice + category + qty does not double-count.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -27,11 +28,11 @@ export function FuelCsvImport() {
       </div>
       <form action={formAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="fuel-csv">Upload CSV</label>
-          <input id="fuel-csv" name="csv" type="file" />
+          <label htmlFor="fuel-csv">Upload CSV or PDF</label>
+          <input id="fuel-csv" name="csv" type="file" accept=".csv,.pdf,text/csv,application/pdf" />
         </div>
         <button className="btn btn-primary" type="submit" disabled={pending}>
-          {pending ? "Importing…" : "Upload CSV"}
+          {pending ? "Importing…" : "Upload"}
         </button>
       </form>
       {state?.ok ? (

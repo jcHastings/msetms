@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { formatFuelMoney, formatGallons } from "@/lib/format";
+import { FUEL_BUCKETS, type FuelBucket } from "@/lib/fuel";
 import { getDriverFuelRollup } from "@/lib/fuel-store";
+
+function cell(bucket: FuelBucket, gallons: number, amount: number): string {
+  if (bucket === "scale") return formatFuelMoney(amount);
+  return `${formatGallons(gallons)} · ${formatFuelMoney(amount)}`;
+}
 
 export function DriverFuelCard({ driverId }: { driverId: number }) {
   const rollup = getDriverFuelRollup(driverId);
@@ -12,17 +18,18 @@ export function DriverFuelCard({ driverId }: { driverId: number }) {
           View fuel
         </Link>
       </div>
-      <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-        <div>
-          <dt className="text-slate-500">This week</dt>
-          <dd className="font-semibold">{formatGallons(rollup?.weekGallons ?? 0)}</dd>
-          <dd className="text-slate-600">{formatFuelMoney(rollup?.weekAmount ?? 0)}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">This month</dt>
-          <dd className="font-semibold">{formatGallons(rollup?.monthGallons ?? 0)}</dd>
-          <dd className="text-slate-600">{formatFuelMoney(rollup?.monthAmount ?? 0)}</dd>
-        </div>
+      <dl className="mt-3 grid gap-3 text-sm md:grid-cols-4">
+        {FUEL_BUCKETS.map((bucket) => (
+          <div key={bucket.value}>
+            <dt className="text-slate-500">{bucket.label}</dt>
+            <dd className="font-semibold">
+              {cell(bucket.value, rollup.month[bucket.value].gallons, rollup.month[bucket.value].amount)}
+            </dd>
+            <dd className="text-xs text-slate-600">
+              Week {cell(bucket.value, rollup.week[bucket.value].gallons, rollup.week[bucket.value].amount)}
+            </dd>
+          </div>
+        ))}
       </dl>
     </section>
   );

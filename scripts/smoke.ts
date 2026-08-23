@@ -1766,11 +1766,15 @@ Continuous reefer. Two load locks.
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /Unassigned/);
+  assert.match(fuelPage, /Per-truck totals/);
+  assert.match(fuelPage, /Truck diesel|labelForFuelBucket/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
+  assert.match(fuelImportUi, /NName|Transaction Activity/);
   assert.match(driversListPage, /href="\/fuel"/);
   assert.match(driverEditPage, /DriverFuelCard/);
-  assert.doesNotMatch(fuelPage + fuelImportUi, /Comdata|WEX|EFS|TChek/i);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /href="\/fuel"/);
+  assert.doesNotMatch(fuelPage + fuelImportUi, /Comdata|WEX/i);
   for (const file of ["app/api/fuel/template/route.ts", "app/api/fuel/export/route.ts"]) {
     assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /dispatcherCsvResponse/);
   }
@@ -1778,7 +1782,10 @@ Continuous reefer. Two load locks.
   const {
     cardLast4From,
     matchFuelDriver,
+    classifyFuelCategory,
+    parseEfsFuelText,
     parseFuelCsv,
+    parseFuelReport,
     parseFuelWhen,
     renderFuelExportCsv,
     renderFuelTemplate,
@@ -1838,6 +1845,98 @@ Continuous reefer. Two load locks.
   assert.match(exportedFuel, /4321/);
   assert.doesNotMatch(exportedFuel, /1125/);
   assert.equal(fuelStore.listFuelTransactions().length, 3);
+  assert.equal(classifyFuelCategory("ULTRA LOW SULFUR DIESEL"), "truck_diesel");
+  assert.equal(classifyFuelCategory("REEFER ULTRA LOW SULFUR"), "reefer_diesel");
+  assert.equal(classifyFuelCategory("CAT SCALES"), "scale");
+  assert.equal(classifyFuelCategory("DIESEL EXHAUST FLUID"), "def");
+  assert.equal(classifyFuelCategory("candy"), "other");
+
+  const efsReport = [
+    "/Dm201902",
+    "M&S LOADS",
+    "CUSTOMER 3770001903818",
+    "TRANSACTION ACTIVITY REPORT",
+    "REPORT DATE 08/21/2026",
+    "",
+    "NName: HOWELL, CHRISTOPHER",
+    "08/21/26 556712341111 DIESEL ULTRA LOW SULFUR DIESEL 32 32 900111 1011 MEMPHIS TN LOVES 102.340 3.459 8.20 353.90 0.00 1.00 355.10",
+    "08/21/26 556712341111 REEFER REEFER ULTRA LOW SULFUR 32 32 900112 1011 MEMPHIS TN LOVES 20.000 3.459 1.50 69.18 0.00 0.00 69.18",
+    "08/21/26 556712341111 DEF DIESEL EXHAUST FLUID 32 32 900113 1011 MEMPHIS TN LOVES 5.000 4.199 0.40 21.00 0.00 0.00 21.00",
+    "",
+    "NName: ELLER, STEVE",
+    "08/21/26 556712342222 SCALE CAT SCALES 26 26 900221 2022 JACKSON MS CAT SCALE 1.000 0.000 0.00 18.50 0.00 0.00 18.50",
+    "",
+    "NName: WHALEY, KELVIN",
+    "08/21/26 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45",
+  ].join("\n");
+  const efsParsed = parseEfsFuelText(efsReport);
+  assert.equal(efsParsed.rows.length, 5);
+  assert.equal(efsParsed.rows[0]?.driverName, "Christopher Howell");
+  assert.equal(efsParsed.rows[0]?.category, "truck_diesel");
+  assert.equal(efsParsed.rows[0]?.unitNumber, "32");
+  assert.equal(efsParsed.rows[0]?.invoice, "900111");
+  assert.equal(efsParsed.rows[1]?.category, "reefer_diesel");
+  assert.equal(efsParsed.rows[2]?.category, "def");
+  assert.equal(efsParsed.rows[3]?.driverName, "Steve Eller");
+  assert.equal(efsParsed.rows[3]?.category, "scale");
+  assert.equal(efsParsed.rows[4]?.driverName, "Kelvin Whaley");
+  assert.equal(efsParsed.rows[4]?.unitNumber, "28");
+
+  const truck32 = queries.createTruck({ unit_number: "32", type: "reefer", capacity_lbs: 44000, status: "available" });
+  const truck26 = queries.createTruck({ unit_number: "26", type: "reefer", capacity_lbs: 44000, status: "available" });
+  const truck28 = queries.createTruck({ unit_number: "28", type: "dry_van", capacity_lbs: 44000, status: "available" });
+  const howellId = queries.createDriver({
+    name: "Christopher Howell",
+    phone: "555-0032",
+    truck_id: truck32,
+    status: "available",
+  });
+  const ellerId = queries.createDriver({
+    name: "Steve Eller",
+    phone: "555-0026",
+    truck_id: truck26,
+    status: "available",
+  });
+  const whaleyId = queries.createDriver({
+    name: "Kelvin Whaley",
+    phone: "555-0028",
+    truck_id: truck28,
+    status: "available",
+  });
+  const efsImport = fuelStore.importFuelFromText(efsReport, "activity.pdf");
+  assert.equal(efsImport.created, 5);
+  assert.equal(efsImport.unmatched, 0);
+  const efsAgain = fuelStore.importFuelFromText(efsReport, "activity-again.pdf");
+  assert.equal(efsAgain.created, 0);
+  assert.equal(efsAgain.skipped, 5);
+  const howellRollup = fuelStore.getDriverFuelRollup(howellId);
+  assert.equal(howellRollup.month.truck_diesel.gallons, 102.34);
+  assert.equal(howellRollup.month.reefer_diesel.gallons, 20);
+  assert.equal(howellRollup.month.def.gallons, 5);
+  assert.equal(howellRollup.month.truck_diesel.gallons === howellRollup.monthGallons, false);
+  const ellerRollup = fuelStore.getDriverFuelRollup(ellerId);
+  assert.equal(ellerRollup.month.scale.amount, 18.5);
+  assert.equal(ellerRollup.month.truck_diesel.gallons, 0);
+  const truckRollups = fuelStore.listTruckFuelRollups();
+  assert.ok(truckRollups.some((row) => row.name === "32" && row.month.def.gallons === 5));
+  assert.ok(truckRollups.some((row) => row.name === "28" && row.month.truck_diesel.gallons === 88.1));
+  assert.equal(queries.getDriver(howellId)?.name, "Christopher Howell");
+  assert.equal(queries.getDriver(whaleyId)?.name, "Kelvin Whaley");
+
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const efsPdf = await PDFDocument.create();
+  const efsPage = efsPdf.addPage([612, 792]);
+  const efsFont = await efsPdf.embedFont(StandardFonts.Courier);
+  efsReport.split("\n").forEach((line, index) => {
+    efsPage.drawText(line || " ", { x: 36, y: 760 - index * 12, size: 9, font: efsFont });
+  });
+  const efsPdfBytes = Buffer.from(await efsPdf.save());
+  const { extractDocumentText } = await import("../lib/rate-con");
+  const efsPdfText = await extractDocumentText(efsPdfBytes, "application/pdf", "activity.pdf");
+  const fromPdf = parseFuelReport(efsPdfText);
+  assert.ok(fromPdf.rows.length >= 5, "PDF extract should keep activity lines");
+  assert.ok(fromPdf.rows.some((row) => row.category === "def"));
+  assert.ok(fromPdf.rows.some((row) => row.driverName.toUpperCase().includes("HOWELL")));
 
   const { extractStateCode } = await import("../lib/locations");
   assert.equal(extractStateCode("Chicago, IL"), "IL");

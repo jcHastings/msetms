@@ -23,6 +23,9 @@ export default function TrucksPage() {
         subtitle="Power units, plates, and compliance. Samsara vehicle ID is optional."
         actions={
           <>
+            <Link href="/fuel" className="btn btn-secondary">
+              Fuel
+            </Link>
             <a href="/api/fleet/trucks/export" className="btn btn-secondary">
               Download CSV
             </a>

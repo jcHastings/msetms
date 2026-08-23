@@ -1,10 +1,13 @@
 import { getDb } from "./db";
 import {
+  emptyPeriodTotals,
+  isFuelBucket,
   matchFuelDriver,
-  parseFuelCsv,
+  parseFuelReport,
   startOfLocalMonth,
   startOfLocalWeek,
   type FuelCsvRowError,
+  type FuelPeriodTotals,
   type FuelRollup,
   type FuelTransactionView,
 } from "./fuel";
@@ -23,6 +26,7 @@ const FUEL_SELECT = `SELECT fuel_transactions.*,
 
 export function listFuelTransactions(filters?: {
   driverId?: number;
+  truckId?: number;
   unmatchedOnly?: boolean;
 }): FuelTransactionView[] {
   const clauses: string[] = [];
@@ -30,6 +34,10 @@ export function listFuelTransactions(filters?: {
   if (filters?.driverId) {
     clauses.push("fuel_transactions.driver_id = ?");
     params.push(filters.driverId);
+  }
+  if (filters?.truckId) {
+    clauses.push("fuel_transactions.truck_id = ?");
+    params.push(filters.truckId);
   }
   if (filters?.unmatchedOnly) {
     clauses.push("fuel_transactions.driver_id IS NULL");
@@ -47,11 +55,11 @@ export function getFuelTransaction(id: number): FuelTransactionView | null {
   );
 }
 
-export function importFuelFromCsv(
+export function importFuelFromText(
   text: string,
   sourceFile: string,
 ): { created: number; skipped: number; unmatched: number; errors: FuelCsvRowError[] } {
-  const parsed = parseFuelCsv(text);
+  const parsed = parseFuelReport(text);
   const drivers = listDrivers();
   const trucks = listTrucks();
   const db = getDb();
@@ -63,8 +71,9 @@ export function importFuelFromCsv(
   const insert = db.prepare(
     `INSERT INTO fuel_transactions (
       occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
-      card_last4, source_file, category, unit_number, driver_name_raw, dedup_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+      prompt_data, dedup_key, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let created = 0;
   let skipped = parsed.skipped;
@@ -90,6 +99,8 @@ export function importFuelFromCsv(
         row.category,
         match.unitNumber,
         row.driverName,
+        row.invoice,
+        row.prompt,
         row.dedupKey,
         nowIso(),
       );
@@ -99,6 +110,10 @@ export function importFuelFromCsv(
     }
   })();
   return { created, skipped, unmatched, errors: parsed.errors };
+}
+
+export function importFuelFromCsv(text: string, sourceFile: string) {
+  return importFuelFromText(text, sourceFile);
 }
 
 export function assignFuelTransactionDriver(id: number, driverId: number): void {
@@ -112,41 +127,72 @@ export function assignFuelTransactionDriver(id: number, driverId: number): void 
     .run(driverId, truckId, id);
 }
 
-export function listFuelRollups(now = new Date()): FuelRollup[] {
-  const weekStart = startOfLocalWeek(now).toISOString();
-  const monthStart = startOfLocalMonth(now).toISOString();
-  const rows = listFuelTransactions().filter((row) => row.driver_id);
-  const map = new Map<number, FuelRollup>();
-  for (const row of rows) {
-    const driverId = row.driver_id as number;
-    const current = map.get(driverId) ?? {
-      driverId,
-      driverName: row.driver_name || "Driver",
-      weekGallons: 0,
-      weekAmount: 0,
-      monthGallons: 0,
-      monthAmount: 0,
-    };
-    if (row.occurred_at >= monthStart) {
-      current.monthGallons += row.gallons ?? 0;
-      current.monthAmount += row.amount ?? 0;
-    }
-    if (row.occurred_at >= weekStart) {
-      current.weekGallons += row.gallons ?? 0;
-      current.weekAmount += row.amount ?? 0;
-    }
-    map.set(driverId, current);
-  }
-  return [...map.values()].sort((a, b) => a.driverName.localeCompare(b.driverName));
+function addToPeriod(period: FuelPeriodTotals, row: FuelTransactionView): void {
+  period.gallons += row.gallons ?? 0;
+  period.amount += row.amount ?? 0;
+  if (!isFuelBucket(row.category)) return;
+  period[row.category].gallons += row.gallons ?? 0;
+  period[row.category].amount += row.amount ?? 0;
 }
 
-export function getDriverFuelRollup(driverId: number, now = new Date()): FuelRollup | null {
-  return listFuelRollups(now).find((row) => row.driverId === driverId) ?? {
-    driverId,
-    driverName: "",
+function toRollup(id: number, name: string): FuelRollup {
+  const week = emptyPeriodTotals();
+  const month = emptyPeriodTotals();
+  return {
+    id,
+    name,
+    week,
+    month,
     weekGallons: 0,
     weekAmount: 0,
     monthGallons: 0,
     monthAmount: 0,
   };
+}
+
+function syncRollupTotals(row: FuelRollup): FuelRollup {
+  row.weekGallons = row.week.gallons;
+  row.weekAmount = row.week.amount;
+  row.monthGallons = row.month.gallons;
+  row.monthAmount = row.month.amount;
+  return row;
+}
+
+function rollupRows(
+  rows: FuelTransactionView[],
+  now: Date,
+  keyOf: (row: FuelTransactionView) => { id: number; name: string } | null,
+): FuelRollup[] {
+  const weekStart = startOfLocalWeek(now).toISOString();
+  const monthStart = startOfLocalMonth(now).toISOString();
+  const map = new Map<number, FuelRollup>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!key) continue;
+    const current = map.get(key.id) ?? toRollup(key.id, key.name);
+    if (row.occurred_at >= monthStart) addToPeriod(current.month, row);
+    if (row.occurred_at >= weekStart) addToPeriod(current.week, row);
+    map.set(key.id, syncRollupTotals(current));
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function listFuelRollups(now = new Date()): FuelRollup[] {
+  return rollupRows(listFuelTransactions(), now, (row) =>
+    row.driver_id ? { id: row.driver_id, name: row.driver_name || "Driver" } : null,
+  );
+}
+
+export function listTruckFuelRollups(now = new Date()): FuelRollup[] {
+  return rollupRows(listFuelTransactions(), now, (row) =>
+    row.truck_id ? { id: row.truck_id, name: row.truck_unit || row.unit_number || "Truck" } : null,
+  );
+}
+
+export function getDriverFuelRollup(driverId: number, now = new Date()): FuelRollup {
+  return (
+    listFuelRollups(now).find((row) => row.id === driverId) ?? {
+      ...toRollup(driverId, ""),
+    }
+  );
 }

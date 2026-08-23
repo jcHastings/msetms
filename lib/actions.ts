@@ -54,7 +54,7 @@ import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settin
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
-import { assignFuelTransactionDriver, importFuelFromCsv } from "./fuel-store";
+import { assignFuelTransactionDriver, importFuelFromText } from "./fuel-store";
 
 function refresh(): void {
   try {
@@ -900,17 +900,29 @@ export async function importFuelCsvAction(
   try {
     const file = formData.get("csv");
     if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Choose a CSV file." };
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      return { ok: false, error: "CSV is too large (max 5 MB)." };
+      return { ok: false, error: "Choose a CSV or PDF." };
     }
     const name = file.name.toLowerCase();
-    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-      return { ok: false, error: "Upload a CSV. In Excel use File → Save As → CSV UTF-8." };
+    const mime = (file.type || "").toLowerCase();
+    const isPdf = name.endsWith(".pdf") || mime.includes("pdf");
+    if (isPdf ? file.size > 15 * 1024 * 1024 : file.size > 5 * 1024 * 1024) {
+      return { ok: false, error: isPdf ? "PDF is too large (max 15 MB)." : "CSV is too large (max 5 MB)." };
     }
-    const text = decodeCsvBuffer(await fileToBuffer(file));
-    const result = importFuelFromCsv(text, file.name || "fuel.csv");
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      return { ok: false, error: "Upload a CSV or PDF. In Excel use File → Save As → CSV UTF-8." };
+    }
+    const buffer = await fileToBuffer(file);
+    let text = "";
+    if (isPdf) {
+      const { extractDocumentText } = await import("./rate-con");
+      text = await extractDocumentText(buffer, mime || "application/pdf", file.name);
+      if (!text.trim()) {
+        return { ok: false, error: "Couldn't read text from this PDF. Save the report as CSV and upload that." };
+      }
+    } else {
+      text = decodeCsvBuffer(buffer);
+    }
+    const result = importFuelFromText(text, file.name || "fuel.csv");
     refresh();
     return { ok: true, ...result };
   } catch (error) {

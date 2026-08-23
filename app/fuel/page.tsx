@@ -1,31 +1,46 @@
 import Link from "next/link";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
+import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { PageHeader } from "@/components/page-header";
 import { assignFuelDriverAction } from "@/lib/actions";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
-import { listFuelRollups, listFuelTransactions } from "@/lib/fuel-store";
-import { listDrivers } from "@/lib/queries";
+import { labelForFuelBucket } from "@/lib/fuel";
+import { listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
+import { listDrivers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function FuelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ driver?: string }>;
+  searchParams: Promise<{ driver?: string; truck?: string }>;
 }) {
-  const driverId = Number.parseInt((await searchParams).driver ?? "", 10);
+  const params = await searchParams;
+  const driverId = Number.parseInt(params.driver ?? "", 10);
+  const truckId = Number.parseInt(params.truck ?? "", 10);
   const selectedDriverId = Number.isFinite(driverId) ? driverId : null;
+  const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
   const drivers = listDrivers();
+  const trucks = listTrucks();
   const selectedDriver = selectedDriverId ? drivers.find((driver) => driver.id === selectedDriverId) : null;
-  const transactions = listFuelTransactions(selectedDriverId ? { driverId: selectedDriverId } : undefined);
+  const selectedTruck = selectedTruckId ? trucks.find((truck) => truck.id === selectedTruckId) : null;
+  const transactions = listFuelTransactions(
+    selectedDriverId ? { driverId: selectedDriverId } : selectedTruckId ? { truckId: selectedTruckId } : undefined,
+  );
   const unmatched = listFuelTransactions({ unmatchedOnly: true });
-  const rollups = listFuelRollups();
+  const driverRollups = listFuelRollups();
+  const truckRollups = listTruckFuelRollups();
+  const filterLabel = selectedDriver
+    ? `Transactions — ${selectedDriver.name}`
+    : selectedTruck
+      ? `Transactions — Unit ${selectedTruck.unit_number}`
+      : "Transactions";
 
   return (
     <>
       <PageHeader
         title="Fuel"
-        subtitle="Daily fuel-card CSV import. Match by driver name or unit number. Re-uploads of the same file are skipped."
+        subtitle="Daily fuel-card CSV or Transaction Activity Report PDF. Totals split truck diesel, reefer diesel, DEF, and scale."
         actions={
           <>
             <a href="/api/fuel/export" className="btn btn-secondary">
@@ -52,8 +67,9 @@ export default async function FuelPage({
                   <th>When</th>
                   <th>Name on file</th>
                   <th>Unit</th>
+                  <th>Category</th>
                   <th>Location</th>
-                  <th>Gallons</th>
+                  <th>Qty</th>
                   <th>Amount</th>
                   <th>Assign</th>
                 </tr>
@@ -64,8 +80,9 @@ export default async function FuelPage({
                     <td>{formatDateTime(row.occurred_at)}</td>
                     <td>{row.driver_name_raw || "—"}</td>
                     <td>{row.truck_unit || row.unit_number || "—"}</td>
+                    <td>{labelForFuelBucket(row.category)}</td>
                     <td>{row.location || "—"}</td>
-                    <td>{formatGallons(row.gallons)}</td>
+                    <td>{row.category === "scale" ? row.gallons ?? "—" : formatGallons(row.gallons)}</td>
                     <td>{formatFuelMoney(row.amount)}</td>
                     <td>
                       <form action={assignFuelDriverAction} className="flex flex-wrap items-center gap-2">
@@ -91,50 +108,15 @@ export default async function FuelPage({
         </section>
       ) : null}
 
-      <section className="card mb-6 overflow-hidden">
-        <header className="border-b border-slate-200 px-5 py-3">
-          <h2 className="text-sm font-semibold">Per-driver this week / this month</h2>
-        </header>
-        {rollups.length === 0 ? (
-          <p className="p-5 text-sm text-slate-600">No matched fuel yet. Import a CSV or assign unmatched rows.</p>
-        ) : (
-          <table className="table-grid">
-            <thead>
-              <tr>
-                <th>Driver</th>
-                <th>This week</th>
-                <th>This month</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rollups.map((row) => (
-                <tr key={row.driverId}>
-                  <td>
-                    <Link href={`/fuel?driver=${row.driverId}`} className="font-semibold hover:underline">
-                      {row.driverName}
-                    </Link>
-                  </td>
-                  <td>
-                    {formatGallons(row.weekGallons)} · {formatFuelMoney(row.weekAmount)}
-                  </td>
-                  <td>
-                    {formatGallons(row.monthGallons)} · {formatFuelMoney(row.monthAmount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      <FuelRollupTable title="Per-driver totals" rows={driverRollups} hrefFor={(row) => `/fuel?driver=${row.id}`} />
+      <FuelRollupTable title="Per-truck totals" rows={truckRollups} hrefFor={(row) => `/fuel?truck=${row.id}`} />
 
       <section className="card overflow-hidden">
         <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-          <h2 className="text-sm font-semibold">
-            {selectedDriver ? `Transactions — ${selectedDriver.name}` : "Transactions"}
-          </h2>
-          {selectedDriver ? (
+          <h2 className="text-sm font-semibold">{filterLabel}</h2>
+          {selectedDriver || selectedTruck ? (
             <Link href="/fuel" className="text-sm font-medium text-navy hover:underline">
-              All drivers
+              All fuel
             </Link>
           ) : null}
         </header>
@@ -148,10 +130,12 @@ export default async function FuelPage({
                   <th>When</th>
                   <th>Driver</th>
                   <th>Truck</th>
+                  <th>Category</th>
                   <th>Location</th>
-                  <th>Gallons</th>
+                  <th>Qty</th>
                   <th>PPG</th>
                   <th>Amount</th>
+                  <th>Invoice</th>
                   <th>Card</th>
                   <th>Source</th>
                 </tr>
@@ -169,11 +153,21 @@ export default async function FuelPage({
                         "—"
                       )}
                     </td>
-                    <td>{row.truck_unit || row.unit_number || "—"}</td>
+                    <td>
+                      {row.truck_id ? (
+                        <Link href={`/fuel?truck=${row.truck_id}`} className="hover:underline">
+                          {row.truck_unit || row.unit_number}
+                        </Link>
+                      ) : (
+                        row.unit_number || "—"
+                      )}
+                    </td>
+                    <td>{labelForFuelBucket(row.category)}</td>
                     <td>{row.location || "—"}</td>
-                    <td>{formatGallons(row.gallons)}</td>
+                    <td>{row.category === "scale" ? row.gallons ?? "—" : formatGallons(row.gallons)}</td>
                     <td>{row.price_per_gallon == null ? "—" : formatFuelMoney(row.price_per_gallon)}</td>
                     <td>{formatFuelMoney(row.amount)}</td>
+                    <td className="text-xs">{row.invoice_number || "—"}</td>
                     <td>{row.card_last4 ? `••••${row.card_last4}` : "—"}</td>
                     <td className="text-xs text-slate-500">{row.source_file || "—"}</td>
                   </tr>
