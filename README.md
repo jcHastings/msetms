@@ -5,33 +5,80 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. The dispatcher desk requires a username + password. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
+
+Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is the only toolchain this app needs.
+
+On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
+
+`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` junctions or copies `data` and `.env` into `.next/standalone` (Windows `symlink` hits `EPERM` without those).
+
+Copy `.env.example` to `.env.local` and set `DISPATCH_PASSWORD` (at least 8 characters). That creates the `admin` dispatcher account on first start. Do **not** put that password in git.
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) — you will be sent to `/login`. After sign-in, the board and desk work. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login) (PIN, not the dispatcher password).
+
+Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
+
+**Docker:**
+
+```bash
+docker compose up --build
+```
+
+Then open `http://<this-box>:3000` for dispatch (sign in) and `http://<this-box>:3000/driver/login` for the driver app. Pass `DISPATCH_PASSWORD` into Compose from your shell; do not write a real password into `docker-compose.yml`.
+
+`npm start` and Docker both run the Next **standalone** server on port **3000**. SQLite and uploads persist in `./data` (Compose mounts that folder). The server binds `0.0.0.0` unless you set an explicit IP with `HOST` / `LISTEN_HOST` / `BIND_HOST`. It does **not** use the OS `HOSTNAME` (that is the machine name — on some boxes it is `cursor`, and nothing useful listens).
+
+Override port with `PORT`. No Vercel account or secrets required.
+
+Local edit loop on the same machine:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
-
 The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 
 | Command | What it does |
 | --- | --- |
-| `npm install` | Install dependencies |
-| `npm run dev` | Run the app |
+| `npm install` | Install JavaScript dependencies (no native compile) |
+| `npm run build` | Production build (writes `.next/standalone`) |
+| `npm start` | Run the standalone server and keep it listening |
+| `docker compose up --build` | Build the Node 22 image and serve port 3000 |
+| `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires Node.js 20 or newer.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
+
+Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
+
+## Dispatcher login
+
+The board, loads, fleet, customers, settings, and company APIs are closed until a dispatcher signs in at `/login`.
+
+- Username + password (not a PIN, not a query-string secret)
+- Password stored as an **scrypt** hash
+- Session is an **httpOnly**, `SameSite=Lax` cookie (`tms_dispatcher`). It is not shown in the address bar.
+- First run with no users: if `DISPATCH_PASSWORD` is set, the app creates `admin` (or `DISPATCH_USERNAME`) from that value. Existing users are never overwritten.
+- **Log out** is on the left chrome.
+- Drivers keep PIN login at `/driver/login` and cannot open dispatcher pages.
+
+**HTTPS:** `npm start` on your LAN is usually plain HTTP, so the cookie is not marked `Secure` (otherwise the browser would drop it). If this app is on the public internet, put **HTTPS** in front of it (Caddy, nginx, IIS, Cloudflare) and set `TMS_COOKIE_SECURE=1` in gitignored `.env.local` so the session cookie is only sent over TLS.
 
 ## Dispatcher
 
+- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
 - Dashboard counts, dispatch board with status / pickup-date filters
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
@@ -43,7 +90,7 @@ Requires Node.js 20 or newer.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
-- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
+- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it, including a load the dispatcher just created (a leftover driver-app sign-in does not 404 the file). Company header is editable on Settings.
 - **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
 - **IFTA mileage** on in-transit and delivered loads: miles by US state / Canadian province, totals, vehicle id, and a downloadable CSV on the load documents. **Refresh IFTA from Samsara** pulls live reports when a token is set; otherwise a labeled demo breakdown is built from origin / destination.
 
@@ -60,7 +107,9 @@ Sign in at `/driver/login` with name + PIN. Seeded demo PINs:
 
 Driver statuses: en route to pickup → loaded → en route to delivery → delivered. Those move the dispatcher's load to in transit / delivered.
 
-Uploads (BOL, POD, lumper, trailer/product/seal photos) are stored under `data/uploads/` and show on the dispatcher load page.
+On a load, the driver can **take a photo with the phone camera** (or pick an existing picture), preview / retake, add more pages, then **Make PDF and upload** as BOL / POD / lumper / other. The PDF is stored on the load; the dispatcher opens it under documents. Camera uses the native file input (`capture=environment`) so it works on iPhone Safari and Android Chrome over `http://localhost` or LAN; live `getUserMedia` is used when the browser allows it. No cloud OCR.
+
+Uploads (BOL, POD, lumper, trailer/product/seal photos, camera PDFs) are stored under `data/uploads/` and show on the dispatcher load page.
 
 ## Rate confirmation ingest
 
@@ -188,14 +237,20 @@ To use a live QuickBooks company later: create production keys, re-authorize aga
 - Uploads: `data/uploads/`
 - Rotated QuickBooks refresh token: `data/qbo-refresh.json` (gitignored)
 
-Reset:
+Reset (macOS / Linux):
 
 ```bash
 rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 ```
 
+Reset (Windows PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force data\tms.db, data\tms.db-wal, data\tms.db-shm, data\uploads -ErrorAction SilentlyContinue
+```
+
 ## Stack
 
-Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
+Next.js (App Router), TypeScript, Tailwind CSS, Node built-in SQLite (`node:sqlite`), `dotenv`, `unpdf`, optional `tesseract.js`. No `better-sqlite3` / node-gyp.
 
 See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.
