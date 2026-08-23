@@ -744,6 +744,25 @@ export function assignLoad(
   })();
 }
 
+export function markQboInvoice(
+  loadId: number,
+  input: {
+    invoiceId: string;
+    invoiceNumber: string;
+    source: "demo" | "quickbooks";
+    sentAt: string;
+  },
+): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb()
+    .prepare(
+      `UPDATE loads
+       SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_sent_at = ?, qbo_source = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(input.invoiceId, input.invoiceNumber, input.sentAt, input.source, input.sentAt, loadId);
+}
+
 export function updateLoadStatus(loadId: number, status: LoadStatus): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");

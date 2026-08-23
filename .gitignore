@@ -41,8 +41,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local TMS database
+# local TMS database and rotated QuickBooks refresh token
 /data/*.db
 /data/*.db-wal
 /data/*.db-shm
 /data/uploads/
+/data/qbo-refresh.json

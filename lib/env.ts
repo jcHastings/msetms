@@ -47,3 +47,33 @@ export function getOrbcommApiBase(): string {
 export function isOrbcommConfigured(): boolean {
   return Boolean(getOrbcommUsername() && getOrbcommPassword());
 }
+
+export function getQuickbooksClientId(): string | undefined {
+  return readSecret("QUICKBOOKS_CLIENT_ID");
+}
+
+export function getQuickbooksClientSecret(): string | undefined {
+  return readSecret("QUICKBOOKS_CLIENT_SECRET");
+}
+
+export function getQuickbooksRefreshToken(): string | undefined {
+  return readSecret("QUICKBOOKS_REFRESH_TOKEN");
+}
+
+export function getQuickbooksRealmId(): string | undefined {
+  return readSecret("QUICKBOOKS_REALM_ID");
+}
+
+export function getQuickbooksEnvironment(): "sandbox" | "production" {
+  const value = readSecret("QUICKBOOKS_ENVIRONMENT")?.toLowerCase();
+  return value === "production" ? "production" : "sandbox";
+}
+
+export function isQuickbooksConfigured(): boolean {
+  return Boolean(
+    getQuickbooksClientId() &&
+      getQuickbooksClientSecret() &&
+      getQuickbooksRefreshToken() &&
+      getQuickbooksRealmId(),
+  );
+}

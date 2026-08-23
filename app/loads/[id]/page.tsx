@@ -9,7 +9,9 @@ import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
+import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { listAttachments } from "@/lib/files";
+import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
@@ -77,7 +79,17 @@ export default async function LoadDetailPage({
             {load.oo_percent}% of {load.rate != null ? `$${load.rate.toLocaleString()}` : "rate"} = $
             {load.oo_pay.toLocaleString()}
           </div>
+          <p className="mt-1 text-slate-600">Settled outside QuickBooks. Customer invoices use the load rate.</p>
         </div>
+      ) : null}
+      {load.status === "delivered" ? (
+        load.rate != null ? (
+          <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
+        ) : (
+          <section className="card mb-4 p-5 text-sm text-slate-600">
+            Set a customer rate on this delivered load to send a QuickBooks invoice.
+          </section>
+        )
       ) : null}
       <LoadForm
         customers={listCustomers()}

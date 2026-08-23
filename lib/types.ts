@@ -217,6 +217,10 @@ export type Load = {
   status: LoadStatus;
   truck_id: number | null;
   driver_id: number | null;
+  qbo_invoice_id: string;
+  qbo_invoice_number: string;
+  qbo_sent_at: string;
+  qbo_source: "demo" | "quickbooks" | "";
   created_at: string;
   updated_at: string;
 };

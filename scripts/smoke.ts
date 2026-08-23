@@ -497,6 +497,93 @@ SPECIAL INSTRUCTIONS
     .some((load) => load.id === loadId);
   assert.equal(boardHit, true, "delivered load should appear on the board when filtered");
 
+  const qbo = await import("../lib/integrations/quickbooks");
+  const qboEnvKeys = [
+    "QUICKBOOKS_CLIENT_ID",
+    "QUICKBOOKS_CLIENT_SECRET",
+    "QUICKBOOKS_REFRESH_TOKEN",
+    "QUICKBOOKS_REALM_ID",
+    "QUICKBOOKS_ENVIRONMENT",
+  ] as const;
+  const previousQbo = Object.fromEntries(qboEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of qboEnvKeys) delete process.env[key];
+  process.env.TMS_QBO_REFRESH_PATH = path.join(os.tmpdir(), `qbo-refresh-smoke-${Date.now()}.json`);
+  qbo.resetQuickbooksForTests();
+
+  try {
+    queries.updateLoadStatus(coleLoad.id, "delivered");
+    const coleDelivered = queries.getLoad(coleLoad.id);
+    assert.ok(coleDelivered);
+    assert.ok(coleDelivered.rate != null);
+    assert.ok(coleDelivered.oo_pay != null);
+    const ooPreview = qbo.previewQuickbooksInvoice(coleDelivered);
+    assert.equal(ooPreview.mode, "demo");
+    assert.equal(ooPreview.amount, coleDelivered.rate, "QBO invoice uses customer rate, not OO pay");
+    assert.notEqual(ooPreview.amount, coleDelivered.oo_pay);
+    assert.match(ooPreview.memo, /customer rate/i);
+
+    const available = queries.listLoads({ status: "available" })[0];
+    assert.ok(available);
+    await assert.rejects(() => qbo.sendLoadToQuickbooks(available.id), /Delivered/);
+
+    const deliveredLoad = queries.getLoad(loadId);
+    assert.ok(deliveredLoad);
+    const preview = qbo.previewQuickbooksInvoice(deliveredLoad);
+    assert.equal(preview.mode, "demo");
+    assert.equal(preview.amount, 1400);
+    assert.match(preview.lane, /Jackson, MS/);
+    assert.match(preview.memo, /RC-SMOKE/);
+
+    const demoSent = await qbo.sendLoadToQuickbooks(loadId);
+    assert.equal(demoSent.source, "demo");
+    assert.match(demoSent.invoiceId, /^demo-MSE-\d+-\d+$/);
+    const afterDemo = queries.getLoad(loadId);
+    assert.ok(afterDemo);
+    assert.equal(afterDemo.qbo_invoice_id, demoSent.invoiceId);
+    assert.ok(afterDemo.qbo_sent_at);
+    assert.equal(afterDemo.qbo_source, "demo");
+
+    await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId), /already sent/i);
+
+    const demoResent = await qbo.sendLoadToQuickbooks(loadId, { confirmResend: true });
+    assert.notEqual(demoResent.invoiceId, demoSent.invoiceId);
+
+    const qboStatus = await qbo.getQuickbooksStatus();
+    assert.equal(qboStatus.configured, false);
+    assert.equal(qboStatus.status, "Demo");
+
+    process.env.QUICKBOOKS_CLIENT_ID = "test-not-a-real-client-id";
+    process.env.QUICKBOOKS_CLIENT_SECRET = "test-not-a-real-client-secret";
+    process.env.QUICKBOOKS_REFRESH_TOKEN = "test-not-a-real-refresh-token";
+    process.env.QUICKBOOKS_REALM_ID = "1234567890";
+    process.env.QUICKBOOKS_ENVIRONMENT = "sandbox";
+    qbo.resetQuickbooksForTests();
+    const originalQboFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
+    try {
+      const beforeFail = queries.getLoad(loadId);
+      await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId, { confirmResend: true }), /401/);
+      const afterFail = queries.getLoad(loadId);
+      assert.equal(afterFail?.qbo_invoice_id, beforeFail?.qbo_invoice_id, "401 must not mark the load sent");
+      const failedStatus = await qbo.getQuickbooksStatus();
+      assert.equal(failedStatus.status, "API error");
+      assert.ok(failedStatus.error && /401/.test(failedStatus.error));
+    } finally {
+      globalThis.fetch = originalQboFetch;
+    }
+  } finally {
+    for (const key of qboEnvKeys) {
+      const value = previousQbo[key];
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
+    if (process.env.TMS_QBO_REFRESH_PATH) {
+      fs.rmSync(process.env.TMS_QBO_REFRESH_PATH, { force: true });
+      delete process.env.TMS_QBO_REFRESH_PATH;
+    }
+    qbo.resetQuickbooksForTests();
+  }
+
   closeDb();
   const reopened = getDb();
   const persisted = reopened

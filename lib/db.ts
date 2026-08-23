@@ -212,6 +212,10 @@ export function migrate(db: Database.Database): void {
   ensureColumn(db, "reefer_readings", "latitude", "REAL");
   ensureColumn(db, "reefer_readings", "longitude", "REAL");
   ensureColumn(db, "reefer_readings", "address", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_invoice_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_invoice_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_source", "TEXT NOT NULL DEFAULT ''");
 }
 
 function isoDateOffset(offsetDays: number): string {

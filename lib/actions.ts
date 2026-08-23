@@ -400,6 +400,23 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
   }
 }
 
+export async function sendToQuickbooksAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
+    const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
+    await sendLoadToQuickbooks(loadId, { confirmResend });
+    refresh();
+    return { ok: true, id: loadId };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
   try {
     const loadId = parseOptionalInt(formData.get("load_id"));

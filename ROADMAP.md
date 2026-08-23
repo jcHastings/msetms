@@ -1,6 +1,6 @@
 # Roadmap
 
-v1 is a local dispatcher desk plus a mobile-width driver web app, file attachments, rate-con ingest, Samsara GPS/HOS, and ORBCOMM reefer status. Each integration stays demo unless local credentials are present.
+v1 is a local dispatcher desk plus a mobile-width driver web app, file attachments, rate-con ingest, Samsara GPS/HOS, ORBCOMM reefer status, and QuickBooks Online invoices for delivered loads. Each integration stays demo unless local credentials are present.
 
 ## Next product slices
 
@@ -14,7 +14,7 @@ v1 is a local dispatcher desk plus a mobile-width driver web app, file attachmen
 ## Integrations still later
 
 - **Other ELD / telematics** — Motive, Geotab.
-- **Accounting** — invoice from a delivered load, QuickBooks or similar. No AR/AP in v1.
+- **Deeper accounting** — payments, bills, owner-operator settlements in QuickBooks. v1 invoices the customer rate on a delivered load only.
 - **EDI / load boards** — 204 in, 214 out, DAT/Truckstop. v1 loads are keyed or imported from a rate con.
 - **Fuel and IFTA** — fuel card import, miles by state.
 

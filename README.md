@@ -44,6 +44,7 @@ Requires Node.js 20 or newer.
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
 - **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
+- **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
 
 ## Driver app
 
@@ -86,10 +87,11 @@ Both integrations are required. They do not share data:
 | --- | --- | --- | --- |
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
+| **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
 
 Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
 
-**Integrations** has two cards. Connected vs demo is independent: one token can be live while the other is demo.
+**Integrations** has separate cards. Connected vs demo is independent: one integration can be live while another is demo.
 
 Map IDs on **Fleet**: truck → Samsara vehicle ID, driver → Samsara driver ID, trailer → ORBCOMM asset ID. The board and load page show Samsara tractor/HOS and ORBCOMM trailer/reefer when those IDs are mapped.
 
@@ -134,10 +136,47 @@ How JC pulls the report today:
 
 When ORBCOMM enables Transportation Platform B2B access, put the username/password in `.env` and restart — the app will request a token. There is no scrape of the logged-in portal.
 
+### QuickBooks Online — invoice delivered loads
+
+This app does **not** run an in-app OAuth dance and does not ship secrets. You create a QBO app, finish OAuth in Intuit’s tools, and paste the resulting values into gitignored `.env`.
+
+1. Create an Intuit developer account at [developer.intuit.com](https://developer.intuit.com).
+2. Create an app. Enable **QuickBooks Online** with the accounting scope (`com.intuit.quickbooks.accounting`).
+3. Use **Development** keys for the Intuit sandbox (a sandbox company is created with the app). Production keys are a separate step later.
+4. Add the OAuth 2.0 Playground redirect URI Intuit shows for your app (typically under the app’s Keys tab).
+5. Open the [OAuth 2.0 Playground](https://developer.intuit.com/app/developer/playground), select your app, authorize the sandbox company, and exchange the code for tokens.
+6. Copy **Client ID**, **Client Secret**, **refresh token**, and **realm id** (company id). Access tokens expire in about an hour; the refresh token is what this app stores.
+7. Copy `.env.example` to `.env` and fill only those placeholders:
+
+```
+QUICKBOOKS_CLIENT_ID=
+QUICKBOOKS_CLIENT_SECRET=
+QUICKBOOKS_REFRESH_TOKEN=
+QUICKBOOKS_REALM_ID=
+QUICKBOOKS_ENVIRONMENT=sandbox
+```
+
+8. Restart the app. **Integrations** shows Connected vs Demo independently of Samsara/ORBCOMM.
+
+When credentials are present, **Send to QuickBooks** on a delivered load:
+
+- Finds or creates a QBO customer by display name
+- Creates an invoice: customer, load #, PU → DEL, amount = load customer rate, date = delivery date, memo with refs / special instructions
+- Marks the load with the QBO invoice id and timestamp
+
+Owner-operator pay is **not** invoiced and is **not** a QBO bill. The invoice is always customer billing. A note is added on OO loads.
+
+Intuit rotates refresh tokens. The latest refresh token is written to gitignored `data/qbo-refresh.json` (never committed or shown). If refresh or invoice create returns 401/403, the UI shows the error and the load is **not** marked sent.
+
+No credentials: the same screen shows a labeled **demo** invoice preview. **Record demo invoice** stores a local `demo-…` invoice id so you can test the UI. A second send is blocked until you confirm.
+
+To use a live QuickBooks company later: create production keys, re-authorize against that company, set `QUICKBOOKS_ENVIRONMENT=production`, and paste the new refresh token + realm id.
+
 ## Data
 
 - SQLite: `data/tms.db`
 - Uploads: `data/uploads/`
+- Rotated QuickBooks refresh token: `data/qbo-refresh.json` (gitignored)
 
 Reset:
 
