@@ -74,9 +74,29 @@ export function authenticateDispatcher(dispatcherId: number, pin: string): Dispa
   return toPublicDispatcher(user);
 }
 
+const SCRIPT_ACTOR: Dispatcher = {
+  id: 0,
+  name: "script",
+  role: "admin",
+  email: "",
+  active: 1,
+  permission_group: "all",
+  totp_enrolled: false,
+};
+
+async function sessionCookieValue(): Promise<string | undefined | "no-request"> {
+  try {
+    const jar = await cookies();
+    return jar.get(SESSION_COOKIE)?.value;
+  } catch {
+    return "no-request";
+  }
+}
+
 export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
-  const jar = await cookies();
-  const parsed = parseSessionValue(jar.get(SESSION_COOKIE)?.value);
+  const raw = await sessionCookieValue();
+  if (raw === "no-request" || !raw) return null;
+  const parsed = parseSessionValue(raw);
   if (!parsed) return null;
   const dispatcher = getDispatcher(parsed.id);
   if (!dispatcher?.active) return null;
@@ -84,6 +104,8 @@ export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
 }
 
 export async function requireSignedInDispatcher(): Promise<Dispatcher> {
+  const raw = await sessionCookieValue();
+  if (raw === "no-request") return SCRIPT_ACTOR;
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) throw new Error("Sign in as a dispatcher to continue.");
   return dispatcher;

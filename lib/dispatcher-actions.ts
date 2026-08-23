@@ -456,6 +456,9 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
 export async function sendLoadSmsAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      const { sendTwilioSms, twilioConfigured } = await import("./integrations/twilio");
+      const { SMS_MISSING_KEYS } = await import("./sms-shared");
+      if (!twilioConfigured()) throw new Error(SMS_MISSING_KEYS);
       await requireCapability(canSendSms, "SMS is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
@@ -466,7 +469,6 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
       if (!phone) throw new Error("The assigned driver needs a mobile number.");
       const kind = String(formData.get("kind") ?? "message");
       const { formatLoadSummary } = await import("./load-summary");
-      const { sendTwilioSms } = await import("./integrations/twilio");
       const body =
         kind === "load_info"
           ? formatLoadSummary(load)
