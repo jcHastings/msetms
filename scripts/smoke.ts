@@ -484,6 +484,65 @@ SPECIAL INSTRUCTIONS
     orbcomm.resetOrbcommCacheForTests();
   }
 
+  const ifta = await import("../lib/integrations/ifta");
+  delete process.env.SAMSARA_API_TOKEN;
+  const demoRows = ifta.buildDemoIftaBreakdown("Nashville, TN", "Dallas, TX");
+  assert.ok(demoRows.some((row) => row.jurisdiction === "TN"));
+  assert.ok(demoRows.some((row) => row.jurisdiction === "TX"));
+  const msAl = ifta.buildDemoIftaBreakdown("Jackson, MS", "Birmingham, AL");
+  assert.ok(msAl.some((row) => row.jurisdiction === "MS"));
+  assert.ok(msAl.some((row) => row.jurisdiction === "AL"));
+  assert.equal(ifta.metersToMiles(1609.344), 1);
+  const mappedIfta = ifta.mapIftaVehicleReports({
+    vehicleId: "281474977075805",
+    vehicleReports: [
+      {
+        vehicle: { id: "281474977075805" },
+        jurisdictions: [
+          { jurisdiction: "TN", taxableMeters: 160934.4, totalMeters: 160934.4 },
+          { jurisdiction: "AR", taxableMeters: 80467.2, totalMeters: 80467.2 },
+        ],
+      },
+    ],
+  });
+  assert.equal(mappedIfta.find((row) => row.jurisdiction === "TN")?.miles, 100);
+  const parsedCsv = ifta.parseIftaDetailCsv(
+    "device_id,jurisdiction,distance_meters\n1,TN,16093.44\n1,TX,32186.88\n",
+  );
+  assert.ok(parsedCsv.some((row) => row.jurisdiction === "TX" && row.miles === 20));
+
+  const demoIfta = await ifta.refreshIftaForLoad(reeferLoad.id);
+  assert.equal(demoIfta.source, "demo");
+  assert.ok(demoIfta.rows.some((row) => row.jurisdiction === "TN"));
+  assert.ok(demoIfta.rows.some((row) => row.jurisdiction === "TX"));
+  assert.ok(demoIfta.total_miles > 0);
+  assert.ok(demoIfta.vehicle_id);
+  assert.ok(demoIfta.generated_at);
+  assert.ok(demoIfta.attachment_id);
+  const { listAttachments: listLoadFiles } = await import("../lib/files");
+  assert.ok(
+    listLoadFiles(reeferLoad.id).some((file) => file.kind === "ifta" && file.original_name.includes("IFTA")),
+  );
+
+  const openForIfta = queries.listLoads({ status: "available" })[0];
+  assert.ok(openForIfta);
+  await assert.rejects(() => ifta.refreshIftaForLoad(openForIfta.id), /in transit or delivered/i);
+
+  process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+  const beforeIftaFail = queries.getIftaReport(reeferLoad.id);
+  const iftaFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
+  try {
+    await assert.rejects(() => ifta.refreshIftaForLoad(reeferLoad.id), /401/);
+    const afterIftaFail = queries.getIftaReport(reeferLoad.id);
+    assert.equal(afterIftaFail?.source, "demo", "401 must not replace a report with fake live IFTA");
+    assert.equal(afterIftaFail?.generated_at, beforeIftaFail?.generated_at);
+  } finally {
+    globalThis.fetch = iftaFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+  }
+
   queries.updateLoadStatus(loadId, "delivered");
   const delivered = queries.getLoad(loadId);
   assert.ok(delivered);

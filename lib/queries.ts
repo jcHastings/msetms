@@ -20,6 +20,8 @@ import {
   type Load,
   type DriverProgress,
   type LoadStatus,
+  type IftaJurisdictionRow,
+  type IftaReport,
   type LoadView,
   type Trailer,
   type TrailerType,
@@ -742,6 +744,70 @@ export function assignLoad(
     );
     markAssetsOnDuty(truckId, driverId);
   })();
+}
+
+export function getIftaReport(loadId: number): IftaReport | null {
+  const report = getDb()
+    .prepare("SELECT * FROM ifta_reports WHERE load_id = ?")
+    .get(loadId) as Omit<IftaReport, "rows"> | undefined;
+  if (!report) return null;
+  const rows = getDb()
+    .prepare(
+      "SELECT jurisdiction, name, miles FROM ifta_jurisdictions WHERE report_id = ? ORDER BY miles DESC, jurisdiction",
+    )
+    .all(report.id) as IftaJurisdictionRow[];
+  return { ...report, rows };
+}
+
+export function saveIftaReport(input: {
+  loadId: number;
+  source: "demo" | "samsara";
+  vehicleId: string;
+  generatedAt: string;
+  windowStart: string;
+  windowEnd: string;
+  totalMiles: number;
+  note: string;
+  error?: string;
+  attachmentId: number | null;
+  rows: IftaJurisdictionRow[];
+}): IftaReport {
+  if (!getLoad(input.loadId)) throw new Error("Load not found.");
+  const db = getDb();
+  const persist = db.transaction(() => {
+    db.prepare("DELETE FROM ifta_reports WHERE load_id = ?").run(input.loadId);
+    const result = db
+      .prepare(
+        `INSERT INTO ifta_reports (
+          load_id, source, vehicle_id, generated_at, window_start, window_end,
+          total_miles, note, error, attachment_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.loadId,
+        input.source,
+        input.vehicleId,
+        input.generatedAt,
+        input.windowStart,
+        input.windowEnd,
+        input.totalMiles,
+        input.note,
+        input.error ?? "",
+        input.attachmentId,
+      );
+    const reportId = Number(result.lastInsertRowid);
+    const insertRow = db.prepare(
+      "INSERT INTO ifta_jurisdictions (report_id, jurisdiction, name, miles) VALUES (?, ?, ?, ?)",
+    );
+    for (const row of input.rows) {
+      insertRow.run(reportId, row.jurisdiction, row.name, row.miles);
+    }
+    return reportId;
+  });
+  persist();
+  const saved = getIftaReport(input.loadId);
+  if (!saved) throw new Error("IFTA report could not be saved.");
+  return saved;
 }
 
 export function markQboInvoice(

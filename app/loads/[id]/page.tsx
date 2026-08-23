@@ -9,8 +9,10 @@ import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
+import { IftaPanel } from "@/components/ifta-panel";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { listAttachments } from "@/lib/files";
+import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
@@ -30,6 +32,8 @@ export default async function LoadDetailPage({
   if (!load) notFound();
 
   const boundAction = updateLoadAction.bind(null, load.id);
+  await ensureDemoIfta(load);
+  const ifta = getIftaPanel(load);
 
   return (
     <>
@@ -81,6 +85,15 @@ export default async function LoadDetailPage({
           </div>
           <p className="mt-1 text-slate-600">Settled outside QuickBooks. Customer invoices use the load rate.</p>
         </div>
+      ) : null}
+      {(load.status === "in_transit" || load.status === "delivered" || ifta.report) ? (
+        <IftaPanel
+          loadId={load.id}
+          report={ifta.report}
+          canRefresh={ifta.canRefresh}
+          configured={ifta.configured}
+          reason={ifta.reason}
+        />
       ) : null}
       {load.status === "delivered" ? (
         load.rate != null ? (

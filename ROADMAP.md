@@ -16,7 +16,7 @@ v1 is a local dispatcher desk plus a mobile-width driver web app, file attachmen
 - **Other ELD / telematics** — Motive, Geotab.
 - **Deeper accounting** — payments, bills, owner-operator settlements in QuickBooks. v1 invoices the customer rate on a delivered load only.
 - **EDI / load boards** — 204 in, 214 out, DAT/Truckstop. v1 loads are keyed or imported from a rate con.
-- **Fuel and IFTA** — fuel card import, miles by state.
+- **Fuel cards** — import gallons by jurisdiction and pair with the IFTA miles already attached to a load.
 
 ## Later operations
 

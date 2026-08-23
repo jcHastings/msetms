@@ -45,6 +45,7 @@ Requires Node.js 20 or newer.
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
 - **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
 - **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
+- **IFTA mileage** on in-transit and delivered loads: miles by US state / Canadian province, totals, vehicle id, and a downloadable CSV on the load documents. **Refresh IFTA from Samsara** pulls live reports when a token is set; otherwise a labeled demo breakdown is built from origin / destination.
 
 ## Driver app
 
@@ -85,7 +86,7 @@ Both integrations are required. They do not share data:
 
 | Source | Used for | Never used for | Env (gitignored `.env` only) |
 | --- | --- | --- | --- |
-| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
+| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
 
@@ -105,7 +106,16 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 
 When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
 
-No token, or 401/403: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
+In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
+
+- Trip window (preferred): `POST https://api.samsara.com/ifta-detail/csv` with `startHour` / `endHour` / `vehicleIds`, then poll `GET /ifta-detail/csv/{jobId}` and sum `distance_meters` by `jurisdiction`. Token needs **Write IFTA (US)** plus **Read IFTA (US)**.
+- Monthly fallback: `GET https://api.samsara.com/fleet/reports/ifta/vehicle?year=&month=&vehicleIds=` (**Read IFTA**). The UI labels this as the vehicle’s monthly jurisdiction miles, not a trip-only split.
+
+No token: labeled **demo** by-state miles from the load’s origin and destination, plus a CSV on the load documents so the UI can be tested.
+
+Token set and IFTA returns 401/403 or another API error: the load page shows the error. The app does **not** invent live Samsara miles.
+
+No token, or 401/403 on GPS/HOS: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
 
 ### ORBCOMM — trailer tracking and reefer
 

@@ -400,6 +400,22 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
   }
 }
 
+export async function refreshIftaAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const { refreshIftaForLoad } = await import("./integrations/ifta");
+    await refreshIftaForLoad(loadId);
+    refresh();
+    return { ok: true, id: loadId };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function sendToQuickbooksAction(
   _prev: ActionResult | null,
   formData: FormData,

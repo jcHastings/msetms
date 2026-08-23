@@ -77,6 +77,7 @@ export const ATTACHMENT_KINDS = [
   { value: "photo_trailer", label: "Trailer photo" },
   { value: "photo_product", label: "Product photo" },
   { value: "photo_seals", label: "Seal photo" },
+  { value: "ifta", label: "IFTA report" },
   { value: "other", label: "Other" },
 ] as const;
 
@@ -285,6 +286,27 @@ export type ReeferReading = {
   address: string;
   source: "demo" | "orbcomm";
   recorded_at: string;
+};
+
+export type IftaJurisdictionRow = {
+  jurisdiction: string;
+  name: string;
+  miles: number;
+};
+
+export type IftaReport = {
+  id: number;
+  load_id: number;
+  source: "demo" | "samsara";
+  vehicle_id: string;
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  total_miles: number;
+  note: string;
+  error: string;
+  attachment_id: number | null;
+  rows: IftaJurisdictionRow[];
 };
 
 export type DashboardStats = {

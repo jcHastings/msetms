@@ -216,6 +216,30 @@ export function migrate(db: Database.Database): void {
   ensureColumn(db, "loads", "qbo_invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_source", "TEXT NOT NULL DEFAULT ''");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ifta_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL UNIQUE REFERENCES loads(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      vehicle_id TEXT NOT NULL DEFAULT '',
+      generated_at TEXT NOT NULL,
+      window_start TEXT NOT NULL DEFAULT '',
+      window_end TEXT NOT NULL DEFAULT '',
+      total_miles REAL NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      error TEXT NOT NULL DEFAULT '',
+      attachment_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS ifta_jurisdictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL REFERENCES ifta_reports(id) ON DELETE CASCADE,
+      jurisdiction TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      miles REAL NOT NULL
+    );
+  `);
 }
 
 function isoDateOffset(offsetDays: number): string {

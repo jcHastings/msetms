@@ -69,8 +69,11 @@ export default async function SettingsPage() {
         <p className="mt-4 text-sm text-slate-600">
           Set <code>SAMSARA_API_TOKEN</code> in <code>.env</code> and restart. The app calls{" "}
           <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
-          <code>GET https://api.samsara.com/fleet/hos/clocks</code>. Map the Samsara vehicle ID on the truck and the
-          Samsara driver ID on the driver. Samsara is not used for reefer temperature.
+          <code>GET https://api.samsara.com/fleet/hos/clocks</code>. Map the Samsara vehicle ID on the
+          truck and the Samsara driver ID on the driver. IFTA on a load uses{" "}
+          <code>GET /fleet/reports/ifta/vehicle</code> (Read IFTA) and, when available,{" "}
+          <code>POST /ifta-detail/csv</code> for the load window (Write IFTA). Samsara is not used for
+          reefer temperature.
         </p>
         {fleet.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">

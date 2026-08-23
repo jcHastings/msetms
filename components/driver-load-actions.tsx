@@ -60,7 +60,7 @@ export function DriverLoadActions({
         <div className="mt-3 field">
           <label htmlFor="kind">Type</label>
           <select id="kind" name="kind" className="min-h-12" defaultValue="pod">
-            {ATTACHMENT_KINDS.filter((kind) => kind.value !== "rate_con").map((kind) => (
+            {ATTACHMENT_KINDS.filter((kind) => kind.value !== "rate_con" && kind.value !== "ifta").map((kind) => (
               <option key={kind.value} value={kind.value}>
                 {kind.label}
               </option>
