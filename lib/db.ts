@@ -153,6 +153,19 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS company_profile (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      company_name TEXT NOT NULL,
+      dispatcher_name TEXT NOT NULL,
+      dispatcher_phone TEXT NOT NULL,
+      dispatcher_fax TEXT NOT NULL,
+      dispatcher_email TEXT NOT NULL
+    );
+
+    INSERT OR IGNORE INTO company_profile (
+      id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
+    ) VALUES (1, 'M&S Loads', 'Ana G', '402-302-0097', '', 'ana@msloads.com');
+
     CREATE TABLE IF NOT EXISTS reefer_readings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       load_id INTEGER REFERENCES loads(id) ON DELETE CASCADE,

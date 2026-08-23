@@ -40,6 +40,7 @@ const LOAD_SELECT = `
     trailers.unit_number AS trailer_unit,
     trailers.orbcomm_asset_id AS trailer_orbcomm_asset_id,
     drivers.name AS driver_name,
+    drivers.phone AS driver_phone,
     drivers.driver_type AS driver_type
   FROM loads
   JOIN customers ON customers.id = loads.customer_id

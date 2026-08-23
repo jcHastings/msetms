@@ -8,6 +8,7 @@ import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
+import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { listAttachments } from "@/lib/files";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
@@ -36,6 +37,7 @@ export default async function LoadDetailPage({
         actions={
           <div className="flex items-center gap-3">
             <LoadStatusBadge status={load.status} />
+            <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} />
             <Link href="/board" className="btn btn-secondary">
               Back to board
             </Link>

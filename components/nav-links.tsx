@@ -9,7 +9,7 @@ const NAV = [
   { href: "/loads/new", label: "New load" },
   { href: "/fleet", label: "Fleet" },
   { href: "/customers", label: "Customers" },
-  { href: "/settings", label: "Integrations" },
+  { href: "/settings", label: "Settings" },
   { href: "/driver/login", label: "Driver app" },
 ];
 

@@ -231,7 +231,16 @@ export type LoadView = Load & {
   trailer_unit: string | null;
   trailer_orbcomm_asset_id: string | null;
   driver_name: string | null;
+  driver_phone: string | null;
   driver_type: DriverKind | null;
+};
+
+export type CompanyProfile = {
+  company_name: string;
+  dispatcher_name: string;
+  dispatcher_phone: string;
+  dispatcher_fax: string;
+  dispatcher_email: string;
 };
 
 export type FleetDocument = {

@@ -1,5 +1,7 @@
+import { CompanyProfileForm } from "@/components/company-profile-form";
 import { OrbcommImportForm } from "@/components/orbcomm-import-form";
 import { PageHeader } from "@/components/page-header";
+import { getCompanyProfile } from "@/lib/company";
 import { formatDateTime } from "@/lib/format";
 import { isOrbcommConfigured } from "@/lib/env";
 import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
@@ -28,8 +30,18 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Integrations"
-        subtitle="Samsara is tractor GPS and driver HOS. ORBCOMM is trailer location and reefer status. Connected vs demo is independent. Credentials stay in local .env and are never shown."
+        subtitle="Company header for load confirmations, plus Samsara and ORBCOMM. Credentials stay in local .env and are never shown."
       />
+
+      <section className="card mb-6 p-6">
+        <h2 className="text-sm font-semibold">Company header</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Prefills the Rate & Load Confirmation PDF (company name, dispatcher, phone, email).
+        </p>
+        <div className="mt-4">
+          <CompanyProfileForm profile={getCompanyProfile()} />
+        </div>
+      </section>
 
       <section className="card p-6">
         <h2 className="text-sm font-semibold">Samsara — truck tracking & HOS</h2>

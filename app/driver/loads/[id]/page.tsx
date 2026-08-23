@@ -39,6 +39,12 @@ export default async function DriverLoadPage({
       </p>
       <p className="text-slate-500">{load.customer_name}</p>
 
+      <div className="mt-4">
+        <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation`}>
+          Download load confirmation
+        </a>
+      </div>
+
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <Row label="Pickup" value={`${formatDateTime(load.pickup_start)} – ${formatDateTime(load.pickup_end)}`} />
         <Row label="Delivery" value={`${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`} />

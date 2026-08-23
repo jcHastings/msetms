@@ -430,6 +430,27 @@ SPECIAL INSTRUCTIONS
   assert.ok(bothWindows.some((alert) => alert.kind === "registration"));
   assert.ok(bothWindows.some((alert) => alert.kind === "dot_inspection"));
 
+  const confirmation = await import("../lib/load-confirmation");
+  const { getCompanyProfile } = await import("../lib/company");
+  const header = getCompanyProfile();
+  assert.equal(header.company_name, "M&S Loads");
+  assert.equal(header.dispatcher_name, "Ana G");
+  const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
+  assert.equal(coleConfirm.style, "owner_operator");
+  assert.equal(coleConfirm.loadNumber, coleLoad.load_number);
+  assert.ok(coleConfirm.agreedAmount != null);
+  assert.ok(!["1006149", "1006151"].includes(coleConfirm.loadNumber));
+  const colePdf = await confirmation.renderConfirmationPdf(coleConfirm);
+  assert.equal(colePdf.subarray(0, 4).toString(), "%PDF");
+  const deniseLoad = queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
+  assert.ok(deniseLoad);
+  const deniseConfirm = confirmation.buildConfirmationForLoad(deniseLoad.id);
+  assert.equal(deniseConfirm.style, "company_driver");
+  assert.equal(deniseConfirm.agreedAmount, null);
+  assert.equal(deniseConfirm.loadNumber, deniseLoad.load_number);
+  const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
+  assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
+
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");
   assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));

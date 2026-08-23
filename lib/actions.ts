@@ -597,3 +597,23 @@ export async function attachFleetDocAction(formData: FormData): Promise<ActionRe
     return fail(error);
   }
 }
+
+export async function updateCompanyProfileAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const { updateCompanyProfile } = await import("./company");
+    updateCompanyProfile({
+      company_name: requiredString(formData.get("company_name"), "Company name"),
+      dispatcher_name: requiredString(formData.get("dispatcher_name"), "Dispatcher name"),
+      dispatcher_phone: String(formData.get("dispatcher_phone") ?? "").trim(),
+      dispatcher_fax: String(formData.get("dispatcher_fax") ?? "").trim(),
+      dispatcher_email: String(formData.get("dispatcher_email") ?? "").trim(),
+    });
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}

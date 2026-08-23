@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "tsx scripts/smoke.ts",
-    "sample-rate-con": "tsx scripts/generate-sample-rate-con.ts"
+    "sample-rate-con": "tsx scripts/generate-sample-rate-con.ts",
+    "sample-confirmations": "tsx scripts/generate-sample-confirmations.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

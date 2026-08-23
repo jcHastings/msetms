@@ -26,6 +26,7 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `npm run build` | Production build |
 | `npm start` | Serve the production build |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
+| `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
 Requires Node.js 20 or newer.
 
@@ -42,6 +43,7 @@ Requires Node.js 20 or newer.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
+- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
 
 ## Driver app
 
@@ -65,7 +67,14 @@ Uploads (BOL, POD, lumper, trailer/product/seal photos) are stored under `data/u
 3. Review/edit every extracted field. A partial parse is expected.
 4. Save. The original file is attached to the load as a rate confirmation.
 
-A labeled sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer).
+A labeled ingest sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer).
+
+Layout references for the outbound confirmation (not used as live data):
+
+- [`public/samples/sample-load-confirmation-oo.pdf`](public/samples/sample-load-confirmation-oo.pdf) — owner-operator style
+- [`public/samples/sample-load-confirmation-company.pdf`](public/samples/sample-load-confirmation-company.pdf) — company driver style
+
+Live confirmations are generated from the load record. Company name / dispatcher / phone / email are set on **Settings**.
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
