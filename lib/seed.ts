@@ -500,8 +500,16 @@ export function seedDatabase(db: Database.Database): void {
     insertReading.run(load1043.id, t108, "TR-8801", 36, 36.4, 0, "", atHour(0, 5, 40));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 33.8, 0, "", atHour(0, 11, 15));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 34.2, 0, "", atHour(0, 13, 5));
-    db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ? WHERE trailer_id = 'TR-8801'").run(36.1, 35.8);
-    db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ? WHERE trailer_id = 'TR-7742' AND temperature_f = 34.2").run(34.0, 33.6);
+    db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ?, latitude = ?, longitude = ?, address = ? WHERE trailer_id = 'TR-8801'").run(
+      36.1,
+      35.8,
+      36.1652,
+      -86.7841,
+      "Nashville, TN",
+    );
+    db.prepare(
+      "UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ?, latitude = ?, longitude = ?, address = ? WHERE trailer_id = 'TR-7742' AND temperature_f = 34.2",
+    ).run(34.0, 33.6, 32.7791, -96.8002, "Dallas, TX");
 
     const patchDriver = db.prepare(
       `UPDATE drivers SET license_number = ?, license_state = ?, license_expires = ?,

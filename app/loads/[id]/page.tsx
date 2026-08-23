@@ -8,8 +8,8 @@ import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments, listFleetDocuments } from "@/lib/files";
-import { HosBadge, LocationBadge } from "@/components/fleet-badges";
-import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
+import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
 import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 
@@ -41,7 +41,7 @@ export default async function LoadDetailPage({
           </div>
         }
       />
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="card p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
           <div className="mt-1">
@@ -52,6 +52,12 @@ export default async function LoadDetailPage({
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
           <div className="mt-1">
             <HosBadge hos={await getHosForLoad(load.id)} />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trailer (ORBCOMM)</div>
+          <div className="mt-1">
+            <TrailerLocationBadge location={await getTrailerLocationForLoad(load.id)} />
           </div>
         </div>
         <div className="card p-4">

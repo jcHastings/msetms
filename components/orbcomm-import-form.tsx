@@ -24,7 +24,7 @@ export function OrbcommImportForm() {
           id="report_text"
           name="report_text"
           rows={5}
-          placeholder={'trailer_id,temperature_f,setpoint_f,return_air_f,supply_air_f,alarm,recorded_at\nTR-7742,34.2,34,34.1,33.8,,2026-08-23T13:05:00Z'}
+          placeholder={'trailer_id,temperature_f,setpoint_f,return_air_f,supply_air_f,alarm,latitude,longitude,recorded_at\nTR-7742,34.2,34,34.1,33.8,,32.78,-96.8,2026-08-23T13:05:00Z'}
         />
       </div>
       <div className="flex justify-end">

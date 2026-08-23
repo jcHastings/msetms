@@ -2,7 +2,7 @@
 
 A local Transportation Management System for a small trucking company. Two interfaces:
 
-- **Dispatcher** (desktop) — book or import a load, assign truck + driver, change the unit later, watch status and reefer temp.
+- **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
 Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
@@ -36,8 +36,8 @@ Requires Node.js 20 or newer.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
-- Tractor GPS and driver HOS (Samsara when a token is set; otherwise labeled demo)
-- Trailer / reefer status from ORBCOMM (temp, setpoint, return/supply air, alarms, last report)
+- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo)
+- Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report)
 - Compliance alerts on assign: license/med card (30 days), registration (60 days), DOT inspection (30 days)
 - Company driver vs owner-operator settlement on the load
 
@@ -67,9 +67,22 @@ A labeled sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
-## Integrations (Samsara + ORBCOMM)
+## Integrations (hard split)
 
-Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. Both env files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
+Both integrations are required. They do not share data:
+
+| Source | Used for | Never used for | Env (gitignored `.env` only) |
+| --- | --- | --- | --- |
+| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
+| **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
+
+Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
+
+**Integrations** has two cards. Connected vs demo is independent: one token can be live while the other is demo.
+
+Map IDs on **Fleet**: truck → Samsara vehicle ID, driver → Samsara driver ID, trailer → ORBCOMM asset ID. The board and load page show Samsara tractor/HOS and ORBCOMM trailer/reefer when those IDs are mapped.
+
+The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (ORBCOMM) when available.
 
 ### Samsara — tractor GPS and driver HOS
 
@@ -77,7 +90,7 @@ Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and re
 2. Restart.
 3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
 
-When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known tractor location and remaining drive time. Samsara is **not** used for reefer temperature.
+When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
 
 No token, or 401/403: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
 
@@ -88,7 +101,7 @@ Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/po
 1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
 2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
 3. Restart.
-4. On **Fleet**, set the ORBCOMM asset ID (and trailer #) on the reefer unit.
+4. On **Fleet → Trailers**, set the ORBCOMM asset ID.
 
 When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
 
@@ -97,9 +110,9 @@ If B2B snapshot access is not enabled yet:
 1. In ORBCOMM, open Reefer Status Report and export CSV or JSON.
 2. On **Integrations**, import that file (or paste rows).
 
-Expected columns: `trailer_id`, `temperature_f`, `setpoint_f`, `return_air_f`, `supply_air_f`, `alarm`, `recorded_at`.
+Expected columns: `trailer_id`, `temperature_f`, `setpoint_f`, `return_air_f`, `supply_air_f`, `alarm`, `latitude`, `longitude`, `address`, `recorded_at`.
 
-A load whose trailer record, trailer #, or ORBCOMM asset ID matches a row shows last temp, setpoint, return/supply air if present, alarms, and timestamp. No credentials: seeded demo temps, labeled **demo**. Auth/API failure: error in the UI and demo fallback.
+A load whose trailer record, trailer #, or ORBCOMM asset ID matches a row shows trailer location if present, last temp, setpoint, return/supply air, alarms, and timestamp. No credentials: seeded demo trailer/reefer data, labeled **demo**. Auth/API failure: error in the UI and demo fallback.
 
 How JC pulls the report today:
 

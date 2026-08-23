@@ -28,7 +28,7 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Integrations"
-        subtitle="Samsara is tractor GPS and driver HOS. ORBCOMM is trailer / reefer status. Credentials stay in local .env and are never shown."
+        subtitle="Samsara is tractor GPS and driver HOS. ORBCOMM is trailer location and reefer status. Connected vs demo is independent. Credentials stay in local .env and are never shown."
       />
 
       <section className="card p-6">
@@ -92,7 +92,7 @@ export default async function SettingsPage() {
           <div>
             <dt className="text-slate-500">Mode</dt>
             <dd className="font-semibold">
-              {reefers.mode === "orbcomm" ? "Live / imported reefer" : "Demo reefer"}
+              {reefers.mode === "orbcomm" ? "Live / imported trailer + reefer" : "Demo trailer + reefer"}
             </dd>
           </div>
         </dl>
@@ -110,7 +110,7 @@ export default async function SettingsPage() {
           <code>ORBCOMM_ACCOUNT_ID</code>) in <code>.env</code>. The app requests a Transportation Platform token at{" "}
           <code>POST /SynB2BGatewayService/api/generateToken</code>. There is no scrape of the logged-in portal. If
           B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the ORBCOMM
-          asset ID on the trailer / truck.
+          asset ID on the trailer. ORBCOMM is not used for driver HOS.
         </p>
         {reefers.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -135,6 +135,7 @@ export default async function SettingsPage() {
           <thead>
             <tr>
               <th>Load / trailer</th>
+              <th>Location</th>
               <th>Temp</th>
               <th>Setpoint</th>
               <th>When</th>
@@ -143,7 +144,7 @@ export default async function SettingsPage() {
           <tbody>
             {reefers.readings.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-slate-500">
+                <td colSpan={5} className="text-slate-500">
                   No readings.
                 </td>
               </tr>
@@ -153,6 +154,12 @@ export default async function SettingsPage() {
                   <td>
                     {reading.loadId ? `Load ${reading.loadId}` : "—"}
                     {reading.trailerId ? ` · ${reading.trailerId}` : ""}
+                  </td>
+                  <td>
+                    {reading.address ||
+                      (reading.latitude != null && reading.longitude != null
+                        ? `${reading.latitude.toFixed(3)}, ${reading.longitude.toFixed(3)}`
+                        : "—")}
                   </td>
                   <td>{reading.temperatureF != null ? `${reading.temperatureF}°F` : "—"}</td>
                   <td>{reading.setpointF != null ? `${reading.setpointF}°F` : "—"}</td>

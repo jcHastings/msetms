@@ -23,8 +23,21 @@ export type ReeferSnapshot = {
   supplyAirF: number | null;
   doorOpen: boolean | null;
   alarm: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
   source: "demo" | "orbcomm";
   recordedAt: string;
+};
+
+export type TrailerLocation = {
+  loadId: number | null;
+  trailerId: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
+  recordedAt: string;
+  source: "demo" | "orbcomm";
 };
 
 export type ReeferSnapshotResult = {
@@ -48,6 +61,7 @@ export type OrbcommAssetReading = {
   recordedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
+  address?: string;
 };
 
 export type MappedTruck = {
@@ -122,6 +136,28 @@ export async function getLatestReeferForLoad(loadId: number): Promise<ReeferRead
   if (live) return snapshotToReading(live);
   if (snapshots.mode === "orbcomm" && !snapshots.error) return null;
   return getDemoReeferForLoad(loadId);
+}
+
+export async function getTrailerLocationForLoad(loadId: number): Promise<TrailerLocation | null> {
+  const snapshots = await getReeferSnapshots();
+  const live = snapshots.readings.find((reading) => reading.loadId === loadId);
+  if (live) return snapshotToTrailerLocation(live);
+  if (snapshots.mode === "orbcomm" && !snapshots.error) return null;
+  const demo = getDemoReeferForLoad(loadId);
+  return demo ? snapshotToTrailerLocation(withDemoTrailerLocation(toSnapshot(demo))) : null;
+}
+
+export function snapshotToTrailerLocation(snapshot: ReeferSnapshot): TrailerLocation | null {
+  if (snapshot.latitude == null && snapshot.longitude == null && !snapshot.address) return null;
+  return {
+    loadId: snapshot.loadId,
+    trailerId: snapshot.trailerId,
+    latitude: snapshot.latitude,
+    longitude: snapshot.longitude,
+    address: snapshot.address,
+    recordedAt: snapshot.recordedAt,
+    source: snapshot.source,
+  };
 }
 
 export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?: number | null): ReeferStatus | null {
@@ -203,8 +239,27 @@ function demoSnapshotResult(): ReeferSnapshotResult {
     mode: "demo",
     credentialsSet: isOrbcommConfigured(),
     fetchedAt: new Date().toISOString(),
-    readings: listLatestReeferReadings("demo").map(toSnapshot),
+    readings: listLatestReeferReadings("demo").map(toSnapshot).map(withDemoTrailerLocation),
   };
+}
+
+function withDemoTrailerLocation(snapshot: ReeferSnapshot): ReeferSnapshot {
+  if (snapshot.latitude != null && snapshot.longitude != null) return snapshot;
+  const demo = demoCoordsForTrailer(snapshot.trailerId);
+  if (!demo) return snapshot;
+  return {
+    ...snapshot,
+    latitude: demo.latitude,
+    longitude: demo.longitude,
+    address: snapshot.address || demo.address,
+  };
+}
+
+function demoCoordsForTrailer(trailerId: string): { latitude: number; longitude: number; address: string } | null {
+  const key = normalizeKey(trailerId);
+  if (key.includes("7742")) return { latitude: 32.7791, longitude: -96.8002, address: "Dallas, TX" };
+  if (key.includes("8801")) return { latitude: 36.1652, longitude: -86.7841, address: "Nashville, TN" };
+  return null;
 }
 
 export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
@@ -219,6 +274,9 @@ export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
     supply_air_f: snapshot.supplyAirF,
     door_open: snapshot.doorOpen == null ? null : snapshot.doorOpen ? 1 : 0,
     alarm: snapshot.alarm,
+    latitude: snapshot.latitude,
+    longitude: snapshot.longitude,
+    address: snapshot.address,
     source: snapshot.source,
     recorded_at: snapshot.recordedAt,
   };
@@ -236,6 +294,9 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
     supplyAirF: row.supply_air_f,
     doorOpen: row.door_open == null ? null : row.door_open === 1,
     alarm: row.alarm,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    address: row.address ?? "",
     source: row.source === "orbcomm" ? "orbcomm" : "demo",
     recordedAt: row.recorded_at,
   };
@@ -373,8 +434,9 @@ function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
         "timestamp",
         "time",
       ]) ?? undefined,
-    latitude: firstNumber(item, ["latitude", "lat"]),
-    longitude: firstNumber(item, ["longitude", "lng", "lon"]),
+    latitude: firstNumber(item, ["latitude", "Latitude", "lat", "Lat", "LAT"]),
+    longitude: firstNumber(item, ["longitude", "Longitude", "lng", "lon", "Lon", "LNG"]),
+    address: firstString(item, ["address", "Address", "location", "Location", "formattedAddress"]) ?? "",
   };
 }
 
@@ -400,7 +462,8 @@ export function mapOrbcommReadingsToLoads(input: {
     if (!asset) continue;
     const temperatureF = asset.temperatureF ?? asset.returnAirF ?? asset.supplyAirF ?? null;
     const setpointF = asset.setpointF ?? load.reefer_setpoint_f;
-    if (temperatureF == null && setpointF == null) continue;
+    const hasLocation = asset.latitude != null && asset.longitude != null;
+    if (temperatureF == null && setpointF == null && !hasLocation && !asset.address) continue;
     readings.push({
       loadId: load.id,
       truckId: truck?.id ?? null,
@@ -412,6 +475,9 @@ export function mapOrbcommReadingsToLoads(input: {
       supplyAirF: asset.supplyAirF ?? null,
       doorOpen: null,
       alarm: asset.alarm ?? "",
+      latitude: asset.latitude ?? null,
+      longitude: asset.longitude ?? null,
+      address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
     });
@@ -502,6 +568,9 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
       supply_air_f: reading.supplyAirF,
       door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
       alarm: reading.alarm,
+      latitude: reading.latitude,
+      longitude: reading.longitude,
+      address: reading.address,
       source: "orbcomm",
       recorded_at: reading.recordedAt,
     });
@@ -514,8 +583,8 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
   getDb()
     .prepare(
         `INSERT INTO reefer_readings (
-        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, latitude, longitude, address, source, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.load_id,
@@ -527,6 +596,9 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
       input.supply_air_f ?? null,
       input.door_open,
       input.alarm,
+      input.latitude ?? null,
+      input.longitude ?? null,
+      input.address ?? "",
       input.source,
       input.recorded_at,
     );

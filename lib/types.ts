@@ -267,6 +267,9 @@ export type ReeferReading = {
   supply_air_f: number | null;
   door_open: number | null;
   alarm: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
   source: "demo" | "orbcomm";
   recorded_at: string;
 };

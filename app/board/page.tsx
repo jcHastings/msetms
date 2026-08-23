@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { AssignDialog } from "@/components/assign-dialog";
 import { BoardToolbar } from "@/components/board-toolbar";
-import { HosBadge, LocationBadge } from "@/components/fleet-badges";
+import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
+import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -67,6 +67,7 @@ export default async function BoardPage({
                   <th>Delivery</th>
                   <th>Unit</th>
                   <th>Tractor</th>
+                  <th>Trailer</th>
                   <th>HOS</th>
                   <th>Reefer</th>
                   <th>Rate</th>
@@ -116,6 +117,16 @@ export default async function BoardPage({
                     </td>
                     <td>
                       <LocationBadge location={fleet.locations.find((item) => item.loadId === load.id) ?? null} />
+                    </td>
+                    <td>
+                      <TrailerLocationBadge
+                        location={
+                          reefers.readings
+                            .filter((item) => item.loadId === load.id)
+                            .map(snapshotToTrailerLocation)
+                            .find(Boolean) ?? null
+                        }
+                      />
                     </td>
                     <td>
                       <HosBadge hos={fleet.hos.find((item) => item.loadId === load.id) ?? null} />

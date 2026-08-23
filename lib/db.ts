@@ -194,6 +194,9 @@ export function migrate(db: Database.Database): void {
   ensureColumn(db, "drivers", "pay_percent", "REAL");
   ensureColumn(db, "reefer_readings", "return_air_f", "REAL");
   ensureColumn(db, "reefer_readings", "supply_air_f", "REAL");
+  ensureColumn(db, "reefer_readings", "latitude", "REAL");
+  ensureColumn(db, "reefer_readings", "longitude", "REAL");
+  ensureColumn(db, "reefer_readings", "address", "TEXT NOT NULL DEFAULT ''");
 }
 
 function backfillDemoPins(db: Database.Database): void {

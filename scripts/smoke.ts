@@ -245,6 +245,9 @@ SPECIAL INSTRUCTIONS
         trailerId: "TR-7742",
         temperatureF: 34.2,
         setpointF: 34,
+        latitude: 32.78,
+        longitude: -96.8,
+        address: "Dallas, TX",
         recordedAt: "2026-08-23T13:05:00Z",
       },
     ],
@@ -252,12 +255,52 @@ SPECIAL INSTRUCTIONS
   assert.equal(mappedReefer.length, 1);
   assert.equal(mappedReefer[0].source, "orbcomm");
   assert.equal(mappedReefer[0].temperatureF, 34.2);
+  assert.equal(mappedReefer[0].latitude, 32.78);
+  assert.equal(mappedReefer[0].address, "Dallas, TX");
   assert.equal(mappedReefer[0].recordedAt, "2026-08-23T13:05:00Z");
 
+  const mappedViaTrailer = orbcomm.mapOrbcommReadingsToLoads({
+    loads: [
+      {
+        id: reeferLoad.id,
+        truck_id: null,
+        trailer_id: 99,
+        trailer_number: "TR-7742",
+        reefer_setpoint_f: 34,
+      },
+    ],
+    trucks: [],
+    trailers: [{ id: 99, unit_number: "TR-7742", orbcomm_asset_id: "orbcomm-tr-7742" }],
+    assets: [{ assetId: "orbcomm-tr-7742", temperatureF: 33.1, setpointF: 34 }],
+  });
+  assert.equal(mappedViaTrailer[0]?.temperatureF, 33.1, "trailer ORBCOMM asset id should map reefer");
+
+  const locationOnly = orbcomm.mapOrbcommReadingsToLoads({
+    loads: [
+      { id: reeferLoad.id, truck_id: reeferLoad.truck_id, trailer_number: "TR-7742", reefer_setpoint_f: null },
+    ],
+    trucks: [
+      {
+        id: reeferLoad.truck_id ?? 0,
+        unit_number: "112",
+        orbcomm_asset_id: "orbcomm-tr-7742",
+        trailer_number: "TR-7742",
+      },
+    ],
+    assets: [{ assetId: "orbcomm-tr-7742", latitude: 35.1, longitude: -90.05 }],
+  });
+  assert.equal(locationOnly[0]?.latitude, 35.1);
+
   const parsedReport = orbcomm.parseOrbcommReport(
-    "trailer_id,temperature_f,setpoint_f,recorded_at\nTR-7742,34.2,34,2026-08-23T13:05:00Z\n",
+    "trailer_id,temperature_f,setpoint_f,latitude,longitude,recorded_at\nTR-7742,34.2,34,32.78,-96.8,2026-08-23T13:05:00Z\n",
   );
   assert.equal(parsedReport[0]?.trailerId, "TR-7742");
+  assert.equal(parsedReport[0]?.latitude, 32.78);
+
+  const trailerLocation = await orbcomm.getTrailerLocationForLoad(reeferLoad.id);
+  assert.ok(trailerLocation, "demo ORBCOMM snapshot should include trailer location");
+  assert.equal(trailerLocation.source, "demo");
+  assert.ok(trailerLocation.latitude != null && trailerLocation.longitude != null);
 
   const mappedGps = samsara.mapVehicleLocations({
     vehicles: [
