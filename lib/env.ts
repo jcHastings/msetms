@@ -12,14 +12,38 @@ export function loadLocalEnv(): void {
   config({ path: path.join(cwd, ".env.local"), override: true });
 }
 
-export function getSamsaraApiToken(): string | undefined {
+function readSecret(name: string): string | undefined {
   loadLocalEnv();
-  const raw = process.env.SAMSARA_API_TOKEN;
+  const raw = process.env[name];
   if (typeof raw !== "string") return undefined;
-  const token = raw.trim();
-  return token.length > 0 ? token : undefined;
+  const value = raw.trim();
+  return value.length > 0 ? value : undefined;
+}
+
+export function getSamsaraApiToken(): string | undefined {
+  return readSecret("SAMSARA_API_TOKEN");
 }
 
 export function isSamsaraTokenSet(): boolean {
   return Boolean(getSamsaraApiToken());
+}
+
+export function getOrbcommUsername(): string | undefined {
+  return readSecret("ORBCOMM_USERNAME");
+}
+
+export function getOrbcommPassword(): string | undefined {
+  return readSecret("ORBCOMM_PASSWORD");
+}
+
+export function getOrbcommAccountId(): string | undefined {
+  return readSecret("ORBCOMM_ACCOUNT_ID");
+}
+
+export function getOrbcommApiBase(): string {
+  return readSecret("ORBCOMM_API_BASE") ?? "https://platform.orbcomm.com";
+}
+
+export function isOrbcommConfigured(): boolean {
+  return Boolean(getOrbcommUsername() && getOrbcommPassword());
 }

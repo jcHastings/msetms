@@ -11,7 +11,7 @@ export function ReeferBadge({
   const shownSet = setpoint ?? reading?.setpoint_f ?? null;
   if (shownSet == null && !reading) return <span className="text-slate-400">—</span>;
   const temp = reading?.temperature_f;
-  const source = reading?.source === "demo" ? "demo" : reading?.source === "samsara" ? "samsara" : "";
+  const source = reading?.source === "demo" ? "demo" : reading?.source === "orbcomm" ? "orbcomm" : "";
   return (
     <div className="text-sm">
       <div className="font-semibold tabular-nums">

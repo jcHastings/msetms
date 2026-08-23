@@ -26,6 +26,7 @@ const LOAD_SELECT = `
     trucks.type AS truck_type,
     trucks.samsara_vehicle_id AS truck_samsara_id,
     trucks.samsara_trailer_id AS truck_samsara_trailer_id,
+    trucks.orbcomm_asset_id AS truck_orbcomm_asset_id,
     drivers.name AS driver_name
   FROM loads
   JOIN customers ON customers.id = loads.customer_id
@@ -122,14 +123,15 @@ export function createTruck(input: {
   status: TruckStatus;
   samsara_vehicle_id?: string;
   samsara_trailer_id?: string;
+  orbcomm_asset_id?: string;
   trailer_number?: string;
 }): number {
   const timestamp = now();
   try {
     const result = getDb()
       .prepare(
-        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, trailer_number, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -138,6 +140,7 @@ export function createTruck(input: {
         input.status,
         input.samsara_vehicle_id ?? "",
         input.samsara_trailer_id ?? "",
+        input.orbcomm_asset_id ?? "",
         input.trailer_number ?? "",
         timestamp,
         timestamp,
@@ -160,6 +163,7 @@ export function updateTruck(
     status: TruckStatus;
     samsara_vehicle_id?: string;
     samsara_trailer_id?: string;
+    orbcomm_asset_id?: string;
     trailer_number?: string;
   },
 ): void {
@@ -169,7 +173,7 @@ export function updateTruck(
       .prepare(
         `UPDATE trucks
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
-             samsara_vehicle_id = ?, samsara_trailer_id = ?, trailer_number = ?, updated_at = ?
+             samsara_vehicle_id = ?, samsara_trailer_id = ?, orbcomm_asset_id = ?, trailer_number = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -179,6 +183,7 @@ export function updateTruck(
         input.status,
         input.samsara_vehicle_id ?? "",
         input.samsara_trailer_id ?? "",
+        input.orbcomm_asset_id ?? "",
         input.trailer_number ?? "",
         now(),
         id,
@@ -220,6 +225,7 @@ export function createDriver(input: {
   phone: string;
   license: string;
   pin?: string;
+  samsara_driver_id?: string;
   truck_id: number | null;
   status: DriverStatus;
 }): number {
@@ -229,14 +235,15 @@ export function createDriver(input: {
   const timestamp = now();
   const result = getDb()
     .prepare(
-      `INSERT INTO drivers (name, phone, license, pin, truck_id, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO drivers (name, phone, license, pin, samsara_driver_id, truck_id, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
       input.phone,
       input.license,
       input.pin ?? "",
+      input.samsara_driver_id ?? "",
       input.truck_id,
       input.status,
       timestamp,
@@ -252,6 +259,7 @@ export function updateDriver(
     phone: string;
     license: string;
     pin?: string;
+    samsara_driver_id?: string;
     truck_id: number | null;
     status: DriverStatus;
   },
@@ -263,7 +271,7 @@ export function updateDriver(
   getDb()
     .prepare(
       `UPDATE drivers
-       SET name = ?, phone = ?, license = ?, pin = ?, truck_id = ?, status = ?, updated_at = ?
+       SET name = ?, phone = ?, license = ?, pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -271,6 +279,7 @@ export function updateDriver(
       input.phone,
       input.license,
       input.pin ?? "",
+      input.samsara_driver_id ?? "",
       input.truck_id,
       input.status,
       now(),

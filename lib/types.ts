@@ -90,6 +90,7 @@ export type Truck = {
   status: TruckStatus;
   samsara_vehicle_id: string;
   samsara_trailer_id: string;
+  orbcomm_asset_id: string;
   trailer_number: string;
   created_at: string;
   updated_at: string;
@@ -101,6 +102,7 @@ export type Driver = {
   phone: string;
   license: string;
   pin: string;
+  samsara_driver_id: string;
   truck_id: number | null;
   status: DriverStatus;
   created_at: string;
@@ -146,6 +148,7 @@ export type LoadView = Load & {
   truck_type: TruckType | null;
   truck_samsara_id: string | null;
   truck_samsara_trailer_id: string | null;
+  truck_orbcomm_asset_id: string | null;
   driver_name: string | null;
 };
 
@@ -169,7 +172,7 @@ export type ReeferReading = {
   temperature_f: number | null;
   door_open: number | null;
   alarm: string;
-  source: "demo" | "samsara";
+  source: "demo" | "orbcomm";
   recorded_at: string;
 };
 

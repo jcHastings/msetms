@@ -210,18 +210,24 @@ SPECIAL INSTRUCTIONS
   queries.authenticateDriver(denise.id, "1125");
   const deniseLoads = queries.listLoadsForDriver(denise.id);
   assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
+  const orbcomm = await import("../lib/integrations/orbcomm");
   const samsara = await import("../lib/integrations/samsara");
   const reeferLoad = deniseLoads.find((load) => load.load_number === "MSE-1045");
   assert.ok(reeferLoad);
-  const previousToken = process.env.SAMSARA_API_TOKEN;
+  const previousSamsara = process.env.SAMSARA_API_TOKEN;
+  const previousUser = process.env.ORBCOMM_USERNAME;
+  const previousPass = process.env.ORBCOMM_PASSWORD;
   delete process.env.SAMSARA_API_TOKEN;
+  delete process.env.ORBCOMM_USERNAME;
+  delete process.env.ORBCOMM_PASSWORD;
+  orbcomm.resetOrbcommCacheForTests();
   samsara.resetSamsaraCacheForTests();
-  const reading = await samsara.getLatestReeferForLoad(reeferLoad.id);
+  const reading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
   assert.ok(reading, "seeded reefer load should have a demo temperature");
   assert.equal(reading.source, "demo");
   assert.equal(reading.temperature_f, 34.2);
 
-  const mapped = samsara.mapLiveReadingsToLoads({
+  const mappedReefer = orbcomm.mapOrbcommReadingsToLoads({
     loads: [
       { id: reeferLoad.id, truck_id: reeferLoad.truck_id, trailer_number: "TR-7742", reefer_setpoint_f: 34 },
     ],
@@ -229,47 +235,95 @@ SPECIAL INSTRUCTIONS
       {
         id: reeferLoad.truck_id ?? 0,
         unit_number: "112",
-        samsara_vehicle_id: "281474977075805",
-        samsara_trailer_id: "88110022",
+        orbcomm_asset_id: "orbcomm-tr-7742",
         trailer_number: "TR-7742",
       },
     ],
-    vehicles: [{ id: "281474977075805", name: "Unit 112" }],
-    trailers: [
+    assets: [
       {
-        id: "88110022",
-        name: "TR-7742",
-        reeferAmbientAirTemperatureMilliC: { time: "2026-08-23T13:05:00Z", value: 1200 },
-        reeferSetPointTemperatureMilliCZone1: { time: "2026-08-23T13:05:00Z", value: 1111 },
-        reeferDoorOpen: { time: "2026-08-23T13:05:00Z", value: false },
+        assetId: "orbcomm-tr-7742",
+        trailerId: "TR-7742",
+        temperatureF: 34.2,
+        setpointF: 34,
+        recordedAt: "2026-08-23T13:05:00Z",
       },
     ],
   });
-  assert.equal(mapped.length, 1);
-  assert.equal(mapped[0].source, "samsara");
-  assert.equal(mapped[0].temperatureF, 34.2);
-  assert.equal(mapped[0].setpointF, 34);
-  assert.equal(mapped[0].recordedAt, "2026-08-23T13:05:00Z");
+  assert.equal(mappedReefer.length, 1);
+  assert.equal(mappedReefer[0].source, "orbcomm");
+  assert.equal(mappedReefer[0].temperatureF, 34.2);
+  assert.equal(mappedReefer[0].recordedAt, "2026-08-23T13:05:00Z");
+
+  const parsedReport = orbcomm.parseOrbcommReport(
+    "trailer_id,temperature_f,setpoint_f,recorded_at\nTR-7742,34.2,34,2026-08-23T13:05:00Z\n",
+  );
+  assert.equal(parsedReport[0]?.trailerId, "TR-7742");
+
+  const mappedGps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "281474977075805",
+        name: "112",
+        gps: {
+          time: "2026-08-23T13:05:00Z",
+          latitude: 32.78,
+          longitude: -96.8,
+          speedMilesPerHour: 54,
+          reverseGeo: { formattedLocation: "Dallas, TX" },
+        },
+      },
+    ],
+    trucks: [{ id: reeferLoad.truck_id ?? 0, unit_number: "112", samsara_vehicle_id: "281474977075805" }],
+    loads: [{ id: reeferLoad.id, truck_id: reeferLoad.truck_id }],
+  });
+  assert.equal(mappedGps[0]?.address, "Dallas, TX");
+  assert.equal(mappedGps[0]?.source, "samsara");
+
+  const mappedHos = samsara.mapHosClocks({
+    clocks: [
+      {
+        driver: { id: "88668", name: "Denise Ortega" },
+        currentDutyStatus: { hosStatusType: "driving" },
+        clocks: { drive: { driveRemainingDurationMs: 22320000 } },
+      },
+    ],
+    drivers: [{ id: denise.id, name: "Denise Ortega", samsara_driver_id: "88668" }],
+    loads: [{ id: reeferLoad.id, driver_id: denise.id }],
+  });
+  assert.equal(mappedHos[0]?.driveRemainingMs, 22320000);
+  assert.equal(samsara.formatDurationMs(22320000), "6h 12m");
+
+  const fleet = await samsara.getSamsaraFleet();
+  assert.equal(fleet.mode, "demo");
+  assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));
 
   process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+  process.env.ORBCOMM_USERNAME = "demo-user";
+  process.env.ORBCOMM_PASSWORD = "demo-pass";
   samsara.resetSamsaraCacheForTests();
+  orbcomm.resetOrbcommCacheForTests();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
   try {
-    const failed = await samsara.getReeferSnapshots();
-    assert.equal(failed.mode, "demo", "401 should fall back to demo");
-    assert.ok(failed.error && /401/.test(failed.error), "401 should surface a clear UI error");
-    assert.ok(
-      failed.readings.some((item) => item.loadId === reeferLoad.id && item.source === "demo"),
-      "401 fallback should keep labeled demo temps",
-    );
-    const fallbackReading = await samsara.getLatestReeferForLoad(reeferLoad.id);
+    const failedFleet = await samsara.getSamsaraFleet();
+    assert.equal(failedFleet.mode, "demo", "Samsara 401 should fall back to demo GPS/HOS");
+    assert.ok(failedFleet.error && /401/.test(failedFleet.error));
+
+    const failedReefer = await orbcomm.getReeferSnapshots();
+    assert.equal(failedReefer.mode, "demo", "ORBCOMM 401 should fall back to demo temps");
+    assert.ok(failedReefer.error && /401/.test(failedReefer.error));
+    const fallbackReading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
     assert.equal(fallbackReading?.source, "demo");
   } finally {
     globalThis.fetch = originalFetch;
-    if (previousToken == null) delete process.env.SAMSARA_API_TOKEN;
-    else process.env.SAMSARA_API_TOKEN = previousToken;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+    if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+    else process.env.ORBCOMM_USERNAME = previousUser;
+    if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+    else process.env.ORBCOMM_PASSWORD = previousPass;
     samsara.resetSamsaraCacheForTests();
+    orbcomm.resetOrbcommCacheForTests();
   }
 
   queries.updateLoadStatus(loadId, "delivered");

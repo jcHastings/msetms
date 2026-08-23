@@ -8,7 +8,9 @@ import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments } from "@/lib/files";
-import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
+import { HosBadge, LocationBadge } from "@/components/fleet-badges";
+import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
 import { getLoad, listCustomers, listDrivers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +41,24 @@ export default async function LoadDetailPage({
           </div>
         }
       />
-      <div className="mb-4 card p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer</div>
-        <div className="mt-1">
-          <ReeferBadge setpoint={load.reefer_setpoint_f} reading={await getLatestReeferForLoad(load.id)} />
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
+          <div className="mt-1">
+            <LocationBadge location={await getLocationForLoad(load.id)} />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
+          <div className="mt-1">
+            <HosBadge hos={await getHosForLoad(load.id)} />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (ORBCOMM)</div>
+          <div className="mt-1">
+            <ReeferBadge setpoint={load.reefer_setpoint_f} reading={await getLatestReeferForLoad(load.id)} />
+          </div>
         </div>
       </div>
       <LoadForm

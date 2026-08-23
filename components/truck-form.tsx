@@ -47,21 +47,21 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         />
       </div>
       <div className="field">
-        <label htmlFor="samsara_vehicle_id">Samsara vehicle ID (tractor)</label>
+        <label htmlFor="samsara_vehicle_id">Samsara vehicle ID (tractor GPS)</label>
         <input
           id="samsara_vehicle_id"
           name="samsara_vehicle_id"
           defaultValue={truck?.samsara_vehicle_id}
-          placeholder="From Samsara — not the API token"
+          placeholder="Tractor ID in Samsara — not the API token"
         />
       </div>
       <div className="field">
-        <label htmlFor="samsara_trailer_id">Samsara trailer / asset ID</label>
+        <label htmlFor="orbcomm_asset_id">ORBCOMM asset ID (trailer / reefer)</label>
         <input
-          id="samsara_trailer_id"
-          name="samsara_trailer_id"
-          defaultValue={truck?.samsara_trailer_id}
-          placeholder="Reefer trailer ID in Samsara"
+          id="orbcomm_asset_id"
+          name="orbcomm_asset_id"
+          defaultValue={truck?.orbcomm_asset_id}
+          placeholder="Trailer ID from ORBCOMM Reefer Status Report"
         />
       </div>
       <div className="field">

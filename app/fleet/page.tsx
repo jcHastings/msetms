@@ -51,7 +51,9 @@ export default function FleetPage() {
                   <td>{labelForTruckType(truck.type)}</td>
                   <td>{formatWeight(truck.capacity_lbs)}</td>
                   <td className="text-xs text-slate-500">
-                    {truck.samsara_vehicle_id || truck.samsara_trailer_id ? "Mapped" : "—"}
+                    {[truck.samsara_vehicle_id ? "Samsara" : null, truck.orbcomm_asset_id ? "ORBCOMM" : null]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
                   </td>
                   <td>
                     <TruckStatusBadge status={truck.status} />

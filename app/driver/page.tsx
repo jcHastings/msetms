@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { driverLogoutAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { formatDateTime } from "@/lib/format";
-import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
+import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -15,6 +16,7 @@ export default async function DriverHomePage() {
   if (!driver) redirect("/driver/login");
   const loads = listLoadsForDriver(driver.id).filter((load) => load.status !== "delivered");
   const done = listLoadsForDriver(driver.id).filter((load) => load.status === "delivered");
+  const hos = await getHosForDriver(driver.id);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
@@ -30,6 +32,9 @@ export default async function DriverHomePage() {
           <h1 className="mt-1 text-2xl font-semibold">{driver.name}</h1>
           <p className="text-sm text-slate-500">
             {driver.truck_unit ? `Unit ${driver.truck_unit}` : "No assigned truck"}
+            {hos
+              ? ` · ${formatDurationMs(hos.driveRemainingMs)} drive left${hos.source === "demo" ? " (demo)" : ""}`
+              : ""}
           </p>
         </div>
         <form action={driverLogoutAction}>
@@ -77,7 +82,7 @@ export default async function DriverHomePage() {
                     <div className="mt-2 text-sm text-slate-600">
                       Reefer {reefer?.temperature_f ?? "—"}°F
                       {load.reefer_setpoint_f != null ? ` / set ${load.reefer_setpoint_f}°F` : ""}
-                      {reefer?.source === "demo" ? " · demo" : ""}
+                      {reefer?.source === "demo" ? " · demo" : reefer?.source === "orbcomm" ? " · ORBCOMM" : ""}
                     </div>
                   ) : null}
                 </Link>

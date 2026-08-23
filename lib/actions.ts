@@ -170,6 +170,7 @@ export async function createTruckAction(
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
+      orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();
@@ -196,6 +197,7 @@ export async function updateTruckAction(
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
+      orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();
@@ -215,6 +217,7 @@ export async function createDriverAction(
       phone: String(formData.get("phone") ?? "").trim(),
       license: String(formData.get("license") ?? "").trim(),
       pin: String(formData.get("pin") ?? "").trim(),
+      samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -238,6 +241,7 @@ export async function updateDriverAction(
       phone: String(formData.get("phone") ?? "").trim(),
       license: String(formData.get("license") ?? "").trim(),
       pin: String(formData.get("pin") ?? "").trim(),
+      samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -383,6 +387,36 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
     });
     refresh();
     return { ok: true, id: loadId };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function importOrbcommReportAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const pasted = String(formData.get("report_text") ?? "").trim();
+    const file = formData.get("file");
+    let text = pasted;
+    if (!text && file instanceof File && file.size > 0) {
+      text = await file.text();
+    }
+    if (!text) throw new Error("Paste JSON/CSV from the ORBCOMM Reefer Status Report, or choose a file.");
+    const { importOrbcommReadings, parseOrbcommReport } = await import("./integrations/orbcomm");
+    const rows = parseOrbcommReport(text);
+    if (rows.length === 0) {
+      throw new Error("No trailer rows found. Use trailer_id, temperature_f, setpoint_f, recorded_at columns.");
+    }
+    const count = importOrbcommReadings(rows);
+    refresh();
+    if (count === 0) {
+      throw new Error(
+        "Rows parsed, but none mapped to a truck/load trailer ID. Set ORBCOMM asset ID or trailer # on the unit.",
+      );
+    }
+    return { ok: true };
   } catch (error) {
     return fail(error);
   }

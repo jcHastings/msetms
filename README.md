@@ -36,7 +36,8 @@ Requires Node.js 20 or newer.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
-- Reefer setpoint + last temp on the board (live Samsara when a token is set; otherwise labeled demo)
+- Tractor GPS and driver HOS (Samsara when a token is set; otherwise labeled demo)
+- Trailer / reefer temp (ORBCOMM when credentials or a report import exist; otherwise labeled demo)
 
 ## Driver app
 
@@ -64,27 +65,39 @@ A labeled sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
-## Samsara (live reefer)
+## Integrations (Samsara + ORBCOMM)
 
-The API token is read only from the process environment. It is never committed, never written to the database, never logged, and never shown in the UI.
+Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. Both env files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
 
-1. Copy `.env.example` to `.env` (or `.env.local`).
-2. Paste your Samsara API token after `SAMSARA_API_TOKEN=`.
-3. Restart the app (`npm run dev`).
+### Samsara — tractor GPS and driver HOS
 
-Both `.env` and `.env.local` are gitignored. `.env.example` only contains an empty `SAMSARA_API_TOKEN=`.
+1. Paste the token after `SAMSARA_API_TOKEN=`.
+2. Restart.
+3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
 
-- **No token:** board, driver screen, and **Integrations** show seeded demo temps, labeled **demo**. Status: Demo. Token: Not set.
-- **Token present:** the app calls `GET https://api.samsara.com/fleet/vehicles/stats` and `GET https://api.samsara.com/fleet/trailers/stats` for last-known reefer ambient, zone-1 setpoint, and door. Integrations shows **Connected** and Token: **Set (hidden)**.
-- **401 / 403 or other API failures:** Integrations and the board show a clear error, the UI falls back to labeled demo temps, and the app does not crash.
+When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known tractor location and remaining drive time. Samsara is **not** used for reefer temperature.
 
-Map IDs on **Fleet → Edit truck**:
+No token, or 401/403: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
 
-- Samsara vehicle ID (tractor)
-- Samsara trailer / asset ID (reefer)
-- Default trailer number (also matched to the Samsara trailer name)
+### ORBCOMM — trailer tracking and reefer
 
-A load assigned to a mapped unit, or a load whose trailer number matches a mapped truck, shows last reported temp, setpoint if Samsara sent one, and the reading timestamp.
+Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/portal/remote/ReeferStatusReport).
+
+1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
+2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
+3. Restart.
+4. On **Fleet**, set the ORBCOMM asset ID (and trailer #) on the reefer unit.
+
+When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
+
+If B2B snapshot access is not enabled yet:
+
+1. In ORBCOMM, open Reefer Status Report and export CSV or JSON.
+2. On **Integrations**, import that file (or paste rows).
+
+Expected columns: `trailer_id`, `temperature_f`, `setpoint_f`, `return_air_f`, `supply_air_f`, `alarm`, `recorded_at`.
+
+A load whose trailer # or ORBCOMM asset ID matches a row shows last temp, setpoint if present, and timestamp. No credentials: seeded demo temps, labeled **demo**. Auth/API failure: error in the UI and demo fallback.
 
 ## Data
 

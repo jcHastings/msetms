@@ -23,12 +23,12 @@ export function seedDatabase(db: Database.Database): void {
      VALUES (?, ?, ?, ?, ?)`,
   );
   const insertTruck = db.prepare(
-    `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, trailer_number, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertDriver = db.prepare(
-    `INSERT INTO drivers (name, phone, license, pin, truck_id, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO drivers (name, phone, license, pin, samsara_driver_id, truck_id, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertLoad = db.prepare(
     `INSERT INTO loads (
@@ -118,35 +118,35 @@ export function seedDatabase(db: Database.Database): void {
       created,
     );
 
-    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", created, created).lastInsertRowid);
-    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", created, created).lastInsertRowid);
-    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "", "TR-8801", created, created).lastInsertRowid);
-    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "", "TR-7742", created, created).lastInsertRowid);
-    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", created, created).lastInsertRowid);
-    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", created, created).lastInsertRowid);
-    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", created, created).lastInsertRowid);
-    insertTruck.run("301", "box", 26000, "available", "", "", "", created, created);
+    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
+    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
+    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
+    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
+    insertTruck.run("301", "box", 26000, "available", "", "", "", "", created, created);
 
     const marcus = Number(
-      insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", t102, "on_duty", created, created)
+      insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", "samsara-drv-marcus", t102, "on_duty", created, created)
         .lastInsertRowid,
     );
     const denise = Number(
-      insertDriver.run("Denise Ortega", "(901) 555-0102", "TN-CDL-772110", "1125", t112, "on_duty", created, created)
+      insertDriver.run("Denise Ortega", "(901) 555-0102", "TN-CDL-772110", "1125", "samsara-drv-denise", t112, "on_duty", created, created)
         .lastInsertRowid,
     );
     const james = Number(
-      insertDriver.run("James Whitaker", "(314) 555-0103", "MO-CDL-190334", "1186", t118, "on_duty", created, created)
+      insertDriver.run("James Whitaker", "(314) 555-0103", "MO-CDL-190334", "1186", "samsara-drv-james", t118, "on_duty", created, created)
         .lastInsertRowid,
     );
     const cole = Number(
-      insertDriver.run("Cole Brennan", "(615) 555-0104", "TN-CDL-551902", "2051", t205, "on_duty", created, created)
+      insertDriver.run("Cole Brennan", "(615) 555-0104", "TN-CDL-551902", "2051", "samsara-drv-cole", t205, "on_duty", created, created)
         .lastInsertRowid,
     );
-    insertDriver.run("Priya Shah", "(317) 555-0105", "IN-CDL-883441", "1010", t101, "available", created, created);
-    insertDriver.run("Angela Ruiz", "(312) 555-0106", "IL-CDL-229817", "1080", t108, "available", created, created);
-    insertDriver.run("Tyrell Brooks", "(901) 555-0107", "MS-CDL-104552", "3000", null, "available", created, created);
-    insertDriver.run("Sam Keene", "(816) 555-0108", "KS-CDL-667320", "2100", t210, "off_duty", created, created);
+    insertDriver.run("Priya Shah", "(317) 555-0105", "IN-CDL-883441", "1010", "", t101, "available", created, created);
+    insertDriver.run("Angela Ruiz", "(312) 555-0106", "IL-CDL-229817", "1080", "", t108, "available", created, created);
+    insertDriver.run("Tyrell Brooks", "(901) 555-0107", "MS-CDL-104552", "3000", "", null, "available", created, created);
+    insertDriver.run("Sam Keene", "(816) 555-0108", "KS-CDL-667320", "2100", "", t210, "off_duty", created, created);
 
     insertLoad.run(
       "MSE-1042",

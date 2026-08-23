@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { AssignDialog } from "@/components/assign-dialog";
 import { BoardToolbar } from "@/components/board-toolbar";
+import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
+import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { ReeferBadge } from "@/components/reefer-badge";
-import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/samsara";
+import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
+import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -22,7 +24,8 @@ export default async function BoardPage({
   const date = params.date ?? "";
   const q = params.q ?? "";
   const loads = listLoads({ status, date, q });
-  const snapshots = await getReeferSnapshots();
+  const reefers = await getReeferSnapshots();
+  const fleet = await getSamsaraFleet();
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
@@ -39,9 +42,14 @@ export default async function BoardPage({
           </Link>
         }
       />
-      {snapshots.error ? (
+      {fleet.error ? (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          {snapshots.error}
+          {fleet.error}
+        </p>
+      ) : null}
+      {reefers.error ? (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          {reefers.error}
         </p>
       ) : null}
       <BoardToolbar status={status} date={date} q={q} />
@@ -58,6 +66,8 @@ export default async function BoardPage({
                   <th>Pickup</th>
                   <th>Delivery</th>
                   <th>Unit</th>
+                  <th>Tractor</th>
+                  <th>HOS</th>
                   <th>Reefer</th>
                   <th>Rate</th>
                   <th>Move</th>
@@ -103,6 +113,12 @@ export default async function BoardPage({
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}
+                    </td>
+                    <td>
+                      <LocationBadge location={fleet.locations.find((item) => item.loadId === load.id) ?? null} />
+                    </td>
+                    <td>
+                      <HosBadge hos={fleet.hos.find((item) => item.loadId === load.id) ?? null} />
                     </td>
                     <td>
                       <ReeferBadge

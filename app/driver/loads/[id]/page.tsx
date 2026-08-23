@@ -4,7 +4,8 @@ import { DriverLoadActions } from "@/components/driver-load-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
-import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
+import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { getLoad } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForAttachmentKind } from "@/lib/types";
@@ -21,6 +22,7 @@ export default async function DriverLoadPage({
   const load = getLoad(Number.parseInt((await params).id, 10));
   if (!load || load.driver_id !== driver.id) notFound();
   const reefer = await getLatestReeferForLoad(load.id);
+  const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
 
   return (
@@ -47,6 +49,19 @@ export default async function DriverLoadPage({
         <Row label="Trailer" value={load.trailer_number || "—"} />
       </section>
 
+      {hos ? (
+        <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hours of service</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {formatDurationMs(hos.driveRemainingMs)} drive left
+          </div>
+          <div className="text-sm text-slate-600">
+            {formatDutyStatus(hos.dutyStatus)}
+            {hos.source === "demo" ? " · demo" : " · Samsara"}
+          </div>
+        </section>
+      ) : null}
+
       {(load.reefer_setpoint_f != null || reefer) && (
         <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reefer</div>
@@ -55,7 +70,7 @@ export default async function DriverLoadPage({
           </div>
           <div className="text-sm text-slate-600">
             Setpoint {load.reefer_setpoint_f ?? reefer?.setpoint_f ?? "—"}°F
-            {reefer?.source === "demo" ? " · demo reading" : reefer?.source === "samsara" ? " · Samsara" : ""}
+            {reefer?.source === "demo" ? " · demo reading" : reefer?.source === "orbcomm" ? " · ORBCOMM" : ""}
             {reefer?.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
           </div>
           {reefer?.door_open === 1 ? <div className="mt-1 text-sm text-rose-700">Door open</div> : null}
