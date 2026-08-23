@@ -367,6 +367,7 @@ export async function updateDriverAction(
         .filter(Boolean)
         .join("-"),
       pin: String(formData.get("pin") ?? "").trim(),
+      resetPin: String(formData.get("reset_pin") ?? "") === "1",
       samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
       license_number: String(formData.get("license_number") ?? "").trim(),
       license_state: String(formData.get("license_state") ?? "").trim().toUpperCase(),

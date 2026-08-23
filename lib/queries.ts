@@ -629,6 +629,7 @@ export function updateDriver(
     active?: number;
     license: string;
     pin?: string;
+    resetPin?: boolean;
     samsara_driver_id?: string;
     license_number?: string;
     license_state?: string;
@@ -646,7 +647,7 @@ export function updateDriver(
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
   }
-  const pin = input.pin != null && input.pin.trim() !== "" ? input.pin.trim() : current.pin;
+  const pin = input.resetPin ? "" : input.pin != null && input.pin.trim() !== "" ? input.pin.trim() : current.pin;
   getDb()
     .prepare(
       `UPDATE drivers

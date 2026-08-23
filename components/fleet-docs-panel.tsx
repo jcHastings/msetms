@@ -23,7 +23,7 @@ export function FleetDocsPanel({
           <select id={`kind-${ownerType}-${ownerId}`} name="kind" defaultValue={ownerType === "driver" ? "cdl" : "registration"}>
             {FLEET_DOC_KINDS.filter((kind) =>
               ownerType === "driver"
-                ? ["cdl", "med_card", "insurance", "other"].includes(kind.value)
+                ? ["cdl", "med_card", "other"].includes(kind.value)
                 : ["registration", "dot_inspection", "insurance", "other"].includes(kind.value),
             ).map((kind) => (
               <option key={kind.value} value={kind.value}>

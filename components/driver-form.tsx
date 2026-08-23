@@ -5,13 +5,14 @@ import { FormBanner } from "@/components/form-banner";
 import { DRIVER_STATUSES, DRIVER_TYPES, type ActionResult, type Driver, type Truck } from "@/lib/types";
 
 type Props = {
-  driver?: Driver;
+  driver?: Omit<Driver, "pin">;
+  hasPin?: boolean;
   trucks: Truck[];
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
 
-export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
+export function DriverForm({ driver, hasPin = false, trucks, action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
   const [kind, setKind] = useState(driver?.driver_type ?? "company_driver");
 
@@ -47,7 +48,8 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
       </div>
       {kind === "owner_operator" ? (
         <div className="field">
-          <label htmlFor="pay_percent">Default pay %</label>
+          <label htmlFor="pay_percent">Default settlement %</label>
+          <p className="mb-1 text-xs text-slate-500">Used on loads when this owner-operator is assigned.</p>
           <input
             id="pay_percent"
             name="pay_percent"
@@ -59,7 +61,7 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
           />
         </div>
       ) : null}
-      <h2 className="text-sm font-semibold">Driver license</h2>
+      <h2 className="text-sm font-semibold">CDL</h2>
       <div className="field">
         <label htmlFor="license_state">State</label>
         <input id="license_state" name="license_state" maxLength={2} defaultValue={driver?.license_state} />
@@ -82,14 +84,25 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
         <input id="medical_expires" name="medical_expires" type="date" defaultValue={driver?.medical_expires} />
       </div>
       <div className="field">
-        <label htmlFor="pin">Driver app PIN {driver ? "(leave blank to keep)" : ""}</label>
+        <label htmlFor="pin">Driver app PIN</label>
+        <p className="mb-1 text-xs text-slate-500">
+          {hasPin
+            ? "PIN is set and never shown. Enter a new one to change it, or reset it."
+            : "4+ digits for the driver app. Leave blank if they should not log in yet."}
+        </p>
         <input
           id="pin"
           name="pin"
           defaultValue=""
           autoComplete="off"
-          placeholder={driver?.pin ? "PIN is set" : "4+ digits"}
+          placeholder={hasPin ? "New PIN (optional)" : "4+ digits"}
         />
+        {hasPin ? (
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" name="reset_pin" value="1" />
+            Reset PIN (they cannot sign in until you set a new one)
+          </label>
+        ) : null}
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="notes">Notes</label>

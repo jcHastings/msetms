@@ -32,7 +32,8 @@ export default async function EditDriverPage({
       />
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
       <DriverForm
-        driver={driver}
+        driver={{ ...driver, pin: "" }}
+        hasPin={Boolean(driver.pin)}
         trucks={listTrucks()}
         action={boundAction}
         submitLabel="Save driver"

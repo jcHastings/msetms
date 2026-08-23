@@ -1530,6 +1530,29 @@ Continuous reefer. Two load locks.
   });
   assert.equal(queries.getDriver(fleetDriverId)?.pin, "3333");
   assert.equal(queries.getDriver(fleetDriverId)?.email, "fleet@msloads.com");
+  queries.updateDriver(fleetDriverId, {
+    name: "Fleet Smoke",
+    phone: "555-0144",
+    email: "fleet@msloads.com",
+    notes: "Nights",
+    license: "NE-CDL-FLEET",
+    pin: "",
+    resetPin: true,
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.getDriver(fleetDriverId)?.pin, "");
+  queries.updateDriver(fleetDriverId, {
+    name: "Fleet Smoke",
+    phone: "555-0144",
+    email: "fleet@msloads.com",
+    notes: "Nights",
+    license: "NE-CDL-FLEET",
+    pin: "4444",
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.getDriver(fleetDriverId)?.pin, "4444");
   const modelTruckId = queries.createTruck({
     unit_number: "SMOKE-T",
     type: "dry_van",
