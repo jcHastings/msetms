@@ -18,6 +18,39 @@ async function main() {
   assert.ok(queries.listLoads({ status: "in_transit" }).length >= 1, "seed should include in-transit loads");
   assert.ok(queries.listCustomers().length >= 1, "seed should include customers");
 
+  const { listenAddress } = await import("../scripts/listen-address.mjs");
+  const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
+  assert.equal(listenAddress(noBind), "0.0.0.0", "OS HOSTNAME must not become the bind address");
+  assert.equal(listenAddress({ ...noBind, HOST: "127.0.0.1" }), "127.0.0.1");
+  assert.equal(listenAddress({ ...noBind, LISTEN_HOST: "10.0.0.8" }), "10.0.0.8");
+
+  const { listExceptionInbox } = await import("../lib/exceptions");
+  const inbox = listExceptionInbox();
+  assert.ok(inbox.attentionCount >= 1, "seed exception inbox should not be empty");
+  assert.ok(inbox.items.length >= 1);
+  const kinds = new Set(inbox.items.map((item) => item.kind));
+  assert.ok(kinds.has("reefer"), "seed reefer vs setpoint");
+  assert.ok(kinds.has("late"), "seed late vs window");
+  assert.ok(kinds.has("missing_pod"), "seed missing POD");
+  assert.ok(kinds.has("compliance"), "seed compliance");
+  assert.ok(kinds.has("unassigned"), "seed unassigned");
+  const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  assert.equal(inbox.items[0].severity, "CRITICAL");
+  for (let index = 1; index < inbox.items.length; index += 1) {
+    assert.ok(
+      rank[inbox.items[index].severity] >= rank[inbox.items[index - 1].severity],
+      "inbox must be ranked CRITICAL → LOW",
+    );
+  }
+  const quiet = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1050");
+  assert.ok(quiet);
+  assert.equal(
+    inbox.items.some((item) => item.loadId === quiet.id),
+    false,
+    "future unassigned load stays off the inbox",
+  );
+  assert.ok(inbox.fineCount >= 1, "some open loads should be fine");
+
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
     billing_notes: "Net 15",
@@ -242,7 +275,8 @@ SPECIAL INSTRUCTIONS
   const reading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
   assert.ok(reading, "seeded reefer load should have a demo temperature");
   assert.equal(reading.source, "demo");
-  assert.equal(reading.temperature_f, 34.2);
+  assert.equal(reading.temperature_f, 48.6);
+  assert.equal(reading.alarm, "HIGH TEMP");
 
   const mappedReefer = orbcomm.mapOrbcommReadingsToLoads({
     loads: [

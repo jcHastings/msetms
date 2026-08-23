@@ -37,6 +37,7 @@ export function getDb(): Database.Database {
     backfillDemoPins(db);
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
+    backfillDemoInboxExceptions(db);
   }
 
   connection = db;
@@ -285,6 +286,54 @@ function backfillDemoRegistration(db: Database.Database): void {
          dot_expires = CASE WHEN dot_expires = '' THEN ? ELSE dot_expires END
      WHERE unit_number = '108'`,
   ).run(isoDateOffset(-200), isoDateOffset(20));
+}
+
+/** Keep the exception inbox non-empty on existing demo databases. */
+function backfillDemoInboxExceptions(db: Database.Database): void {
+  const load1045 = db.prepare("SELECT id FROM loads WHERE load_number = 'MSE-1045'").get() as
+    | { id: number }
+    | undefined;
+  if (load1045) {
+    const excursion = db
+      .prepare(
+        `SELECT id FROM reefer_readings
+         WHERE load_id = ? AND (temperature_f >= 40 OR alarm != '')
+         LIMIT 1`,
+      )
+      .get(load1045.id) as { id: number } | undefined;
+    if (!excursion) {
+      const truck = db.prepare("SELECT id FROM trucks WHERE unit_number = '112'").get() as
+        | { id: number }
+        | undefined;
+      const recorded = new Date();
+      recorded.setMinutes(recorded.getMinutes() - 20);
+      db.prepare(
+        `INSERT INTO reefer_readings (
+          load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f,
+          door_open, alarm, latitude, longitude, address, source, recorded_at
+        ) VALUES (?, ?, 'TR-7742', 34, 48.6, 47.8, 46.2, 0, 'HIGH TEMP', 32.7791, -96.8002, 'Dallas, TX', 'demo', ?)`,
+      ).run(load1045.id, truck?.id ?? null, recorded.toISOString());
+    }
+  }
+
+  const load1046 = db
+    .prepare("SELECT id, delivery_end, status FROM loads WHERE load_number = 'MSE-1046'")
+    .get() as { id: number; delivery_end: string; status: string } | undefined;
+  if (load1046?.status === "in_transit") {
+    const end = new Date(load1046.delivery_end);
+    if (!Number.isNaN(end.getTime()) && end.getTime() > Date.now()) {
+      const lateEnd = new Date();
+      lateEnd.setDate(lateEnd.getDate() - 1);
+      lateEnd.setHours(12, 0, 0, 0);
+      const lateStart = new Date(lateEnd);
+      lateStart.setHours(8, 0, 0, 0);
+      db.prepare("UPDATE loads SET delivery_start = ?, delivery_end = ? WHERE id = ?").run(
+        lateStart.toISOString(),
+        lateEnd.toISOString(),
+        load1046.id,
+      );
+    }
+  }
 }
 
 function backfillDemoPins(db: Database.Database): void {
