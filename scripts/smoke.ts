@@ -311,6 +311,81 @@ Send bills to billing@msloads.com
   assert.match(ascend.origin, /Avenel/i);
   assert.match(ascend.destination, /Hastings/i);
   assert.match(ascend.special_instructions, /continuous reefer/i);
+  assert.equal(ascend.customer_name, "", "broker packet has no shipper customer");
+
+  const stackedAscend = parseRateConText(
+    `
+LOAD CONFIRMATION
+Load #
+45090
+Date
+08/23/2026
+Equipment
+Reefer
+Equipment Length
+53'
+Weight
+42500 lbs
+Commodity
+FROZEN BEEF
+Distance
+1406 miles
+Carrier
+MS EXPRESS
+Stops / Actions
+#
+Action
+Date/Time
+Location
+Contact
+1
+Pickup
+03/03/25
+Lineage Logistics - Avenel
+275 Blair rd
+Avenel, NJ 07001
+Preferred Freezer-Woodridge
+Phone: 732-340-1600
+2
+Delivery
+03/05/25
+Nebraska Cold Storage
+600 E 39th St
+Hastings, NE 68901-7381 USA
+Jennifer
+Phone: 402-461-4442
+Pay Items
+Description
+Notes
+Quantity
+Rate
+Amount
+Flat Rate
+1
+3200.00
+$ 3,200.00
+Total
+$ 3,200.00
+Terms of Load
+Please email invoices to billing@msloads.com with the load number in the subject line.
+Temperature controlled loads must always run on continuous mode. Never start and stop.
+Two load locks. Seal required.
+Page 1 out of 2
+Load #45090 | Powered by AscendTMS.com
+`,
+    [],
+    "Load_Confirmation_45090_20260823190045.pdf",
+  );
+  assert.equal(stackedAscend.weight, 42500);
+  assert.notEqual(stackedAscend.weight, 45090);
+  assert.equal(stackedAscend.reference_number, "45090");
+  assert.equal(stackedAscend.rate, 3200);
+  assert.match(stackedAscend.commodity, /FROZEN BEEF/i);
+  assert.equal(stackedAscend.origin, "Avenel, NJ");
+  assert.equal(stackedAscend.destination, "Hastings, NE");
+  assert.match(stackedAscend.special_instructions, /continuous reefer/i);
+  assert.match(stackedAscend.special_instructions, /billing@msloads.com/i);
+  assert.equal(stackedAscend.customer_name, "");
   const namedFile = parseRateConText(
     "Load confirmation for file Load_Confirmation_45090_20260823190045.pdf",
     [],
@@ -428,6 +503,27 @@ Continuous reefer. Two load locks.
     assert.equal(blankExtract.warning, "Couldn't read text from this PDF");
     assert.equal(blankExtract.fileName, "Load_Confirmation_45090_20260823190045.pdf");
     assert.ok(blankExtract.inboxId);
+  }
+
+  const sampleAscendPdf = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
+  if (fs.existsSync(sampleAscendPdf)) {
+    const { extractDocumentText } = await import("../lib/rate-con");
+    const ascendFromFile = parseRateConText(
+      await extractDocumentText(
+        fs.readFileSync(sampleAscendPdf),
+        "application/pdf",
+        "Load_Confirmation_45090_20260823190045.pdf",
+      ),
+      [],
+      "Load_Confirmation_45090_20260823190045.pdf",
+    );
+    assert.equal(ascendFromFile.weight, 42500);
+    assert.notEqual(ascendFromFile.weight, 45090);
+    assert.equal(ascendFromFile.rate, 3200);
+    assert.equal(ascendFromFile.origin, "Avenel, NJ");
+    assert.equal(ascendFromFile.destination, "Hastings, NE");
+    assert.match(ascendFromFile.commodity, /FROZEN BEEF/i);
+    assert.match(ascendFromFile.special_instructions, /billing@msloads.com/i);
   }
 
   const samplePdf = path.join(process.cwd(), "public", "samples", "sample-rate-con.pdf");

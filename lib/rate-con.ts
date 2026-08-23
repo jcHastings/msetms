@@ -112,9 +112,9 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
   const ascend = parseAscendConfirmation(text);
   const printed = parsePrintedConfirmation(text);
   const customerName =
-    labeled(text, ["customer", "bill to", "account", "broker"]) ??
-    ascend.customer_name ??
-    printed.customer_name ??
+    labeled(text, ["customer", "bill to", "account"]) ||
+    ascend.customer_name ||
+    printed.customer_name ||
     "";
   const matched = matchCustomer(customerName, customers);
 
@@ -153,9 +153,9 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       commodity: labeled(text, ["commodity", "product", "description"]) || ascend.commodity || printed.commodity || "",
       weight: parseWeight(labeled(text, ["weight"]) ?? "") ?? ascend.weight ?? printed.weight,
       reference_number:
-        labeled(text, ["ref #", "ref#", "reference", "rate con"]) ||
         ascend.load_number ||
         printed.load_number ||
+        labeled(text, ["ref #", "ref#", "rate con"]) ||
         "",
       po_number:
         labeled(text, ["po #", "po#", "po number", "purchase order"]) || printed.po_number || "",
@@ -201,42 +201,35 @@ function parseAscendConfirmation(text: string): {
     load_number: "",
     special_instructions: "",
   };
-  if (!/load confirmation/i.test(text)) return empty;
+  const looksAscend =
+    /load confirmation/i.test(text) ||
+    /ascendtms/i.test(text) ||
+    /stops\s*\/\s*actions/i.test(text) ||
+    /pay items/i.test(text);
+  if (!looksAscend) return empty;
 
-  const flat = text.replace(/\s+/g, " ");
-  const loadNumber = text.match(/load\s*#\s*[:#]?\s*([A-Z0-9-]{3,20})/i)?.[1] ?? "";
-  const weightMatch =
-    text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i) ??
-    flat.match(/weight\s+([\d,]+)\s*(?:lbs?|pounds)/i);
-  const commodity =
-    labeled(text, ["commodity"]) ??
-    text.match(/commodity\s+([A-Z][A-Z0-9 /-]{2,40})/i)?.[1]?.trim() ??
+  const loadNumber =
+    text.match(/load\s*#\s*[:#]?\s*(\d{3,8})\b/i)?.[1] ??
+    text.match(/load\s*#\s*[:#]?\s*\n\s*(\d{3,8})\b/i)?.[1] ??
     "";
-  const rate =
-    parseMoney(text.match(/(?:rate|flat rate|line\s*haul)\s*[:#]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "") ??
-    parseMoney(flat.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?(?:flat rate)?/i)?.[0] ?? "") ??
-    parseMoney(flat.match(/pay items[\s\S]{0,80}\$\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "");
 
   const pickup = firstStop(
+    parseAscendStop(text, "pickup"),
     parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
     parseStopBlock(text, /pick(?:\s*up)?(?:\s+date)?/i),
   );
   const delivery = firstStop(
+    parseAscendStop(text, "delivery"),
     parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
     parseStopBlock(text, /deliv(?:ery)?(?:\s+date)?/i),
   );
 
-  const terms = section(text, /terms|special instructions?|notes/i);
-  const extras = [
-    /continuous reefer/i.test(text) ? "Continuous reefer." : "",
-    /load locks?/i.test(text) ? "Two load locks." : "",
-    /\bseal\b/i.test(text) ? "Seal required." : "",
-    text.match(/billing@[a-z0-9.-]+/i)?.[0]
-      ? `Billing: ${text.match(/billing@[a-z0-9.-]+/i)?.[0]}`
-      : "",
+  const equipment = [
+    fieldAfterLabel(text, ["equipment"])?.replace(/equipment length/i, "").trim(),
+    fieldAfterLabel(text, ["equipment length"]),
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(", ");
 
   return {
     customer_name: "",
@@ -246,12 +239,120 @@ function parseAscendConfirmation(text: string): {
     pickup_end: pickup.end,
     delivery_start: delivery.start,
     delivery_end: delivery.end,
-    rate,
-    commodity: commodity.replace(/\s+/g, " "),
-    weight: weightMatch ? Number.parseInt(weightMatch[1].replace(/,/g, ""), 10) : null,
+    rate: parseAscendRate(text),
+    commodity: (fieldAfterLabel(text, ["commodity"]) || "").replace(/\s+/g, " "),
+    weight: parseAscendWeight(text, loadNumber),
     load_number: loadNumber,
-    special_instructions: [terms, extras].filter(Boolean).join("\n"),
+    special_instructions: parseAscendInstructions(text, equipment),
   };
+}
+
+function fieldAfterLabel(text: string, labels: string[]): string | null {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const same = text.match(new RegExp(`${escaped}\\s*[:#]?\\s+([^\\n]+)$`, "im"));
+    if (same?.[1] && !/^(date|time|length|weight|commodity|equipment)\b/i.test(same[1].trim())) {
+      return clean(same[1]);
+    }
+    const next = text.match(new RegExp(`${escaped}\\s*[:#]?\\s*\\n\\s*([^\\n]+)$`, "im"));
+    if (next?.[1] && !/^(date|time|#|action|location|contact)$/i.test(next[1].trim())) {
+      return clean(next[1]);
+    }
+  }
+  return null;
+}
+
+function parseAscendWeight(text: string, loadNumber: string): number | null {
+  const patterns = [
+    /weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)\b/i,
+    /weight\s*[:#]?\s*\n\s*([\d,]+)\s*(?:lbs?|pounds)\b/i,
+    /weight\s*[:#]?\s*\n\s*([\d,]+)\s*\n\s*(?:lbs?|pounds)\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const value = Number.parseInt(match[1].replace(/,/g, ""), 10);
+    if (!Number.isFinite(value)) continue;
+    if (loadNumber && String(value) === loadNumber) continue;
+    if (value < 500 || value > 90000) continue;
+    return value;
+  }
+  return null;
+}
+
+function parseAscendRate(text: string): number | null {
+  const patterns = [
+    /pay items[\s\S]{0,240}total\s*\$?\s*([\d,]+(?:\.\d+)?)/i,
+    /flat\s*rate[\s\S]{0,80}\$\s*([\d,]+(?:\.\d+)?)/i,
+    /(?:rate|line\s*haul)\s*[:#/]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i,
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?flat\s*rate/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const value = Number.parseFloat(match[1].replace(/,/g, ""));
+    if (Number.isFinite(value) && value >= 50 && value <= 50000) return value;
+  }
+  return null;
+}
+
+function parseAscendStop(text: string, kind: "pickup" | "delivery"): { start: string; end: string; address: string } {
+  const action = kind === "pickup" ? "(?:pick\\s*up|pickup|pu)" : "(?:delivery|deliver|drop)";
+  const oneLine = text.match(
+    new RegExp(
+      `(?:^|\\n|\\s)(?:\\d+\\s+)?${action}\\s+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})(?:\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\s+(.+?)(?=\\s+(?:\\d+\\s+)?(?:${kind === "pickup" ? "delivery|deliver|drop" : "pay items|terms"}|contact|phone:)|$)`,
+      "is",
+    ),
+  );
+  if (oneLine) {
+    return {
+      start: toIso(oneLine[1], "08:00"),
+      end: toIso(oneLine[1], "17:00"),
+      address: cleanLocationCell(oneLine[2]),
+    };
+  }
+
+  const stacked = text.match(
+    new RegExp(
+      `${action}\\s*\\n\\s*(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})\\s*\\n([\\s\\S]{0,320}?)(?=\\n\\s*(?:\\d+\\s*\\n\\s*)?(?:delivery|deliver|drop|pickup|pay items|terms of load)|$)`,
+      "i",
+    ),
+  );
+  if (!stacked) return { start: "", end: "", address: "" };
+  return {
+    start: toIso(stacked[1], "08:00"),
+    end: toIso(stacked[1], "17:00"),
+    address: cleanLocationCell(stacked[2]),
+  };
+}
+
+function cleanLocationCell(value: string): string {
+  return clean(
+    value
+      .replace(/\b(?:preferred freezer|phone:|email:|contact)\b[\s\S]*/i, "")
+      .replace(/\bUSA\b/g, ""),
+  );
+}
+
+function parseAscendInstructions(text: string, equipment: string): string {
+  const terms = captureBlock(text, /terms of load/i, /page\s+\d|powered by|ascendtms/i);
+  const extras = [
+    equipment ? `Equipment: ${equipment}.` : "",
+    /continuous(?:\s+reefer|\s+mode)/i.test(text) ? "Continuous reefer." : "",
+    /load locks?/i.test(text) ? "Two load locks." : "",
+    /\bseals?\b/i.test(text) ? "Seal required." : "",
+    text.match(/billing@[a-z0-9.-]+/i)?.[0] ? `Billing: ${text.match(/billing@[a-z0-9.-]+/i)?.[0]}` : "",
+  ].filter(Boolean);
+  const termLines = terms
+    .split(/(?<=\.)\s+/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line &&
+        /continuous|lock|seal|billing@|temperature|invoice|subject/i.test(line) &&
+        !/electronic signature|triumphpay|quick pay/i.test(line),
+    );
+  return [...new Set([...termLines, ...extras])].join(" ");
 }
 
 function parsePrintedConfirmation(text: string): {
@@ -390,12 +491,19 @@ function cityStateFromAddress(address: string): string {
 
 function cityStateOrEmpty(address: string): string {
   const matches = [
-    ...address.matchAll(/([A-Za-z][A-Za-z .'-]{0,48}),\s*([A-Z]{2})\b(?:\s+\d{5})?/g),
+    ...address.matchAll(
+      /\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+)*),\s*([A-Z]{2})\b(?:\s+\d{5}(?:-\d{4})?)?/g,
+    ),
   ];
   const match = matches.at(-1);
   if (!match) return "";
-  const city = match[1].trim().replace(/.*,\s*/, "");
-  return `${city}, ${match[2]}`;
+  const city = match[1]
+    .trim()
+    .split(/\s+/)
+    .filter((word) => !/^(?:N|S|E|W|NE|NW|SE|SW|St|Rd|Dr|Ave|Blvd|Ln|Ct|Hwy)$/i.test(word))
+    .slice(-2)
+    .join(" ");
+  return city ? `${city}, ${match[2]}` : "";
 }
 
 function matchCustomer(name: string, customers: Customer[]): number | null {
