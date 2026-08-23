@@ -44,6 +44,7 @@ export function getDb(): Database {
     backfillDemoPins(db);
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
+    backfillDemoTruckDetails(db);
     backfillDemoInboxExceptions(db);
     backfillDemoLocations(db);
   }
@@ -709,6 +710,27 @@ function backfillDemoRegistration(db: Database): void {
 }
 
 /** Keep the exception inbox non-empty on existing demo databases. */
+function backfillDemoTruckDetails(db: Database): void {
+  const rows: Array<[string, string, string, string, string, string]> = [
+    ["2020", "Volvo", "VNL 760", "KY-102", "4V4NC9EH5LN102001", "102"],
+    ["2019", "Kenworth", "T680", "TN-108", "1XKYD49X5KJ108001", "108"],
+    ["2021", "Freightliner", "Cascadia", "TN-112", "3AKJHHDR8MSLJ1120", "112"],
+    ["2018", "Peterbilt", "579", "TN-210", "1XPBD49X5JD210001", "210"],
+  ];
+  const update = db.prepare(
+    `UPDATE trucks
+     SET year = CASE WHEN year = '' THEN ? ELSE year END,
+         make = CASE WHEN make = '' THEN ? ELSE make END,
+         model = CASE WHEN model = '' THEN ? ELSE model END,
+         plate = CASE WHEN plate = '' THEN ? ELSE plate END,
+         vin = CASE WHEN vin = '' THEN ? ELSE vin END
+     WHERE unit_number = ?`,
+  );
+  for (const row of rows) {
+    update.run(...row);
+  }
+}
+
 function backfillDemoInboxExceptions(db: Database): void {
   const load1045 = db.prepare("SELECT id FROM loads WHERE load_number = 'MSE-1045'").get() as
     | { id: number }

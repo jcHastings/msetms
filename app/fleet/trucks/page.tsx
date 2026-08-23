@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { ComplianceBadge } from "@/components/compliance-badge";
+import { ClickableRow } from "@/components/clickable-row";
+import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { PageHeader } from "@/components/page-header";
-import { TruckStatusBadge } from "@/components/status-badge";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
-import { labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +35,10 @@ export default function TrucksPage() {
               <th>Year / make / model</th>
               <th>Plate</th>
               <th>Driver</th>
-              <th>Registration</th>
+              <th>Registration exp</th>
               <th>DOT inspection</th>
-              <th>Compliance</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -50,27 +49,35 @@ export default function TrucksPage() {
                 </td>
               </tr>
             ) : (
-              trucks.map((truck) => (
-                <tr key={truck.id} className={truck.active === 0 ? "opacity-60" : undefined}>
-                  <td>
-                    <Link href={`/fleet/trucks/${truck.id}`} className="font-mono font-semibold hover:underline">
-                      {truck.unit_number}
-                    </Link>
-                    {truck.active === 0 ? <div className="text-xs text-slate-500">Inactive</div> : null}
-                  </td>
-                  <td>{vehicleLabel(truck)}</td>
-                  <td>{truck.plate || "—"}</td>
-                  <td>{truck.driver_name || "—"}</td>
-                  <td className="whitespace-nowrap">{truck.registration_expires || "—"}</td>
-                  <td className="whitespace-nowrap">{truck.dot_expires || "—"}</td>
-                  <td>
-                    <ComplianceBadge alerts={truckComplianceAlerts(truck, windows)} />
-                  </td>
-                  <td>
-                    <TruckStatusBadge status={truck.status} />
-                  </td>
-                </tr>
-              ))
+              trucks.map((truck) => {
+                const alerts = truckComplianceAlerts(truck, windows);
+                return (
+                  <ClickableRow
+                    key={truck.id}
+                    href={`/fleet/trucks/${truck.id}`}
+                    className={truck.active === 0 ? "opacity-60" : undefined}
+                  >
+                    <td>
+                      <span className="font-mono font-semibold hover:underline">{truck.unit_number}</span>
+                    </td>
+                    <td>{vehicleLabel(truck)}</td>
+                    <td>{truck.plate || "—"}</td>
+                    <td>{truck.driver_name || "—"}</td>
+                    <ExpiryCell
+                      value={truck.registration_expires}
+                      alert={alerts.find((item) => item.kind === "registration")}
+                    />
+                    <ExpiryCell
+                      value={truck.dot_inspected_on || truck.dot_expires}
+                      alert={alerts.find((item) => item.kind === "dot_inspection")}
+                    />
+                    <ActiveStatusCell active={truck.active} />
+                    <td>
+                      <span className="text-sm font-medium text-navy">Edit</span>
+                    </td>
+                  </ClickableRow>
+                );
+              })
             )}
           </tbody>
         </table>

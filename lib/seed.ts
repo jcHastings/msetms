@@ -189,6 +189,13 @@ export function seedDatabase(db: Database): void {
     db.prepare(
       `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
     ).run(isoDate(-180), isoDate(220), isoDate(-90), isoDate(200), "112");
+    const patchTruck = db.prepare(
+      `UPDATE trucks SET year = ?, make = ?, model = ?, plate = ?, vin = ? WHERE unit_number = ?`,
+    );
+    patchTruck.run("2020", "Volvo", "VNL 760", "KY-102", "4V4NC9EH5LN102001", "102");
+    patchTruck.run("2019", "Kenworth", "T680", "TN-108", "1XKYD49X5KJ108001", "108");
+    patchTruck.run("2021", "Freightliner", "Cascadia", "TN-112", "3AKJHHDR8MSLJ1120", "112");
+    patchTruck.run("2018", "Peterbilt", "579", "TN-210", "1XPBD49X5JD210001", "210");
 
     const marcus = Number(
       insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", "samsara-drv-marcus", t102, "on_duty", created, created)

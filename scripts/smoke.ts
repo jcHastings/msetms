@@ -827,6 +827,10 @@ Continuous reefer. Two load locks.
   const trailer8801 = queries.listTrailers().find((trailer) => trailer.unit_number === "TR-8801");
   assert.ok(truck210);
   assert.ok(trailer8801);
+  assert.equal(truck210.year, "2018");
+  assert.equal(truck210.make, "Peterbilt");
+  assert.equal(truck210.model, "579");
+  assert.equal(truck210.plate, "TN-210");
   const truckReg = truckComplianceAlerts(truck210).find((alert) => alert.kind === "registration");
   assert.ok(truckReg);
   assert.equal(truckReg.severity, "expiring");
@@ -1300,8 +1304,13 @@ Continuous reefer. Two load locks.
     plate: "TN-SMOKE",
     year: "2022",
     make: "Freightliner",
+    model: "Cascadia",
+    notes: "Shop next week",
+    active: 1,
   });
   assert.equal(queries.getTruck(truckId)?.vin, "1FTSW21P04EB12345");
+  assert.equal(queries.getTruck(truckId)?.model, "Cascadia");
+  assert.equal(queries.getTruck(truckId)?.notes, "Shop next week");
   assert.equal(isClosedStatus("completed"), true);
 
   queries.deleteLocation(oneOffShipper);
@@ -1573,6 +1582,19 @@ Continuous reefer. Two load locks.
   });
   assert.equal(queries.getTrailer(reeferTrailerId)?.truck_unit, "SMOKE-T");
   assert.equal(queries.getTrailer(reeferTrailerId)?.reefer_setpoint_f, -10);
+  queries.updateTrailer(reeferTrailerId, {
+    unit_number: "R-SMOKE",
+    type: "reefer",
+    vin: "1TRAILER",
+    plate: "TRL-1",
+    truck_id: modelTruckId,
+    reefer_setpoint_f: -10,
+    notes: "Keep at -10",
+    active: 1,
+    orbcomm_asset_id: "orb-smoke",
+  });
+  assert.equal(queries.getTrailer(reeferTrailerId)?.notes, "Keep at -10");
+  assert.equal(queries.getTrailer(reeferTrailerId)?.orbcomm_asset_id, "orb-smoke");
 
   closeDb();
   const reopened = getDb();

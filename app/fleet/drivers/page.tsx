@@ -1,20 +1,11 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
-import { ComplianceBadge } from "@/components/compliance-badge";
+import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
-import { driverComplianceAlerts, type ComplianceAlert } from "@/lib/compliance";
+import { driverComplianceAlerts } from "@/lib/compliance";
 import { listDrivers } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
-
-function ExpiryCell({ value, alert }: { value: string; alert?: ComplianceAlert }) {
-  return (
-    <td className="whitespace-nowrap">
-      <div>{value || "—"}</div>
-      {alert ? <ComplianceBadge alerts={[alert]} /> : null}
-    </td>
-  );
-}
 
 export const dynamic = "force-dynamic";
 
@@ -78,13 +69,7 @@ export default function DriversPage() {
                     <ExpiryCell value={driver.license_expires} alert={alerts.find((item) => item.kind === "license")} />
                     <ExpiryCell value={driver.medical_expires} alert={alerts.find((item) => item.kind === "medical")} />
                     <td>{driver.pin ? "Set" : "—"}</td>
-                    <td>
-                      {driver.active === 0 ? (
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inactive</span>
-                      ) : (
-                        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Active</span>
-                      )}
-                    </td>
+                    <ActiveStatusCell active={driver.active} />
                     <td>
                       <span className="text-sm font-medium text-navy">Edit</span>
                     </td>

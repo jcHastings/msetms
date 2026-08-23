@@ -196,7 +196,7 @@ export const FLEET_DOC_KINDS = [
 export type FleetDocKind = (typeof FLEET_DOC_KINDS)[number]["value"];
 
 export const TRAILER_TYPES = [
-  { value: "reefer", label: "Reefer" },
+  { value: "reefer", label: "53' reefer" },
   { value: "dry_van", label: "Dry Van" },
   { value: "flatbed", label: "Flatbed" },
   { value: "other", label: "Other" },

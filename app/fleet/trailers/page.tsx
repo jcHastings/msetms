@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ComplianceBadge } from "@/components/compliance-badge";
+import { ClickableRow } from "@/components/clickable-row";
+import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { PageHeader } from "@/components/page-header";
-import { TruckStatusBadge } from "@/components/status-badge";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
 import { listTrailers } from "@/lib/queries";
@@ -9,6 +9,20 @@ import { complianceWindows } from "@/lib/settings";
 import { labelForTrailerType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+function reeferStub(trailer: {
+  orbcomm_asset_id: string;
+  reefer_setpoint_f: number | null;
+  unit_number: string;
+}): string {
+  const reading = latestReeferForTrailer(trailer);
+  if (reading) {
+    const temp = reading.temperature_f != null ? `${reading.temperature_f}°F` : "Reading";
+    return `${temp} · ${reading.source}`;
+  }
+  if (trailer.orbcomm_asset_id) return "Mapped";
+  return "—";
+}
 
 export default function TrailersPage() {
   const windows = complianceWindows();
@@ -18,7 +32,7 @@ export default function TrailersPage() {
     <>
       <PageHeader
         title="Trailers"
-        subtitle="Reefers and dry vans. ORBCOMM asset ID is optional for the last known reading."
+        subtitle="53' reefers and dry vans. ORBCOMM asset ID is optional for the last known reading."
         actions={
           <Link href="/fleet/trailers/new" className="btn btn-primary">
             Add trailer
@@ -32,11 +46,11 @@ export default function TrailersPage() {
               <th>Trailer</th>
               <th>Type</th>
               <th>Truck</th>
-              <th>Registration</th>
+              <th>Registration exp</th>
               <th>DOT inspection</th>
               <th>Reefer / ORBCOMM</th>
-              <th>Compliance</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -48,36 +62,35 @@ export default function TrailersPage() {
               </tr>
             ) : (
               trailers.map((trailer) => {
-                const reefer = latestReeferForTrailer(trailer);
+                const alerts = trailerComplianceAlerts(trailer, windows);
                 return (
-                  <tr key={trailer.id} className={trailer.active === 0 ? "opacity-60" : undefined}>
+                  <ClickableRow
+                    key={trailer.id}
+                    href={`/fleet/trailers/${trailer.id}`}
+                    className={trailer.active === 0 ? "opacity-60" : undefined}
+                  >
                     <td>
-                      <Link href={`/fleet/trailers/${trailer.id}`} className="font-mono font-semibold hover:underline">
-                        {trailer.unit_number}
-                      </Link>
-                      {trailer.active === 0 ? <div className="text-xs text-slate-500">Inactive</div> : null}
+                      <span className="font-mono font-semibold hover:underline">{trailer.unit_number}</span>
                     </td>
                     <td>{labelForTrailerType(trailer.type)}</td>
                     <td>{trailer.truck_unit ? `Unit ${trailer.truck_unit}` : "—"}</td>
-                    <td className="whitespace-nowrap">{trailer.registration_expires || "—"}</td>
-                    <td className="whitespace-nowrap">{trailer.dot_expires || "—"}</td>
+                    <ExpiryCell
+                      value={trailer.registration_expires}
+                      alert={alerts.find((item) => item.kind === "registration")}
+                    />
+                    <ExpiryCell
+                      value={trailer.dot_inspected_on || trailer.dot_expires}
+                      alert={alerts.find((item) => item.kind === "dot_inspection")}
+                    />
                     <td className="text-xs text-slate-600">
-                      {reefer
-                        ? `${reefer.temperature_f != null ? `${reefer.temperature_f}°F` : "Reading"} · ${reefer.source}`
-                        : trailer.orbcomm_asset_id
-                          ? "Mapped"
-                          : "—"}
-                      {trailer.reefer_setpoint_f != null ? (
-                        <div>Setpoint {trailer.reefer_setpoint_f}°F</div>
-                      ) : null}
+                      {reeferStub(trailer)}
+                      {trailer.reefer_setpoint_f != null ? <div>Setpoint {trailer.reefer_setpoint_f}°F</div> : null}
                     </td>
+                    <ActiveStatusCell active={trailer.active} />
                     <td>
-                      <ComplianceBadge alerts={trailerComplianceAlerts(trailer, windows)} />
+                      <span className="text-sm font-medium text-navy">Edit</span>
                     </td>
-                    <td>
-                      <TruckStatusBadge status={trailer.status} />
-                    </td>
-                  </tr>
+                  </ClickableRow>
                 );
               })
             )}

@@ -24,7 +24,7 @@ export function FleetDocsPanel({
             {FLEET_DOC_KINDS.filter((kind) =>
               ownerType === "driver"
                 ? ["cdl", "med_card", "other"].includes(kind.value)
-                : ["registration", "dot_inspection", "insurance", "other"].includes(kind.value),
+                : ["registration", "dot_inspection", "other"].includes(kind.value),
             ).map((kind) => (
               <option key={kind.value} value={kind.value}>
                 {kind.label}
