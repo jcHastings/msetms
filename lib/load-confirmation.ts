@@ -234,7 +234,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text("Dispatch Notes:", left, y);
   y += 14;
   doc.font("Helvetica").fontSize(9).fillColor("#111827");
-  doc.text(model.dispatchNotes || " ", left, y, { width, minHeight: 48 });
+  doc.text(model.dispatchNotes || " ", left, y, { width, height: 48 });
   y = Math.max(y + 56, doc.y + 8);
 
   if (model.style === "owner_operator") {

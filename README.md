@@ -28,7 +28,9 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires Node.js 20 or newer.
+Requires Node.js 20 or newer. `better-sqlite3` 13 may warn that it prefers Node **22**; install still works on Node 20. Use Node 22 if you want to silence that warning.
+
+`npm run dev` uses webpack so the process stays listening on port 3000. Turbopack (`next dev` without `--webpack`) can print Ready and then exit on some Node versions.
 
 ## Dispatcher
 
