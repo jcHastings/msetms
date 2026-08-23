@@ -16,6 +16,7 @@ import { PlaceSearch } from "@/components/place-search";
 import { matchLocationForPlace } from "@/lib/places-shared";
 import { formatLocationAddress, formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
 import { formatParsedStop, type ParsedStop } from "@/lib/rate-con-shared";
+import { REEFER_MODES } from "@/lib/reefer-shared";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import {
@@ -48,6 +49,7 @@ type Defaults = Partial<{
   reference_number: string;
   po_number: string;
   reefer_setpoint_f: number | null;
+  reefer_mode: string;
   trailer_number: string;
   shipper_location_id: number | null;
   consignee_location_id: number | null;
@@ -407,16 +409,6 @@ export function LoadForm({
           <label htmlFor="po_number">PO number</label>
           <input id="po_number" name="po_number" defaultValue={load?.po_number ?? extraDefaults?.po_number ?? ""} />
         </div>
-        <div className="field">
-          <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
-          <input
-            id="reefer_setpoint_f"
-            name="reefer_setpoint_f"
-            type="number"
-            step="0.1"
-            defaultValue={load?.reefer_setpoint_f ?? extraDefaults?.reefer_setpoint_f ?? ""}
-          />
-        </div>
         <div className="field md:col-span-2">
           <label htmlFor="special_instructions">Special instructions (driver sees these)</label>
           <textarea
@@ -448,6 +440,38 @@ export function LoadForm({
             value={rate}
             onChange={(event) => setRate(event.target.value)}
           />
+        </div>
+        </Section>
+        <Section tab={tab} when={["basics", "assets"]}>
+        <div className="field">
+          <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
+          <input
+            id="reefer_setpoint_f"
+            name="reefer_setpoint_f"
+            type="number"
+            step="0.1"
+            defaultValue={load?.reefer_setpoint_f ?? extraDefaults?.reefer_setpoint_f ?? ""}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reefer_mode">Reefer mode</label>
+          <select
+            id="reefer_mode"
+            name="reefer_mode"
+            defaultValue={
+              load?.reefer_mode ||
+              extraDefaults.reefer_mode ||
+              (load?.reefer_setpoint_f != null || extraDefaults.reefer_setpoint_f != null ? "continuous" : "")
+            }
+          >
+            <option value="">Not a reefer</option>
+            {REEFER_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">Reefers default to Continuous. JC’s terms: never start/stop unless you change this.</p>
         </div>
         </Section>
         <Section tab={tab} when="assets">
@@ -607,10 +631,11 @@ function Section({
   children,
 }: {
   tab: string;
-  when: string;
+  when: string | string[];
   children: ReactNode;
 }) {
-  const show = tab === "all" || tab === when;
+  const allowed = Array.isArray(when) ? when : [when];
+  const show = tab === "all" || allowed.includes(tab);
   return <div className={show ? "contents" : "hidden"}>{children}</div>;
 }
 

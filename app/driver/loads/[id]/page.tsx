@@ -11,6 +11,7 @@ import { getLoad, locationsForLoad } from "@/lib/queries";
 import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/lib/reefer-shared";
 import { isClosedStatus, labelForAttachmentKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export default async function DriverLoadPage({
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
   const stopLocations = locationsForLoad(load);
+  const reeferSpec = resolveReeferSpec(load);
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-20 pt-5">
@@ -70,7 +72,13 @@ export default async function DriverLoadPage({
         <Row label="Weight" value={formatWeight(load.weight)} />
         <Row label="Rate" value={formatMoney(load.rate)} />
         <Row label="Ref / PO" value={[load.reference_number, load.po_number].filter(Boolean).join(" · ") || "—"} />
-        <Row label="Trailer" value={load.trailer_number || "—"} />
+        <Row label="Trailer" value={load.trailer_number || load.trailer_unit || "—"} />
+        {reeferSpec.isReefer ? (
+          <>
+            <Row label="Reefer setpoint" value={formatReeferSetpoint(reeferSpec.setpointF) || "—"} />
+            <Row label="Reefer mode" value={labelForReeferMode(reeferSpec.mode) || "Continuous"} />
+          </>
+        ) : null}
       </section>
 
       {hos ? (
@@ -86,17 +94,22 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      {(load.reefer_setpoint_f != null || reefer) && (
-        <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reefer</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">
-            {reefer?.temperature_f ?? "—"}°F
+      {(reeferSpec.isReefer || reefer) && (
+        <section className="mt-3 rounded-2xl bg-sky-50 p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-sky-800">Reefer</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-sky-950">
+            {formatReeferSetpoint(reeferSpec.setpointF ?? reefer?.setpoint_f) || "—"}
           </div>
-          <div className="text-sm text-slate-600">
-            Setpoint {load.reefer_setpoint_f ?? reefer?.setpoint_f ?? "—"}°F
-            {reefer?.source === "demo" ? " · demo reading" : reefer?.source === "orbcomm" ? " · ORBCOMM" : ""}
-            {reefer?.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
+          <div className="text-base font-medium text-sky-950">
+            Mode: {labelForReeferMode(reeferSpec.mode) || "Continuous"}
           </div>
+          {reefer ? (
+            <div className="mt-1 text-sm text-sky-900">
+              Live {reefer.temperature_f ?? "—"}°F
+              {reefer.source === "demo" ? " · demo reading" : reefer.source === "orbcomm" ? " · ORBCOMM" : ""}
+              {reefer.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
+            </div>
+          ) : null}
           {reefer?.door_open === 1 ? <div className="mt-1 text-sm text-rose-700">Door open</div> : null}
           {reefer?.alarm ? <div className="text-sm text-rose-700">{reefer.alarm}</div> : null}
         </section>

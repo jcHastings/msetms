@@ -349,6 +349,7 @@ export type Load = {
   reference_number: string;
   po_number: string;
   reefer_setpoint_f: number | null;
+  reefer_mode: string;
   trailer_number: string;
   trailer_id: number | null;
   shipper_location_id: number | null;
@@ -398,6 +399,7 @@ export type LoadView = Load & {
   truck_samsara_trailer_id: string | null;
   truck_orbcomm_asset_id: string | null;
   trailer_unit: string | null;
+  trailer_type: string | null;
   trailer_orbcomm_asset_id: string | null;
   driver_name: string | null;
   driver_phone: string | null;

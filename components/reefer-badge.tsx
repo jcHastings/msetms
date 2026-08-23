@@ -1,4 +1,5 @@
 import { formatDateTime } from "@/lib/format";
+import { labelForReeferMode, type ReeferMode } from "@/lib/reefer-shared";
 import type { ReeferReading, ReeferStatus } from "@/lib/types";
 
 function asStatus(reading: ReeferReading | ReeferStatus | null): ReeferStatus | null {
@@ -18,9 +19,11 @@ function asStatus(reading: ReeferReading | ReeferStatus | null): ReeferStatus | 
 
 export function ReeferBadge({
   setpoint,
+  mode,
   reading,
 }: {
   setpoint: number | null;
+  mode?: ReeferMode | string | null;
   reading: ReeferReading | ReeferStatus | null;
 }) {
   const status = asStatus(reading);
@@ -33,6 +36,9 @@ export function ReeferBadge({
       <div className="font-semibold tabular-nums">
         {temp != null ? `${temp}°F` : "—"}
         {shownSet != null ? <span className="font-normal text-slate-500"> / set {shownSet}°F</span> : null}
+        {labelForReeferMode(mode as ReeferMode) ? (
+          <span className="ml-1 font-normal text-slate-600">· {labelForReeferMode(mode as ReeferMode)}</span>
+        ) : null}
       </div>
       {status?.trailerId ? <div className="text-xs text-slate-500">{status.trailerId}</div> : null}
       {status?.returnAirF != null || status?.supplyAirF != null ? (

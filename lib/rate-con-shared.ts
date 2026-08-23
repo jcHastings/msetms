@@ -27,6 +27,7 @@ export type ParsedRateCon = {
   special_instructions: string;
   appointment_notes: string;
   reefer_setpoint_f: number | null;
+  reefer_mode: string;
   load_number_hint: string;
   raw_text: string;
   shipper: ParsedStop;
@@ -64,6 +65,7 @@ export function emptyParsedRateCon(): ParsedRateCon {
     special_instructions: "",
     appointment_notes: "",
     reefer_setpoint_f: null,
+    reefer_mode: "",
     load_number_hint: "",
     raw_text: "",
     shipper: emptyParsedStop(),

@@ -176,6 +176,7 @@ async function main() {
     "components/rate-con-location-review.tsx",
     "components/load-form.tsx",
     "lib/rate-con-shared.ts",
+    "lib/reefer-shared.ts",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
@@ -785,6 +786,7 @@ Load #45090 | Powered by AscendTMS.com
   assert.equal(stackedAscend.destination, "Hastings, NE");
   assert.match(stackedAscend.special_instructions, /continuous reefer/i);
   assert.match(stackedAscend.special_instructions, /billing@msloads.com/i);
+  assert.equal(stackedAscend.reefer_mode, "continuous", "Ascend terms: continuous, never start/stop");
   assert.equal(stackedAscend.customer_name, "");
   assert.equal(stackedAscend.shipper.name, "Lineage Logistics - Avenel");
   assert.match(stackedAscend.shipper.street, /275 Blair/i);
@@ -873,6 +875,19 @@ Continuous reefer. Two load locks.
   assert.equal(printed.consignee.name, "Nebraska Cold Storage");
   assert.match(printed.consignee.street, /600 E 39th/i);
   assert.equal(printed.consignee.city, "Hastings");
+
+  const { parseReeferModeFromText, parseReeferSetpointFromText, resolveReeferSpec } = await import(
+    "../lib/reefer-shared"
+  );
+  assert.equal(
+    parseReeferModeFromText("Temperature controlled loads must always run on continuous mode. Never start and stop."),
+    "continuous",
+  );
+  assert.equal(parseReeferModeFromText("Run start and stop overnight"), "start_stop");
+  assert.equal(parseReeferSetpointFromText("Reefer Setpoint: 0 F"), 0);
+  assert.equal(parseReeferSetpointFromText("Maintain 34°F."), 34);
+  assert.equal(resolveReeferSpec({ reefer_setpoint_f: -10, reefer_mode: "", special_instructions: "" }).mode, "continuous");
+  assert.equal(resolveReeferSpec({ equipment: "dry_van_53" }).isReefer, false);
 
   const { attachParsedLocationMatches, matchLocationForParsedStop } = await import("../lib/rate-con-shared");
   const locationsBeforeMatch = queries.listLocations().length;
@@ -1337,6 +1352,12 @@ Continuous reefer. Two load locks.
   assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
   assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
   assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
+  assert.match(deniseText, /REEFER/);
+  assert.match(deniseText, /34\s*°?\s*F|34°F/);
+  assert.match(deniseText, /Continuous/);
+  assert.equal(deniseConfirm.reeferMode, "Continuous");
+  assert.match(deniseConfirm.reeferSetpoint, /34/);
+  assert.equal(deniseLoad.reefer_mode, "continuous");
 
   const freshCompanyId = queries.createLoad({
     customer_id: customerId,

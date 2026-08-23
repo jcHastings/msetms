@@ -450,7 +450,7 @@ export function seedDatabase(db: Database): void {
     const extras = db.prepare(
       `UPDATE loads SET
         special_instructions = ?, appointment_notes = ?, reference_number = ?, po_number = ?,
-        reefer_setpoint_f = ?, trailer_number = ?, driver_progress = ?
+        reefer_setpoint_f = ?, reefer_mode = ?, trailer_number = ?, driver_progress = ?
        WHERE load_number = ?`,
     );
     extras.run(
@@ -459,6 +459,7 @@ export function seedDatabase(db: Database): void {
       "RC-1043",
       "PO-44118",
       36,
+      "continuous",
       "TR-8801",
       "",
       "MSE-1043",
@@ -469,6 +470,7 @@ export function seedDatabase(db: Database): void {
       "RC-1045",
       "PO-55209",
       34,
+      "continuous",
       "TR-7742",
       "en_route_delivery",
       "MSE-1045",
@@ -482,16 +484,18 @@ export function seedDatabase(db: Database): void {
       "",
       null,
       "",
+      "",
       "en_route_delivery",
       "MSE-1046",
     );
-    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "MSE-1044");
+    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "", "MSE-1044");
     extras.run(
       "Flatbed. 4-foot tarps. Chains in the box.",
       "",
       "RC-1051",
       "",
       null,
+      "",
       "",
       "",
       "MSE-1051",

@@ -5,6 +5,7 @@ import { formatLocationAddress, formatSchedulingSummary } from "./locations";
 import { getCustomer, getLoad, getLocation, getTrailer } from "./queries";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
+import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import type { CompanyProfile, LoadView } from "./types";
 
@@ -47,6 +48,8 @@ export type ConfirmationModel = {
   consignee: ConfirmationStop;
   dispatchNotes: string;
   internalLegs: string;
+  reeferSetpoint: string;
+  reeferMode: string;
 };
 
 export function confirmationStatus(load: LoadView): string {
@@ -118,6 +121,15 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
   ]
     .filter(Boolean)
     .join("\n");
+  const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
+  const reefer = resolveReeferSpec({
+    reefer_setpoint_f: load.reefer_setpoint_f,
+    reefer_mode: load.reefer_mode,
+    special_instructions: load.special_instructions,
+    equipment: load.equipment || equipmentLabel(load),
+    truck_type: load.truck_type,
+    trailer_type: trailer?.type ?? load.trailer_type,
+  });
   return {
     style,
     company,
@@ -176,6 +188,8 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     },
     dispatchNotes: notes,
     internalLegs: "",
+    reeferSetpoint: reefer.isReefer ? formatReeferSetpoint(reefer.setpointF) : "",
+    reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) : "",
   };
 }
 
@@ -306,6 +320,10 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ]);
   }
 
+  if (model.reeferSetpoint || model.reeferMode) {
+    y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
+  }
+
   y = drawStop(doc, left, y + 10, width, model.shipper);
   y = drawStop(doc, left, y + 8, width, model.consignee);
 
@@ -419,6 +437,28 @@ function drawPartyRow(
     });
   });
   return y + headerH + valueH;
+}
+
+function drawReeferBar(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  setpoint: string,
+  mode: string,
+): number {
+  const height = 20;
+  doc.save();
+  doc.rect(x, y, width, height).fill("#dbeafe");
+  doc.restore();
+  doc.rect(x, y, width, height).strokeColor("#1d4ed8").lineWidth(0.7).stroke();
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#1e3a8a");
+  doc.text("REEFER", x + 6, y + 6, { width: 52, lineBreak: false });
+  doc.font("Helvetica").fontSize(8).fillColor("#111827");
+  const setpointText = setpoint ? `Setpoint ${setpoint}` : "Setpoint —";
+  const modeText = mode ? `Mode: ${mode}` : "Mode: Continuous";
+  doc.text(`${setpointText}     ${modeText}`, x + 62, y + 6, { width: width - 70, lineBreak: false });
+  return y + height;
 }
 
 function drawStop(

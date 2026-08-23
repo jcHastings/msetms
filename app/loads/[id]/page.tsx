@@ -155,7 +155,11 @@ export default async function LoadDetailPage({
             <div className="card p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (ORBCOMM)</div>
               <div className="mt-1">
-                <ReeferBadge setpoint={load.reefer_setpoint_f} reading={await getLatestReeferForLoad(load.id)} />
+                <ReeferBadge
+                  setpoint={load.reefer_setpoint_f}
+                  mode={load.reefer_mode || (load.reefer_setpoint_f != null ? "continuous" : "")}
+                  reading={await getLatestReeferForLoad(load.id)}
+                />
               </div>
             </div>
           </div>

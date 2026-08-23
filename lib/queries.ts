@@ -14,6 +14,7 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import { persistReeferMode } from "./reefer-shared";
 import { driverAssignedToLoad } from "./relay-store";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
@@ -72,6 +73,7 @@ const LOAD_SELECT = `
     trucks.samsara_trailer_id AS truck_samsara_trailer_id,
     trucks.orbcomm_asset_id AS truck_orbcomm_asset_id,
     trailers.unit_number AS trailer_unit,
+    trailers.type AS trailer_type,
     trailers.orbcomm_asset_id AS trailer_orbcomm_asset_id,
     drivers.name AS driver_name,
     drivers.phone AS driver_phone,
@@ -989,6 +991,7 @@ export type LoadInput = {
   reference_number: string;
   po_number: string;
   reefer_setpoint_f: number | null;
+  reefer_mode?: string;
   trailer_number: string;
   trailer_id?: number | null;
   shipper_location_id?: number | null;
@@ -1041,10 +1044,10 @@ export function createLoad(input: LoadInput): number {
           load_number, customer_id, origin, destination,
           pickup_start, pickup_end, delivery_start, delivery_end,
           weight, commodity, rate, notes, special_instructions, appointment_notes,
-          reference_number, po_number, reefer_setpoint_f, trailer_number, trailer_id,
+          reference_number, po_number, reefer_setpoint_f, reefer_mode, trailer_number, trailer_id,
           shipper_location_id, consignee_location_id,
           oo_percent, oo_pay, status, truck_id, driver_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         loadNumber,
@@ -1064,6 +1067,7 @@ export function createLoad(input: LoadInput): number {
         input.reference_number,
         input.po_number,
         input.reefer_setpoint_f,
+        persistReeferMode(input),
         input.trailer_number,
         input.trailer_id ?? null,
         input.shipper_location_id ?? null,
@@ -1109,7 +1113,7 @@ export function updateLoad(id: number, input: LoadInput): void {
         pickup_start = ?, pickup_end = ?, delivery_start = ?, delivery_end = ?,
         weight = ?, commodity = ?, rate = ?, notes = ?,
         special_instructions = ?, appointment_notes = ?,
-        reference_number = ?, po_number = ?, reefer_setpoint_f = ?, trailer_number = ?, trailer_id = ?,
+        reference_number = ?, po_number = ?, reefer_setpoint_f = ?, reefer_mode = ?, trailer_number = ?, trailer_id = ?,
         shipper_location_id = ?, consignee_location_id = ?,
         oo_percent = ?, oo_pay = ?, status = ?, truck_id = ?, driver_id = ?, updated_at = ?
        WHERE id = ?`,
@@ -1130,6 +1134,7 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.reference_number,
       input.po_number,
       input.reefer_setpoint_f,
+      persistReeferMode(input),
       input.trailer_number,
       input.trailer_id ?? null,
       input.shipper_location_id ?? null,
@@ -1173,6 +1178,8 @@ export function updateLoad(id: number, input: LoadInput): void {
       oldValue: locationName(existing.consignee_location_id),
       newValue: locationName(input.consignee_location_id),
     },
+    { field: "reefer_setpoint_f", oldValue: existing.reefer_setpoint_f, newValue: input.reefer_setpoint_f },
+    { field: "reefer_mode", oldValue: existing.reefer_mode, newValue: persistReeferMode(input) },
   ]);
 }
 
@@ -1606,6 +1613,7 @@ export function cloneLoad(loadId: number): number {
     reference_number: load.reference_number,
     po_number: load.po_number,
     reefer_setpoint_f: load.reefer_setpoint_f,
+    reefer_mode: load.reefer_mode,
     trailer_number: load.trailer_number,
     trailer_id: null,
     shipper_location_id: load.shipper_location_id,

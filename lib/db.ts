@@ -204,6 +204,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "reference_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "po_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "reefer_setpoint_f", "REAL");
+  ensureColumn(db, "loads", "reefer_mode", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "trailer_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "driver_progress", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "trailer_id", "INTEGER");

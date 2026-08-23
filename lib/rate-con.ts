@@ -9,6 +9,7 @@ import {
   type ParsedRateCon,
   type ParsedStop,
 } from "./rate-con-shared";
+import { parseReeferModeFromText, parseReeferSetpointFromText } from "./reefer-shared";
 import type { Customer } from "./types";
 
 export {
@@ -148,7 +149,8 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
         labeled(text, ["po #", "po#", "po number", "purchase order"]) || printed.po_number || "",
       special_instructions: special,
       appointment_notes: appointment,
-      reefer_setpoint_f: parseTemp(text),
+      reefer_setpoint_f: parseReeferSetpointFromText(text),
+      reefer_mode: parseReeferModeFromText(text) ?? "",
       load_number_hint:
         labeled(text, ["load #", "load#", "load number"]) ||
         ascend.load_number ||
@@ -583,13 +585,6 @@ function parseWeight(value: string): number | null {
   if (!value.trim()) return null;
   const match = value.replace(/,/g, "").match(/(\d{3,6})\s*(?:lbs?|pounds)\b/i);
   return match ? Number.parseInt(match[1], 10) : null;
-}
-
-function parseTemp(text: string): number | null {
-  const match = text.match(/(?:reefer\s*)?(?:setpoint|set point|temp(?:erature)?)\s*[:#]?\s*(-?\d+(?:\.\d+)?)\s*°?\s*F/i);
-  if (match) return Number.parseFloat(match[1]);
-  const bare = text.match(/(-?\d+(?:\.\d+)?)\s*°\s*F/);
-  return bare ? Number.parseFloat(bare[1]) : null;
 }
 
 function clean(value: string): string {

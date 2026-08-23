@@ -9,6 +9,7 @@ import { listLoadsForDriver } from "@/lib/queries";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export default async function DriverHomePage() {
         <ul className="space-y-3">
           {loads.map((load) => {
             const reefer = reeferByLoad.get(load.id);
+            const spec = resolveReeferSpec(load);
             return (
               <li key={load.id}>
                 <Link href={`/driver/loads/${load.id}`} className="block rounded-2xl bg-white p-4 shadow-sm">
@@ -93,10 +95,10 @@ export default async function DriverHomePage() {
                       {labelForDriverProgress(load.driver_progress)}
                     </div>
                   ) : null}
-                  {load.reefer_setpoint_f != null || reefer ? (
-                    <div className="mt-2 text-sm text-slate-600">
-                      Reefer {reefer?.temperature_f ?? "—"}°F
-                      {load.reefer_setpoint_f != null ? ` / set ${load.reefer_setpoint_f}°F` : ""}
+                  {spec.isReefer || reefer ? (
+                    <div className="mt-2 text-sm font-medium text-sky-900">
+                      {formatReeferHeader(spec) || "Reefer"}
+                      {reefer?.temperature_f != null ? ` · live ${reefer.temperature_f}°F` : ""}
                       {reefer?.source === "demo" ? " · demo" : reefer?.source === "orbcomm" ? " · ORBCOMM" : ""}
                     </div>
                   ) : null}

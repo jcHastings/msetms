@@ -55,6 +55,7 @@ import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type Searc
 import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
+import { isReeferMode } from "./reefer-shared";
 import { type FuelImportResult } from "./fuel";
 import { assignFuelTransactionDriver, importFuelFromText } from "./fuel-store";
 
@@ -125,6 +126,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     reference_number: String(formData.get("reference_number") ?? "").trim(),
     po_number: String(formData.get("po_number") ?? "").trim(),
     reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
+    reefer_mode: parseReeferModeField(formData.get("reefer_mode")),
     trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     trailer_id: parseOptionalInt(formData.get("trailer_id")),
     shipper_location_id: parseOptionalInt(formData.get("shipper_location_id")),
@@ -144,6 +146,13 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     parsed.oo_pay = null;
   }
   return parsed;
+}
+
+function parseReeferModeField(value: FormDataEntryValue | null): string {
+  const mode = String(value ?? "").trim();
+  if (!mode) return "";
+  if (!isReeferMode(mode)) throw new Error("Pick Continuous or Start/Stop.");
+  return mode;
 }
 
 function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
