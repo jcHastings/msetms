@@ -1,18 +1,25 @@
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { Database } from "./sqlite";
 import { seedDatabase } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
 
-let connection: Database.Database | null = null;
+let connection: Database | null = null;
 let connectedPath: string | null = null;
 
 export function getDbPath(): string {
   return process.env.TMS_DB_PATH || DEFAULT_DB_PATH;
 }
 
-export function getDb(): Database.Database {
+/** Project `data/` (or dirname of TMS_DB_PATH). Standalone cwd is `.next/standalone`. */
+export function getDataDir(): string {
+  if (process.env.TMS_DATA_DIR) return process.env.TMS_DATA_DIR;
+  if (process.env.TMS_DB_PATH) return path.dirname(process.env.TMS_DB_PATH);
+  return path.join(process.cwd(), "data");
+}
+
+export function getDb(): Database {
   const dbPath = getDbPath();
   if (connection && connectedPath === dbPath) {
     return connection;
@@ -37,6 +44,7 @@ export function getDb(): Database.Database {
     backfillDemoPins(db);
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
+    backfillDemoInboxExceptions(db);
   }
 
   connection = db;
@@ -52,7 +60,7 @@ export function closeDb(): void {
   }
 }
 
-export function migrate(db: Database.Database): void {
+export function migrate(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,7 +256,7 @@ function isoDateOffset(offsetDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function backfillDemoDriverCompliance(db: Database.Database): void {
+function backfillDemoDriverCompliance(db: Database): void {
   const rows: Array<[string, string, string, string, string]> = [
     ["Denise Ortega", "772110", "TN", isoDateOffset(25), isoDateOffset(200)],
     ["Tyrell Brooks", "104552", "MS", isoDateOffset(400), isoDateOffset(-10)],
@@ -266,7 +274,7 @@ function backfillDemoDriverCompliance(db: Database.Database): void {
   }
 }
 
-function backfillDemoRegistration(db: Database.Database): void {
+function backfillDemoRegistration(db: Database): void {
   db.prepare(
     `UPDATE trucks
      SET registration_issued = CASE WHEN registration_issued = '' THEN ? ELSE registration_issued END,
@@ -287,7 +295,55 @@ function backfillDemoRegistration(db: Database.Database): void {
   ).run(isoDateOffset(-200), isoDateOffset(20));
 }
 
-function backfillDemoPins(db: Database.Database): void {
+/** Keep the exception inbox non-empty on existing demo databases. */
+function backfillDemoInboxExceptions(db: Database): void {
+  const load1045 = db.prepare("SELECT id FROM loads WHERE load_number = 'MSE-1045'").get() as
+    | { id: number }
+    | undefined;
+  if (load1045) {
+    const excursion = db
+      .prepare(
+        `SELECT id FROM reefer_readings
+         WHERE load_id = ? AND (temperature_f >= 40 OR alarm != '')
+         LIMIT 1`,
+      )
+      .get(load1045.id) as { id: number } | undefined;
+    if (!excursion) {
+      const truck = db.prepare("SELECT id FROM trucks WHERE unit_number = '112'").get() as
+        | { id: number }
+        | undefined;
+      const recorded = new Date();
+      recorded.setMinutes(recorded.getMinutes() - 20);
+      db.prepare(
+        `INSERT INTO reefer_readings (
+          load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f,
+          door_open, alarm, latitude, longitude, address, source, recorded_at
+        ) VALUES (?, ?, 'TR-7742', 34, 48.6, 47.8, 46.2, 0, 'HIGH TEMP', 32.7791, -96.8002, 'Dallas, TX', 'demo', ?)`,
+      ).run(load1045.id, truck?.id ?? null, recorded.toISOString());
+    }
+  }
+
+  const load1046 = db
+    .prepare("SELECT id, delivery_end, status FROM loads WHERE load_number = 'MSE-1046'")
+    .get() as { id: number; delivery_end: string; status: string } | undefined;
+  if (load1046?.status === "in_transit") {
+    const end = new Date(load1046.delivery_end);
+    if (!Number.isNaN(end.getTime()) && end.getTime() > Date.now()) {
+      const lateEnd = new Date();
+      lateEnd.setDate(lateEnd.getDate() - 1);
+      lateEnd.setHours(12, 0, 0, 0);
+      const lateStart = new Date(lateEnd);
+      lateStart.setHours(8, 0, 0, 0);
+      db.prepare("UPDATE loads SET delivery_start = ?, delivery_end = ? WHERE id = ?").run(
+        lateStart.toISOString(),
+        lateEnd.toISOString(),
+        load1046.id,
+      );
+    }
+  }
+}
+
+function backfillDemoPins(db: Database): void {
   const pins: Record<string, string> = {
     "Marcus Hale": "1024",
     "Denise Ortega": "1125",
@@ -305,7 +361,7 @@ function backfillDemoPins(db: Database.Database): void {
 }
 
 function ensureColumn(
-  db: Database.Database,
+  db: Database,
   table: string,
   column: string,
   definition: string,

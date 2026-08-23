@@ -18,6 +18,7 @@ Do not implement the full catalog in this PR. Ship the current v1 slice only.
 Existing work only:
 
 - Dispatcher web desk and phone-width driver web app
+- **Exception inbox** on dispatch home (N fine / M need attention, ranked CRITICAL–LOW)
 - Loads: create, edit, board filters, assign / reassign truck + trailer + driver
 - Rate-con ingest (PDF / local OCR) with review before save
 - Load confirmation PDFs (owner-operator vs company-driver templates)
@@ -32,7 +33,6 @@ Each integration is Connected vs Demo independently. Failed live APIs show an er
 
 ## Next
 
-- **Exception inbox** — the “7 loads need attention” list (late, reefer, HOS, missing docs, expiring compliance), ranked by severity
 - Richer load statuses (at PU / picked up / at DEL, reason codes)
 - Multi-stop loads
 - **IFTA live** as the default path when the token and scopes are present (trip-window detail, not only demo)

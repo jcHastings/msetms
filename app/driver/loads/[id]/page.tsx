@@ -107,7 +107,12 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      <DriverLoadActions loadId={load.id} current={load.driver_progress} closed={load.status === "delivered"} />
+      <DriverLoadActions
+        loadId={load.id}
+        loadNumber={load.load_number}
+        current={load.driver_progress}
+        closed={load.status === "delivered"}
+      />
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold">Files on this load</h2>

@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database } from "./sqlite";
 
 function atHour(offsetDays: number, hour: number, minute = 0): string {
   const date = new Date();
@@ -17,7 +17,7 @@ function isoDate(offsetDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function seedDatabase(db: Database.Database): void {
+export function seedDatabase(db: Database): void {
   const created = now();
 
   const insertCustomer = db.prepare(
@@ -235,10 +235,10 @@ export function seedDatabase(db: Database.Database): void {
       riverCity,
       "Memphis, TN",
       "Atlanta, GA",
-      atHour(0, 6, 0),
-      atHour(0, 10, 0),
-      atHour(1, 5, 0),
-      atHour(1, 11, 0),
+      atHour(-1, 6, 0),
+      atHour(-1, 10, 0),
+      atHour(0, 5, 0),
+      atHour(0, 11, 0),
       41200,
       "Fresh produce",
       2400,
@@ -292,10 +292,10 @@ export function seedDatabase(db: Database.Database): void {
       prairie,
       "Kansas City, MO",
       "St. Louis, MO",
-      atHour(-1, 10, 0),
-      atHour(-1, 15, 0),
-      atHour(0, 8, 0),
-      atHour(0, 12, 0),
+      atHour(-2, 10, 0),
+      atHour(-2, 15, 0),
+      atHour(-1, 8, 0),
+      atHour(-1, 12, 0),
       44000,
       "Bagged feed",
       980,
@@ -500,6 +500,7 @@ export function seedDatabase(db: Database.Database): void {
     insertReading.run(load1043.id, t108, "TR-8801", 36, 36.4, 0, "", atHour(0, 5, 40));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 33.8, 0, "", atHour(0, 11, 15));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 34.2, 0, "", atHour(0, 13, 5));
+    insertReading.run(load1045.id, t112, "TR-7742", 34, 48.6, 0, "HIGH TEMP", atHour(0, 14, 20));
     db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ?, latitude = ?, longitude = ?, address = ? WHERE trailer_id = 'TR-8801'").run(
       36.1,
       35.8,
@@ -510,6 +511,9 @@ export function seedDatabase(db: Database.Database): void {
     db.prepare(
       "UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ?, latitude = ?, longitude = ?, address = ? WHERE trailer_id = 'TR-7742' AND temperature_f = 34.2",
     ).run(34.0, 33.6, 32.7791, -96.8002, "Dallas, TX");
+    db.prepare(
+      "UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ?, latitude = ?, longitude = ?, address = ? WHERE trailer_id = 'TR-7742' AND temperature_f = 48.6",
+    ).run(47.8, 46.2, 32.7791, -96.8002, "Dallas, TX");
 
     const patchDriver = db.prepare(
       `UPDATE drivers SET license_number = ?, license_state = ?, license_expires = ?,

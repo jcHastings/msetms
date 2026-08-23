@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { ComplianceList } from "@/components/compliance-badge";
+import { listExceptionInbox } from "@/lib/exceptions";
 import { getDashboardStats, listAttentionLoads, listDrivers, listMovingLoads, listTrucks, listUpcomingCompliance } from "@/lib/queries";
 import { labelForTruckType } from "@/lib/types";
 
@@ -17,18 +19,21 @@ export default function DashboardPage() {
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
   const onDuty = drivers.filter((driver) => driver.status === "on_duty");
   const expirations = listUpcomingCompliance();
+  const inbox = listExceptionInbox();
 
   return (
     <>
       <PageHeader
         title="Dispatch desk"
-        subtitle="Open work, trucks on the road, and loads that still need a unit."
+        subtitle="Exception inbox first — ranked work, then trucks on the road and loads that still need a unit."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load
           </Link>
         }
       />
+
+      <ExceptionInboxCard inbox={inbox} />
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Open loads" value={stats.openLoads} hint="Available, assigned, in transit" href="/board" />
