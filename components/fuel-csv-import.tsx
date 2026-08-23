@@ -13,9 +13,10 @@ export function FuelCsvImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Daily fuel-card import</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Upload a CSV or a Transaction Activity Report PDF. Lines map date, card, category, unit, prompt,
-          invoice, location, qty, PPG, and total. Driver comes from the name on the row or the NName
-          block. Re-uploading the same invoice + category + qty does not double-count.
+          Upload a CSV or a Transaction Activity Report PDF. Every line is one of four buckets: Truck
+          diesel, Reefer diesel, DEF, or Scale — never lumped into Other. Lines map date, card, category,
+          unit, prompt, invoice, location, qty, PPG, and total. Driver comes from the name on the row or
+          the NName block. Re-uploading the same invoice + category + qty does not double-count.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">

@@ -1767,7 +1767,11 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /Unassigned/);
   assert.match(fuelPage, /Per-truck totals/);
-  assert.match(fuelPage, /Truck diesel|labelForFuelBucket/);
+  assert.match(fuelPage, /Truck diesel/);
+  assert.match(fuelPage, /Reefer diesel|reefer diesel/);
+  assert.match(fuelPage, /DEF/);
+  assert.match(fuelPage, /Scale/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-rollup-table.tsx"), "utf8"), /FUEL_BUCKETS/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.match(fuelImportUi, /NName|Transaction Activity/);
@@ -1790,8 +1794,13 @@ Continuous reefer. Two load locks.
     renderFuelExportCsv,
     renderFuelTemplate,
     FUEL_CSV_HEADERS,
+    FUEL_BUCKETS,
   } = await import("../lib/fuel");
   const fuelStore = await import("../lib/fuel-store");
+  assert.deepEqual(
+    FUEL_BUCKETS.map((bucket) => bucket.value),
+    ["truck_diesel", "reefer_diesel", "def", "scale"],
+  );
   assert.equal(renderFuelTemplate().replace(/^\uFEFF/, "").trim(), FUEL_CSV_HEADERS.join(","));
   const noon = parseFuelWhen("08/21/2026", "2:32 PM");
   assert.ok(noon);
@@ -1802,11 +1811,11 @@ Continuous reefer. Two load locks.
   const fuelWhen = new Date();
   const fuelDate = `${fuelWhen.getMonth() + 1}/${fuelWhen.getDate()}/${fuelWhen.getFullYear()}`;
   const fuelCsv = [
-    "Date,Time,Driver Name,Driver ID,Unit,Location,Gallons,Price,Total,Card Number",
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
-    `${fuelDate},15:10,, ,101,Indianapolis,80,3.40,272.00,1111`,
-    `${fuelDate},16:00,Unknown Driver,,8888,Nowhere,40,3.10,124.00,2222`,
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
+    "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},15:10,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},16:00,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
@@ -1840,6 +1849,10 @@ Continuous reefer. Two load locks.
   assert.ok(deniseFuel);
   assert.equal(deniseFuel.weekGallons, 100);
   assert.equal(deniseFuel.monthAmount, 349.9);
+  assert.equal(deniseFuel.week.truck_diesel.gallons, 100);
+  assert.equal(deniseFuel.week.reefer_diesel.gallons, 0);
+  assert.equal(deniseFuel.week.def.gallons, 0);
+  assert.equal(deniseFuel.week.scale.amount, 0);
   const exportedFuel = renderFuelExportCsv(fuelStore.listFuelTransactions());
   assert.match(exportedFuel, /Denise Ortega/);
   assert.match(exportedFuel, /4321/);
@@ -1849,7 +1862,20 @@ Continuous reefer. Two load locks.
   assert.equal(classifyFuelCategory("REEFER ULTRA LOW SULFUR"), "reefer_diesel");
   assert.equal(classifyFuelCategory("CAT SCALES"), "scale");
   assert.equal(classifyFuelCategory("DIESEL EXHAUST FLUID"), "def");
-  assert.equal(classifyFuelCategory("candy"), "other");
+  assert.equal(classifyFuelCategory("candy"), "");
+  const fourCsv = parseFuelCsv(
+    [
+      "Date,Driver Name,Unit,Category,Invoice,Gallons,Total",
+      `${fuelDate},Christopher Howell,32,ULTRA LOW SULFUR DIESEL,CSV-1,10,30`,
+      `${fuelDate},Christopher Howell,32,REEFER ULTRA LOW SULFUR,CSV-2,5,15`,
+      `${fuelDate},Christopher Howell,32,DIESEL EXHAUST FLUID,CSV-3,1,4`,
+      `${fuelDate},Christopher Howell,32,CAT SCALES,CSV-4,1,18`,
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    fourCsv.rows.map((row) => row.category),
+    ["truck_diesel", "reefer_diesel", "def", "scale"],
+  );
 
   const efsReport = [
     "/Dm201902",
@@ -1917,6 +1943,12 @@ Continuous reefer. Two load locks.
   assert.equal(howellRollup.month.reefer_diesel.gallons, 20);
   assert.equal(howellRollup.month.def.gallons, 5);
   assert.equal(howellRollup.month.truck_diesel.gallons === howellRollup.monthGallons, false);
+  assert.equal(howellRollup.month.scale.gallons, 0);
+  assert.equal(howellRollup.month.scale.amount, 0);
+  for (const key of ["truck_diesel", "reefer_diesel", "def", "scale"] as const) {
+    assert.ok(howellRollup.month[key]);
+    assert.ok(howellRollup.week[key]);
+  }
   const ellerRollup = fuelStore.getDriverFuelRollup(ellerId);
   assert.equal(ellerRollup.month.scale.amount, 18.5);
   assert.equal(ellerRollup.month.truck_diesel.gallons, 0);

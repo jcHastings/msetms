@@ -40,7 +40,7 @@ export default async function FuelPage({
     <>
       <PageHeader
         title="Fuel"
-        subtitle="Daily fuel-card CSV or Transaction Activity Report PDF. Totals split truck diesel, reefer diesel, DEF, and scale."
+        subtitle="Daily fuel-card CSV or Transaction Activity Report PDF. Totals always split Truck diesel, Reefer diesel, DEF, and Scale."
         actions={
           <>
             <a href="/api/fuel/export" className="btn btn-secondary">

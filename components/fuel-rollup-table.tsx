@@ -22,7 +22,7 @@ export function FuelRollupTable({
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Truck diesel, reefer diesel, DEF, and scale stay split. DEF is never rolled into truck diesel.
+          Four first-class buckets: Truck diesel, Reefer diesel, DEF, Scale. Never lumped into Other.
         </p>
       </header>
       {rows.length === 0 ? (

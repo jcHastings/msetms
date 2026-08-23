@@ -180,18 +180,18 @@ export function emptyPeriodTotals(): FuelPeriodTotals {
   return { ...emptyBucketTotals(), gallons: 0, amount: 0 };
 }
 
-export function classifyFuelCategory(raw: string): FuelBucket | "other" {
+export function classifyFuelCategory(raw: string): FuelBucket | "" {
   const key = raw.toLowerCase();
-  if (!key.trim()) return "other";
+  if (!key.trim()) return "";
   if (/diesel exhaust|exhaust fluid|\bdef\b/.test(key)) return "def";
   if (/reefer/.test(key)) return "reefer_diesel";
   if (/scale/.test(key)) return "scale";
   if (/diesel|ulsd/.test(key)) return "truck_diesel";
-  return "other";
+  return "";
 }
 
 export function labelForFuelBucket(value: string): string {
-  if (value === "other" || !value) return "Other";
+  if (!value || value === "other") return "—";
   return FUEL_BUCKETS.find((item) => item.value === value)?.label ?? value;
 }
 
@@ -321,7 +321,8 @@ export function fuelRowDedupKey(input: {
   amount: number | null;
   cardLast4: string;
 }): string {
-  const bucket = classifyFuelCategory(input.category) === "other" ? input.category || "other" : classifyFuelCategory(input.category);
+  const classified = classifyFuelCategory(input.category);
+  const bucket = classified || input.category.trim().toLowerCase() || "unclassified";
   if (input.invoice.trim()) {
     const qty = input.gallons == null ? "" : input.gallons.toFixed(3);
     return `inv|${input.invoice.trim().toLowerCase()}|${bucket}|${qty}`;
