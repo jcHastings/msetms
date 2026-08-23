@@ -60,6 +60,72 @@ export type Contact = {
 
 export type CustomerWithContacts = Customer & { contacts: Contact[] };
 
+export const LOCATION_ROLES = [
+  { value: "shipper", label: "Shipper" },
+  { value: "receiver", label: "Receiver" },
+  { value: "both", label: "Shipper & receiver" },
+] as const;
+
+export type LocationRole = (typeof LOCATION_ROLES)[number]["value"];
+
+export const LOCATION_SCHEDULING = [
+  { value: "appointment", label: "Appointment required" },
+  { value: "fcfs", label: "FCFS" },
+] as const;
+
+export type LocationSchedulingType = (typeof LOCATION_SCHEDULING)[number]["value"];
+
+export type Location = {
+  id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: LocationRole;
+  scheduling_type: LocationSchedulingType;
+  hours: string;
+  scheduling_notes: string;
+  scheduling_email: string;
+  scheduling_portal: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LocationInput = {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: LocationRole;
+  scheduling_type: LocationSchedulingType;
+  hours: string;
+  scheduling_notes: string;
+  scheduling_email: string;
+  scheduling_portal: string;
+};
+
+export function labelForLocationRole(role: string): string {
+  return LOCATION_ROLES.find((item) => item.value === role)?.label ?? role;
+}
+
+export function labelForLocationScheduling(value: string): string {
+  return LOCATION_SCHEDULING.find((item) => item.value === value)?.label ?? value;
+}
+
+export function isLocationRole(value: string): value is LocationRole {
+  return LOCATION_ROLES.some((item) => item.value === value);
+}
+
+export function isLocationSchedulingType(value: string): value is LocationSchedulingType {
+  return LOCATION_SCHEDULING.some((item) => item.value === value);
+}
+
 export const DRIVER_PROGRESS = [
   { value: "en_route_pickup", label: "En route to pickup" },
   { value: "loaded", label: "Loaded" },
@@ -197,6 +263,8 @@ export type Load = {
   customer_id: number;
   origin: string;
   destination: string;
+  shipper_location_id: number | null;
+  consignee_location_id: number | null;
   pickup_start: string;
   pickup_end: string;
   delivery_start: string;
@@ -314,6 +382,59 @@ export type DashboardStats = {
   inTransit: number;
   availableTrucks: number;
   unassignedLoads: number;
+};
+
+export type SearchColumnId =
+  | "load_id"
+  | "pickups"
+  | "deliveries"
+  | "customer"
+  | "driver"
+  | "truck"
+  | "trailer"
+  | "refs"
+  | "notes"
+  | "status";
+
+export const SEARCH_COLUMNS: Array<{ id: SearchColumnId; label: string }> = [
+  { id: "load_id", label: "Load ID" },
+  { id: "pickups", label: "Pickups" },
+  { id: "deliveries", label: "Deliveries" },
+  { id: "customer", label: "Customer" },
+  { id: "driver", label: "Driver" },
+  { id: "truck", label: "Truck" },
+  { id: "trailer", label: "Trailer" },
+  { id: "refs", label: "Refs" },
+  { id: "notes", label: "Notes" },
+  { id: "status", label: "Status" },
+];
+
+export type LoadSearchCriteria = {
+  q: string;
+  originState: string;
+  destState: string;
+  dateFrom: string;
+  dateTo: string;
+  datePreset: "" | "this_week" | "this_month";
+  searchBy: "pickup";
+  customerId: number | null;
+  driverId: number | null;
+  truckId: number | null;
+  trailerId: number | null;
+  status: "" | LoadStatus;
+  includeLive: boolean;
+  includeArchived: boolean;
+  includeCancelled: boolean;
+  columns: SearchColumnId[];
+  reportId: number | null;
+};
+
+export type SavedSearchReport = {
+  id: number;
+  name: string;
+  filters: LoadSearchCriteria;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ActionResult = { ok: true; id?: number } | { ok: false; error: string };

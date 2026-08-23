@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { getDb } from "./db";
+import { getDataDir, getDb } from "./db";
 import type { Attachment, AttachmentKind, FleetDocKind, FleetDocument } from "./types";
 
 function uploadsDir(...parts: string[]): string {
-  const dir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", ...parts);
+  const dir = path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", ...parts);
   fs.mkdirSync(/*turbopackIgnore: true*/ dir, { recursive: true });
   return dir;
 }
@@ -20,7 +20,7 @@ export function saveInboxFile(file: File, buffer: Buffer): { inboxId: string; st
 }
 
 export function getInboxFile(inboxId: string): { storedPath: string; originalName: string } | null {
-  const dir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", "inbox", inboxId);
+  const dir = path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "inbox", inboxId);
   if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) return null;
   const files = fs.readdirSync(/*turbopackIgnore: true*/ dir).filter((name) => name !== "parsed.json");
   if (files.length === 0) return null;
@@ -33,7 +33,7 @@ export function writeInboxParse(inboxId: string, payload: unknown): void {
 }
 
 export function readInboxParse<T>(inboxId: string): T | null {
-  const file = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", "inbox", inboxId, "parsed.json");
+  const file = path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "inbox", inboxId, "parsed.json");
   if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return null;
   return JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as T;
 }
@@ -107,8 +107,7 @@ export function getAttachment(id: number): Attachment | null {
 
 export function getAttachmentPath(attachment: Attachment): string {
   return path.join(
-    /*turbopackIgnore: true*/ process.cwd(),
-    "data",
+    /*turbopackIgnore: true*/ getDataDir(),
     "uploads",
     String(attachment.load_id),
     attachment.stored_name,
@@ -194,8 +193,7 @@ export function getFleetDocument(id: number): FleetDocument | null {
 
 export function getFleetDocumentPath(doc: FleetDocument): string {
   return path.join(
-    /*turbopackIgnore: true*/ process.cwd(),
-    "data",
+    /*turbopackIgnore: true*/ getDataDir(),
     "uploads",
     "fleet",
     doc.owner_type,

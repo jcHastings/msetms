@@ -10,7 +10,9 @@ import {
   trailerComplianceAlerts,
   truckComplianceAlerts,
 } from "@/lib/compliance";
+import { StopPicker } from "@/components/stop-picker";
 import { formatMoney, toInputDateTime } from "@/lib/format";
+import { locationServesRole } from "@/lib/locations";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import {
   LOAD_STATUSES,
@@ -19,6 +21,7 @@ import {
   type Customer,
   type DriverWithTruck,
   type Load,
+  type Location,
   type Trailer,
   type Truck,
 } from "@/lib/types";
@@ -49,6 +52,7 @@ type Props = {
   trucks: Truck[];
   trailers?: Trailer[];
   drivers: DriverWithTruck[];
+  locations?: Location[];
   load?: Load;
   defaults?: Defaults;
   inboxId?: string;
@@ -61,6 +65,7 @@ export function LoadForm({
   trucks,
   trailers = [],
   drivers,
+  locations = [],
   load,
   defaults,
   inboxId,
@@ -130,26 +135,22 @@ export function LoadForm({
             ))}
           </select>
         </div>
-        <div className="field">
-          <label htmlFor="origin">Origin</label>
-          <input
-            id="origin"
-            name="origin"
-            required
-            defaultValue={load?.origin ?? extraDefaults.origin ?? ""}
-            placeholder="City, ST"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="destination">Destination</label>
-          <input
-            id="destination"
-            name="destination"
-            required
-            defaultValue={load?.destination ?? extraDefaults.destination ?? ""}
-            placeholder="City, ST"
-          />
-        </div>
+        <StopPicker
+          prefix="shipper"
+          label="Shipper / pickup"
+          addressName="origin"
+          locations={locations.filter((location) => locationServesRole(location, "shipper"))}
+          defaultLocationId={load?.shipper_location_id}
+          defaultAddress={load?.origin ?? extraDefaults.origin ?? ""}
+        />
+        <StopPicker
+          prefix="consignee"
+          label="Consignee / delivery"
+          addressName="destination"
+          locations={locations.filter((location) => locationServesRole(location, "receiver"))}
+          defaultLocationId={load?.consignee_location_id}
+          defaultAddress={load?.destination ?? extraDefaults.destination ?? ""}
+        />
         <div className="field">
           <label htmlFor="pickup_start">Pickup window start</label>
           <input

@@ -15,9 +15,10 @@ import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
+import { LocationScheduling } from "@/components/location-scheduling";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
-import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { getLoad, getLocation, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export default async function LoadDetailPage({
   if (!load) notFound();
 
   const boundAction = updateLoadAction.bind(null, load.id);
+  const shipper = load.shipper_location_id ? getLocation(load.shipper_location_id) : null;
+  const consignee = load.consignee_location_id ? getLocation(load.consignee_location_id) : null;
   await ensureDemoIfta(load);
   const ifta = getIftaPanel(load);
 
@@ -76,6 +79,10 @@ export default async function LoadDetailPage({
           </div>
         </div>
       </div>
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <LocationScheduling title="Pickup location" location={shipper} fallbackAddress={load.origin} />
+        <LocationScheduling title="Delivery location" location={consignee} fallbackAddress={load.destination} />
+      </div>
       {load.driver_type === "owner_operator" && load.oo_pay != null ? (
         <div className="mb-4 card p-4 text-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner-operator pay</div>
@@ -109,6 +116,7 @@ export default async function LoadDetailPage({
         trucks={listTrucks()}
         trailers={listTrailers()}
         drivers={listDrivers()}
+        locations={listLocations()}
         load={load}
         action={boundAction}
         submitLabel="Save load"
@@ -119,6 +127,7 @@ export default async function LoadDetailPage({
         trucks={listTrucks()}
         trailers={listTrailers()}
         drivers={listDrivers()}
+        locations={listLocations()}
       />
       <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
