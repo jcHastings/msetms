@@ -78,6 +78,11 @@ export const SETTINGS_SECTIONS = [
     title: "Integrations",
     items: [
       {
+        href: "/settings/quickbooks",
+        label: "QuickBooks Online",
+        hint: "Connect OAuth. Customer invoices only. Keys stay in .env.",
+      },
+      {
         href: "/settings/integrations",
         label: "Samsara, ORBCOMM, QuickBooks, tracking",
         hint: "Connect status only. Credentials stay in .env.",

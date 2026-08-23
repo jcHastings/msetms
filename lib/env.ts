@@ -49,24 +49,39 @@ export function isOrbcommConfigured(): boolean {
 }
 
 export function getQuickbooksClientId(): string | undefined {
-  return readSecret("QUICKBOOKS_CLIENT_ID");
+  return readSecret("QBO_CLIENT_ID") ?? readSecret("QUICKBOOKS_CLIENT_ID");
 }
 
 export function getQuickbooksClientSecret(): string | undefined {
-  return readSecret("QUICKBOOKS_CLIENT_SECRET");
+  return readSecret("QBO_CLIENT_SECRET") ?? readSecret("QUICKBOOKS_CLIENT_SECRET");
+}
+
+export function getQuickbooksRedirectUri(): string {
+  return (
+    readSecret("QBO_REDIRECT_URI") ??
+    readSecret("QUICKBOOKS_REDIRECT_URI") ??
+    "http://localhost:3000/api/integrations/quickbooks/callback"
+  );
 }
 
 export function getQuickbooksRefreshToken(): string | undefined {
-  return readSecret("QUICKBOOKS_REFRESH_TOKEN");
+  return readSecret("QBO_REFRESH_TOKEN") ?? readSecret("QUICKBOOKS_REFRESH_TOKEN");
 }
 
 export function getQuickbooksRealmId(): string | undefined {
-  return readSecret("QUICKBOOKS_REALM_ID");
+  return readSecret("QBO_REALM_ID") ?? readSecret("QUICKBOOKS_REALM_ID");
 }
 
 export function getQuickbooksEnvironment(): "sandbox" | "production" {
+  const sandbox = readSecret("QBO_SANDBOX")?.toLowerCase();
+  if (sandbox === "false" || sandbox === "0" || sandbox === "no") return "production";
+  if (sandbox === "true" || sandbox === "1" || sandbox === "yes") return "sandbox";
   const value = readSecret("QUICKBOOKS_ENVIRONMENT")?.toLowerCase();
   return value === "production" ? "production" : "sandbox";
+}
+
+export function isQuickbooksOAuthReady(): boolean {
+  return Boolean(getQuickbooksClientId() && getQuickbooksClientSecret());
 }
 
 export function getGoogleMapsApiKey(): string | undefined {

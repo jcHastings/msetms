@@ -78,6 +78,11 @@ export default async function LoadDetailPage({
           <div className="flex items-center gap-3">
             <LoadStatusBadge status={load.status} />
             <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
+            {load.qbo_invoice_number || load.qbo_invoice_id ? (
+              <span className="text-sm text-slate-600">
+                QBO {load.qbo_invoice_number || load.qbo_invoice_id}
+              </span>
+            ) : null}
           </div>
         }
       />

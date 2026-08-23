@@ -143,6 +143,8 @@ export type Customer = {
   billing_notes: string;
   credit_hold: number;
   payment_terms: string;
+  qbo_customer_id: string;
+  qbo_status: string;
   created_at: string;
   updated_at: string;
 };

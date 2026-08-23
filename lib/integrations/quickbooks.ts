@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -5,17 +6,27 @@ import {
   getQuickbooksClientSecret,
   getQuickbooksEnvironment,
   getQuickbooksRealmId,
+  getQuickbooksRedirectUri,
   getQuickbooksRefreshToken,
-  isQuickbooksConfigured,
+  isQuickbooksOAuthReady,
 } from "../env";
 import { getDbPath } from "../db";
-import { getLoad, markQboInvoice } from "../queries";
+import {
+  getCustomer,
+  getLoad,
+  markCustomerNeedsQbo,
+  markCustomerQboMapped,
+  markQboInvoice,
+} from "../queries";
 import type { LoadView } from "../types";
 
 const MINOR_VERSION = "75";
 const FETCH_TIMEOUT_MS = 15_000;
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
+const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
+const LUMPER_ITEM_NAME = "Lumper";
 
 let lastDemoInvoiceStamp = 0;
 
@@ -25,14 +36,22 @@ function uniqueDemoInvoiceStamp(): number {
   return next;
 }
 
+export type QboInvoiceLine = {
+  name: string;
+  description: string;
+  amount: number;
+};
+
 export type QboInvoicePreview = {
   configured: boolean;
   mode: "demo" | "quickbooks";
   environment: "sandbox" | "production";
   customerName: string;
+  customerNeedsQbo: boolean;
   loadNumber: string;
   lane: string;
   amount: number;
+  lines: QboInvoiceLine[];
   txnDate: string;
   memo: string;
   ownerOperatorNote: string;
@@ -52,11 +71,13 @@ export type QboSendResult = {
 
 export type QboStatus = {
   configured: boolean;
+  oauthReady: boolean;
   environment: "sandbox" | "production";
   mode: "demo" | "quickbooks";
-  status: "Demo" | "Connected" | "API error";
+  status: "Demo" | "Connected" | "API error" | "Needs connect";
   clientIdSet: boolean;
   clientSecretSet: boolean;
+  redirectUri: string;
   refreshTokenSet: boolean;
   realmIdSet: boolean;
   companyName: string;
@@ -77,17 +98,27 @@ export function resetQuickbooksForTests(): void {
   cachedAccess = null;
 }
 
+export function hasQuickbooksSession(): boolean {
+  return Boolean(
+    getQuickbooksClientId() && getQuickbooksClientSecret() && resolveRefreshToken() && resolveRealmId(),
+  );
+}
+
 export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
-  const amount = requireCustomerRate(load);
-  const configured = isQuickbooksConfigured();
+  const lines = buildInvoiceLines(load);
+  const amount = lines.reduce((sum, line) => sum + line.amount, 0);
+  const configured = hasQuickbooksSession();
+  const customer = getCustomer(load.customer_id);
   return {
     configured,
     mode: configured ? "quickbooks" : "demo",
     environment: getQuickbooksEnvironment(),
     customerName: load.customer_name,
+    customerNeedsQbo: customer?.qbo_status === "needs_qbo",
     loadNumber: load.load_number,
     lane: `${load.origin} → ${load.destination}`,
     amount,
+    lines,
     txnDate: invoiceDate(load.delivery_end || load.delivery_start),
     memo: buildMemo(load),
     ownerOperatorNote:
@@ -100,6 +131,22 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     existingSentAt: load.qbo_sent_at,
     existingSource: load.qbo_source,
   };
+}
+
+export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
+  const rate = requireCustomerRate(load);
+  const lane = `${load.origin} → ${load.destination}`;
+  const lines: QboInvoiceLine[] = [
+    { name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
+  ];
+  if (load.lumper_actual != null && load.lumper_actual > 0) {
+    lines.push({
+      name: LUMPER_ITEM_NAME,
+      description: `${load.load_number} lumper`,
+      amount: load.lumper_actual,
+    });
+  }
+  return lines;
 }
 
 export async function sendLoadToQuickbooks(
@@ -117,7 +164,7 @@ export async function sendLoadToQuickbooks(
   const preview = previewQuickbooksInvoice(load);
   const sentAt = new Date().toISOString();
 
-  if (!isQuickbooksConfigured()) {
+  if (!hasQuickbooksSession()) {
     const result: QboSendResult = {
       invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
       invoiceNumber: load.load_number,
@@ -142,23 +189,27 @@ export async function sendLoadToQuickbooks(
 export async function getQuickbooksStatus(): Promise<QboStatus> {
   const fetchedAt = new Date().toISOString();
   const environment = getQuickbooksEnvironment();
+  const session = hasQuickbooksSession();
+  const oauthReady = isQuickbooksOAuthReady();
   const base: QboStatus = {
-    configured: isQuickbooksConfigured(),
+    configured: session,
+    oauthReady,
     environment,
-    mode: "demo",
-    status: "Demo",
+    mode: session ? "quickbooks" : "demo",
+    status: session ? "Connected" : oauthReady ? "Needs connect" : "Demo",
     clientIdSet: Boolean(getQuickbooksClientId()),
     clientSecretSet: Boolean(getQuickbooksClientSecret()),
-    refreshTokenSet: Boolean(getQuickbooksRefreshToken() || readStoredRefreshToken()),
-    realmIdSet: Boolean(getQuickbooksRealmId()),
+    redirectUri: getQuickbooksRedirectUri(),
+    refreshTokenSet: Boolean(resolveRefreshToken()),
+    realmIdSet: Boolean(resolveRealmId()),
     companyName: "",
     fetchedAt,
   };
-  if (!isQuickbooksConfigured()) return base;
+  if (!session) return base;
 
   try {
     const company = await qboGet<{ CompanyInfo?: { CompanyName?: string; LegalName?: string } }>(
-      `/companyinfo/${getQuickbooksRealmId()}`,
+      `/companyinfo/${resolveRealmId()}`,
       "company info",
     );
     const companyName = company.CompanyInfo?.CompanyName || company.CompanyInfo?.LegalName || "";
@@ -209,27 +260,29 @@ async function createLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
-  const customerId = await findOrCreateCustomer(preview.customerName);
-  const itemId = await findOrCreateLineHaulItem();
+  const customerId = await resolveQboCustomer(load);
   const docNumber = uniqueDocNumber(load);
+  const linePayload = [];
+  for (const line of preview.lines) {
+    const itemId = await findOrCreateServiceItem(line.name);
+    linePayload.push({
+      Amount: line.amount,
+      DetailType: "SalesItemLineDetail",
+      Description: line.description,
+      SalesItemLineDetail: {
+        ItemRef: { value: itemId, name: line.name },
+        Qty: 1,
+        UnitPrice: line.amount,
+      },
+    });
+  }
   const payload = {
     DocNumber: docNumber,
     TxnDate: preview.txnDate,
     CustomerRef: { value: customerId },
     PrivateNote: preview.memo.slice(0, 4000),
     CustomerMemo: { value: preview.memo.slice(0, 1000) },
-    Line: [
-      {
-        Amount: preview.amount,
-        DetailType: "SalesItemLineDetail",
-        Description: `${preview.loadNumber} ${preview.lane}`,
-        SalesItemLineDetail: {
-          ItemRef: { value: itemId, name: LINE_HAUL_ITEM_NAME },
-          Qty: 1,
-          UnitPrice: preview.amount,
-        },
-      },
-    ],
+    Line: linePayload,
   };
   const created = await qboPost<{ Invoice?: { Id?: string; DocNumber?: string } }>(
     "/invoice",
@@ -252,28 +305,53 @@ function uniqueDocNumber(load: LoadView): string {
   return `${load.load_number}-${suffix}`.slice(0, 21);
 }
 
-async function findOrCreateCustomer(name: string): Promise<string> {
-  const displayName = name.trim().slice(0, 500);
-  const existing = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
+async function resolveQboCustomer(load: LoadView): Promise<string> {
+  const mapped = getCustomer(load.customer_id);
+  if (mapped?.qbo_customer_id) return mapped.qbo_customer_id;
+  const displayName = load.customer_name.trim().slice(0, 500);
+  try {
+    const found = await findQboCustomerId(displayName);
+    if (found) {
+      if (load.customer_id) markCustomerQboMapped(load.customer_id, found);
+      return found;
+    }
+    const created = await qboPost<{ Customer?: { Id?: string } }>(
+      "/customer",
+      { DisplayName: displayName },
+      "customer create",
+    );
+    const id = created.Customer?.Id;
+    if (!id) throw new Error("QuickBooks did not return a customer id.");
+    if (load.customer_id) markCustomerQboMapped(load.customer_id, id);
+    return id;
+  } catch (error) {
+    if (error instanceof QboHttpError) throw error;
+    if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
+    if (error instanceof Error && /Needs QBO customer/i.test(error.message)) throw error;
+    throw new Error(`Needs QBO customer: ${displayName}. Create or match this customer in QuickBooks, then send again.`);
+  }
+}
+
+async function findQboCustomerId(displayName: string): Promise<string | undefined> {
+  const exact = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
     `select * from Customer where DisplayName = '${escapeQboString(displayName)}'`,
     "customer query",
   );
-  const found = existing.QueryResponse?.Customer?.[0]?.Id;
-  if (found) return found;
-
-  const created = await qboPost<{ Customer?: { Id?: string } }>(
-    "/customer",
-    { DisplayName: displayName },
-    "customer create",
+  const exactHits = exact.QueryResponse?.Customer ?? [];
+  if (exactHits.length === 1 && exactHits[0]?.Id) return exactHits[0].Id;
+  if (exactHits.length > 1) return undefined;
+  const company = await qboQuery<{ Customer?: Array<{ Id?: string }> }>(
+    `select * from Customer where CompanyName = '${escapeQboString(displayName)}'`,
+    "customer company query",
   );
-  const id = created.Customer?.Id;
-  if (!id) throw new Error("QuickBooks did not return a customer id.");
-  return id;
+  const companyHits = company.QueryResponse?.Customer ?? [];
+  if (companyHits.length === 1 && companyHits[0]?.Id) return companyHits[0].Id;
+  return undefined;
 }
 
-async function findOrCreateLineHaulItem(): Promise<string> {
+async function findOrCreateServiceItem(name: string): Promise<string> {
   const named = await qboQuery<{ Item?: Array<{ Id?: string; Name?: string }> }>(
-    `select * from Item where Name = '${escapeQboString(LINE_HAUL_ITEM_NAME)}'`,
+    `select * from Item where Name = '${escapeQboString(name)}'`,
     "item query",
   );
   const namedId = named.QueryResponse?.Item?.[0]?.Id;
@@ -297,7 +375,7 @@ async function findOrCreateLineHaulItem(): Promise<string> {
   const created = await qboPost<{ Item?: { Id?: string } }>(
     "/item",
     {
-      Name: LINE_HAUL_ITEM_NAME,
+      Name: name,
       Type: "Service",
       IncomeAccountRef: { value: incomeId },
     },
@@ -313,8 +391,8 @@ function escapeQboString(value: string): string {
 }
 
 function apiBase(): string {
-  const realmId = getQuickbooksRealmId();
-  if (!realmId) throw new Error("QUICKBOOKS_REALM_ID is not set.");
+  const realmId = resolveRealmId();
+  if (!realmId) throw new Error("Connect QuickBooks in Settings to store the company (realm) id.");
   const host =
     getQuickbooksEnvironment() === "production"
       ? "https://quickbooks.api.intuit.com"
@@ -371,7 +449,7 @@ async function getAccessToken(): Promise<string> {
   }
   const clientId = getQuickbooksClientId();
   const clientSecret = getQuickbooksClientSecret();
-  const refreshToken = readStoredRefreshToken() || getQuickbooksRefreshToken();
+  const refreshToken = resolveRefreshToken();
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error("QuickBooks credentials are incomplete.");
   }
@@ -402,7 +480,7 @@ async function getAccessToken(): Promise<string> {
     throw new Error("QuickBooks did not return an access token.");
   }
   if (payload.refresh_token) {
-    writeStoredRefreshToken(payload.refresh_token);
+    writeStoredTokens({ refresh_token: payload.refresh_token, realm_id: resolveRealmId() });
   }
   cachedAccess = {
     accessToken: payload.access_token,
@@ -416,28 +494,120 @@ function refreshTokenPath(): string {
   return path.join(path.dirname(getDbPath()), "qbo-refresh.json");
 }
 
-function readStoredRefreshToken(): string | undefined {
+type StoredQboTokens = { refresh_token?: string; realm_id?: string };
+
+function readStoredTokens(): StoredQboTokens {
   try {
     const raw = fs.readFileSync(/*turbopackIgnore: true*/ refreshTokenPath(), "utf8");
-    const parsed = JSON.parse(raw) as { refresh_token?: string };
-    const token = typeof parsed.refresh_token === "string" ? parsed.refresh_token.trim() : "";
-    return token || undefined;
+    const parsed = JSON.parse(raw) as StoredQboTokens;
+    return {
+      refresh_token: typeof parsed.refresh_token === "string" ? parsed.refresh_token.trim() : undefined,
+      realm_id: typeof parsed.realm_id === "string" ? parsed.realm_id.trim() : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
-function writeStoredRefreshToken(token: string): void {
+function resolveRefreshToken(): string | undefined {
+  return readStoredTokens().refresh_token || getQuickbooksRefreshToken();
+}
+
+function resolveRealmId(): string | undefined {
+  return readStoredTokens().realm_id || getQuickbooksRealmId();
+}
+
+function writeStoredTokens(input: { refresh_token: string; realm_id?: string }): void {
   const filePath = refreshTokenPath();
+  const current = readStoredTokens();
   fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(/*turbopackIgnore: true*/ filePath, `${JSON.stringify({ refresh_token: token, updated_at: new Date().toISOString() })}\n`, {
-    mode: 0o600,
+  fs.writeFileSync(
+    /*turbopackIgnore: true*/ filePath,
+    `${JSON.stringify({
+      refresh_token: input.refresh_token,
+      realm_id: input.realm_id || current.realm_id || "",
+      updated_at: new Date().toISOString(),
+    })}\n`,
+    { mode: 0o600 },
+  );
+}
+
+export function clearStoredQuickbooksTokens(): void {
+  cachedAccess = null;
+  try {
+    fs.rmSync(/*turbopackIgnore: true*/ refreshTokenPath(), { force: true });
+  } catch {
+    // File may not exist.
+  }
+}
+
+export function createQuickbooksOAuthState(): string {
+  return randomBytes(16).toString("hex");
+}
+
+export function oauthStatesMatch(expected: string | undefined, actual: string | undefined): boolean {
+  if (!expected || !actual) return false;
+  const left = Buffer.from(expected);
+  const right = Buffer.from(actual);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export function buildQuickbooksAuthorizeUrl(state: string): string {
+  const clientId = getQuickbooksClientId();
+  if (!clientId) throw new Error("Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env first.");
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: getQuickbooksRedirectUri(),
+    response_type: "code",
+    scope: QBO_SCOPE,
+    state,
   });
+  return `${AUTHORIZE_URL}?${params.toString()}`;
+}
+
+export async function completeQuickbooksOAuth(input: {
+  code: string;
+  realmId: string;
+}): Promise<void> {
+  const clientId = getQuickbooksClientId();
+  const clientSecret = getQuickbooksClientSecret();
+  if (!clientId || !clientSecret) {
+    throw new Error("Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env first.");
+  }
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code: input.code,
+      redirect_uri: getQuickbooksRedirectUri(),
+    }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new QboHttpError(response.status, "OAuth connect");
+  }
+  const payload = (await response.json()) as { refresh_token?: string; access_token?: string; expires_in?: number };
+  if (!payload.refresh_token) {
+    throw new Error("QuickBooks did not return a refresh token.");
+  }
+  writeStoredTokens({ refresh_token: payload.refresh_token, realm_id: input.realmId.trim() });
+  cachedAccess = payload.access_token
+    ? {
+        accessToken: payload.access_token,
+        expiresAt: Date.now() + Math.max(30, payload.expires_in ?? 3600) * 1000,
+      }
+    : null;
 }
 
 function qboStatusMessage(status: number, context: string): string {
   if (status === 401 || status === 403) {
-    return `QuickBooks ${context} failed (${status}). Re-authorize in the Intuit OAuth 2.0 Playground and update QUICKBOOKS_REFRESH_TOKEN.`;
+    return `QuickBooks ${context} failed (${status}). Re-connect QuickBooks in Settings.`;
   }
   if (status === 429) return `QuickBooks rate-limited the ${context} request. Try again shortly.`;
   return `QuickBooks ${context} failed (${status}).`;

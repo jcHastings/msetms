@@ -497,6 +497,19 @@ export async function refreshIftaAction(
   }
 }
 
+export async function disconnectQuickbooksAction(): Promise<ActionResult> {
+  try {
+    const { requireSettingsEditor } = await import("./dispatcher-session");
+    await requireSettingsEditor();
+    const { clearStoredQuickbooksTokens } = await import("./integrations/quickbooks");
+    clearStoredQuickbooksTokens();
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function sendToQuickbooksAction(
   _prev: ActionResult | null,
   formData: FormData,

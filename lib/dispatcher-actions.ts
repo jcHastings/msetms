@@ -371,7 +371,7 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
         try {
           await sendLoadToQuickbooks(loadId, { confirmResend: String(formData.get("confirm_resend") ?? "") === "1" });
           refresh();
-          return { ok: true, id: loadId, message: "Sent to accounting (QuickBooks stub) and marked ready to invoice." };
+          return { ok: true, id: loadId, message: "Sent to accounting (QuickBooks) and marked ready to invoice." };
         } catch (error) {
           const text = error instanceof Error ? error.message : "QuickBooks send failed.";
           if (/already sent/i.test(text)) {
@@ -386,7 +386,7 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
       return {
         ok: true,
         id: loadId,
-        message: "Marked ready to invoice. Send the QuickBooks stub from Financials after the load is delivered with a rate.",
+        message: "Marked ready to invoice. Send the QuickBooks invoice from Financials after the load is delivered with a rate.",
       };
     } catch (error) {
       return fail(error);

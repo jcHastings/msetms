@@ -44,6 +44,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /Add relay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /not a billed customer stop/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
+  const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
+  assert.match(qboSettingsPage, /Connect QuickBooks/);
+  assert.match(qboSettingsPage, /Setup steps/);
+  assert.match(qboSettingsPage, /QBO_CLIENT_ID/);
+  assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_SECRET=\w+/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /QBO_REDIRECT_URI=/);
   assert.match(tabSource, /Load Basics/);
   assert.match(tabSource, /Customer Info/);
   assert.match(tabSource, /Carrier \/ Asset Info/);
@@ -2254,6 +2262,12 @@ Continuous reefer. Two load locks.
     "QUICKBOOKS_REFRESH_TOKEN",
     "QUICKBOOKS_REALM_ID",
     "QUICKBOOKS_ENVIRONMENT",
+    "QBO_CLIENT_ID",
+    "QBO_CLIENT_SECRET",
+    "QBO_REDIRECT_URI",
+    "QBO_REFRESH_TOKEN",
+    "QBO_REALM_ID",
+    "QBO_SANDBOX",
   ] as const;
   const previousQbo = Object.fromEntries(qboEnvKeys.map((key) => [key, process.env[key]]));
   for (const key of qboEnvKeys) delete process.env[key];
@@ -2271,6 +2285,15 @@ Continuous reefer. Two load locks.
     assert.equal(ooPreview.amount, coleDelivered.rate, "QBO invoice uses customer rate, not OO pay");
     assert.notEqual(ooPreview.amount, coleDelivered.oo_pay);
     assert.match(ooPreview.memo, /customer rate/i);
+    assert.equal(
+      ooPreview.lines.some((line) => /relay|owner-operator|oo pay/i.test(`${line.name} ${line.description}`)),
+      false,
+    );
+    const lumperLines = qbo.buildInvoiceLines({ ...coleDelivered, lumper_actual: 150 });
+    assert.equal(lumperLines.reduce((sum, line) => sum + line.amount, 0), (coleDelivered.rate ?? 0) + 150);
+    assert.ok(lumperLines.some((line) => line.name === "Lumper"));
+    assert.equal(qbo.oauthStatesMatch("abc123", "abc123"), true);
+    assert.equal(qbo.oauthStatesMatch("abc123", "abc124"), false);
 
     const available = queries.listLoads({ status: "available" })[0];
     assert.ok(available);
@@ -2301,6 +2324,22 @@ Continuous reefer. Two load locks.
     const qboStatus = await qbo.getQuickbooksStatus();
     assert.equal(qboStatus.configured, false);
     assert.equal(qboStatus.status, "Demo");
+    assert.equal(qboStatus.oauthReady, false);
+
+    process.env.QBO_CLIENT_ID = "alias-client";
+    process.env.QBO_CLIENT_SECRET = "alias-secret";
+    process.env.QBO_SANDBOX = "true";
+    const envMod = await import("../lib/env");
+    assert.equal(envMod.getQuickbooksClientId(), "alias-client");
+    assert.equal(envMod.getQuickbooksEnvironment(), "sandbox");
+    assert.equal(envMod.isQuickbooksOAuthReady(), true);
+    const needsConnect = await qbo.getQuickbooksStatus();
+    assert.equal(needsConnect.status, "Needs connect");
+    assert.match(qbo.buildQuickbooksAuthorizeUrl("state-xyz"), /appcenter\.intuit\.com\/connect\/oauth2/);
+    assert.match(qbo.buildQuickbooksAuthorizeUrl("state-xyz"), /state-xyz/);
+    delete process.env.QBO_CLIENT_ID;
+    delete process.env.QBO_CLIENT_SECRET;
+    delete process.env.QBO_SANDBOX;
 
     process.env.QUICKBOOKS_CLIENT_ID = "test-not-a-real-client-id";
     process.env.QUICKBOOKS_CLIENT_SECRET = "test-not-a-real-client-secret";
@@ -2321,6 +2360,27 @@ Continuous reefer. Two load locks.
     } finally {
       globalThis.fetch = originalQboFetch;
     }
+
+    const originalConnectFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ refresh_token: "stored-refresh", access_token: "stored-access", expires_in: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+    try {
+      delete process.env.QUICKBOOKS_REFRESH_TOKEN;
+      delete process.env.QUICKBOOKS_REALM_ID;
+      await qbo.completeQuickbooksOAuth({ code: "auth-code", realmId: "realm-99" });
+      assert.equal(qbo.hasQuickbooksSession(), true);
+      qbo.clearStoredQuickbooksTokens();
+      qbo.resetQuickbooksForTests();
+      assert.equal(qbo.hasQuickbooksSession(), false);
+    } finally {
+      globalThis.fetch = originalConnectFetch;
+    }
+
+    queries.markCustomerNeedsQbo(customerId);
+    assert.ok(queries.listCustomersNeedingQbo().some((row) => row.id === customerId));
   } finally {
     for (const key of qboEnvKeys) {
       const value = previousQbo[key];
@@ -2337,6 +2397,11 @@ Continuous reefer. Two load locks.
   const settings = await import("../lib/settings");
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Company Settings"));
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Users"));
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/quickbooks"),
+    ),
+  );
   settings.updateCompanyContact({
     company_name: "M&S Loads",
     dispatcher_name: "Ana G",

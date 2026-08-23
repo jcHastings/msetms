@@ -35,8 +35,9 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Accounting (nav section)
 
 - Overview, **Invoices (AR)**, **Bills (AP)**, **Driver pay**, **Commissions** (3% worksheet), **QuickBooks**.
-- Local mark-paid. QBO still invoices the customer rate only (demo or live when env tokens work).
-- OO pay is not a QBO bill.
+- **Settings → QuickBooks**: Connect QuickBooks Online OAuth (`QBO_CLIENT_ID` / `QBO_CLIENT_SECRET` / `QBO_REDIRECT_URI`, optional `QBO_SANDBOX=true`). Realm and refresh tokens stay on the server. Missing keys show setup steps, no crash.
+- Live or demo invoice on a delivered load: customer rate + lumper only. Relays and OO/driver pay stay off the invoice. One invoice per load unless you confirm a resend. QBO doc # is stored on the load. Unmatched customers queue as **Needs QBO customer**.
+- Local mark-paid. OO pay is not a QBO bill.
 
 ## Fleet / admin
 
@@ -64,7 +65,7 @@ Dispatcher login required. Saves to the local database. No secrets. No fake Asce
 - **Document defaults** — header / footer / terms / font size for load & carrier confirmation, invoice, customer confirmation, BOL
 - **Load numbers** — prefix and next number; show sample data toggle (hides seeded demo loads)
 - **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups
-- **Integrations** — existing Samsara / ORBCOMM / QuickBooks / load-tracking stubs
+- **Integrations** — Samsara / ORBCOMM status plus a link to **Settings → QuickBooks** (in-app Online OAuth)
 
 - Load confirmation PDF: title page-centered on its own line (Load Confirmation for company drivers), logo left, dispatcher/load card below the title on the right so it does not share a line with the title, email on one line, hours do not overflow appointment, extra blank pages dropped.
 - Rate-con upload: New Load → From rate con accepts PDF/image, extracts text in JS (`unpdf`, no native tools), fills the review form, and always keeps the file. Empty extract still opens the form with a warning. “Pick a file first” if nothing is chosen. Filename digits are never weight. Works on Windows next start.

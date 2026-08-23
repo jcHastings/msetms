@@ -1308,6 +1308,24 @@ export function saveIftaReport(input: {
   return saved;
 }
 
+export function listCustomersNeedingQbo(): Customer[] {
+  return getDb()
+    .prepare("SELECT * FROM customers WHERE qbo_status = 'needs_qbo' ORDER BY name COLLATE NOCASE")
+    .all() as Customer[];
+}
+
+export function markCustomerQboMapped(customerId: number, qboCustomerId: string): void {
+  getDb()
+    .prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped', updated_at = ? WHERE id = ?")
+    .run(qboCustomerId, now(), customerId);
+}
+
+export function markCustomerNeedsQbo(customerId: number): void {
+  getDb()
+    .prepare("UPDATE customers SET qbo_status = 'needs_qbo', updated_at = ? WHERE id = ?")
+    .run(now(), customerId);
+}
+
 export function markQboInvoice(
   loadId: number,
   input: {

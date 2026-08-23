@@ -188,12 +188,21 @@ export default async function IntegrationsSettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Complete OAuth outside this app (Intuit OAuth 2.0 Playground), then set{" "}
-          <code>QUICKBOOKS_CLIENT_ID</code>, <code>QUICKBOOKS_CLIENT_SECRET</code>,{" "}
-          <code>QUICKBOOKS_REFRESH_TOKEN</code>, and <code>QUICKBOOKS_REALM_ID</code> in <code>.env</code>. Optional{" "}
-          <code>QUICKBOOKS_ENVIRONMENT=sandbox</code> or <code>production</code>. Restart after changing values.
-          Delivered loads invoice the <strong>customer rate</strong>, not owner-operator pay.
+          Connect from{" "}
+          <Link href="/settings/quickbooks" className="underline">
+            Settings → QuickBooks
+          </Link>
+          . Set <code>QBO_CLIENT_ID</code>, <code>QBO_CLIENT_SECRET</code>, and{" "}
+          <code>QBO_REDIRECT_URI</code> (localhost is fine) in <code>.env</code>. Optional{" "}
+          <code>QBO_SANDBOX=true</code>. Realm and refresh tokens are stored on the server after Connect — never
+          shown in the browser. Delivered loads invoice the <strong>customer</strong>, not owner-operator pay or
+          relays.
         </p>
+        <div className="mt-3">
+          <Link href="/settings/quickbooks" className="btn btn-secondary">
+            Open QuickBooks settings
+          </Link>
+        </div>
         {qbo.companyName ? (
           <p className="mt-3 text-sm text-slate-600">
             Connected company: <span className="font-semibold">{qbo.companyName}</span>

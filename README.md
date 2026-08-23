@@ -127,7 +127,7 @@ Both integrations are required. They do not share data:
 | --- | --- | --- | --- |
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
-| **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
+| **QuickBooks Online** | Invoice the customer for a delivered load (rate + lumper) | Owner-operator settlement / bills / relays | `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, optional `QBO_SANDBOX=true` |
 | **Google Places** | Address autocomplete on Locations and New Load / rate-con | Scraping maps.google.com | `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` (server-side). If you must use a browser key, restrict it by HTTP referrer to localhost. |
 
 Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
@@ -188,39 +188,30 @@ When ORBCOMM enables Transportation Platform B2B access, put the username/passwo
 
 ### QuickBooks Online — invoice delivered loads
 
-This app does **not** run an in-app OAuth dance and does not ship secrets. You create a QBO app, finish OAuth in Intuit’s tools, and paste the resulting values into gitignored `.env`.
+QuickBooks **Online** only (not Desktop). Secrets stay in gitignored `.env`. **Settings → QuickBooks** runs Connect OAuth and stores the realm + refresh token on the server (`data/qbo-refresh.json`), never in the browser.
 
-1. Create an Intuit developer account at [developer.intuit.com](https://developer.intuit.com).
-2. Create an app. Enable **QuickBooks Online** with the accounting scope (`com.intuit.quickbooks.accounting`).
-3. Use **Development** keys for the Intuit sandbox (a sandbox company is created with the app). Production keys are a separate step later.
-4. Add the OAuth 2.0 Playground redirect URI Intuit shows for your app (typically under the app’s Keys tab).
-5. Open the [OAuth 2.0 Playground](https://developer.intuit.com/app/developer/playground), select your app, authorize the sandbox company, and exchange the code for tokens.
-6. Copy **Client ID**, **Client Secret**, **refresh token**, and **realm id** (company id). Access tokens expire in about an hour; the refresh token is what this app stores.
-7. Copy `.env.example` to `.env` and fill only those placeholders:
+1. Create an Intuit developer app at [developer.intuit.com](https://developer.intuit.com) with the accounting scope.
+2. Add redirect URI `http://localhost:3000/api/integrations/quickbooks/callback` (or your `QBO_REDIRECT_URI`).
+3. Copy `.env.example` to `.env` and set:
 
 ```
-QUICKBOOKS_CLIENT_ID=
-QUICKBOOKS_CLIENT_SECRET=
-QUICKBOOKS_REFRESH_TOKEN=
-QUICKBOOKS_REALM_ID=
-QUICKBOOKS_ENVIRONMENT=sandbox
+QBO_CLIENT_ID=
+QBO_CLIENT_SECRET=
+QBO_REDIRECT_URI=http://localhost:3000/api/integrations/quickbooks/callback
+QBO_SANDBOX=true
 ```
 
-8. Restart the app. **Integrations** shows Connected vs Demo independently of Samsara/ORBCOMM.
+4. Restart. Open **Settings → QuickBooks** and click **Connect QuickBooks**. If those keys are missing, the page shows setup steps and does not crash.
+5. **Accounting → QuickBooks** lists ready/sent invoices and any **Needs QBO customer** rows.
 
-When credentials are present, **Send to QuickBooks** on a delivered load:
+When connected, **Send to QuickBooks** on a delivered load:
 
-- Finds or creates a QBO customer by display name
-- Creates an invoice: customer, load #, PU → DEL, amount = load customer rate, date = delivery date, memo with refs / special instructions
-- Marks the load with the QBO invoice id and timestamp
+- Maps the TMS customer by DisplayName / CompanyName, or creates one. If that fails, the customer is queued as **Needs QBO customer** and the load is not marked sent.
+- Creates one invoice: customer, load #, PU → DEL, line haul = customer rate, plus lumper if recorded. Date = delivery date.
+- Relays and owner-operator / driver pay are **not** on the invoice.
+- Idempotent: a second send is blocked until you confirm. The QBO doc number is stored on the load.
 
-Owner-operator pay is **not** invoiced and is **not** a QBO bill. The invoice is always customer billing. A note is added on OO loads.
-
-Intuit rotates refresh tokens. The latest refresh token is written to gitignored `data/qbo-refresh.json` (never committed or shown). If refresh or invoice create returns 401/403, the UI shows the error and the load is **not** marked sent.
-
-No credentials: the same screen shows a labeled **demo** invoice preview. **Record demo invoice** stores a local `demo-…` invoice id so you can test the UI. A second send is blocked until you confirm.
-
-To use a live QuickBooks company later: create production keys, re-authorize against that company, set `QUICKBOOKS_ENVIRONMENT=production`, and paste the new refresh token + realm id.
+No app keys: labeled **demo** invoice you can record locally. 401/403 leaves the load unsent and asks you to re-connect in Settings.
 
 ## Data
 

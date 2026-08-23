@@ -307,6 +307,8 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "ready_to_invoice", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "customers", "credit_hold", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "qbo_customer_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "qbo_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "year", "TEXT NOT NULL DEFAULT ''");

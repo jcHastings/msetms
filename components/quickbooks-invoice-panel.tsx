@@ -31,10 +31,12 @@ export function QuickbooksInvoicePanel({
         <div>
           <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Bills the <strong>customer rate</strong>
+            Bills the <strong>customer</strong> (line haul
+            {preview.lines.some((line) => line.name === "Lumper") ? " + lumper" : ""})
             {preview.mode === "demo"
               ? " — demo preview (no QuickBooks credentials)."
-              : ` — live ${preview.environment} company.`}
+              : ` — live ${preview.environment} company.`}{" "}
+            Relays and owner-operator pay are not invoiced.
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -56,7 +58,7 @@ export function QuickbooksInvoicePanel({
           <dd className="font-semibold">{preview.lane}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Amount (customer rate)</dt>
+          <dt className="text-slate-500">Amount</dt>
           <dd className="font-semibold">{formatMoney(preview.amount)}</dd>
         </div>
         <div>
@@ -65,7 +67,7 @@ export function QuickbooksInvoicePanel({
         </div>
         {preview.alreadySent ? (
           <div>
-            <dt className="text-slate-500">Already sent</dt>
+            <dt className="text-slate-500">QBO doc #</dt>
             <dd className="font-semibold">
               {preview.existingInvoiceNumber || preview.existingInvoiceId}
               {preview.existingSentAt ? ` · ${formatDateTime(preview.existingSentAt)}` : ""}
@@ -74,6 +76,22 @@ export function QuickbooksInvoicePanel({
           </div>
         ) : null}
       </dl>
+      {preview.customerNeedsQbo ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Needs QBO customer: {preview.customerName}. Match or create this customer in QuickBooks, then send again.
+        </p>
+      ) : null}
+      <ul className="mt-3 space-y-1 text-sm text-slate-700">
+        {preview.lines.map((line) => (
+          <li key={`${line.name}-${line.description}`} className="flex justify-between gap-3">
+            <span>
+              {line.name}
+              <span className="text-slate-500"> · {line.description}</span>
+            </span>
+            <span className="font-semibold">{formatMoney(line.amount)}</span>
+          </li>
+        ))}
+      </ul>
 
       <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
         {preview.memo}
