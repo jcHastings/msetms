@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LoadForm } from "@/components/load-form";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { RateConApply } from "@/components/rate-con-apply";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
@@ -51,6 +52,12 @@ export default async function LoadDetailPage({
         load={load}
         action={boundAction}
         submitLabel="Save load"
+      />
+      <RateConApply
+        load={load}
+        customers={listCustomers()}
+        trucks={listTrucks()}
+        drivers={listDrivers()}
       />
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
     </>

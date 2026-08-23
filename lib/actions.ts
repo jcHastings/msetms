@@ -272,6 +272,11 @@ export async function updateLoadAction(
 ): Promise<ActionResult> {
   try {
     updateLoad(id, parseLoadInput(formData));
+    const inboxId = String(formData.get("inbox_id") ?? "").trim();
+    if (inboxId) {
+      const { attachInboxToLoad } = await import("./files");
+      attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+    }
     refresh();
     return { ok: true, id };
   } catch (error) {
