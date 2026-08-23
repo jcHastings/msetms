@@ -198,7 +198,7 @@ function resolveStopLocation(
       state: String(formData.get(`${prefix}_state`) ?? "").trim(),
       zip: String(formData.get(`${prefix}_zip`) ?? "").trim(),
       addressLine,
-      role: prefix,
+      role: prefix === "shipper" ? "shipper" : "receiver",
     }),
   );
 }
