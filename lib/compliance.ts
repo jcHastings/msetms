@@ -96,6 +96,11 @@ export function collectAssignmentAlerts(input: {
   ];
 }
 
+export function complianceShortLabel(alerts: ComplianceAlert[]): string {
+  if (alerts.length === 0) return "";
+  return alerts.some((alert) => alert.severity === "expired") ? "expired docs" : "docs expiring";
+}
+
 export function requireAssignmentOverride(alerts: ComplianceAlert[], confirmed: boolean): void {
   const expired = alerts.filter((alert) => alert.severity === "expired");
   if (expired.length === 0) return;

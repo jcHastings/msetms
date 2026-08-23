@@ -55,24 +55,26 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
           />
         </div>
       ) : null}
+      <h2 className="text-sm font-semibold">Driver license</h2>
       <div className="field">
-        <label htmlFor="license_state">License state</label>
+        <label htmlFor="license_state">State</label>
         <input id="license_state" name="license_state" maxLength={2} defaultValue={driver?.license_state} />
       </div>
       <div className="field">
-        <label htmlFor="license_number">License number</label>
+        <label htmlFor="license_number">Number</label>
         <input id="license_number" name="license_number" defaultValue={driver?.license_number} />
       </div>
       <div className="field">
-        <label htmlFor="license_expires">License expiration</label>
+        <label htmlFor="license_expires">Expiration date</label>
         <input id="license_expires" name="license_expires" type="date" defaultValue={driver?.license_expires} />
       </div>
+      <h2 className="text-sm font-semibold">Medical card</h2>
       <div className="field">
-        <label htmlFor="medical_issued">Medical card issued</label>
+        <label htmlFor="medical_issued">Date issued</label>
         <input id="medical_issued" name="medical_issued" type="date" defaultValue={driver?.medical_issued} />
       </div>
       <div className="field">
-        <label htmlFor="medical_expires">Medical card expiration</label>
+        <label htmlFor="medical_expires">Expiration date</label>
         <input id="medical_expires" name="medical_expires" type="date" defaultValue={driver?.medical_expires} />
       </div>
       <div className="field">

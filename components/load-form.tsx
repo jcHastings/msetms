@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { ComplianceList } from "@/components/compliance-badge";
 import { FormBanner } from "@/components/form-banner";
-import { collectAssignmentAlerts } from "@/lib/compliance";
+import { collectAssignmentAlerts, complianceShortLabel, driverComplianceAlerts } from "@/lib/compliance";
 import { toInputDateTime } from "@/lib/format";
 import {
   LOAD_STATUSES,
@@ -306,6 +306,7 @@ export function LoadForm({
               <option key={driver.id} value={driver.id}>
                 {driver.name}
                 {driver.driver_type === "owner_operator" ? " · OO" : ""}
+                {driverOptionNote(driver)}
               </option>
             ))}
           </select>
@@ -347,10 +348,15 @@ export function LoadForm({
         </label>
       ) : null}
       <div className="flex justify-end">
-        <button className="btn btn-primary" type="submit" disabled={pending}>
+        <button className="btn btn-primary" type="submit" disabled={pending || (expired && !confirmed)}>
           {pending ? "Saving…" : submitLabel}
         </button>
       </div>
     </form>
   );
+}
+
+function driverOptionNote(driver: DriverWithTruck): string {
+  const label = complianceShortLabel(driverComplianceAlerts(driver));
+  return label ? ` · ${label}` : "";
 }

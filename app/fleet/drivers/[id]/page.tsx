@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DriverComplianceCard } from "@/components/driver-compliance-card";
 import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
@@ -28,6 +29,7 @@ export default async function EditDriverPage({
           </Link>
         }
       />
+      <DriverComplianceCard driver={driver} />
       <DriverForm
         driver={driver}
         trucks={listTrucks()}

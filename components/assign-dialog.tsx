@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ComplianceList } from "@/components/compliance-badge";
 import { assignLoadAction } from "@/lib/actions";
-import { collectAssignmentAlerts } from "@/lib/compliance";
+import { collectAssignmentAlerts, complianceShortLabel, driverComplianceAlerts } from "@/lib/compliance";
 import type { DriverWithTruck, Trailer, Truck } from "@/lib/types";
 
 type Props = {
@@ -85,6 +85,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                       {item.name}
                       {item.driver_type === "owner_operator" ? " · OO" : ""}
                       {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
+                      {driverOptionNote(item)}
                     </option>
                   ))}
                 </select>
@@ -172,4 +173,9 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
       ) : null}
     </>
   );
+}
+
+function driverOptionNote(driver: DriverWithTruck): string {
+  const label = complianceShortLabel(driverComplianceAlerts(driver));
+  return label ? ` · ${label}` : "";
 }
