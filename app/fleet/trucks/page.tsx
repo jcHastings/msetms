@@ -22,9 +22,14 @@ export default function TrucksPage() {
         title="Trucks"
         subtitle="Power units, plates, and compliance. Samsara vehicle ID is optional."
         actions={
-          <Link href="/fleet/trucks/new" className="btn btn-primary">
-            Add truck
-          </Link>
+          <>
+            <a href="/api/fleet/trucks/export" className="btn btn-secondary">
+              Download CSV
+            </a>
+            <Link href="/fleet/trucks/new" className="btn btn-primary">
+              Add truck
+            </Link>
+          </>
         }
       />
       <div className="card overflow-hidden">

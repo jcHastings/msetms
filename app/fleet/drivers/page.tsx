@@ -19,9 +19,14 @@ export default function DriversPage() {
         title="Drivers"
         subtitle="Company drivers and owner-operators. Assign a unit from the dispatch board."
         actions={
-          <Link href="/fleet/drivers/new" className="btn btn-primary">
-            Add driver
-          </Link>
+          <>
+            <a href="/api/fleet/drivers/export" className="btn btn-secondary">
+              Download CSV
+            </a>
+            <Link href="/fleet/drivers/new" className="btn btn-primary">
+              Add driver
+            </Link>
+          </>
         }
       />
       <div className="card overflow-hidden">

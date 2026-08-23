@@ -1451,17 +1451,32 @@ Continuous reefer. Two load locks.
 
   const locationsPage = fs.readFileSync(path.join(process.cwd(), "app/locations/page.tsx"), "utf8");
   assert.match(locationsPage, /LocationCsvImport/);
+  assert.match(locationsPage, /Download all locations/);
+  assert.match(locationsPage, /\/api\/locations\/export/);
   const importUi = fs.readFileSync(path.join(process.cwd(), "components/location-csv-import.tsx"), "utf8");
   assert.match(importUi, /Download template/);
+  assert.match(importUi, /Download all locations/);
   assert.match(importUi, /Upload CSV/);
   assert.match(importUi, /\/api\/locations\/template/);
+  assert.match(importUi, /\/api\/locations\/export/);
   assert.doesNotMatch(importUi, /googleapis|GOOGLE_MAPS/i);
+  for (const file of [
+    "app/api/locations/export/route.ts",
+    "app/api/locations/template/route.ts",
+    "app/api/fleet/drivers/export/route.ts",
+    "app/api/fleet/trucks/export/route.ts",
+    "app/api/fleet/trailers/export/route.ts",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(source, /dispatcherCsvResponse/);
+  }
 
   const {
     ASCEND_LOCATION_HEADERS,
     csvEscape,
     decodeCsvBuffer,
     parseAscendLocationCsv,
+    renderAscendLocationCsv,
     renderAscendLocationTemplate,
   } = await import("../lib/location-csv");
   assert.deepEqual(ASCEND_LOCATION_HEADERS, [
@@ -1625,6 +1640,12 @@ Continuous reefer. Two load locks.
   assert.equal(imported.phone, "555-0199 x12");
   assert.match(imported.notes, /Private note here/);
   assert.match(imported.scheduling_notes, /Dock 4/);
+  const importedRoundTrip = parseAscendLocationCsv(renderAscendLocationCsv([imported])).rows[0];
+  assert.ok(importedRoundTrip);
+  assert.equal(importedRoundTrip.input.name, imported.name);
+  assert.equal(importedRoundTrip.input.phone, imported.phone);
+  assert.equal(importedRoundTrip.input.notes, imported.notes);
+  assert.equal(importedRoundTrip.input.scheduling_notes, imported.scheduling_notes);
   queries.updateLocation(imported.id, {
     ...imported,
     hours: "Mon–Fri 07:00–15:00",
@@ -1692,6 +1713,49 @@ Continuous reefer. Two load locks.
   assert.equal(dupLoc.role, "receiver");
   assert.equal(dupLoc.phone, "222");
   assert.equal(dupLoc.scheduling_notes, "Second");
+
+  const allLocations = queries.listLocations();
+  const exportedLocations = renderAscendLocationCsv(allLocations);
+  assert.equal(exportedLocations.startsWith("\uFEFF"), true);
+  assert.equal(exportedLocations.replace(/^\uFEFF/, "").split(/\r\n/)[0], ASCEND_LOCATION_HEADERS.join(","));
+  const exportedRows = parseAscendLocationCsv(exportedLocations);
+  assert.equal(exportedRows.rows.length, allLocations.length);
+  assert.equal(exportedRows.skipped, 0);
+  assert.equal(exportedRows.errors.length, 0);
+  const exportedImport = exportedRows.rows.find((row) => row.input.name === "New Import DC");
+  assert.ok(exportedImport);
+  assert.equal(exportedImport.input.phone, "555-9999");
+  assert.equal(exportedImport.input.role, "both");
+  assert.equal(exportedImport.input.scheduling_notes, "Updated public");
+  const exportedDup = exportedRows.rows.find((row) => row.input.name === "Dup Yard");
+  assert.ok(exportedDup);
+  assert.equal(exportedDup.input.role, "receiver");
+  assert.equal(exportedDup.input.phone, "222");
+  const reimport = queries.importLocationsFromCsv(exportedLocations);
+  assert.equal(reimport.created, 0);
+  assert.equal(reimport.updated, allLocations.length);
+
+  const { renderDriversCsv, renderTrailersCsv, renderTrucksCsv, DRIVER_CSV_HEADERS } =
+    await import("../lib/fleet-csv");
+  const driversPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
+  const trucksPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8");
+  const trailersPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8");
+  assert.match(driversPage, /\/api\/fleet\/drivers\/export/);
+  assert.match(trucksPage, /\/api\/fleet\/trucks\/export/);
+  assert.match(trailersPage, /\/api\/fleet\/trailers\/export/);
+  const driversCsv = renderDriversCsv(queries.listDrivers());
+  assert.equal(driversCsv.replace(/^\uFEFF/, "").split(/\r\n/)[0], DRIVER_CSV_HEADERS.join(","));
+  assert.match(driversCsv, /Denise Ortega/);
+  assert.doesNotMatch(driversCsv, /1125/);
+  assert.doesNotMatch(driversCsv, /4020/);
+  for (const driver of queries.listDrivers()) {
+    if (driver.pin) assert.doesNotMatch(driversCsv, new RegExp(driver.pin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  const trucksCsv = renderTrucksCsv(queries.listTrucks());
+  assert.match(trucksCsv, /Unit/);
+  assert.ok(queries.listTrucks().every((truck) => trucksCsv.includes(truck.unit_number)));
+  const trailersCsv = renderTrailersCsv(queries.listTrailers());
+  assert.ok(queries.listTrailers().every((trailer) => trailersCsv.includes(trailer.unit_number)));
 
   const { extractStateCode } = await import("../lib/locations");
   assert.equal(extractStateCode("Chicago, IL"), "IL");

@@ -11,7 +11,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Dispatch
 
-- **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver. Mass upload from JC’s Ascend blank location CSV (template download + UTF-8 import; duplicate name+address updates).
+- **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver. Mass upload from JC’s Ascend blank location CSV (template download + UTF-8 import; duplicate name+address updates). **Download all locations** uses the same Ascend headers so a backup can be edited and re-imported.
 - **Search** in nav — criteria, live/archived/cancelled, saved reports.
 - Richer load statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.
 - Status reason, cover-by, equipment required, hazmat, commodity class, seals, pallets/cases, team, lumper, detention start/stop, appointment confirmation, unload type, cancel reason.
@@ -39,7 +39,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Fleet / admin
 
-- **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav (plus the Fleet overview).
+- **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav (plus the Fleet overview). Each list has a UTF-8 CSV download (own columns; driver PIN is never exported).
 - Drivers: name, mobile, email, PIN (set/reset, never shown in the list), company vs owner-operator, OO %, CDL, medical card, assigned truck, notes, active flag, document uploads.
 - Trucks: unit #, year/make/model, plate, VIN, assigned driver, registration + DOT dates, Samsara vehicle id, notes, active flag, document uploads.
 - Trailers: unit #, type, VIN/plate, assigned truck, registration + DOT, ORBCOMM id, default reefer setpoint, last known reading stub, notes, active flag, document uploads.

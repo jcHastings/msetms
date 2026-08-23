@@ -1,5 +1,8 @@
+import { renderUtf8Csv } from "./csv";
 import type { LocationInput } from "./locations";
-import type { LocationRole } from "./types";
+import type { Location, LocationRole } from "./types";
+
+export { csvEscape, renderUtf8Csv } from "./csv";
 
 export const ASCEND_LOCATION_HEADERS = [
   "Location Name",
@@ -50,7 +53,48 @@ export type LocationCsvImportResult = {
 };
 
 export function renderAscendLocationTemplate(): string {
-  return `\uFEFF${ASCEND_LOCATION_HEADERS.map(csvEscape).join(",")}\r\n`;
+  return renderUtf8Csv(ASCEND_LOCATION_HEADERS, []);
+}
+
+export function locationToAscendValues(
+  location: Location,
+): Record<(typeof ASCEND_LOCATION_HEADERS)[number], string> {
+  const { phone, ext } = splitPhoneExt(location.phone);
+  const notes = parseStoredLocationNotes(location.notes);
+  return {
+    "Location Name": location.name,
+    "Address Line 1": location.street,
+    "Address Line 2": "",
+    City: location.city,
+    State: location.state,
+    "Zip/Postal Code": location.zip,
+    "Phone number": phone,
+    "Phone Ext.": ext,
+    "Location Type": location.role,
+    "Location Code": notes.code,
+    "Primary Contact Name": notes.primary.name,
+    "Primary Contact Phone Number": notes.primary.phone,
+    "Primary Contact Ext.": notes.primary.ext,
+    "Primary Contact Email": notes.primary.email,
+    "Primary Contact Fax": notes.primary.fax,
+    "Secondary Contact Name": notes.secondary.name,
+    "Secondary Contact Phone Number": notes.secondary.phone,
+    "Secondary Contact Ext.": notes.secondary.ext,
+    "Secondary Contact Email": notes.secondary.email,
+    "Secondary Contact Fax": notes.secondary.fax,
+    "Location Private notes": notes.privateNotes,
+    "Location Public notes": location.scheduling_notes,
+  };
+}
+
+export function renderAscendLocationCsv(locations: Location[]): string {
+  return renderUtf8Csv(
+    ASCEND_LOCATION_HEADERS,
+    locations.map((location) => {
+      const values = locationToAscendValues(location);
+      return ASCEND_LOCATION_HEADERS.map((header) => values[header]);
+    }),
+  );
 }
 
 export function decodeCsvBuffer(input: ArrayBuffer | Uint8Array | Buffer): string {
@@ -280,7 +324,66 @@ export function parseCsvRecords(text: string): string[][] {
   return rows.filter((cells) => cells.some((cell) => cell.trim()));
 }
 
-export function csvEscape(value: string): string {
-  if (/[",\r\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`;
-  return value;
+function splitPhoneExt(value: string): { phone: string; ext: string } {
+  const match = value.trim().match(/^(.*?)\s+x\s*(.+)$/i);
+  if (match) return { phone: match[1].trim(), ext: match[2].trim() };
+  return { phone: value.trim(), ext: "" };
+}
+
+function parseStoredLocationNotes(notes: string): {
+  privateNotes: string;
+  code: string;
+  primary: ContactBits;
+  secondary: ContactBits;
+} {
+  const privateLines: string[] = [];
+  let code = "";
+  let primary = emptyContact("Primary");
+  let secondary = emptyContact("Secondary");
+  for (const line of notes.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const codeMatch = trimmed.match(/^code:\s*(.*)$/i);
+    if (codeMatch) {
+      code = codeMatch[1].trim();
+      continue;
+    }
+    const primaryMatch = trimmed.match(/^primary:\s*(.*)$/i);
+    if (primaryMatch) {
+      primary = parseContactLine("Primary", primaryMatch[1]);
+      continue;
+    }
+    const secondaryMatch = trimmed.match(/^secondary:\s*(.*)$/i);
+    if (secondaryMatch) {
+      secondary = parseContactLine("Secondary", secondaryMatch[1]);
+      continue;
+    }
+    if (line.length > 0) privateLines.push(line);
+  }
+  return { privateNotes: privateLines.join("\n"), code, primary, secondary };
+}
+
+function emptyContact(label: string): ContactBits {
+  return { label, name: "", phone: "", ext: "", email: "", fax: "" };
+}
+
+function parseContactLine(label: string, raw: string): ContactBits {
+  const parts = raw
+    .split(" · ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const faxPart = parts.find((part) => /^fax\s+/i.test(part));
+  const emailPart = parts.find((part) => part.includes("@"));
+  const phonePart = parts.find(
+    (part) => part !== faxPart && part !== emailPart && /\d/.test(part) && !part.includes("@"),
+  );
+  const namePart = parts.find((part) => part !== faxPart && part !== emailPart && part !== phonePart);
+  const phone = splitPhoneExt(phonePart ?? "");
+  return {
+    label,
+    name: namePart ?? "",
+    phone: phone.phone,
+    ext: phone.ext,
+    email: emailPart ?? "",
+    fax: faxPart ? faxPart.replace(/^fax\s+/i, "").trim() : "",
+  };
 }

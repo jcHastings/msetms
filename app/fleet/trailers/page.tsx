@@ -34,9 +34,14 @@ export default function TrailersPage() {
         title="Trailers"
         subtitle="53' reefers and dry vans. ORBCOMM asset ID is optional for the last known reading."
         actions={
-          <Link href="/fleet/trailers/new" className="btn btn-primary">
-            Add trailer
-          </Link>
+          <>
+            <a href="/api/fleet/trailers/export" className="btn btn-secondary">
+              Download CSV
+            </a>
+            <Link href="/fleet/trailers/new" className="btn btn-primary">
+              Add trailer
+            </Link>
+          </>
         }
       />
       <div className="card overflow-hidden">

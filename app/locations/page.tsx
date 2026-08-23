@@ -16,9 +16,14 @@ export default function LocationsPage() {
         title="Locations"
         subtitle="Shippers and receivers. Pick one on a load, type a one-off address, or upload the Ascend location CSV."
         actions={
-          <Link href="/locations/new" className="btn btn-primary">
-            New location
-          </Link>
+          <>
+            <a href="/api/locations/export" className="btn btn-secondary">
+              Download all locations
+            </a>
+            <Link href="/locations/new" className="btn btn-primary">
+              New location
+            </Link>
+          </>
         }
       />
       <LocationCsvImport />

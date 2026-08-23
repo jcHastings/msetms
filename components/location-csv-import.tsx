@@ -25,6 +25,9 @@ export function LocationCsvImport() {
         <a href="/api/locations/template" className="btn btn-secondary">
           Download template
         </a>
+        <a href="/api/locations/export" className="btn btn-secondary">
+          Download all locations
+        </a>
       </div>
       <form action={formAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
