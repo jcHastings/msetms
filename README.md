@@ -198,4 +198,4 @@ rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 
 Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
 
-See [ROADMAP.md](./ROADMAP.md) for native apps, deeper telematics, accounting, and EDI.
+See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.
