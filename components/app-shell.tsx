@@ -1,15 +1,22 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { NavLinks } from "@/components/nav-links";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
-import type { Dispatcher } from "@/lib/dispatcher-session";
+import type { PublicDispatcher } from "@/lib/settings-shared";
 
 export function AppShell({
   children,
   dispatcher,
+  requireTwoFactor = false,
 }: {
   children: React.ReactNode;
-  dispatcher: Dispatcher;
+  dispatcher: PublicDispatcher;
+  requireTwoFactor?: boolean;
 }) {
+  const pathname = usePathname();
+  const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-navy text-slate-100">
@@ -36,7 +43,19 @@ export function AppShell({
         </div>
       </aside>
       <div className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[1400px] px-8 py-7">{children}</div>
+        <div className="mx-auto w-full max-w-[1400px] px-8 py-7">
+          {showSetupPrompt ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p>
+                Set up 2-step verification for your dispatcher login. You can skip until an admin requires it.
+              </p>
+              <Link href="/settings/security" className="btn btn-secondary">
+                Set up 2-step
+              </Link>
+            </div>
+          ) : null}
+          {children}
+        </div>
       </div>
     </div>
   );

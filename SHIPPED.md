@@ -6,8 +6,10 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Sign-in
 
-- Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (manager).
-- Driver app unchanged: `/driver/login` with seeded driver PINs.
+- Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (manager). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code).
+- **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Admin/manager can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so Ana G / the office PC can still use PIN until they enroll.
+- Dispatcher session lasts 12 hours from sign-in.
+- Driver app unchanged: `/driver/login` with seeded driver PINs. No TOTP.
 
 ## Dispatch
 
@@ -64,7 +66,8 @@ Dispatcher login required. Saves to the local database. No secrets. No fake Asce
 - **Pay and margin** — OO default %, carrier/OO pay method, target gross margin
 - **Document defaults** — header / footer / terms / font size for load & carrier confirmation, invoice, customer confirmation, BOL
 - **Load numbers** — prefix and next number; show sample data toggle (hides seeded demo loads)
-- **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups
+- **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups; 2-step on/off and admin reset
+- **2-step verification** — authenticator enrollment for dispatchers only; optional require-all (default off)
 - **Integrations** — Samsara / ORBCOMM status plus a link to **Settings → QuickBooks** (in-app Online OAuth)
 
 - Load confirmation PDF: title page-centered on its own line (Load Confirmation for company drivers), logo left, dispatcher/load card below the title on the right so it does not share a line with the title, email on one line, hours do not overflow appointment, extra blank pages dropped.

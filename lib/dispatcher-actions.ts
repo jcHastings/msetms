@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
 import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
-import { authenticateDispatcher, clearDispatcherSession, setDispatcherSession } from "./dispatcher-session";
+import {
+  authenticateDispatcher,
+  clearDispatcherSession,
+  getPendingTwoFactorDispatcherId,
+  setDispatcherSession,
+  setPendingTwoFactor,
+} from "./dispatcher-session";
+import { consumeRecoveryCode, isDispatcherTotpEnrolled, verifyDispatcherTotp } from "./dispatcher-totp";
 import {
   assignLoadDispatcher,
   cloneLoad,
@@ -35,10 +42,36 @@ export async function dispatcherLoginAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    const totp = String(formData.get("totp") ?? "").trim();
+    const recoveryCode = String(formData.get("recovery_code") ?? "").trim();
+    if (totp || recoveryCode) {
+      const pendingId = await getPendingTwoFactorDispatcherId();
+      if (!pendingId) throw new Error("PIN step expired. Sign in again.");
+      if (!isDispatcherTotpEnrolled(pendingId)) throw new Error("2-step is not on for this user.");
+      if (totp) {
+        if (!verifyDispatcherTotp(pendingId, totp)) {
+          throw new Error("That authenticator code is not valid.");
+        }
+      } else {
+        consumeRecoveryCode(pendingId, recoveryCode);
+      }
+      await setDispatcherSession(pendingId);
+      refresh();
+      redirect("/");
+    }
+
     const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
     const pin = String(formData.get("pin") ?? "").trim();
     if (!dispatcherId || !pin) throw new Error("Pick your name and enter your PIN.");
     const dispatcher = authenticateDispatcher(dispatcherId, pin);
+    if (isDispatcherTotpEnrolled(dispatcher.id)) {
+      await setPendingTwoFactor(dispatcher.id);
+      return {
+        ok: true,
+        needsTotp: true,
+        message: "Enter the 6-digit code from your authenticator app.",
+      };
+    }
     await setDispatcherSession(dispatcher.id);
     refresh();
     redirect("/");

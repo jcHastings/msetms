@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { DispatcherUserForm } from "@/components/dispatcher-user-form";
+import { ResetTotpForm } from "@/components/reset-totp-form";
 import { PageHeader } from "@/components/page-header";
 import { SettingsBack } from "@/components/settings-nav";
 import { canManageUsers, getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -26,6 +27,7 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
           canEdit={canManage}
         />
       </section>
+      {canManage ? <ResetTotpForm userId={user.id} enrolled={Boolean(user.totp_enrolled)} userName={user.name} /> : null}
     </>
   );
 }

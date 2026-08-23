@@ -46,6 +46,7 @@ export type CompanySettings = CompanyProfile & {
   load_number_prefix: string;
   load_number_next: number;
   show_sample_data: number;
+  require_dispatcher_2fa: number;
 };
 
 export type DropdownOption = {
@@ -99,6 +100,7 @@ const SETTINGS_DEFAULTS: CompanySettings = {
   load_number_prefix: "MSE",
   load_number_next: 1001,
   show_sample_data: 1,
+  require_dispatcher_2fa: 0,
 };
 
 const SETTINGS_COLUMNS = [
@@ -135,6 +137,7 @@ const SETTINGS_COLUMNS = [
   "load_number_prefix",
   "load_number_next",
   "show_sample_data",
+  "require_dispatcher_2fa",
 ] as const;
 
 export function getCompanySettings(): CompanySettings {
@@ -154,6 +157,7 @@ function normalizeSettings(row?: Partial<CompanySettings> | null): CompanySettin
     tax_enabled: Number(merged.tax_enabled) ? 1 : 0,
     alert_emails_enabled: Number(merged.alert_emails_enabled) ? 1 : 0,
     show_sample_data: Number(merged.show_sample_data) ? 1 : 0,
+    require_dispatcher_2fa: Number(merged.require_dispatcher_2fa) ? 1 : 0,
     tax_rate: Number(merged.tax_rate) || 0,
     alert_driver_days: Number(merged.alert_driver_days) || 30,
     alert_registration_days: Number(merged.alert_registration_days) || 60,
@@ -179,7 +183,8 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
          alert_driver_days = ?, alert_registration_days = ?, alert_dot_days = ?, alert_emails_enabled = ?,
          default_routing_notes = ?, default_oo_percent = ?, default_gross_margin_percent = ?,
          carrier_pay_method = ?, carrier_pay_notes = ?,
-         load_number_prefix = ?, load_number_next = ?, show_sample_data = ?
+         load_number_prefix = ?, load_number_next = ?, show_sample_data = ?,
+         require_dispatcher_2fa = ?
        WHERE id = 1`,
     )
     .run(
@@ -216,6 +221,7 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
       next.load_number_prefix,
       next.load_number_next,
       next.show_sample_data,
+      next.require_dispatcher_2fa,
     );
   return next;
 }
@@ -585,17 +591,30 @@ export function clearCompanyLogo(): CompanySettings {
   return patchSettings({ logo_stored_name: "", logo_original_name: "", logo_mime_type: "" });
 }
 
+const DISPATCHER_SAFE_COLUMNS =
+  "id, name, pin, role, email, active, permission_group, totp_enrolled";
+
 export function listDispatcherUsers(includeInactive = true): DispatcherUser[] {
   const where = includeInactive ? "" : "WHERE active = 1";
   return getDb()
-    .prepare(`SELECT * FROM dispatchers ${where} ORDER BY name COLLATE NOCASE`)
+    .prepare(`SELECT ${DISPATCHER_SAFE_COLUMNS} FROM dispatchers ${where} ORDER BY name COLLATE NOCASE`)
     .all() as DispatcherUser[];
 }
 
 export function getDispatcherUser(id: number): DispatcherUser | null {
   return (
-    (getDb().prepare("SELECT * FROM dispatchers WHERE id = ?").get(id) as DispatcherUser | undefined) ?? null
+    (getDb()
+      .prepare(`SELECT ${DISPATCHER_SAFE_COLUMNS} FROM dispatchers WHERE id = ?`)
+      .get(id) as DispatcherUser | undefined) ?? null
   );
+}
+
+export function isDispatcherTwoFactorRequired(): boolean {
+  return Boolean(getCompanySettings().require_dispatcher_2fa);
+}
+
+export function updateTwoFactorPolicy(requireDispatcher2fa: boolean): CompanySettings {
+  return patchSettings({ require_dispatcher_2fa: requireDispatcher2fa ? 1 : 0 });
 }
 
 function parseDispatcherRole(role: string): string {

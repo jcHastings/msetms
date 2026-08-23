@@ -17,7 +17,8 @@ export default async function DispatcherLoginPage() {
         </div>
         <h1 className="mt-2 text-3xl font-semibold">Dispatcher desk</h1>
         <p className="mt-2 text-base text-slate-600">
-          Local PIN login. Driver app is separate at /driver/login.
+          Local PIN login. 2-step is asked only after you enroll. Driver app is separate at
+          /driver/login.
         </p>
       </div>
       <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />

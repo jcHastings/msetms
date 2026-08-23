@@ -52,6 +52,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /QBO_REDIRECT_URI=/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /2-step verification/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Set up 2-step/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Require 2-step for all dispatchers/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Authenticator code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8"), /totp|authenticator/i);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.match(tabSource, /Load Basics/);
   assert.match(tabSource, /Customer Info/);
   assert.match(tabSource, /Carrier \/ Asset Info/);
@@ -2201,8 +2209,13 @@ Continuous reefer. Two load locks.
   const session = await import("../lib/dispatcher-session");
   const ana = session.listDispatchers().find((row) => row.name === "Ana G");
   assert.ok(ana);
+  assert.equal(ana.totp_enrolled, false);
+  assert.equal("pin" in ana, false);
+  assert.equal("totp_secret" in ana, false);
   assert.equal(session.authenticateDispatcher(ana.id, "4020").role, "manager");
   assert.throws(() => session.authenticateDispatcher(ana.id, "0000"));
+  assert.ok(session.parseSessionValue(`${ana.id}.${Date.now()}`));
+  assert.equal(session.parseSessionValue(`${ana.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
 
   const accounting = await import("../lib/accounting");
   assert.ok(accounting.listBills().some((bill) => /Lumper/i.test(bill.vendor)));
@@ -2402,6 +2415,11 @@ Continuous reefer. Two load locks.
       section.items.some((item) => item.href === "/settings/quickbooks"),
     ),
   );
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/security"),
+    ),
+  );
   settings.updateCompanyContact({
     company_name: "M&S Loads",
     dispatcher_name: "Ana G",
@@ -2465,6 +2483,33 @@ Continuous reefer. Two load locks.
   const jordan = session.listDispatchers().find((row) => row.name === "Jordan Lee");
   assert.ok(jordan);
   assert.equal(jordan.role, "dispatcher");
+  assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 0);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), false);
+  settings.updateTwoFactorPolicy(true);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), true);
+  settings.updateTwoFactorPolicy(false);
+  const totp = await import("../lib/totp");
+  const dispatcherTotp = await import("../lib/dispatcher-totp");
+  const generatedSecret = totp.generateTotpSecret();
+  const liveCode = totp.generateTotpCode(generatedSecret);
+  assert.equal(totp.verifyTotpCode(generatedSecret, liveCode), true);
+  assert.equal(totp.verifyTotpCode(generatedSecret, "000000"), false);
+  assert.equal(dispatcherTotp.isDispatcherTotpEnrolled(userId), false);
+  const enrollment = dispatcherTotp.beginTotpEnrollment(userId);
+  const recoveryCodes = dispatcherTotp.confirmTotpEnrollment(userId, totp.generateTotpCode(enrollment.secret));
+  assert.equal(dispatcherTotp.isDispatcherTotpEnrolled(userId), true);
+  assert.equal(recoveryCodes.length, 10);
+  assert.equal(settings.getDispatcherUser(userId)?.totp_enrolled, 1);
+  assert.equal("totp_secret" in (settings.getDispatcherUser(userId) ?? {}), false);
+  dispatcherTotp.consumeRecoveryCode(userId, recoveryCodes[0]);
+  assert.throws(() => dispatcherTotp.consumeRecoveryCode(userId, recoveryCodes[0]));
+  const auditRows = (await import("../lib/desk")).listAudit(20);
+  assert.ok(auditRows.some((row) => row.action === "totp_enroll"));
+  assert.ok(
+    auditRows.every((row) => !new RegExp(enrollment.secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(row.detail)),
+  );
+  dispatcherTotp.resetDispatcherTotp(userId, "Ana G");
+  assert.equal(dispatcherTotp.isDispatcherTotpEnrolled(userId), false);
   settings.updateLoadManagementSettings({
     load_number_prefix: "ABC",
     load_number_next: 2000,

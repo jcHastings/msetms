@@ -485,7 +485,9 @@ export type DashboardStats = {
   unassignedLoads: number;
 };
 
-export type ActionResult = { ok: true; id?: number; message?: string } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; id?: number; message?: string; needsTotp?: boolean; recoveryCodes?: string[] }
+  | { ok: false; error: string };
 
 export function labelForLoadStatus(status: string): string {
   switch (status) {

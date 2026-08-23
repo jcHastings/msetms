@@ -16,7 +16,7 @@ export default async function UsersSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Dispatchers and roles"
-        subtitle="Local PIN users. Admin and manager can add people. Read-only can view but not save settings. No invite email is sent."
+        subtitle="Local PIN users. Admin and manager can add people and reset 2-step. Read-only can view but not save settings. No invite email is sent."
         actions={
           canManage ? (
             <Link href="/settings/users/new" className="btn btn-primary">
@@ -33,6 +33,7 @@ export default async function UsersSettingsPage() {
               <th>Role</th>
               <th>Group</th>
               <th>Active</th>
+              <th>2-step</th>
               <th></th>
             </tr>
           </thead>
@@ -46,6 +47,7 @@ export default async function UsersSettingsPage() {
                 <td>{roleLabel(user.role)}</td>
                 <td>{permissionGroupLabel(user.permission_group)}</td>
                 <td>{user.active ? "Yes" : "Off"}</td>
+                <td>{user.totp_enrolled ? "On" : "Off"}</td>
                 <td className="text-right">
                   <Link href={`/settings/users/${user.id}`} className="text-sm font-semibold underline">
                     {canManage ? "Edit" : "View"}

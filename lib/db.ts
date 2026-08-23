@@ -523,6 +523,7 @@ export function migrate(db: Database): void {
     ["load_number_prefix", "TEXT NOT NULL DEFAULT 'MSE'"],
     ["load_number_next", "INTEGER NOT NULL DEFAULT 1001"],
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
+    ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 0"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
@@ -530,6 +531,19 @@ export function migrate(db: Database): void {
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");
+  ensureColumn(db, "dispatchers", "totp_secret", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "totp_pending_secret", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "totp_enrolled", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatcher_totp_recovery_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_totp_recovery_dispatcher
+      ON dispatcher_totp_recovery_codes(dispatcher_id, used_at);
+  `);
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");

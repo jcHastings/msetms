@@ -72,6 +72,11 @@ export const SETTINGS_SECTIONS = [
         label: "Dispatchers and roles",
         hint: "Admin, dispatcher, read-only. Light permission groups.",
       },
+      {
+        href: "/settings/security",
+        label: "2-step verification",
+        hint: "Authenticator app for dispatcher login. Driver PIN is unchanged.",
+      },
     ],
   },
   {
@@ -146,7 +151,35 @@ export type DispatcherUser = {
   email: string;
   active: number;
   permission_group: string;
+  totp_enrolled: number;
 };
+
+export type PublicDispatcher = {
+  id: number;
+  name: string;
+  role: string;
+  email: string;
+  active: number;
+  permission_group: string;
+  totp_enrolled: boolean;
+};
+
+export function toPublicDispatcher(
+  user: Pick<
+    DispatcherUser,
+    "id" | "name" | "role" | "email" | "active" | "permission_group" | "totp_enrolled"
+  >,
+): PublicDispatcher {
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    email: user.email,
+    active: user.active,
+    permission_group: user.permission_group,
+    totp_enrolled: Boolean(user.totp_enrolled),
+  };
+}
 
 export function roleLabel(role: string): string {
   return DISPATCHER_ROLES.find((item) => item.value === role)?.label ?? role;

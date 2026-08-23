@@ -5,7 +5,7 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Optional authenticator 2-step after PIN once a user enrolls in **Settings → 2-step verification**. Driver PIN login is unchanged. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -68,7 +68,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch. Address search uses Google Places when `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` is in `.env` (server-side; fields stay manual if the key is missing).
 - **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
 - **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
-- **Settings** — hub for company contact/logo, insurance, dropdown lists, currency/units, tax, alert windows, routing notes, OO pay defaults, document header/footer/terms, load number prefix, sample-data toggle, dispatcher users/roles, and integration status. Dispatcher login required. Saves to SQLite.
+- **Settings** — hub for company contact/logo, insurance, dropdown lists, currency/units, tax, alert windows, routing notes, OO pay defaults, document header/footer/terms, load number prefix, sample-data toggle, dispatcher users/roles, 2-step verification, and integration status. Dispatcher login required. Saves to SQLite.
 - Richer load statuses, multi-stop, clone, templates, document checklist, claims
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it

@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
-import { requireSettingsEditor, requireUserAdmin } from "./dispatcher-session";
+import { requireSettingsEditor, requireSignedInDispatcher, requireUserAdmin } from "./dispatcher-session";
+import {
+  beginTotpEnrollment,
+  cancelTotpEnrollment,
+  confirmTotpEnrollment,
+  resetDispatcherTotp,
+} from "./dispatcher-totp";
 import {
   addDropdownOption,
   clearCompanyLogo,
@@ -20,6 +26,7 @@ import {
   updateRoutingNotes,
   updateDispatcherUser,
   updateTaxSettings,
+  updateTwoFactorPolicy,
   updateUnitSettings,
   type DocumentType,
 } from "./settings";
@@ -280,6 +287,78 @@ export async function createDispatcherUserAction(
     redirect(`/settings/users/${id}`);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function startTotpEnrollmentAction(): Promise<ActionResult> {
+  try {
+    const dispatcher = await requireSignedInDispatcher();
+    beginTotpEnrollment(dispatcher.id);
+    refresh();
+    return { ok: true, message: "Scan the QR code, then confirm a 6-digit code." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function cancelTotpEnrollmentAction(): Promise<ActionResult> {
+  try {
+    const dispatcher = await requireSignedInDispatcher();
+    cancelTotpEnrollment(dispatcher.id);
+    refresh();
+    return { ok: true, message: "2-step setup cancelled." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function confirmTotpEnrollmentAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const dispatcher = await requireSignedInDispatcher();
+    const code = String(formData.get("totp") ?? "").trim();
+    if (!code) throw new Error("Enter the 6-digit authenticator code.");
+    const recoveryCodes = confirmTotpEnrollment(dispatcher.id, code);
+    refresh();
+    return {
+      ok: true,
+      recoveryCodes,
+      message: "2-step is on. Save these recovery codes now — they are shown once.",
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveTwoFactorPolicyAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireUserAdmin();
+    updateTwoFactorPolicy(String(formData.get("require_dispatcher_2fa") ?? "") === "1");
+    refresh();
+    return { ok: true, message: "2-step policy saved." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function resetDispatcherTotpAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const admin = await requireUserAdmin();
+    const id = parseOptionalInt(formData.get("user_id"));
+    if (!id) throw new Error("User is missing.");
+    resetDispatcherTotp(id, admin.name);
+    refresh();
+    return { ok: true, message: "2-step was reset. They can sign in with PIN until they enroll again." };
+  } catch (error) {
     return fail(error);
   }
 }

@@ -1,40 +1,44 @@
 import { cookies } from "next/headers";
-import { getDispatcherUser, listDispatcherUsers } from "./settings";
+import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
   canEditSettings,
   canManageUsers,
   roleLabel,
-  type DispatcherUser,
+  toPublicDispatcher,
+  type PublicDispatcher,
 } from "./settings-shared";
 
 export { canEditSettings, canManageUsers, roleLabel };
 
-const COOKIE = "tms_dispatcher_id";
+const SESSION_COOKIE = "tms_dispatcher_id";
+const PENDING_COOKIE = "tms_2fa_pending";
+export const DISPATCHER_SESSION_MS = 12 * 60 * 60 * 1000;
+const PENDING_MS = 10 * 60 * 1000;
 
-export type Dispatcher = DispatcherUser;
+export type Dispatcher = PublicDispatcher;
 
 export function listDispatchers(): Dispatcher[] {
-  return listDispatcherUsers(false);
+  return listDispatcherUsers(false).map(toPublicDispatcher);
 }
 
 export function getDispatcher(id: number): Dispatcher | null {
-  return getDispatcherUser(id);
+  const user = getDispatcherUser(id);
+  return user ? toPublicDispatcher(user) : null;
 }
 
 export function authenticateDispatcher(dispatcherId: number, pin: string): Dispatcher {
-  const dispatcher = getDispatcher(dispatcherId);
-  if (!dispatcher || !dispatcher.active || dispatcher.pin !== pin.trim()) {
+  const user = getDispatcherUser(dispatcherId);
+  if (!user || !user.active || user.pin !== pin.trim()) {
     throw new Error("Dispatcher or PIN is not recognized.");
   }
-  return dispatcher;
+  return toPublicDispatcher(user);
 }
 
 export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
   const jar = await cookies();
-  const raw = jar.get(COOKIE)?.value;
-  const id = raw ? Number.parseInt(raw, 10) : NaN;
-  if (!id) return null;
-  const dispatcher = getDispatcher(id);
+  const parsed = parseSessionValue(jar.get(SESSION_COOKIE)?.value);
+  if (!parsed) return null;
+  const dispatcher = getDispatcher(parsed.id);
   if (!dispatcher?.active) return null;
   return dispatcher;
 }
@@ -63,15 +67,55 @@ export async function requireUserAdmin(): Promise<Dispatcher> {
 
 export async function setDispatcherSession(dispatcherId: number): Promise<void> {
   const jar = await cookies();
-  jar.set(COOKIE, String(dispatcherId), {
+  jar.set(SESSION_COOKIE, `${dispatcherId}.${Date.now()}`, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: DISPATCHER_SESSION_MS / 1000,
   });
+  jar.delete(PENDING_COOKIE);
 }
 
 export async function clearDispatcherSession(): Promise<void> {
   const jar = await cookies();
-  jar.delete(COOKIE);
+  jar.delete(SESSION_COOKIE);
+  jar.delete(PENDING_COOKIE);
+}
+
+export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {
+  const jar = await cookies();
+  jar.set(PENDING_COOKIE, String(dispatcherId), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: PENDING_MS / 1000,
+  });
+  jar.delete(SESSION_COOKIE);
+}
+
+export async function getPendingTwoFactorDispatcherId(): Promise<number | null> {
+  const jar = await cookies();
+  const id = Number.parseInt(jar.get(PENDING_COOKIE)?.value ?? "", 10);
+  return id || null;
+}
+
+export async function clearPendingTwoFactor(): Promise<void> {
+  const jar = await cookies();
+  jar.delete(PENDING_COOKIE);
+}
+
+export function isTwoFactorRequired(): boolean {
+  return isDispatcherTwoFactorRequired();
+}
+
+export function parseSessionValue(raw: string | undefined): { id: number; issuedAt: number } | null {
+  if (!raw) return null;
+  const [idPart, tsPart] = raw.split(".");
+  const id = Number.parseInt(idPart, 10);
+  if (!id) return null;
+  if (!tsPart) return { id, issuedAt: Date.now() };
+  const issuedAt = Number.parseInt(tsPart, 10);
+  if (!Number.isFinite(issuedAt)) return null;
+  if (Date.now() - issuedAt > DISPATCHER_SESSION_MS) return null;
+  return { id, issuedAt };
 }
