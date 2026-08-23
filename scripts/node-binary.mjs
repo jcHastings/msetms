@@ -16,6 +16,7 @@ export function isSupportedNodeVersion(version) {
   return major === 22 && minor >= 13;
 }
 
+/** @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env] */
 export function windowsNodeInstalls(env = process.env) {
   const files = [];
   if (env.ProgramFiles) files.push(join(env.ProgramFiles, "nodejs", "node.exe"));
@@ -40,6 +41,16 @@ export function readNodeVersion(execPath) {
   }
 }
 
+/**
+ * @param {{
+ *   execPath?: string,
+ *   version?: string,
+ *   platform?: NodeJS.Platform,
+ *   env?: NodeJS.ProcessEnv | Record<string, string | undefined>,
+ *   exists?: (file: string) => boolean,
+ *   readVersion?: (file: string) => string | null,
+ * }} [options]
+ */
 export function resolveNodeExecutable({
   execPath = process.execPath,
   version = process.versions.node,
