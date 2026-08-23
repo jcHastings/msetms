@@ -611,11 +611,13 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
         throw new Error("Choose a file to upload.");
       }
       const kind = String(formData.get("kind") ?? "other");
-      const { addAttachment, fileToBuffer } = await import("./files");
+      const { addAttachment, fileToBuffer, isPdfOrImage } = await import("./files");
       const { ATTACHMENT_KINDS } = await import("./types");
       if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
         throw new Error("Pick an attachment type.");
       }
+      if (file.size > 15 * 1024 * 1024) throw new Error("File is over 15 MB.");
+      if (!isPdfOrImage(file)) throw new Error("Upload a PDF or image.");
       await addAttachment({
         loadId,
         kind: kind as (typeof ATTACHMENT_KINDS)[number]["value"],
@@ -626,6 +628,37 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
       });
       refresh();
       return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function replaceAttachmentFormAction(formData: FormData): Promise<void> {
+  const result = await replaceAttachmentAction(formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function replaceAttachmentAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const attachmentId = parseOptionalInt(formData.get("attachment_id"));
+      if (!attachmentId) throw new Error("Attachment is missing.");
+      const file = formData.get("file");
+      if (!(file instanceof File) || file.size === 0) {
+        throw new Error("Choose a file to replace this one.");
+      }
+      if (file.size > 15 * 1024 * 1024) throw new Error("File is over 15 MB.");
+      const { replaceAttachment, fileToBuffer, isPdfOrImage } = await import("./files");
+      if (!isPdfOrImage(file)) throw new Error("Upload a PDF or image.");
+      replaceAttachment(attachmentId, {
+        originalName: file.name,
+        buffer: await fileToBuffer(file),
+        mimeType: file.type,
+        uploadedBy: "dispatcher",
+      });
+      refresh();
+      return { ok: true, id: attachmentId };
     } catch (error) {
       return fail(error);
     }

@@ -51,6 +51,9 @@ async function main() {
   assert.match(workspaceSource, /Copy \/ Cancel \/ Archive/);
   assert.match(workspaceSource, /form=\{formId\}/);
   assert.match(workspaceSource, /beforeunload/);
+  const docsPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
+  assert.match(docsPage, /AttachmentsPanel/);
+  assert.match(docsPage, /when="docs"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -369,7 +372,58 @@ async function main() {
     mimeType: "application/pdf",
     uploadedBy: "dispatcher",
   });
-  const { deleteAttachment } = await import("../lib/files");
+  const { deleteAttachment, isPdfOrImage, replaceAttachment } = await import("../lib/files");
+  const { labelForAttachmentKind } = await import("../lib/types");
+  assert.equal(labelForAttachmentKind("rate_con"), "Rate confirmation");
+  assert.equal(labelForAttachmentKind("invoice"), "Invoice (customer)");
+  assert.equal(labelForAttachmentKind("carrier_invoice"), "Bill / carrier invoice");
+  assert.equal(isPdfOrImage({ name: "invoice.pdf", type: "" }), true);
+  assert.equal(isPdfOrImage({ name: "notes.txt", type: "text/plain" }), false);
+  const customerInvoice = addAttachment({
+    loadId,
+    kind: "invoice",
+    originalName: "customer-invoice.pdf",
+    buffer: Buffer.from("%PDF-1.4 invoice-v1"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  addAttachment({
+    loadId,
+    kind: "invoice",
+    originalName: "customer-invoice-revised.pdf",
+    buffer: Buffer.from("%PDF-1.4 invoice-v1b"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  addAttachment({
+    loadId,
+    kind: "carrier_invoice",
+    originalName: "carrier-bill.pdf",
+    buffer: Buffer.from("%PDF-1.4 bill"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const oldInvoicePath = getAttachmentPath(customerInvoice);
+  const replacedInvoice = replaceAttachment(customerInvoice.id, {
+    originalName: "customer-invoice-v2.pdf",
+    buffer: Buffer.from("%PDF-1.4 invoice-v2"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  assert.equal(replacedInvoice.original_name, "customer-invoice-v2.pdf");
+  assert.equal(replacedInvoice.kind, "invoice");
+  assert.equal(fs.existsSync(oldInvoicePath), false);
+  assert.equal(fs.readFileSync(getAttachmentPath(replacedInvoice), "utf8").includes("invoice-v2"), true);
+  assert.equal(listAttachments(loadId).filter((file) => file.kind === "invoice").length, 2);
+  assert.equal(listAttachments(loadId).some((file) => file.kind === "rate_con"), true);
+  const docsPanel = fs.readFileSync(path.join(process.cwd(), "components/attachments-panel.tsx"), "utf8");
+  assert.match(docsPanel, /LOAD_DOCUMENT_KINDS/);
+  assert.match(docsPanel, /download=1/);
+  assert.match(docsPanel, /Replace/);
+  assert.match(docsPanel, /From rate con/);
+  const kindsSource = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
+  assert.match(kindsSource, /Invoice \(customer\)/);
+  assert.match(kindsSource, /Bill \/ carrier invoice/);
   deleteAttachment(cameraAttachment.id);
   const history = audit.listLoadAudit(loadId);
   assert.ok(history.some((row) => row.action === "create" && row.field === "load"));

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { recordLoadAudit } from "./audit";
+import { currentAuditActor, recordLoadAudit } from "./audit";
 import { getDataDir, getDb } from "./db";
 import type { Attachment, AttachmentKind, FleetDocKind, FleetDocument } from "./types";
 
@@ -43,7 +43,7 @@ export function attachInboxToLoad(
   loadId: number,
   inboxId: string,
   kind: AttachmentKind,
-  uploadedBy: "dispatcher" | "driver",
+  uploadedBy: string,
 ): Attachment {
   const inbox = getInboxFile(inboxId);
   if (!inbox) throw new Error("Uploaded file is no longer available. Upload it again.");
@@ -64,12 +64,13 @@ export function addAttachment(input: {
   originalName: string;
   buffer: Buffer;
   mimeType: string;
-  uploadedBy: "dispatcher" | "driver";
+  uploadedBy: string;
 }): Attachment {
   const storedName = `${randomUUID()}-${sanitizeName(input.originalName)}`;
   const dir = uploadsDir(String(input.loadId));
   fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.buffer);
   const createdAt = new Date().toISOString();
+  const uploadedBy = uploaderName(input.uploadedBy);
   const result = getDb()
     .prepare(
       `INSERT INTO attachments (load_id, kind, original_name, stored_name, mime_type, uploaded_by, created_at)
@@ -81,7 +82,7 @@ export function addAttachment(input: {
       input.originalName,
       storedName,
       input.mimeType || guessMime(input.originalName),
-      input.uploadedBy,
+      uploadedBy,
       createdAt,
     );
   const attachment = {
@@ -91,7 +92,7 @@ export function addAttachment(input: {
     original_name: input.originalName,
     stored_name: storedName,
     mime_type: input.mimeType || guessMime(input.originalName),
-    uploaded_by: input.uploadedBy,
+    uploaded_by: uploadedBy,
     created_at: createdAt,
   };
   recordLoadAudit({
@@ -101,6 +102,51 @@ export function addAttachment(input: {
     newValue: input.originalName,
   });
   return attachment;
+}
+
+export function replaceAttachment(
+  id: number,
+  input: {
+    originalName: string;
+    buffer: Buffer;
+    mimeType: string;
+    uploadedBy: string;
+  },
+): Attachment {
+  const existing = getAttachment(id);
+  if (!existing) throw new Error("Attachment not found.");
+  const storedName = `${randomUUID()}-${sanitizeName(input.originalName)}`;
+  const dir = uploadsDir(String(existing.load_id));
+  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.buffer);
+  const oldPath = getAttachmentPath(existing);
+  const createdAt = new Date().toISOString();
+  getDb()
+    .prepare(
+      `UPDATE attachments
+       SET original_name = ?, stored_name = ?, mime_type = ?, uploaded_by = ?, created_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      input.originalName,
+      storedName,
+      input.mimeType || guessMime(input.originalName),
+      uploaderName(input.uploadedBy),
+      createdAt,
+      id,
+    );
+  if (fs.existsSync(/*turbopackIgnore: true*/ oldPath)) {
+    fs.unlinkSync(/*turbopackIgnore: true*/ oldPath);
+  }
+  recordLoadAudit({
+    loadId: existing.load_id,
+    action: "attachment",
+    field: existing.kind,
+    oldValue: existing.original_name,
+    newValue: input.originalName,
+  });
+  const next = getAttachment(id);
+  if (!next) throw new Error("Attachment could not be replaced.");
+  return next;
 }
 
 export function deleteAttachment(id: number): void {
@@ -139,8 +185,20 @@ export function getAttachmentPath(attachment: Attachment): string {
   );
 }
 
+function uploaderName(fallback: string): string {
+  const actor = currentAuditActor();
+  if (actor.kind === "system") return fallback || "dispatcher";
+  return actor.name;
+}
+
 export function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80) || "file";
+}
+
+export function isPdfOrImage(file: { name: string; type?: string }): boolean {
+  const mime = String(file.type ?? "").toLowerCase();
+  if (mime === "application/pdf" || mime.startsWith("image/")) return true;
+  return /\.(pdf|png|jpe?g|gif|webp|heic|heif)$/i.test(file.name);
 }
 
 export function guessMime(name: string): string {

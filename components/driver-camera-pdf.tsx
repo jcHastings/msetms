@@ -10,7 +10,11 @@ type Draft = { previewUrl: string; blob: Blob };
 type Page = Draft & { id: string };
 
 const DRIVER_KINDS = ATTACHMENT_KINDS.filter(
-  (kind) => kind.value !== "rate_con" && kind.value !== "ifta",
+  (kind) =>
+    kind.value !== "rate_con" &&
+    kind.value !== "ifta" &&
+    kind.value !== "invoice" &&
+    kind.value !== "carrier_invoice",
 );
 
 export function DriverCameraPdf({

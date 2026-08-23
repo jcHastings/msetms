@@ -169,6 +169,8 @@ export type DriverProgress = (typeof DRIVER_PROGRESS)[number]["value"];
 
 export const ATTACHMENT_KINDS = [
   { value: "rate_con", label: "Rate confirmation" },
+  { value: "invoice", label: "Invoice (customer)" },
+  { value: "carrier_invoice", label: "Bill / carrier invoice" },
   { value: "bol", label: "BOL" },
   { value: "pod", label: "POD" },
   { value: "lumper", label: "Lumper" },
@@ -183,6 +185,15 @@ export const ATTACHMENT_KINDS = [
 ] as const;
 
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]["value"];
+
+export const LOAD_DOCUMENT_KINDS: AttachmentKind[] = [
+  "rate_con",
+  "invoice",
+  "carrier_invoice",
+  "bol",
+  "pod",
+  "other",
+];
 
 export const FLEET_DOC_KINDS = [
   { value: "cdl", label: "Driver license" },
@@ -417,7 +428,7 @@ export type Attachment = {
   original_name: string;
   stored_name: string;
   mime_type: string;
-  uploaded_by: "dispatcher" | "driver";
+  uploaded_by: string;
   created_at: string;
 };
 
@@ -530,6 +541,13 @@ export function labelForDriverProgress(value: string): string {
 
 export function labelForAttachmentKind(value: string): string {
   return ATTACHMENT_KINDS.find((item) => item.value === value)?.label ?? value;
+}
+
+export function labelForUploader(value: string): string {
+  if (value === "dispatcher") return "Dispatcher";
+  if (value === "driver") return "Driver";
+  if (value === "system") return "System";
+  return value || "Dispatcher";
 }
 
 export function isLocationRole(value: string): value is LocationRole {
