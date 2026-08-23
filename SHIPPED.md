@@ -11,7 +11,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Dispatch
 
-- **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver.
+- **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver. Mass upload from JC’s Ascend blank location CSV (template download + UTF-8 import; duplicate name+address updates).
 - **Search** in nav — criteria, live/archived/cancelled, saved reports.
 - Richer load statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.
 - Status reason, cover-by, equipment required, hazmat, commodity class, seals, pallets/cases, team, lumper, detention start/stop, appointment confirmation, unload type, cancel reason.

@@ -19,6 +19,7 @@ import {
   getDriver,
   getTrailer,
   getTruck,
+  importLocationsFromCsv,
   updateCustomer,
   updateDriver,
   updateLoad,
@@ -50,6 +51,8 @@ import {
 } from "./types";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
+import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
+import { fileToBuffer } from "./files";
 
 function refresh(): void {
   try {
@@ -864,6 +867,27 @@ export async function updateLocationAction(
     return { ok: true, id };
   } catch (error) {
     return fail(error);
+  }
+}
+
+export async function importLocationsCsvAction(
+  _prev: LocationCsvImportResult | null,
+  formData: FormData,
+): Promise<LocationCsvImportResult> {
+  try {
+    const file = formData.get("csv");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Choose a CSV file." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { ok: false, error: "CSV is too large (max 5 MB)." };
+    }
+    const text = decodeCsvBuffer(await fileToBuffer(file));
+    const result = importLocationsFromCsv(text);
+    refresh();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
   }
 }
 

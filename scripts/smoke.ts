@@ -1449,6 +1449,244 @@ Continuous reefer. Two load locks.
   });
   assert.equal(queries.getLocation(oneOffShipper)?.scheduling_type, "fcfs");
 
+  const locationsPage = fs.readFileSync(path.join(process.cwd(), "app/locations/page.tsx"), "utf8");
+  assert.match(locationsPage, /LocationCsvImport/);
+  const importUi = fs.readFileSync(path.join(process.cwd(), "components/location-csv-import.tsx"), "utf8");
+  assert.match(importUi, /Download template/);
+  assert.match(importUi, /Upload CSV/);
+  assert.match(importUi, /\/api\/locations\/template/);
+  assert.doesNotMatch(importUi, /googleapis|GOOGLE_MAPS/i);
+
+  const {
+    ASCEND_LOCATION_HEADERS,
+    csvEscape,
+    decodeCsvBuffer,
+    parseAscendLocationCsv,
+    renderAscendLocationTemplate,
+  } = await import("../lib/location-csv");
+  assert.deepEqual(ASCEND_LOCATION_HEADERS, [
+    "Location Name",
+    "Address Line 1",
+    "Address Line 2",
+    "City",
+    "State",
+    "Zip/Postal Code",
+    "Phone number",
+    "Phone Ext.",
+    "Location Type",
+    "Location Code",
+    "Primary Contact Name",
+    "Primary Contact Phone Number",
+    "Primary Contact Ext.",
+    "Primary Contact Email",
+    "Primary Contact Fax",
+    "Secondary Contact Name",
+    "Secondary Contact Phone Number",
+    "Secondary Contact Ext.",
+    "Secondary Contact Email",
+    "Secondary Contact Fax",
+    "Location Private notes",
+    "Location Public notes",
+  ]);
+  const template = renderAscendLocationTemplate();
+  assert.equal(template.startsWith("\uFEFF"), true);
+  assert.match(template, /\r\n$/);
+  assert.equal(template.replace(/^\uFEFF/, "").trim(), ASCEND_LOCATION_HEADERS.join(","));
+
+  const locationCsvLine = (values: Partial<Record<(typeof ASCEND_LOCATION_HEADERS)[number], string>>) =>
+    ASCEND_LOCATION_HEADERS.map((header) => csvEscape(values[header] ?? "")).join(",");
+  const locationCsv = (...rows: Partial<Record<(typeof ASCEND_LOCATION_HEADERS)[number], string>>[]) =>
+    [ASCEND_LOCATION_HEADERS.join(","), ...rows.map(locationCsvLine)].join("\r\n");
+
+  const parsedImport = parseAscendLocationCsv(
+    locationCsv(
+      {
+        "Location Name": "New Import DC",
+        "Address Line 1": "100 Import Rd",
+        City: "Jackson",
+        State: "ms",
+        "Zip/Postal Code": "39201",
+        "Phone number": "555-0199",
+        "Phone Ext.": "12",
+        "Location Type": "SHIPPER",
+        "Location Code": "IMP-1",
+        "Primary Contact Name": "Pat Contact",
+        "Primary Contact Phone Number": "555-0200",
+        "Primary Contact Ext.": "3",
+        "Primary Contact Email": "pat@example.com",
+        "Primary Contact Fax": "555-0201",
+        "Location Private notes": "Private note here",
+        "Location Public notes": "Dock 4 appointment",
+      },
+      {},
+      {
+        "Location Name": "Bad Type Yard",
+        "Address Line 1": "1 Main",
+        City: "Dallas",
+        State: "TX",
+        "Location Type": "warehouse",
+      },
+      {
+        "Location Name": "Quoted Name",
+        "Address Line 1": '200 "A" St',
+        "Address Line 2": "Suite 2",
+        City: "Chicago",
+        State: "IL",
+        "Zip/Postal Code": "60601",
+        "Location Type": "both",
+        "Location Public notes": "Public hours",
+      },
+    ),
+  );
+  assert.equal(parsedImport.skipped, 1);
+  assert.equal(parsedImport.errors.length, 1);
+  assert.equal(parsedImport.errors[0]?.row, 4);
+  assert.match(parsedImport.errors[0]?.error ?? "", /shipper, receiver, or both/i);
+  assert.equal(parsedImport.rows.length, 2);
+  assert.equal(parsedImport.rows[0]?.input.role, "shipper");
+  assert.equal(parsedImport.rows[0]?.input.phone, "555-0199 x12");
+  assert.equal(parsedImport.rows[0]?.input.state, "MS");
+  assert.match(parsedImport.rows[0]?.input.notes ?? "", /Private note here/);
+  assert.match(parsedImport.rows[0]?.input.notes ?? "", /Code: IMP-1/);
+  assert.match(parsedImport.rows[0]?.input.notes ?? "", /Primary: Pat Contact/);
+  assert.match(parsedImport.rows[0]?.input.notes ?? "", /555-0200 x3/);
+  assert.equal(parsedImport.rows[0]?.input.scheduling_notes, "Dock 4 appointment");
+  assert.equal(parsedImport.rows[1]?.input.name, "Quoted Name");
+  assert.equal(parsedImport.rows[1]?.input.street, '200 "A" St, Suite 2');
+
+  const blankType = parseAscendLocationCsv(
+    locationCsv({
+      "Location Name": "Blank Type DC",
+      "Address Line 1": "9 Oak",
+      City: "Austin",
+      State: "TX",
+    }),
+  );
+  assert.equal(blankType.rows[0]?.input.role, "both");
+  const consigneeType = parseAscendLocationCsv(
+    locationCsv({
+      "Location Name": "Recv DC",
+      "Address Line 1": "1 St",
+      City: "Austin",
+      State: "TX",
+      "Location Type": "consignee",
+    }),
+  );
+  assert.equal(consigneeType.rows[0]?.input.role, "receiver");
+
+  const utf16 = Buffer.concat([
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from(`${ASCEND_LOCATION_HEADERS.join(",")}\nUtf16 Yard,1 A,,Dallas,TX,75001,,,,,,\n`, "utf16le"),
+  ]);
+  const decodedUtf16 = decodeCsvBuffer(utf16);
+  assert.match(decodedUtf16, /Utf16 Yard/);
+  const bomUtf8 = decodeCsvBuffer(Buffer.from(`\uFEFF${ASCEND_LOCATION_HEADERS.join(",")}\nBom Yard,2 B,,Dallas,TX,75001,,,,,,\n`, "utf8"));
+  assert.equal(bomUtf8.includes("\uFEFF"), false);
+  assert.equal(parseAscendLocationCsv(bomUtf8).rows[0]?.input.name, "Bom Yard");
+
+  const firstImport = queries.importLocationsFromCsv(
+    locationCsv(
+      {
+        "Location Name": "New Import DC",
+        "Address Line 1": "100 Import Rd",
+        City: "Jackson",
+        State: "MS",
+        "Zip/Postal Code": "39201",
+        "Phone number": "555-0199",
+        "Phone Ext.": "12",
+        "Location Type": "shipper",
+        "Location Code": "IMP-1",
+        "Location Private notes": "Private note here",
+        "Location Public notes": "Dock 4 appointment",
+      },
+      {},
+      {
+        "Location Name": "Bad Type Yard",
+        "Address Line 1": "1 Main",
+        City: "Dallas",
+        State: "TX",
+        "Location Type": "warehouse",
+      },
+    ),
+  );
+  assert.equal(firstImport.created, 1);
+  assert.equal(firstImport.updated, 0);
+  assert.equal(firstImport.skipped, 1);
+  assert.equal(firstImport.errors.length, 1);
+  const imported = queries.findLocationByNameAddress("New Import DC", "100 Import Rd", "Jackson", "MS", "39201");
+  assert.ok(imported);
+  assert.equal(imported.role, "shipper");
+  assert.equal(imported.phone, "555-0199 x12");
+  assert.match(imported.notes, /Private note here/);
+  assert.match(imported.scheduling_notes, /Dock 4/);
+  queries.updateLocation(imported.id, {
+    ...imported,
+    hours: "Mon–Fri 07:00–15:00",
+    scheduling_type: "appointment",
+    latitude: 32.3,
+    longitude: -90.2,
+  });
+
+  const secondImport = queries.importLocationsFromCsv(
+    locationCsv({
+      "Location Name": "new import dc",
+      "Address Line 1": "100 Import Rd",
+      City: "Jackson",
+      State: "ms",
+      "Zip/Postal Code": "39201",
+      "Phone number": "555-9999",
+      "Location Type": "both",
+      "Location Public notes": "Updated public",
+    }),
+  );
+  assert.equal(secondImport.created, 0);
+  assert.equal(secondImport.updated, 1);
+  const afterUpdate = queries.getLocation(imported.id);
+  assert.ok(afterUpdate);
+  assert.equal(afterUpdate.role, "both");
+  assert.equal(afterUpdate.phone, "555-9999");
+  assert.equal(afterUpdate.scheduling_notes, "Updated public");
+  assert.equal(afterUpdate.scheduling_type, "appointment");
+  assert.equal(afterUpdate.hours, "Mon–Fri 07:00–15:00");
+  assert.equal(afterUpdate.latitude, 32.3);
+  assert.equal(afterUpdate.longitude, -90.2);
+  assert.equal(
+    queries.listLocations().filter((location) => location.name.toLowerCase() === "new import dc").length,
+    1,
+  );
+
+  const sameCsvDup = queries.importLocationsFromCsv(
+    locationCsv(
+      {
+        "Location Name": "Dup Yard",
+        "Address Line 1": "1 A St",
+        City: "Dallas",
+        State: "TX",
+        "Zip/Postal Code": "75001",
+        "Phone number": "111",
+        "Location Type": "shipper",
+        "Location Public notes": "First",
+      },
+      {
+        "Location Name": "Dup Yard",
+        "Address Line 1": "1 A St",
+        City: "Dallas",
+        State: "TX",
+        "Zip/Postal Code": "75001",
+        "Phone number": "222",
+        "Location Type": "receiver",
+        "Location Public notes": "Second",
+      },
+    ),
+  );
+  assert.equal(sameCsvDup.created, 1);
+  assert.equal(sameCsvDup.updated, 1);
+  const dupLoc = queries.findLocationByNameAddress("Dup Yard", "1 A St", "Dallas", "TX", "75001");
+  assert.ok(dupLoc);
+  assert.equal(dupLoc.role, "receiver");
+  assert.equal(dupLoc.phone, "222");
+  assert.equal(dupLoc.scheduling_notes, "Second");
+
   const { extractStateCode } = await import("../lib/locations");
   assert.equal(extractStateCode("Chicago, IL"), "IL");
   assert.equal(extractStateCode("Dallas, TX 75215"), "TX");

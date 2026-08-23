@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocationCsvImport } from "@/components/location-csv-import";
 import { PageHeader } from "@/components/page-header";
 import { formatLocationAddress, formatSchedulingSummary } from "@/lib/locations";
 import { listLocations } from "@/lib/queries";
@@ -13,13 +14,14 @@ export default function LocationsPage() {
     <>
       <PageHeader
         title="Locations"
-        subtitle="Shippers and receivers. Pick one on a load, or still type a one-off address."
+        subtitle="Shippers and receivers. Pick one on a load, type a one-off address, or upload the Ascend location CSV."
         actions={
           <Link href="/locations/new" className="btn btn-primary">
             New location
           </Link>
         }
       />
+      <LocationCsvImport />
       <div className="card overflow-hidden">
         {locations.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">

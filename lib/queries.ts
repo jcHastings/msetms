@@ -47,6 +47,7 @@ import {
 } from "./types";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
+import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
 import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
 import {
   defaultSearchCriteria,
@@ -101,6 +102,61 @@ export function listLocations(role?: "shipper" | "receiver"): Location[] {
 
 export function getLocation(id: number): Location | null {
   return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
+}
+
+export function findLocationByNameAddress(
+  name: string,
+  street: string,
+  city: string,
+  state: string,
+  zip: string,
+): Location | null {
+  const key = locationMatchKey(name, street, city, state, zip);
+  const candidates = getDb()
+    .prepare("SELECT * FROM locations WHERE name = ? COLLATE NOCASE")
+    .all(name) as Location[];
+  return (
+    candidates.find(
+      (location) =>
+        locationMatchKey(location.name, location.street, location.city, location.state, location.zip) === key,
+    ) ?? null
+  );
+}
+
+export function importLocationsFromCsv(text: string): {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: LocationCsvRowError[];
+} {
+  const parsed = parseAscendLocationCsv(text);
+  let created = 0;
+  let updated = 0;
+  getDb().transaction(() => {
+    for (const row of parsed.rows) {
+      const existing = findLocationByNameAddress(
+        row.input.name,
+        row.input.street,
+        row.input.city,
+        row.input.state,
+        row.input.zip,
+      );
+      if (existing) {
+        updateLocation(existing.id, {
+          ...row.input,
+          scheduling_type: existing.scheduling_type,
+          hours: existing.hours,
+          latitude: existing.latitude,
+          longitude: existing.longitude,
+        });
+        updated += 1;
+      } else {
+        createLocation(row.input);
+        created += 1;
+      }
+    }
+  })();
+  return { created, updated, skipped: parsed.skipped, errors: parsed.errors };
 }
 
 export function createLocation(input: LocationInput): number {
