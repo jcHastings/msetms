@@ -7,7 +7,8 @@ import { RateConApply } from "@/components/rate-con-apply";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
-import { listAttachments, listFleetDocuments } from "@/lib/files";
+import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
+import { listAttachments } from "@/lib/files";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
@@ -92,43 +93,7 @@ export default async function LoadDetailPage({
         trailers={listTrailers()}
         drivers={listDrivers()}
       />
-      {(load.driver_id || load.truck_id || load.trailer_id) && (
-        <section className="card mt-6 p-6">
-          <h2 className="text-sm font-semibold">Assigned unit documents</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            {load.driver_id ? (
-              <li>
-                <Link className="underline" href={`/fleet/drivers/${load.driver_id}`}>
-                  Driver CDL / medical card
-                </Link>
-                {listFleetDocuments("driver", load.driver_id).length
-                  ? ` · ${listFleetDocuments("driver", load.driver_id).length} file(s)`
-                  : " · none uploaded"}
-              </li>
-            ) : null}
-            {load.truck_id ? (
-              <li>
-                <Link className="underline" href={`/fleet/trucks/${load.truck_id}`}>
-                  Truck registration / DOT
-                </Link>
-                {listFleetDocuments("truck", load.truck_id).length
-                  ? ` · ${listFleetDocuments("truck", load.truck_id).length} file(s)`
-                  : " · none uploaded"}
-              </li>
-            ) : null}
-            {load.trailer_id ? (
-              <li>
-                <Link className="underline" href={`/fleet/trailers/${load.trailer_id}`}>
-                  Trailer registration / DOT
-                </Link>
-                {listFleetDocuments("trailer", load.trailer_id).length
-                  ? ` · ${listFleetDocuments("trailer", load.trailer_id).length} file(s)`
-                  : " · none uploaded"}
-              </li>
-            ) : null}
-          </ul>
-        </section>
-      )}
+      <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
     </>
   );

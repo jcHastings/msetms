@@ -114,8 +114,26 @@ async function main() {
     mimeType: "application/pdf",
     uploadedBy: "driver",
   });
-  const { listAttachments } = await import("../lib/files");
+  const { addFleetDocument, listAttachments, listFleetDocuments } = await import("../lib/files");
   assert.equal(listAttachments(loadId).some((file) => file.kind === "pod"), true);
+  addFleetDocument({
+    ownerType: "driver",
+    ownerId: otherDriverId,
+    kind: "cdl",
+    originalName: "cdl-smoke.pdf",
+    buffer: Buffer.from("%PDF-1.4 cdl"),
+    mimeType: "application/pdf",
+  });
+  addFleetDocument({
+    ownerType: "truck",
+    ownerId: truckId,
+    kind: "registration",
+    originalName: "reg-smoke.pdf",
+    buffer: Buffer.from("%PDF-1.4 reg"),
+    mimeType: "application/pdf",
+  });
+  assert.ok(listFleetDocuments("driver", otherDriverId).some((file) => file.kind === "cdl"));
+  assert.ok(listFleetDocuments("truck", truckId).some((file) => file.kind === "registration"));
 
   const { parseRateConText } = await import("../lib/rate-con");
   const parsed = parseRateConText(

@@ -30,7 +30,13 @@ export function FleetDocsPanel({
         </div>
         <div className="field min-w-56 flex-1">
           <label htmlFor={`file-${ownerType}-${ownerId}`}>File</label>
-          <input id={`file-${ownerType}-${ownerId}`} name="file" type="file" required />
+          <input
+            id={`file-${ownerType}-${ownerId}`}
+            name="file"
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            required
+          />
         </div>
         <button className="btn btn-secondary" type="submit">
           Upload
