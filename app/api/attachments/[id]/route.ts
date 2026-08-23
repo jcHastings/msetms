@@ -10,7 +10,7 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
   const buffer = await readFile(getAttachmentPath(attachment));
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": attachment.mime_type || "application/octet-stream",
       "Content-Disposition": `inline; filename="${attachment.original_name.replaceAll('"', "")}"`,

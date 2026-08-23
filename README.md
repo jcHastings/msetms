@@ -9,6 +9,18 @@ Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and 
 
 ## Quick start
 
+On a shared Linux box (browser-only access from another machine):
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+Then open `http://<this-box>:3000` for dispatch and `http://<this-box>:3000/driver/login` for the driver app. The server binds `0.0.0.0` so a browser on the LAN can reach it. Override with `PORT` / `HOSTNAME` if needed.
+
+Local edit loop on the same machine:
+
 ```bash
 npm install
 npm run dev
@@ -21,14 +33,18 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | Command | What it does |
 | --- | --- |
 | `npm install` | Install dependencies |
-| `npm run dev` | Run the app |
+| `npm run build` | Production build (writes `.next/standalone`) |
+| `npm start` | Run the standalone server and keep it listening |
+| `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires Node.js 20 or newer.
+Requires Node.js 20 or newer. `better-sqlite3` 13 may warn that it prefers Node **22**; install still works on Node 20. Use Node 22 if you want to silence that warning. No Vercel account or deploy is required.
+
+`npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
+
+Next 16 on Linux Node 20 can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. Turbopack plus `cacheComponents` has a separate silent-exit bug. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 
 ## Dispatcher
 

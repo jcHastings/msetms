@@ -21,7 +21,7 @@ export async function GET(
   const model = buildConfirmationForLoad(load.id);
   const pdf = await renderConfirmationPdf(model);
   const filename = `${load.load_number}-load-confirmation.pdf`;
-  return new Response(pdf, {
+  return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,

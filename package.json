@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/run-next.mjs dev --webpack",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start-standalone.mjs",
+    "start:next": "node scripts/run-next.mjs start --hostname 0.0.0.0",
     "lint": "eslint",
     "test": "tsx scripts/smoke.ts",
     "sample-rate-con": "tsx scripts/generate-sample-rate-con.ts",

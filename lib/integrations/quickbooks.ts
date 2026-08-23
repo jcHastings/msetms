@@ -410,7 +410,7 @@ function refreshTokenPath(): string {
 
 function readStoredRefreshToken(): string | undefined {
   try {
-    const raw = fs.readFileSync(refreshTokenPath(), "utf8");
+    const raw = fs.readFileSync(/*turbopackIgnore: true*/ refreshTokenPath(), "utf8");
     const parsed = JSON.parse(raw) as { refresh_token?: string };
     const token = typeof parsed.refresh_token === "string" ? parsed.refresh_token.trim() : "";
     return token || undefined;
@@ -421,8 +421,8 @@ function readStoredRefreshToken(): string | undefined {
 
 function writeStoredRefreshToken(token: string): void {
   const filePath = refreshTokenPath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify({ refresh_token: token, updated_at: new Date().toISOString() })}\n`, {
+  fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ filePath, `${JSON.stringify({ refresh_token: token, updated_at: new Date().toISOString() })}\n`, {
     mode: 0o600,
   });
 }
