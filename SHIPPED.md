@@ -6,6 +6,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Sign-in
 
+- Default company logo is the official **MS Express** mark (`public/ms-express-logo.png`) on login, the dispatcher header, and load confirmation PDFs. Product name stays **MS Express TMS**. Settings → Company can upload a replacement; remove reverts to the default.
 - Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (manager). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code).
 - **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Admin/manager can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so Ana G / the office PC can still use PIN until they enroll.
 - Dispatcher session lasts 12 hours from sign-in.
@@ -56,7 +57,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 Dispatcher login required. Saves to the local database. No secrets. No fake Ascend APIs.
 
-- **Company contact** — name, phone, email, address, logo (used on load confirmations)
+- **Company contact** — name, phone, email, address, logo (default MS Express mark; upload replaces it on login, header, and confirmations)
 - **Insurance** — provider, policy, coverage, expiry
 - **Dropdown lists** — commodities, equipment types, custom load statuses
 - **Currency / units** — USD or CAD, lb vs kg

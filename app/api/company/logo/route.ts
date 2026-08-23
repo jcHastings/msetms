@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { companyLogoPath, getCompanySettings } from "@/lib/settings";
+import { companyLogoPath, getCompanySettings, hasCustomCompanyLogo } from "@/lib/settings";
 
 export async function GET() {
   const settings = getCompanySettings();
@@ -10,7 +10,7 @@ export async function GET() {
   const buffer = await readFile(file);
   return new Response(new Uint8Array(buffer), {
     headers: {
-      "Content-Type": settings.logo_mime_type || "image/png",
+      "Content-Type": hasCustomCompanyLogo(settings) ? settings.logo_mime_type || "image/png" : "image/png",
       "Cache-Control": "no-store",
     },
   });

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandMark } from "@/components/brand-mark";
 import { NavLinks } from "@/components/nav-links";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
 import type { PublicDispatcher } from "@/lib/settings-shared";
@@ -22,10 +23,7 @@ export function AppShell({
       <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-navy text-slate-100">
         <div className="border-b border-white/10 px-5 py-5">
           <Link href="/" className="block">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-              MSE Transport
-            </div>
-            <div className="mt-1 text-xl font-semibold tracking-tight">TMS</div>
+            <BrandMark variant="dark" size="sm" />
           </Link>
           <p className="mt-2 text-xs leading-5 text-slate-400">
             Local dispatch for a small fleet

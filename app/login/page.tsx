@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/brand-mark";
 import { DispatcherLoginForm } from "@/components/dispatcher-login-form";
 import { dispatcherLoginAction } from "@/lib/dispatcher-actions";
 import { getSignedInDispatcher, listDispatchers } from "@/lib/dispatcher-session";
@@ -12,10 +13,8 @@ export default async function DispatcherLoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <div className="mb-6">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-          MSE Transport
-        </div>
-        <h1 className="mt-2 text-3xl font-semibold">Dispatcher desk</h1>
+        <BrandMark size="lg" />
+        <h1 className="mt-4 text-3xl font-semibold">Dispatcher desk</h1>
         <p className="mt-2 text-base text-slate-600">
           Local PIN login. 2-step is asked only after you enroll. Driver app is separate at
           /driver/login.

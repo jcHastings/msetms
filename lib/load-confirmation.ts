@@ -243,9 +243,11 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   ];
 
   const logo = companyLogoPath();
+  let logoDrawn = false;
   if (logo) {
     try {
-      doc.image(logo, left, 36, { fit: [52, 30] });
+      doc.image(logo, left, 28, { fit: [78, 48] });
+      logoDrawn = true;
     } catch {
       // Skip a bad logo file rather than failing the confirmation.
     }
@@ -269,11 +271,12 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const cardH = drawContactCard(doc, cardX, cardY, cardW, contactRows);
 
   const nameWidth = Math.max(120, cardX - left - 10);
+  const nameY = logoDrawn ? 84 : 74;
   doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c");
-  doc.text(model.company.company_name || "M&S", left, 74, { width: nameWidth, lineBreak: false });
+  doc.text(model.company.company_name || "M&S", left, nameY, { width: nameWidth, lineBreak: false });
   const address = formatCompanyAddress(getCompanySettings());
   if (address) {
-    doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(address, left, 88, {
+    doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(address, left, nameY + 14, {
       width: nameWidth,
       height: 18,
       lineBreak: true,

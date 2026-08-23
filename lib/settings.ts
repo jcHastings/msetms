@@ -549,10 +549,30 @@ export function updateDocumentDefaults(input: DocumentDefaults): void {
     .run(input.doc_type, input.header_text.trim(), input.footer_text.trim(), input.terms_text.trim(), font);
 }
 
-export function companyLogoPath(settings: CompanySettings = getCompanySettings()): string | null {
-  if (!settings.logo_stored_name) return null;
+export const DEFAULT_COMPANY_LOGO_FILE = "ms-express-logo.png";
+
+export function defaultCompanyLogoPath(): string | null {
+  const candidates = [
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", DEFAULT_COMPANY_LOGO_FILE),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), DEFAULT_COMPANY_LOGO_FILE),
+  ];
+  for (const file of candidates) {
+    if (fs.existsSync(/*turbopackIgnore: true*/ file)) return file;
+  }
+  return null;
+}
+
+export function hasCustomCompanyLogo(settings: CompanySettings = getCompanySettings()): boolean {
+  if (!settings.logo_stored_name) return false;
   const file = path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "company", settings.logo_stored_name);
-  return fs.existsSync(/*turbopackIgnore: true*/ file) ? file : null;
+  return fs.existsSync(/*turbopackIgnore: true*/ file);
+}
+
+export function companyLogoPath(settings: CompanySettings = getCompanySettings()): string | null {
+  if (hasCustomCompanyLogo(settings)) {
+    return path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "company", settings.logo_stored_name);
+  }
+  return defaultCompanyLogoPath();
 }
 
 export function saveCompanyLogo(input: { originalName: string; buffer: Buffer; mimeType: string }): CompanySettings {

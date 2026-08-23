@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/brand-mark";
 import { driverLoginAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listDrivers } from "@/lib/queries";
@@ -13,10 +14,8 @@ export default async function DriverLoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <div className="mb-6">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-          MSE Transport
-        </div>
-        <h1 className="mt-2 text-3xl font-semibold">Driver dispatch</h1>
+        <BrandMark size="lg" />
+        <h1 className="mt-4 text-3xl font-semibold">Driver dispatch</h1>
         <p className="mt-2 text-base text-slate-600">
           Sign in with your name and PIN. Local v1 — no password reset.
         </p>

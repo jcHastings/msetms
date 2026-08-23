@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MSE TMS",
+  title: "MS Express TMS",
   description: "Transportation management for a small trucking fleet",
 };
 

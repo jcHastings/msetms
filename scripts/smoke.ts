@@ -60,6 +60,12 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8"), /totp|authenticator/i);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /BrandMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8"), /companyLogoPath/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MSE Transport/);
   assert.match(tabSource, /Load Basics/);
   assert.match(tabSource, /Customer Info/);
   assert.match(tabSource, /Carrier \/ Asset Info/);
@@ -1172,6 +1178,10 @@ Continuous reefer. Two load locks.
   const { getCompanyProfile } = await import("../lib/company");
   const header = getCompanyProfile();
   assert.equal(header.company_name, "M&S Loads");
+  const { companyLogoPath, defaultCompanyLogoPath, hasCustomCompanyLogo } = await import("../lib/settings");
+  assert.equal(hasCustomCompanyLogo(), false);
+  assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
+  assert.equal(companyLogoPath(), defaultCompanyLogoPath());
   assert.equal(header.dispatcher_name, "Ana G");
   const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
   assert.equal(coleConfirm.style, "owner_operator");

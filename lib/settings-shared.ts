@@ -5,7 +5,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/company",
         label: "Company contact",
-        hint: "Name, phone, email, address, and logo for confirmations",
+        hint: "Name, phone, email, address, and logo (default MS Express mark)",
       },
       {
         href: "/settings/insurance",

@@ -3,7 +3,7 @@ import { LogoUploadForm } from "@/components/logo-upload-form";
 import { PageHeader } from "@/components/page-header";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { getCompanySettings } from "@/lib/settings";
+import { getCompanySettings, hasCustomCompanyLogo } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export default async function CompanySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Company contact"
-        subtitle="Used on load confirmations and as the company header. Address and logo are optional."
+        subtitle="Used on load confirmations and as the company header. The default MS Express logo is used until you upload a replacement."
       />
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Contact</h2>
@@ -26,10 +26,12 @@ export default async function CompanySettingsPage() {
       </section>
       <section className="card p-6">
         <h2 className="text-sm font-semibold">Logo</h2>
-        <p className="mt-1 text-sm text-slate-600">Shows on the load confirmation PDF when present.</p>
+        <p className="mt-1 text-sm text-slate-600">
+          Shows on login, the dispatcher header, and load confirmation PDFs. Product name stays MS Express TMS.
+        </p>
         <div className="mt-4">
           <LogoUploadForm
-            hasLogo={Boolean(settings.logo_stored_name)}
+            hasCustom={hasCustomCompanyLogo(settings)}
             originalName={settings.logo_original_name}
             canEdit={canEdit}
           />
