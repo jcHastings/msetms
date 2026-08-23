@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { listReceivables } from "@/lib/accounting";
+import { canConnectQuickbooks, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
 import { listCustomersNeedingQbo } from "@/lib/queries";
@@ -8,6 +9,8 @@ import { listCustomersNeedingQbo } from "@/lib/queries";
 export const dynamic = "force-dynamic";
 
 export default async function QuickbooksAccountingPage() {
+  const dispatcher = await getSignedInDispatcher();
+  const canConnect = dispatcher ? canConnectQuickbooks(dispatcher.role) : false;
   const qbo = await getQuickbooksStatus();
   const ready = listReceivables().filter((row) => !row.qbo_invoice_id);
   const sent = listReceivables().filter((row) => row.qbo_invoice_id);
@@ -30,6 +33,7 @@ export default async function QuickbooksAccountingPage() {
             {qbo.error}
           </p>
         ) : null}
+        {canConnect ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <Link href="/settings/quickbooks" className="btn btn-secondary">
             Settings → QuickBooks
@@ -40,6 +44,9 @@ export default async function QuickbooksAccountingPage() {
             </a>
           ) : null}
         </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-600">Ask an Administrator to connect QuickBooks.</p>
+        )}
       </section>
 
       {needsCustomer.length > 0 ? (

@@ -29,7 +29,7 @@ export function AppShell({
             Local dispatch for a small fleet
           </p>
         </div>
-        <NavLinks />
+        <NavLinks role={dispatcher.role} />
         <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">
           <div className="font-medium text-slate-200">{dispatcher.name}</div>
           <div>{roleLabel(dispatcher.role)}</div>

@@ -8,9 +8,17 @@ import {
   authenticateDispatcher,
   clearDispatcherSession,
   getPendingTwoFactorDispatcherId,
+  requireCapability,
+  requireLoadAssigner,
+  requireLoadEditor,
   setDispatcherSession,
   setPendingTwoFactor,
 } from "./dispatcher-session";
+import {
+  canAccessAccounting,
+  canLogCheckCall,
+  canSendSms,
+} from "./settings-shared";
 import { consumeRecoveryCode, isDispatcherTotpEnrolled, verifyDispatcherTotp } from "./dispatcher-totp";
 import {
   assignLoadDispatcher,
@@ -89,6 +97,7 @@ export async function dispatcherLogoutAction(): Promise<void> {
 
 export async function cloneLoadAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("load_id"));
     if (!id) throw new Error("Load is missing.");
     const cloned = cloneLoad(id);
@@ -99,6 +108,7 @@ export async function cloneLoadAction(formData: FormData): Promise<void> {
 }
 
 export async function saveTemplateAction(formData: FormData): Promise<void> {
+  await requireLoadEditor();
   const id = parseOptionalInt(formData.get("load_id"));
   if (!id) throw new Error("Load is missing.");
   const name = String(formData.get("name") ?? "").trim();
@@ -108,6 +118,7 @@ export async function saveTemplateAction(formData: FormData): Promise<void> {
 
 export async function createFromTemplateAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("template_id"));
     if (!id) throw new Error("Template is missing.");
     const loadId = createLoadFromTemplate(id);
@@ -117,6 +128,7 @@ export async function createFromTemplateAction(formData: FormData): Promise<void
 }
 
 export async function watchLoadAction(formData: FormData): Promise<void> {
+  await requireLoadEditor();
   const id = parseOptionalInt(formData.get("load_id"));
   if (!id) throw new Error("Load is missing.");
   setLoadWatched(id, String(formData.get("watched") ?? "") === "1");
@@ -125,6 +137,7 @@ export async function watchLoadAction(formData: FormData): Promise<void> {
 
 export async function saveLoadDetailsAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("load_id"));
     if (!id) throw new Error("Load is missing.");
     updateLoadDetails(id, {
@@ -164,6 +177,7 @@ function parseRelayForm(formData: FormData) {
 
 export async function addRelayAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     addRelay(loadId, parseRelayForm(formData));
@@ -173,6 +187,7 @@ export async function addRelayAction(formData: FormData): Promise<void> {
 
 export async function updateRelayAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("relay_id"));
     if (!id) throw new Error("Relay is missing.");
     updateRelay(id, parseRelayForm(formData));
@@ -182,6 +197,7 @@ export async function updateRelayAction(formData: FormData): Promise<void> {
 
 export async function deleteRelayAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("relay_id"));
     if (!id) throw new Error("Relay is missing.");
     deleteRelay(id);
@@ -191,6 +207,7 @@ export async function deleteRelayAction(formData: FormData): Promise<void> {
 
 export async function moveRelayAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("relay_id"));
     const direction = Number.parseInt(String(formData.get("direction") ?? "0"), 10);
     if (!id || (direction !== 1 && direction !== -1)) throw new Error("Relay is missing.");
@@ -201,6 +218,7 @@ export async function moveRelayAction(formData: FormData): Promise<void> {
 
 export async function addStopAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const kind = String(formData.get("kind") ?? "stopoff");
@@ -230,6 +248,7 @@ export async function addStopAction(formData: FormData): Promise<void> {
 
 export async function moveStopAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("stop_id"));
     const direction = Number.parseInt(String(formData.get("direction") ?? "0"), 10);
     if (!id || (direction !== 1 && direction !== -1)) throw new Error("Stop is missing.");
@@ -253,6 +272,7 @@ export async function moveStopAction(formData: FormData): Promise<void> {
 
 export async function deleteStopAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("stop_id"));
     if (!id) throw new Error("Stop is missing.");
     const { getDb } = await import("./db");
@@ -274,6 +294,7 @@ export async function deleteStopAction(formData: FormData): Promise<void> {
 }
 
 export async function exceptionAction(formData: FormData): Promise<void> {
+  await requireLoadEditor();
   const key = String(formData.get("exception_key") ?? "").trim();
   const status = String(formData.get("status") ?? "");
   if (!key) throw new Error("Exception is missing.");
@@ -286,11 +307,13 @@ export async function exceptionAction(formData: FormData): Promise<void> {
 }
 
 export async function saveHandoffAction(formData: FormData): Promise<void> {
+  await requireLoadEditor();
   setHandoffNote(String(formData.get("handoff_note") ?? ""));
   refresh();
 }
 
 export async function createClaimAction(formData: FormData): Promise<void> {
+  await requireLoadEditor();
   const loadId = parseOptionalInt(formData.get("load_id"));
   if (!loadId) throw new Error("Load is missing.");
   createClaim({
@@ -303,6 +326,7 @@ export async function createClaimAction(formData: FormData): Promise<void> {
 }
 
 export async function createBillAction(formData: FormData): Promise<void> {
+  await requireCapability(canAccessAccounting, "Bills are for Administrator and Accounting.");
   createBill({
     vendor: requiredString(formData.get("vendor"), "Vendor"),
     memo: String(formData.get("memo") ?? ""),
@@ -313,6 +337,7 @@ export async function createBillAction(formData: FormData): Promise<void> {
 }
 
 export async function payBillAction(formData: FormData): Promise<void> {
+  await requireCapability(canAccessAccounting, "Bills are for Administrator and Accounting.");
   const id = parseOptionalInt(formData.get("bill_id"));
   if (!id) throw new Error("Bill is missing.");
   markBillPaid(id);
@@ -320,6 +345,7 @@ export async function payBillAction(formData: FormData): Promise<void> {
 }
 
 export async function paySettlementAction(formData: FormData): Promise<void> {
+  await requireCapability(canAccessAccounting, "Driver pay is for Administrator and Accounting.");
   const id = parseOptionalInt(formData.get("load_id"));
   if (!id) throw new Error("Load is missing.");
   markSettlementPaid(id);
@@ -327,6 +353,7 @@ export async function paySettlementAction(formData: FormData): Promise<void> {
 }
 
 export async function markReceivablePaidAction(formData: FormData): Promise<void> {
+  await requireCapability(canAccessAccounting, "Invoices are for Administrator and Accounting.");
   const id = parseOptionalInt(formData.get("load_id"));
   if (!id) throw new Error("Load is missing.");
   markInvoicePaid(id, true);
@@ -341,6 +368,7 @@ export async function logCheckCallFormAction(formData: FormData): Promise<void> 
 export async function logCheckCallAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canLogCheckCall, "Check-calls are for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       if (!getLoad(loadId)) throw new Error("Load not found.");
@@ -365,6 +393,7 @@ export async function logCheckCallAction(formData: FormData): Promise<ActionResu
 export async function requestDriverDocumentsAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       setLoadDocsRequested(loadId, true);
@@ -378,7 +407,6 @@ export async function requestDriverDocumentsAction(formData: FormData): Promise<
 
 export async function assignLoadDispatcherAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
-    const { requireLoadAssigner } = await import("./dispatcher-session");
     await requireLoadAssigner();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
@@ -391,6 +419,7 @@ export async function assignLoadDispatcherAction(formData: FormData): Promise<vo
 export async function sendToAccountingAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canAccessAccounting, "Send to Accounting is for Administrator and Accounting.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);
@@ -427,6 +456,7 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
 export async function sendLoadSmsAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canSendSms, "SMS is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);

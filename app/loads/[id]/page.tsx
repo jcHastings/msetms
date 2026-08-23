@@ -26,7 +26,9 @@ import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
+import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured } from "@/lib/env";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { getCustomer, getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
@@ -50,6 +52,11 @@ export default async function LoadDetailPage({
   const loadId = Number.parseInt(id, 10);
   const load = getLoad(loadId);
   if (!load) notFound();
+  const dispatcher = await getSignedInDispatcher();
+  const role = dispatcher?.role ?? "dispatcher";
+  const showFinancials = canViewLoadFinancials(role);
+  const requestedTab = parseLoadTab(tab);
+  const initialTab = requestedTab === "financials" && !showFinancials ? "basics" : requestedTab;
 
   const boundAction = updateLoadAction.bind(null, load.id);
   const stopLocations = locationsForLoad(load);
@@ -90,7 +97,7 @@ export default async function LoadDetailPage({
       <LoadWorkspace
         loadId={load.id}
         status={load.status}
-        initialTab={parseLoadTab(tab)}
+        initialTab={initialTab}
         loadSummary={formatLoadSummary(load)}
         driverAssigned={Boolean(load.driver_id)}
         driverPhone={load.driver_phone ?? ""}
@@ -98,6 +105,7 @@ export default async function LoadDetailPage({
         dispatchers={dispatchers}
         docsRequested={Boolean(load.docs_requested)}
         smsConfigured={isTwilioConfigured()}
+        role={role}
       >
         <LoadForm
           customers={customers}
@@ -186,7 +194,7 @@ export default async function LoadDetailPage({
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">
-          {load.driver_type === "owner_operator" && load.oo_pay != null ? (
+          {showFinancials && load.driver_type === "owner_operator" && load.oo_pay != null ? (
             <div className="mb-4 card p-4 text-sm">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner-operator pay</div>
               <div className="mt-1 font-semibold">
@@ -196,13 +204,14 @@ export default async function LoadDetailPage({
               <p className="mt-1 text-slate-600">Settled outside QuickBooks. Customer invoices use the load rate.</p>
             </div>
           ) : null}
-          {(load.status === "in_transit" ||
+          {showFinancials && canViewIfta(role) &&
+          (load.status === "in_transit" ||
             load.status === "picked_up" ||
             load.status === "at_delivery" ||
             load.status === "unloading" ||
             load.status === "delivered" ||
             load.status === "completed" ||
-            ifta.report) && (
+            ifta.report) ? (
             <IftaPanel
               loadId={load.id}
               report={ifta.report}
@@ -210,8 +219,8 @@ export default async function LoadDetailPage({
               configured={ifta.configured}
               reason={ifta.reason}
             />
-          )}
-          {load.status === "delivered" || load.status === "completed" ? (
+          ) : null}
+          {showFinancials && (load.status === "delivered" || load.status === "completed") ? (
             load.rate != null ? (
               <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
             ) : (
@@ -256,7 +265,7 @@ export default async function LoadDetailPage({
             </ul>
           </section>
           <MakeBolPanel loadId={load.id} attachments={attachments} />
-          <AttachmentsPanel loadId={load.id} attachments={attachments} />
+          <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
         </LoadTabPanel>
       </LoadWorkspace>
     </>

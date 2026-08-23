@@ -10,6 +10,7 @@ import {
   createDriver,
   createLoad,
   createLocation,
+  getLoad,
   getLocation,
   createSavedReport,
   createTrailer,
@@ -58,6 +59,24 @@ import { fileToBuffer } from "./files";
 import { isReeferMode } from "./reefer-shared";
 import { type FuelImportResult } from "./fuel";
 import { assignFuelTransactionDriver, importFuelFromText } from "./fuel-store";
+import {
+  requireCapability,
+  requireLoadAssigner,
+  requireLoadEditor,
+  requireSettingsEditor,
+} from "./dispatcher-session";
+import {
+  canAccessAccounting,
+  canAssignLoads,
+  canDeleteDocuments,
+  canDeleteLocations,
+  canEditFleet,
+  canEditLocations,
+  canImportLocations,
+  canUploadFuel,
+  canViewIfta,
+  canViewLoadFinancials,
+} from "./settings-shared";
 
 function refresh(): void {
   try {
@@ -69,6 +88,32 @@ function refresh(): void {
 
 function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+}
+
+function applyLoadPermissions(
+  input: LoadInput,
+  role: string,
+  existing?: {
+    rate: number | null;
+    oo_percent: number | null;
+    oo_pay: number | null;
+    truck_id: number | null;
+    driver_id: number | null;
+    trailer_id: number | null;
+  },
+): LoadInput {
+  const next = { ...input };
+  if (!canViewLoadFinancials(role)) {
+    next.rate = existing?.rate ?? null;
+    next.oo_percent = existing?.oo_percent ?? null;
+    next.oo_pay = existing?.oo_pay ?? null;
+  }
+  if (!canAssignLoads(role)) {
+    next.truck_id = existing?.truck_id ?? null;
+    next.driver_id = existing?.driver_id ?? null;
+    next.trailer_id = existing?.trailer_id ?? null;
+  }
+  return next;
 }
 
 function parseActive(formData: FormData): number {
@@ -218,6 +263,7 @@ export async function createCustomerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireLoadEditor();
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -239,6 +285,7 @@ export async function updateCustomerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireLoadEditor();
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -258,6 +305,7 @@ export async function createTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     const id = createTruck({
@@ -297,6 +345,7 @@ export async function updateTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     updateTruck(id, {
@@ -333,6 +382,7 @@ export async function createDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const id = createDriver({
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -372,6 +422,7 @@ export async function updateDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -410,7 +461,8 @@ export async function createLoadAction(
 ): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      const input = parseLoadInput(formData);
+      const actor = await requireLoadEditor();
+      const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       const id = createLoad(input);
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
@@ -434,7 +486,9 @@ export async function updateLoadAction(
 ): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      const input = parseLoadInput(formData);
+      const actor = await requireLoadEditor();
+      const existing = getLoad(id);
+      const input = applyLoadPermissions(parseLoadInput(formData), actor.role, existing ?? undefined);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
       if (String(formData.get("save_load_details") ?? "") === "1") {
@@ -473,7 +527,6 @@ export async function updateLoadAction(
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      const { requireLoadAssigner } = await import("./dispatcher-session");
       await requireLoadAssigner();
       const loadId = parseOptionalInt(formData.get("load_id"));
       const truckId = parseOptionalInt(formData.get("truck_id"));
@@ -499,6 +552,7 @@ export async function refreshIftaAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canViewIfta, "IFTA is for Administrator and Accounting.");
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const { refreshIftaForLoad } = await import("./integrations/ifta");
@@ -511,7 +565,6 @@ export async function refreshIftaAction(
 }
 
 export async function disconnectQuickbooksAction(): Promise<void> {
-  const { requireSettingsEditor } = await import("./dispatcher-session");
   await requireSettingsEditor();
   const { clearStoredQuickbooksTokens } = await import("./integrations/quickbooks");
   clearStoredQuickbooksTokens();
@@ -523,6 +576,7 @@ export async function sendToQuickbooksAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canAccessAccounting, "Sending invoices is for Administrator and Accounting.");
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
@@ -538,6 +592,7 @@ export async function sendToQuickbooksAction(
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       const status = String(formData.get("status") ?? "");
       if (!loadId) throw new Error("Load is missing.");
@@ -566,6 +621,7 @@ export async function parseRateConAction(
   formData: FormData,
 ): Promise<RateConParseState> {
   try {
+    await requireLoadEditor();
     const file = formData.get("rate_con");
     if (!(file instanceof File) || file.size === 0) {
       throw new Error("Pick a file first.");
@@ -630,6 +686,7 @@ export async function makeBolAction(
 ): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireLoadEditor();
       if (!loadId) throw new Error("Load is missing.");
       const { generateBolPdf } = await import("./bol");
       const { addAttachment } = await import("./files");
@@ -658,6 +715,7 @@ export async function attachFileFormAction(formData: FormData): Promise<void> {
 export async function attachFileAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const file = formData.get("file");
@@ -696,6 +754,7 @@ export async function replaceAttachmentFormAction(formData: FormData): Promise<v
 export async function replaceAttachmentAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireLoadEditor();
       const attachmentId = parseOptionalInt(formData.get("attachment_id"));
       if (!attachmentId) throw new Error("Attachment is missing.");
       const file = formData.get("file");
@@ -727,6 +786,7 @@ export async function deleteAttachmentFormAction(formData: FormData): Promise<vo
 export async function deleteAttachmentAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canDeleteDocuments, "Only an Administrator can delete documents.");
       const attachmentId = parseOptionalInt(formData.get("attachment_id"));
       if (!attachmentId) throw new Error("Attachment is missing.");
       const { deleteAttachment } = await import("./files");
@@ -744,6 +804,7 @@ export async function importOrbcommReportAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const pasted = String(formData.get("report_text") ?? "").trim();
     const file = formData.get("file");
     let text = pasted;
@@ -774,6 +835,7 @@ export async function createTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const id = createTrailer({
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -805,6 +867,7 @@ export async function updateTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     updateTrailer(id, {
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -835,6 +898,7 @@ export async function attachFleetDocFormAction(formData: FormData): Promise<void
 
 export async function attachFleetDocAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const ownerId = parseOptionalInt(formData.get("owner_id"));
     const ownerType = String(formData.get("owner_type") ?? "");
     if (!ownerId || !["driver", "truck", "trailer"].includes(ownerType)) {
@@ -902,6 +966,7 @@ export async function saveRateConLocationAction(
   formData: FormData,
 ): Promise<SaveRateConLocationState> {
   try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
     const id = createLocation({
       ...parseLocationInput(formData),
       notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
@@ -921,6 +986,7 @@ export async function createLocationAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
     const id = createLocation(parseLocationInput(formData));
     refresh();
     redirect(`/locations/${id}`);
@@ -936,6 +1002,7 @@ export async function updateLocationAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
     updateLocation(id, parseLocationInput(formData));
     refresh();
     return { ok: true, id };
@@ -949,6 +1016,7 @@ export async function importLocationsCsvAction(
   formData: FormData,
 ): Promise<LocationCsvImportResult> {
   try {
+    await requireCapability(canImportLocations, "Only an Administrator can import locations.");
     const file = formData.get("csv");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Choose a CSV file." };
@@ -970,6 +1038,7 @@ export async function importFuelCsvAction(
   formData: FormData,
 ): Promise<FuelImportResult> {
   try {
+    await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
     const file = formData.get("csv");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Choose a CSV or PDF." };
@@ -1003,6 +1072,7 @@ export async function importFuelCsvAction(
 }
 
 export async function assignFuelDriverAction(formData: FormData): Promise<void> {
+  await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
   const id = parseOptionalInt(formData.get("fuel_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
   if (!id || !driverId) throw new Error("Pick a driver.");
@@ -1012,6 +1082,7 @@ export async function assignFuelDriverAction(formData: FormData): Promise<void> 
 
 export async function deleteLocationAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireCapability(canDeleteLocations, "You cannot delete locations.");
     const id = parseOptionalInt(formData.get("location_id"));
     if (!id) throw new Error("Location is missing.");
     deleteLocation(id);
@@ -1049,6 +1120,7 @@ export async function saveSearchReportAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireLoadEditor();
     const id = createSavedReport({
       name: requiredString(formData.get("name"), "Report name"),
       filters: parseReportFilters(formData),
@@ -1063,6 +1135,7 @@ export async function saveSearchReportAction(
 
 export async function deleteSearchReportAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireLoadEditor();
     const id = parseOptionalInt(formData.get("report_id"));
     if (!id) throw new Error("Report is missing.");
     deleteSavedReport(id);
@@ -1083,6 +1156,7 @@ export async function updateCompanyProfileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireSettingsEditor();
     const { updateCompanyProfile } = await import("./company");
     updateCompanyProfile({
       company_name: requiredString(formData.get("company_name"), "Company name"),

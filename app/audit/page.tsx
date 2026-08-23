@@ -1,6 +1,8 @@
+import { AccessDenied } from "@/components/access-denied";
 import { LoadAuditTable } from "@/components/load-audit-table";
 import { PageHeader } from "@/components/page-header";
 import { listAuditActors, listCompanyAudit } from "@/lib/audit";
+import { canViewAudit, getPageAccess } from "@/lib/dispatcher-session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,10 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ load?: string; user?: string; from?: string; to?: string }>;
 }) {
+  const dispatcher = await getPageAccess(canViewAudit);
+  if (!dispatcher) {
+    return <AccessDenied message="The accountability log is for Administrator and Accounting." />;
+  }
   const filters = await searchParams;
   const rows = listCompanyAudit({
     loadNumber: filters.load,

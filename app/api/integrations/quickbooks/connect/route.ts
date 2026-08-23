@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { canConnectQuickbooks } from "@/lib/settings-shared";
 import { isQuickbooksOAuthReady } from "@/lib/env";
 import { buildQuickbooksAuthorizeUrl, createQuickbooksOAuthState } from "@/lib/integrations/quickbooks";
 
@@ -14,6 +15,9 @@ export async function GET(request: Request) {
     const dispatcher = await getSignedInDispatcher();
     if (!dispatcher) {
       return NextResponse.redirect(new URL("/login", origin));
+    }
+    if (!canConnectQuickbooks(dispatcher.role)) {
+      return unauthorizedResponse();
     }
     if (!isQuickbooksOAuthReady()) {
       settings.searchParams.set("error", "Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env, then restart.");

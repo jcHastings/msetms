@@ -1,14 +1,20 @@
 import Link from "next/link";
 import { LocationCsvImport } from "@/components/location-csv-import";
 import { PageHeader } from "@/components/page-header";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatLocationAddress, formatSchedulingSummary } from "@/lib/locations";
 import { listLocations } from "@/lib/queries";
+import { canExportCsv, canImportLocations } from "@/lib/settings-shared";
 import { labelForLocationRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default function LocationsPage() {
+export default async function LocationsPage() {
   const locations = listLocations();
+  const dispatcher = await getSignedInDispatcher();
+  const role = dispatcher?.role ?? "";
+  const canImport = canImportLocations(role);
+  const canExport = canExportCsv(role);
 
   return (
     <>
@@ -17,16 +23,18 @@ export default function LocationsPage() {
         subtitle="Shippers and receivers. Pick one on a load, type a one-off address, or upload the Ascend location CSV."
         actions={
           <>
-            <a href="/api/locations/export" className="btn btn-secondary">
-              Download all locations
-            </a>
+            {canExport ? (
+              <a href="/api/locations/export" className="btn btn-secondary">
+                Download all locations
+              </a>
+            ) : null}
             <Link href="/locations/new" className="btn btn-primary">
               New location
             </Link>
           </>
         }
       />
-      <LocationCsvImport />
+      {canImport ? <LocationCsvImport /> : null}
       <div className="card overflow-hidden">
         {locations.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">

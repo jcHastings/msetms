@@ -17,9 +17,11 @@ const PRIMARY = new Set<string>(LOAD_DOCUMENT_KINDS);
 export function AttachmentsPanel({
   loadId,
   attachments,
+  canDelete = false,
 }: {
   loadId: number;
   attachments: Attachment[];
+  canDelete?: boolean;
 }) {
   const extraKinds = ATTACHMENT_KINDS.filter((kind) => !PRIMARY.has(kind.value));
 
@@ -86,12 +88,14 @@ export function AttachmentsPanel({
                     Replace
                   </button>
                 </form>
-                <form action={deleteAttachmentFormAction}>
-                  <input type="hidden" name="attachment_id" value={file.id} />
-                  <button className="btn btn-ghost" type="submit">
-                    Delete
-                  </button>
-                </form>
+                {canDelete ? (
+                  <form action={deleteAttachmentFormAction}>
+                    <input type="hidden" name="attachment_id" value={file.id} />
+                    <button className="btn btn-ghost" type="submit">
+                      Delete
+                    </button>
+                  </form>
+                ) : null}
               </div>
             </li>
           ))}

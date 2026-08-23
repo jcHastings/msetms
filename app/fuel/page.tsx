@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { PageHeader } from "@/components/page-header";
 import { assignFuelDriverAction } from "@/lib/actions";
+import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { labelForFuelBucket } from "@/lib/fuel";
 import { listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
@@ -15,6 +17,10 @@ export default async function FuelPage({
 }: {
   searchParams: Promise<{ driver?: string; truck?: string }>;
 }) {
+  const dispatcher = await getPageAccess(canUploadFuel);
+  if (!dispatcher) {
+    return <AccessDenied message="Fuel is for Administrator and Standard." />;
+  }
   const params = await searchParams;
   const driverId = Number.parseInt(params.driver ?? "", 10);
   const truckId = Number.parseInt(params.truck ?? "", 10);
@@ -43,9 +49,11 @@ export default async function FuelPage({
         subtitle="Daily fuel-card CSV or Transaction Activity Report PDF. Totals always split Truck diesel, Reefer diesel, DEF, and Scale."
         actions={
           <>
-            <a href="/api/fuel/export" className="btn btn-secondary">
-              Download all fuel
-            </a>
+            {canExportCsv(dispatcher.role) ? (
+              <a href="/api/fuel/export" className="btn btn-secondary">
+                Download all fuel
+              </a>
+            ) : null}
             <Link href="/fleet/drivers" className="btn btn-secondary">
               Drivers
             </Link>

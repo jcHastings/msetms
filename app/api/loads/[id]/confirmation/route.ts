@@ -1,3 +1,5 @@
+import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { getSignedInDriver } from "@/lib/driver-session";
 import { buildConfirmationForLoad, renderConfirmationPdf } from "@/lib/load-confirmation";
 import { getLoad } from "@/lib/queries";
 
@@ -8,6 +10,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const dispatcher = await getSignedInDispatcher();
+  const driver = dispatcher ? null : await getSignedInDriver();
+  if (!dispatcher && !driver) {
+    return unauthorizedResponse();
+  }
   const loadId = Number.parseInt((await params).id, 10);
   const load = getLoad(loadId);
   if (!load) return new Response("Not found", { status: 404 });

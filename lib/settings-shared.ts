@@ -130,11 +130,12 @@ export const ASSIGNABLE_DISPATCHER_ROLES = [
 ] as const;
 
 export const DISPATCHER_ROLE_HINTS: Record<string, string> = {
-  admin: "Manage users and 2-step reset, plus the full desk.",
-  manager: "Manage users and 2-step reset, plus the full desk.",
-  dispatcher: "The dispatch board — loads, fleet, and locations.",
+  admin: "Everything: users, settings, 2-step reset, accounting, dispatch, fleet, and reports.",
+  manager: "Everything: users, settings, 2-step reset, accounting, dispatch, fleet, and reports.",
+  dispatcher:
+    "Dispatch board: loads, locations, fleet, fuel, check-calls, and documents. No accounting, settings, or CSV admin exports.",
   accounting:
-    "Accounting, QuickBooks invoices, and audit read. Does not assign loads or change dispatch unless also granted.",
+    "Financial dashboard, load financials, invoices/QBO, driver pay, locations, and load create/update/cancel. Not Settings or user admin.",
   read_only: "View only. Kept for existing accounts.",
 };
 
@@ -241,8 +242,20 @@ export function isStandardRole(role: string): boolean {
   return role === "dispatcher";
 }
 
+export function accessRole(role: string): "admin" | "accounting" | "standard" | "read_only" {
+  if (isAdminRole(role)) return "admin";
+  if (isAccountingRole(role)) return "accounting";
+  if (role === "read_only") return "read_only";
+  return "standard";
+}
+
+export function canWriteDesk(role: string): boolean {
+  const access = accessRole(role);
+  return access === "admin" || access === "accounting" || access === "standard";
+}
+
 export function canEditSettings(role: string): boolean {
-  return role !== "read_only";
+  return isAdminRole(role);
 }
 
 export function canManageUsers(role: string): boolean {
@@ -253,8 +266,85 @@ export function canAccessAccounting(role: string): boolean {
   return isAdminRole(role) || isAccountingRole(role);
 }
 
+export function canViewLoadFinancials(role: string): boolean {
+  return canAccessAccounting(role);
+}
+
+export function canConnectQuickbooks(role: string): boolean {
+  return isAdminRole(role);
+}
+
+export function canEditLoads(role: string): boolean {
+  return canWriteDesk(role);
+}
+
 export function canAssignLoads(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canEditLocations(role: string): boolean {
+  return canWriteDesk(role);
+}
+
+export function canImportLocations(role: string): boolean {
+  return isAdminRole(role);
+}
+
+export function canDeleteLocations(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canEditFleet(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canUploadFuel(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canViewIfta(role: string): boolean {
+  return canAccessAccounting(role);
+}
+
+export function canViewAudit(role: string): boolean {
+  return canAccessAccounting(role);
+}
+
+export function canExportCsv(role: string): boolean {
+  return isAdminRole(role);
+}
+
+export function canViewReports(role: string): boolean {
+  return isAdminRole(role);
+}
+
+export function canDeleteDocuments(role: string): boolean {
+  return isAdminRole(role);
+}
+
+export function canSendSms(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canLogCheckCall(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
+}
+
+export function canSeeNavHref(role: string, href: string): boolean {
+  if (href === "/driver/login") return true;
+  if (href === "/" || href === "/board" || href === "/search") return true;
+  if (href === "/loads/new" || href === "/loads/templates") return canEditLoads(role);
+  if (href === "/locations") return canEditLocations(role) || accessRole(role) === "read_only";
+  if (href === "/audit") return canViewAudit(role);
+  if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance") return canEditFleet(role);
+  if (href === "/fuel") return canUploadFuel(role);
+  if (href === "/customers") return canWriteDesk(role) || accessRole(role) === "read_only";
+  if (href === "/accounting" || href.startsWith("/accounting/")) return canAccessAccounting(role);
+  if (href === "/users") return canManageUsers(role);
+  if (href === "/claims") return canWriteDesk(role);
+  if (href === "/reports") return canViewReports(role);
+  if (href === "/settings" || href.startsWith("/settings/")) return canEditSettings(role) || href === "/settings/security";
+  return isAdminRole(role);
 }
 
 export type ComplianceWindows = {

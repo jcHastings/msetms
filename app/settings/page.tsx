@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
+import { canEditSettings, getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
 import { SETTINGS_SECTIONS } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +20,19 @@ export default async function SettingsHubPage() {
         </p>
       ) : null}
       <div className="space-y-8">
-        {SETTINGS_SECTIONS.map((section) => (
+        {SETTINGS_SECTIONS.map((section) => {
+          const items = section.items.filter((item) => {
+            if (item.href === "/settings/security") return true;
+            return dispatcher ? canEditSettings(dispatcher.role) : false;
+          });
+          if (items.length === 0) return null;
+          return (
           <section key={section.title}>
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               {section.title}
             </h2>
             <div className="grid gap-3 md:grid-cols-2">
-              {section.items.map((item) => (
+              {items.map((item) => (
                 <Link key={item.href} href={item.href} className="card block p-5 hover:border-slate-300">
                   <div className="text-sm font-semibold">{item.label}</div>
                   <p className="mt-1 text-sm text-slate-600">{item.hint}</p>
@@ -34,7 +40,8 @@ export default async function SettingsHubPage() {
               ))}
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
     </>
   );

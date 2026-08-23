@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { listBills, listCommissions, listDriverPay, listReceivables } from "@/lib/accounting";
+import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default function AccountingHomePage() {
+export default async function AccountingHomePage() {
+  const dispatcher = await getSignedInDispatcher();
+  const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
   const ar = listReceivables();
   const unpaid = ar.filter((row) => !row.paid);
   const bills = listBills();
@@ -34,10 +37,12 @@ export default function AccountingHomePage() {
             Send customer invoices from a delivered load. OO pay is never a QBO bill.
           </p>
         </Link>
+        {showReports ? (
         <Link href="/reports" className="card p-5 hover:border-slate-300">
           <div className="text-sm font-semibold">Revenue report</div>
           <p className="mt-1 text-sm text-slate-600">By customer, plus on-time and a loads CSV.</p>
         </Link>
+        ) : null}
       </div>
     </>
   );

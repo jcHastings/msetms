@@ -1,11 +1,17 @@
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { ComplianceList } from "@/components/compliance-badge";
 import { PageHeader } from "@/components/page-header";
+import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { listDrivers, listTrailers, listTrucks, listUpcomingCompliance } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function CompliancePage() {
+export default async function CompliancePage() {
+  const dispatcher = await getPageAccess(canEditFleet);
+  if (!dispatcher) {
+    return <AccessDenied message="Compliance is for Administrator and Standard." />;
+  }
   const alerts = listUpcomingCompliance();
   const expired = alerts.filter((alert) => alert.severity === "expired");
   return (

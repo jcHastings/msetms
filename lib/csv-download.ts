@@ -1,9 +1,14 @@
-import { getSignedInDispatcher } from "./dispatcher-session";
+import { getSignedInDispatcher, unauthorizedResponse } from "./dispatcher-session";
+import { canExportCsv } from "./settings-shared";
 
-export async function dispatcherCsvResponse(filename: string, csv: string): Promise<Response> {
+export async function dispatcherCsvResponse(
+  filename: string,
+  csv: string,
+  allowed: (role: string) => boolean = canExportCsv,
+): Promise<Response> {
   const dispatcher = await getSignedInDispatcher();
-  if (!dispatcher) {
-    return new Response("Sign in as a dispatcher to continue.", { status: 401 });
+  if (!dispatcher || !allowed(dispatcher.role)) {
+    return unauthorizedResponse();
   }
   const safeName = filename.replaceAll('"', "");
   return new Response(csv, {

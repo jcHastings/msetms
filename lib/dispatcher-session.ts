@@ -3,14 +3,52 @@ import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers }
 import {
   canAccessAccounting,
   canAssignLoads,
+  canConnectQuickbooks,
+  canDeleteDocuments,
+  canDeleteLocations,
+  canEditFleet,
+  canEditLoads,
+  canEditLocations,
   canEditSettings,
+  canExportCsv,
+  canImportLocations,
+  canLogCheckCall,
   canManageUsers,
+  canSeeNavHref,
+  canSendSms,
+  canUploadFuel,
+  canViewAudit,
+  canViewIfta,
+  canViewLoadFinancials,
+  canViewReports,
   roleLabel,
   toPublicDispatcher,
   type PublicDispatcher,
 } from "./settings-shared";
 
-export { canAccessAccounting, canAssignLoads, canEditSettings, canManageUsers, roleLabel };
+export {
+  canAccessAccounting,
+  canAssignLoads,
+  canConnectQuickbooks,
+  canDeleteDocuments,
+  canDeleteLocations,
+  canEditFleet,
+  canEditLoads,
+  canEditLocations,
+  canEditSettings,
+  canExportCsv,
+  canImportLocations,
+  canLogCheckCall,
+  canManageUsers,
+  canSeeNavHref,
+  canSendSms,
+  canUploadFuel,
+  canViewAudit,
+  canViewIfta,
+  canViewLoadFinancials,
+  canViewReports,
+  roleLabel,
+};
 
 const SESSION_COOKIE = "tms_dispatcher_id";
 const PENDING_COOKIE = "tms_2fa_pending";
@@ -51,28 +89,41 @@ export async function requireSignedInDispatcher(): Promise<Dispatcher> {
   return dispatcher;
 }
 
-export async function requireSettingsEditor(): Promise<Dispatcher> {
+export async function requireCapability(
+  allowed: (role: string) => boolean,
+  message = "You do not have access to this.",
+): Promise<Dispatcher> {
   const dispatcher = await requireSignedInDispatcher();
-  if (!canEditSettings(dispatcher.role)) {
-    throw new Error("Read-only users cannot change settings.");
+  if (!allowed(dispatcher.role)) {
+    throw new Error(message);
   }
   return dispatcher;
+}
+
+export async function getPageAccess(allowed: (role: string) => boolean): Promise<Dispatcher | null> {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher || !allowed(dispatcher.role)) return null;
+  return dispatcher;
+}
+
+export function unauthorizedResponse(message = "Unauthorized"): Response {
+  return new Response(message, { status: 401 });
+}
+
+export async function requireSettingsEditor(): Promise<Dispatcher> {
+  return requireCapability(canEditSettings, "Only an Administrator can change settings.");
 }
 
 export async function requireUserAdmin(): Promise<Dispatcher> {
-  const dispatcher = await requireSettingsEditor();
-  if (!canManageUsers(dispatcher.role)) {
-    throw new Error("Only an Administrator can manage users.");
-  }
-  return dispatcher;
+  return requireCapability(canManageUsers, "Only an Administrator can manage users.");
 }
 
 export async function requireLoadAssigner(): Promise<Dispatcher> {
-  const dispatcher = await requireSignedInDispatcher();
-  if (!canAssignLoads(dispatcher.role)) {
-    throw new Error("Accounting cannot assign loads or change dispatch.");
-  }
-  return dispatcher;
+  return requireCapability(canAssignLoads, "Standard dispatch owns day-to-day assignment.");
+}
+
+export async function requireLoadEditor(): Promise<Dispatcher> {
+  return requireCapability(canEditLoads, "You cannot create or change loads.");
 }
 
 export async function setDispatcherSession(dispatcherId: number): Promise<void> {

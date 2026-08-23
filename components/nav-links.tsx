@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canSeeNavHref } from "@/lib/settings-shared";
 
 const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: string }> }> = [
   {
@@ -54,12 +55,16 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
   },
 ];
 
-export function NavLinks() {
+export function NavLinks({ role }: { role: string }) {
   const pathname = usePathname();
+  const sections = SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => canSeeNavHref(role, item.href)),
+  })).filter((section) => section.items.length > 0);
 
   return (
     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
-      {SECTIONS.map((section) => (
+      {sections.map((section) => (
         <div key={section.title}>
           <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             {section.title}

@@ -12,7 +12,14 @@ import {
 } from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
-import { LOAD_TABS, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
+import { loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
+import {
+  canAssignLoads,
+  canLogCheckCall,
+  canSendSms,
+  canViewAudit,
+  canViewLoadFinancials,
+} from "@/lib/settings-shared";
 
 export function LoadWorkspace({
   loadId,
@@ -25,6 +32,7 @@ export function LoadWorkspace({
   dispatchers,
   docsRequested,
   smsConfigured,
+  role,
   children,
 }: {
   loadId: number;
@@ -37,6 +45,7 @@ export function LoadWorkspace({
   dispatchers: Array<{ id: number; name: string }>;
   docsRequested: boolean;
   smsConfigured: boolean;
+  role: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -127,7 +136,7 @@ export function LoadWorkspace({
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
         <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
-          {LOAD_TABS.map((item) => (
+          {loadFormTabsForRole(role).map((item) => (
             <button
               key={item.value}
               type="button"
@@ -156,9 +165,11 @@ export function LoadWorkspace({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Load Actions</span>
         <ActionMenu label="Load Log">
-          <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
-            Log Check Call
-          </button>
+          {canLogCheckCall(role) ? (
+            <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
+              Log Check Call
+            </button>
+          ) : null}
           <button type="button" className="menu-item" onClick={() => setTab("log", "load-log")}>
             View Load Log
           </button>
@@ -167,33 +178,37 @@ export function LoadWorkspace({
           <button type="button" className="menu-item" onClick={() => setTab("assets")}>
             Tracking and status
           </button>
-          <button
-            type="button"
-            className="menu-item"
-            onClick={() => {
-              if (!requireDriverPhone()) return;
-              const body = window.prompt("Short message to the assigned driver:");
-              if (body == null) return;
-              if (!body.trim()) {
-                window.alert("Type a short message.");
-                return;
-              }
-              void sendSms("message", body);
-            }}
-          >
-            Send Text Message
-          </button>
-          <button
-            type="button"
-            className="menu-item"
-            onClick={() => {
-              if (!requireDriverPhone()) return;
-              if (!window.confirm(`Text this load information to ${driverPhone}?\n\n${loadSummary}`)) return;
-              void sendSms("load_info");
-            }}
-          >
-            Text Load Information
-          </button>
+          {canSendSms(role) ? (
+            <>
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  if (!requireDriverPhone()) return;
+                  const body = window.prompt("Short message to the assigned driver:");
+                  if (body == null) return;
+                  if (!body.trim()) {
+                    window.alert("Type a short message.");
+                    return;
+                  }
+                  void sendSms("message", body);
+                }}
+              >
+                Send Text Message
+              </button>
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  if (!requireDriverPhone()) return;
+                  if (!window.confirm(`Text this load information to ${driverPhone}?\n\n${loadSummary}`)) return;
+                  void sendSms("load_info");
+                }}
+              >
+                Text Load Information
+              </button>
+            </>
+          ) : null}
         </ActionMenu>
         <ActionMenu label="Load Documents">
           <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
@@ -212,18 +227,24 @@ export function LoadWorkspace({
             }}
           />
         </ActionMenu>
+        {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials">
-          <MenuAction
-            label="Send to Accounting"
-            run={async () => {
-              const formData = new FormData();
-              formData.set("load_id", String(loadId));
-              return sendToAccountingAction(formData);
-            }}
-          />
-          <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
-            View Accountability Log
-          </button>
+          {canViewLoadFinancials(role) ? (
+            <MenuAction
+              label="Send to Accounting"
+              run={async () => {
+                const formData = new FormData();
+                formData.set("load_id", String(loadId));
+                return sendToAccountingAction(formData);
+              }}
+            />
+          ) : null}
+          {canViewAudit(role) ? (
+            <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
+              View Accountability Log
+            </button>
+          ) : null}
+          {canAssignLoads(role) ? (
           <form action={assignLoadDispatcherAction} className="border-t border-slate-100 px-3 py-2">
             <input type="hidden" name="load_id" value={loadId} />
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -245,7 +266,9 @@ export function LoadWorkspace({
               Save dispatcher
             </button>
           </form>
+          ) : null}
         </ActionMenu>
+        ) : null}
         <ActionMenu label="Copy / Cancel / Archive">
           <form action={cloneLoadAction}>
             <input type="hidden" name="load_id" value={loadId} />

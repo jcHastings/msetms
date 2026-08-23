@@ -1,3 +1,5 @@
+import { canViewLoadFinancials } from "./settings-shared";
+
 export const LOAD_TABS = [
   { value: "basics", label: "Load Basics" },
   { value: "customer", label: "Customer Info" },
@@ -46,4 +48,8 @@ export function parseLoadTab(value: string | null | undefined): LoadTab {
 
 export function isFormTab(tab: LoadTab): boolean {
   return tab === "basics" || tab === "customer" || tab === "assets" || tab === "financials";
+}
+
+export function loadFormTabsForRole(role: string) {
+  return LOAD_TABS.filter((tab) => tab.value !== "financials" || canViewLoadFinancials(role));
 }

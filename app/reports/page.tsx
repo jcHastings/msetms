@@ -1,12 +1,18 @@
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
 import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { canExportCsv, canViewReports, getPageAccess } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 import { listLoads } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const dispatcher = await getPageAccess(canViewReports);
+  if (!dispatcher) {
+    return <AccessDenied message="Reports are for Administrator." />;
+  }
   const recap = dailyRecap();
   const onTime = onTimeReport();
   const revenue = revenueByCustomer();
@@ -34,9 +40,11 @@ export default function ReportsPage() {
         title="Reports"
         subtitle="On-time, revenue by customer, daily recap, audit, and a loads CSV. Local numbers only."
         actions={
-          <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
-            Download loads CSV
-          </a>
+          canExportCsv(dispatcher.role) ? (
+            <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
+              Download loads CSV
+            </a>
+          ) : null
         }
       />
       <div className="mb-4 grid gap-4 md:grid-cols-4">

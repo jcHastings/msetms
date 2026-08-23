@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { canConnectQuickbooks } from "@/lib/settings-shared";
 import { completeQuickbooksOAuth, oauthStatesMatch } from "@/lib/integrations/quickbooks";
 
 export const runtime = "nodejs";
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
     const dispatcher = await getSignedInDispatcher();
     if (!dispatcher) {
       return NextResponse.redirect(new URL("/login", incoming.origin));
+    }
+    if (!canConnectQuickbooks(dispatcher.role)) {
+      return unauthorizedResponse();
     }
     const denied = incoming.searchParams.get("error");
     if (denied) {

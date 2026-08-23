@@ -15,6 +15,7 @@ import {
   listUpcomingCompliance,
   listWatchedLoads,
 } from "@/lib/queries";
+import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { labelForTruckType } from "@/lib/types";
 
@@ -26,6 +27,8 @@ export default async function DashboardPage({
   searchParams: Promise<{ kind?: string; q?: string }>;
 }) {
   const params = await searchParams;
+  const dispatcher = await getSignedInDispatcher();
+  const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
   const stats = getDashboardStats();
   const unassigned = listAttentionLoads();
   const moving = listMovingLoads();
@@ -108,9 +111,11 @@ export default async function DashboardPage({
               <dd className="font-semibold">{recap.claims}</dd>
             </div>
           </dl>
-          <Link href="/reports" className="mt-3 inline-block text-sm font-medium text-slate-600 hover:text-slate-900">
-            Open reports
-          </Link>
+          {showReports ? (
+            <Link href="/reports" className="mt-3 inline-block text-sm font-medium text-slate-600 hover:text-slate-900">
+              Open reports
+            </Link>
+          ) : null}
         </section>
         <section className="card p-5">
           <h2 className="text-sm font-semibold">Watch list</h2>
