@@ -1,0 +1,37 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { DriverForm } from "@/components/driver-form";
+import { PageHeader } from "@/components/page-header";
+import { updateDriverAction } from "@/lib/actions";
+import { getDriver, listTrucks } from "@/lib/queries";
+
+export const dynamic = "force-dynamic";
+
+export default async function EditDriverPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const driver = getDriver(Number.parseInt((await params).id, 10));
+  if (!driver) notFound();
+  const boundAction = updateDriverAction.bind(null, driver.id);
+
+  return (
+    <>
+      <PageHeader
+        title={driver.name}
+        actions={
+          <Link href="/fleet" className="btn btn-secondary">
+            Back to fleet
+          </Link>
+        }
+      />
+      <DriverForm
+        driver={driver}
+        trucks={listTrucks()}
+        action={boundAction}
+        submitLabel="Save driver"
+      />
+    </>
+  );
+}
