@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { ComplianceList } from "@/components/compliance-badge";
 import { assignLoadAction } from "@/lib/actions";
-import { collectAssignmentAlerts, complianceShortLabel, driverComplianceAlerts } from "@/lib/compliance";
+import {
+  collectAssignmentAlerts,
+  complianceShortLabel,
+  driverComplianceAlerts,
+  trailerComplianceAlerts,
+  truckComplianceAlerts,
+} from "@/lib/compliance";
 import type { DriverWithTruck, Trailer, Truck } from "@/lib/types";
 
 type Props = {
@@ -106,6 +112,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                   {trucks.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.unit_number} · {item.type.replaceAll("_", " ")}
+                      {optionNote(truckComplianceAlerts(item))}
                     </option>
                   ))}
                 </select>
@@ -125,6 +132,7 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                   {trailers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.unit_number} · {item.type.replaceAll("_", " ")}
+                      {optionNote(trailerComplianceAlerts(item))}
                     </option>
                   ))}
                 </select>
@@ -176,6 +184,10 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
 }
 
 function driverOptionNote(driver: DriverWithTruck): string {
-  const label = complianceShortLabel(driverComplianceAlerts(driver));
+  return optionNote(driverComplianceAlerts(driver));
+}
+
+function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {
+  const label = complianceShortLabel(alerts);
   return label ? ` · ${label}` : "";
 }

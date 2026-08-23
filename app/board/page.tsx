@@ -104,6 +104,11 @@ export default async function BoardPage({
                       {load.truck_unit ? (
                         <>
                           <div>Unit {load.truck_unit}</div>
+                          {load.trailer_unit || load.trailer_number ? (
+                            <div className="text-xs text-slate-500">
+                              Trailer {load.trailer_unit || load.trailer_number}
+                            </div>
+                          ) : null}
                           <div className="text-xs text-slate-500">{load.driver_name}</div>
                           {load.driver_progress ? (
                             <div className="text-xs text-indigo-700">

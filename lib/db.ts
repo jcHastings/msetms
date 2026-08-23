@@ -36,6 +36,7 @@ export function getDb(): Database.Database {
   } else {
     backfillDemoPins(db);
     backfillDemoDriverCompliance(db);
+    backfillDemoRegistration(db);
   }
 
   connection = db;
@@ -222,6 +223,21 @@ function backfillDemoDriverCompliance(db: Database.Database): void {
   for (const [name, number, state, licenseExpires, medicalExpires] of rows) {
     update.run(number, state, licenseExpires, medicalExpires, name);
   }
+}
+
+function backfillDemoRegistration(db: Database.Database): void {
+  db.prepare(
+    `UPDATE trucks
+     SET registration_issued = CASE WHEN registration_issued = '' THEN ? ELSE registration_issued END,
+         registration_expires = CASE WHEN registration_expires = '' THEN ? ELSE registration_expires END
+     WHERE unit_number = '210'`,
+  ).run(isoDateOffset(-250), isoDateOffset(40));
+  db.prepare(
+    `UPDATE trailers
+     SET registration_issued = CASE WHEN registration_issued = '' THEN ? ELSE registration_issued END,
+         registration_expires = CASE WHEN registration_expires = '' THEN ? ELSE registration_expires END
+     WHERE unit_number = 'TR-8801'`,
+  ).run(isoDateOffset(-200), isoDateOffset(45));
 }
 
 function backfillDemoPins(db: Database.Database): void {

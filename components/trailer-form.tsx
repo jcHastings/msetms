@@ -39,12 +39,13 @@ export function TrailerForm({ trailer, action, submitLabel }: Props) {
           placeholder="From Reefer Status Report"
         />
       </div>
+      <h2 className="text-sm font-semibold">Registration</h2>
       <div className="field">
-        <label htmlFor="registration_issued">Registration issued</label>
+        <label htmlFor="registration_issued">Date issued</label>
         <input id="registration_issued" name="registration_issued" type="date" defaultValue={trailer?.registration_issued} />
       </div>
       <div className="field">
-        <label htmlFor="registration_expires">Registration expires</label>
+        <label htmlFor="registration_expires">Expiration date</label>
         <input id="registration_expires" name="registration_expires" type="date" defaultValue={trailer?.registration_expires} />
       </div>
       <div className="field">

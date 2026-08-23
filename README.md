@@ -39,7 +39,7 @@ Requires Node.js 20 or newer.
 - Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo)
 - Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report)
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
-- Assign-time compliance alerts: license/med card (30 days). Expired documents require an explicit confirm. Expiring/expired badges on the driver list and a dashboard list. Seed: Denise (license inside 30 days), Tyrell (expired medical card).
+- Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days). Expired documents require an explicit confirm. Badges on fleet lists and a dashboard upcoming list. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days).
 - Company driver vs owner-operator settlement on the load
 
 ## Driver app

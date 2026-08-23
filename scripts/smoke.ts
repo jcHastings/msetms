@@ -345,7 +345,8 @@ SPECIAL INSTRUCTIONS
   assert.equal(cole.pay_percent, 75);
   const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrell);
-  const { collectAssignmentAlerts, requireAssignmentOverride } = await import("../lib/compliance");
+  const { collectAssignmentAlerts, requireAssignmentOverride, trailerComplianceAlerts, truckComplianceAlerts } =
+    await import("../lib/compliance");
   assert.equal(denise.license_state, "TN");
   assert.equal(denise.license_number, "772110");
   assert.ok(denise.license_expires);
@@ -364,6 +365,20 @@ SPECIAL INSTRUCTIONS
   requireAssignmentOverride(tyrellAlerts, true);
   const upcoming = queries.listUpcomingCompliance();
   assert.ok(upcoming.length >= 3, "seed should surface expiring/expired documents");
+  const truck210 = queries.listTrucks().find((truck) => truck.unit_number === "210");
+  const trailer8801 = queries.listTrailers().find((trailer) => trailer.unit_number === "TR-8801");
+  assert.ok(truck210);
+  assert.ok(trailer8801);
+  const truckReg = truckComplianceAlerts(truck210).find((alert) => alert.kind === "registration");
+  assert.ok(truckReg);
+  assert.equal(truckReg.severity, "expiring");
+  assert.match(truckReg.message, /Unit 210/);
+  assert.match(truckReg.message, /registration/);
+  const trailerReg = trailerComplianceAlerts(trailer8801).find((alert) => alert.kind === "registration");
+  assert.ok(trailerReg);
+  assert.equal(trailerReg.severity, "expiring");
+  assert.match(trailerReg.message, /Trailer TR-8801/);
+  assert.match(trailerReg.message, /registration/);
 
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");

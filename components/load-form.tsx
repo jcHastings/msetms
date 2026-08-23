@@ -3,7 +3,13 @@
 import { useActionState, useMemo, useState } from "react";
 import { ComplianceList } from "@/components/compliance-badge";
 import { FormBanner } from "@/components/form-banner";
-import { collectAssignmentAlerts, complianceShortLabel, driverComplianceAlerts } from "@/lib/compliance";
+import {
+  collectAssignmentAlerts,
+  complianceShortLabel,
+  driverComplianceAlerts,
+  trailerComplianceAlerts,
+  truckComplianceAlerts,
+} from "@/lib/compliance";
 import { toInputDateTime } from "@/lib/format";
 import {
   LOAD_STATUSES,
@@ -237,6 +243,7 @@ export function LoadForm({
             {trailers.map((trailer) => (
               <option key={trailer.id} value={trailer.id}>
                 {trailer.unit_number}
+                {optionNote(trailerComplianceAlerts(trailer))}
               </option>
             ))}
           </select>
@@ -286,6 +293,7 @@ export function LoadForm({
             {trucks.map((truck) => (
               <option key={truck.id} value={truck.id}>
                 {truck.unit_number}
+                {optionNote(truckComplianceAlerts(truck))}
               </option>
             ))}
           </select>
@@ -357,6 +365,10 @@ export function LoadForm({
 }
 
 function driverOptionNote(driver: DriverWithTruck): string {
-  const label = complianceShortLabel(driverComplianceAlerts(driver));
+  return optionNote(driverComplianceAlerts(driver));
+}
+
+function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {
+  const label = complianceShortLabel(alerts);
   return label ? ` · ${label}` : "";
 }

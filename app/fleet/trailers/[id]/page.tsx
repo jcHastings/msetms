@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { TrailerForm } from "@/components/trailer-form";
+import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { updateTrailerAction } from "@/lib/actions";
+import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { getTrailer } from "@/lib/queries";
 
@@ -27,6 +29,13 @@ export default async function EditTrailerPage({
             Back to fleet
           </Link>
         }
+      />
+      <UnitComplianceCard
+        title="Registration"
+        issued={trailer.registration_issued}
+        expires={trailer.registration_expires}
+        alerts={trailerComplianceAlerts(trailer)}
+        emptyLabel="No registration or DOT dates in the warning windows."
       />
       <TrailerForm trailer={trailer} action={boundAction} submitLabel="Save trailer" />
       <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />
