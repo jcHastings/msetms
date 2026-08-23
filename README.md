@@ -54,7 +54,7 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `docker compose up --build` | Build the Node 22 image and serve port 3000 |
 | `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
-| `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
+| `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` and the Ascend-style sample |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
 Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.

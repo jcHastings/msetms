@@ -314,6 +314,47 @@ Send bills to billing@msloads.com
   const namedFile = parseRateConText("Load confirmation for file Load_Confirmation_45090_20260823190045.pdf");
   assert.equal(namedFile.weight, null, "filename digits must not become weight");
 
+  const emptyExtract = await (await import("../lib/actions")).parseRateConAction(null, new FormData());
+  assert.equal(emptyExtract.ok, false);
+  if (!emptyExtract.ok) assert.match(emptyExtract.error, /Pick a file first/);
+
+  const { default: PDFDocumentCtor } = await import("../lib/pdfkit-document");
+  const ascendPdf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.fontSize(16).text("LOAD CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Load # 45090");
+    doc.text("Weight 42500 lbs");
+    doc.text("Commodity FROZEN BEEF");
+    doc.text("Rate $3200 / Flat Rate");
+    doc.text("Pickup 03/03/25 Lineage Logistics - Avenel, 275 Blair rd, Avenel, NJ 07001");
+    doc.text("Delivery 03/05/25 Nebraska Cold Storage, 600 E 39th St, Hastings, NE 68901");
+    doc.text("Special instructions: continuous reefer, two load locks, seal required.");
+    doc.end();
+  });
+  const ascendForm = new FormData();
+  ascendForm.set(
+    "rate_con",
+    new File([new Uint8Array(ascendPdf)], "Load_Confirmation_45090_20260823190045.pdf", {
+      type: "application/pdf",
+    }),
+  );
+  const extracted = await (await import("../lib/actions")).parseRateConAction(null, ascendForm);
+  assert.equal(extracted.ok, true);
+  if (extracted.ok && "parsed" in extracted) {
+    assert.equal(extracted.parsed.weight, 42500);
+    assert.notEqual(extracted.parsed.weight, 45090);
+    assert.equal(extracted.parsed.rate, 3200);
+    assert.match(extracted.parsed.origin, /Avenel/i);
+    assert.match(extracted.parsed.destination, /Hastings/i);
+    assert.ok(extracted.inboxId);
+    assert.equal(extracted.fileName, "Load_Confirmation_45090_20260823190045.pdf");
+  }
+
   const samplePdf = path.join(process.cwd(), "public", "samples", "sample-rate-con.pdf");
   if (fs.existsSync(samplePdf)) {
     const { extractDocumentText } = await import("../lib/rate-con");

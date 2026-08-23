@@ -50,7 +50,11 @@ import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type Searc
 import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
 
 function refresh(): void {
-  revalidatePath("/", "layout");
+  try {
+    revalidatePath("/", "layout");
+  } catch {
+    // Tests and scripts have no Next.js request cache.
+  }
 }
 
 function fail(error: unknown): ActionResult {
@@ -512,6 +516,14 @@ export async function parseRateConAction(
     if (file.size > 15 * 1024 * 1024) {
       throw new Error("File is over 15 MB.");
     }
+    const lowerName = file.name.toLowerCase();
+    const mime = (file.type || "").toLowerCase();
+    const looksPdf = mime.includes("pdf") || lowerName.endsWith(".pdf");
+    const looksImage =
+      mime.startsWith("image/") || /\.(png|jpe?g|webp|heic)$/.test(lowerName);
+    if (!looksPdf && !looksImage) {
+      throw new Error("Upload a PDF or an image (PNG, JPG, WebP).");
+    }
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
     const { extractDocumentText, parseRateConText, emptyParsedRateCon } = await import("./rate-con");
     const { listCustomers } = await import("./queries");
@@ -520,7 +532,7 @@ export async function parseRateConAction(
     let text = "";
     let warning = "";
     try {
-      text = await extractDocumentText(buffer, file.type, file.name);
+      text = await extractDocumentText(buffer, mime || (looksPdf ? "application/pdf" : file.type), file.name);
     } catch (error) {
       warning = error instanceof Error ? error.message : "Could not read that file.";
     }
@@ -532,14 +544,26 @@ export async function parseRateConAction(
         ok: true,
         inboxId,
         fileName: file.name,
-        warning: warning || "Couldn't read text from this PDF. The file is still attached — finish the fields by hand.",
+        warning:
+          warning ||
+          "Couldn't read text from this PDF. The file is still attached — finish the fields by hand.",
         parsed,
       };
     }
     const parsed = parseRateConText(text, listCustomers());
+    const thin =
+      !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
     writeInboxParse(inboxId, parsed);
     refresh();
-    return { ok: true, inboxId, fileName: file.name, parsed };
+    return {
+      ok: true,
+      inboxId,
+      fileName: file.name,
+      warning: thin
+        ? "Read the file, but almost no load fields were in the text. Finish the form by hand — the original file stays attached."
+        : undefined,
+      parsed,
+    };
   } catch (error) {
     return fail(error);
   }

@@ -151,18 +151,28 @@ function parseAscendConfirmation(text: string): {
   };
   if (!/load confirmation/i.test(text)) return empty;
 
+  const flat = text.replace(/\s+/g, " ");
   const loadNumber = text.match(/load\s*#\s*(\d{3,8})/i)?.[1] ?? "";
-  const weightMatch = text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i);
+  const weightMatch =
+    text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i) ??
+    flat.match(/weight\s+([\d,]+)\s*(?:lbs?|pounds)/i);
   const commodity =
     labeled(text, ["commodity"]) ??
     text.match(/commodity\s+([A-Z][A-Z0-9 /-]{2,40})/i)?.[1]?.trim() ??
     "";
   const rate =
-    parseMoney(text.match(/(?:rate|flat rate)\s*[:#]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "") ??
-    parseMoney(text.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?(?:flat rate)?/i)?.[0] ?? "");
+    parseMoney(text.match(/(?:rate|flat rate|line\s*haul)\s*[:#]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "") ??
+    parseMoney(flat.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?(?:flat rate)?/i)?.[0] ?? "") ??
+    parseMoney(flat.match(/pay items[\s\S]{0,80}\$\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "");
 
-  const pickup = parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i);
-  const delivery = parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i);
+  const pickup = firstStop(
+    parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
+    parseStopBlock(text, /pick(?:\s*up)?(?:\s+date)?/i),
+  );
+  const delivery = firstStop(
+    parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
+    parseStopBlock(text, /deliv(?:ery)?(?:\s+date)?/i),
+  );
 
   const terms = section(text, /terms|special instructions?|notes/i);
   const extras = [
@@ -192,6 +202,12 @@ function parseAscendConfirmation(text: string): {
   };
 }
 
+function firstStop(
+  ...stops: Array<{ start: string; end: string; address: string }>
+): { start: string; end: string; address: string } {
+  return stops.find((stop) => stop.start || stop.address) ?? { start: "", end: "", address: "" };
+}
+
 function parseStopLine(
   text: string,
   pattern: RegExp,
@@ -201,6 +217,28 @@ function parseStopLine(
   const start = toIso(match[1], "08:00");
   const end = toIso(match[1], "17:00");
   return { start, end, address: clean(match[2] ?? "") };
+}
+
+function parseStopBlock(
+  text: string,
+  heading: RegExp,
+): { start: string; end: string; address: string } {
+  const match = text.match(
+    new RegExp(
+      `${heading.source}\\s*[:\\s]+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})([\\s\\S]{0,240}?)(?=deliv|consignee|pay items|special|terms|shipper|$)`,
+      "i",
+    ),
+  );
+  if (!match) return { start: "", end: "", address: "" };
+  const address = clean(
+    match[2]
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !/^(date|time|type|qty|weight|actions?)\b/i.test(line))
+      .slice(0, 4)
+      .join(", "),
+  );
+  return { start: toIso(match[1], "08:00"), end: toIso(match[1], "17:00"), address };
 }
 
 function cityStateFromAddress(address: string): string {

@@ -65,7 +65,7 @@ Dispatcher login required. Saves to the local database. No secrets. No fake Asce
 - **Integrations** — existing Samsara / ORBCOMM / QuickBooks / load-tracking stubs
 
 - Load confirmation PDF: title page-centered on its own line (Load Confirmation for company drivers), logo left, dispatcher/load card below the title on the right so it does not share a line with the title, email on one line, hours do not overflow appointment, extra blank pages dropped.
-- Rate-con upload: keep the chosen PDF, parse Ascend LOAD CONFIRMATION packets (load # is not weight), attach even when text is thin.
+- Rate-con upload: New Load → From rate con accepts PDF/image, extracts text in JS (`unpdf`, no native tools), fills the review form, and always keeps the file. Empty extract still opens the form with a warning. “Pick a file first” if nothing is chosen. Filename digits are never weight. Works on Windows next start.
 - Google Places address search on Locations and New Load when `GOOGLE_MAPS_API_KEY` is set (server-side; no key in the browser).
 
 Skipped Ascend-exclusive: Pro Plan billing, Business Center legal/training/tax store, AscendCarrierPortal, DAT load-board, Master Loads.

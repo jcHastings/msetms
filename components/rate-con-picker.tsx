@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp";
 
 export function RateConPicker({
   inputId = "rate_con",
@@ -11,6 +13,33 @@ export function RateConPicker({
 }) {
   const [name, setName] = useState(fileName ?? "");
   const [drag, setDrag] = useState(false);
+  const fileRef = useRef<File | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (fileName) setName(fileName);
+  }, [fileName]);
+
+  function putFileOnInput(file: File) {
+    const input = inputRef.current;
+    if (!input) return;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+  }
+
+  function assignFile(file: File | null) {
+    fileRef.current = file;
+    setName(file?.name ?? "");
+    if (file) putFileOnInput(file);
+  }
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (fileRef.current && input && (!input.files || input.files.length === 0)) {
+      putFileOnInput(fileRef.current);
+    }
+  });
 
   return (
     <div
@@ -25,28 +54,32 @@ export function RateConPicker({
       onDrop={(event) => {
         event.preventDefault();
         setDrag(false);
-        const file = event.dataTransfer.files?.[0];
-        const input = document.getElementById(inputId) as HTMLInputElement | null;
-        if (!file || !input) return;
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        input.files = transfer.files;
-        setName(file.name);
+        assignFile(event.dataTransfer.files?.[0] ?? null);
       }}
     >
       <label htmlFor={inputId} className="text-sm font-semibold">
         Rate con file
       </label>
-      <p className="mt-1 text-sm text-slate-500">PDF or image. Drag and drop, or choose a file.</p>
+      <p className="mt-1 text-sm text-slate-500">
+        PDF or image. Drag and drop, or choose a file. Windows: if the picker says Custom Files, pick
+        the PDF anyway — we accept it.
+      </p>
       <input
         id={inputId}
+        ref={inputRef}
         name="rate_con"
         type="file"
         className="mt-3 block w-full text-sm"
-        accept=".pdf,application/pdf,image/*,.png,.jpg,.jpeg,.webp"
-        onChange={(event) => setName(event.target.files?.[0]?.name ?? "")}
+        accept={ACCEPT}
+        onChange={(event) => assignFile(event.target.files?.[0] ?? null)}
       />
-      {name ? <p className="mt-2 font-mono text-xs text-slate-700">{name}</p> : null}
+      {name ? (
+        <p className="mt-2 font-mono text-xs text-slate-700">
+          Chosen: {name}
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500">No file chosen yet.</p>
+      )}
     </div>
   );
 }

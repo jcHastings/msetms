@@ -11,7 +11,7 @@ export default function ImportRateConPage() {
     <>
       <PageHeader
         title="Load from rate confirmation"
-        subtitle="Upload the customer rate con, review the extracted fields, then save and assign a driver."
+        subtitle="Upload a PDF or image. We read the text in the browser app (no Windows extra tools), then you review and save. A thin parse still attaches the file."
         actions={
           <Link href="/loads/new" className="btn btn-secondary">
             Type a load instead

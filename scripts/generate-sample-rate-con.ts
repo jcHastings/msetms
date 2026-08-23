@@ -50,9 +50,43 @@ function main() {
   });
 }
 
+const ascendOut = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
+
+function writeAscendSample(): Promise<void> {
+  const ascend = new PDFDocument({ size: "LETTER", margin: 48 });
+  const ascendStream = fs.createWriteStream(ascendOut);
+  ascend.pipe(ascendStream);
+  ascend.fontSize(16).text("LOAD CONFIRMATION");
+  ascend.moveDown(0.4);
+  ascend.fontSize(11);
+  ascend.text("Load # 45090");
+  ascend.text("Date 08/23/2026");
+  ascend.text("Equipment Reefer, 53'");
+  ascend.text("Weight 42500 lbs");
+  ascend.text("Commodity FROZEN BEEF");
+  ascend.text("Rate $3200 / Flat Rate");
+  ascend.moveDown();
+  ascend.text("Stops / Actions");
+  ascend.text("Pickup 03/03/25 Lineage Logistics - Avenel, 275 Blair rd, Avenel, NJ 07001");
+  ascend.text("Delivery 03/05/25 Nebraska Cold Storage, 600 E 39th St, Hastings, NE 68901");
+  ascend.moveDown();
+  ascend.text("Pay Items");
+  ascend.text("Line Haul $3200 Flat Rate");
+  ascend.moveDown();
+  ascend.text("Special instructions: continuous reefer, two load locks, seal required.");
+  ascend.text("Send bills to billing@msloads.com");
+  ascend.end();
+  return new Promise((resolve, reject) => {
+    ascendStream.on("finish", () => resolve());
+    ascendStream.on("error", reject);
+  });
+}
+
 main()
+  .then(() => writeAscendSample())
   .then(() => {
     console.log(`Wrote ${out}`);
+    console.log(`Wrote ${ascendOut}`);
   })
   .catch((error) => {
     console.error(error);
