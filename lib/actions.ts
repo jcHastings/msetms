@@ -14,6 +14,7 @@ import {
   updateLoad,
   updateLoadStatus,
   updateTruck,
+  type LoadInput,
 } from "./queries";
 import {
   DRIVER_STATUSES,
@@ -23,7 +24,6 @@ import {
   isLoadStatus,
   type ActionResult,
   type DriverStatus,
-  type LoadInput,
   type LoadStatus,
   type TruckStatus,
   type TruckType,
