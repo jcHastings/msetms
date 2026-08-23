@@ -275,7 +275,8 @@ SPECIAL INSTRUCTIONS
   const reading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
   assert.ok(reading, "seeded reefer load should have a demo temperature");
   assert.equal(reading.source, "demo");
-  assert.equal(reading.temperature_f, 34.2);
+  assert.equal(reading.temperature_f, 48.6);
+  assert.equal(reading.alarm, "HIGH TEMP");
 
   const mappedReefer = orbcomm.mapOrbcommReadingsToLoads({
     loads: [
