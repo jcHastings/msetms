@@ -111,6 +111,7 @@ export function RateConApply({
       </form>
       {parsed && state && "inboxId" in state ? (
         <LoadForm
+          standalone
           customers={customers}
           trucks={trucks}
           trailers={trailers}

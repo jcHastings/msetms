@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLoadEdit } from "@/components/load-edit-context";
 import { ComplianceList } from "@/components/compliance-badge";
 import { FormBanner } from "@/components/form-banner";
 import {
@@ -68,6 +69,7 @@ type Props = {
   alertWindows?: ComplianceWindows;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
+  standalone?: boolean;
 };
 
 export function LoadForm({
@@ -89,7 +91,12 @@ export function LoadForm({
   alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
   action,
   submitLabel,
+  standalone = false,
 }: Props) {
+  const edit = useLoadEdit();
+  const workspace = standalone ? null : edit;
+  const tab = workspace?.tab ?? "all";
+  const formId = workspace?.formId;
   const [state, formAction, pending] = useActionState(action, null);
   const extraDefaults = defaults ?? {};
   const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
@@ -132,14 +139,36 @@ export function LoadForm({
     selectedDriver?.driver_type === "owner_operator"
       ? computeOwnerOperatorPay(parsedRate, parsedPercent)
       : null;
+  const canSubmit = !pending && !(expired && !confirmed);
+
+  useEffect(() => {
+    workspace?.setSubmitState({ canSubmit, pending });
+  }, [workspace?.setSubmitState, canSubmit, pending]);
+
+  useEffect(() => {
+    if (state && "ok" in state && state.ok) workspace?.clearDirty();
+  }, [workspace?.clearDirty, state]);
 
   return (
-    <form action={formAction} className="card space-y-6 p-6">
+    <form
+      id={formId}
+      action={formAction}
+      className={workspace ? "space-y-6" : "card space-y-6 p-6"}
+      hidden={
+        Boolean(workspace) &&
+        tab !== "basics" &&
+        tab !== "customer" &&
+        tab !== "assets" &&
+        tab !== "financials" &&
+        tab !== "all"
+      }
+    >
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
       <input type="hidden" name="customer_name" value={extraDefaults.customer_name ?? ""} />
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="field">
+      <div className={workspace ? "card grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+        <Section tab={tab} when="customer">
+        <div className="field md:col-span-2">
           <label htmlFor="customer_id">Customer</label>
           <select
             id="customer_id"
@@ -160,6 +189,8 @@ export function LoadForm({
             ))}
           </select>
         </div>
+        </Section>
+        <Section tab={tab} when="basics">
         <div className="field">
           <label htmlFor="status">Status</label>
           <select id="status" name="status" defaultValue={load?.status ?? "available"}>
@@ -338,18 +369,6 @@ export function LoadForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="rate">Rate ({currency})</label>
-          <input
-            id="rate"
-            name="rate"
-            type="number"
-            min={0}
-            step="0.01"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-          />
-        </div>
-        <div className="field">
           <label htmlFor="reference_number">Reference / rate con #</label>
           <input
             id="reference_number"
@@ -371,6 +390,40 @@ export function LoadForm({
             defaultValue={load?.reefer_setpoint_f ?? extraDefaults?.reefer_setpoint_f ?? ""}
           />
         </div>
+        <div className="field md:col-span-2">
+          <label htmlFor="special_instructions">Special instructions (driver sees these)</label>
+          <textarea
+            id="special_instructions"
+            name="special_instructions"
+            rows={4}
+            defaultValue={load?.special_instructions ?? extraDefaults?.special_instructions ?? ""}
+          />
+        </div>
+        <div className="field md:col-span-2">
+          <label htmlFor="appointment_notes">Appointment notes</label>
+          <textarea
+            id="appointment_notes"
+            name="appointment_notes"
+            rows={2}
+            defaultValue={load?.appointment_notes ?? extraDefaults?.appointment_notes ?? ""}
+          />
+        </div>
+        </Section>
+        <Section tab={tab} when="financials">
+        <div className="field">
+          <label htmlFor="rate">Rate ({currency})</label>
+          <input
+            id="rate"
+            name="rate"
+            type="number"
+            min={0}
+            step="0.01"
+            value={rate}
+            onChange={(event) => setRate(event.target.value)}
+          />
+        </div>
+        </Section>
+        <Section tab={tab} when="assets">
         <div className="field">
           <label htmlFor="trailer_id">Trailer</label>
           <select
@@ -398,28 +451,6 @@ export function LoadForm({
             name="trailer_number"
             defaultValue={load?.trailer_number ?? extraDefaults?.trailer_number ?? ""}
           />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="special_instructions">Special instructions (driver sees these)</label>
-          <textarea
-            id="special_instructions"
-            name="special_instructions"
-            rows={4}
-            defaultValue={load?.special_instructions ?? extraDefaults?.special_instructions ?? ""}
-          />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="appointment_notes">Appointment notes</label>
-          <textarea
-            id="appointment_notes"
-            name="appointment_notes"
-            rows={2}
-            defaultValue={load?.appointment_notes ?? extraDefaults?.appointment_notes ?? ""}
-          />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="notes">Internal notes</label>
-          <textarea id="notes" name="notes" rows={3} defaultValue={load?.notes ?? extraDefaults?.notes ?? ""} />
         </div>
         <div className="field">
           <label htmlFor="truck_id">Assigned truck</label>
@@ -470,6 +501,14 @@ export function LoadForm({
             ))}
           </select>
         </div>
+        </Section>
+        <Section tab={tab} when="customer">
+        <div className="field md:col-span-2">
+          <label htmlFor="notes">Internal notes</label>
+          <textarea id="notes" name="notes" rows={3} defaultValue={load?.notes ?? extraDefaults?.notes ?? ""} />
+        </div>
+        </Section>
+        <Section tab={tab} when="financials">
         {selectedDriver?.driver_type === "owner_operator" ? (
           <>
             <div className="field">
@@ -511,8 +550,9 @@ export function LoadForm({
             </div>
           </div>
         ) : null}
+        </Section>
       </div>
-      {alerts.length > 0 ? (
+      {alerts.length > 0 && (tab === "all" || tab === "assets") ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
           <ComplianceList alerts={alerts} />
         </div>
@@ -523,13 +563,28 @@ export function LoadForm({
           I confirm saving this assignment with expired documents.
         </label>
       ) : null}
+      {workspace ? null : (
       <div className="flex justify-end">
-        <button className="btn btn-primary" type="submit" disabled={pending || (expired && !confirmed)}>
+        <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
           {pending ? "Saving…" : submitLabel}
         </button>
       </div>
+      )}
     </form>
   );
+}
+
+function Section({
+  tab,
+  when,
+  children,
+}: {
+  tab: string;
+  when: string;
+  children: ReactNode;
+}) {
+  const show = tab === "all" || tab === when;
+  return <div className={show ? "contents" : "hidden"}>{children}</div>;
 }
 
 function driverOptionNote(driver: DriverWithTruck, windows: ComplianceWindows): string {

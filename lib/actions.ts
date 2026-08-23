@@ -22,6 +22,7 @@ import {
   updateCustomer,
   updateDriver,
   updateLoad,
+  updateLoadDetails,
   updateLoadStatus,
   updateLocation,
   updateTrailer,
@@ -420,6 +421,26 @@ export async function updateLoadAction(
       const input = parseLoadInput(formData);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
+      if (String(formData.get("save_load_details") ?? "") === "1") {
+        updateLoadDetails(id, {
+          status_reason: String(formData.get("status_reason") ?? ""),
+          cancel_reason: String(formData.get("cancel_reason") ?? ""),
+          cover_by: String(formData.get("cover_by") ?? ""),
+          equipment: String(formData.get("equipment") ?? ""),
+          hazmat: String(formData.get("hazmat") ?? "") === "1",
+          commodity_class: String(formData.get("commodity_class") ?? ""),
+          seal_numbers: String(formData.get("seal_numbers") ?? ""),
+          pallet_count: parseOptionalInt(formData.get("pallet_count")),
+          case_count: parseOptionalInt(formData.get("case_count")),
+          team: String(formData.get("team") ?? "") === "1",
+          lumper_expected: parseOptionalFloat(formData.get("lumper_expected")),
+          lumper_actual: parseOptionalFloat(formData.get("lumper_actual")),
+          detention_started_at: String(formData.get("detention_started_at") ?? ""),
+          detention_ended_at: String(formData.get("detention_ended_at") ?? ""),
+          appointment_confirmation: String(formData.get("appointment_confirmation") ?? ""),
+          unload_type: String(formData.get("unload_type") ?? ""),
+        });
+      }
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
         const { attachInboxToLoad } = await import("./files");
