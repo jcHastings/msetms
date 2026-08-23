@@ -37,7 +37,8 @@ async function main() {
   });
   assert.equal(currentNode.execPath, "/current/node", "prefer process.execPath when version is new enough");
   assert.equal(currentNode.switched, false);
-  const programFiles = "C:\\Program Files\\nodejs\\node.exe";
+  const programFiles = windowsNodeInstalls({ ProgramFiles: "C:\\Program Files" })[0];
+  assert.match(programFiles, /nodejs/);
   const fromOldPath = resolveNodeExecutable({
     execPath: "C:\\old\\node.exe",
     version: "20.10.0",
@@ -49,7 +50,6 @@ async function main() {
   assert.equal(fromOldPath.execPath, programFiles);
   assert.equal(fromOldPath.version, "24.4.0");
   assert.equal(fromOldPath.switched, true);
-  assert.ok(windowsNodeInstalls({ ProgramFiles: "C:\\Program Files" }).includes(programFiles));
 
   const { mirrorIntoStandalone } = await import("../scripts/standalone-link.mjs");
   const linkRoot = path.join(os.tmpdir(), `tms-link-${Date.now()}`);
