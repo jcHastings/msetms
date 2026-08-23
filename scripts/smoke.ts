@@ -597,8 +597,13 @@ Send bills to billing@msloads.com
   const colePdf = await confirmation.renderConfirmationPdf(coleConfirm);
   assert.equal(colePdf.subarray(0, 4).toString(), "%PDF");
   const { PDFDocument } = await import("pdf-lib");
+  const { extractText } = await import("unpdf");
   assert.equal((await PDFDocument.load(colePdf)).getPageCount(), 1, "confirmation must be one page");
-  const deniseLoad = queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
+  const coleText = String((await extractText(new Uint8Array(colePdf), { mergePages: true })).text ?? "");
+  assert.match(coleText, /Rate & Load Confirmation/);
+  const deniseLoad =
+    queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1045") ??
+    queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
   assert.ok(deniseLoad);
   const deniseConfirm = confirmation.buildConfirmationForLoad(deniseLoad.id);
   assert.equal(deniseConfirm.style, "company_driver");
@@ -606,6 +611,13 @@ Send bills to billing@msloads.com
   assert.equal(deniseConfirm.loadNumber, deniseLoad.load_number);
   const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
   assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
+  assert.equal((await PDFDocument.load(denisePdf)).getPageCount(), 1, "company confirmation must be one page");
+  const deniseText = String((await extractText(new Uint8Array(denisePdf), { mergePages: true })).text ?? "");
+  assert.match(deniseText, /Load Confirmation/);
+  assert.doesNotMatch(deniseText, /Rate & Load Confirmation/);
+  assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
+  assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
+  assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
 
   const freshCompanyId = queries.createLoad({
     customer_id: customerId,

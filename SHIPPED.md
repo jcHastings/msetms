@@ -64,7 +64,7 @@ Dispatcher login required. Saves to the local database. No secrets. No fake Asce
 - **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups
 - **Integrations** — existing Samsara / ORBCOMM / QuickBooks / load-tracking stubs
 
-- Load confirmation PDF: title centered, logo left, dispatcher/load block right, email on one line, extra blank pages dropped.
+- Load confirmation PDF: title page-centered on its own line (Load Confirmation for company drivers), logo left, dispatcher/load card below the title on the right so it does not share a line with the title, email on one line, hours do not overflow appointment, extra blank pages dropped.
 - Rate-con upload: keep the chosen PDF, parse Ascend LOAD CONFIRMATION packets (load # is not weight), attach even when text is thin.
 - Google Places address search on Locations and New Load when `GOOGLE_MAPS_API_KEY` is set (server-side; no key in the browser).
 

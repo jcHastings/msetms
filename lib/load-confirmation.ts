@@ -203,35 +203,21 @@ async function dropEmptyExtraPages(buffer: Buffer): Promise<Buffer> {
   return Buffer.from(await pdf.save());
 }
 
+function confirmationTitle(model: ConfirmationModel, headerText: string): string {
+  const custom = headerText.trim();
+  const stock = "Rate & Load Confirmation";
+  if (custom && custom !== stock) return custom;
+  return model.style === "company_driver" ? "Load Confirmation" : stock;
+}
+
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
+  const pageW = 612;
   const left = 36;
   const width = 540;
-  const right = left + width;
   const defaults = getDocumentDefaults("load_confirmation");
   const bodySize = defaults.font_size || 10;
-  const title =
-    defaults.header_text ||
-    (model.style === "company_driver" ? "Load Confirmation" : "Rate & Load Confirmation");
-  const logo = companyLogoPath();
-  if (logo) {
-    try {
-      doc.image(logo, left, 36, { fit: [56, 36] });
-    } catch {
-      // Skip a bad logo file rather than failing the confirmation.
-    }
-  }
-
-  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111827");
-  doc.text(title, left, 40, { width, align: "center", lineBreak: false });
-
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c");
-  doc.text(model.company.company_name || "M&S", left, 78, { width: 190 });
-  const address = formatCompanyAddress(getCompanySettings());
-  if (address) {
-    doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(address, left, 92, { width: 190 });
-  }
-
-  drawContactCard(doc, 400, 36, 176, [
+  const title = confirmationTitle(model, defaults.header_text);
+  const contactRows: Array<[string, string]> = [
     ["Dispatcher", model.company.dispatcher_name],
     ["Phone #", model.company.dispatcher_phone],
     ["Fax #", model.company.dispatcher_fax],
@@ -239,8 +225,47 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ["LOAD #", model.loadNumber],
     ["Ship Date", model.shipDate],
     ["Today's Date", model.todayDate],
-  ]);
-  let y = 148;
+  ];
+
+  const logo = companyLogoPath();
+  if (logo) {
+    try {
+      doc.image(logo, left, 36, { fit: [52, 30] });
+    } catch {
+      // Skip a bad logo file rather than failing the confirmation.
+    }
+  }
+
+  // Title is page-centered on its own line. The dispatcher card starts below that
+  // baseline so "Dispatcher" never sits on the title and the title is not shoved left.
+  doc.font("Helvetica-Bold").fontSize(13);
+  let titleSize = 13;
+  while (titleSize > 9 && doc.widthOfString(title) > pageW - 160) {
+    titleSize -= 0.5;
+    doc.fontSize(titleSize);
+  }
+  doc.fillColor("#111827").text(title, 0, 38, { width: pageW, align: "center", lineBreak: false });
+
+  doc.font("Helvetica").fontSize(8);
+  const emailW = doc.widthOfString(model.company.dispatcher_email || " ");
+  const cardW = Math.min(200, Math.max(168, 70 + emailW));
+  const cardX = left + width - cardW;
+  const cardY = 56;
+  const cardH = drawContactCard(doc, cardX, cardY, cardW, contactRows);
+
+  const nameWidth = Math.max(120, cardX - left - 10);
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c");
+  doc.text(model.company.company_name || "M&S", left, 74, { width: nameWidth, lineBreak: false });
+  const address = formatCompanyAddress(getCompanySettings());
+  if (address) {
+    doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(address, left, 88, {
+      width: nameWidth,
+      height: 18,
+      lineBreak: true,
+    });
+  }
+
+  let y = Math.max(148, cardY + cardH + 10);
 
   if (model.style === "owner_operator") {
     y = drawPartyRow(doc, left, y, width, [
@@ -267,33 +292,38 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   y = drawStop(doc, left, y + 8, width, model.consignee);
 
   y += 8;
-  if (y < 640) {
-    doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y);
+  if (y < 620) {
+    doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y, {
+      lineBreak: false,
+    });
     y += 12;
     doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
-    doc.text(model.dispatchNotes || " ", left, y, { width, height: 36 });
-    y = Math.min(Math.max(y + 40, doc.y + 6), 680);
+    const notesH = model.style === "owner_operator" ? 28 : 40;
+    doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
+    y = Math.min(y + notesH + 6, model.style === "owner_operator" ? 650 : 700);
   }
 
-  if (model.style === "owner_operator" && y < 680) {
-    doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y);
+  if (model.style === "owner_operator" && y < 668) {
+    doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y, { lineBreak: false });
     y += 12;
     const haul = formatUsd(model.agreedAmount) || "$0.00 USD";
     doc.font("Helvetica").fontSize(9).text(`Line Haul: ${haul.replace(" USD", "")}   TOTAL: ${haul}`, left, y, {
       width,
       lineBreak: false,
     });
-    y += 18;
-    if (y < 700) {
+    y += 16;
+    if (y < 690) {
       doc.font("Helvetica").fontSize(8);
       drawWriteLine(doc, left, y, 170, "Accepted By");
       drawWriteLine(doc, left + 186, y, 120, "Date");
       drawWriteLine(doc, left + 322, y, 218, "Signature");
-      y += 22;
-      drawWriteLine(doc, left, y, 150, "Driver Name", model.driverName);
-      drawWriteLine(doc, left + 166, y, 120, "Cell #", model.driverPhone);
-      drawWriteLine(doc, left + 302, y, 110, "Truck #", model.truckNumber);
-      drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
+      y += 20;
+      if (y < 712) {
+        drawWriteLine(doc, left, y, 150, "Driver Name", model.driverName);
+        drawWriteLine(doc, left + 166, y, 120, "Cell #", model.driverPhone);
+        drawWriteLine(doc, left + 302, y, 110, "Truck #", model.truckNumber);
+        drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
+      }
     }
   }
 
@@ -304,12 +334,11 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   }
   if (defaults.terms_text) {
     doc.font("Helvetica").fontSize(7).fillColor("#374151");
-    doc.text(defaults.terms_text, left, 708, { width, height: 22, lineBreak: true });
+    doc.text(defaults.terms_text, left, 718, { width, height: 16, lineBreak: true });
   }
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
-  doc.text(defaults.footer_text || "Page 1 of 1", left, 748, { width, align: "center" });
-  doc.rect(left, 28, width, 710).strokeColor("#d1d5db").lineWidth(0.4).stroke();
-  void right;
+  doc.text(defaults.footer_text || "Page 1 of 1", left, 752, { width, align: "center", lineBreak: false });
+  doc.rect(left, 28, width, 726).strokeColor("#d1d5db").lineWidth(0.4).stroke();
 }
 
 function drawContactCard(
@@ -318,15 +347,21 @@ function drawContactCard(
   y: number,
   width: number,
   rows: Array<[string, string]>,
-): void {
+): number {
   const rowH = 12;
-  doc.rect(x, y, width, rows.length * rowH + 6).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  const height = rows.length * rowH + 6;
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
   rows.forEach(([label, value], index) => {
     doc.font("Helvetica").fontSize(7).fillColor("#4b5563");
-    doc.text(`${label}:`, x + 4, y + 4 + index * rowH, { width: 58, lineBreak: false });
+    doc.text(`${label}:`, x + 4, y + 4 + index * rowH, { width: 52, lineBreak: false });
     doc.font(label === "LOAD #" ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
-    doc.text(value || " ", x + 62, y + 4 + index * rowH, { width: width - 68, lineBreak: false });
+    doc.text(value || " ", x + 56, y + 4 + index * rowH, {
+      width: width - 62,
+      height: 10,
+      lineBreak: false,
+    });
   });
+  return height;
 }
 
 function drawPartyRow(
@@ -345,9 +380,13 @@ function drawPartyRow(
   cells.forEach(([label], index) => {
     doc.rect(x + index * col, y, col, headerH + valueH).strokeColor("#9ca3af").lineWidth(0.5).stroke();
     doc.font("Helvetica-Bold").fontSize(7).fillColor("#111827");
-    doc.text(label, x + index * col + 3, y + 4, { width: col - 6 });
+    doc.text(label, x + index * col + 3, y + 4, { width: col - 6, lineBreak: false });
     doc.font("Helvetica").fontSize(8);
-    doc.text(cells[index][1] || " ", x + index * col + 3, y + headerH + 4, { width: col - 6 });
+    doc.text(cells[index][1] || " ", x + index * col + 3, y + headerH + 4, {
+      width: col - 6,
+      height: 16,
+      lineBreak: false,
+    });
   });
   return y + headerH + valueH;
 }
@@ -359,15 +398,25 @@ function drawStop(
   width: number,
   stop: ConfirmationStop,
 ): number {
-  const height = 104;
+  const height = 108;
   doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(stop.title, x + 6, y + 6);
-  doc.font("Helvetica-Bold").fontSize(9).text(stop.name || " ", x + 6, y + 22, { width: 230 });
+  const leftW = 220;
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(stop.title, x + 6, y + 6, {
+    lineBreak: false,
+  });
+  doc.font("Helvetica-Bold").fontSize(9).text(stop.name || " ", x + 6, y + 22, {
+    width: leftW - 8,
+    height: 12,
+    lineBreak: false,
+  });
   doc.font("Helvetica").fontSize(8);
-  doc.text(stop.address || " ", x + 6, y + 36, { width: 230 });
-  if (stop.phone) doc.text(`Phone: ${stop.phone}`, x + 6, y + 62);
+  doc.text(stop.address || " ", x + 6, y + 36, { width: leftW - 8, height: 22 });
+  if (stop.phone) {
+    doc.text(`Phone: ${stop.phone}`, x + 6, y + 62, { width: leftW - 8, lineBreak: false });
+  }
 
-  const gridX = x + 250;
+  const gridX = x + leftW;
+  const colW = (width - leftW) / 2;
   const rows: Array<[string, string]> = [
     ["Date", stop.date],
     ["Time", stop.time],
@@ -383,10 +432,15 @@ function drawStop(
   rows.forEach(([label, value], index) => {
     const col = index < 5 ? 0 : 1;
     const row = index < 5 ? index : index - 5;
-    kv(doc, gridX + col * 150, y + 8 + row * 14, 78, 148, label, value);
+    const wide = /hours/i.test(label);
+    kv(doc, gridX + col * colW, y + 8 + row * 14, wide ? 74 : 70, wide ? colW + 8 : colW - 4, label, value);
   });
   if (stop.extra) {
-    doc.font("Helvetica").fontSize(7).text(stop.extra, gridX, y + 96, { width: 280 });
+    doc.font("Helvetica").fontSize(7).text(stop.extra, x + 6, y + height - 12, {
+      width: width - 12,
+      height: 10,
+      lineBreak: false,
+    });
   }
   return y + height;
 }
@@ -401,9 +455,17 @@ function kv(
   value: string,
   emphasize = false,
 ): void {
-  doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(`${label}:`, x, y, { width: labelW });
-  doc.font(emphasize ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor("#111827");
-  doc.text(value || " ", x + labelW, y, { width: width - labelW });
+  doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(`${label}:`, x, y, {
+    width: labelW,
+    height: 10,
+    lineBreak: false,
+  });
+  doc.font(emphasize ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
+  doc.text(value || " ", x + labelW, y, {
+    width: Math.max(36, width - labelW),
+    height: 10,
+    lineBreak: false,
+  });
 }
 
 function drawWriteLine(
