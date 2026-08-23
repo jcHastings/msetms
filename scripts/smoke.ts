@@ -1518,7 +1518,10 @@ Continuous reefer. Two load locks.
         "Location Private notes": "Private note here",
         "Location Public notes": "Dock 4 appointment",
       },
-      {},
+      {
+        "Address Line 1": "orphan address",
+        City: "Nowhere",
+      },
       {
         "Location Name": "Bad Type Yard",
         "Address Line 1": "1 Main",
@@ -1599,7 +1602,10 @@ Continuous reefer. Two load locks.
         "Location Private notes": "Private note here",
         "Location Public notes": "Dock 4 appointment",
       },
-      {},
+      {
+        "Address Line 1": "orphan address",
+        City: "Nowhere",
+      },
       {
         "Location Name": "Bad Type Yard",
         "Address Line 1": "1 Main",

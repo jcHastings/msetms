@@ -84,7 +84,8 @@ export function parseAscendLocationCsv(text: string): LocationCsvParseResult {
       (cells[headerMap[normalizeHeader(header)] ?? -1] ?? "").trim();
     const name = get("Location Name");
     if (!name) {
-      skipped += 1;
+      const hasValues = ASCEND_LOCATION_HEADERS.some((header) => get(header));
+      if (hasValues) skipped += 1;
       return;
     }
     const typeRaw = get("Location Type");
