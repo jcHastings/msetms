@@ -311,8 +311,57 @@ Send bills to billing@msloads.com
   assert.match(ascend.origin, /Avenel/i);
   assert.match(ascend.destination, /Hastings/i);
   assert.match(ascend.special_instructions, /continuous reefer/i);
-  const namedFile = parseRateConText("Load confirmation for file Load_Confirmation_45090_20260823190045.pdf");
+  const namedFile = parseRateConText(
+    "Load confirmation for file Load_Confirmation_45090_20260823190045.pdf",
+    [],
+    "Load_Confirmation_45090_20260823190045.pdf",
+  );
   assert.equal(namedFile.weight, null, "filename digits must not become weight");
+  assert.equal(namedFile.origin, "", "filename-only text must not invent origin");
+
+  const { sanitizeParsedRateCon, emptyParsedRateCon, textLooksLikeFilenameOnly } = await import("../lib/rate-con");
+  assert.equal(
+    textLooksLikeFilenameOnly(
+      "Load_Confirmation_45090_20260823190045.pdf",
+      "Load_Confirmation_45090_20260823190045.pdf",
+    ),
+    true,
+  );
+  const filenameWeight = sanitizeParsedRateCon(
+    { ...emptyParsedRateCon(), weight: 45090, load_number_hint: "45090", raw_text: "LOAD CONFIRMATION\nLoad # 45090" },
+    "Load_Confirmation_45090_20260823190045.pdf",
+  );
+  assert.equal(filenameWeight.weight, null, "load number / filename digits must not become weight");
+
+  const printed = parseRateConText(
+    `
+Rate & Load Confirmation
+LOAD #: 45090
+Shipper 1
+Lineage Logistics - Avenel
+275 Blair rd, Avenel, NJ 07001
+Date 03/03/2025
+Time 8:00 AM
+Weight 42500 lbs
+Description FROZEN BEEF
+Consignee 1
+Nebraska Cold Storage
+600 E 39th St, Hastings, NE 68901
+Date 03/05/2025
+Time 2:00 PM
+Dispatch Notes:
+Continuous reefer. Two load locks.
+`,
+    [],
+    "Load_Confirmation_45090_20260823190045.pdf",
+  );
+  assert.equal(printed.weight, 42500);
+  assert.notEqual(printed.weight, 45090);
+  assert.match(printed.origin, /Avenel/i);
+  assert.match(printed.destination, /Hastings/i);
+  assert.ok(printed.pickup_start);
+  assert.ok(printed.delivery_start);
+  assert.match(printed.special_instructions, /Continuous reefer/i);
 
   const emptyExtract = await (await import("../lib/actions")).parseRateConAction(null, new FormData());
   assert.equal(emptyExtract.ok, false);
@@ -353,6 +402,31 @@ Send bills to billing@msloads.com
     assert.match(extracted.parsed.destination, /Hastings/i);
     assert.ok(extracted.inboxId);
     assert.equal(extracted.fileName, "Load_Confirmation_45090_20260823190045.pdf");
+  }
+
+  const blankPdf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.fontSize(11).text(" ");
+    doc.end();
+  });
+  const blankForm = new FormData();
+  blankForm.set(
+    "rate_con",
+    new File([new Uint8Array(blankPdf)], "Load_Confirmation_45090_20260823190045.pdf", {
+      type: "application/pdf",
+    }),
+  );
+  const blankExtract = await (await import("../lib/actions")).parseRateConAction(null, blankForm);
+  assert.equal(blankExtract.ok, true);
+  if (blankExtract.ok && "parsed" in blankExtract) {
+    assert.equal(blankExtract.parsed.weight, null, "empty PDF must not scrape 45090 from the filename");
+    assert.equal(blankExtract.parsed.origin, "");
+    assert.match(blankExtract.warning ?? "", /text|read/i);
+    assert.ok(blankExtract.inboxId);
   }
 
   const samplePdf = path.join(process.cwd(), "public", "samples", "sample-rate-con.pdf");

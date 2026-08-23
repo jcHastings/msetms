@@ -525,7 +525,7 @@ export async function parseRateConAction(
       throw new Error("Upload a PDF or an image (PNG, JPG, WebP).");
     }
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
-    const { extractDocumentText, parseRateConText, emptyParsedRateCon } = await import("./rate-con");
+    const { extractDocumentText, parseRateConText, emptyParsedRateCon, textLooksLikeFilenameOnly } = await import("./rate-con");
     const { listCustomers } = await import("./queries");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
@@ -536,7 +536,7 @@ export async function parseRateConAction(
     } catch (error) {
       warning = error instanceof Error ? error.message : "Could not read that file.";
     }
-    if (!text) {
+    if (!text || textLooksLikeFilenameOnly(text, file.name)) {
       const parsed = emptyParsedRateCon();
       writeInboxParse(inboxId, parsed);
       refresh();
@@ -550,7 +550,7 @@ export async function parseRateConAction(
         parsed,
       };
     }
-    const parsed = parseRateConText(text, listCustomers());
+    const parsed = parseRateConText(text, listCustomers(), file.name);
     const thin =
       !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
     writeInboxParse(inboxId, parsed);

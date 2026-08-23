@@ -71,54 +71,106 @@ export async function extractDocumentText(buffer: Buffer, mimeType: string, file
   throw new Error("Upload a PDF or an image of the rate confirmation.");
 }
 
-export function parseRateConText(rawText: string, customers: Customer[] = []): ParsedRateCon {
+export function textLooksLikeFilenameOnly(text: string, filename = ""): boolean {
+  const compact = text.replace(/\s+/g, "").toLowerCase();
+  if (!compact) return true;
+  if (!filename) return false;
+  const stem = filename.replace(/\.[^.]+$/, "").toLowerCase();
+  const full = filename.toLowerCase();
+  const collapsed = (value: string) => value.replace(/[^a-z0-9]/g, "");
+  return compact === collapsed(stem) || compact === collapsed(full) || compact === full || compact === stem;
+}
+
+export function sanitizeParsedRateCon(parsed: ParsedRateCon, filename = ""): ParsedRateCon {
+  const next = { ...parsed };
+  if (textLooksLikeFilenameOnly(next.raw_text, filename)) {
+    return { ...emptyParsedRateCon(), raw_text: next.raw_text };
+  }
+  const filenameDigits = [...filename.matchAll(/(\d{4,8})/g)].map((item) => item[1]);
+  const bodyHasLbsWeight =
+    next.weight != null &&
+    new RegExp(`(?:weight\\b[\\s\\S]{0,40})?${next.weight}\\s*(?:lbs?|pounds)\\b`, "i").test(next.raw_text);
+  if (next.weight != null && filenameDigits.includes(String(next.weight)) && !bodyHasLbsWeight) {
+    next.weight = null;
+  }
+  if (
+    next.weight != null &&
+    next.load_number_hint &&
+    String(next.weight) === next.load_number_hint &&
+    !bodyHasLbsWeight
+  ) {
+    next.weight = null;
+  }
+  return next;
+}
+
+export function parseRateConText(rawText: string, customers: Customer[] = [], filename = ""): ParsedRateCon {
   const text = rawText.replace(/\r/g, "");
+  if (textLooksLikeFilenameOnly(text, filename)) {
+    return { ...emptyParsedRateCon(), raw_text: text };
+  }
   const ascend = parseAscendConfirmation(text);
+  const printed = parsePrintedConfirmation(text);
   const customerName =
     labeled(text, ["customer", "bill to", "account", "broker"]) ??
     ascend.customer_name ??
+    printed.customer_name ??
     "";
   const matched = matchCustomer(customerName, customers);
 
   const special =
     section(text, /special instructions?/i) ||
+    section(text, /dispatch notes/i) ||
     ascend.special_instructions ||
+    printed.special_instructions ||
     "";
   const appointment =
-    labeled(text, ["appointment"]) ??
+    labeled(text, ["appointment"]) ||
+    printed.appointment_notes ||
     linesMatching(special, /appointment|call \d+ minutes/i).join("\n");
   const pickup = parseWindow(text, "pickup");
   const delivery = parseWindow(text, "delivery");
 
-  return {
-    customer_name: customerName,
-    customer_id: matched,
-    origin:
-      labeled(text, ["origin", "pickup location", "ship from"]) ??
-      ascend.origin ??
-      "",
-    destination:
-      labeled(text, ["destination", "delivery location", "ship to", "consignee city"]) ??
-      ascend.destination ??
-      "",
-    pickup_start: pickup.start || ascend.pickup_start || "",
-    pickup_end: pickup.end || ascend.pickup_end || "",
-    delivery_start: delivery.start || ascend.delivery_start || "",
-    delivery_end: delivery.end || ascend.delivery_end || "",
-    rate: parseMoney(labeled(text, ["rate", "linehaul", "total pay", "flat rate"]) ?? "") ?? ascend.rate,
-    commodity: labeled(text, ["commodity", "product"]) ?? ascend.commodity ?? "",
-    weight: parseWeight(labeled(text, ["weight"]) ?? "") ?? ascend.weight,
-    reference_number:
-      labeled(text, ["ref #", "ref#", "reference", "rate con"]) ??
-      ascend.load_number ??
-      "",
-    po_number: labeled(text, ["po #", "po#", "po number", "purchase order"]) ?? "",
-    special_instructions: special,
-    appointment_notes: appointment,
-    reefer_setpoint_f: parseTemp(text),
-    load_number_hint: labeled(text, ["load #", "load#", "load number"]) ?? ascend.load_number ?? "",
-    raw_text: text,
-  };
+  return sanitizeParsedRateCon(
+    {
+      customer_name: customerName,
+      customer_id: matched,
+      origin:
+        labeled(text, ["origin", "pickup location", "ship from"]) ||
+        ascend.origin ||
+        printed.origin ||
+        "",
+      destination:
+        labeled(text, ["destination", "delivery location", "ship to", "consignee city"]) ||
+        ascend.destination ||
+        printed.destination ||
+        "",
+      pickup_start: pickup.start || ascend.pickup_start || printed.pickup_start || "",
+      pickup_end: pickup.end || ascend.pickup_end || printed.pickup_end || "",
+      delivery_start: delivery.start || ascend.delivery_start || printed.delivery_start || "",
+      delivery_end: delivery.end || ascend.delivery_end || printed.delivery_end || "",
+      rate: parseMoney(labeled(text, ["rate", "linehaul", "total pay", "flat rate"]) ?? "") ?? ascend.rate,
+      commodity: labeled(text, ["commodity", "product", "description"]) || ascend.commodity || printed.commodity || "",
+      weight: parseWeight(labeled(text, ["weight"]) ?? "") ?? ascend.weight ?? printed.weight,
+      reference_number:
+        labeled(text, ["ref #", "ref#", "reference", "rate con"]) ||
+        ascend.load_number ||
+        printed.load_number ||
+        "",
+      po_number:
+        labeled(text, ["po #", "po#", "po number", "purchase order"]) || printed.po_number || "",
+      special_instructions: special,
+      appointment_notes: appointment,
+      reefer_setpoint_f: parseTemp(text),
+      load_number_hint:
+        labeled(text, ["load #", "load#", "load number"]) ||
+        ascend.load_number ||
+        printed.load_number ||
+        "",
+      raw_text: text,
+    },
+    filename,
+  );
 }
 
 function parseAscendConfirmation(text: string): {
@@ -152,7 +204,7 @@ function parseAscendConfirmation(text: string): {
   if (!/load confirmation/i.test(text)) return empty;
 
   const flat = text.replace(/\s+/g, " ");
-  const loadNumber = text.match(/load\s*#\s*(\d{3,8})/i)?.[1] ?? "";
+  const loadNumber = text.match(/load\s*#\s*[:#]?\s*([A-Z0-9-]{3,20})/i)?.[1] ?? "";
   const weightMatch =
     text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i) ??
     flat.match(/weight\s+([\d,]+)\s*(?:lbs?|pounds)/i);
@@ -202,6 +254,97 @@ function parseAscendConfirmation(text: string): {
   };
 }
 
+function parsePrintedConfirmation(text: string): {
+  customer_name: string;
+  origin: string;
+  destination: string;
+  pickup_start: string;
+  pickup_end: string;
+  delivery_start: string;
+  delivery_end: string;
+  commodity: string;
+  weight: number | null;
+  load_number: string;
+  po_number: string;
+  special_instructions: string;
+  appointment_notes: string;
+} {
+  const empty = {
+    customer_name: "",
+    origin: "",
+    destination: "",
+    pickup_start: "",
+    pickup_end: "",
+    delivery_start: "",
+    delivery_end: "",
+    commodity: "",
+    weight: null as number | null,
+    load_number: "",
+    po_number: "",
+    special_instructions: "",
+    appointment_notes: "",
+  };
+  if (!/shipper\s*1|consignee\s*1|dispatch notes/i.test(text)) return empty;
+
+  const shipper = captureBlock(text, /shipper\s*1/i, /consignee\s*1|dispatch notes|carrier pay/i);
+  const consignee = captureBlock(text, /consignee\s*1/i, /dispatch notes|carrier pay|page \d/i);
+  const pickup = windowFromStop(shipper);
+  const delivery = windowFromStop(consignee);
+  const weightMatch =
+    text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i) ??
+    shipper.match(/([\d,]+)\s*(?:lbs?|pounds)/i);
+  const loadNumber = text.match(/load\s*#\s*[:#]?\s*([A-Z0-9-]{3,20})/i)?.[1] ?? "";
+
+  return {
+    customer_name: firstNonAddressLine(shipper),
+    origin: cityStateOrEmpty(shipper),
+    destination: cityStateOrEmpty(consignee),
+    pickup_start: pickup.start,
+    pickup_end: pickup.end,
+    delivery_start: delivery.start,
+    delivery_end: delivery.end,
+    commodity:
+      labeled(text, ["description", "commodity"]) ??
+      text.match(/description\s+([A-Z][A-Z0-9 /-]{2,40})/i)?.[1]?.trim() ??
+      "",
+    weight: weightMatch ? Number.parseInt(weightMatch[1].replace(/,/g, ""), 10) : null,
+    load_number: loadNumber,
+    po_number: labeled(text, ["purchase order #", "purchase order", "po #"]) ?? "",
+    special_instructions: section(text, /dispatch notes/i),
+    appointment_notes: labeled(text, ["appointment"]) ?? "",
+  };
+}
+
+function captureBlock(text: string, start: RegExp, stop: RegExp): string {
+  const match = text.match(new RegExp(`${start.source}([\\s\\S]*?)(?=${stop.source}|$)`, "i"));
+  return clean(match?.[1] ?? "");
+}
+
+function firstNonAddressLine(block: string): string {
+  const line = block
+    .split(",")[0]
+    ?.replace(/phone:.*/i, "")
+    .trim();
+  if (!line || /^(date|time|type|qty|weight|shipper|consignee)\b/i.test(line)) return "";
+  return line;
+}
+
+function windowFromStop(block: string): { start: string; end: string } {
+  const date = block.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/);
+  if (!date) return { start: "", end: "" };
+  const clock = block.match(/(\d{1,2}:\d{2})\s*(am|pm)?/i);
+  const startTime = normalizeClock(clock?.[1] ?? "08:00", clock?.[2]);
+  return { start: toIso(date[1], startTime), end: toIso(date[1], "17:00") };
+}
+
+function normalizeClock(hhmm: string, ampm?: string): string {
+  const [rawHour, rawMinute] = hhmm.split(":").map((part) => Number.parseInt(part, 10));
+  let hour = rawHour;
+  if (ampm && /pm/i.test(ampm) && hour < 12) hour += 12;
+  if (ampm && /am/i.test(ampm) && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${String(rawMinute || 0).padStart(2, "0")}`;
+}
+
 function firstStop(
   ...stops: Array<{ start: string; end: string; address: string }>
 ): { start: string; end: string; address: string } {
@@ -242,9 +385,17 @@ function parseStopBlock(
 }
 
 function cityStateFromAddress(address: string): string {
-  const match = address.match(/([A-Za-z .'-]+),\s*([A-Z]{2})(?:\s+\d{5})?/);
-  if (!match) return address;
-  return `${match[1].trim()}, ${match[2]}`;
+  return cityStateOrEmpty(address) || address;
+}
+
+function cityStateOrEmpty(address: string): string {
+  const matches = [
+    ...address.matchAll(/([A-Za-z][A-Za-z .'-]{0,48}),\s*([A-Z]{2})\b(?:\s+\d{5})?/g),
+  ];
+  const match = matches.at(-1);
+  if (!match) return "";
+  const city = match[1].trim().replace(/.*,\s*/, "");
+  return `${city}, ${match[2]}`;
 }
 
 function matchCustomer(name: string, customers: Customer[]): number | null {

@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
-import { RateConPicker } from "@/components/rate-con-picker";
+import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
@@ -35,12 +35,27 @@ export function RateConApply({
   };
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
+  const [localError, setLocalError] = useState("");
+  const heldFile = useRef<File | null>(null);
   const parsed = state && "parsed" in state && state.ok ? state.parsed : null;
   const boundAction = updateLoadAction.bind(null, load.id);
+  const serverError = state && !("parsed" in state && state.ok) ? state : null;
 
   return (
     <section className="mt-6 space-y-4">
-      <form action={formAction} className="card space-y-4 p-6">
+      <form
+        className="card space-y-4 p-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const next = extractRateConFormData(heldFile.current);
+          if ("error" in next) {
+            setLocalError(next.error);
+            return;
+          }
+          setLocalError("");
+          formAction(next.data);
+        }}
+      >
         <div>
           <h2 className="text-sm font-semibold">Apply a rate confirmation</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -48,8 +63,25 @@ export function RateConApply({
             the original file.
           </p>
         </div>
-        {state && !("parsed" in state && state.ok) ? <FormBanner result={state} /> : null}
-        <RateConPicker inputId={`rate_con_${load.id}`} fileName={state && "fileName" in state ? state.fileName : ""} />
+        {localError ? (
+          <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {localError}
+          </div>
+        ) : null}
+        {serverError ? <FormBanner result={serverError} /> : null}
+        {state && "warning" in state && state.warning ? (
+          <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {state.warning}
+          </div>
+        ) : null}
+        <RateConPicker
+          inputId={`rate_con_${load.id}`}
+          fileName={state && "fileName" in state ? state.fileName : ""}
+          onFile={(file) => {
+            heldFile.current = file;
+            if (file) setLocalError("");
+          }}
+        />
         <button className="btn btn-secondary" type="submit" disabled={pending}>
           {pending ? "Reading…" : "Extract fields"}
         </button>
