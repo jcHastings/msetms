@@ -1358,7 +1358,6 @@ Continuous reefer. Two load locks.
   assert.equal(qboPreview.amount, 3200);
   assert.equal(qboPreview.lane, "New York, NY → Denver, CO");
   assert.doesNotMatch(qboPreview.memo, /Chicago|internal \$900|Relay Bravo/);
-  const { formatLoadSummary } = await import("../lib/load-summary");
   const relaySms = formatLoadSummary(queries.getLoad(relayLoadId)!);
   assert.match(relaySms, /New York, NY → Denver, CO/);
   assert.doesNotMatch(relaySms, /Chicago|internal \$900|Relay Bravo/);
