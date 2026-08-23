@@ -1366,6 +1366,8 @@ Continuous reefer. Two load locks.
     0,
     "BOL is not auto-created on seed/assign",
   );
+  const bolChecklist = (await import("../lib/desk")).requiredDocumentsForLoad(deniseLoad).find((doc) => doc.kind === "bol");
+  assert.equal(bolChecklist?.required, false, "making a BOL is optional");
   const settingsMod = await import("../lib/settings");
   settingsMod.updateDocumentDefaults({
     doc_type: "bol",

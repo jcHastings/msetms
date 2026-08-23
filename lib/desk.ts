@@ -197,7 +197,7 @@ export function requiredDocumentsForLoad(load: LoadView): Array<{ kind: string; 
     { kind: "rate_con", label: "Rate confirmation", required: true },
     { kind: "invoice", label: "Invoice (customer)", required: false },
     { kind: "carrier_invoice", label: "Bill / carrier invoice", required: false },
-    { kind: "bol", label: "BOL", required: true },
+    { kind: "bol", label: "BOL", required: false },
     { kind: "pod", label: "POD", required: load.status === "delivered" || load.status === "completed" },
     { kind: "temp_log", label: "Temp log", required: load.reefer_setpoint_f != null },
   ];
