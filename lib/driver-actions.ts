@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { withRequestAuditActor } from "./audit";
 import { parseOptionalInt } from "./format";
 import { authenticateDriver, updateDriverProgress } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
@@ -40,21 +41,24 @@ export async function driverLogoutAction(): Promise<void> {
 }
 
 export async function driverProgressAction(formData: FormData): Promise<ActionResult> {
-  try {
-    const driver = await requireDriver();
-    const loadId = parseOptionalInt(formData.get("load_id"));
-    const progress = String(formData.get("progress") ?? "");
-    if (!loadId) throw new Error("Load is missing.");
-    if (!isDriverProgress(progress)) throw new Error("Pick a status.");
-    updateDriverProgress(loadId, driver.id, progress);
-    refresh();
-    return { ok: true, id: loadId };
-  } catch (error) {
-    return fail(error);
-  }
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const progress = String(formData.get("progress") ?? "");
+      if (!loadId) throw new Error("Load is missing.");
+      if (!isDriverProgress(progress)) throw new Error("Pick a status.");
+      updateDriverProgress(loadId, driver.id, progress);
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
 }
 
 export async function driverUploadAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
   try {
     const driver = await requireDriver();
     const loadId = parseOptionalInt(formData.get("load_id"));
@@ -86,4 +90,5 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
   } catch (error) {
     return fail(error);
   }
+  });
 }

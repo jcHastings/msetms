@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { recordLoadAudit } from "./audit";
 import { getDataDir, getDb } from "./db";
 import type { Attachment, AttachmentKind, FleetDocKind, FleetDocument } from "./types";
 
@@ -83,7 +84,7 @@ export function addAttachment(input: {
       input.uploadedBy,
       createdAt,
     );
-  return {
+  const attachment = {
     id: Number(result.lastInsertRowid),
     load_id: input.loadId,
     kind: input.kind,
@@ -93,6 +94,30 @@ export function addAttachment(input: {
     uploaded_by: input.uploadedBy,
     created_at: createdAt,
   };
+  recordLoadAudit({
+    loadId: input.loadId,
+    action: input.kind === "rate_con" ? "rate_con" : "attachment",
+    field: input.kind,
+    newValue: input.originalName,
+  });
+  return attachment;
+}
+
+export function deleteAttachment(id: number): void {
+  const attachment = getAttachment(id);
+  if (!attachment) throw new Error("Attachment not found.");
+  const stored = getAttachmentPath(attachment);
+  getDb().prepare("DELETE FROM attachments WHERE id = ?").run(id);
+  if (fs.existsSync(/*turbopackIgnore: true*/ stored)) {
+    fs.unlinkSync(/*turbopackIgnore: true*/ stored);
+  }
+  recordLoadAudit({
+    loadId: attachment.load_id,
+    action: "attachment",
+    field: attachment.kind,
+    oldValue: attachment.original_name,
+    newValue: "",
+  });
 }
 
 export function listAttachments(loadId: number): Attachment[] {

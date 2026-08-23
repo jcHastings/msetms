@@ -13,6 +13,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/loads/new", label: "New load" },
       { href: "/loads/templates", label: "Templates" },
       { href: "/locations", label: "Locations" },
+      { href: "/audit", label: "Audit" },
     ],
   },
   {

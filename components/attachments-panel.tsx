@@ -1,7 +1,7 @@
 import { labelForAttachmentKind, type Attachment } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 import { ATTACHMENT_KINDS } from "@/lib/types";
-import { attachFileFormAction } from "@/lib/actions";
+import { attachFileFormAction, deleteAttachmentFormAction } from "@/lib/actions";
 
 export function AttachmentsPanel({
   loadId,
@@ -52,9 +52,17 @@ export function AttachmentsPanel({
                   {formatDateTime(file.created_at)}
                 </div>
               </div>
-              <a href={`/api/attachments/${file.id}`} className="btn btn-ghost">
-                Open
-              </a>
+              <div className="flex items-center gap-2">
+                <a href={`/api/attachments/${file.id}`} className="btn btn-ghost">
+                  Open
+                </a>
+                <form action={deleteAttachmentFormAction}>
+                  <input type="hidden" name="attachment_id" value={file.id} />
+                  <button className="btn btn-ghost" type="submit">
+                    Remove
+                  </button>
+                </form>
+              </div>
             </li>
           ))}
         </ul>

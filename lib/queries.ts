@@ -4,6 +4,15 @@ import {
   truckComplianceAlerts,
   type ComplianceAlert,
 } from "./compliance";
+import {
+  customerName,
+  driverName,
+  locationName,
+  recordLoadAudit,
+  recordLoadChanges,
+  trailerUnit,
+  truckUnit,
+} from "./audit";
 import { getDb } from "./db";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
@@ -1005,7 +1014,19 @@ export function createLoad(input: LoadInput): number {
     syncAssignment(id, input.status, input.truck_id, input.driver_id);
     return id;
   });
-  return insert();
+  const id = insert();
+  recordLoadAudit({ loadId: id, action: "create", field: "load", newValue: loadNumber });
+  recordLoadChanges(id, "create", [
+    { field: "customer", newValue: customerName(input.customer_id) },
+    { field: "origin", newValue: input.origin },
+    { field: "destination", newValue: input.destination },
+    { field: "rate", newValue: input.rate },
+    { field: "special_instructions", newValue: input.special_instructions },
+    { field: "driver", newValue: driverName(input.driver_id) },
+    { field: "truck", newValue: truckUnit(input.truck_id) },
+    { field: "trailer", newValue: trailerUnit(input.trailer_id ?? null) },
+  ]);
+  return id;
 }
 
 export function updateLoad(id: number, input: LoadInput): void {
@@ -1057,6 +1078,36 @@ export function updateLoad(id: number, input: LoadInput): void {
     );
     syncAssignment(id, input.status, input.truck_id, input.driver_id);
   })();
+  recordLoadChanges(id, input.status === "cancelled" ? "cancel" : "update", [
+    { field: "customer", oldValue: existing.customer_name, newValue: customerName(input.customer_id) },
+    { field: "origin", oldValue: existing.origin, newValue: input.origin },
+    { field: "destination", oldValue: existing.destination, newValue: input.destination },
+    { field: "pickup_start", oldValue: existing.pickup_start, newValue: input.pickup_start },
+    { field: "pickup_end", oldValue: existing.pickup_end, newValue: input.pickup_end },
+    { field: "delivery_start", oldValue: existing.delivery_start, newValue: input.delivery_start },
+    { field: "delivery_end", oldValue: existing.delivery_end, newValue: input.delivery_end },
+    { field: "weight", oldValue: existing.weight, newValue: input.weight },
+    { field: "commodity", oldValue: existing.commodity, newValue: input.commodity },
+    { field: "rate", oldValue: existing.rate, newValue: input.rate },
+    { field: "notes", oldValue: existing.notes, newValue: input.notes },
+    { field: "special_instructions", oldValue: existing.special_instructions, newValue: input.special_instructions },
+    { field: "status", oldValue: existing.status, newValue: input.status },
+    { field: "driver", oldValue: driverName(existing.driver_id), newValue: driverName(input.driver_id) },
+    { field: "truck", oldValue: truckUnit(existing.truck_id), newValue: truckUnit(input.truck_id) },
+    { field: "trailer", oldValue: trailerUnit(existing.trailer_id), newValue: trailerUnit(input.trailer_id ?? null) },
+    { field: "oo_percent", oldValue: existing.oo_percent, newValue: input.oo_percent },
+    { field: "oo_pay", oldValue: existing.oo_pay, newValue: input.oo_pay },
+    {
+      field: "shipper",
+      oldValue: locationName(existing.shipper_location_id),
+      newValue: locationName(input.shipper_location_id),
+    },
+    {
+      field: "consignee",
+      oldValue: locationName(existing.consignee_location_id),
+      newValue: locationName(input.consignee_location_id),
+    },
+  ]);
 }
 
 export function assignLoad(
@@ -1113,6 +1164,18 @@ export function assignLoad(
     );
     markAssetsOnDuty(truckId, driverId);
   })();
+  recordLoadChanges(loadId, "assign", [
+    { field: "driver", oldValue: driverName(load.driver_id), newValue: driver.name },
+    { field: "truck", oldValue: truckUnit(load.truck_id), newValue: truckUnit(truckId) },
+    {
+      field: "trailer",
+      oldValue: trailerUnit(load.trailer_id),
+      newValue: trailer?.unit_number ?? load.trailer_number,
+    },
+    { field: "status", oldValue: load.status, newValue: isRollingStatus(load.status) ? load.status : "assigned" },
+    { field: "oo_percent", oldValue: load.oo_percent, newValue: ooPercent },
+    { field: "oo_pay", oldValue: load.oo_pay, newValue: ooPay },
+  ]);
 }
 
 export function getIftaReport(loadId: number): IftaReport | null {
@@ -1219,6 +1282,16 @@ export function updateLoadStatus(loadId: number, status: string): void {
       releaseAssetsIfNeeded(load);
     }
   })();
+  const action = status === "cancelled" ? "cancel" : "status";
+  recordLoadChanges(loadId, action, [
+    { field: "status", oldValue: load.status, newValue: status },
+    ...(status === "available"
+      ? [
+          { field: "driver", oldValue: driverName(load.driver_id), newValue: "" },
+          { field: "truck", oldValue: truckUnit(load.truck_id), newValue: "" },
+        ]
+      : []),
+  ]);
 }
 
 function assertAssetFree(
@@ -1360,6 +1433,10 @@ export function updateDriverProgress(loadId: number, driverId: number, progress:
       markAssetsOnDuty(load.truck_id, load.driver_id);
     }
   })();
+  recordLoadChanges(loadId, "status", [
+    { field: "driver_progress", oldValue: load.driver_progress, newValue: progress },
+    { field: "status", oldValue: load.status, newValue: nextStatus },
+  ]);
 }
 
 function sampleFilterSql(): string {
@@ -1449,6 +1526,18 @@ export function cloneLoad(loadId: number): number {
     driver_id: null,
   });
   getDb().prepare("UPDATE loads SET cloned_from_id = ? WHERE id = ?").run(loadId, id);
+  recordLoadAudit({
+    loadId: id,
+    action: "clone",
+    field: "cloned_from",
+    newValue: load.load_number,
+  });
+  recordLoadAudit({
+    loadId,
+    action: "clone",
+    field: "cloned_to",
+    newValue: getLoad(id)?.load_number,
+  });
   updateLoadDetails(id, {
     equipment: load.equipment,
     hazmat: Boolean(load.hazmat),
@@ -1521,6 +1610,13 @@ export function updateLoadDetails(
       now(),
       loadId,
     );
+  const nextCancel = details.cancel_reason ?? load.cancel_reason ?? "";
+  recordLoadChanges(loadId, nextCancel && nextCancel !== (load.cancel_reason ?? "") ? "cancel" : "update", [
+    { field: "cancel_reason", oldValue: load.cancel_reason, newValue: nextCancel },
+    { field: "status_reason", oldValue: load.status_reason, newValue: details.status_reason ?? load.status_reason },
+    { field: "equipment", oldValue: load.equipment, newValue: details.equipment ?? load.equipment },
+    { field: "cover_by", oldValue: load.cover_by, newValue: details.cover_by ?? load.cover_by },
+  ]);
 }
 
 export function markInvoicePaid(loadId: number, paid: boolean): void {

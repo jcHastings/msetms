@@ -17,6 +17,7 @@ import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
+import { LoadAuditSection } from "@/components/load-audit-section";
 import { LoadOps } from "@/components/load-ops";
 import { LocationSchedulingCard } from "@/components/location-scheduling";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
@@ -137,6 +138,7 @@ export default async function LoadDetailPage({
       <LoadOps load={load} />
       <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
+      <LoadAuditSection loadId={load.id} />
     </>
   );
 }

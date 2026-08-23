@@ -414,6 +414,21 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS load_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL,
+      load_number TEXT NOT NULL DEFAULT '',
+      actor TEXT NOT NULL,
+      actor_kind TEXT NOT NULL DEFAULT 'dispatcher',
+      action TEXT NOT NULL,
+      field TEXT NOT NULL DEFAULT '',
+      old_value TEXT NOT NULL DEFAULT '',
+      new_value TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_audit_load ON load_audit(load_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_load_audit_actor ON load_audit(actor, created_at);
+
     CREATE TABLE IF NOT EXISTS dropdown_lists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,

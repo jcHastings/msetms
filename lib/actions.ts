@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { withRequestAuditActor } from "./audit";
 import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import {
   assignLoad,
@@ -390,21 +391,23 @@ export async function createLoadAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  try {
-    const input = parseLoadInput(formData);
-    enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
-    const id = createLoad(input);
-    const inboxId = String(formData.get("inbox_id") ?? "").trim();
-    if (inboxId) {
-      const { attachInboxToLoad } = await import("./files");
-      attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+  return withRequestAuditActor(async () => {
+    try {
+      const input = parseLoadInput(formData);
+      enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
+      const id = createLoad(input);
+      const inboxId = String(formData.get("inbox_id") ?? "").trim();
+      if (inboxId) {
+        const { attachInboxToLoad } = await import("./files");
+        attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+      }
+      refresh();
+      redirect(`/loads/${id}`);
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
     }
-    refresh();
-    redirect(`/loads/${id}`);
-  } catch (error) {
-    if (error && typeof error === "object" && "digest" in error) throw error;
-    return fail(error);
-  }
+  });
 }
 
 export async function updateLoadAction(
@@ -412,40 +415,44 @@ export async function updateLoadAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  try {
-    const input = parseLoadInput(formData);
-    enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
-    updateLoad(id, input);
-    const inboxId = String(formData.get("inbox_id") ?? "").trim();
-    if (inboxId) {
-      const { attachInboxToLoad } = await import("./files");
-      attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+  return withRequestAuditActor(async () => {
+    try {
+      const input = parseLoadInput(formData);
+      enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
+      updateLoad(id, input);
+      const inboxId = String(formData.get("inbox_id") ?? "").trim();
+      if (inboxId) {
+        const { attachInboxToLoad } = await import("./files");
+        attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+      }
+      refresh();
+      return { ok: true, id };
+    } catch (error) {
+      return fail(error);
     }
-    refresh();
-    return { ok: true, id };
-  } catch (error) {
-    return fail(error);
-  }
+  });
 }
 
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
-  try {
-    const loadId = parseOptionalInt(formData.get("load_id"));
-    const truckId = parseOptionalInt(formData.get("truck_id"));
-    const driverId = parseOptionalInt(formData.get("driver_id"));
-    const trailerId = parseOptionalInt(formData.get("trailer_id"));
-    if (!loadId || !truckId || !driverId) {
-      throw new Error("Pick a truck and a driver.");
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const truckId = parseOptionalInt(formData.get("truck_id"));
+      const driverId = parseOptionalInt(formData.get("driver_id"));
+      const trailerId = parseOptionalInt(formData.get("trailer_id"));
+      if (!loadId || !truckId || !driverId) {
+        throw new Error("Pick a truck and a driver.");
+      }
+      enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
+      assignLoad(loadId, truckId, driverId, trailerId, {
+        oo_percent: parseOptionalFloat(formData.get("oo_percent")),
+      });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
     }
-    enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
-    assignLoad(loadId, truckId, driverId, trailerId, {
-      oo_percent: parseOptionalFloat(formData.get("oo_percent")),
-    });
-    refresh();
-    return { ok: true, id: loadId };
-  } catch (error) {
-    return fail(error);
-  }
+  });
 }
 
 export async function refreshIftaAction(
@@ -482,19 +489,21 @@ export async function sendToQuickbooksAction(
 }
 
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
-  try {
-    const loadId = parseOptionalInt(formData.get("load_id"));
-    const status = String(formData.get("status") ?? "");
-    if (!loadId) throw new Error("Load is missing.");
-    if (!isKnownLoadStatus(status)) {
-      throw new Error("Invalid status.");
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const status = String(formData.get("status") ?? "");
+      if (!loadId) throw new Error("Load is missing.");
+      if (!isKnownLoadStatus(status)) {
+        throw new Error("Invalid status.");
+      }
+      updateLoadStatus(loadId, status);
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
     }
-    updateLoadStatus(loadId, status);
-    refresh();
-    return { ok: true, id: loadId };
-  } catch (error) {
-    return fail(error);
-  }
+  });
 }
 
 export type RateConParseState = {
@@ -572,32 +581,54 @@ export async function attachFileFormAction(formData: FormData): Promise<void> {
 }
 
 export async function attachFileAction(formData: FormData): Promise<ActionResult> {
-  try {
-    const loadId = parseOptionalInt(formData.get("load_id"));
-    if (!loadId) throw new Error("Load is missing.");
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      throw new Error("Choose a file to upload.");
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const file = formData.get("file");
+      if (!(file instanceof File) || file.size === 0) {
+        throw new Error("Choose a file to upload.");
+      }
+      const kind = String(formData.get("kind") ?? "other");
+      const { addAttachment, fileToBuffer } = await import("./files");
+      const { ATTACHMENT_KINDS } = await import("./types");
+      if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
+        throw new Error("Pick an attachment type.");
+      }
+      await addAttachment({
+        loadId,
+        kind: kind as (typeof ATTACHMENT_KINDS)[number]["value"],
+        originalName: file.name,
+        buffer: await fileToBuffer(file),
+        mimeType: file.type,
+        uploadedBy: "dispatcher",
+      });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
     }
-    const kind = String(formData.get("kind") ?? "other");
-    const { addAttachment, fileToBuffer } = await import("./files");
-    const { ATTACHMENT_KINDS } = await import("./types");
-    if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
-      throw new Error("Pick an attachment type.");
+  });
+}
+
+export async function deleteAttachmentFormAction(formData: FormData): Promise<void> {
+  const result = await deleteAttachmentAction(formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function deleteAttachmentAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const attachmentId = parseOptionalInt(formData.get("attachment_id"));
+      if (!attachmentId) throw new Error("Attachment is missing.");
+      const { deleteAttachment } = await import("./files");
+      deleteAttachment(attachmentId);
+      refresh();
+      return { ok: true };
+    } catch (error) {
+      return fail(error);
     }
-    await addAttachment({
-      loadId,
-      kind: kind as (typeof ATTACHMENT_KINDS)[number]["value"],
-      originalName: file.name,
-      buffer: await fileToBuffer(file),
-      mimeType: file.type,
-      uploadedBy: "dispatcher",
-    });
-    refresh();
-    return { ok: true, id: loadId };
-  } catch (error) {
-    return fail(error);
-  }
+  });
 }
 
 export async function importOrbcommReportAction(

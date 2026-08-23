@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { dailyRecap, listAudit, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
 import { formatMoney } from "@/lib/format";
 import { listLoads } from "@/lib/queries";
 
@@ -10,7 +10,6 @@ export default function ReportsPage() {
   const recap = dailyRecap();
   const onTime = onTimeReport();
   const revenue = revenueByCustomer();
-  const audit = listAudit(20);
   const csv = listLoads({ status: "all" })
     .map((load) =>
       [
@@ -92,19 +91,14 @@ export default function ReportsPage() {
           </table>
         </section>
         <section className="card overflow-hidden xl:col-span-2">
-          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Audit log</header>
-          {audit.length === 0 ? (
-            <p className="p-5 text-sm text-slate-500">No audited actions yet (clone, etc.).</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {audit.map((row) => (
-                <li key={row.id} className="px-5 py-2">
-                  <span className="font-medium">{row.action}</span> {row.entity} {row.entity_id}{" "}
-                  <span className="text-slate-500">{row.detail}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Accountability</header>
+          <p className="p-5 text-sm text-slate-600">
+            Load changes are on the{" "}
+            <Link href="/audit" className="font-medium text-navy hover:underline">
+              Audit
+            </Link>{" "}
+            page (filter by load #, user, and date). Each load also has a History section.
+          </p>
         </section>
       </div>
     </>

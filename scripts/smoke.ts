@@ -23,6 +23,8 @@ async function main() {
   assert.match(navSource, /href: "\/compliance"/);
   assert.match(navSource, /href: "\/loads\/templates"/);
   assert.match(navSource, /href: "\/settings"/);
+  assert.match(navSource, /href: "\/audit"/);
+  assert.match(navSource, /label: "Audit"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -298,6 +300,70 @@ async function main() {
   assert.equal(storedCamera.mime_type, "application/pdf");
   assert.equal(storedCamera.uploaded_by, "driver");
   assert.equal(fs.readFileSync(getAttachmentPath(storedCamera)).subarray(0, 4).toString(), "%PDF");
+  const audit = await import("../lib/audit");
+  const seedLoad = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1042");
+  assert.ok(seedLoad);
+  assert.equal(audit.listLoadAudit(seedLoad.id).length, 0, "existing loads are not backfilled");
+  const afterDelivery = queries.getLoad(loadId);
+  assert.ok(afterDelivery);
+  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+    queries.updateLoad(loadId, {
+      customer_id: afterDelivery.customer_id,
+      origin: afterDelivery.origin,
+      destination: afterDelivery.destination,
+      pickup_start: afterDelivery.pickup_start,
+      pickup_end: afterDelivery.pickup_end,
+      delivery_start: afterDelivery.delivery_start,
+      delivery_end: afterDelivery.delivery_end,
+      weight: afterDelivery.weight,
+      commodity: afterDelivery.commodity,
+      rate: afterDelivery.rate,
+      notes: afterDelivery.notes,
+      special_instructions: "Hold at dock 4. Call receiver.",
+      appointment_notes: afterDelivery.appointment_notes,
+      reference_number: afterDelivery.reference_number,
+      po_number: afterDelivery.po_number,
+      reefer_setpoint_f: afterDelivery.reefer_setpoint_f,
+      trailer_number: afterDelivery.trailer_number,
+      trailer_id: afterDelivery.trailer_id,
+      shipper_location_id: afterDelivery.shipper_location_id,
+      consignee_location_id: afterDelivery.consignee_location_id,
+      oo_percent: afterDelivery.oo_percent,
+      oo_pay: afterDelivery.oo_pay,
+      status: afterDelivery.status,
+      truck_id: afterDelivery.truck_id,
+      driver_id: afterDelivery.driver_id,
+    });
+  });
+  addAttachment({
+    loadId,
+    kind: "rate_con",
+    originalName: "rate-con-smoke.pdf",
+    buffer: Buffer.from("%PDF-1.4 rate"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const { deleteAttachment } = await import("../lib/files");
+  deleteAttachment(cameraAttachment.id);
+  const history = audit.listLoadAudit(loadId);
+  assert.ok(history.some((row) => row.action === "create" && row.field === "load"));
+  assert.ok(history.some((row) => row.action === "assign" && row.field === "driver"));
+  assert.ok(history.some((row) => row.action === "status" && row.new_value === "delivered"));
+  assert.ok(
+    history.some(
+      (row) =>
+        row.action === "update" &&
+        row.field === "special_instructions" &&
+        row.new_value.includes("Hold at dock 4") &&
+        row.actor === "Ana G",
+    ),
+  );
+  assert.ok(history.some((row) => row.action === "rate_con" && row.new_value === "rate-con-smoke.pdf"));
+  assert.ok(history.some((row) => row.action === "attachment" && row.old_value.includes("pod-MSE-SMOKE")));
+  assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
+  assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
+  const company = audit.listCompanyAudit({ loadNumber: created.load_number, user: "Ana G" });
+  assert.ok(company.length >= 1);
   addFleetDocument({
     ownerType: "driver",
     ownerId: otherDriverId,
@@ -1224,6 +1290,7 @@ Continuous reefer. Two load locks.
   queries.deleteSavedReport(reportId);
   assert.equal(queries.getSavedReport(reportId), null);
 
+  assert.equal(audit.listLoadAudit(load1042.id).length, 0, "clone source seed load stays unbackfilled until clone");
   const clonedId = queries.cloneLoad(load1042.id);
   const cloned = queries.getLoad(clonedId);
   assert.ok(cloned);
@@ -1231,6 +1298,8 @@ Continuous reefer. Two load locks.
   assert.equal(cloned.origin, load1042.origin);
   assert.equal(cloned.destination, load1042.destination);
   assert.equal(cloned.cloned_from_id, load1042.id);
+  assert.ok(audit.listLoadAudit(clonedId).some((row) => row.action === "clone" && row.field === "cloned_from"));
+  assert.ok(audit.listLoadAudit(load1042.id).some((row) => row.action === "clone" && row.field === "cloned_to"));
   queries.updateLoadStatus(clonedId, "hold");
   assert.equal(queries.getLoad(clonedId)?.status, "hold");
   queries.updateLoadDetails(clonedId, {
