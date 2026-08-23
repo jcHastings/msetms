@@ -68,9 +68,9 @@ export const SETTINGS_SECTIONS = [
     title: "Users",
     items: [
       {
-        href: "/settings/users",
-        label: "Dispatchers and roles",
-        hint: "Admin, dispatcher, read-only. Light permission groups.",
+        href: "/users",
+        label: "Users",
+        hint: "Administrators, Standard dispatchers, and Accounting. Same list as the Users tab.",
       },
       {
         href: "/settings/security",
@@ -115,11 +115,28 @@ export const DOCUMENT_TYPES = [
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]["value"];
 
 export const DISPATCHER_ROLES = [
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "dispatcher", label: "Dispatcher" },
+  { value: "admin", label: "Administrator" },
+  { value: "accounting", label: "Accounting" },
+  { value: "dispatcher", label: "Standard" },
+  { value: "manager", label: "Administrator" },
   { value: "read_only", label: "Read-only" },
 ] as const;
+
+/** Roles JC picks on Users. Legacy manager/read_only stay valid on existing rows. */
+export const ASSIGNABLE_DISPATCHER_ROLES = [
+  { value: "admin", label: "Administrator" },
+  { value: "dispatcher", label: "Standard" },
+  { value: "accounting", label: "Accounting" },
+] as const;
+
+export const DISPATCHER_ROLE_HINTS: Record<string, string> = {
+  admin: "Manage users and 2-step reset, plus the full desk.",
+  manager: "Manage users and 2-step reset, plus the full desk.",
+  dispatcher: "The dispatch board — loads, fleet, and locations.",
+  accounting:
+    "Accounting, QuickBooks invoices, and audit read. Does not assign loads or change dispatch unless also granted.",
+  read_only: "View only. Kept for existing accounts.",
+};
 
 export const PERMISSION_GROUPS = [
   { value: "all", label: "All" },
@@ -182,7 +199,30 @@ export function toPublicDispatcher(
 }
 
 export function roleLabel(role: string): string {
+  if (role === "admin" || role === "manager") return "Administrator";
+  if (role === "dispatcher") return "Standard";
+  if (role === "accounting") return "Accounting";
   return DISPATCHER_ROLES.find((item) => item.value === role)?.label ?? role;
+}
+
+export function formRoleValue(role?: string): string {
+  if (!role) return "dispatcher";
+  if (role === "manager") return "admin";
+  return role;
+}
+
+export function selectableDispatcherRoles(currentRole?: string) {
+  const roles = [...ASSIGNABLE_DISPATCHER_ROLES];
+  if (currentRole === "read_only") {
+    roles.push({ value: "read_only", label: "Read-only" });
+  }
+  return roles;
+}
+
+export function defaultPermissionGroupForRole(role: string): string {
+  if (role === "admin" || role === "manager") return "all";
+  if (role === "accounting") return "billing";
+  return "dispatch";
 }
 
 export function permissionGroupLabel(value: string): string {
@@ -193,12 +233,28 @@ export function isAdminRole(role: string): boolean {
   return role === "admin" || role === "manager";
 }
 
+export function isAccountingRole(role: string): boolean {
+  return role === "accounting";
+}
+
+export function isStandardRole(role: string): boolean {
+  return role === "dispatcher";
+}
+
 export function canEditSettings(role: string): boolean {
   return role !== "read_only";
 }
 
 export function canManageUsers(role: string): boolean {
   return isAdminRole(role);
+}
+
+export function canAccessAccounting(role: string): boolean {
+  return isAdminRole(role) || isAccountingRole(role);
+}
+
+export function canAssignLoads(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role);
 }
 
 export type ComplianceWindows = {

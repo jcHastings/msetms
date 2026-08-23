@@ -1,7 +1,12 @@
 "use client";
 
 import { SettingsForm } from "@/components/settings-form";
-import { DISPATCHER_ROLES, PERMISSION_GROUPS, type DispatcherUser } from "@/lib/settings-shared";
+import {
+  DISPATCHER_ROLE_HINTS,
+  formRoleValue,
+  selectableDispatcherRoles,
+  type PublicDispatcher,
+} from "@/lib/settings-shared";
 import type { ActionResult } from "@/lib/types";
 
 export function DispatcherUserForm({
@@ -10,49 +15,73 @@ export function DispatcherUserForm({
   submitLabel,
   canEdit,
 }: {
-  user?: DispatcherUser;
+  user?: PublicDispatcher;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
   canEdit: boolean;
 }) {
+  const roles = selectableDispatcherRoles(user?.role);
   return (
     <SettingsForm action={action} submitLabel={submitLabel} canEdit={canEdit}>
       <div className="field">
         <label htmlFor="name">Name</label>
-        <input id="name" name="name" required defaultValue={user?.name ?? ""} />
+        <input id="name" name="name" required defaultValue={user?.name ?? ""} disabled={!canEdit} />
       </div>
       <div className="field">
         <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" defaultValue={user?.email ?? ""} />
+        <input id="email" name="email" type="email" defaultValue={user?.email ?? ""} disabled={!canEdit} />
       </div>
       <div className="field">
-        <label htmlFor="pin">PIN {user ? "(leave blank to keep)" : ""}</label>
-        <input id="pin" name="pin" inputMode="numeric" required={!user} defaultValue="" autoComplete="off" />
+        <label htmlFor="pin">PIN / password {user ? "(leave blank to keep)" : ""}</label>
+        <input
+          id="pin"
+          name="pin"
+          type="password"
+          inputMode="numeric"
+          required={!user}
+          defaultValue=""
+          autoComplete="new-password"
+          disabled={!canEdit}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          4–8 digits. The current PIN is never shown.
+        </p>
       </div>
       <div className="field">
         <label htmlFor="role">Role</label>
-        <select id="role" name="role" defaultValue={user?.role ?? "dispatcher"}>
-          {DISPATCHER_ROLES.filter((role) => role.value !== "manager" || user?.role === "manager").map((role) => (
+        <select id="role" name="role" defaultValue={formRoleValue(user?.role)} disabled={!canEdit}>
+          {roles.map((role) => (
             <option key={role.value} value={role.value}>
               {role.label}
             </option>
           ))}
         </select>
+        <ul className="mt-2 space-y-1 text-xs text-slate-500">
+          {roles
+            .filter((role) => role.value !== "read_only")
+            .map((role) => (
+              <li key={role.value}>
+                <span className="font-medium text-slate-600">{role.label}:</span>{" "}
+                {DISPATCHER_ROLE_HINTS[role.value]}
+              </li>
+            ))}
+        </ul>
       </div>
       <div className="field">
-        <label htmlFor="permission_group">Permission group</label>
-        <select id="permission_group" name="permission_group" defaultValue={user?.permission_group ?? "all"}>
-          {PERMISSION_GROUPS.map((group) => (
-            <option key={group.value} value={group.value}>
-              {group.label}
-            </option>
-          ))}
+        <label htmlFor="active">Status</label>
+        <select id="active" name="active" defaultValue={user && !user.active ? "0" : "1"} disabled={!canEdit}>
+          <option value="1">Active</option>
+          <option value="0">Inactive</option>
         </select>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="active" value="1" defaultChecked={user ? Boolean(user.active) : true} />
-        Active (can sign in)
-      </label>
+      {user ? (
+        <div className="field">
+          <label>2-step verification</label>
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {user.totp_enrolled ? "On" : "Off"}
+          </p>
+        </div>
+      ) : null}
     </SettingsForm>
   );
 }

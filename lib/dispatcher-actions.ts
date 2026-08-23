@@ -378,6 +378,8 @@ export async function requestDriverDocumentsAction(formData: FormData): Promise<
 
 export async function assignLoadDispatcherAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
+    const { requireLoadAssigner } = await import("./dispatcher-session");
+    await requireLoadAssigner();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));

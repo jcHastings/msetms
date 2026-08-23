@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
+  canAccessAccounting,
+  canAssignLoads,
   canEditSettings,
   canManageUsers,
   roleLabel,
@@ -8,7 +10,7 @@ import {
   type PublicDispatcher,
 } from "./settings-shared";
 
-export { canEditSettings, canManageUsers, roleLabel };
+export { canAccessAccounting, canAssignLoads, canEditSettings, canManageUsers, roleLabel };
 
 const SESSION_COOKIE = "tms_dispatcher_id";
 const PENDING_COOKIE = "tms_2fa_pending";
@@ -60,7 +62,15 @@ export async function requireSettingsEditor(): Promise<Dispatcher> {
 export async function requireUserAdmin(): Promise<Dispatcher> {
   const dispatcher = await requireSettingsEditor();
   if (!canManageUsers(dispatcher.role)) {
-    throw new Error("Only an admin or manager can manage users.");
+    throw new Error("Only an Administrator can manage users.");
+  }
+  return dispatcher;
+}
+
+export async function requireLoadAssigner(): Promise<Dispatcher> {
+  const dispatcher = await requireSignedInDispatcher();
+  if (!canAssignLoads(dispatcher.role)) {
+    throw new Error("Accounting cannot assign loads or change dispatch.");
   }
   return dispatcher;
 }

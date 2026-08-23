@@ -7,8 +7,9 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Sign-in
 
 - Default company logo is the official **MS Express** mark (`public/ms-express-logo.png`) on login, the dispatcher header, and load confirmation PDFs. Product name stays **MS Express TMS**. Settings → Company can upload a replacement; remove reverts to the default.
-- Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (manager). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code).
-- **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Admin/manager can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so Ana G / the office PC can still use PIN until they enroll.
+- Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (Administrator). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code).
+- **Users** in the main nav — list + add dispatchers and accounting staff on the same `dispatchers` records as Settings → Users. Roles: **Administrator**, **Standard** (board), **Accounting** (Accounting / QBO invoices / audit-read; does not assign loads unless also granted). PIN is never shown after save. Administrator resets 2-step.
+- **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Administrator can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so Ana G / the office PC can still use PIN until they enroll.
 - Dispatcher session lasts 12 hours from sign-in.
 - Driver app unchanged: `/driver/login` with seeded driver PINs. No TOTP.
 
@@ -67,7 +68,7 @@ Dispatcher login required. Saves to the local database. No secrets. No fake Asce
 - **Pay and margin** — OO default %, carrier/OO pay method, target gross margin
 - **Document defaults** — header / footer / terms / font size for load & carrier confirmation, invoice, customer confirmation, BOL
 - **Load numbers** — prefix and next number; show sample data toggle (hides seeded demo loads)
-- **Users** — add/edit dispatcher PIN users, roles (admin / manager / dispatcher / read-only), light permission groups; 2-step on/off and admin reset
+- **Users** — same list as the Users tab (Administrator / Standard / Accounting); 2-step on/off and Administrator reset
 - **2-step verification** — authenticator enrollment for dispatchers only; optional require-all (default off)
 - **Integrations** — Samsara / ORBCOMM status plus a link to **Settings → QuickBooks** (in-app Online OAuth)
 

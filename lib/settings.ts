@@ -11,6 +11,7 @@ import {
   DOCUMENT_TYPES,
   PAY_METHODS,
   PERMISSION_GROUPS,
+  defaultPermissionGroupForRole,
   isAdminRole,
   type ComplianceWindows,
   type DispatcherUser,
@@ -639,7 +640,7 @@ export function updateTwoFactorPolicy(requireDispatcher2fa: boolean): CompanySet
 
 function parseDispatcherRole(role: string): string {
   if (!DISPATCHER_ROLES.some((item) => item.value === role)) {
-    throw new Error("Pick admin, dispatcher, or read-only.");
+    throw new Error("Pick Administrator, Standard, or Accounting.");
   }
   return role;
 }
@@ -671,7 +672,7 @@ export function createDispatcherUser(input: {
   if (!name) throw new Error("Name is required.");
   if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4–8 digits.");
   const role = parseDispatcherRole(input.role);
-  const group = parsePermissionGroup(input.permission_group ?? "all");
+  const group = parsePermissionGroup(input.permission_group ?? defaultPermissionGroupForRole(role));
   const result = getDb()
     .prepare(
       `INSERT INTO dispatchers (name, pin, role, email, active, permission_group)
@@ -702,7 +703,7 @@ export function updateDispatcherUser(
   const group = parsePermissionGroup(input.permission_group ?? existing.permission_group);
   const active = input.active === false ? 0 : 1;
   if ((!active || !isAdminRole(role)) && isAdminRole(existing.role) && existing.active && countAdmins(id) === 0) {
-    throw new Error("Keep at least one active admin or manager.");
+    throw new Error("Keep at least one active Administrator.");
   }
   getDb()
     .prepare(

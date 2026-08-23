@@ -359,12 +359,12 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 ## 281–300 · Admin, users, reporting
 
 281. [v1] Single-tenant local; dispatcher PIN login (demo: Ana G / 4020). Optional TOTP 2-step after PIN.
-282. [v1] Dispatcher vs manager roles (stored; manager seeded).
+282. [v1] Administrator / Standard / Accounting roles (Ana G seeded as Administrator via manager).
 283. [v1] Audit log: clone and desk actions (local).
 284. [v1] Company profile (name, dispatcher, phone, email, fax, address, logo) for confirmations.
 285. Terminal / yard list.
 286. [v1] User add / deactivate (local PIN; no invite email).
-287. [v1] Roles admin/dispatcher/read-only plus light permission groups (dispatch, billing, safety).
+287. [v1] Roles Administrator / Standard / Accounting (legacy manager and read-only still valid). Users tab + Settings → Users share the same records.
 288. [v1] Data export (loads CSV).
 289. [v1] On-time report.
 290. [v1] Revenue by customer / lane.

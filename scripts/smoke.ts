@@ -25,6 +25,8 @@ async function main() {
   assert.match(navSource, /label: "Fuel"/);
   assert.match(navSource, /href: "\/loads\/templates"/);
   assert.match(navSource, /href: "\/settings"/);
+  assert.match(navSource, /href: "\/users"/);
+  assert.match(navSource, /label: "Users"/);
   assert.match(navSource, /href: "\/audit"/);
   assert.match(navSource, /label: "Audit"/);
   const tabSource = fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8");
@@ -2618,6 +2620,29 @@ Continuous reefer. Two load locks.
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Company Settings"));
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Users"));
   assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/users")),
+  );
+  assert.equal(settings.roleLabel("admin"), "Administrator");
+  assert.equal(settings.roleLabel("manager"), "Administrator");
+  assert.equal(settings.roleLabel("dispatcher"), "Standard");
+  assert.equal(settings.roleLabel("accounting"), "Accounting");
+  assert.ok(settings.DISPATCHER_ROLES.some((role) => role.value === "accounting"));
+  assert.equal(settings.canManageUsers("manager"), true);
+  assert.equal(settings.canManageUsers("accounting"), false);
+  assert.equal(settings.canAccessAccounting("accounting"), true);
+  assert.equal(settings.canAccessAccounting("dispatcher"), false);
+  assert.equal(settings.canAssignLoads("dispatcher"), true);
+  assert.equal(settings.canAssignLoads("accounting"), false);
+  const usersPage = fs.readFileSync(path.join(process.cwd(), "app/users/page.tsx"), "utf8");
+  assert.match(usersPage, /Add user/);
+  assert.match(usersPage, /listDispatcherUsers/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/users/page.tsx"), "utf8"), /redirect\("\/users"\)/);
+  const userForm = fs.readFileSync(path.join(process.cwd(), "components/dispatcher-user-form.tsx"), "utf8");
+  assert.doesNotMatch(userForm, /user\?\.pin/);
+  assert.match(userForm, /defaultValue=""/);
+  assert.match(userForm, /leave blank to keep/);
+  assert.match(userForm, /2-step verification/);
+  assert.ok(
     settings.SETTINGS_SECTIONS.some((section) =>
       section.items.some((item) => item.href === "/settings/quickbooks"),
     ),
@@ -2687,9 +2712,22 @@ Continuous reefer. Two load locks.
     permission_group: "billing",
   });
   assert.equal(settings.getDispatcherUser(userId)?.permission_group, "billing");
+  const booksId = settings.createDispatcherUser({
+    name: "Smoke Books",
+    pin: "8888",
+    role: "accounting",
+    email: "books@msloads.com",
+  });
+  assert.equal(settings.getDispatcherUser(booksId)?.role, "accounting");
+  assert.equal(settings.getDispatcherUser(booksId)?.permission_group, "billing");
+  assert.equal("pin" in (session.listDispatchers().find((row) => row.id === booksId) ?? {}), false);
   const jordan = session.listDispatchers().find((row) => row.name === "Jordan Lee");
   assert.ok(jordan);
   assert.equal(jordan.role, "dispatcher");
+  const casey = session.listDispatchers().find((row) => row.name === "Casey Ortiz");
+  assert.ok(casey);
+  assert.equal(casey.role, "accounting");
+  assert.equal(session.roleLabel(casey.role), "Accounting");
   assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 0);
   assert.equal(settings.isDispatcherTwoFactorRequired(), false);
   settings.updateTwoFactorPolicy(true);

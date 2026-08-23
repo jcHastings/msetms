@@ -23,9 +23,10 @@ export default async function DispatcherLoginPage() {
       <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />
       <div className="mt-6 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
         <div className="font-semibold text-slate-800">Demo PIN</div>
-        <p className="mt-1">Ana G · 4020 (manager)</p>
-        <p className="mt-1">Jordan Lee · 4410 (dispatcher)</p>
-        <p className="mt-1">Riley Parks · 5500 (read-only)</p>
+        <p className="mt-1">Ana G · 4020 (Administrator)</p>
+        <p className="mt-1">Jordan Lee · 4410 (Standard)</p>
+        <p className="mt-1">Casey Ortiz · 6600 (Accounting)</p>
+        <p className="mt-1">Riley Parks · 5500 (Read-only)</p>
       </div>
     </div>
   );

@@ -45,6 +45,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
   {
     title: "More",
     items: [
+      { href: "/users", label: "Users" },
       { href: "/claims", label: "Claims" },
       { href: "/reports", label: "Reports" },
       { href: "/settings", label: "Settings" },

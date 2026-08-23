@@ -473,6 +473,8 @@ export async function updateLoadAction(
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      const { requireLoadAssigner } = await import("./dispatcher-session");
+      await requireLoadAssigner();
       const loadId = parseOptionalInt(formData.get("load_id"));
       const truckId = parseOptionalInt(formData.get("truck_id"));
       const driverId = parseOptionalInt(formData.get("driver_id"));

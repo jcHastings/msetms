@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { NavLinks } from "@/components/nav-links";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
-import type { PublicDispatcher } from "@/lib/settings-shared";
+import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
 
 export function AppShell({
   children,
@@ -32,7 +32,7 @@ export function AppShell({
         <NavLinks />
         <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">
           <div className="font-medium text-slate-200">{dispatcher.name}</div>
-          <div className="capitalize">{dispatcher.role}</div>
+          <div>{roleLabel(dispatcher.role)}</div>
           <form action={dispatcherLogoutAction} className="mt-2">
             <button className="btn btn-ghost px-0 text-slate-300" type="submit">
               Sign out

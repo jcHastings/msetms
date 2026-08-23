@@ -574,6 +574,7 @@ function backfillDispatchers(db: Database): void {
 function backfillSettingsUsers(db: Database): void {
   const extras: Array<[string, string, string, string, string]> = [
     ["Jordan Lee", "4410", "dispatcher", "jordan@msloads.com", "dispatch"],
+    ["Casey Ortiz", "6600", "accounting", "casey@msloads.com", "billing"],
     ["Riley Parks", "5500", "read_only", "riley@msloads.com", "dispatch"],
   ];
   const find = db.prepare("SELECT id FROM dispatchers WHERE name = ?");

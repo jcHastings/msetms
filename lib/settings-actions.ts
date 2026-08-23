@@ -14,6 +14,7 @@ import {
   addDropdownOption,
   clearCompanyLogo,
   createDispatcherUser,
+  defaultPermissionGroupForRole,
   deleteDropdownOption,
   saveCompanyLogo,
   setDropdownOptionActive,
@@ -275,16 +276,18 @@ export async function createDispatcherUserAction(
 ): Promise<ActionResult> {
   try {
     await requireUserAdmin();
+    const role = String(formData.get("role") ?? "dispatcher");
     const id = createDispatcherUser({
       name: requiredString(formData.get("name"), "Name"),
       pin: requiredString(formData.get("pin"), "PIN"),
-      role: String(formData.get("role") ?? "dispatcher"),
+      role,
       email: String(formData.get("email") ?? ""),
-      permission_group: String(formData.get("permission_group") ?? "all"),
+      permission_group:
+        String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
     });
     refresh();
-    redirect(`/settings/users/${id}`);
+    redirect(`/users/${id}`);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
@@ -376,12 +379,14 @@ export async function updateDispatcherUserAction(
 ): Promise<ActionResult> {
   try {
     await requireUserAdmin();
+    const role = String(formData.get("role") ?? "dispatcher");
     updateDispatcherUser(id, {
       name: requiredString(formData.get("name"), "Name"),
       pin: String(formData.get("pin") ?? ""),
-      role: String(formData.get("role") ?? "dispatcher"),
+      role,
       email: String(formData.get("email") ?? ""),
-      permission_group: String(formData.get("permission_group") ?? "all"),
+      permission_group:
+        String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
     });
     refresh();
