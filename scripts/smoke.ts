@@ -1798,7 +1798,7 @@ Continuous reefer. Two load locks.
     "Date,Time,Driver Name,Driver ID,Unit,Location,Gallons,Price,Total,Card Number",
     `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
     `${fuelDate},15:10,, ,101,Indianapolis,80,3.40,272.00,1111`,
-    `${fuelDate},16:00,Unknown Driver,,999,Nowhere,40,3.10,124.00,2222`,
+    `${fuelDate},16:00,Unknown Driver,,8888,Nowhere,40,3.10,124.00,2222`,
     `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
@@ -1823,13 +1823,13 @@ Continuous reefer. Two load locks.
   const unmatchedFuel = fuelStore.listFuelTransactions({ unmatchedOnly: true });
   assert.equal(unmatchedFuel.length, 1);
   assert.equal(unmatchedFuel[0]?.driver_name_raw, "Unknown Driver");
-  const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
-  assert.ok(tyrell);
-  fuelStore.assignFuelTransactionDriver(unmatchedFuel[0]!.id, tyrell.id);
+  const fuelTyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
+  assert.ok(fuelTyrell);
+  fuelStore.assignFuelTransactionDriver(unmatchedFuel[0]!.id, fuelTyrell.id);
   assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 0);
-  const denise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
-  assert.ok(denise);
-  const deniseFuel = fuelStore.getDriverFuelRollup(denise.id);
+  const fuelDenise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
+  assert.ok(fuelDenise);
+  const deniseFuel = fuelStore.getDriverFuelRollup(fuelDenise.id);
   assert.ok(deniseFuel);
   assert.equal(deniseFuel.weekGallons, 100);
   assert.equal(deniseFuel.monthAmount, 349.9);
