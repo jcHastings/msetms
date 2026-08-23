@@ -25,7 +25,8 @@ import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integra
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
 import { parseLoadTab } from "@/lib/load-tabs";
-import { formatLoadSummary, formatTextMessageDraft } from "@/lib/load-summary";
+import { isTwilioConfigured } from "@/lib/env";
+import { formatLoadSummary } from "@/lib/load-summary";
 import { getCustomer, getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks, locationsForLoad } from "@/lib/queries";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
@@ -81,12 +82,12 @@ export default async function LoadDetailPage({
         status={load.status}
         initialTab={parseLoadTab(tab)}
         loadSummary={formatLoadSummary(load)}
-        textDraft={formatTextMessageDraft(load)}
         driverAssigned={Boolean(load.driver_id)}
         driverPhone={load.driver_phone ?? ""}
         dispatcherId={load.dispatcher_id}
         dispatchers={dispatchers}
         docsRequested={Boolean(load.docs_requested)}
+        smsConfigured={isTwilioConfigured()}
       >
         <LoadForm
           customers={customers}

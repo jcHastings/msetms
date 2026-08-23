@@ -342,3 +342,40 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
     }
   });
 }
+
+export async function sendLoadSmsAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      if (!load.driver_id) throw new Error("Assign a driver first.");
+      const phone = String(load.driver_phone ?? "").trim();
+      if (!phone) throw new Error("The assigned driver needs a mobile number.");
+      const kind = String(formData.get("kind") ?? "message");
+      const { formatLoadSummary } = await import("./load-summary");
+      const { sendTwilioSms } = await import("./integrations/twilio");
+      const body =
+        kind === "load_info"
+          ? formatLoadSummary(load)
+          : requiredString(formData.get("body"), "Message");
+      await sendTwilioSms({ to: phone, body });
+      recordLoadAudit({
+        loadId,
+        action: "sms",
+        field: "to",
+        oldValue: kind === "load_info" ? "load information" : "message",
+        newValue: phone,
+      });
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message: kind === "load_info" ? `Load information texted to ${phone}.` : `Message texted to ${phone}.`,
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}

@@ -34,7 +34,7 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
       <section id="load-log" className="card overflow-hidden">
         <header className="border-b border-slate-100 px-5 py-3">
           <h2 className="text-sm font-semibold">Load log</h2>
-          <p className="text-xs text-slate-500">Status changes and check calls, newest first.</p>
+          <p className="text-xs text-slate-500">Status changes, check calls, and texts, newest first.</p>
         </header>
         {rows.length === 0 ? (
           <p className="px-5 py-6 text-sm text-slate-500">No status changes or check calls yet.</p>
@@ -52,6 +52,8 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
                   {row.actor}
                   {row.action === "check_call"
                     ? ` · ${row.new_value}`
+                    : row.action === "sms"
+                      ? ` · to ${row.new_value}${row.old_value ? ` · ${row.old_value}` : ""}`
                     : row.field === "status"
                       ? ` · ${labelForLoadStatus(row.old_value || "")} → ${labelForLoadStatus(row.new_value || "")}`
                       : row.new_value

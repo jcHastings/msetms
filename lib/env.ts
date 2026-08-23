@@ -77,6 +77,22 @@ export function isGooglePlacesConfigured(): boolean {
   return Boolean(getGoogleMapsApiKey());
 }
 
+export function getTwilioAccountSid(): string | undefined {
+  return readSecret("TWILIO_ACCOUNT_SID");
+}
+
+export function getTwilioAuthToken(): string | undefined {
+  return readSecret("TWILIO_AUTH_TOKEN");
+}
+
+export function getTwilioFromNumber(): string | undefined {
+  return readSecret("TWILIO_FROM_NUMBER");
+}
+
+export function isTwilioConfigured(): boolean {
+  return Boolean(getTwilioAccountSid() && getTwilioAuthToken() && getTwilioFromNumber());
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&

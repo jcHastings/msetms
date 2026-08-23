@@ -475,6 +475,7 @@ async function main() {
     oo_pay: null,
   });
   assert.match(companySummary, /MSE-TEST/);
+  assert.match(companySummary, /localhost:3000\/driver/);
   assert.doesNotMatch(companySummary, /2150|\$2/);
   const ooSummary = formatLoadSummary({
     ...{
@@ -518,6 +519,70 @@ async function main() {
   assert.ok(afterActions?.dispatcher_id);
   assert.ok(audit.listLoadLog(loadId).some((row) => row.action === "check_call" && row.new_value === "Rolling I-80"));
   assert.ok(audit.listLoadLog(loadId).some((row) => row.action === "docs_requested"));
+  const twilioEnvKeys = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"] as const;
+  const previousTwilio = Object.fromEntries(twilioEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of twilioEnvKeys) delete process.env[key];
+  const twilio = await import("../lib/integrations/twilio");
+  const { SMS_MISSING_KEYS } = await import("../lib/sms-shared");
+  assert.equal(twilio.twilioConfigured(), false);
+  assert.equal(twilio.formatSmsDestination("(312) 555-0148"), "+13125550148");
+  await assert.rejects(
+    () => twilio.sendTwilioSms({ to: "(312) 555-0148", body: "Rolling" }),
+    (error: unknown) => {
+      assert.equal(error instanceof Error && error.message, SMS_MISSING_KEYS);
+      return true;
+    },
+  );
+  const { sendLoadSmsAction } = await import("../lib/dispatcher-actions");
+  const smsForm = new FormData();
+  smsForm.set("load_id", String(loadId));
+  smsForm.set("kind", "load_info");
+  const missingKeys = await sendLoadSmsAction(smsForm);
+  assert.equal(missingKeys.ok, false);
+  if (!missingKeys.ok) assert.match(missingKeys.error, /Add Twilio keys in \.env/);
+  process.env.TWILIO_ACCOUNT_SID = "ACtestnotreal";
+  process.env.TWILIO_AUTH_TOKEN = "twilio-secret-token-do-not-log";
+  process.env.TWILIO_FROM_NUMBER = "+15555550100";
+  const failFetch = (async () =>
+    ({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        message: "Authenticate twilio-secret-token-do-not-log ACtestnotreal",
+      }),
+    })) as typeof fetch;
+  await assert.rejects(
+    () => twilio.sendTwilioSms({ to: "(312) 555-0148", body: "Rolling" }, failFetch),
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : "";
+      assert.doesNotMatch(message, /twilio-secret-token-do-not-log/);
+      assert.doesNotMatch(message, /ACtestnotreal/);
+      assert.match(message, /redacted|Authenticate/);
+      return true;
+    },
+  );
+  let sentBody = "";
+  const okFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    sentBody = String(init?.body ?? "");
+    return { ok: true, status: 201, json: async () => ({ sid: "SM-test" }) };
+  }) as typeof fetch;
+  await twilio.sendTwilioSms({ to: "(312) 555-0148", body: "On time" }, okFetch);
+  assert.match(sentBody, /On\+time|On%20time|On time/);
+  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+    audit.recordLoadAudit({
+      loadId,
+      action: "sms",
+      field: "to",
+      oldValue: "load information",
+      newValue: "(312) 555-0148",
+    });
+  });
+  assert.ok(audit.listLoadLog(loadId).some((row) => row.action === "sms" && row.field === "to"));
+  for (const key of twilioEnvKeys) {
+    const value = previousTwilio[key];
+    if (value == null) delete process.env[key];
+    else process.env[key] = value;
+  }
   assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
   assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
   const company = audit.listCompanyAudit({ loadNumber: created.load_number, user: "Ana G" });

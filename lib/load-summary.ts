@@ -19,7 +19,7 @@ export type LoadSummaryInput = {
   oo_pay: number | null;
 };
 
-export const SMS_LATER_NOTE = "SMS texting is not wired yet. Add Twilio keys in .env later.";
+export { SMS_MISSING_KEYS } from "./sms-shared";
 
 export function formatLoadSummary(load: LoadSummaryInput): string {
   const lines = [
@@ -35,11 +35,6 @@ export function formatLoadSummary(load: LoadSummaryInput): string {
   if (load.driver_type === "owner_operator" && (load.oo_pay != null || load.rate != null)) {
     lines.push(`Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`);
   }
-  lines.push("Driver app: http://localhost:3000/driver");
+  lines.push("Driver app: http://localhost:3000/driver (on the shop LAN, use this PC's IP in place of localhost)");
   return lines.join("\n");
-}
-
-export function formatTextMessageDraft(load: LoadSummaryInput): string {
-  const to = load.driver_phone?.trim() || "(no mobile on file)";
-  return `To: ${to}\n\n`;
 }

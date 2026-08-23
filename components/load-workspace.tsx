@@ -7,10 +7,11 @@ import {
   assignLoadDispatcherAction,
   cloneLoadAction,
   requestDriverDocumentsAction,
+  sendLoadSmsAction,
   sendToAccountingAction,
 } from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
-import { SMS_LATER_NOTE } from "@/lib/load-summary";
+import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
 import { LOAD_TABS, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 
 export function LoadWorkspace({
@@ -18,24 +19,24 @@ export function LoadWorkspace({
   status,
   initialTab,
   loadSummary,
-  textDraft,
   driverAssigned,
   driverPhone,
   dispatcherId,
   dispatchers,
   docsRequested,
+  smsConfigured,
   children,
 }: {
   loadId: number;
   status: string;
   initialTab: string;
   loadSummary: string;
-  textDraft: string;
   driverAssigned: boolean;
   driverPhone: string;
   dispatcherId: number | null;
   dispatchers: Array<{ id: number; name: string }>;
   docsRequested: boolean;
+  smsConfigured: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -90,17 +91,11 @@ export function LoadWorkspace({
     router.push(href);
   }
 
-  async function copyText(label: string, body: string) {
-    const text = `${body}\n\n${SMS_LATER_NOTE}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      window.alert(`${label} copied. ${SMS_LATER_NOTE}`);
-    } catch {
-      window.prompt(`${label} — copy this text. ${SMS_LATER_NOTE}`, text);
-    }
-  }
-
   function requireDriverPhone(): boolean {
+    if (!smsConfigured) {
+      window.alert(SMS_MISSING_KEYS);
+      return false;
+    }
     if (!driverAssigned) {
       window.alert("Assign a driver first.");
       return false;
@@ -110,6 +105,20 @@ export function LoadWorkspace({
       return false;
     }
     return true;
+  }
+
+  async function sendSms(kind: "message" | "load_info", body?: string) {
+    const formData = new FormData();
+    formData.set("load_id", String(loadId));
+    formData.set("kind", kind);
+    if (body) formData.set("body", body);
+    const result = await sendLoadSmsAction(formData);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    window.alert(result.message ?? "Text sent.");
+    router.refresh();
   }
 
   return (
@@ -163,7 +172,13 @@ export function LoadWorkspace({
             className="menu-item"
             onClick={() => {
               if (!requireDriverPhone()) return;
-              void copyText("Send Text Message", textDraft);
+              const body = window.prompt("Short message to the assigned driver:");
+              if (body == null) return;
+              if (!body.trim()) {
+                window.alert("Type a short message.");
+                return;
+              }
+              void sendSms("message", body);
             }}
           >
             Send Text Message
@@ -173,7 +188,8 @@ export function LoadWorkspace({
             className="menu-item"
             onClick={() => {
               if (!requireDriverPhone()) return;
-              void copyText("Text Load Information", loadSummary);
+              if (!window.confirm(`Text this load information to ${driverPhone}?\n\n${loadSummary}`)) return;
+              void sendSms("load_info");
             }}
           >
             Text Load Information
