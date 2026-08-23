@@ -9,12 +9,14 @@ export function SettingsForm({
   children,
   submitLabel = "Save",
   canEdit = true,
+  announceReadOnly = true,
   className = "grid gap-3 md:grid-cols-2",
 }: {
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   children: React.ReactNode;
   submitLabel?: string;
   canEdit?: boolean;
+  announceReadOnly?: boolean;
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
@@ -22,7 +24,7 @@ export function SettingsForm({
     <form action={formAction} className={className}>
       <div className="md:col-span-2">
         <FormBanner result={state} />
-        {!canEdit ? (
+        {!canEdit && announceReadOnly ? (
           <p className="mb-2 text-sm text-slate-600">Read-only — you can view these settings.</p>
         ) : null}
       </div>

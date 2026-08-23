@@ -23,7 +23,12 @@ export function LogoUploadForm({
       ) : (
         <p className="text-sm text-slate-600">No logo uploaded yet. PNG, JPG, or WebP, 4 MB max.</p>
       )}
-      <SettingsForm action={uploadLogoAction} submitLabel="Upload logo" canEdit={canEdit}>
+      <SettingsForm
+        action={uploadLogoAction}
+        submitLabel="Upload logo"
+        canEdit={canEdit}
+        announceReadOnly={false}
+      >
         <div className="field md:col-span-2">
           <label htmlFor="logo">Logo file</label>
           <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" />
