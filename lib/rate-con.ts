@@ -297,7 +297,7 @@ function parseAscendStop(text: string, kind: "pickup" | "delivery"): StopParse {
   const action = kind === "pickup" ? "(?:pick\\s*up|pickup|pu)" : "(?:delivery|deliver|drop)";
   const oneLine = text.match(
     new RegExp(
-      `(?:^|\\n|\\s)(?:\\d+\\s+)?${action}\\s+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})(?:\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\s+(.+?)(?=\\s+(?:\\d+\\s+)?(?:${kind === "pickup" ? "delivery|deliver|drop" : "pay items|terms of load|terms"})|$)`,
+      `(?:^|\\n|\\s)(?:\\d+\\s+)?${action}\\s+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})(?:\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\s+(.+?)(?=\\s+(?:\\d{1,2}\\s+)?(?:${kind === "pickup" ? "delivery|deliver|drop" : "pay items|terms of load|terms"})|$)`,
       "is",
     ),
   );
