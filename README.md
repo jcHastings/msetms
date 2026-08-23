@@ -75,7 +75,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
-- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
+- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it, including a load the dispatcher just created (a leftover driver-app sign-in does not 404 the file). Company header is editable on Settings.
 - **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
 - **IFTA mileage** on in-transit and delivered loads: miles by US state / Canadian province, totals, vehicle id, and a downloadable CSV on the load documents. **Refresh IFTA from Samsara** pulls live reports when a token is set; otherwise a labeled demo breakdown is built from origin / destination.
 

@@ -1,4 +1,4 @@
-import PDFDocument from "pdfkit";
+import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
 import { getCustomer, getLoad, getTrailer } from "./queries";

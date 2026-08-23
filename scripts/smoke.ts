@@ -562,6 +562,95 @@ SPECIAL INSTRUCTIONS
   const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
   assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
 
+  const freshCompanyId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Atlanta, GA",
+    destination: "Nashville, TN",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 18000,
+    commodity: "Fresh company confirmation",
+    rate: 1100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "CONF-CO",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const freshCompany = confirmation.buildConfirmationForLoad(freshCompanyId);
+  assert.equal(freshCompany.style, "company_driver");
+  const freshCompanyPdf = await confirmation.renderConfirmationPdf(freshCompany);
+  assert.equal(freshCompanyPdf.subarray(0, 4).toString(), "%PDF");
+
+  const confirmTruckId = queries.createTruck({
+    unit_number: "CONF-1",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+  });
+  const confirmOoDriverId = queries.createDriver({
+    name: "OO Confirm",
+    phone: "555-0188",
+    license: "MS-CDL-CONF",
+    pin: "8181",
+    truck_id: confirmTruckId,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const freshOoId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Memphis, TN",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 22000,
+    commodity: "Fresh OO confirmation",
+    rate: 2100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "CONF-OO",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: confirmTruckId,
+    driver_id: confirmOoDriverId,
+    oo_percent: 80,
+  });
+  const freshOo = confirmation.buildConfirmationForLoad(freshOoId);
+  assert.equal(freshOo.style, "owner_operator");
+  const freshOoPdf = await confirmation.renderConfirmationPdf(freshOo);
+  assert.equal(freshOoPdf.subarray(0, 4).toString(), "%PDF");
+
+  const { pathToFileURL } = await import("node:url");
+  const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);
+  const Helvetica = (await import("pdfkit/standard-fonts/Helvetica")).default;
+  const HelveticaBold = (await import("pdfkit/standard-fonts/HelveticaBold")).default;
+  assert.equal(typeof browserPdfkit.registerStdFonts, "function");
+  browserPdfkit.registerStdFonts(Helvetica, HelveticaBold);
+  const browserPdf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new browserPdfkit.PDFDocument({ size: "LETTER", margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.font("Helvetica-Bold").fontSize(12).text("Load confirmation");
+    doc.font("Helvetica").text("Browser-build fonts registered.");
+    doc.end();
+  });
+  assert.equal(browserPdf.subarray(0, 4).toString(), "%PDF");
+
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");
   assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));
