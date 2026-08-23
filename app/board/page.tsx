@@ -6,9 +6,9 @@ import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { ReeferBadge } from "@/components/reefer-badge";
-import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
+import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrucks, listLoads } from "@/lib/queries";
-import { labelForDriverProgress } from "@/lib/types";
+import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,11 @@ export default async function BoardPage({
   const date = params.date ?? "";
   const q = params.q ?? "";
   const loads = listLoads({ status, date, q });
+  const snapshots = await getReeferSnapshots();
+  const reeferByLoad = new Map<number, ReeferReading | null>();
+  for (const load of loads) {
+    reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
+  }
 
   return (
     <>
@@ -34,6 +39,11 @@ export default async function BoardPage({
           </Link>
         }
       />
+      {snapshots.error ? (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          {snapshots.error}
+        </p>
+      ) : null}
       <BoardToolbar status={status} date={date} q={q} />
       <div className="card overflow-hidden">
         {loads.length === 0 ? (
@@ -97,7 +107,7 @@ export default async function BoardPage({
                     <td>
                       <ReeferBadge
                         setpoint={load.reefer_setpoint_f}
-                        reading={getLatestReeferForLoad(load.id)}
+                        reading={reeferByLoad.get(load.id) ?? null}
                       />
                     </td>
                     <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>

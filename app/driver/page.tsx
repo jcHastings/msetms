@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format";
 import { getLatestReeferForLoad } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { labelForDriverProgress } from "@/lib/types";
+import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,10 @@ export default async function DriverHomePage() {
   if (!driver) redirect("/driver/login");
   const loads = listLoadsForDriver(driver.id).filter((load) => load.status !== "delivered");
   const done = listLoadsForDriver(driver.id).filter((load) => load.status === "delivered");
+  const reeferByLoad = new Map<number, ReeferReading | null>();
+  for (const load of loads) {
+    reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
+  }
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-16 pt-6">
@@ -42,7 +46,7 @@ export default async function DriverHomePage() {
       ) : (
         <ul className="space-y-3">
           {loads.map((load) => {
-            const reefer = getLatestReeferForLoad(load.id);
+            const reefer = reeferByLoad.get(load.id);
             return (
               <li key={load.id}>
                 <Link href={`/driver/loads/${load.id}`} className="block rounded-2xl bg-white p-4 shadow-sm">

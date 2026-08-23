@@ -141,6 +141,7 @@ export function migrate(db: Database.Database): void {
   `);
 
   ensureColumn(db, "trucks", "samsara_vehicle_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "samsara_trailer_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "trailer_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "pin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "special_instructions", "TEXT NOT NULL DEFAULT ''");

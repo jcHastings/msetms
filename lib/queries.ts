@@ -25,6 +25,7 @@ const LOAD_SELECT = `
     trucks.unit_number AS truck_unit,
     trucks.type AS truck_type,
     trucks.samsara_vehicle_id AS truck_samsara_id,
+    trucks.samsara_trailer_id AS truck_samsara_trailer_id,
     drivers.name AS driver_name
   FROM loads
   JOIN customers ON customers.id = loads.customer_id
@@ -120,14 +121,15 @@ export function createTruck(input: {
   capacity_lbs: number;
   status: TruckStatus;
   samsara_vehicle_id?: string;
+  samsara_trailer_id?: string;
   trailer_number?: string;
 }): number {
   const timestamp = now();
   try {
     const result = getDb()
       .prepare(
-        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, trailer_number, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, trailer_number, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -135,6 +137,7 @@ export function createTruck(input: {
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
+        input.samsara_trailer_id ?? "",
         input.trailer_number ?? "",
         timestamp,
         timestamp,
@@ -156,6 +159,7 @@ export function updateTruck(
     capacity_lbs: number;
     status: TruckStatus;
     samsara_vehicle_id?: string;
+    samsara_trailer_id?: string;
     trailer_number?: string;
   },
 ): void {
@@ -165,7 +169,7 @@ export function updateTruck(
       .prepare(
         `UPDATE trucks
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
-             samsara_vehicle_id = ?, trailer_number = ?, updated_at = ?
+             samsara_vehicle_id = ?, samsara_trailer_id = ?, trailer_number = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -174,6 +178,7 @@ export function updateTruck(
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
+        input.samsara_trailer_id ?? "",
         input.trailer_number ?? "",
         now(),
         id,

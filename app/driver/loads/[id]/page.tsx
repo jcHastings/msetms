@@ -20,7 +20,7 @@ export default async function DriverLoadPage({
   if (!driver) redirect("/driver/login");
   const load = getLoad(Number.parseInt((await params).id, 10));
   if (!load || load.driver_id !== driver.id) notFound();
-  const reefer = getLatestReeferForLoad(load.id);
+  const reefer = await getLatestReeferForLoad(load.id);
   const attachments = listAttachments(load.id);
 
   return (
@@ -56,6 +56,7 @@ export default async function DriverLoadPage({
           <div className="text-sm text-slate-600">
             Setpoint {load.reefer_setpoint_f ?? reefer?.setpoint_f ?? "—"}°F
             {reefer?.source === "demo" ? " · demo reading" : reefer?.source === "samsara" ? " · Samsara" : ""}
+            {reefer?.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
           </div>
           {reefer?.door_open === 1 ? <div className="mt-1 text-sm text-rose-700">Door open</div> : null}
           {reefer?.alarm ? <div className="text-sm text-rose-700">{reefer.alarm}</div> : null}

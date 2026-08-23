@@ -89,6 +89,7 @@ export type Truck = {
   capacity_lbs: number;
   status: TruckStatus;
   samsara_vehicle_id: string;
+  samsara_trailer_id: string;
   trailer_number: string;
   created_at: string;
   updated_at: string;
@@ -144,6 +145,7 @@ export type LoadView = Load & {
   truck_unit: string | null;
   truck_type: TruckType | null;
   truck_samsara_id: string | null;
+  truck_samsara_trailer_id: string | null;
   driver_name: string | null;
 };
 

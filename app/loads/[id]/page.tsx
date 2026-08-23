@@ -42,7 +42,7 @@ export default async function LoadDetailPage({
       <div className="mb-4 card p-4">
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer</div>
         <div className="mt-1">
-          <ReeferBadge setpoint={load.reefer_setpoint_f} reading={getLatestReeferForLoad(load.id)} />
+          <ReeferBadge setpoint={load.reefer_setpoint_f} reading={await getLatestReeferForLoad(load.id)} />
         </div>
       </div>
       <LoadForm

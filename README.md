@@ -36,7 +36,7 @@ Requires Node.js 20 or newer.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
-- Reefer setpoint + last temp on the board (demo data unless Samsara is configured)
+- Reefer setpoint + last temp on the board (live Samsara when a token is set; otherwise labeled demo)
 
 ## Driver app
 
@@ -64,14 +64,27 @@ A labeled sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
-## Samsara (reefer)
+## Samsara (live reefer)
 
-No live call is made unless `SAMSARA_API_TOKEN` is set in the environment. The token is never committed.
+The API token is read only from the process environment. It is never committed, never written to the database, never logged, and never shown in the UI.
 
-- **No token:** board, driver screen, and **Integrations** show seeded demo temps, labeled **demo**.
-- **Token present:** the app calls `GET https://api.samsara.com/fleet/vehicles/stats` for reefer ambient, setpoint, door, and alarm. Failures are shown as errors, not replaced with fake live data.
+1. Copy `.env.example` to `.env` (or `.env.local`).
+2. Paste your Samsara API token after `SAMSARA_API_TOKEN=`.
+3. Restart the app (`npm run dev`).
 
-Optional truck fields: Samsara vehicle ID and default trailer number.
+Both `.env` and `.env.local` are gitignored. `.env.example` only contains an empty `SAMSARA_API_TOKEN=`.
+
+- **No token:** board, driver screen, and **Integrations** show seeded demo temps, labeled **demo**. Status: Demo. Token: Not set.
+- **Token present:** the app calls `GET https://api.samsara.com/fleet/vehicles/stats` and `GET https://api.samsara.com/fleet/trailers/stats` for last-known reefer ambient, zone-1 setpoint, and door. Integrations shows **Connected** and Token: **Set (hidden)**.
+- **401 / 403 or other API failures:** Integrations and the board show a clear error, the UI falls back to labeled demo temps, and the app does not crash.
+
+Map IDs on **Fleet → Edit truck**:
+
+- Samsara vehicle ID (tractor)
+- Samsara trailer / asset ID (reefer)
+- Default trailer number (also matched to the Samsara trailer name)
+
+A load assigned to a mapped unit, or a load whose trailer number matches a mapped truck, shows last reported temp, setpoint if Samsara sent one, and the reading timestamp.
 
 ## Data
 
@@ -86,6 +99,6 @@ rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 
 ## Stack
 
-Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `unpdf`, optional `tesseract.js`.
+Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
 
 See [ROADMAP.md](./ROADMAP.md) for native apps, live ELD, accounting, and EDI.

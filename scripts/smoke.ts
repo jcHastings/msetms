@@ -210,12 +210,67 @@ SPECIAL INSTRUCTIONS
   queries.authenticateDriver(denise.id, "1125");
   const deniseLoads = queries.listLoadsForDriver(denise.id);
   assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
-  const { getLatestReeferForLoad } = await import("../lib/integrations/samsara");
+  const samsara = await import("../lib/integrations/samsara");
   const reeferLoad = deniseLoads.find((load) => load.load_number === "MSE-1045");
   assert.ok(reeferLoad);
-  const reading = getLatestReeferForLoad(reeferLoad.id);
+  const previousToken = process.env.SAMSARA_API_TOKEN;
+  delete process.env.SAMSARA_API_TOKEN;
+  samsara.resetSamsaraCacheForTests();
+  const reading = await samsara.getLatestReeferForLoad(reeferLoad.id);
   assert.ok(reading, "seeded reefer load should have a demo temperature");
   assert.equal(reading.source, "demo");
+  assert.equal(reading.temperature_f, 34.2);
+
+  const mapped = samsara.mapLiveReadingsToLoads({
+    loads: [
+      { id: reeferLoad.id, truck_id: reeferLoad.truck_id, trailer_number: "TR-7742", reefer_setpoint_f: 34 },
+    ],
+    trucks: [
+      {
+        id: reeferLoad.truck_id ?? 0,
+        unit_number: "112",
+        samsara_vehicle_id: "281474977075805",
+        samsara_trailer_id: "88110022",
+        trailer_number: "TR-7742",
+      },
+    ],
+    vehicles: [{ id: "281474977075805", name: "Unit 112" }],
+    trailers: [
+      {
+        id: "88110022",
+        name: "TR-7742",
+        reeferAmbientAirTemperatureMilliC: { time: "2026-08-23T13:05:00Z", value: 1200 },
+        reeferSetPointTemperatureMilliCZone1: { time: "2026-08-23T13:05:00Z", value: 1111 },
+        reeferDoorOpen: { time: "2026-08-23T13:05:00Z", value: false },
+      },
+    ],
+  });
+  assert.equal(mapped.length, 1);
+  assert.equal(mapped[0].source, "samsara");
+  assert.equal(mapped[0].temperatureF, 34.2);
+  assert.equal(mapped[0].setpointF, 34);
+  assert.equal(mapped[0].recordedAt, "2026-08-23T13:05:00Z");
+
+  process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+  samsara.resetSamsaraCacheForTests();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
+  try {
+    const failed = await samsara.getReeferSnapshots();
+    assert.equal(failed.mode, "demo", "401 should fall back to demo");
+    assert.ok(failed.error && /401/.test(failed.error), "401 should surface a clear UI error");
+    assert.ok(
+      failed.readings.some((item) => item.loadId === reeferLoad.id && item.source === "demo"),
+      "401 fallback should keep labeled demo temps",
+    );
+    const fallbackReading = await samsara.getLatestReeferForLoad(reeferLoad.id);
+    assert.equal(fallbackReading?.source, "demo");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousToken == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousToken;
+    samsara.resetSamsaraCacheForTests();
+  }
 
   queries.updateLoadStatus(loadId, "delivered");
   const delivered = queries.getLoad(loadId);

@@ -39,6 +39,7 @@ export default function FleetPage() {
                 <th>Unit</th>
                 <th>Type</th>
                 <th>Capacity</th>
+                <th>Samsara</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -49,6 +50,9 @@ export default function FleetPage() {
                   <td className="font-mono font-semibold">{truck.unit_number}</td>
                   <td>{labelForTruckType(truck.type)}</td>
                   <td>{formatWeight(truck.capacity_lbs)}</td>
+                  <td className="text-xs text-slate-500">
+                    {truck.samsara_vehicle_id || truck.samsara_trailer_id ? "Mapped" : "—"}
+                  </td>
                   <td>
                     <TruckStatusBadge status={truck.status} />
                   </td>

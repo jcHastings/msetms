@@ -169,6 +169,7 @@ export async function createTruckAction(
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();
@@ -194,6 +195,7 @@ export async function updateTruckAction(
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
     });
     refresh();

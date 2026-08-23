@@ -6,7 +6,7 @@ v1 is a local dispatcher desk plus a mobile-width driver web app, file attachmen
 
 - **Dispatcher login and roles** — dispatcher vs manager, audit of who changed a load or reassigned a driver.
 - **Native driver apps** — iOS/Android wrappers or store apps, push notifications, offline photo queue, camera-first POD.
-- **Live Samsara** — map the tokened vehicle-stats call onto tractors automatically, HOS, GPS breadcrumb, geofenced arrive/depart, reefer alarms on the board. v1 only fetches stats when `SAMSARA_API_TOKEN` is set and otherwise shows labeled demo readings.
+- **Deeper Samsara** — HOS, GPS breadcrumb, geofenced arrive/depart, reefer alarms on the board. v1 already fetches last-known vehicle and trailer reefer stats when `SAMSARA_API_TOKEN` is set (local `.env` only) and falls back to labeled demo readings if the token is missing or the API rejects it.
 - **Better rate-con capture** — trained templates per customer, split-page PDFs, and a human confirmation queue when confidence is low. v1 is labeled-text extract plus optional local OCR.
 - **Settlements** — driver pay, accessorials, detention, weekly worksheet.
 - **Customer portal** — shipment status without the dispatch board.
