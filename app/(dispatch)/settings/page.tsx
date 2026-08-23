@@ -1,9 +1,10 @@
 import { CompanyProfileForm } from "@/components/company-profile-form";
 import { OrbcommImportForm } from "@/components/orbcomm-import-form";
 import { PageHeader } from "@/components/page-header";
+import { QuickbooksSettingsCard } from "@/components/quickbooks-settings-card";
 import { getCompanyProfile } from "@/lib/company";
 import { formatDateTime } from "@/lib/format";
-import { isOrbcommConfigured, isQuickbooksConfigured } from "@/lib/env";
+import { isOrbcommConfigured } from "@/lib/env";
 import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
 import { formatDurationMs, getSamsaraFleet, isSamsaraConfigured } from "@/lib/integrations/samsara";
@@ -13,7 +14,6 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const samsaraTokenSet = isSamsaraConfigured();
   const orbcommSet = isOrbcommConfigured();
-  const qboSet = isQuickbooksConfigured();
   const fleet = await getSamsaraFleet();
   const reefers = await getReeferSnapshots();
   const qbo = await getQuickbooksStatus();
@@ -67,13 +67,18 @@ export default async function SettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Set <code>SAMSARA_API_TOKEN</code> in <code>.env</code> and restart. The app calls{" "}
-          <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
-          <code>GET https://api.samsara.com/fleet/hos/clocks</code>. Map the Samsara vehicle ID on the
-          truck and the Samsara driver ID on the driver. IFTA on a load uses{" "}
-          <code>GET /fleet/reports/ifta/vehicle</code> (Read IFTA) and, when available,{" "}
-          <code>POST /ifta-detail/csv</code> for the load window (Write IFTA). Samsara is not used for
-          reefer temperature.
+          On the Windows box: copy <code>.env.example</code> to <code>.env.local</code> in Notepad (same
+          folder as <code>package.json</code>), set <code>SAMSARA_API_TOKEN=</code>, save, then{" "}
+          <code>npm start</code> again. Never paste the token into Slack, email, or chat. The token is never
+          shown here.
+        </p>
+        <p className="mt-3 text-sm text-slate-600">
+          Live calls: <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
+          <code>GET https://api.samsara.com/fleet/hos/clocks</code> with{" "}
+          <code>X-Samsara-Version: 2025-10-23</code>. Map the Samsara vehicle ID on the truck and the
+          Samsara driver ID on the driver. IFTA uses <code>POST /ifta-detail/csv</code> for the load
+          window (gzipped CSV) and falls back to <code>GET /fleet/reports/ifta/vehicle</code>. Samsara is
+          not used for reefer temperature.
         </p>
         {fleet.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -124,11 +129,14 @@ export default async function SettingsPage() {
           >
             ORBCOMM Reefer Status Report
           </a>
-          . Set <code>ORBCOMM_USERNAME</code> and <code>ORBCOMM_PASSWORD</code> (optional{" "}
-          <code>ORBCOMM_ACCOUNT_ID</code>) in <code>.env</code>. The app requests a Transportation Platform token at{" "}
-          <code>POST /SynB2BGatewayService/api/generateToken</code>. There is no scrape of the logged-in portal. If
-          B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the ORBCOMM
-          asset ID on the trailer. ORBCOMM is not used for driver HOS.
+          . On Windows, put <code>ORBCOMM_USERNAME</code> / <code>ORBCOMM_PASSWORD</code> (optional{" "}
+          <code>ORBCOMM_ORG_KEY</code>) in gitignored <code>.env.local</code> — never Slack. The app
+          requests <code>POST /SynB2BGatewayService/api/generateToken</code> with official{" "}
+          <code>userName</code> / <code>password</code> / <code>orgKey</code> fields and reads{" "}
+          <code>data.accessToken</code>. There is no scrape of the logged-in portal. If B2B snapshot
+          access is not enabled, export the report as CSV/JSON and import it below. Live snapshot URLs
+          live in one file (<code>lib/integrations/orbcomm-client.ts</code>). Map the ORBCOMM asset ID on
+          the trailer. ORBCOMM is not used for driver HOS.
         </p>
         {reefers.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -143,67 +151,9 @@ export default async function SettingsPage() {
         <OrbcommImportForm />
       </section>
 
-      <section className="card mt-6 p-6">
-        <h2 className="text-sm font-semibold">QuickBooks Online — customer invoices</h2>
-        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-slate-500">Client ID</dt>
-            <dd className="font-semibold">{qbo.clientIdSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Client secret</dt>
-            <dd className="font-semibold">{qbo.clientSecretSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Refresh token</dt>
-            <dd className="font-semibold">{qbo.refreshTokenSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Realm ID</dt>
-            <dd className="font-semibold">{qbo.realmIdSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Environment</dt>
-            <dd className="font-semibold">{qbo.environment}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Status</dt>
-            <dd className="font-semibold">{qbo.status}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Mode</dt>
-            <dd className="font-semibold">
-              {qbo.mode === "quickbooks" ? "Live invoices" : "Demo invoice preview"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Last check</dt>
-            <dd className="font-semibold">{formatDateTime(qbo.fetchedAt)}</dd>
-          </div>
-        </dl>
-        <p className="mt-4 text-sm text-slate-600">
-          Complete OAuth outside this app (Intuit OAuth 2.0 Playground), then set{" "}
-          <code>QUICKBOOKS_CLIENT_ID</code>, <code>QUICKBOOKS_CLIENT_SECRET</code>,{" "}
-          <code>QUICKBOOKS_REFRESH_TOKEN</code>, and <code>QUICKBOOKS_REALM_ID</code> in <code>.env</code>. Optional{" "}
-          <code>QUICKBOOKS_ENVIRONMENT=sandbox</code> or <code>production</code>. Restart after changing values.
-          Delivered loads invoice the <strong>customer rate</strong>, not owner-operator pay.
-        </p>
-        {qbo.companyName ? (
-          <p className="mt-3 text-sm text-slate-600">
-            Connected company: <span className="font-semibold">{qbo.companyName}</span>
-          </p>
-        ) : null}
-        {qbo.error ? (
-          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            {qbo.error}
-          </p>
-        ) : null}
-        {!qboSet ? (
-          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            No credentials — delivered loads show a labeled demo invoice you can record locally.
-          </p>
-        ) : null}
-      </section>
+      <div className="mt-6">
+        <QuickbooksSettingsCard qbo={qbo} />
+      </div>
 
       <section className="card mt-6 overflow-hidden">
         <header className="border-b border-slate-200 px-5 py-3">

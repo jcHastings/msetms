@@ -40,6 +40,19 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
           <label htmlFor="name">Customer name</label>
           <input id="name" name="name" required defaultValue={customer?.name} />
         </div>
+        <div className="field">
+          <label htmlFor="commission_percent">Commission % (optional)</label>
+          <input
+            id="commission_percent"
+            name="commission_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            defaultValue={customer?.commission_percent ?? ""}
+            placeholder="Default for this customer’s loads"
+          />
+        </div>
         <div className="field md:col-span-2">
           <label htmlFor="billing_notes">Billing notes</label>
           <textarea

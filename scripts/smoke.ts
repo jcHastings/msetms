@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
@@ -17,6 +18,230 @@ async function main() {
   assert.ok(seeded.availableTrucks >= 1, "seed should create available trucks");
   assert.ok(queries.listLoads({ status: "in_transit" }).length >= 1, "seed should include in-transit loads");
   assert.ok(queries.listCustomers().length >= 1, "seed should include customers");
+
+  const accounting = await import("../lib/accounting");
+  const heartland = queries.listCustomers().find((customer) => customer.name === "Heartland Foods Co.");
+  assert.ok(heartland);
+  assert.equal(heartland.commission_percent, 5, "Heartland should seed a 5% commission default");
+  const invoices = queries.listInvoices();
+  const inv1047 = invoices.find((invoice) => invoice.number === "INV-1047");
+  const inv1048 = invoices.find((invoice) => invoice.number === "INV-1048");
+  assert.ok(inv1047, "seed should include INV-1047");
+  assert.ok(inv1048, "seed should include INV-1048");
+  assert.equal(inv1047.status, "sent");
+  assert.equal(inv1047.amount, 2250);
+  assert.equal(inv1048.status, "draft");
+  assert.equal(accounting.agingBucket(accounting.invoiceAgeDays(inv1047.issued_at)), "31-60");
+  const unpaidAr = queries.listUnpaidInvoices();
+  assert.ok(unpaidAr.some((invoice) => invoice.number === "INV-1047"));
+  assert.ok(accounting.agingTotals(unpaidAr)["31-60"] >= 2250);
+  const ooBill = queries.listPayables().find((row) => row.load_number === "MSE-1047");
+  assert.ok(ooBill, "AP stub should include Cole’s OO bill on MSE-1047");
+  assert.equal(ooBill.amount, 1687.5);
+  assert.equal(ooBill.paid, false);
+  assert.equal(ooBill.driver_name, "Cole Brennan");
+  const comm1048 = queries.listCommissions().find((row) => row.load_number === "MSE-1048");
+  assert.ok(comm1048, "commissions should include the MSE-1048 load override example");
+  assert.equal(comm1048.percent, 3);
+  assert.equal(comm1048.source, "load");
+  assert.equal(comm1048.amount, 43.5);
+  const heartlandLoad = queries.listLoads({ status: "available" }).find((load) => load.load_number === "MSE-1042");
+  assert.ok(heartlandLoad);
+  const heartlandCommission = accounting.effectiveCommission(heartlandLoad);
+  assert.equal(heartlandCommission?.percent, 5);
+  assert.equal(heartlandCommission?.source, "customer");
+  assert.throws(() => queries.createInvoiceFromLoad(heartlandLoad.id), /Delivered/);
+  const ooPay = queries.listDriverPay().find((row) => row.load_number === "MSE-1047");
+  assert.ok(ooPay);
+  assert.equal(ooPay.driver_type, "owner_operator");
+  assert.equal(ooPay.oo_percent, 75);
+  assert.equal(ooPay.oo_pay, 1687.5);
+  const companyPay = queries.listDriverPay().find((row) => row.load_number === "MSE-1048");
+  assert.ok(companyPay);
+  assert.equal(companyPay.driver_type, "company_driver");
+  queries.setDriverPayPaid(ooPay.load_id, true);
+  assert.equal(queries.listPayables().find((row) => row.load_number === "MSE-1047")?.paid, true);
+  queries.setDriverPayPaid(ooPay.load_id, false);
+  queries.setCommissionPaid(comm1048.load_id, true);
+  assert.equal(queries.listCommissions().find((row) => row.load_number === "MSE-1048")?.paid, true);
+  queries.setCommissionPaid(comm1048.load_id, false);
+  assert.equal(accounting.nextInvoiceNumber(["INV-1047", "INV-1048"]), "INV-1049");
+
+  const { listenAddress } = await import("../scripts/listen-address.mjs");
+  const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
+  assert.equal(listenAddress(noBind), "0.0.0.0", "OS HOSTNAME must not become the bind address");
+  assert.equal(listenAddress({ ...noBind, HOST: "127.0.0.1" }), "127.0.0.1");
+  assert.equal(listenAddress({ ...noBind, LISTEN_HOST: "10.0.0.8" }), "10.0.0.8");
+
+  const { isSupportedNodeVersion, resolveNodeExecutable, windowsNodeInstalls } =
+    await import("../scripts/node-binary.mjs");
+  assert.equal(isSupportedNodeVersion("20.10.0"), false);
+  assert.equal(isSupportedNodeVersion("22.12.0"), false);
+  assert.equal(isSupportedNodeVersion("22.13.0"), true);
+  assert.equal(isSupportedNodeVersion("24.5.0"), true);
+  const currentNode = resolveNodeExecutable({
+    execPath: "/current/node",
+    version: "24.1.0",
+    platform: "win32",
+  });
+  assert.equal(currentNode.execPath, "/current/node", "prefer process.execPath when version is new enough");
+  assert.equal(currentNode.switched, false);
+  const programFiles = windowsNodeInstalls({ ProgramFiles: "C:\\Program Files" })[0];
+  assert.match(programFiles, /nodejs/);
+  const fromOldPath = resolveNodeExecutable({
+    execPath: "C:\\old\\node.exe",
+    version: "20.10.0",
+    platform: "win32",
+    env: { ProgramFiles: "C:\\Program Files" },
+    exists: (file) => file === programFiles,
+    readVersion: (file) => (file === programFiles ? "24.4.0" : null),
+  });
+  assert.equal(fromOldPath.execPath, programFiles);
+  assert.equal(fromOldPath.version, "24.4.0");
+  assert.equal(fromOldPath.switched, true);
+
+  const { mirrorIntoStandalone } = await import("../scripts/standalone-link.mjs");
+  const linkRoot = path.join(os.tmpdir(), `tms-link-${Date.now()}`);
+  const projectData = path.join(linkRoot, "data");
+  const standaloneData = path.join(linkRoot, "standalone", "data");
+  const envFile = path.join(linkRoot, ".env");
+  const standaloneEnv = path.join(linkRoot, "standalone", ".env");
+  fs.mkdirSync(projectData, { recursive: true });
+  fs.writeFileSync(path.join(projectData, "tms.db"), "db");
+  fs.writeFileSync(envFile, "PLACEHOLDER=1\n");
+  const winData = mirrorIntoStandalone(projectData, standaloneData, { platform: "win32" });
+  const winEnv = mirrorIntoStandalone(envFile, standaloneEnv, { platform: "win32" });
+  assert.equal(winData.method, "copy", "win32 must not symlink data (EPERM / Developer Mode)");
+  assert.equal(winEnv.method, "copy", "win32 must not symlink .env");
+  assert.equal(fs.lstatSync(standaloneData).isSymbolicLink(), false);
+  assert.equal(fs.lstatSync(standaloneEnv).isSymbolicLink(), false);
+  assert.equal(fs.readFileSync(path.join(standaloneData, "tms.db"), "utf8"), "db");
+  assert.equal(fs.readFileSync(standaloneEnv, "utf8"), "PLACEHOLDER=1\n");
+  fs.rmSync(linkRoot, { recursive: true, force: true });
+
+  const { getDataDir } = await import("../lib/db");
+  const previousDataDir = process.env.TMS_DATA_DIR;
+  process.env.TMS_DATA_DIR = projectData;
+  assert.equal(getDataDir(), projectData);
+  if (previousDataDir == null) delete process.env.TMS_DATA_DIR;
+  else process.env.TMS_DATA_DIR = previousDataDir;
+
+  const { listExceptionInbox } = await import("../lib/exceptions");
+  const inbox = listExceptionInbox();
+  assert.ok(inbox.attentionCount >= 1, "seed exception inbox should not be empty");
+  assert.ok(inbox.items.length >= 1);
+  const kinds = new Set(inbox.items.map((item) => item.kind));
+  assert.ok(kinds.has("reefer"), "seed reefer vs setpoint");
+  assert.ok(kinds.has("late"), "seed late vs window");
+  assert.ok(kinds.has("missing_pod"), "seed missing POD");
+  assert.ok(kinds.has("compliance"), "seed compliance");
+  assert.ok(kinds.has("unassigned"), "seed unassigned");
+  const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  assert.equal(inbox.items[0].severity, "CRITICAL");
+  for (let index = 1; index < inbox.items.length; index += 1) {
+    assert.ok(
+      rank[inbox.items[index].severity] >= rank[inbox.items[index - 1].severity],
+      "inbox must be ranked CRITICAL → LOW",
+    );
+  }
+  const quiet = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1050");
+  assert.ok(quiet);
+  assert.equal(
+    inbox.items.some((item) => item.loadId === quiet.id),
+    false,
+    "future unassigned load stays off the inbox",
+  );
+  assert.ok(inbox.fineCount >= 1, "some open loads should be fine");
+
+  const locations = queries.listLocations();
+  assert.ok(locations.length >= 4, "seed should include a locations directory");
+  const nashvilleCooler = locations.find((item) => /nashville/i.test(item.name));
+  assert.ok(nashvilleCooler);
+  assert.equal(nashvilleCooler.scheduling_type, "appointment");
+  assert.match(nashvilleCooler.hours, /06:00/);
+  assert.ok(queries.listLocations({ q: "dallas" }).some((item) => /dallas/i.test(item.name)));
+  assert.ok(queries.listLocations({ role: "shipper" }).every((item) => item.role === "shipper" || item.role === "both"));
+  const seededReefer = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1045");
+  assert.ok(seededReefer?.shipper_location_id, "MSE-1045 should link the Nashville shipper");
+  assert.ok(seededReefer?.consignee_location_id, "MSE-1045 should link the Dallas receiver");
+  const seededShipper = queries.getLocation(seededReefer.shipper_location_id);
+  assert.ok(seededShipper);
+  assert.equal(seededShipper.scheduling_type, "appointment");
+
+  const { formatLocationAddress, locationInputFromStop, parsePlace } = await import("../lib/locations");
+  assert.equal(parsePlace("Nashville, TN").state, "TN");
+  assert.equal(parsePlace("1400 Cowan St, Nashville, TN 37208").zip, "37208");
+  assert.match(formatLocationAddress(nashvilleCooler), /Nashville/);
+  const savedStop = locationInputFromStop({
+    addressLine: "Birmingham, AL",
+    name: "ABC Yard",
+    role: "receiver",
+  });
+  assert.equal(savedStop.city, "Birmingham");
+  assert.equal(savedStop.state, "AL");
+  const bookId = queries.createLocation({
+    ...savedStop,
+    hours: "Mon–Fri 08:00–16:00",
+    scheduling_notes: "FCFS at the scale.",
+    scheduling_type: "fcfs",
+    phone: "555-0190",
+    notes: "",
+    street: "900 1st Ave N",
+    zip: "35203",
+    scheduling_email: "",
+    scheduling_portal: "",
+  });
+  assert.ok(queries.getLocation(bookId));
+
+  const search = await import("../lib/load-search");
+  const week = search.datePresetRange("this_week", new Date("2026-08-23T12:00:00"));
+  assert.ok(week);
+  assert.equal(week.from, "2026-08-23");
+  assert.equal(week.to, "2026-08-29");
+  const month = search.datePresetRange("this_month", new Date("2026-08-23T12:00:00"));
+  assert.ok(month);
+  assert.equal(month.from, "2026-08-01");
+  assert.equal(month.to, "2026-08-31");
+  const liveOnly = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    originState: "TN",
+    destState: "TX",
+  });
+  assert.ok(
+    liveOnly.some((load) => load.load_number === "MSE-1045"),
+    "TN→TX live search should find the in-transit dairy load",
+  );
+  assert.equal(liveOnly.some((load) => load.status === "delivered"), false);
+  const archived = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    includeLive: false,
+    includeArchived: true,
+  });
+  assert.ok(archived.some((load) => load.status === "delivered"));
+  assert.equal(archived.some((load) => load.status === "in_transit"), false);
+  const cancelled = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    includeLive: false,
+    includeCancelled: true,
+  });
+  assert.ok(cancelled.some((load) => load.load_number === "MSE-1049"));
+  const byRef = queries.searchLoads({
+    ...search.defaultLoadSearchCriteria(),
+    q: "RC-1045",
+    includeLive: true,
+  });
+  assert.ok(byRef.some((load) => load.load_number === "MSE-1045"));
+  const hiddenNotes = search.parseLoadSearchParams({ cols: "load_id,status", searched: "1" });
+  assert.deepEqual(hiddenNotes.columns, ["load_id", "status"]);
+  const reportId = queries.createSavedSearchReport({
+    name: "TN live reefers",
+    filters: { ...search.defaultLoadSearchCriteria(), originState: "TN" },
+  });
+  const saved = queries.getSavedSearchReport(reportId);
+  assert.ok(saved);
+  assert.equal(saved.name, "TN live reefers");
+  assert.equal(saved.filters.originState, "TN");
+  assert.match(search.loadSearchHref(saved.filters), /origin_state=TN/);
 
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
@@ -77,12 +302,16 @@ async function main() {
     status: "available",
     truck_id: null,
     driver_id: null,
+    shipper_location_id: bookId,
+    consignee_location_id: null,
   });
 
   const created = queries.getLoad(loadId);
   assert.ok(created);
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
+  assert.equal(created.shipper_location_id, bookId);
+  assert.equal(queries.getLocation(created.shipper_location_id)?.hours, "Mon–Fri 08:00–16:00");
 
   queries.assignLoad(loadId, truckId, driverId);
   const assigned = queries.getLoad(loadId);
@@ -105,7 +334,8 @@ async function main() {
   queries.updateDriverProgress(loadId, otherDriverId, "delivered");
   assert.equal(queries.getLoad(loadId)?.status, "delivered");
 
-  const { addAttachment, addFleetDocument, listAttachments, listFleetDocuments } = await import("../lib/files");
+  const { addAttachment, addFleetDocument, getAttachment, getAttachmentPath, listAttachments, listFleetDocuments } =
+    await import("../lib/files");
   addAttachment({
     loadId,
     kind: "pod",
@@ -115,6 +345,29 @@ async function main() {
     uploadedBy: "driver",
   });
   assert.equal(listAttachments(loadId).some((file) => file.kind === "pod"), true);
+
+  const { imagesToPdf, pdfFileName } = await import("../lib/image-pdf");
+  // 1×1 PNG so the camera→PDF path can be tested without a phone.
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8cfc000000101000118dd8db00000000049454e44ae426082",
+    "hex",
+  );
+  const cameraPdf = Buffer.from(await imagesToPdf([{ bytes: new Uint8Array(png), format: "png" }]));
+  assert.equal(cameraPdf.subarray(0, 4).toString(), "%PDF");
+  assert.match(pdfFileName("pod", "MSE-1045"), /^pod-MSE-1045-\d{4}-\d{2}-\d{2}\.pdf$/);
+  const cameraAttachment = addAttachment({
+    loadId,
+    kind: "pod",
+    originalName: pdfFileName("pod", "MSE-SMOKE"),
+    buffer: cameraPdf,
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  const storedCamera = getAttachment(cameraAttachment.id);
+  assert.ok(storedCamera);
+  assert.equal(storedCamera.mime_type, "application/pdf");
+  assert.equal(storedCamera.uploaded_by, "driver");
+  assert.equal(fs.readFileSync(getAttachmentPath(storedCamera)).subarray(0, 4).toString(), "%PDF");
   addFleetDocument({
     ownerType: "driver",
     ownerId: otherDriverId,
@@ -242,7 +495,8 @@ SPECIAL INSTRUCTIONS
   const reading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
   assert.ok(reading, "seeded reefer load should have a demo temperature");
   assert.equal(reading.source, "demo");
-  assert.equal(reading.temperature_f, 34.2);
+  assert.equal(reading.temperature_f, 48.6);
+  assert.equal(reading.alarm, "HIGH TEMP");
 
   const mappedReefer = orbcomm.mapOrbcommReadingsToLoads({
     loads: [
@@ -344,14 +598,68 @@ SPECIAL INSTRUCTIONS
       {
         driver: { id: "88668", name: "Denise Ortega" },
         currentDutyStatus: { hosStatusType: "driving" },
-        clocks: { drive: { driveRemainingDurationMs: 22320000 } },
+        clocks: {
+          drive: { driveRemainingDurationMs: 22320000 },
+          shift: { shiftRemainingDurationMs: 39600000 },
+          cycle: { cycleRemainingDurationMs: 194400000 },
+        },
       },
     ],
     drivers: [{ id: denise.id, name: "Denise Ortega", samsara_driver_id: "88668" }],
     loads: [{ id: reeferLoad.id, driver_id: denise.id }],
   });
   assert.equal(mappedHos[0]?.driveRemainingMs, 22320000);
+  assert.equal(mappedHos[0]?.shiftRemainingMs, 39600000);
+  assert.equal(mappedHos[0]?.cycleRemainingMs, 194400000);
   assert.equal(samsara.formatDurationMs(22320000), "6h 12m");
+
+  const samsaraClient = await import("../lib/integrations/samsara-client");
+  const orbcommClient = await import("../lib/integrations/orbcomm-client");
+  assert.equal(samsaraClient.SAMSARA_API_VERSION, "2025-10-23");
+  assert.equal(
+    samsaraClient.decodeMaybeGzip(Buffer.from("jurisdiction,distance_meters\nTN,1\n")),
+    "jurisdiction,distance_meters\nTN,1\n",
+  );
+  assert.equal(
+    samsaraClient.decodeMaybeGzip(gzipSync(Buffer.from("jurisdiction,distance_meters\nTX,2\n"))),
+    "jurisdiction,distance_meters\nTX,2\n",
+  );
+  assert.equal(orbcommClient.extractOrbcommAccessToken({ data: { accessToken: "nested-live" } }), "nested-live");
+  assert.equal(orbcommClient.extractOrbcommAccessToken({ token: "top-level" }), "top-level");
+  const previousOrg = process.env.ORBCOMM_ORG_KEY;
+  const previousClientId = process.env.ORBCOMM_CLIENT_ID;
+  const previousClientSecret = process.env.ORBCOMM_CLIENT_SECRET;
+  process.env.ORBCOMM_USERNAME = "jc-user";
+  process.env.ORBCOMM_PASSWORD = "jc-pass";
+  process.env.ORBCOMM_ORG_KEY = "org-key-1";
+  process.env.ORBCOMM_CLIENT_ID = "reserved-id";
+  process.env.ORBCOMM_CLIENT_SECRET = "reserved-secret";
+  const tokenBody = orbcommClient.orbcommTokenBody();
+  assert.equal(tokenBody.userName, "jc-user");
+  assert.equal(tokenBody.password, "jc-pass");
+  assert.equal(tokenBody.orgKey, "org-key-1");
+  assert.equal(tokenBody.clientId, "reserved-id");
+  assert.equal(tokenBody.clientSecret, "reserved-secret");
+  assert.equal("username" in tokenBody, false, "official B2B field is userName, not username");
+  if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+  else process.env.ORBCOMM_USERNAME = previousUser;
+  if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+  else process.env.ORBCOMM_PASSWORD = previousPass;
+  if (previousOrg == null) delete process.env.ORBCOMM_ORG_KEY;
+  else process.env.ORBCOMM_ORG_KEY = previousOrg;
+  if (previousClientId == null) delete process.env.ORBCOMM_CLIENT_ID;
+  else process.env.ORBCOMM_CLIENT_ID = previousClientId;
+  if (previousClientSecret == null) delete process.env.ORBCOMM_CLIENT_SECRET;
+  else process.env.ORBCOMM_CLIENT_SECRET = previousClientSecret;
+
+  const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
+  assert.match(envExample, /^SAMSARA_API_TOKEN=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_USERNAME=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_PASSWORD=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_CLIENT_ID=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_CLIENT_SECRET=\s*$/m);
+  assert.doesNotMatch(envExample, /^SAMSARA_API_TOKEN=\S+/m);
+  assert.doesNotMatch(envExample, /^ORBCOMM_PASSWORD=\S+/m);
 
   const trailers = queries.listTrailers();
   assert.ok(trailers.some((trailer) => trailer.unit_number === "TR-7742"));
@@ -451,6 +759,136 @@ SPECIAL INSTRUCTIONS
   const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
   assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
 
+  const freshCompanyId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Atlanta, GA",
+    destination: "Nashville, TN",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 18000,
+    commodity: "Fresh company confirmation",
+    rate: 1100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "CONF-CO",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const freshCompany = confirmation.buildConfirmationForLoad(freshCompanyId);
+  assert.equal(freshCompany.style, "company_driver");
+  const freshCompanyPdf = await confirmation.renderConfirmationPdf(freshCompany);
+  assert.equal(freshCompanyPdf.subarray(0, 4).toString(), "%PDF");
+
+  const confirmTruckId = queries.createTruck({
+    unit_number: "CONF-1",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+  });
+  const confirmOoDriverId = queries.createDriver({
+    name: "OO Confirm",
+    phone: "555-0188",
+    license: "MS-CDL-CONF",
+    pin: "8181",
+    truck_id: confirmTruckId,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const freshOoId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Memphis, TN",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 22000,
+    commodity: "Fresh OO confirmation",
+    rate: 2100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "CONF-OO",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: confirmTruckId,
+    driver_id: confirmOoDriverId,
+    oo_percent: 80,
+  });
+  const freshOo = confirmation.buildConfirmationForLoad(freshOoId);
+  assert.equal(freshOo.style, "owner_operator");
+  const freshOoPdf = await confirmation.renderConfirmationPdf(freshOo);
+  assert.equal(freshOoPdf.subarray(0, 4).toString(), "%PDF");
+
+  const { pathToFileURL } = await import("node:url");
+  const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);
+  const Helvetica = (await import("pdfkit/standard-fonts/Helvetica")).default;
+  const HelveticaBold = (await import("pdfkit/standard-fonts/HelveticaBold")).default;
+  assert.equal(typeof browserPdfkit.registerStdFonts, "function");
+  browserPdfkit.registerStdFonts(Helvetica, HelveticaBold);
+  const browserPdf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new browserPdfkit.PDFDocument({ size: "LETTER", margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.font("Helvetica-Bold").fontSize(12).text("Load confirmation");
+    doc.font("Helvetica").text("Browser-build fonts registered.");
+    doc.end();
+  });
+  assert.equal(browserPdf.subarray(0, 4).toString(), "%PDF");
+
+  const password = await import("../lib/password");
+  const hashed = password.hashPassword("desk-test-secret");
+  assert.match(hashed, /^scrypt\$/);
+  assert.equal(password.verifyPassword("desk-test-secret", hashed), true);
+  assert.equal(password.verifyPassword("wrong-secret", hashed), false);
+
+  const dispatchPaths = await import("../lib/dispatch-paths");
+  assert.equal(dispatchPaths.isPublicPath("/login"), true);
+  assert.equal(dispatchPaths.isPublicPath("/board"), false);
+  assert.equal(dispatchPaths.isDriverAppPath("/driver/login"), true);
+  assert.equal(dispatchPaths.isDriverAppPath("/board"), false);
+  assert.equal(dispatchPaths.isDriverSharedApi("/api/loads/13/confirmation"), true);
+  assert.equal(dispatchPaths.isDriverSharedApi("/api/fleet-docs/1"), false);
+  assert.equal(dispatchPaths.safeNextPath("/board"), "/board");
+  assert.equal(dispatchPaths.safeNextPath("//evil.example"), "/");
+  assert.equal(dispatchPaths.safeNextPath("/api/login"), "/");
+
+  const dispatchAuth = await import("../lib/dispatch-auth");
+  const { ensureBootstrapDispatcher } = await import("../lib/db");
+  assert.equal(dispatchAuth.dispatcherCount(), 0);
+  process.env.DISPATCH_PASSWORD = "short";
+  ensureBootstrapDispatcher(getDb());
+  assert.equal(dispatchAuth.dispatcherCount(), 0, "short DISPATCH_PASSWORD must not create admin");
+  process.env.DISPATCH_PASSWORD = "SmokeDesk.Pass9";
+  ensureBootstrapDispatcher(getDb());
+  assert.equal(dispatchAuth.dispatcherCount(), 1);
+  const admin = dispatchAuth.authenticateDispatcher("admin", "SmokeDesk.Pass9");
+  assert.ok(admin);
+  assert.equal(admin.username, "admin");
+  assert.equal(dispatchAuth.authenticateDispatcher("admin", "wrong-password"), null);
+  const sessionToken = dispatchAuth.createDispatcherSession(admin.id);
+  assert.ok(dispatchAuth.dispatcherFromToken(sessionToken));
+  assert.equal(dispatchAuth.dispatcherFromToken("not-a-session"), null);
+  dispatchAuth.revokeDispatcherSession(sessionToken);
+  assert.equal(dispatchAuth.dispatcherFromToken(sessionToken), null);
+  process.env.DISPATCH_PASSWORD = "OtherDesk.Pass9";
+  ensureBootstrapDispatcher(getDb());
+  assert.ok(dispatchAuth.authenticateDispatcher("admin", "SmokeDesk.Pass9"));
+  assert.equal(dispatchAuth.authenticateDispatcher("admin", "OtherDesk.Pass9"), null);
+  delete process.env.DISPATCH_PASSWORD;
+
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");
   assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));
@@ -484,11 +922,131 @@ SPECIAL INSTRUCTIONS
     orbcomm.resetOrbcommCacheForTests();
   }
 
+  process.env.SAMSARA_API_TOKEN = "test-live-samsara-token";
+  process.env.ORBCOMM_USERNAME = "jc-user";
+  process.env.ORBCOMM_PASSWORD = "jc-pass";
+  process.env.ORBCOMM_ORG_KEY = "org-key-1";
+  samsara.resetSamsaraCacheForTests();
+  orbcomm.resetOrbcommCacheForTests();
+  const liveFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const headers = new Headers(init?.headers);
+    if (url.includes("api.samsara.com")) {
+      assert.equal(headers.get("Authorization"), "Bearer test-live-samsara-token");
+      assert.equal(headers.get("X-Samsara-Version"), "2025-10-23");
+    }
+    if (url.includes("/fleet/vehicles/stats")) {
+      return Response.json({
+        data: [
+          {
+            id: "samsara-veh-112",
+            name: "112",
+            gps: {
+              time: "2026-08-23T13:05:00Z",
+              latitude: 32.78,
+              longitude: -96.8,
+              speedMilesPerHour: 54,
+              reverseGeo: { formattedLocation: "Dallas, TX" },
+            },
+          },
+        ],
+      });
+    }
+    if (url.includes("/fleet/hos/clocks")) {
+      return Response.json({
+        data: [
+          {
+            driver: { id: "samsara-drv-denise", name: "Denise Ortega" },
+            currentDutyStatus: { hosStatusType: "driving" },
+            clocks: {
+              drive: { driveRemainingDurationMs: 22320000 },
+              shift: { shiftRemainingDurationMs: 39600000 },
+              cycle: { cycleRemainingDurationMs: 194400000 },
+            },
+          },
+        ],
+      });
+    }
+    if (url.includes("/SynB2BGatewayService/api/generateToken")) {
+      const posted = JSON.parse(String(init?.body ?? "{}")) as Record<string, string>;
+      assert.equal(posted.userName, "jc-user");
+      assert.equal(posted.password, "jc-pass");
+      assert.equal(posted.orgKey, "org-key-1");
+      return Response.json({ data: { accessToken: "live-orbcomm-token", refreshToken: "refresh" } });
+    }
+    if (url.includes("/SynB2BGatewayService/api/")) {
+      assert.equal(headers.get("Authorization"), "Bearer live-orbcomm-token");
+      return Response.json({
+        data: [
+          {
+            assetId: "orbcomm-tr-7742",
+            trailerId: "TR-7742",
+            temperatureF: 34.2,
+            setpointF: 34,
+            returnAirF: 34.1,
+            supplyAirF: 33.8,
+            alarm: "DOOR OPEN",
+            latitude: 32.78,
+            longitude: -96.8,
+            address: "Dallas, TX",
+            recordedAt: "2026-08-23T13:05:00Z",
+          },
+        ],
+      });
+    }
+    return new Response("unexpected live client URL", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const liveFleet = await samsara.getSamsaraFleet();
+    assert.equal(liveFleet.mode, "samsara");
+    assert.equal(liveFleet.error, undefined);
+    const liveGps = liveFleet.locations.find((item) => item.unitNumber === "112");
+    assert.ok(liveGps);
+    assert.equal(liveGps.source, "samsara");
+    assert.equal(liveGps.address, "Dallas, TX");
+    assert.equal(liveGps.speedMph, 54);
+    const liveHos = liveFleet.hos.find((item) => item.driverName === "Denise Ortega");
+    assert.ok(liveHos);
+    assert.equal(liveHos.source, "samsara");
+    assert.equal(liveHos.driveRemainingMs, 22320000);
+    assert.equal(liveHos.shiftRemainingMs, 39600000);
+    assert.equal(liveHos.cycleRemainingMs, 194400000);
+
+    const liveReefers = await orbcomm.getReeferSnapshots();
+    assert.equal(liveReefers.mode, "orbcomm");
+    assert.equal(liveReefers.error, undefined);
+    const liveReefer = liveReefers.readings.find((item) => item.trailerId === "TR-7742");
+    assert.ok(liveReefer);
+    assert.equal(liveReefer.source, "orbcomm");
+    assert.equal(liveReefer.temperatureF, 34.2);
+    assert.equal(liveReefer.setpointF, 34);
+    assert.equal(liveReefer.returnAirF, 34.1);
+    assert.equal(liveReefer.supplyAirF, 33.8);
+    assert.equal(liveReefer.alarm, "DOOR OPEN");
+    const liveReading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
+    assert.equal(liveReading?.source, "orbcomm");
+    assert.equal(liveReading?.temperature_f, 34.2);
+  } finally {
+    globalThis.fetch = liveFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+    if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+    else process.env.ORBCOMM_USERNAME = previousUser;
+    if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+    else process.env.ORBCOMM_PASSWORD = previousPass;
+    if (previousOrg == null) delete process.env.ORBCOMM_ORG_KEY;
+    else process.env.ORBCOMM_ORG_KEY = previousOrg;
+    samsara.resetSamsaraCacheForTests();
+    orbcomm.resetOrbcommCacheForTests();
+  }
+
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;
   const demoRows = ifta.buildDemoIftaBreakdown("Nashville, TN", "Dallas, TX");
   assert.ok(demoRows.some((row) => row.jurisdiction === "TN"));
   assert.ok(demoRows.some((row) => row.jurisdiction === "TX"));
+  assert.equal(ifta.extractJurisdiction("1400 Cowan St, Nashville, TN 37208"), "TN");
   const msAl = ifta.buildDemoIftaBreakdown("Jackson, MS", "Birmingham, AL");
   assert.ok(msAl.some((row) => row.jurisdiction === "MS"));
   assert.ok(msAl.some((row) => row.jurisdiction === "AL"));
@@ -543,7 +1101,62 @@ SPECIAL INSTRUCTIONS
     else process.env.SAMSARA_API_TOKEN = previousSamsara;
   }
 
+  process.env.SAMSARA_API_TOKEN = "test-live-samsara-token";
+  const gzipCsv = gzipSync(Buffer.from("device_id,jurisdiction,distance_meters\n1,TN,160934.4\n1,AR,80467.2\n"));
+  const gzipFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("Authorization"), "Bearer test-live-samsara-token");
+    assert.equal(headers.get("X-Samsara-Version"), "2025-10-23");
+    if (url.endsWith("/ifta-detail/csv") && init?.method === "POST") {
+      const posted = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+      assert.equal(posted.vehicleIds, "samsara-veh-112");
+      assert.ok(posted.startHour);
+      assert.ok(posted.endHour);
+      return Response.json({ data: { jobId: "ifta-job-1", jobStatus: "Requested" } });
+    }
+    if (url.includes("/ifta-detail/csv/ifta-job-1")) {
+      return Response.json({
+        data: {
+          jobStatus: "Completed",
+          files: [{ downloadUrl: "https://api.samsara.com/download/ifta-job-1.csv.gz" }],
+        },
+      });
+    }
+    if (url.includes("/download/ifta-job-1.csv.gz")) {
+      return new Response(gzipCsv, { headers: { "Content-Type": "application/gzip" } });
+    }
+    return new Response("unexpected IFTA URL", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const liveIfta = await ifta.refreshIftaForLoad(reeferLoad.id);
+    assert.equal(liveIfta.source, "samsara");
+    assert.equal(liveIfta.vehicle_id, "samsara-veh-112");
+    assert.ok(liveIfta.rows.some((row) => row.jurisdiction === "TN" && row.miles === 100));
+    assert.ok(liveIfta.rows.some((row) => row.jurisdiction === "AR" && row.miles === 50));
+    assert.match(liveIfta.note, /detail/i);
+  } finally {
+    globalThis.fetch = gzipFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+  }
+
   queries.updateLoadStatus(loadId, "delivered");
+  const createdInvoiceId = queries.createInvoiceFromLoad(loadId);
+  assert.ok(createdInvoiceId);
+  const localInvoice = queries.getInvoiceByLoad(loadId);
+  assert.ok(localInvoice);
+  assert.equal(localInvoice.status, "draft");
+  assert.equal(localInvoice.amount, 1400);
+  assert.throws(() => queries.createInvoiceFromLoad(loadId), /already/);
+  queries.updateInvoiceStatus(localInvoice.id, "sent");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "sent");
+  queries.updateInvoiceStatus(localInvoice.id, "paid");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "paid");
+  assert.ok(queries.getInvoice(localInvoice.id)?.paid_at);
+  queries.updateInvoiceStatus(localInvoice.id, "sent");
+  assert.equal(queries.getInvoice(localInvoice.id)?.status, "sent");
   const delivered = queries.getLoad(loadId);
   assert.ok(delivered);
   assert.equal(delivered.status, "delivered");
@@ -601,6 +1214,12 @@ SPECIAL INSTRUCTIONS
     assert.equal(afterDemo.qbo_invoice_id, demoSent.invoiceId);
     assert.ok(afterDemo.qbo_sent_at);
     assert.equal(afterDemo.qbo_source, "demo");
+    const qboInvoice = queries.getInvoiceByLoad(loadId);
+    assert.ok(qboInvoice, "QBO send should upsert the accounting invoice");
+    assert.equal(qboInvoice.id, localInvoice.id);
+    assert.equal(qboInvoice.status, "sent");
+    assert.equal(qboInvoice.source, "demo");
+    assert.equal(qboInvoice.qbo_invoice_id, demoSent.invoiceId);
 
     await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId), /already sent/i);
 
@@ -610,6 +1229,8 @@ SPECIAL INSTRUCTIONS
     const qboStatus = await qbo.getQuickbooksStatus();
     assert.equal(qboStatus.configured, false);
     assert.equal(qboStatus.status, "Demo");
+    assert.equal(qboStatus.clientIdSet, false);
+    assert.ok(!JSON.stringify(qboStatus).includes("test-not-a-real"));
 
     process.env.QUICKBOOKS_CLIENT_ID = "test-not-a-real-client-id";
     process.env.QUICKBOOKS_CLIENT_SECRET = "test-not-a-real-client-secret";
@@ -627,6 +1248,7 @@ SPECIAL INSTRUCTIONS
       const failedStatus = await qbo.getQuickbooksStatus();
       assert.equal(failedStatus.status, "API error");
       assert.ok(failedStatus.error && /401/.test(failedStatus.error));
+      assert.ok(!JSON.stringify(failedStatus).includes("test-not-a-real-client-secret"));
     } finally {
       globalThis.fetch = originalQboFetch;
     }

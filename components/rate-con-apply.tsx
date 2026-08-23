@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
-import type { Customer, DriverWithTruck, Load, Trailer, Truck } from "@/lib/types";
+import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export function RateConApply({
   load,
@@ -12,12 +12,14 @@ export function RateConApply({
   trucks,
   trailers = [],
   drivers,
+  locations = [],
 }: {
   load: Load;
   customers: Customer[];
   trucks: Truck[];
   trailers?: Trailer[];
   drivers: DriverWithTruck[];
+  locations?: Location[];
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const parsed = state && "parsed" in state && state.ok ? state.parsed : null;
@@ -48,6 +50,7 @@ export function RateConApply({
           trucks={trucks}
           trailers={trailers}
           drivers={drivers}
+          locations={locations}
           load={{
             ...load,
             origin: parsed.origin || load.origin,

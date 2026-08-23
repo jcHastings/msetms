@@ -43,20 +43,20 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 ## 1–25 · Command center and exceptions
 
 1. [v1] Home counts: open loads, in transit, available trucks, unassigned loads.
-2. Dispatch inbox ranked by exception severity (the “7 loads need attention” list).
-3. Exception types: late to PU, late to DEL, appointment at risk, HOS short, reefer excursion, missing docs, compliance expiring, unassigned covering today.
+2. [v1] Dispatch inbox ranked by exception severity (the “7 loads need attention” list).
+3. [v1] Exception types in this slice: late to PU/DEL, window at risk, reefer vs setpoint, missing POD, compliance expiring, unassigned covering today. (HOS short is later.)
 4. Acknowledge / snooze / resolve an exception with a reason.
 5. Exception history on the load.
 6. Shift handoff note (“what’s on fire”).
 7. Watch list of loads a dispatcher pinned.
-8. Silent loads (in transit, no exception) stay off the inbox.
+8. [v1] Silent loads (in transit, no exception) stay off the inbox.
 9. Map is a drill-in, not the home screen.
 10. Sound / badge only for new high-severity exceptions.
 11. Filter inbox by exception type.
 12. Filter inbox by customer or lane.
 13. Filter inbox by driver or truck.
 14. Saved inbox views per dispatcher.
-15. “All quiet” empty state when nothing is on fire.
+15. [v1] “All quiet” empty state when nothing is on fire.
 16. Daily recap: delivered, late, claims opened.
 17. Weekly recap: on-time %, temp claims, detention.
 18. Command-center KPI strip (on-time, open exceptions, trucks available).
@@ -65,7 +65,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 21. Escalation if an exception sits untouched.
 22. Multi-dispatcher claim of an exception (“I’ve got it”).
 23. Audit: who resolved which exception.
-24. Seed / demo exceptions labeled as demo.
+24. [v1] Seed / demo exceptions labeled as demo.
 25. Never invent a live exception from a failed telematics call.
 
 ## 26–55 · Loads and dispatch board
@@ -358,7 +358,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 281–300 · Admin, users, reporting
 
-281. [v1] Single-tenant local; no dispatcher login in v1.
+281. [v1] Single-tenant local; dispatcher username + password (scrypt, httpOnly session).
 282. Dispatcher vs manager roles.
 283. Audit log: who changed a load or reassigned a driver.
 284. Company profile (name, dispatcher, phone, email, fax) — [v1] for confirmations.

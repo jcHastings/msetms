@@ -40,6 +40,19 @@ export function getOrbcommAccountId(): string | undefined {
   return readSecret("ORBCOMM_ACCOUNT_ID");
 }
 
+export function getOrbcommOrgKey(): string | undefined {
+  return readSecret("ORBCOMM_ORG_KEY") ?? getOrbcommAccountId();
+}
+
+/** Optional. Official B2B uses username/password. Reserved if ORBCOMM issues OAuth-style keys. */
+export function getOrbcommClientId(): string | undefined {
+  return readSecret("ORBCOMM_CLIENT_ID");
+}
+
+export function getOrbcommClientSecret(): string | undefined {
+  return readSecret("ORBCOMM_CLIENT_SECRET");
+}
+
 export function getOrbcommApiBase(): string {
   return readSecret("ORBCOMM_API_BASE") ?? "https://platform.orbcomm.com";
 }

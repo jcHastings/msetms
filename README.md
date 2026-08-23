@@ -2,38 +2,87 @@
 
 A local Transportation Management System for a small trucking company. Two interfaces:
 
-- **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
+- **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, keep a Locations book for shippers/receivers, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. The dispatcher desk requires a username + password. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
+
+Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is the only toolchain this app needs.
+
+On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
+
+`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` junctions or copies `data` and `.env` into `.next/standalone` (Windows `symlink` hits `EPERM` without those).
+
+Copy `.env.example` to `.env.local` and set `DISPATCH_PASSWORD` (at least 8 characters). That creates the `admin` dispatcher account on first start. Do **not** put that password in git.
+
+```bash
+npm install
+npm run build
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) — you will be sent to `/login`. After sign-in, the board and desk work. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login) (PIN, not the dispatcher password).
+
+Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
+
+**Docker:**
+
+```bash
+docker compose up --build
+```
+
+Then open `http://<this-box>:3000` for dispatch (sign in) and `http://<this-box>:3000/driver/login` for the driver app. Pass `DISPATCH_PASSWORD` into Compose from your shell; do not write a real password into `docker-compose.yml`.
+
+`npm start` and Docker both run the Next **standalone** server on port **3000**. SQLite and uploads persist in `./data` (Compose mounts that folder). The server binds `0.0.0.0` unless you set an explicit IP with `HOST` / `LISTEN_HOST` / `BIND_HOST`. It does **not** use the OS `HOSTNAME` (that is the machine name — on some boxes it is `cursor`, and nothing useful listens).
+
+Override port with `PORT`. No Vercel account or secrets required.
+
+Local edit loop on the same machine:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
-
 The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 
 | Command | What it does |
 | --- | --- |
-| `npm install` | Install dependencies |
-| `npm run dev` | Run the app |
+| `npm install` | Install JavaScript dependencies (no native compile) |
+| `npm run build` | Production build (writes `.next/standalone`) |
+| `npm start` | Run the standalone server and keep it listening |
+| `docker compose up --build` | Build the Node 22 image and serve port 3000 |
+| `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
-| `npm run build` | Production build |
-| `npm start` | Serve the production build |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires Node.js 20 or newer.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
+
+Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
+
+## Dispatcher login
+
+The board, loads, fleet, customers, settings, and company APIs are closed until a dispatcher signs in at `/login`.
+
+- Username + password (not a PIN, not a query-string secret)
+- Password stored as an **scrypt** hash
+- Session is an **httpOnly**, `SameSite=Lax` cookie (`tms_dispatcher`). It is not shown in the address bar.
+- First run with no users: if `DISPATCH_PASSWORD` is set, the app creates `admin` (or `DISPATCH_USERNAME`) from that value. Existing users are never overwritten.
+- **Log out** is on the left chrome.
+- Drivers keep PIN login at `/driver/login` and cannot open dispatcher pages.
+
+**HTTPS:** `npm start` on your LAN is usually plain HTTP, so the cookie is not marked `Secure` (otherwise the browser would drop it). If this app is on the public internet, put **HTTPS** in front of it (Caddy, nginx, IIS, Cloudflare) and set `TMS_COOKIE_SECURE=1` in gitignored `.env.local` so the session cookie is only sent over TLS.
 
 ## Dispatcher
 
+- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
 - Dashboard counts, dispatch board with status / pickup-date filters
-- Create a load by hand, or **Load from rate confirmation**
+- **Load search** (`/loads/search`): Ascend-style criteria — terms, origin/destination state, pickup date range (this week / this month), customer / driver / truck / trailer, status, and live / archived / cancelled. Results table; click a row to open the load. Save a named report (filters + visible columns) in local SQLite.
+- **Accounting** (collapsible nav): AR/AP Report, Invoices/Bills, Commissions Mgt, Driver Pay Mgt, and QuickBooks. Invoices come from delivered loads at the customer rate (draft / sent / paid). AR ages unpaid customer invoices; AP is a stub of owner-operator bills from load OO pay. Commissions use an optional % on the customer or the load (seeded: Heartland 5% default, MSE-1048 at 3%). Driver pay lists OO rate/%/computed pay and a simple company-driver paid flag. QuickBooks opens the existing send + settings UI and never prints credentials.
+- **Locations** directory for shippers and receivers (name, street/city/state/zip, phone, notes, role, appointment vs FCFS, hours, scheduling notes, email/portal). Search and edit from the nav. On a load, pick from the book or type a one-off address; saving can add that stop to Locations. Pickup/delivery scheduling shows on the load and the driver’s dispatch.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
@@ -43,7 +92,7 @@ Requires Node.js 20 or newer.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
-- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it. Company header is editable on Settings.
+- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it, including a load the dispatcher just created (a leftover driver-app sign-in does not 404 the file). Company header is editable on Settings.
 - **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
 - **IFTA mileage** on in-transit and delivered loads: miles by US state / Canadian province, totals, vehicle id, and a downloadable CSV on the load documents. **Refresh IFTA from Samsara** pulls live reports when a token is set; otherwise a labeled demo breakdown is built from origin / destination.
 
@@ -60,7 +109,9 @@ Sign in at `/driver/login` with name + PIN. Seeded demo PINs:
 
 Driver statuses: en route to pickup → loaded → en route to delivery → delivered. Those move the dispatcher's load to in transit / delivered.
 
-Uploads (BOL, POD, lumper, trailer/product/seal photos) are stored under `data/uploads/` and show on the dispatcher load page.
+On a load, the driver can **take a photo with the phone camera** (or pick an existing picture), preview / retake, add more pages, then **Make PDF and upload** as BOL / POD / lumper / other. The PDF is stored on the load; the dispatcher opens it under documents. Camera uses the native file input (`capture=environment`) so it works on iPhone Safari and Android Chrome over `http://localhost` or LAN; live `getUserMedia` is used when the browser allows it. No cloud OCR.
+
+Uploads (BOL, POD, lumper, trailer/product/seal photos, camera PDFs) are stored under `data/uploads/` and show on the dispatcher load page.
 
 ## Rate confirmation ingest
 
@@ -87,10 +138,10 @@ Both integrations are required. They do not share data:
 | Source | Used for | Never used for | Env (gitignored `.env` only) |
 | --- | --- | --- | --- |
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
-| **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
+| **ORBCOMM** | Trailer location, reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ORG_KEY` / `ORBCOMM_CLIENT_ID` / `ORBCOMM_CLIENT_SECRET` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
 
-Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
+**Windows (how JC adds tokens):** In File Explorer open the project folder (the one with `package.json`). Copy `.env.example` to `.env.local`. Open `.env.local` in Notepad. Set `SAMSARA_API_TOKEN=` and/or `ORBCOMM_USERNAME=` / `ORBCOMM_PASSWORD=` on those lines only. Save. Run `npm start` again. `.env` files are gitignored. **Never paste tokens into Slack, email, or chat.** Credentials are never committed, logged, stored in SQLite, or shown on Settings.
 
 **Integrations** has separate cards. Connected vs demo is independent: one integration can be live while another is demo.
 
@@ -104,11 +155,16 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 2. Restart.
 3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
 
-When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
+When the token is set, the app calls current Samsara REST (`https://api.samsara.com`) with `Authorization: Bearer` and `X-Samsara-Version: 2025-10-23`:
+
+- `GET /fleet/vehicles/stats?types=gps` — last location, speed, ping time
+- `GET /fleet/hos/clocks` — drive / shift / cycle remaining
+
+The board and load page show those values. Missing token or API error: labeled **demo**, no crash.
 
 In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
 
-- Trip window (preferred): `POST https://api.samsara.com/ifta-detail/csv` with `startHour` / `endHour` / `vehicleIds`, then poll `GET /ifta-detail/csv/{jobId}` and sum `distance_meters` by `jurisdiction`. Token needs **Write IFTA (US)** plus **Read IFTA (US)**.
+- Trip window (preferred): `POST /ifta-detail/csv` with `startHour` / `endHour` / `vehicleIds`, poll `GET /ifta-detail/csv/{jobId}`, download the **gzipped** CSV, sum `distance_meters` by `jurisdiction`. Token needs **Write IFTA (US)** plus **Read IFTA (US)**.
 - Monthly fallback: `GET https://api.samsara.com/fleet/reports/ifta/vehicle?year=&month=&vehicleIds=` (**Read IFTA**). The UI labels this as the vehicle’s monthly jurisdiction miles, not a trip-only split.
 
 No token: labeled **demo** by-state miles from the load’s origin and destination, plus a CSV on the load documents so the UI can be tested.
@@ -121,12 +177,11 @@ No token, or 401/403 on GPS/HOS: labeled **demo** GPS/HOS, plus a clear error on
 
 Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/portal/remote/ReeferStatusReport).
 
-1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
-2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
-3. Restart.
-4. On **Fleet → Trailers**, set the ORBCOMM asset ID.
+1. Ask your ORBCOMM CSM for Transportation Platform **B2B** username/password (optional org key). There is no public snapshot API without that contract.
+2. On Windows, put them in gitignored `.env.local` (Notepad). Optional empty placeholders: `ORBCOMM_CLIENT_ID` / `ORBCOMM_CLIENT_SECRET` if they later issue OAuth-style keys.
+3. Restart, then map each trailer’s ORBCOMM asset ID on **Fleet → Trailers**.
 
-When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
+When credentials are present the app calls official `POST /SynB2BGatewayService/api/generateToken` (`userName`, `password`, `orgKey`) and reads `data.accessToken`. Live snapshot URLs live in **one file**: `lib/integrations/orbcomm-client.ts`. There is **no scrape** of the logged-in portal.
 
 If B2B snapshot access is not enabled yet:
 
@@ -188,14 +243,20 @@ To use a live QuickBooks company later: create production keys, re-authorize aga
 - Uploads: `data/uploads/`
 - Rotated QuickBooks refresh token: `data/qbo-refresh.json` (gitignored)
 
-Reset:
+Reset (macOS / Linux):
 
 ```bash
 rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 ```
 
+Reset (Windows PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force data\tms.db, data\tms.db-wal, data\tms.db-shm, data\uploads -ErrorAction SilentlyContinue
+```
+
 ## Stack
 
-Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
+Next.js (App Router), TypeScript, Tailwind CSS, Node built-in SQLite (`node:sqlite`), `dotenv`, `unpdf`, optional `tesseract.js`. No `better-sqlite3` / node-gyp.
 
 See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.

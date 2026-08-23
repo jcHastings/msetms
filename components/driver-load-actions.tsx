@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { DriverCameraPdf } from "@/components/driver-camera-pdf";
 import { driverProgressAction, driverUploadAction } from "@/lib/driver-actions";
 import { ATTACHMENT_KINDS, DRIVER_PROGRESS, labelForDriverProgress } from "@/lib/types";
 
 export function DriverLoadActions({
   loadId,
+  loadNumber,
   current,
   closed,
 }: {
   loadId: number;
+  loadNumber: string;
   current: string;
   closed: boolean;
 }) {
@@ -47,6 +50,8 @@ export function DriverLoadActions({
         </button>
       ))}
 
+      <DriverCameraPdf loadId={loadId} loadNumber={loadNumber} />
+
       <form
         className="rounded-2xl bg-white p-4 shadow-sm"
         action={async (formData) => {
@@ -55,7 +60,7 @@ export function DriverLoadActions({
           if (!result.ok) setError(result.error);
         }}
       >
-        <h2 className="text-base font-semibold">Upload a photo or PDF</h2>
+        <h2 className="text-base font-semibold">Or upload a file you already have</h2>
         <input type="hidden" name="load_id" value={loadId} />
         <div className="mt-3 field">
           <label htmlFor="kind">Type</label>

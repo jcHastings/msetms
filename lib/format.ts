@@ -43,6 +43,16 @@ export function formatMoney(value: number | null | undefined): string {
   });
 }
 
+export function formatMoneyCents(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatWeight(value: number | null | undefined): string {
   if (value == null) return "—";
   return `${value.toLocaleString("en-US")} lbs`;
