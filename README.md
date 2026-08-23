@@ -65,7 +65,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 
 - **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Ack / snooze / resolve. Seeded demo data keeps the list from being empty.
 - Dashboard counts, shift handoff, watch list, daily recap, dispatch board with status / pickup-date filters
-- **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch.
+- **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch. Address search uses Google Places when `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` is in `.env` (server-side; fields stay manual if the key is missing).
 - **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
 - **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
 - **Settings** — hub for company contact/logo, insurance, dropdown lists, currency/units, tax, alert windows, routing notes, OO pay defaults, document header/footer/terms, load number prefix, sample-data toggle, dispatcher users/roles, and integration status. Dispatcher login required. Saves to SQLite.
@@ -128,6 +128,7 @@ Both integrations are required. They do not share data:
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
+| **Google Places** | Address autocomplete on Locations and New Load / rate-con | Scraping maps.google.com | `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` (server-side). If you must use a browser key, restrict it by HTTP referrer to localhost. |
 
 Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
 

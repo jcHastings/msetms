@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
 import type { PlaceDetails } from "@/lib/places-shared";
 
@@ -18,19 +18,28 @@ export function PlaceSearch({
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
-  if (!enabled) {
-    return <p className="text-xs text-slate-500">Add GOOGLE_MAPS_API_KEY to .env to enable address search.</p>;
-  }
-
-  async function onSearch() {
-    setPending(true);
-    setError("");
-    try {
-      setResults(await searchPlacesAction(query));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Search failed.");
+  useEffect(() => {
+    if (!enabled) return;
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      setResults([]);
+      return;
     }
-    setPending(false);
+    const handle = window.setTimeout(() => {
+      setPending(true);
+      setError("");
+      void searchPlacesAction(trimmed)
+        .then((next) => setResults(next))
+        .catch((caught: unknown) => {
+          setError(caught instanceof Error ? caught.message : "Search failed.");
+        })
+        .finally(() => setPending(false));
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [enabled, query]);
+
+  if (!enabled) {
+    return <p className="text-xs text-slate-500">Add a key to enable search.</p>;
   }
 
   async function onSelect(placeId: string) {
@@ -39,6 +48,7 @@ export function PlaceSearch({
     try {
       onPick(await placeDetailsAction(placeId));
       setResults([]);
+      setQuery("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Place could not be loaded.");
     }
@@ -52,18 +62,21 @@ export function PlaceSearch({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
+          autoComplete="off"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-        <button className="btn btn-secondary" type="button" disabled={pending || query.trim().length < 3} onClick={onSearch}>
-          {pending ? "…" : "Search"}
-        </button>
+        <span className="self-center text-xs text-slate-400">{pending ? "Searching…" : ""}</span>
       </div>
       {error ? <p className="mt-1 text-xs text-rose-700">{error}</p> : null}
       {results.length > 0 ? (
         <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white text-sm">
           {results.map((item) => (
             <li key={item.placeId}>
-              <button className="w-full px-3 py-2 text-left hover:bg-slate-50" type="button" onClick={() => onSelect(item.placeId)}>
+              <button
+                className="w-full px-3 py-2 text-left hover:bg-slate-50"
+                type="button"
+                onClick={() => onSelect(item.placeId)}
+              >
                 {item.label}
               </button>
             </li>

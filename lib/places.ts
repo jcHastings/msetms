@@ -14,13 +14,14 @@ export async function searchPlaces(query: string): Promise<PlaceSuggestion[]> {
   if (trimmed.length < 3) return [];
   const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
   url.searchParams.set("input", trimmed);
+  url.searchParams.set("components", "country:us");
   url.searchParams.set("key", key);
+  // Do not log `url` — the query string includes the server key.
   const response = await fetch(url);
   if (!response.ok) throw new Error("Places search failed.");
   const payload = (await response.json()) as {
     status: string;
     predictions?: Array<{ place_id: string; description: string }>;
-    error_message?: string;
   };
   if (payload.status !== "OK" && payload.status !== "ZERO_RESULTS") {
     throw new Error("Places search is not available.");
@@ -38,6 +39,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
   url.searchParams.set("place_id", placeId);
   url.searchParams.set("fields", "name,formatted_address,address_component,geometry");
   url.searchParams.set("key", key);
+  // Do not log `url` — the query string includes the server key.
   const response = await fetch(url);
   if (!response.ok) throw new Error("Place details failed.");
   const payload = (await response.json()) as {

@@ -36,13 +36,13 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
           enabled={placesEnabled}
           placeholder="Search a shipper or receiver address"
           onPick={(place) => {
-            if (!name.trim()) setName(place.name);
-            if (!street.trim()) setStreet(place.street);
-            setCity(place.city || city);
-            setRegion(place.state || region);
-            if (!zip.trim()) setZip(place.zip);
-            setLatitude(place.latitude != null ? String(place.latitude) : latitude);
-            setLongitude(place.longitude != null ? String(place.longitude) : longitude);
+            if (!name.trim() && place.name) setName(place.name);
+            setStreet(place.street || place.formatted || street);
+            if (place.city) setCity(place.city);
+            if (place.state) setRegion(place.state);
+            if (place.zip) setZip(place.zip);
+            if (place.latitude != null) setLatitude(String(place.latitude));
+            if (place.longitude != null) setLongitude(String(place.longitude));
           }}
         />
         <div className="field md:col-span-2">

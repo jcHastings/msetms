@@ -87,6 +87,62 @@ async function main() {
   assert.equal(fs.readFileSync(standaloneEnv, "utf8"), "PLACEHOLDER=1\n");
   fs.rmSync(linkRoot, { recursive: true, force: true });
 
+  const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
+  assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
+  assert.match(envExample, /GOOGLE_PLACES_API_KEY/);
+  assert.match(envExample, /HTTP referrer/);
+  const placeSearchSource = fs.readFileSync(path.join(process.cwd(), "components/place-search.tsx"), "utf8");
+  assert.match(placeSearchSource, /Add a key to enable search/);
+  assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/places["']/);
+  assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/env["']/);
+  const { matchLocationForPlace } = await import("../lib/places-shared");
+  const matchedId = matchLocationForPlace(
+    [
+      {
+        id: 9,
+        name: "Lineage Logistics - Avenel",
+        street: "275 Blair rd",
+        city: "Avenel",
+        state: "NJ",
+        zip: "07001",
+      },
+    ],
+    {
+      name: "Lineage Logistics - Avenel",
+      street: "275 Blair rd",
+      city: "Avenel",
+      state: "NJ",
+      zip: "07001",
+      formatted: "275 Blair rd, Avenel, NJ 07001",
+      latitude: 40.57,
+      longitude: -74.28,
+    },
+  );
+  assert.equal(matchedId, 9);
+  assert.equal(
+    matchLocationForPlace([], {
+      name: "",
+      street: "",
+      city: "",
+      state: "",
+      zip: "",
+      formatted: "",
+      latitude: null,
+      longitude: null,
+    }),
+    null,
+  );
+  const savedMapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  const savedPlacesKey = process.env.GOOGLE_PLACES_API_KEY;
+  const { searchPlaces } = await import("../lib/places");
+  process.env.GOOGLE_MAPS_API_KEY = "";
+  process.env.GOOGLE_PLACES_API_KEY = "";
+  assert.deepEqual(await searchPlaces("Avenel NJ"), [], "missing key must not call Google");
+  if (savedMapsKey == null) delete process.env.GOOGLE_MAPS_API_KEY;
+  else process.env.GOOGLE_MAPS_API_KEY = savedMapsKey;
+  if (savedPlacesKey == null) delete process.env.GOOGLE_PLACES_API_KEY;
+  else process.env.GOOGLE_PLACES_API_KEY = savedPlacesKey;
+
   const { getDataDir } = await import("../lib/db");
   const previousDataDir = process.env.TMS_DATA_DIR;
   process.env.TMS_DATA_DIR = projectData;

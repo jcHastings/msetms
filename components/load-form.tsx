@@ -12,6 +12,7 @@ import {
 } from "@/lib/compliance";
 import { formatMoney, toInputDateTime } from "@/lib/format";
 import { PlaceSearch } from "@/components/place-search";
+import { matchLocationForPlace } from "@/lib/places-shared";
 import { formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
@@ -222,15 +223,32 @@ export function LoadForm({
             <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedConsignee)}</p>
           ) : null}
         </div>
-        <PlaceSearch
-          enabled={placesEnabled}
-          placeholder="Search origin or destination"
-          onPick={(place) => {
-            const cityState = [place.city, place.state].filter(Boolean).join(", ");
-            if (!origin.trim()) setOrigin(cityState);
-            else if (!destination.trim()) setDestination(cityState);
-          }}
-        />
+        {placesEnabled ? (
+          <>
+            <PlaceSearch
+              enabled
+              placeholder="Search origin / shipper address"
+              onPick={(place) => {
+                const cityState = [place.city, place.state].filter(Boolean).join(", ");
+                if (cityState) setOrigin(cityState);
+                const match = matchLocationForPlace(shippers, place);
+                if (match) setShipperId(String(match));
+              }}
+            />
+            <PlaceSearch
+              enabled
+              placeholder="Search destination / consignee address"
+              onPick={(place) => {
+                const cityState = [place.city, place.state].filter(Boolean).join(", ");
+                if (cityState) setDestination(cityState);
+                const match = matchLocationForPlace(receivers, place);
+                if (match) setConsigneeId(String(match));
+              }}
+            />
+          </>
+        ) : (
+          <p className="text-xs text-slate-500 md:col-span-2">Add a key to enable search.</p>
+        )}
         <div className="field">
           <label htmlFor="origin">Origin</label>
           <input
