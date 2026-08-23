@@ -2,6 +2,29 @@ import { extractText } from "unpdf";
 import { fromInputDateTime, toInputDateTime } from "./format";
 import type { Customer } from "./types";
 
+export function emptyParsedRateCon(): ParsedRateCon {
+  return {
+    customer_name: "",
+    customer_id: null,
+    origin: "",
+    destination: "",
+    pickup_start: "",
+    pickup_end: "",
+    delivery_start: "",
+    delivery_end: "",
+    rate: null,
+    commodity: "",
+    weight: null,
+    reference_number: "",
+    po_number: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reefer_setpoint_f: null,
+    load_number_hint: "",
+    raw_text: "",
+  };
+}
+
 export type ParsedRateCon = {
   customer_name: string;
   customer_id: number | null;
@@ -50,34 +73,140 @@ export async function extractDocumentText(buffer: Buffer, mimeType: string, file
 
 export function parseRateConText(rawText: string, customers: Customer[] = []): ParsedRateCon {
   const text = rawText.replace(/\r/g, "");
-  const customerName = labeled(text, ["customer", "bill to", "shipper", "account"]) ?? "";
+  const ascend = parseAscendConfirmation(text);
+  const customerName =
+    labeled(text, ["customer", "bill to", "account", "broker"]) ??
+    ascend.customer_name ??
+    "";
   const matched = matchCustomer(customerName, customers);
 
-  const special = section(text, /special instructions?/i);
+  const special =
+    section(text, /special instructions?/i) ||
+    ascend.special_instructions ||
+    "";
   const appointment =
     labeled(text, ["appointment"]) ??
     linesMatching(special, /appointment|call \d+ minutes/i).join("\n");
+  const pickup = parseWindow(text, "pickup");
+  const delivery = parseWindow(text, "delivery");
 
   return {
     customer_name: customerName,
     customer_id: matched,
-    origin: labeled(text, ["origin", "pickup location", "ship from"]) ?? "",
-    destination: labeled(text, ["destination", "delivery location", "ship to", "consignee city"]) ?? "",
-    pickup_start: parseWindow(text, "pickup").start,
-    pickup_end: parseWindow(text, "pickup").end,
-    delivery_start: parseWindow(text, "delivery").start,
-    delivery_end: parseWindow(text, "delivery").end,
-    rate: parseMoney(labeled(text, ["rate", "linehaul", "total pay"]) ?? ""),
-    commodity: labeled(text, ["commodity", "product"]) ?? "",
-    weight: parseWeight(labeled(text, ["weight", "lbs"]) ?? text),
-    reference_number: labeled(text, ["ref #", "ref#", "reference", "rate con"]) ?? "",
+    origin:
+      labeled(text, ["origin", "pickup location", "ship from"]) ??
+      ascend.origin ??
+      "",
+    destination:
+      labeled(text, ["destination", "delivery location", "ship to", "consignee city"]) ??
+      ascend.destination ??
+      "",
+    pickup_start: pickup.start || ascend.pickup_start || "",
+    pickup_end: pickup.end || ascend.pickup_end || "",
+    delivery_start: delivery.start || ascend.delivery_start || "",
+    delivery_end: delivery.end || ascend.delivery_end || "",
+    rate: parseMoney(labeled(text, ["rate", "linehaul", "total pay", "flat rate"]) ?? "") ?? ascend.rate,
+    commodity: labeled(text, ["commodity", "product"]) ?? ascend.commodity ?? "",
+    weight: parseWeight(labeled(text, ["weight"]) ?? "") ?? ascend.weight,
+    reference_number:
+      labeled(text, ["ref #", "ref#", "reference", "rate con"]) ??
+      ascend.load_number ??
+      "",
     po_number: labeled(text, ["po #", "po#", "po number", "purchase order"]) ?? "",
     special_instructions: special,
     appointment_notes: appointment,
     reefer_setpoint_f: parseTemp(text),
-    load_number_hint: labeled(text, ["load #", "load#", "load number"]) ?? "",
+    load_number_hint: labeled(text, ["load #", "load#", "load number"]) ?? ascend.load_number ?? "",
     raw_text: text,
   };
+}
+
+function parseAscendConfirmation(text: string): {
+  customer_name: string;
+  origin: string;
+  destination: string;
+  pickup_start: string;
+  pickup_end: string;
+  delivery_start: string;
+  delivery_end: string;
+  rate: number | null;
+  commodity: string;
+  weight: number | null;
+  load_number: string;
+  special_instructions: string;
+} {
+  const empty = {
+    customer_name: "",
+    origin: "",
+    destination: "",
+    pickup_start: "",
+    pickup_end: "",
+    delivery_start: "",
+    delivery_end: "",
+    rate: null as number | null,
+    commodity: "",
+    weight: null as number | null,
+    load_number: "",
+    special_instructions: "",
+  };
+  if (!/load confirmation/i.test(text)) return empty;
+
+  const loadNumber = text.match(/load\s*#\s*(\d{3,8})/i)?.[1] ?? "";
+  const weightMatch = text.match(/weight\s*[:#]?\s*([\d,]+)\s*(?:lbs?|pounds)/i);
+  const commodity =
+    labeled(text, ["commodity"]) ??
+    text.match(/commodity\s+([A-Z][A-Z0-9 /-]{2,40})/i)?.[1]?.trim() ??
+    "";
+  const rate =
+    parseMoney(text.match(/(?:rate|flat rate)\s*[:#]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i)?.[0] ?? "") ??
+    parseMoney(text.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?(?:flat rate)?/i)?.[0] ?? "");
+
+  const pickup = parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i);
+  const delivery = parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i);
+
+  const terms = section(text, /terms|special instructions?|notes/i);
+  const extras = [
+    /continuous reefer/i.test(text) ? "Continuous reefer." : "",
+    /load locks?/i.test(text) ? "Two load locks." : "",
+    /\bseal\b/i.test(text) ? "Seal required." : "",
+    text.match(/billing@[a-z0-9.-]+/i)?.[0]
+      ? `Billing: ${text.match(/billing@[a-z0-9.-]+/i)?.[0]}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    customer_name: "",
+    origin: cityStateFromAddress(pickup.address),
+    destination: cityStateFromAddress(delivery.address),
+    pickup_start: pickup.start,
+    pickup_end: pickup.end,
+    delivery_start: delivery.start,
+    delivery_end: delivery.end,
+    rate,
+    commodity: commodity.replace(/\s+/g, " "),
+    weight: weightMatch ? Number.parseInt(weightMatch[1].replace(/,/g, ""), 10) : null,
+    load_number: loadNumber,
+    special_instructions: [terms, extras].filter(Boolean).join("\n"),
+  };
+}
+
+function parseStopLine(
+  text: string,
+  pattern: RegExp,
+): { start: string; end: string; address: string } {
+  const match = text.match(pattern);
+  if (!match) return { start: "", end: "", address: "" };
+  const start = toIso(match[1], "08:00");
+  const end = toIso(match[1], "17:00");
+  return { start, end, address: clean(match[2] ?? "") };
+}
+
+function cityStateFromAddress(address: string): string {
+  const match = address.match(/([A-Za-z .'-]+),\s*([A-Z]{2})(?:\s+\d{5})?/);
+  if (!match) return address;
+  return `${match[1].trim()}, ${match[2]}`;
 }
 
 function matchCustomer(name: string, customers: Customer[]): number | null {
@@ -154,7 +283,8 @@ function parseMoney(value: string): number | null {
 }
 
 function parseWeight(value: string): number | null {
-  const match = value.replace(/,/g, "").match(/(\d{3,6})\s*(?:lbs?|pounds)?/i);
+  if (!value.trim()) return null;
+  const match = value.replace(/,/g, "").match(/(\d{3,6})\s*(?:lbs?|pounds)\b/i);
   return match ? Number.parseInt(match[1], 10) : null;
 }
 

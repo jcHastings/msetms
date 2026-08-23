@@ -131,6 +131,8 @@ export type Location = {
   scheduling_type: SchedulingType;
   hours: string;
   scheduling_notes: string;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   updated_at: string;
 };

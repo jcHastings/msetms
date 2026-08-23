@@ -11,6 +11,7 @@ import {
   truckComplianceAlerts,
 } from "@/lib/compliance";
 import { formatMoney, toInputDateTime } from "@/lib/format";
+import { PlaceSearch } from "@/components/place-search";
 import { formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
 import {
@@ -61,6 +62,7 @@ type Props = {
   weightUnit?: string;
   currency?: string;
   targetMarginPercent?: number;
+  placesEnabled?: boolean;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
@@ -80,6 +82,7 @@ export function LoadForm({
   weightUnit = "lb",
   currency = "USD",
   targetMarginPercent,
+  placesEnabled = false,
   action,
   submitLabel,
 }: Props) {
@@ -212,6 +215,15 @@ export function LoadForm({
             <p className="text-xs text-slate-500">{formatSchedulingSummary(selectedConsignee)}</p>
           ) : null}
         </div>
+        <PlaceSearch
+          enabled={placesEnabled}
+          placeholder="Search origin or destination"
+          onPick={(place) => {
+            const cityState = [place.city, place.state].filter(Boolean).join(", ");
+            if (!origin.trim()) setOrigin(cityState);
+            else if (!destination.trim()) setDestination(cityState);
+          }}
+        />
         <div className="field">
           <label htmlFor="origin">Origin</label>
           <input

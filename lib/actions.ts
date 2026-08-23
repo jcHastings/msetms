@@ -474,6 +474,8 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
 export type RateConParseState = {
   ok: true;
   inboxId: string;
+  fileName: string;
+  warning?: string;
   parsed: import("./rate-con").ParsedRateCon;
 } | ActionResult;
 
@@ -484,24 +486,39 @@ export async function parseRateConAction(
   try {
     const file = formData.get("rate_con");
     if (!(file instanceof File) || file.size === 0) {
-      throw new Error("Choose a rate confirmation PDF or image.");
+      throw new Error("Pick a file first.");
     }
     if (file.size > 15 * 1024 * 1024) {
       throw new Error("File is over 15 MB.");
     }
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
-    const { extractDocumentText, parseRateConText } = await import("./rate-con");
+    const { extractDocumentText, parseRateConText, emptyParsedRateCon } = await import("./rate-con");
     const { listCustomers } = await import("./queries");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
-    const text = await extractDocumentText(buffer, file.type, file.name);
+    let text = "";
+    let warning = "";
+    try {
+      text = await extractDocumentText(buffer, file.type, file.name);
+    } catch (error) {
+      warning = error instanceof Error ? error.message : "Could not read that file.";
+    }
     if (!text) {
-      throw new Error("No text came out of that file. Try a text PDF, or type the load by hand.");
+      const parsed = emptyParsedRateCon();
+      writeInboxParse(inboxId, parsed);
+      refresh();
+      return {
+        ok: true,
+        inboxId,
+        fileName: file.name,
+        warning: warning || "Couldn't read text from this PDF. The file is still attached — finish the fields by hand.",
+        parsed,
+      };
     }
     const parsed = parseRateConText(text, listCustomers());
     writeInboxParse(inboxId, parsed);
     refresh();
-    return { ok: true, inboxId, parsed };
+    return { ok: true, inboxId, fileName: file.name, parsed };
   } catch (error) {
     return fail(error);
   }
@@ -678,6 +695,8 @@ function parseLocationInput(formData: FormData) {
     scheduling_type: parseSchedulingType(formData.get("scheduling_type")),
     hours: String(formData.get("hours") ?? "").trim(),
     scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
+    latitude: parseOptionalFloat(formData.get("latitude")),
+    longitude: parseOptionalFloat(formData.get("longitude")),
   };
 }
 

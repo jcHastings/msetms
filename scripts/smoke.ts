@@ -288,6 +288,32 @@ SPECIAL INSTRUCTIONS
   assert.match(parsed.special_instructions, /Lumper/i);
   assert.ok(parsed.customer_id, "sample customer should match Delta Cold Storage");
 
+  const ascendText = `
+LOAD CONFIRMATION
+Load # 45090
+Date 08/23/2026
+Equipment Reefer, 53'
+Weight 42500 lbs
+Commodity FROZEN BEEF
+Rate $3200 / Flat Rate
+Pickup 03/03/25 Lineage Logistics - Avenel, 275 Blair rd, Avenel, NJ 07001
+Delivery 03/05/25 Nebraska Cold Storage, 600 E 39th St, Hastings, NE 68901
+Special instructions: continuous reefer, two load locks, seal required.
+Send bills to billing@msloads.com
+`;
+  const ascend = parseRateConText(ascendText);
+  assert.equal(ascend.load_number_hint, "45090");
+  assert.equal(ascend.reference_number, "45090");
+  assert.equal(ascend.weight, 42500);
+  assert.notEqual(ascend.weight, 45090);
+  assert.match(ascend.commodity, /FROZEN BEEF/i);
+  assert.equal(ascend.rate, 3200);
+  assert.match(ascend.origin, /Avenel/i);
+  assert.match(ascend.destination, /Hastings/i);
+  assert.match(ascend.special_instructions, /continuous reefer/i);
+  const namedFile = parseRateConText("Load confirmation for file Load_Confirmation_45090_20260823190045.pdf");
+  assert.equal(namedFile.weight, null, "filename digits must not become weight");
+
   const samplePdf = path.join(process.cwd(), "public", "samples", "sample-rate-con.pdf");
   if (fs.existsSync(samplePdf)) {
     const { extractDocumentText } = await import("../lib/rate-con");
@@ -570,6 +596,8 @@ SPECIAL INSTRUCTIONS
   assert.ok(!["1006149", "1006151"].includes(coleConfirm.loadNumber));
   const colePdf = await confirmation.renderConfirmationPdf(coleConfirm);
   assert.equal(colePdf.subarray(0, 4).toString(), "%PDF");
+  const { PDFDocument } = await import("pdf-lib");
+  assert.equal((await PDFDocument.load(colePdf)).getPageCount(), 1, "confirmation must be one page");
   const deniseLoad = queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
   assert.ok(deniseLoad);
   const deniseConfirm = confirmation.buildConfirmationForLoad(deniseLoad.id);

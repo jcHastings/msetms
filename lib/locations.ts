@@ -22,6 +22,8 @@ export type LocationInput = {
   scheduling_type: SchedulingType;
   hours: string;
   scheduling_notes: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export function formatLocationCityState(location: Pick<Location, "city" | "state" | "name">): string {

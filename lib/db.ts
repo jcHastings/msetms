@@ -457,6 +457,8 @@ export function migrate(db: Database): void {
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "locations", "latitude", "REAL");
+  ensureColumn(db, "locations", "longitude", "REAL");
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

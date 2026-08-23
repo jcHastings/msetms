@@ -108,7 +108,7 @@ Uploads (BOL, POD, lumper, trailer/product/seal photos, camera PDFs) are stored 
 3. Review/edit every extracted field. A partial parse is expected.
 4. Save. The original file is attached to the load as a rate confirmation.
 
-A labeled ingest sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer).
+A labeled ingest sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer). Ascend **LOAD CONFIRMATION** packets (Load #, Stops, Pay Items) also parse. The file stays attached even if some fields are blank. Weight never comes from the filename.
 
 Layout references for the outbound confirmation (not used as live data):
 

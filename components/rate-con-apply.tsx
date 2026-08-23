@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
+import { RateConPicker } from "@/components/rate-con-picker";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
 import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
@@ -28,6 +29,7 @@ export function RateConApply({
     weightUnit: "lb" | "kg";
     currency: string;
     targetMarginPercent: number;
+    placesEnabled: boolean;
   };
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
@@ -45,10 +47,7 @@ export function RateConApply({
           </p>
         </div>
         {state && !("parsed" in state && state.ok) ? <FormBanner result={state} /> : null}
-        <div className="field">
-          <label htmlFor={`rate_con_${load.id}`}>Rate con file</label>
-          <input id={`rate_con_${load.id}`} name="rate_con" type="file" accept=".pdf,image/*" required />
-        </div>
+        <RateConPicker inputId={`rate_con_${load.id}`} fileName={state && "fileName" in state ? state.fileName : ""} />
         <button className="btn btn-secondary" type="submit" disabled={pending}>
           {pending ? "Reading…" : "Extract fields"}
         </button>

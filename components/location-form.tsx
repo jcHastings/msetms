@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PlaceSearch } from "@/components/place-search";
 import { US_STATES } from "@/lib/locations";
 import {
   LOCATION_ROLES,
@@ -14,30 +15,51 @@ type Props = {
   location?: Location;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
+  placesEnabled?: boolean;
 };
 
-export function LocationForm({ location, action, submitLabel }: Props) {
+export function LocationForm({ location, action, submitLabel, placesEnabled = false }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
+  const [name, setName] = useState(location?.name ?? "");
+  const [street, setStreet] = useState(location?.street ?? "");
+  const [city, setCity] = useState(location?.city ?? "");
+  const [region, setRegion] = useState(location?.state ?? "");
+  const [zip, setZip] = useState(location?.zip ?? "");
+  const [latitude, setLatitude] = useState(location?.latitude != null ? String(location.latitude) : "");
+  const [longitude, setLongitude] = useState(location?.longitude != null ? String(location.longitude) : "");
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
       <FormBanner result={state} />
       <div className="grid gap-4 md:grid-cols-2">
+        <PlaceSearch
+          enabled={placesEnabled}
+          placeholder="Search a shipper or receiver address"
+          onPick={(place) => {
+            if (!name.trim()) setName(place.name);
+            if (!street.trim()) setStreet(place.street);
+            setCity(place.city || city);
+            setRegion(place.state || region);
+            if (!zip.trim()) setZip(place.zip);
+            setLatitude(place.latitude != null ? String(place.latitude) : latitude);
+            setLongitude(place.longitude != null ? String(place.longitude) : longitude);
+          }}
+        />
         <div className="field md:col-span-2">
           <label htmlFor="name">Name</label>
-          <input id="name" name="name" required defaultValue={location?.name} placeholder="Warehouse or DC name" />
+          <input id="name" name="name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Warehouse or DC name" />
         </div>
         <div className="field md:col-span-2">
           <label htmlFor="street">Street</label>
-          <input id="street" name="street" defaultValue={location?.street} />
+          <input id="street" name="street" value={street} onChange={(event) => setStreet(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="city">City</label>
-          <input id="city" name="city" required defaultValue={location?.city} />
+          <input id="city" name="city" required value={city} onChange={(event) => setCity(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="state">State</label>
-          <select id="state" name="state" required defaultValue={location?.state ?? ""}>
+          <select id="state" name="state" required value={region} onChange={(event) => setRegion(event.target.value)}>
             <option value="">Select state</option>
             {US_STATES.map((state) => (
               <option key={state} value={state}>
@@ -48,8 +70,10 @@ export function LocationForm({ location, action, submitLabel }: Props) {
         </div>
         <div className="field">
           <label htmlFor="zip">ZIP</label>
-          <input id="zip" name="zip" defaultValue={location?.zip} />
+          <input id="zip" name="zip" value={zip} onChange={(event) => setZip(event.target.value)} />
         </div>
+        <input type="hidden" name="latitude" value={latitude} />
+        <input type="hidden" name="longitude" value={longitude} />
         <div className="field">
           <label htmlFor="phone">Phone</label>
           <input id="phone" name="phone" defaultValue={location?.phone} />

@@ -69,6 +69,14 @@ export function getQuickbooksEnvironment(): "sandbox" | "production" {
   return value === "production" ? "production" : "sandbox";
 }
 
+export function getGoogleMapsApiKey(): string | undefined {
+  return readSecret("GOOGLE_MAPS_API_KEY") ?? readSecret("GOOGLE_PLACES_API_KEY");
+}
+
+export function isGooglePlacesConfigured(): boolean {
+  return Boolean(getGoogleMapsApiKey());
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&

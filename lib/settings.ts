@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getDataDir, getDb } from "./db";
+import { isGooglePlacesConfigured } from "./env";
 import { sanitizeName } from "./files";
 import {
   CURRENCIES,
@@ -468,6 +469,7 @@ export function loadFormSettings(): {
   weightUnit: "lb" | "kg";
   currency: string;
   targetMarginPercent: number;
+  placesEnabled: boolean;
 } {
   const settings = getCompanySettings();
   return {
@@ -477,6 +479,7 @@ export function loadFormSettings(): {
     weightUnit: settings.weight_unit,
     currency: settings.currency,
     targetMarginPercent: settings.default_gross_margin_percent,
+    placesEnabled: isGooglePlacesConfigured(),
   };
 }
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LocationForm } from "@/components/location-form";
 import { PageHeader } from "@/components/page-header";
 import { createLocationAction } from "@/lib/actions";
+import { isGooglePlacesConfigured } from "@/lib/env";
 
 export default function NewLocationPage() {
   return (
@@ -15,7 +16,11 @@ export default function NewLocationPage() {
           </Link>
         }
       />
-      <LocationForm action={createLocationAction} submitLabel="Create location" />
+      <LocationForm
+        action={createLocationAction}
+        submitLabel="Create location"
+        placesEnabled={isGooglePlacesConfigured()}
+      />
     </>
   );
 }
