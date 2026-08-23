@@ -19,10 +19,10 @@ async function main() {
   assert.ok(queries.listCustomers().length >= 1, "seed should include customers");
 
   const { listenAddress } = await import("../scripts/listen-address.mjs");
-  assert.equal(listenAddress({}), "0.0.0.0");
-  assert.equal(listenAddress({ HOSTNAME: "cursor" }), "0.0.0.0", "OS HOSTNAME must not become the bind address");
-  assert.equal(listenAddress({ HOSTNAME: "cursor", HOST: "127.0.0.1" }), "127.0.0.1");
-  assert.equal(listenAddress({ LISTEN_HOST: "10.0.0.8", HOSTNAME: "cursor" }), "10.0.0.8");
+  const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
+  assert.equal(listenAddress(noBind), "0.0.0.0", "OS HOSTNAME must not become the bind address");
+  assert.equal(listenAddress({ ...noBind, HOST: "127.0.0.1" }), "127.0.0.1");
+  assert.equal(listenAddress({ ...noBind, LISTEN_HOST: "10.0.0.8" }), "10.0.0.8");
 
   const { listExceptionInbox } = await import("../lib/exceptions");
   const inbox = listExceptionInbox();

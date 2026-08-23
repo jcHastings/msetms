@@ -5,6 +5,7 @@
  * or BIND_HOST. Never use OS HOSTNAME — Linux sets that to the machine
  * name (e.g. "cursor"), which binds nowhere a browser can reach.
  */
+/** @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env] */
 export function listenAddress(env = process.env) {
   for (const key of ["HOST", "LISTEN_HOST", "BIND_HOST"]) {
     const value = env[key];
