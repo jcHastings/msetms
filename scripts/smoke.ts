@@ -21,6 +21,8 @@ async function main() {
   assert.match(navSource, /Commissions/);
   assert.match(navSource, /QuickBooks/);
   assert.match(navSource, /href: "\/compliance"/);
+  assert.match(navSource, /href: "\/fuel"/);
+  assert.match(navSource, /label: "Fuel"/);
   assert.match(navSource, /href: "\/loads\/templates"/);
   assert.match(navSource, /href: "\/settings"/);
   assert.match(navSource, /href: "\/audit"/);
@@ -1757,6 +1759,85 @@ Continuous reefer. Two load locks.
   assert.ok(queries.listTrucks().every((truck) => trucksCsv.includes(truck.unit_number)));
   const trailersCsv = renderTrailersCsv(queries.listTrailers());
   assert.ok(queries.listTrailers().every((trailer) => trailersCsv.includes(trailer.unit_number)));
+
+  const fuelPage = fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8");
+  const fuelImportUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-csv-import.tsx"), "utf8");
+  const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
+  const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
+  assert.match(fuelPage, /FuelCsvImport/);
+  assert.match(fuelPage, /Unassigned/);
+  assert.match(fuelImportUi, /\/api\/fuel\/template/);
+  assert.match(fuelImportUi, /\/api\/fuel\/export/);
+  assert.match(driversListPage, /href="\/fuel"/);
+  assert.match(driverEditPage, /DriverFuelCard/);
+  assert.doesNotMatch(fuelPage + fuelImportUi, /Comdata|WEX|EFS|TChek/i);
+  for (const file of ["app/api/fuel/template/route.ts", "app/api/fuel/export/route.ts"]) {
+    assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /dispatcherCsvResponse/);
+  }
+
+  const {
+    cardLast4From,
+    matchFuelDriver,
+    parseFuelCsv,
+    parseFuelWhen,
+    renderFuelExportCsv,
+    renderFuelTemplate,
+    FUEL_CSV_HEADERS,
+  } = await import("../lib/fuel");
+  const fuelStore = await import("../lib/fuel-store");
+  assert.equal(renderFuelTemplate().replace(/^\uFEFF/, "").trim(), FUEL_CSV_HEADERS.join(","));
+  const noon = parseFuelWhen("08/21/2026", "2:32 PM");
+  assert.ok(noon);
+  assert.equal(noon.getMonth(), 7);
+  assert.equal(noon.getDate(), 21);
+  assert.equal(noon.getHours(), 14);
+  assert.equal(cardLast4From("************4321"), "4321");
+  const fuelWhen = new Date();
+  const fuelDate = `${fuelWhen.getMonth() + 1}/${fuelWhen.getDate()}/${fuelWhen.getFullYear()}`;
+  const fuelCsv = [
+    "Date,Time,Driver Name,Driver ID,Unit,Location,Gallons,Price,Total,Card Number",
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
+    `${fuelDate},15:10,, ,101,Indianapolis,80,3.40,272.00,1111`,
+    `${fuelDate},16:00,Unknown Driver,,999,Nowhere,40,3.10,124.00,2222`,
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,100,3.499,349.90,****4321`,
+    ",,,,,",
+  ].join("\r\n");
+  const parsedFuel = parseFuelCsv(fuelCsv);
+  assert.equal(parsedFuel.rows.length, 4);
+  assert.equal(parsedFuel.skipped, 0);
+  const deniseMatch = matchFuelDriver(parsedFuel.rows[0]!, queries.listDrivers(), queries.listTrucks());
+  assert.equal(queries.getDriver(deniseMatch.driverId ?? 0)?.name, "Denise Ortega");
+  const unitMatch = matchFuelDriver(parsedFuel.rows[1]!, queries.listDrivers(), queries.listTrucks());
+  assert.equal(queries.getDriver(unitMatch.driverId ?? 0)?.name, "Priya Shah");
+  const unknownMatch = matchFuelDriver(parsedFuel.rows[2]!, queries.listDrivers(), queries.listTrucks());
+  assert.equal(unknownMatch.driverId, null);
+
+  const firstFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily.csv");
+  assert.equal(firstFuel.created, 2);
+  assert.equal(firstFuel.unmatched, 1);
+  assert.equal(firstFuel.skipped, 1);
+  const secondFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily-again.csv");
+  assert.equal(secondFuel.created, 0);
+  assert.equal(secondFuel.unmatched, 0);
+  assert.equal(secondFuel.skipped, 4);
+  const unmatchedFuel = fuelStore.listFuelTransactions({ unmatchedOnly: true });
+  assert.equal(unmatchedFuel.length, 1);
+  assert.equal(unmatchedFuel[0]?.driver_name_raw, "Unknown Driver");
+  const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
+  assert.ok(tyrell);
+  fuelStore.assignFuelTransactionDriver(unmatchedFuel[0]!.id, tyrell.id);
+  assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 0);
+  const denise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
+  assert.ok(denise);
+  const deniseFuel = fuelStore.getDriverFuelRollup(denise.id);
+  assert.ok(deniseFuel);
+  assert.equal(deniseFuel.weekGallons, 100);
+  assert.equal(deniseFuel.monthAmount, 349.9);
+  const exportedFuel = renderFuelExportCsv(fuelStore.listFuelTransactions());
+  assert.match(exportedFuel, /Denise Ortega/);
+  assert.match(exportedFuel, /4321/);
+  assert.doesNotMatch(exportedFuel, /1125/);
+  assert.equal(fuelStore.listFuelTransactions().length, 3);
 
   const { extractStateCode } = await import("../lib/locations");
   assert.equal(extractStateCode("Chicago, IL"), "IL");

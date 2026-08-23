@@ -40,6 +40,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Fleet / admin
 
 - **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav (plus the Fleet overview). Each list has a UTF-8 CSV download (own columns; driver PIN is never exported).
+- **Fuel** in Fleet nav — daily fuel-card CSV import (no vendor, no live card API). Match by driver name or unit #. Dedup on date+time+gallons+amount+card. Unmatched rows sit in a queue to assign. Per-driver week/month gallons and $. Template + export. Driver pages link here.
 - Drivers: name, mobile, email, PIN (set/reset, never shown in the list), company vs owner-operator, OO %, CDL, medical card, assigned truck, notes, active flag, document uploads.
 - Trucks: unit #, year/make/model, plate, VIN, assigned driver, registration + DOT dates, Samsara vehicle id, notes, active flag, document uploads.
 - Trailers: unit #, type, VIN/plate, assigned truck, registration + DOT, ORBCOMM id, default reefer setpoint, last known reading stub, notes, active flag, document uploads.

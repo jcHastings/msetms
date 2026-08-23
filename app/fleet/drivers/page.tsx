@@ -20,6 +20,9 @@ export default function DriversPage() {
         subtitle="Company drivers and owner-operators. Assign a unit from the dispatch board."
         actions={
           <>
+            <Link href="/fuel" className="btn btn-secondary">
+              Fuel
+            </Link>
             <a href="/api/fleet/drivers/export" className="btn btn-secondary">
               Download CSV
             </a>

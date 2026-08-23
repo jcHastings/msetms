@@ -43,6 +43,21 @@ export function formatMoney(value: number | null | undefined, currency = "USD"):
   });
 }
 
+export function formatFuelMoney(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export function formatGallons(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 3 })} gal`;
+}
+
 export function formatWeight(value: number | null | undefined, unit = "lb"): string {
   if (value == null) return "—";
   return `${value.toLocaleString("en-US")} ${unit === "kg" ? "kg" : "lb"}`;

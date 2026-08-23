@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DriverComplianceCard } from "@/components/driver-compliance-card";
+import { DriverFuelCard } from "@/components/driver-fuel-card";
 import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
@@ -31,6 +32,7 @@ export default async function EditDriverPage({
         }
       />
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
+      <DriverFuelCard driverId={driver.id} />
       <DriverForm
         driver={{ ...driver, pin: "" }}
         hasPin={Boolean(driver.pin)}

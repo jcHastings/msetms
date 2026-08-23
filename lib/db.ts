@@ -450,6 +450,26 @@ export function migrate(db: Database): void {
       terms_text TEXT NOT NULL DEFAULT '',
       font_size INTEGER NOT NULL DEFAULT 10
     );
+
+    CREATE TABLE IF NOT EXISTS fuel_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      occurred_at TEXT NOT NULL,
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      location TEXT NOT NULL DEFAULT '',
+      gallons REAL,
+      price_per_gallon REAL,
+      amount REAL,
+      card_last4 TEXT NOT NULL DEFAULT '',
+      source_file TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      unit_number TEXT NOT NULL DEFAULT '',
+      driver_name_raw TEXT NOT NULL DEFAULT '',
+      dedup_key TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fuel_driver ON fuel_transactions(driver_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_fuel_occurred ON fuel_transactions(occurred_at);
   `);
 
   for (const [column, definition] of [

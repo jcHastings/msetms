@@ -53,6 +53,8 @@ import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type Searc
 import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
+import { type FuelImportResult } from "./fuel";
+import { assignFuelTransactionDriver, importFuelFromCsv } from "./fuel-store";
 
 function refresh(): void {
   try {
@@ -889,6 +891,39 @@ export async function importLocationsCsvAction(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
   }
+}
+
+export async function importFuelCsvAction(
+  _prev: FuelImportResult | null,
+  formData: FormData,
+): Promise<FuelImportResult> {
+  try {
+    const file = formData.get("csv");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Choose a CSV file." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { ok: false, error: "CSV is too large (max 5 MB)." };
+    }
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      return { ok: false, error: "Upload a CSV. In Excel use File → Save As → CSV UTF-8." };
+    }
+    const text = decodeCsvBuffer(await fileToBuffer(file));
+    const result = importFuelFromCsv(text, file.name || "fuel.csv");
+    refresh();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
+}
+
+export async function assignFuelDriverAction(formData: FormData): Promise<void> {
+  const id = parseOptionalInt(formData.get("fuel_id"));
+  const driverId = parseOptionalInt(formData.get("driver_id"));
+  if (!id || !driverId) throw new Error("Pick a driver.");
+  assignFuelTransactionDriver(id, driverId);
+  refresh();
 }
 
 export async function deleteLocationAction(formData: FormData): Promise<ActionResult> {
