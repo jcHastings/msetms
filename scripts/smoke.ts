@@ -177,10 +177,11 @@ async function main() {
     "components/load-form.tsx",
     "lib/rate-con-shared.ts",
     "lib/reefer-shared.ts",
+    "components/make-bol-button.tsx",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
-    assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places|bol)["']/, `${file} must stay client-safe`);
   }
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
@@ -1359,6 +1360,49 @@ Continuous reefer. Two load locks.
   assert.match(deniseConfirm.reeferSetpoint, /34/);
   assert.equal(deniseLoad.reefer_mode, "continuous");
 
+  const filesMod = await import("../lib/files");
+  assert.equal(
+    filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol").length,
+    0,
+    "BOL is not auto-created on seed/assign",
+  );
+  const settingsMod = await import("../lib/settings");
+  settingsMod.updateDocumentDefaults({
+    doc_type: "bol",
+    header_text: "Smoke Bill of Lading",
+    footer_text: "Smoke BOL footer",
+    terms_text: "Smoke BOL terms stay on the form.",
+    font_size: 10,
+  });
+  const madeBol = await (await import("../lib/actions")).makeBolAction(deniseLoad.id, null, new FormData());
+  assert.equal(madeBol.ok, true);
+  const bols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
+  assert.equal(bols.length, 1);
+  assert.equal(bols[0].kind, "bol");
+  assert.match(bols[0].original_name, /MSE-1045-BOL\.pdf/);
+  const bolBuf = fs.readFileSync(filesMod.getAttachmentPath(bols[0]));
+  assert.equal(bolBuf.subarray(0, 4).toString(), "%PDF");
+  assert.equal((await PDFDocument.load(bolBuf)).getPageCount(), 1, "BOL must be one page");
+  const bolText = String((await extractText(new Uint8Array(bolBuf), { mergePages: true })).text ?? "");
+  assert.match(bolText, /Smoke Bill of Lading/);
+  assert.match(bolText, /River City Nashville Cooler/);
+  assert.match(bolText, /700 Cowan/);
+  assert.match(bolText, /\(615\) 555-0144/);
+  assert.match(bolText, /Dallas Cold Storage/);
+  assert.match(bolText, /3500 S Lamar/);
+  assert.match(bolText, /\(214\) 555-0190/);
+  assert.match(bolText, /MSE-1045/);
+  assert.match(bolText, /Chilled dairy/);
+  assert.match(bolText, /42800/);
+  assert.match(bolText, /Denise/);
+  assert.match(bolText, /TR-7742/);
+  assert.match(bolText, /34/);
+  assert.match(bolText, /Continuous/);
+  assert.match(bolText, /PO-55209/);
+  assert.match(bolText, /RC-1045/);
+  assert.match(bolText, /Smoke BOL footer|Smoke BOL terms/);
+  assert.doesNotMatch(bolText, /Internal legs|for carrier use|Relay/i);
+
   const freshCompanyId = queries.createLoad({
     customer_id: customerId,
     origin: "Atlanta, GA",
@@ -1381,6 +1425,11 @@ Continuous reefer. Two load locks.
     truck_id: null,
     driver_id: null,
   });
+  assert.equal(
+    filesMod.listAttachments(freshCompanyId).filter((file) => file.kind === "bol").length,
+    0,
+    "saving a load must not auto-create a BOL",
+  );
   const freshCompany = confirmation.buildConfirmationForLoad(freshCompanyId);
   assert.equal(freshCompany.style, "company_driver");
   const freshCompanyPdf = await confirmation.renderConfirmationPdf(freshCompany);

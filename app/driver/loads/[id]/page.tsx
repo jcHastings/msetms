@@ -59,10 +59,17 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap gap-2">
         <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation`}>
           Download load confirmation
         </a>
+        {attachments
+          .filter((file) => file.kind === "bol")
+          .map((file) => (
+            <a key={file.id} className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
+              Print / view BOL
+            </a>
+          ))}
       </div>
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">

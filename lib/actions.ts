@@ -621,6 +621,33 @@ export async function parseRateConAction(
   }
 }
 
+export async function makeBolAction(
+  loadId: number,
+  _prev: ActionResult | null,
+  _formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      if (!loadId) throw new Error("Load is missing.");
+      const { generateBolPdf } = await import("./bol");
+      const { addAttachment } = await import("./files");
+      const { buffer, filename } = await generateBolPdf(loadId);
+      const attachment = addAttachment({
+        loadId,
+        kind: "bol",
+        originalName: filename,
+        buffer,
+        mimeType: "application/pdf",
+        uploadedBy: "dispatcher",
+      });
+      refresh();
+      return { ok: true, id: attachment.id, message: "BOL saved on Load Documents." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function attachFileFormAction(formData: FormData): Promise<void> {
   const result = await attachFileAction(formData);
   if (!result.ok) throw new Error(result.error);

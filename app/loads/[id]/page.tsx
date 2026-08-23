@@ -16,6 +16,7 @@ import { LoadWorkspace } from "@/components/load-workspace";
 import { LocationSchedulingCard } from "@/components/location-scheduling";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
+import { MakeBolPanel } from "@/components/make-bol-button";
 import { RateConApply } from "@/components/rate-con-apply";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -254,6 +255,7 @@ export default async function LoadDetailPage({
               })}
             </ul>
           </section>
+          <MakeBolPanel loadId={load.id} attachments={attachments} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} />
         </LoadTabPanel>
       </LoadWorkspace>

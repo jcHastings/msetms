@@ -16,7 +16,7 @@ export default async function DocumentSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Document defaults"
-        subtitle="Header, footer, terms, and font size for confirmations, invoice, customer confirmation, and BOL. Not a full document designer. Load confirmation uses these values on the PDF."
+        subtitle="Header, footer, terms, and font size for confirmations, invoice, customer confirmation, and BOL. Make BOL on Load Documents uses the BOL defaults plus the MS Express logo."
       />
       <div className="space-y-6">
         {DOCUMENT_TYPES.map((type) => {
