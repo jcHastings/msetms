@@ -397,7 +397,7 @@ These sit **on top of** the core 300. Do not start them until the ROADMAP phase 
 - OO settlement is **not** a QBO bill unless a later slice says so.
 - Sync payments back from QBO.
 - Multi-entity / multiple QBO realms — not v1.
-- Credentials only via env; no in-app fake OAuth. [v1]
+- Credentials only via env; in-app QuickBooks Online OAuth stores realm/refresh on the server. [v1]
 
 ### Fuel
 
