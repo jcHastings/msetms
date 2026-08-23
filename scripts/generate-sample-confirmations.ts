@@ -11,6 +11,10 @@ const company = {
   dispatcher_phone: "402-302-0097",
   dispatcher_fax: "",
   dispatcher_email: "ana@msloads.com",
+  street: "",
+  city: "",
+  state: "",
+  zip: "",
 };
 
 const ooSample: ConfirmationModel = {

@@ -1206,7 +1206,7 @@ function releaseAssetsIfNeeded(load: Load): void {
 
 function syncAssignment(
   loadId: number,
-  status: LoadStatus,
+  status: string,
   truckId: number | null,
   driverId: number | null,
 ): void {

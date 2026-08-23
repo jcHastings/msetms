@@ -48,6 +48,8 @@ export function getDb(): Database {
     backfillDemoLocations(db);
   }
   backfillDemoAccounting(db);
+  backfillSampleLoads(db);
+  backfillLoadNumbering(db);
 
   connection = db;
   connectedPath = dbPath;

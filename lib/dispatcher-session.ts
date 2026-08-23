@@ -13,8 +13,6 @@ const COOKIE = "tms_dispatcher_id";
 
 export type Dispatcher = DispatcherUser;
 
-export { canEditSettings, canManageUsers, roleLabel };
-
 export function listDispatchers(): Dispatcher[] {
   return listDispatcherUsers(false);
 }

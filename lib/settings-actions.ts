@@ -222,15 +222,10 @@ export async function uploadLogoAction(
   }
 }
 
-export async function clearLogoAction(): Promise<ActionResult> {
-  try {
-    await requireSettingsEditor();
-    clearCompanyLogo();
-    refresh();
-    return { ok: true };
-  } catch (error) {
-    return fail(error);
-  }
+export async function clearLogoAction(): Promise<void> {
+  await requireSettingsEditor();
+  clearCompanyLogo();
+  refresh();
 }
 
 export async function addDropdownOptionAction(
