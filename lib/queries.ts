@@ -144,6 +144,7 @@ export function importLocationsFromCsv(text: string): {
       if (existing) {
         updateLocation(existing.id, {
           ...row.input,
+          name: existing.name,
           scheduling_type: existing.scheduling_type,
           hours: existing.hours,
           latitude: existing.latitude,

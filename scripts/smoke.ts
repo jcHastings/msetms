@@ -1670,6 +1670,7 @@ Continuous reefer. Two load locks.
   assert.equal(secondImport.updated, 1);
   const afterUpdate = queries.getLocation(imported.id);
   assert.ok(afterUpdate);
+  assert.equal(afterUpdate.name, "New Import DC");
   assert.equal(afterUpdate.role, "both");
   assert.equal(afterUpdate.phone, "555-9999");
   assert.equal(afterUpdate.scheduling_notes, "Updated public");
