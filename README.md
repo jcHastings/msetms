@@ -2,7 +2,7 @@
 
 A local Transportation Management System for a small trucking company. Two interfaces:
 
-- **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
+- **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, keep a Locations book for shippers/receivers, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
 Single-tenant. The dispatcher desk requires a username + password. Data lives in SQLite and files on disk, and survives refresh.
@@ -80,7 +80,7 @@ The board, loads, fleet, customers, settings, and company APIs are closed until 
 
 - **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
 - Dashboard counts, dispatch board with status / pickup-date filters
-- Create a load by hand, or **Load from rate confirmation**
+- **Locations** directory for shippers and receivers (name, street/city/state/zip, phone, notes, role, appointment vs FCFS, hours, scheduling notes, email/portal). Search and edit from the nav. On a load, pick from the book or type a one-off address; saving can add that stop to Locations. Pickup/delivery scheduling shows on the load and the driver’s dispatch.
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load

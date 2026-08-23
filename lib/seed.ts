@@ -468,6 +468,7 @@ export function seedDatabase(db: Database): void {
     );
     db.prepare("UPDATE loads SET trailer_id = ? WHERE load_number = 'MSE-1043'").run(tr8801);
     db.prepare("UPDATE loads SET trailer_id = ? WHERE load_number = 'MSE-1045'").run(tr7742);
+    seedLocations(db);
     extras.run(
       "Scale ticket in door pocket.",
       "",
@@ -531,4 +532,151 @@ export function seedDatabase(db: Database): void {
   });
 
   seed();
+}
+
+export function seedLocations(db: Database): void {
+  const existing = db.prepare("SELECT COUNT(*) AS count FROM locations").get() as { count: number };
+  if (Number(existing.count) > 0) {
+    linkSeededLoadsToLocations(db);
+    return;
+  }
+  const created = now();
+  const insert = db.prepare(
+    `INSERT INTO locations (
+      name, street, city, state, zip, phone, notes, role, scheduling_type,
+      hours, scheduling_notes, scheduling_email, scheduling_portal, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  insert.run(
+    "River City Produce — Nashville cooler",
+    "1400 Cowan St",
+    "Nashville",
+    "TN",
+    "37208",
+    "(615) 555-0140",
+    "Pulp dairy at the door.",
+    "shipper",
+    "appointment",
+    "Mon–Fri 06:00–14:00",
+    "Appointment required. Call 60 minutes out. Dock 4.",
+    "appointments@rivercityproduce.example",
+    "",
+    created,
+    created,
+  );
+  insert.run(
+    "Dallas Cold Storage",
+    "8800 Walton Walker Blvd",
+    "Dallas",
+    "TX",
+    "75211",
+    "(214) 555-0188",
+    "",
+    "receiver",
+    "fcfs",
+    "Daily 07:00–17:00",
+    "FCFS. Check in at the guard shack.",
+    "",
+    "https://portal.example.com/dcs",
+    created,
+    created,
+  );
+  insert.run(
+    "Heartland Foods — Chicago DC",
+    "4100 W 43rd St",
+    "Chicago",
+    "IL",
+    "60632",
+    "(312) 555-0148",
+    "",
+    "shipper",
+    "appointment",
+    "Mon–Fri 07:00–15:00",
+    "Live unload. Call Megan 60 minutes out.",
+    "megan.alvarez@heartlandfoods.example",
+    "",
+    created,
+    created,
+  );
+  insert.run(
+    "Summit Building Supply — Indianapolis",
+    "8500 E 33rd St",
+    "Indianapolis",
+    "IN",
+    "46226",
+    "(317) 555-0114",
+    "",
+    "receiver",
+    "fcfs",
+    "Mon–Sat 06:00–16:00",
+    "FCFS. Liftgate dock on the west side.",
+    "dana.w@summitbuild.example",
+    "",
+    created,
+    created,
+  );
+  insert.run(
+    "River City Produce — Memphis",
+    "2250 Harbor Ave",
+    "Memphis",
+    "TN",
+    "38113",
+    "(901) 555-0166",
+    "Reefer only. Maintain 34–38°F.",
+    "both",
+    "appointment",
+    "Mon–Fri 05:00–14:00",
+    "Appointment required. Detention after 2 hours.",
+    "lnavarro@rivercityproduce.example",
+    "",
+    created,
+    created,
+  );
+  insert.run(
+    "Atlanta DC — Blue Ridge",
+    "1200 Fulton Industrial Blvd",
+    "Atlanta",
+    "GA",
+    "30336",
+    "(404) 555-0120",
+    "",
+    "receiver",
+    "appointment",
+    "Mon–Fri 08:00–16:00",
+    "Appointment; docks 4–7.",
+    "",
+    "",
+    created,
+    created,
+  );
+  linkSeededLoadsToLocations(db);
+}
+
+function linkSeededLoadsToLocations(db: Database): void {
+  const nashville = db
+    .prepare("SELECT id FROM locations WHERE name = ?")
+    .get("River City Produce — Nashville cooler") as { id: number } | undefined;
+  const dallas = db.prepare("SELECT id FROM locations WHERE name = ?").get("Dallas Cold Storage") as
+    | { id: number }
+    | undefined;
+  const chicago = db
+    .prepare("SELECT id FROM locations WHERE name = ?")
+    .get("Heartland Foods — Chicago DC") as { id: number } | undefined;
+  const indy = db
+    .prepare("SELECT id FROM locations WHERE name = ?")
+    .get("Summit Building Supply — Indianapolis") as { id: number } | undefined;
+  const memphis = db
+    .prepare("SELECT id FROM locations WHERE name = ?")
+    .get("River City Produce — Memphis") as { id: number } | undefined;
+  const atlanta = db.prepare("SELECT id FROM locations WHERE name = ?").get("Atlanta DC — Blue Ridge") as
+    | { id: number }
+    | undefined;
+  const link = db.prepare(
+    `UPDATE loads SET shipper_location_id = COALESCE(NULLIF(shipper_location_id, 0), ?),
+       consignee_location_id = COALESCE(NULLIF(consignee_location_id, 0), ?)
+     WHERE load_number = ?`,
+  );
+  if (nashville && dallas) link.run(nashville.id, dallas.id, "MSE-1045");
+  if (chicago && indy) link.run(chicago.id, indy.id, "MSE-1042");
+  if (memphis && atlanta) link.run(memphis.id, atlanta.id, "MSE-1043");
 }

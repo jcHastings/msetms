@@ -23,6 +23,9 @@ import {
   type IftaJurisdictionRow,
   type IftaReport,
   type LoadView,
+  type Location,
+  type LocationInput,
+  type LocationRole,
   type Trailer,
   type TrailerType,
   type Truck,
@@ -70,6 +73,107 @@ export function getCustomer(id: number): CustomerWithContacts | null {
     .prepare("SELECT * FROM contacts WHERE customer_id = ? ORDER BY id")
     .all(id) as Contact[];
   return { ...customer, contacts };
+}
+
+export function listLocations(filters: { q?: string; role?: LocationRole | "all" } = {}): Location[] {
+  const q = filters.q?.trim().toLowerCase() ?? "";
+  const role = filters.role && filters.role !== "all" ? filters.role : "";
+  const rows = getDb()
+    .prepare("SELECT * FROM locations ORDER BY name COLLATE NOCASE")
+    .all() as Location[];
+  return rows.filter((location) => {
+    if (role && location.role !== "both" && location.role !== role) return false;
+    if (!q) return true;
+    const haystack = [
+      location.name,
+      location.street,
+      location.city,
+      location.state,
+      location.zip,
+      location.phone,
+      location.notes,
+      location.hours,
+      location.scheduling_notes,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+export function listLocationsForRole(role: "shipper" | "receiver"): Location[] {
+  return listLocations({ role });
+}
+
+export function getLocation(id: number): Location | null {
+  return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
+}
+
+export function createLocation(input: LocationInput): number {
+  validateLocationInput(input);
+  const timestamp = now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO locations (
+        name, street, city, state, zip, phone, notes, role, scheduling_type,
+        hours, scheduling_notes, scheduling_email, scheduling_portal, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.name,
+      input.street,
+      input.city,
+      input.state,
+      input.zip,
+      input.phone,
+      input.notes,
+      input.role,
+      input.scheduling_type,
+      input.hours,
+      input.scheduling_notes,
+      input.scheduling_email,
+      input.scheduling_portal,
+      timestamp,
+      timestamp,
+    );
+  return Number(result.lastInsertRowid);
+}
+
+export function updateLocation(id: number, input: LocationInput): void {
+  if (!getLocation(id)) throw new Error("Location not found.");
+  validateLocationInput(input);
+  getDb()
+    .prepare(
+      `UPDATE locations
+       SET name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?, notes = ?,
+           role = ?, scheduling_type = ?, hours = ?, scheduling_notes = ?,
+           scheduling_email = ?, scheduling_portal = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      input.name,
+      input.street,
+      input.city,
+      input.state,
+      input.zip,
+      input.phone,
+      input.notes,
+      input.role,
+      input.scheduling_type,
+      input.hours,
+      input.scheduling_notes,
+      input.scheduling_email,
+      input.scheduling_portal,
+      now(),
+      id,
+    );
+}
+
+function validateLocationInput(input: LocationInput): void {
+  if (!input.name.trim()) throw new Error("Location name is required.");
+  if (!input.city.trim() && !input.street.trim()) {
+    throw new Error("Add a city or street for this location.");
+  }
 }
 
 export function createCustomer(input: {
@@ -546,6 +650,8 @@ export type LoadInput = {
   customer_id: number;
   origin: string;
   destination: string;
+  shipper_location_id?: number | null;
+  consignee_location_id?: number | null;
   pickup_start: string;
   pickup_end: string;
   delivery_start: string;
@@ -571,6 +677,12 @@ export type LoadInput = {
 function validateLoadInput(input: LoadInput): void {
   if (!getCustomer(input.customer_id)) {
     throw new Error("Pick a customer.");
+  }
+  if (input.shipper_location_id && !getLocation(input.shipper_location_id)) {
+    throw new Error("Shipper location was not found.");
+  }
+  if (input.consignee_location_id && !getLocation(input.consignee_location_id)) {
+    throw new Error("Consignee location was not found.");
   }
   if (new Date(input.pickup_end) < new Date(input.pickup_start)) {
     throw new Error("Pickup window end must be after the start.");
@@ -600,18 +712,20 @@ export function createLoad(input: LoadInput): number {
     const result = db
       .prepare(
         `INSERT INTO loads (
-          load_number, customer_id, origin, destination,
+          load_number, customer_id, origin, destination, shipper_location_id, consignee_location_id,
           pickup_start, pickup_end, delivery_start, delivery_end,
           weight, commodity, rate, notes, special_instructions, appointment_notes,
           reference_number, po_number, reefer_setpoint_f, trailer_number, trailer_id,
           oo_percent, oo_pay, status, truck_id, driver_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         loadNumber,
         input.customer_id,
         input.origin,
         input.destination,
+        input.shipper_location_id ?? null,
+        input.consignee_location_id ?? null,
         input.pickup_start,
         input.pickup_end,
         input.delivery_start,
@@ -652,7 +766,7 @@ export function updateLoad(id: number, input: LoadInput): void {
     releaseAssetsIfNeeded(existing);
     db.prepare(
       `UPDATE loads SET
-        customer_id = ?, origin = ?, destination = ?,
+        customer_id = ?, origin = ?, destination = ?, shipper_location_id = ?, consignee_location_id = ?,
         pickup_start = ?, pickup_end = ?, delivery_start = ?, delivery_end = ?,
         weight = ?, commodity = ?, rate = ?, notes = ?,
         special_instructions = ?, appointment_notes = ?,
@@ -663,6 +777,8 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.customer_id,
       input.origin,
       input.destination,
+      input.shipper_location_id ?? null,
+      input.consignee_location_id ?? null,
       input.pickup_start,
       input.pickup_end,
       input.delivery_start,

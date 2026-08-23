@@ -9,6 +9,7 @@ import {
   createCustomer,
   createDriver,
   createLoad,
+  createLocation,
   createTrailer,
   createTruck,
   findOrCreateCustomer,
@@ -18,11 +19,13 @@ import {
   updateCustomer,
   updateDriver,
   updateLoad,
+  updateLocation,
   updateLoadStatus,
   updateTrailer,
   updateTruck,
   type LoadInput,
 } from "./queries";
+import { locationInputFromStop, parseLocationRole, parseLocationScheduling } from "./locations";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
@@ -84,10 +87,14 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   if (!isLoadStatus(statusValue)) throw new Error("Invalid load status.");
   const truckId = parseOptionalInt(formData.get("truck_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
+  const origin = requiredString(formData.get("origin"), "Origin");
+  const destination = requiredString(formData.get("destination"), "Destination");
   const parsed: LoadInput = {
     customer_id: customerId,
-    origin: requiredString(formData.get("origin"), "Origin"),
-    destination: requiredString(formData.get("destination"), "Destination"),
+    origin,
+    destination,
+    shipper_location_id: resolveStopLocation(formData, "shipper", origin),
+    consignee_location_id: resolveStopLocation(formData, "consignee", destination),
     pickup_start: fromInputDateTime(requiredString(formData.get("pickup_start"), "Pickup start")),
     pickup_end: fromInputDateTime(requiredString(formData.get("pickup_end"), "Pickup end")),
     delivery_start: fromInputDateTime(requiredString(formData.get("delivery_start"), "Delivery start")),
@@ -173,6 +180,75 @@ function parseDriverStatus(value: FormDataEntryValue | null): DriverStatus {
     throw new Error("Invalid driver status.");
   }
   return status as DriverStatus;
+}
+
+function resolveStopLocation(
+  formData: FormData,
+  prefix: "shipper" | "consignee",
+  addressLine: string,
+): number | null {
+  const existing = parseOptionalInt(formData.get(`${prefix}_location_id`));
+  if (existing) return existing;
+  if (String(formData.get(`save_${prefix}_location`) ?? "") !== "1") return null;
+  return createLocation(
+    locationInputFromStop({
+      name: String(formData.get(`${prefix}_name`) ?? "").trim(),
+      street: String(formData.get(`${prefix}_street`) ?? "").trim(),
+      city: String(formData.get(`${prefix}_city`) ?? "").trim(),
+      state: String(formData.get(`${prefix}_state`) ?? "").trim(),
+      zip: String(formData.get(`${prefix}_zip`) ?? "").trim(),
+      addressLine,
+      role: prefix,
+    }),
+  );
+}
+
+export async function createLocationAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    const id = createLocation(parseLocationForm(formData));
+    refresh();
+    redirect(`/locations/${id}`);
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateLocationAction(
+  id: number,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    updateLocation(id, parseLocationForm(formData));
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+function parseLocationForm(formData: FormData) {
+  return {
+    name: requiredString(formData.get("name"), "Location name"),
+    street: String(formData.get("street") ?? "").trim(),
+    city: String(formData.get("city") ?? "").trim(),
+    state: String(formData.get("state") ?? "").trim().toUpperCase(),
+    zip: String(formData.get("zip") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    notes: String(formData.get("notes") ?? "").trim(),
+    role: parseLocationRole(formData.get("role")),
+    scheduling_type: parseLocationScheduling(formData.get("scheduling_type")),
+    hours: String(formData.get("hours") ?? "").trim(),
+    scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
+    scheduling_email: String(formData.get("scheduling_email") ?? "").trim(),
+    scheduling_portal: String(formData.get("scheduling_portal") ?? "").trim(),
+  };
 }
 
 export async function createCustomerAction(

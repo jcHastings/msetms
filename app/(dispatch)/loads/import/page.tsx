@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
-import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,7 @@ export default function ImportRateConPage() {
         trucks={listTrucks()}
         trailers={listTrailers()}
         drivers={listDrivers()}
+        locations={listLocations()}
       />
     </>
   );

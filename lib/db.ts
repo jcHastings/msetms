@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Database } from "./sqlite";
-import { seedDatabase } from "./seed";
+import { seedDatabase, seedLocations } from "./seed";
 import { hashPassword } from "./password";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -47,6 +47,7 @@ export function getDb(): Database {
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
     backfillDemoInboxExceptions(db);
+    backfillDemoLocations(db);
   }
 
   connection = db;
@@ -266,7 +267,32 @@ export function migrate(db: Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_dispatcher_sessions_hash ON dispatcher_sessions(token_hash);
+
+    CREATE TABLE IF NOT EXISTS locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'both',
+      scheduling_type TEXT NOT NULL DEFAULT 'fcfs',
+      hours TEXT NOT NULL DEFAULT '',
+      scheduling_notes TEXT NOT NULL DEFAULT '',
+      scheduling_email TEXT NOT NULL DEFAULT '',
+      scheduling_portal TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);
+    CREATE INDEX IF NOT EXISTS idx_locations_city ON locations(city);
   `);
+
+  ensureColumn(db, "loads", "shipper_location_id", "INTEGER");
+  ensureColumn(db, "loads", "consignee_location_id", "INTEGER");
 }
 
 function isoDateOffset(offsetDays: number): string {
@@ -312,6 +338,10 @@ function backfillDemoRegistration(db: Database): void {
          dot_expires = CASE WHEN dot_expires = '' THEN ? ELSE dot_expires END
      WHERE unit_number = '108'`,
   ).run(isoDateOffset(-200), isoDateOffset(20));
+}
+
+function backfillDemoLocations(db: Database): void {
+  seedLocations(db);
 }
 
 /** Keep the exception inbox non-empty on existing demo databases. */

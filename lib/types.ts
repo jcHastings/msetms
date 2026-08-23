@@ -60,6 +60,72 @@ export type Contact = {
 
 export type CustomerWithContacts = Customer & { contacts: Contact[] };
 
+export const LOCATION_ROLES = [
+  { value: "shipper", label: "Shipper" },
+  { value: "receiver", label: "Receiver" },
+  { value: "both", label: "Shipper & receiver" },
+] as const;
+
+export type LocationRole = (typeof LOCATION_ROLES)[number]["value"];
+
+export const LOCATION_SCHEDULING = [
+  { value: "appointment", label: "Appointment required" },
+  { value: "fcfs", label: "FCFS" },
+] as const;
+
+export type LocationSchedulingType = (typeof LOCATION_SCHEDULING)[number]["value"];
+
+export type Location = {
+  id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: LocationRole;
+  scheduling_type: LocationSchedulingType;
+  hours: string;
+  scheduling_notes: string;
+  scheduling_email: string;
+  scheduling_portal: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LocationInput = {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: LocationRole;
+  scheduling_type: LocationSchedulingType;
+  hours: string;
+  scheduling_notes: string;
+  scheduling_email: string;
+  scheduling_portal: string;
+};
+
+export function labelForLocationRole(role: string): string {
+  return LOCATION_ROLES.find((item) => item.value === role)?.label ?? role;
+}
+
+export function labelForLocationScheduling(value: string): string {
+  return LOCATION_SCHEDULING.find((item) => item.value === value)?.label ?? value;
+}
+
+export function isLocationRole(value: string): value is LocationRole {
+  return LOCATION_ROLES.some((item) => item.value === value);
+}
+
+export function isLocationSchedulingType(value: string): value is LocationSchedulingType {
+  return LOCATION_SCHEDULING.some((item) => item.value === value);
+}
+
 export const DRIVER_PROGRESS = [
   { value: "en_route_pickup", label: "En route to pickup" },
   { value: "loaded", label: "Loaded" },
@@ -197,6 +263,8 @@ export type Load = {
   customer_id: number;
   origin: string;
   destination: string;
+  shipper_location_id: number | null;
+  consignee_location_id: number | null;
   pickup_start: string;
   pickup_end: string;
   delivery_start: string;

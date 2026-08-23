@@ -1,7 +1,9 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
-import { getCustomer, getLoad, getTrailer } from "./queries";
+import { formatLocationAddress } from "./locations";
+import { getCustomer, getLoad, getLocation, getTrailer } from "./queries";
+import { labelForLocationScheduling } from "./types";
 import type { CompanyProfile, LoadView } from "./types";
 
 export type ConfirmationStop = {
@@ -101,6 +103,8 @@ function appointmentLabel(notes: string): string {
 export function buildConfirmationModel(load: LoadView, company = getCompanyProfile()): ConfirmationModel {
   const customer = getCustomer(load.customer_id);
   const contact = customer?.contacts[0];
+  const shipperLocation = load.shipper_location_id ? getLocation(load.shipper_location_id) : null;
+  const consigneeLocation = load.consignee_location_id ? getLocation(load.consignee_location_id) : null;
   const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
   const notes = [load.special_instructions, load.appointment_notes, load.notes].filter(Boolean).join("\n");
   return {
@@ -121,9 +125,9 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     loadStatus: confirmationStatus(load),
     shipper: {
       title: "Shipper 1",
-      name: load.customer_name,
-      address: load.origin,
-      phone: contact?.phone ?? "",
+      name: shipperLocation?.name || load.customer_name,
+      address: shipperLocation ? formatLocationAddress(shipperLocation) : load.origin,
+      phone: shipperLocation?.phone || contact?.phone || "",
       date: formatMdY(load.pickup_start),
       time: formatClock(load.pickup_start),
       type: "",
@@ -133,15 +137,17 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
       confirmationNumber: load.reference_number,
       extra: "",
       hoursLabel: "Shipping Hours",
-      hours: "",
-      appointment: appointmentLabel(load.appointment_notes),
+      hours: shipperLocation?.hours ?? "",
+      appointment: shipperLocation
+        ? labelForLocationScheduling(shipperLocation.scheduling_type)
+        : appointmentLabel(load.appointment_notes),
       description: load.commodity,
     },
     consignee: {
       title: "Consignee 1",
-      name: load.destination,
-      address: load.destination,
-      phone: "",
+      name: consigneeLocation?.name || load.destination,
+      address: consigneeLocation ? formatLocationAddress(consigneeLocation) : load.destination,
+      phone: consigneeLocation?.phone || "",
       date: formatMdY(load.delivery_start),
       time: formatClock(load.delivery_start),
       type: "",
@@ -151,8 +157,10 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
       confirmationNumber: load.reference_number,
       extra: "",
       hoursLabel: "Receiving Hours",
-      hours: "",
-      appointment: appointmentLabel(load.appointment_notes),
+      hours: consigneeLocation?.hours ?? "",
+      appointment: consigneeLocation
+        ? labelForLocationScheduling(consigneeLocation.scheduling_type)
+        : appointmentLabel(load.appointment_notes),
       description: load.commodity,
     },
     dispatchNotes: notes,

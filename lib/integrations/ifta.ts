@@ -41,8 +41,8 @@ export function metersToMiles(meters: number): number {
 
 export function extractJurisdiction(place: string): string | null {
   const trimmed = place.trim();
-  const comma = trimmed.match(/,\s*([A-Za-z]{2})\s*$/);
-  if (comma) return comma[1].toUpperCase();
+  const withZip = trimmed.match(/,\s*([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$/);
+  if (withZip) return withZip[1].toUpperCase();
   const trailing = trimmed.match(/\s([A-Za-z]{2})$/);
   if (trailing) return trailing[1].toUpperCase();
   return null;

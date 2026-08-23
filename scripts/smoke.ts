@@ -105,6 +105,46 @@ async function main() {
   );
   assert.ok(inbox.fineCount >= 1, "some open loads should be fine");
 
+  const locations = queries.listLocations();
+  assert.ok(locations.length >= 4, "seed should include a locations directory");
+  const nashvilleCooler = locations.find((item) => /nashville/i.test(item.name));
+  assert.ok(nashvilleCooler);
+  assert.equal(nashvilleCooler.scheduling_type, "appointment");
+  assert.match(nashvilleCooler.hours, /06:00/);
+  assert.ok(queries.listLocations({ q: "dallas" }).some((item) => /dallas/i.test(item.name)));
+  assert.ok(queries.listLocations({ role: "shipper" }).every((item) => item.role === "shipper" || item.role === "both"));
+  const seededReefer = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1045");
+  assert.ok(seededReefer?.shipper_location_id, "MSE-1045 should link the Nashville shipper");
+  assert.ok(seededReefer?.consignee_location_id, "MSE-1045 should link the Dallas receiver");
+  const seededShipper = queries.getLocation(seededReefer.shipper_location_id);
+  assert.ok(seededShipper);
+  assert.equal(seededShipper.scheduling_type, "appointment");
+
+  const { formatLocationAddress, locationInputFromStop, parsePlace } = await import("../lib/locations");
+  assert.equal(parsePlace("Nashville, TN").state, "TN");
+  assert.equal(parsePlace("1400 Cowan St, Nashville, TN 37208").zip, "37208");
+  assert.match(formatLocationAddress(nashvilleCooler), /Nashville/);
+  const savedStop = locationInputFromStop({
+    addressLine: "Birmingham, AL",
+    name: "ABC Yard",
+    role: "receiver",
+  });
+  assert.equal(savedStop.city, "Birmingham");
+  assert.equal(savedStop.state, "AL");
+  const bookId = queries.createLocation({
+    ...savedStop,
+    hours: "Mon–Fri 08:00–16:00",
+    scheduling_notes: "FCFS at the scale.",
+    scheduling_type: "fcfs",
+    phone: "555-0190",
+    notes: "",
+    street: "900 1st Ave N",
+    zip: "35203",
+    scheduling_email: "",
+    scheduling_portal: "",
+  });
+  assert.ok(queries.getLocation(bookId));
+
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
     billing_notes: "Net 15",
@@ -164,12 +204,16 @@ async function main() {
     status: "available",
     truck_id: null,
     driver_id: null,
+    shipper_location_id: bookId,
+    consignee_location_id: null,
   });
 
   const created = queries.getLoad(loadId);
   assert.ok(created);
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
+  assert.equal(created.shipper_location_id, bookId);
+  assert.equal(queries.getLocation(created.shipper_location_id)?.hours, "Mon–Fri 08:00–16:00");
 
   queries.assignLoad(loadId, truckId, driverId);
   const assigned = queries.getLoad(loadId);
@@ -904,6 +948,7 @@ SPECIAL INSTRUCTIONS
   const demoRows = ifta.buildDemoIftaBreakdown("Nashville, TN", "Dallas, TX");
   assert.ok(demoRows.some((row) => row.jurisdiction === "TN"));
   assert.ok(demoRows.some((row) => row.jurisdiction === "TX"));
+  assert.equal(ifta.extractJurisdiction("1400 Cowan St, Nashville, TN 37208"), "TN");
   const msAl = ifta.buildDemoIftaBreakdown("Jackson, MS", "Birmingham, AL");
   assert.ok(msAl.some((row) => row.jurisdiction === "MS"));
   assert.ok(msAl.some((row) => row.jurisdiction === "AL"));
