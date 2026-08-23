@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
@@ -455,14 +456,68 @@ SPECIAL INSTRUCTIONS
       {
         driver: { id: "88668", name: "Denise Ortega" },
         currentDutyStatus: { hosStatusType: "driving" },
-        clocks: { drive: { driveRemainingDurationMs: 22320000 } },
+        clocks: {
+          drive: { driveRemainingDurationMs: 22320000 },
+          shift: { shiftRemainingDurationMs: 39600000 },
+          cycle: { cycleRemainingDurationMs: 194400000 },
+        },
       },
     ],
     drivers: [{ id: denise.id, name: "Denise Ortega", samsara_driver_id: "88668" }],
     loads: [{ id: reeferLoad.id, driver_id: denise.id }],
   });
   assert.equal(mappedHos[0]?.driveRemainingMs, 22320000);
+  assert.equal(mappedHos[0]?.shiftRemainingMs, 39600000);
+  assert.equal(mappedHos[0]?.cycleRemainingMs, 194400000);
   assert.equal(samsara.formatDurationMs(22320000), "6h 12m");
+
+  const samsaraClient = await import("../lib/integrations/samsara-client");
+  const orbcommClient = await import("../lib/integrations/orbcomm-client");
+  assert.equal(samsaraClient.SAMSARA_API_VERSION, "2025-10-23");
+  assert.equal(
+    samsaraClient.decodeMaybeGzip(Buffer.from("jurisdiction,distance_meters\nTN,1\n")),
+    "jurisdiction,distance_meters\nTN,1\n",
+  );
+  assert.equal(
+    samsaraClient.decodeMaybeGzip(gzipSync(Buffer.from("jurisdiction,distance_meters\nTX,2\n"))),
+    "jurisdiction,distance_meters\nTX,2\n",
+  );
+  assert.equal(orbcommClient.extractOrbcommAccessToken({ data: { accessToken: "nested-live" } }), "nested-live");
+  assert.equal(orbcommClient.extractOrbcommAccessToken({ token: "top-level" }), "top-level");
+  const previousOrg = process.env.ORBCOMM_ORG_KEY;
+  const previousClientId = process.env.ORBCOMM_CLIENT_ID;
+  const previousClientSecret = process.env.ORBCOMM_CLIENT_SECRET;
+  process.env.ORBCOMM_USERNAME = "jc-user";
+  process.env.ORBCOMM_PASSWORD = "jc-pass";
+  process.env.ORBCOMM_ORG_KEY = "org-key-1";
+  process.env.ORBCOMM_CLIENT_ID = "reserved-id";
+  process.env.ORBCOMM_CLIENT_SECRET = "reserved-secret";
+  const tokenBody = orbcommClient.orbcommTokenBody();
+  assert.equal(tokenBody.userName, "jc-user");
+  assert.equal(tokenBody.password, "jc-pass");
+  assert.equal(tokenBody.orgKey, "org-key-1");
+  assert.equal(tokenBody.clientId, "reserved-id");
+  assert.equal(tokenBody.clientSecret, "reserved-secret");
+  assert.equal("username" in tokenBody, false, "official B2B field is userName, not username");
+  if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+  else process.env.ORBCOMM_USERNAME = previousUser;
+  if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+  else process.env.ORBCOMM_PASSWORD = previousPass;
+  if (previousOrg == null) delete process.env.ORBCOMM_ORG_KEY;
+  else process.env.ORBCOMM_ORG_KEY = previousOrg;
+  if (previousClientId == null) delete process.env.ORBCOMM_CLIENT_ID;
+  else process.env.ORBCOMM_CLIENT_ID = previousClientId;
+  if (previousClientSecret == null) delete process.env.ORBCOMM_CLIENT_SECRET;
+  else process.env.ORBCOMM_CLIENT_SECRET = previousClientSecret;
+
+  const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
+  assert.match(envExample, /^SAMSARA_API_TOKEN=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_USERNAME=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_PASSWORD=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_CLIENT_ID=\s*$/m);
+  assert.match(envExample, /^ORBCOMM_CLIENT_SECRET=\s*$/m);
+  assert.doesNotMatch(envExample, /^SAMSARA_API_TOKEN=\S+/m);
+  assert.doesNotMatch(envExample, /^ORBCOMM_PASSWORD=\S+/m);
 
   const trailers = queries.listTrailers();
   assert.ok(trailers.some((trailer) => trailer.unit_number === "TR-7742"));
@@ -725,6 +780,125 @@ SPECIAL INSTRUCTIONS
     orbcomm.resetOrbcommCacheForTests();
   }
 
+  process.env.SAMSARA_API_TOKEN = "test-live-samsara-token";
+  process.env.ORBCOMM_USERNAME = "jc-user";
+  process.env.ORBCOMM_PASSWORD = "jc-pass";
+  process.env.ORBCOMM_ORG_KEY = "org-key-1";
+  samsara.resetSamsaraCacheForTests();
+  orbcomm.resetOrbcommCacheForTests();
+  const liveFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const headers = new Headers(init?.headers);
+    if (url.includes("api.samsara.com")) {
+      assert.equal(headers.get("Authorization"), "Bearer test-live-samsara-token");
+      assert.equal(headers.get("X-Samsara-Version"), "2025-10-23");
+    }
+    if (url.includes("/fleet/vehicles/stats")) {
+      return Response.json({
+        data: [
+          {
+            id: "samsara-veh-112",
+            name: "112",
+            gps: {
+              time: "2026-08-23T13:05:00Z",
+              latitude: 32.78,
+              longitude: -96.8,
+              speedMilesPerHour: 54,
+              reverseGeo: { formattedLocation: "Dallas, TX" },
+            },
+          },
+        ],
+      });
+    }
+    if (url.includes("/fleet/hos/clocks")) {
+      return Response.json({
+        data: [
+          {
+            driver: { id: "samsara-drv-denise", name: "Denise Ortega" },
+            currentDutyStatus: { hosStatusType: "driving" },
+            clocks: {
+              drive: { driveRemainingDurationMs: 22320000 },
+              shift: { shiftRemainingDurationMs: 39600000 },
+              cycle: { cycleRemainingDurationMs: 194400000 },
+            },
+          },
+        ],
+      });
+    }
+    if (url.includes("/SynB2BGatewayService/api/generateToken")) {
+      const posted = JSON.parse(String(init?.body ?? "{}")) as Record<string, string>;
+      assert.equal(posted.userName, "jc-user");
+      assert.equal(posted.password, "jc-pass");
+      assert.equal(posted.orgKey, "org-key-1");
+      return Response.json({ data: { accessToken: "live-orbcomm-token", refreshToken: "refresh" } });
+    }
+    if (url.includes("/SynB2BGatewayService/api/")) {
+      assert.equal(headers.get("Authorization"), "Bearer live-orbcomm-token");
+      return Response.json({
+        data: [
+          {
+            assetId: "orbcomm-tr-7742",
+            trailerId: "TR-7742",
+            temperatureF: 34.2,
+            setpointF: 34,
+            returnAirF: 34.1,
+            supplyAirF: 33.8,
+            alarm: "DOOR OPEN",
+            latitude: 32.78,
+            longitude: -96.8,
+            address: "Dallas, TX",
+            recordedAt: "2026-08-23T13:05:00Z",
+          },
+        ],
+      });
+    }
+    return new Response("unexpected live client URL", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const liveFleet = await samsara.getSamsaraFleet();
+    assert.equal(liveFleet.mode, "samsara");
+    assert.equal(liveFleet.error, undefined);
+    const liveGps = liveFleet.locations.find((item) => item.unitNumber === "112");
+    assert.ok(liveGps);
+    assert.equal(liveGps.source, "samsara");
+    assert.equal(liveGps.address, "Dallas, TX");
+    assert.equal(liveGps.speedMph, 54);
+    const liveHos = liveFleet.hos.find((item) => item.driverName === "Denise Ortega");
+    assert.ok(liveHos);
+    assert.equal(liveHos.source, "samsara");
+    assert.equal(liveHos.driveRemainingMs, 22320000);
+    assert.equal(liveHos.shiftRemainingMs, 39600000);
+    assert.equal(liveHos.cycleRemainingMs, 194400000);
+
+    const liveReefers = await orbcomm.getReeferSnapshots();
+    assert.equal(liveReefers.mode, "orbcomm");
+    assert.equal(liveReefers.error, undefined);
+    const liveReefer = liveReefers.readings.find((item) => item.trailerId === "TR-7742");
+    assert.ok(liveReefer);
+    assert.equal(liveReefer.source, "orbcomm");
+    assert.equal(liveReefer.temperatureF, 34.2);
+    assert.equal(liveReefer.setpointF, 34);
+    assert.equal(liveReefer.returnAirF, 34.1);
+    assert.equal(liveReefer.supplyAirF, 33.8);
+    assert.equal(liveReefer.alarm, "DOOR OPEN");
+    const liveReading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
+    assert.equal(liveReading?.source, "orbcomm");
+    assert.equal(liveReading?.temperature_f, 34.2);
+  } finally {
+    globalThis.fetch = liveFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+    if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+    else process.env.ORBCOMM_USERNAME = previousUser;
+    if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+    else process.env.ORBCOMM_PASSWORD = previousPass;
+    if (previousOrg == null) delete process.env.ORBCOMM_ORG_KEY;
+    else process.env.ORBCOMM_ORG_KEY = previousOrg;
+    samsara.resetSamsaraCacheForTests();
+    orbcomm.resetOrbcommCacheForTests();
+  }
+
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;
   const demoRows = ifta.buildDemoIftaBreakdown("Nashville, TN", "Dallas, TX");
@@ -780,6 +954,47 @@ SPECIAL INSTRUCTIONS
     assert.equal(afterIftaFail?.generated_at, beforeIftaFail?.generated_at);
   } finally {
     globalThis.fetch = iftaFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+  }
+
+  process.env.SAMSARA_API_TOKEN = "test-live-samsara-token";
+  const gzipCsv = gzipSync(Buffer.from("device_id,jurisdiction,distance_meters\n1,TN,160934.4\n1,AR,80467.2\n"));
+  const gzipFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("Authorization"), "Bearer test-live-samsara-token");
+    assert.equal(headers.get("X-Samsara-Version"), "2025-10-23");
+    if (url.endsWith("/ifta-detail/csv") && init?.method === "POST") {
+      const posted = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+      assert.equal(posted.vehicleIds, "samsara-veh-112");
+      assert.ok(posted.startHour);
+      assert.ok(posted.endHour);
+      return Response.json({ data: { jobId: "ifta-job-1", jobStatus: "Requested" } });
+    }
+    if (url.includes("/ifta-detail/csv/ifta-job-1")) {
+      return Response.json({
+        data: {
+          jobStatus: "Completed",
+          files: [{ downloadUrl: "https://api.samsara.com/download/ifta-job-1.csv.gz" }],
+        },
+      });
+    }
+    if (url.includes("/download/ifta-job-1.csv.gz")) {
+      return new Response(gzipCsv, { headers: { "Content-Type": "application/gzip" } });
+    }
+    return new Response("unexpected IFTA URL", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const liveIfta = await ifta.refreshIftaForLoad(reeferLoad.id);
+    assert.equal(liveIfta.source, "samsara");
+    assert.equal(liveIfta.vehicle_id, "samsara-veh-112");
+    assert.ok(liveIfta.rows.some((row) => row.jurisdiction === "TN" && row.miles === 100));
+    assert.ok(liveIfta.rows.some((row) => row.jurisdiction === "AR" && row.miles === 50));
+    assert.match(liveIfta.note, /detail/i);
+  } finally {
+    globalThis.fetch = gzipFetch;
     if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
     else process.env.SAMSARA_API_TOKEN = previousSamsara;
   }

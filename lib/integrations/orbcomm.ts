@@ -1,16 +1,10 @@
 import { getDb } from "../db";
-import {
-  getOrbcommAccountId,
-  getOrbcommApiBase,
-  getOrbcommPassword,
-  getOrbcommUsername,
-  isOrbcommConfigured,
-} from "../env";
+import { isOrbcommConfigured } from "../env";
 import { listLoads, listTrailers, listTrucks } from "../queries";
 import type { ReeferReading, ReeferStatus } from "../types";
+import { fetchOrbcommAssetSnapshot, generateOrbcommAccessToken, publicOrbcommError } from "./orbcomm-client";
 
 const CACHE_TTL_MS = 45_000;
-const FETCH_TIMEOUT_MS = 15_000;
 
 export type ReeferSnapshot = {
   loadId: number | null;
@@ -87,15 +81,6 @@ export type MappedTrailer = {
 
 type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult };
 let cache: CacheEntry | null = null;
-
-class OrbcommHttpError extends Error {
-  status: number;
-  constructor(status: number) {
-    super(orbcommStatusMessage(status));
-    this.name = "OrbcommHttpError";
-    this.status = status;
-  }
-}
 
 export function resetOrbcommCacheForTests(): void {
   cache = null;
@@ -199,8 +184,8 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
   if (!isOrbcommConfigured()) return demo;
 
   try {
-    const token = await generateOrbcommToken();
-    const liveAssets = await tryFetchAssetStatus(token);
+    const token = await generateOrbcommAccessToken();
+    const liveAssets = normalizeOrbcommPayload(await fetchOrbcommAssetSnapshot(token));
     if (liveAssets.length > 0) {
       return {
         mode: "orbcomm",
@@ -329,68 +314,6 @@ function mappingTrailers(): MappedTrailer[] {
   }));
 }
 
-async function generateOrbcommToken(): Promise<string> {
-  const username = getOrbcommUsername();
-  const password = getOrbcommPassword();
-  if (!username || !password) throw new Error("ORBCOMM credentials are not set.");
-
-  const url = new URL("/SynB2BGatewayService/api/generateToken", getOrbcommApiBase());
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      username,
-      password,
-      accountId: getOrbcommAccountId(),
-    }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-
-  if (!response.ok) throw new OrbcommHttpError(response.status);
-
-  const body = (await response.json()) as Record<string, unknown>;
-  const token =
-    asString(body.token) ||
-    asString(body.accessToken) ||
-    asString(body.access_token) ||
-    asString(body.Token);
-  if (!token) {
-    throw new Error("ORBCOMM token response did not include an access token.");
-  }
-  return token;
-}
-
-async function tryFetchAssetStatus(token: string): Promise<OrbcommAssetReading[]> {
-  const paths = [
-    "/SynB2BGatewayService/api/assetStatus",
-    "/SynB2BGatewayService/api/assets/status",
-    "/SynB2BGatewayService/api/GetAssetLatestPositions",
-  ];
-  for (const pathname of paths) {
-    try {
-      const url = new URL(pathname, getOrbcommApiBase());
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-      if (!response.ok) continue;
-      const body = await response.json();
-      const parsed = normalizeOrbcommPayload(body);
-      if (parsed.length) return parsed;
-    } catch {
-      // Unknown partner paths are expected; fall through to import/demo.
-    }
-  }
-  return [];
-}
 
 export function normalizeOrbcommPayload(body: unknown): OrbcommAssetReading[] {
   if (!body) return [];
@@ -648,17 +571,3 @@ function asNumber(value: unknown): number | null {
   return null;
 }
 
-function orbcommStatusMessage(status: number): string {
-  if (status === 401 || status === 403) {
-    return `ORBCOMM rejected the credentials (HTTP ${status}). Check ORBCOMM_USERNAME / ORBCOMM_PASSWORD and restart. Showing demo temps.`;
-  }
-  return `ORBCOMM request failed (HTTP ${status}). Showing demo temps.`;
-}
-
-function publicOrbcommError(error: unknown): string {
-  if (error instanceof OrbcommHttpError) return error.message;
-  if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "ORBCOMM request timed out. Showing demo temps.";
-  }
-  return "ORBCOMM request failed. Showing demo temps.";
-}

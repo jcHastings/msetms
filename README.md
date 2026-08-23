@@ -136,10 +136,10 @@ Both integrations are required. They do not share data:
 | Source | Used for | Never used for | Env (gitignored `.env` only) |
 | --- | --- | --- | --- |
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
-| **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
+| **ORBCOMM** | Trailer location, reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ORG_KEY` / `ORBCOMM_CLIENT_ID` / `ORBCOMM_CLIENT_SECRET` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
 
-Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
+**Windows (how JC adds tokens):** In File Explorer open the project folder (the one with `package.json`). Copy `.env.example` to `.env.local`. Open `.env.local` in Notepad. Set `SAMSARA_API_TOKEN=` and/or `ORBCOMM_USERNAME=` / `ORBCOMM_PASSWORD=` on those lines only. Save. Run `npm start` again. `.env` files are gitignored. **Never paste tokens into Slack, email, or chat.** Credentials are never committed, logged, stored in SQLite, or shown on Settings.
 
 **Integrations** has separate cards. Connected vs demo is independent: one integration can be live while another is demo.
 
@@ -153,11 +153,16 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 2. Restart.
 3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
 
-When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
+When the token is set, the app calls current Samsara REST (`https://api.samsara.com`) with `Authorization: Bearer` and `X-Samsara-Version: 2025-10-23`:
+
+- `GET /fleet/vehicles/stats?types=gps` — last location, speed, ping time
+- `GET /fleet/hos/clocks` — drive / shift / cycle remaining
+
+The board and load page show those values. Missing token or API error: labeled **demo**, no crash.
 
 In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
 
-- Trip window (preferred): `POST https://api.samsara.com/ifta-detail/csv` with `startHour` / `endHour` / `vehicleIds`, then poll `GET /ifta-detail/csv/{jobId}` and sum `distance_meters` by `jurisdiction`. Token needs **Write IFTA (US)** plus **Read IFTA (US)**.
+- Trip window (preferred): `POST /ifta-detail/csv` with `startHour` / `endHour` / `vehicleIds`, poll `GET /ifta-detail/csv/{jobId}`, download the **gzipped** CSV, sum `distance_meters` by `jurisdiction`. Token needs **Write IFTA (US)** plus **Read IFTA (US)**.
 - Monthly fallback: `GET https://api.samsara.com/fleet/reports/ifta/vehicle?year=&month=&vehicleIds=` (**Read IFTA**). The UI labels this as the vehicle’s monthly jurisdiction miles, not a trip-only split.
 
 No token: labeled **demo** by-state miles from the load’s origin and destination, plus a CSV on the load documents so the UI can be tested.
@@ -170,12 +175,11 @@ No token, or 401/403 on GPS/HOS: labeled **demo** GPS/HOS, plus a clear error on
 
 Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/portal/remote/ReeferStatusReport).
 
-1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
-2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
-3. Restart.
-4. On **Fleet → Trailers**, set the ORBCOMM asset ID.
+1. Ask your ORBCOMM CSM for Transportation Platform **B2B** username/password (optional org key). There is no public snapshot API without that contract.
+2. On Windows, put them in gitignored `.env.local` (Notepad). Optional empty placeholders: `ORBCOMM_CLIENT_ID` / `ORBCOMM_CLIENT_SECRET` if they later issue OAuth-style keys.
+3. Restart, then map each trailer’s ORBCOMM asset ID on **Fleet → Trailers**.
 
-When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
+When credentials are present the app calls official `POST /SynB2BGatewayService/api/generateToken` (`userName`, `password`, `orgKey`) and reads `data.accessToken`. Live snapshot URLs live in **one file**: `lib/integrations/orbcomm-client.ts`. There is **no scrape** of the logged-in portal.
 
 If B2B snapshot access is not enabled yet:
 
