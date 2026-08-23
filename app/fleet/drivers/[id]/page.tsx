@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DriverForm } from "@/components/driver-form";
+import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { updateDriverAction } from "@/lib/actions";
+import { listFleetDocuments } from "@/lib/files";
 import { getDriver, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +34,7 @@ export default async function EditDriverPage({
         action={boundAction}
         submitLabel="Save driver"
       />
+      <FleetDocsPanel ownerType="driver" ownerId={driver.id} documents={listFleetDocuments("driver", driver.id)} />
     </>
   );
 }

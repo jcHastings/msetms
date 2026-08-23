@@ -7,11 +7,11 @@ import { RateConApply } from "@/components/rate-con-apply";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { updateLoadAction } from "@/lib/actions";
-import { listAttachments } from "@/lib/files";
+import { listAttachments, listFleetDocuments } from "@/lib/files";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
-import { getLoad, listCustomers, listDrivers, listTrucks } from "@/lib/queries";
+import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -61,9 +61,19 @@ export default async function LoadDetailPage({
           </div>
         </div>
       </div>
+      {load.driver_type === "owner_operator" && load.oo_pay != null ? (
+        <div className="mb-4 card p-4 text-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner-operator pay</div>
+          <div className="mt-1 font-semibold">
+            {load.oo_percent}% of {load.rate != null ? `$${load.rate.toLocaleString()}` : "rate"} = $
+            {load.oo_pay.toLocaleString()}
+          </div>
+        </div>
+      ) : null}
       <LoadForm
         customers={listCustomers()}
         trucks={listTrucks()}
+        trailers={listTrailers()}
         drivers={listDrivers()}
         load={load}
         action={boundAction}
@@ -73,8 +83,46 @@ export default async function LoadDetailPage({
         load={load}
         customers={listCustomers()}
         trucks={listTrucks()}
+        trailers={listTrailers()}
         drivers={listDrivers()}
       />
+      {(load.driver_id || load.truck_id || load.trailer_id) && (
+        <section className="card mt-6 p-6">
+          <h2 className="text-sm font-semibold">Assigned unit documents</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {load.driver_id ? (
+              <li>
+                <Link className="underline" href={`/fleet/drivers/${load.driver_id}`}>
+                  Driver CDL / medical card
+                </Link>
+                {listFleetDocuments("driver", load.driver_id).length
+                  ? ` · ${listFleetDocuments("driver", load.driver_id).length} file(s)`
+                  : " · none uploaded"}
+              </li>
+            ) : null}
+            {load.truck_id ? (
+              <li>
+                <Link className="underline" href={`/fleet/trucks/${load.truck_id}`}>
+                  Truck registration / DOT
+                </Link>
+                {listFleetDocuments("truck", load.truck_id).length
+                  ? ` · ${listFleetDocuments("truck", load.truck_id).length} file(s)`
+                  : " · none uploaded"}
+              </li>
+            ) : null}
+            {load.trailer_id ? (
+              <li>
+                <Link className="underline" href={`/fleet/trailers/${load.trailer_id}`}>
+                  Trailer registration / DOT
+                </Link>
+                {listFleetDocuments("trailer", load.trailer_id).length
+                  ? ` · ${listFleetDocuments("trailer", load.trailer_id).length} file(s)`
+                  : " · none uploaded"}
+              </li>
+            ) : null}
+          </ul>
+        </section>
+      )}
       <AttachmentsPanel loadId={load.id} attachments={listAttachments(load.id)} />
     </>
   );

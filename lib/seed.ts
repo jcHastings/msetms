@@ -11,6 +11,12 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function isoDate(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
 export function seedDatabase(db: Database.Database): void {
   const created = now();
 
@@ -126,6 +132,63 @@ export function seedDatabase(db: Database.Database): void {
     const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
     const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
     insertTruck.run("301", "box", 26000, "available", "", "", "", "", created, created);
+
+    const insertTrailer = db.prepare(
+      `INSERT INTO trailers (
+        unit_number, type, orbcomm_asset_id, registration_issued, registration_expires,
+        dot_inspected_on, dot_expires, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const tr8801 = Number(
+      insertTrailer.run(
+        "TR-8801",
+        "reefer",
+        "orbcomm-tr-8801",
+        isoDate(-200),
+        isoDate(45),
+        isoDate(-180),
+        isoDate(200),
+        "available",
+        created,
+        created,
+      ).lastInsertRowid,
+    );
+    const tr7742 = Number(
+      insertTrailer.run(
+        "TR-7742",
+        "reefer",
+        "orbcomm-tr-7742",
+        isoDate(-120),
+        isoDate(200),
+        isoDate(-90),
+        isoDate(200),
+        "in_use",
+        created,
+        created,
+      ).lastInsertRowid,
+    );
+    insertTrailer.run(
+      "TR-2204",
+      "dry_van",
+      "",
+      isoDate(-90),
+      isoDate(180),
+      isoDate(-20),
+      isoDate(22),
+      "available",
+      created,
+      created,
+    );
+
+    db.prepare(
+      `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
+    ).run(isoDate(-300), isoDate(200), isoDate(-200), isoDate(20), "108");
+    db.prepare(
+      `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
+    ).run(isoDate(-250), isoDate(40), isoDate(-100), isoDate(180), "210");
+    db.prepare(
+      `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
+    ).run(isoDate(-180), isoDate(220), isoDate(-90), isoDate(200), "112");
 
     const marcus = Number(
       insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", "samsara-drv-marcus", t102, "on_duty", created, created)
@@ -403,6 +466,8 @@ export function seedDatabase(db: Database.Database): void {
       "en_route_delivery",
       "MSE-1045",
     );
+    db.prepare("UPDATE loads SET trailer_id = ? WHERE load_number = 'MSE-1043'").run(tr8801);
+    db.prepare("UPDATE loads SET trailer_id = ? WHERE load_number = 'MSE-1045'").run(tr7742);
     extras.run(
       "Scale ticket in door pocket.",
       "",
@@ -435,6 +500,22 @@ export function seedDatabase(db: Database.Database): void {
     insertReading.run(load1043.id, t108, "TR-8801", 36, 36.4, 0, "", atHour(0, 5, 40));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 33.8, 0, "", atHour(0, 11, 15));
     insertReading.run(load1045.id, t112, "TR-7742", 34, 34.2, 0, "", atHour(0, 13, 5));
+    db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ? WHERE trailer_id = 'TR-8801'").run(36.1, 35.8);
+    db.prepare("UPDATE reefer_readings SET return_air_f = ?, supply_air_f = ? WHERE trailer_id = 'TR-7742' AND temperature_f = 34.2").run(34.0, 33.6);
+
+    const patchDriver = db.prepare(
+      `UPDATE drivers SET license_number = ?, license_state = ?, license_expires = ?,
+         medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?
+       WHERE name = ?`,
+    );
+    patchDriver.run("772110", "TN", isoDate(25), isoDate(-200), isoDate(200), "company_driver", null, "Denise Ortega");
+    patchDriver.run("448291", "KY", isoDate(400), isoDate(-180), isoDate(300), "company_driver", null, "Marcus Hale");
+    patchDriver.run("190334", "MO", isoDate(400), isoDate(-160), isoDate(280), "company_driver", null, "James Whitaker");
+    patchDriver.run("551902", "TN", isoDate(400), isoDate(-140), isoDate(260), "owner_operator", 75, "Cole Brennan");
+    patchDriver.run("883441", "IN", isoDate(400), isoDate(-120), isoDate(240), "company_driver", null, "Priya Shah");
+    patchDriver.run("229817", "IL", isoDate(400), isoDate(-100), isoDate(220), "company_driver", null, "Angela Ruiz");
+    patchDriver.run("104552", "MS", isoDate(400), isoDate(-400), isoDate(-10), "company_driver", null, "Tyrell Brooks");
+    patchDriver.run("667320", "KS", isoDate(400), isoDate(-90), isoDate(210), "owner_operator", 80, "Sam Keene");
   });
 
   seed();

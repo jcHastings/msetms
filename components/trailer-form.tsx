@@ -2,33 +2,28 @@
 
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import {
-  TRUCK_STATUSES,
-  TRUCK_TYPES,
-  type ActionResult,
-  type Truck,
-} from "@/lib/types";
+import { TRAILER_TYPES, TRUCK_STATUSES, type ActionResult, type Trailer } from "@/lib/types";
 
 type Props = {
-  truck?: Truck;
+  trailer?: Trailer;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
 
-export function TruckForm({ truck, action, submitLabel }: Props) {
+export function TrailerForm({ trailer, action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
 
   return (
     <form action={formAction} className="card grid max-w-xl gap-4 p-6">
       <FormBanner result={state} />
       <div className="field">
-        <label htmlFor="unit_number">Unit number</label>
-        <input id="unit_number" name="unit_number" required defaultValue={truck?.unit_number} />
+        <label htmlFor="unit_number">Trailer number</label>
+        <input id="unit_number" name="unit_number" required defaultValue={trailer?.unit_number} />
       </div>
       <div className="field">
         <label htmlFor="type">Type</label>
-        <select id="type" name="type" defaultValue={truck?.type ?? "dry_van"}>
-          {TRUCK_TYPES.map((type) => (
+        <select id="type" name="type" defaultValue={trailer?.type ?? "reefer"}>
+          {TRAILER_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
               {type.label}
             </option>
@@ -36,44 +31,33 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         </select>
       </div>
       <div className="field">
-        <label htmlFor="capacity_lbs">Capacity (lbs)</label>
+        <label htmlFor="orbcomm_asset_id">ORBCOMM asset ID</label>
         <input
-          id="capacity_lbs"
-          name="capacity_lbs"
-          type="number"
-          min={1}
-          required
-          defaultValue={truck?.capacity_lbs ?? 45000}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="samsara_vehicle_id">Samsara vehicle ID (tractor GPS)</label>
-        <input
-          id="samsara_vehicle_id"
-          name="samsara_vehicle_id"
-          defaultValue={truck?.samsara_vehicle_id}
-          placeholder="Tractor ID in Samsara — not the API token"
+          id="orbcomm_asset_id"
+          name="orbcomm_asset_id"
+          defaultValue={trailer?.orbcomm_asset_id}
+          placeholder="From Reefer Status Report"
         />
       </div>
       <div className="field">
         <label htmlFor="registration_issued">Registration issued</label>
-        <input id="registration_issued" name="registration_issued" type="date" defaultValue={truck?.registration_issued} />
+        <input id="registration_issued" name="registration_issued" type="date" defaultValue={trailer?.registration_issued} />
       </div>
       <div className="field">
         <label htmlFor="registration_expires">Registration expires</label>
-        <input id="registration_expires" name="registration_expires" type="date" defaultValue={truck?.registration_expires} />
+        <input id="registration_expires" name="registration_expires" type="date" defaultValue={trailer?.registration_expires} />
       </div>
       <div className="field">
         <label htmlFor="dot_inspected_on">DOT inspection completed</label>
-        <input id="dot_inspected_on" name="dot_inspected_on" type="date" defaultValue={truck?.dot_inspected_on} />
+        <input id="dot_inspected_on" name="dot_inspected_on" type="date" defaultValue={trailer?.dot_inspected_on} />
       </div>
       <div className="field">
         <label htmlFor="dot_expires">DOT inspection expires</label>
-        <input id="dot_expires" name="dot_expires" type="date" defaultValue={truck?.dot_expires} />
+        <input id="dot_expires" name="dot_expires" type="date" defaultValue={trailer?.dot_expires} />
       </div>
       <div className="field">
         <label htmlFor="status">Status</label>
-        <select id="status" name="status" defaultValue={truck?.status ?? "available"}>
+        <select id="status" name="status" defaultValue={trailer?.status ?? "available"}>
           {TRUCK_STATUSES.map((status) => (
             <option key={status.value} value={status.value}>
               {status.label}

@@ -293,6 +293,25 @@ SPECIAL INSTRUCTIONS
   assert.equal(mappedHos[0]?.driveRemainingMs, 22320000);
   assert.equal(samsara.formatDurationMs(22320000), "6h 12m");
 
+  const trailers = queries.listTrailers();
+  assert.ok(trailers.some((trailer) => trailer.unit_number === "TR-7742"));
+  assert.equal(denise.driver_type, "company_driver");
+  const cole = queries.listDrivers().find((driver) => driver.name === "Cole Brennan");
+  assert.ok(cole);
+  assert.equal(cole.driver_type, "owner_operator");
+  assert.equal(cole.pay_percent, 75);
+  const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
+  assert.ok(tyrell);
+  const { collectAssignmentAlerts, requireAssignmentOverride } = await import("../lib/compliance");
+  const tyrellAlerts = collectAssignmentAlerts({ driver: tyrell });
+  assert.ok(tyrellAlerts.some((alert) => alert.kind === "medical" && alert.severity === "expired"));
+  const deniseAlerts = collectAssignmentAlerts({ driver: denise });
+  assert.ok(deniseAlerts.some((alert) => alert.kind === "license" && alert.severity === "expiring"));
+  assert.throws(() => requireAssignmentOverride(tyrellAlerts, false), /Expired documents/);
+  requireAssignmentOverride(tyrellAlerts, true);
+  const upcoming = queries.listUpcomingCompliance();
+  assert.ok(upcoming.length >= 3, "seed should surface expiring/expired documents");
+
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");
   assert.ok(fleet.hos.some((clock) => clock.driverName === "Denise Ortega" && clock.source === "demo"));

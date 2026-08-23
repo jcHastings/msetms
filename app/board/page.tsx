@@ -9,7 +9,7 @@ import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
-import { listAssignableDrivers, listAssignableTrucks, listLoads } from "@/lib/queries";
+import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +137,7 @@ export default async function BoardPage({
                             loadId={load.id}
                             loadNumber={load.load_number}
                             trucks={listAssignableTrucks(load.id)}
+                            trailers={listAssignableTrailers(load.id)}
                             drivers={listAssignableDrivers(load.id)}
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />

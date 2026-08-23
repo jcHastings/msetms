@@ -6,8 +6,8 @@ import {
   getOrbcommUsername,
   isOrbcommConfigured,
 } from "../env";
-import { listLoads, listTrucks } from "../queries";
-import type { ReeferReading } from "../types";
+import { listLoads, listTrailers, listTrucks } from "../queries";
+import type { ReeferReading, ReeferStatus } from "../types";
 
 const CACHE_TTL_MS = 45_000;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -60,8 +60,15 @@ export type MappedTruck = {
 export type MappedLoad = {
   id: number;
   truck_id: number | null;
+  trailer_id?: number | null;
   trailer_number: string;
   reefer_setpoint_f: number | null;
+};
+
+export type MappedTrailer = {
+  id: number;
+  unit_number: string;
+  orbcomm_asset_id: string;
 };
 
 type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult };
@@ -117,6 +124,32 @@ export async function getLatestReeferForLoad(loadId: number): Promise<ReeferRead
   return getDemoReeferForLoad(loadId);
 }
 
+export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?: number | null): ReeferStatus | null {
+  if (!reading && fallbackSetpoint == null) return null;
+  if (!reading) {
+    return {
+      trailerId: "",
+      temperatureF: null,
+      setpointF: fallbackSetpoint ?? null,
+      returnAirF: null,
+      supplyAirF: null,
+      alarm: "",
+      recordedAt: "",
+      source: "demo",
+    };
+  }
+  return {
+    trailerId: reading.trailer_id,
+    temperatureF: reading.temperature_f,
+    setpointF: reading.setpoint_f ?? fallbackSetpoint ?? null,
+    returnAirF: reading.return_air_f,
+    supplyAirF: reading.supply_air_f,
+    alarm: reading.alarm,
+    recordedAt: reading.recorded_at,
+    source: reading.source === "orbcomm" ? "orbcomm" : "demo",
+  };
+}
+
 export async function getReeferSnapshots(): Promise<ReeferSnapshotResult> {
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
@@ -140,6 +173,7 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
         readings: mapOrbcommReadingsToLoads({
           loads: mappingLoads(),
           trucks: mappingTrucks(),
+          trailers: mappingTrailers(),
           assets: liveAssets,
         }),
       };
@@ -181,6 +215,8 @@ export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
     trailer_id: snapshot.trailerId,
     setpoint_f: snapshot.setpointF,
     temperature_f: snapshot.temperatureF,
+    return_air_f: snapshot.returnAirF,
+    supply_air_f: snapshot.supplyAirF,
     door_open: snapshot.doorOpen == null ? null : snapshot.doorOpen ? 1 : 0,
     alarm: snapshot.alarm,
     source: snapshot.source,
@@ -196,8 +232,8 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
     trailerId: row.trailer_id,
     setpointF: row.setpoint_f,
     temperatureF: row.temperature_f,
-    returnAirF: null,
-    supplyAirF: null,
+    returnAirF: row.return_air_f,
+    supplyAirF: row.supply_air_f,
     doorOpen: row.door_open == null ? null : row.door_open === 1,
     alarm: row.alarm,
     source: row.source === "orbcomm" ? "orbcomm" : "demo",
@@ -209,6 +245,7 @@ function mappingLoads(): MappedLoad[] {
   return listLoads({ status: "all" }).map((load) => ({
     id: load.id,
     truck_id: load.truck_id,
+    trailer_id: load.trailer_id,
     trailer_number: load.trailer_number,
     reefer_setpoint_f: load.reefer_setpoint_f,
   }));
@@ -220,6 +257,14 @@ function mappingTrucks(): MappedTruck[] {
     unit_number: truck.unit_number,
     orbcomm_asset_id: truck.orbcomm_asset_id,
     trailer_number: truck.trailer_number,
+  }));
+}
+
+function mappingTrailers(): MappedTrailer[] {
+  return listTrailers().map((trailer) => ({
+    id: trailer.id,
+    unit_number: trailer.unit_number,
+    orbcomm_asset_id: trailer.orbcomm_asset_id,
   }));
 }
 
@@ -337,12 +382,17 @@ export function mapOrbcommReadingsToLoads(input: {
   loads: MappedLoad[];
   trucks: MappedTruck[];
   assets: OrbcommAssetReading[];
+  trailers?: MappedTrailer[];
 }): ReeferSnapshot[] {
   const readings: ReeferSnapshot[] = [];
+  const trailers = input.trailers ?? [];
   for (const load of input.loads) {
     const truck = resolveTruckForLoad(load, input.trucks);
-    if (!truck && !load.trailer_number) continue;
+    const trailer = load.trailer_id != null ? trailers.find((item) => item.id === load.trailer_id) : undefined;
+    if (!truck && !trailer && !load.trailer_number) continue;
     const asset = findAsset(input.assets, [
+      trailer?.orbcomm_asset_id ?? "",
+      trailer?.unit_number ?? "",
       truck?.orbcomm_asset_id ?? "",
       load.trailer_number,
       truck?.trailer_number ?? "",
@@ -438,6 +488,7 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
   const readings = mapOrbcommReadingsToLoads({
     loads: mappingLoads(),
     trucks: mappingTrucks(),
+    trailers: mappingTrailers(),
     assets,
   });
   for (const reading of readings) {
@@ -447,6 +498,8 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
       trailer_id: reading.trailerId,
       setpoint_f: reading.setpointF,
       temperature_f: reading.temperatureF,
+      return_air_f: reading.returnAirF,
+      supply_air_f: reading.supplyAirF,
       door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
       alarm: reading.alarm,
       source: "orbcomm",
@@ -460,9 +513,9 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
 export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
   getDb()
     .prepare(
-      `INSERT INTO reefer_readings (
-        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, source, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.load_id,
@@ -470,6 +523,8 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
       input.trailer_id,
       input.setpoint_f,
       input.temperature_f,
+      input.return_air_f ?? null,
+      input.supply_air_f ?? null,
       input.door_open,
       input.alarm,
       input.source,

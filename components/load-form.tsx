@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import { ComplianceList } from "@/components/compliance-badge";
 import { FormBanner } from "@/components/form-banner";
+import { collectAssignmentAlerts } from "@/lib/compliance";
 import { toInputDateTime } from "@/lib/format";
 import {
   LOAD_STATUSES,
@@ -10,6 +12,7 @@ import {
   type Customer,
   type DriverWithTruck,
   type Load,
+  type Trailer,
   type Truck,
 } from "@/lib/types";
 
@@ -37,6 +40,7 @@ type Defaults = Partial<{
 type Props = {
   customers: Customer[];
   trucks: Truck[];
+  trailers?: Trailer[];
   drivers: DriverWithTruck[];
   load?: Load;
   defaults?: Defaults;
@@ -48,6 +52,7 @@ type Props = {
 export function LoadForm({
   customers,
   trucks,
+  trailers = [],
   drivers,
   load,
   defaults,
@@ -57,6 +62,18 @@ export function LoadForm({
 }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
   const extraDefaults = defaults ?? {};
+  const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
+  const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
+  const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
+  const [confirmed, setConfirmed] = useState(false);
+  const selectedDriver = drivers.find((item) => String(item.id) === driverId);
+  const selectedTruck = trucks.find((item) => String(item.id) === truckId);
+  const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
+  const alerts = useMemo(
+    () => collectAssignmentAlerts({ driver: selectedDriver, truck: selectedTruck, trailer: selectedTrailer }),
+    [selectedDriver, selectedTruck, selectedTrailer],
+  );
+  const expired = alerts.some((alert) => alert.severity === "expired");
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
@@ -206,7 +223,26 @@ export function LoadForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="trailer_number">Trailer #</label>
+          <label htmlFor="trailer_id">Trailer</label>
+          <select
+            id="trailer_id"
+            name="trailer_id"
+            value={trailerId}
+            onChange={(event) => {
+              setTrailerId(event.target.value);
+              setConfirmed(false);
+            }}
+          >
+            <option value="">Unassigned</option>
+            {trailers.map((trailer) => (
+              <option key={trailer.id} value={trailer.id}>
+                {trailer.unit_number}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="trailer_number">Trailer # (override)</label>
           <input
             id="trailer_number"
             name="trailer_number"
@@ -237,7 +273,15 @@ export function LoadForm({
         </div>
         <div className="field">
           <label htmlFor="truck_id">Assigned truck</label>
-          <select id="truck_id" name="truck_id" defaultValue={load?.truck_id ?? ""}>
+          <select
+            id="truck_id"
+            name="truck_id"
+            value={truckId}
+            onChange={(event) => {
+              setTruckId(event.target.value);
+              setConfirmed(false);
+            }}
+          >
             <option value="">Unassigned</option>
             {trucks.map((truck) => (
               <option key={truck.id} value={truck.id}>
@@ -248,16 +292,60 @@ export function LoadForm({
         </div>
         <div className="field">
           <label htmlFor="driver_id">Assigned driver</label>
-          <select id="driver_id" name="driver_id" defaultValue={load?.driver_id ?? ""}>
+          <select
+            id="driver_id"
+            name="driver_id"
+            value={driverId}
+            onChange={(event) => {
+              setDriverId(event.target.value);
+              setConfirmed(false);
+            }}
+          >
             <option value="">Unassigned</option>
             {drivers.map((driver) => (
               <option key={driver.id} value={driver.id}>
                 {driver.name}
+                {driver.driver_type === "owner_operator" ? " · OO" : ""}
               </option>
             ))}
           </select>
         </div>
+        {selectedDriver?.driver_type === "owner_operator" ? (
+          <>
+            <div className="field">
+              <label htmlFor="oo_percent">Owner-operator %</label>
+              <input
+                id="oo_percent"
+                name="oo_percent"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                defaultValue={load?.oo_percent ?? selectedDriver.pay_percent ?? 75}
+              />
+            </div>
+            {load?.oo_pay != null ? (
+              <div className="field">
+                <label>Computed OO pay</label>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  ${load.oo_pay.toLocaleString()}
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
+      {alerts.length > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <ComplianceList alerts={alerts} />
+        </div>
+      ) : null}
+      {expired ? (
+        <label className="flex items-start gap-2 text-sm text-rose-800">
+          <input type="checkbox" name="confirm_expired" value="1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+          I confirm saving this assignment with expired documents.
+        </label>
+      ) : null}
       <div className="flex justify-end">
         <button className="btn btn-primary" type="submit" disabled={pending}>
           {pending ? "Saving…" : submitLabel}

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db";
-import type { Attachment, AttachmentKind } from "./types";
+import type { Attachment, AttachmentKind, FleetDocKind, FleetDocument } from "./types";
 
 function uploadsDir(...parts: string[]): string {
   const dir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", ...parts);
@@ -131,4 +131,74 @@ export function guessMime(name: string): string {
 
 export async function fileToBuffer(file: File): Promise<Buffer> {
   return Buffer.from(await file.arrayBuffer());
+}
+
+export function addFleetDocument(input: {
+  ownerType: "driver" | "truck" | "trailer";
+  ownerId: number;
+  kind: FleetDocKind;
+  originalName: string;
+  buffer: Buffer;
+  mimeType: string;
+}): FleetDocument {
+  const storedName = `${randomUUID()}-${sanitizeName(input.originalName)}`;
+  const dir = uploadsDir("fleet", input.ownerType, String(input.ownerId));
+  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.buffer);
+  const createdAt = new Date().toISOString();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO fleet_documents (owner_type, owner_id, kind, original_name, stored_name, mime_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.ownerType,
+      input.ownerId,
+      input.kind,
+      input.originalName,
+      storedName,
+      input.mimeType || guessMime(input.originalName),
+      createdAt,
+    );
+  return {
+    id: Number(result.lastInsertRowid),
+    owner_type: input.ownerType,
+    owner_id: input.ownerId,
+    kind: input.kind,
+    original_name: input.originalName,
+    stored_name: storedName,
+    mime_type: input.mimeType || guessMime(input.originalName),
+    created_at: createdAt,
+  };
+}
+
+export function listFleetDocuments(
+  ownerType: "driver" | "truck" | "trailer",
+  ownerId: number,
+): FleetDocument[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM fleet_documents
+       WHERE owner_type = ? AND owner_id = ?
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all(ownerType, ownerId) as FleetDocument[];
+}
+
+export function getFleetDocument(id: number): FleetDocument | null {
+  return (
+    (getDb().prepare("SELECT * FROM fleet_documents WHERE id = ?").get(id) as FleetDocument | undefined) ??
+    null
+  );
+}
+
+export function getFleetDocumentPath(doc: FleetDocument): string {
+  return path.join(
+    /*turbopackIgnore: true*/ process.cwd(),
+    "data",
+    "uploads",
+    "fleet",
+    doc.owner_type,
+    String(doc.owner_id),
+    doc.stored_name,
+  );
 }

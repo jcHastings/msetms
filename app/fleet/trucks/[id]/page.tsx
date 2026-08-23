@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { TruckForm } from "@/components/truck-form";
 import { updateTruckAction } from "@/lib/actions";
+import { listFleetDocuments } from "@/lib/files";
 import { getTruck } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ export default async function EditTruckPage({
         }
       />
       <TruckForm truck={truck} action={boundAction} submitLabel="Save truck" />
+      <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />
     </>
   );
 }

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/format";
-import { getDashboardStats, listAttentionLoads, listDrivers, listMovingLoads, listTrucks } from "@/lib/queries";
+import { ComplianceList } from "@/components/compliance-badge";
+import { getDashboardStats, listAttentionLoads, listDrivers, listMovingLoads, listTrucks, listUpcomingCompliance } from "@/lib/queries";
 import { labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default function DashboardPage() {
   const drivers = listDrivers();
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
   const onDuty = drivers.filter((driver) => driver.status === "on_duty");
+  const expirations = listUpcomingCompliance();
 
   return (
     <>
@@ -116,6 +118,20 @@ export default function DashboardPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="card p-5 xl:col-span-3">
+          <h2 className="text-sm font-semibold">Upcoming / expired documents</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days.
+          </p>
+          <div className="mt-3">
+            {expirations.length === 0 ? (
+              <p className="text-sm text-slate-500">Nothing expiring in those windows.</p>
+            ) : (
+              <ComplianceList alerts={expirations} />
+            )}
+          </div>
         </section>
 
         <section className="card overflow-hidden xl:col-span-3">

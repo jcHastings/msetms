@@ -8,24 +8,34 @@ import {
   createCustomer,
   createDriver,
   createLoad,
+  createTrailer,
   createTruck,
   findOrCreateCustomer,
+  getDriver,
+  getTrailer,
+  getTruck,
   updateCustomer,
   updateDriver,
   updateLoad,
   updateLoadStatus,
+  updateTrailer,
   updateTruck,
   type LoadInput,
 } from "./queries";
+import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
 import {
   DRIVER_STATUSES,
   LOAD_STATUSES,
+  DRIVER_TYPES,
+  TRAILER_TYPES,
   TRUCK_STATUSES,
   TRUCK_TYPES,
   isLoadStatus,
   type ActionResult,
+  type DriverKind,
   type DriverStatus,
   type LoadStatus,
+  type TrailerType,
   type TruckStatus,
   type TruckType,
 } from "./types";
@@ -72,7 +82,7 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   if (!isLoadStatus(statusValue)) throw new Error("Invalid load status.");
   const truckId = parseOptionalInt(formData.get("truck_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
-  return {
+  const parsed: LoadInput = {
     customer_id: customerId,
     origin: requiredString(formData.get("origin"), "Origin"),
     destination: requiredString(formData.get("destination"), "Destination"),
@@ -90,10 +100,53 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     po_number: String(formData.get("po_number") ?? "").trim(),
     reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
     trailer_number: String(formData.get("trailer_number") ?? "").trim(),
+    trailer_id: parseOptionalInt(formData.get("trailer_id")),
+    oo_percent: parseOptionalFloat(formData.get("oo_percent")),
     status: statusValue,
     truck_id: truckId,
     driver_id: driverId,
   };
+  const driver = driverId ? getDriver(driverId) : null;
+  if (driver?.driver_type === "owner_operator") {
+    const percent = parsed.oo_percent ?? driver.pay_percent ?? 75;
+    parsed.oo_percent = percent;
+    parsed.oo_pay = parsed.rate != null ? Math.round(parsed.rate * (percent / 100) * 100) / 100 : null;
+  } else {
+    parsed.oo_percent = null;
+    parsed.oo_pay = null;
+  }
+  return parsed;
+}
+
+function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
+  const type = String(value ?? "");
+  if (!TRAILER_TYPES.some((item) => item.value === type)) {
+    throw new Error("Pick a trailer type.");
+  }
+  return type as TrailerType;
+}
+
+function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
+  const type = String(value ?? "company_driver");
+  if (!DRIVER_TYPES.some((item) => item.value === type)) {
+    throw new Error("Pick company driver or owner-operator.");
+  }
+  return type as DriverKind;
+}
+
+function parseDateField(value: FormDataEntryValue | null): string {
+  return String(value ?? "").trim();
+}
+
+function enforceAssignmentCompliance(formData: FormData, truckId: number | null, driverId: number | null, trailerId: number | null): void {
+  if (!truckId && !driverId && !trailerId) return;
+  const alerts = collectAssignmentAlerts({
+    truck: truckId ? getTruck(truckId) : null,
+    driver: driverId ? getDriver(driverId) : null,
+    trailer: trailerId ? getTrailer(trailerId) : null,
+  });
+  const confirmed = String(formData.get("confirm_expired") ?? "") === "1";
+  requireAssignmentOverride(alerts, confirmed);
 }
 
 function parseTruckType(value: FormDataEntryValue | null): TruckType {
@@ -172,6 +225,10 @@ export async function createTruckAction(
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
+      registration_issued: parseDateField(formData.get("registration_issued")),
+      registration_expires: parseDateField(formData.get("registration_expires")),
+      dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
+      dot_expires: parseDateField(formData.get("dot_expires")),
     });
     refresh();
     redirect("/fleet");
@@ -199,6 +256,10 @@ export async function updateTruckAction(
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
+      registration_issued: parseDateField(formData.get("registration_issued")),
+      registration_expires: parseDateField(formData.get("registration_expires")),
+      dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
+      dot_expires: parseDateField(formData.get("dot_expires")),
     });
     refresh();
     return { ok: true, id };
@@ -215,9 +276,21 @@ export async function createDriverAction(
     const id = createDriver({
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
-      license: String(formData.get("license") ?? "").trim(),
+      license: [
+        String(formData.get("license_state") ?? "").trim().toUpperCase(),
+        String(formData.get("license_number") ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join("-"),
       pin: String(formData.get("pin") ?? "").trim(),
       samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
+      license_number: String(formData.get("license_number") ?? "").trim(),
+      license_state: String(formData.get("license_state") ?? "").trim().toUpperCase(),
+      license_expires: parseDateField(formData.get("license_expires")),
+      medical_issued: parseDateField(formData.get("medical_issued")),
+      medical_expires: parseDateField(formData.get("medical_expires")),
+      driver_type: parseDriverKind(formData.get("driver_type")),
+      pay_percent: parseOptionalFloat(formData.get("pay_percent")),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -239,9 +312,21 @@ export async function updateDriverAction(
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
-      license: String(formData.get("license") ?? "").trim(),
+      license: [
+        String(formData.get("license_state") ?? "").trim().toUpperCase(),
+        String(formData.get("license_number") ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join("-"),
       pin: String(formData.get("pin") ?? "").trim(),
       samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
+      license_number: String(formData.get("license_number") ?? "").trim(),
+      license_state: String(formData.get("license_state") ?? "").trim().toUpperCase(),
+      license_expires: parseDateField(formData.get("license_expires")),
+      medical_issued: parseDateField(formData.get("medical_issued")),
+      medical_expires: parseDateField(formData.get("medical_expires")),
+      driver_type: parseDriverKind(formData.get("driver_type")),
+      pay_percent: parseOptionalFloat(formData.get("pay_percent")),
       truck_id: parseOptionalInt(formData.get("truck_id")),
       status: parseDriverStatus(formData.get("status")),
     });
@@ -257,7 +342,9 @@ export async function createLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    const id = createLoad(parseLoadInput(formData));
+    const input = parseLoadInput(formData);
+    enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    const id = createLoad(input);
     const inboxId = String(formData.get("inbox_id") ?? "").trim();
     if (inboxId) {
       const { attachInboxToLoad } = await import("./files");
@@ -277,7 +364,9 @@ export async function updateLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    updateLoad(id, parseLoadInput(formData));
+    const input = parseLoadInput(formData);
+    enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    updateLoad(id, input);
     const inboxId = String(formData.get("inbox_id") ?? "").trim();
     if (inboxId) {
       const { attachInboxToLoad } = await import("./files");
@@ -295,10 +384,14 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
     const loadId = parseOptionalInt(formData.get("load_id"));
     const truckId = parseOptionalInt(formData.get("truck_id"));
     const driverId = parseOptionalInt(formData.get("driver_id"));
+    const trailerId = parseOptionalInt(formData.get("trailer_id"));
     if (!loadId || !truckId || !driverId) {
       throw new Error("Pick a truck and a driver.");
     }
-    assignLoad(loadId, truckId, driverId);
+    enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
+    assignLoad(loadId, truckId, driverId, trailerId, {
+      oo_percent: parseOptionalFloat(formData.get("oo_percent")),
+    });
     refresh();
     return { ok: true, id: loadId };
   } catch (error) {
@@ -417,6 +510,88 @@ export async function importOrbcommReportAction(
       );
     }
     return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createTrailerAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const id = createTrailer({
+      unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
+      type: parseTrailerType(formData.get("type")),
+      orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
+      registration_issued: parseDateField(formData.get("registration_issued")),
+      registration_expires: parseDateField(formData.get("registration_expires")),
+      dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
+      dot_expires: parseDateField(formData.get("dot_expires")),
+      status: parseTruckStatus(formData.get("status")),
+    });
+    refresh();
+    redirect("/fleet");
+    return { ok: true, id };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateTrailerAction(
+  id: number,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    updateTrailer(id, {
+      unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
+      type: parseTrailerType(formData.get("type")),
+      orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
+      registration_issued: parseDateField(formData.get("registration_issued")),
+      registration_expires: parseDateField(formData.get("registration_expires")),
+      dot_inspected_on: parseDateField(formData.get("dot_inspected_on")),
+      dot_expires: parseDateField(formData.get("dot_expires")),
+      status: parseTruckStatus(formData.get("status")),
+    });
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function attachFleetDocFormAction(formData: FormData): Promise<void> {
+  const result = await attachFleetDocAction(formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function attachFleetDocAction(formData: FormData): Promise<ActionResult> {
+  try {
+    const ownerId = parseOptionalInt(formData.get("owner_id"));
+    const ownerType = String(formData.get("owner_type") ?? "");
+    if (!ownerId || !["driver", "truck", "trailer"].includes(ownerType)) {
+      throw new Error("Pick a fleet record.");
+    }
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new Error("Choose a file to upload.");
+    const kind = String(formData.get("kind") ?? "other");
+    const { addFleetDocument, fileToBuffer } = await import("./files");
+    const { FLEET_DOC_KINDS } = await import("./types");
+    if (!FLEET_DOC_KINDS.some((item) => item.value === kind)) {
+      throw new Error("Pick a document type.");
+    }
+    addFleetDocument({
+      ownerType: ownerType as "driver" | "truck" | "trailer",
+      ownerId,
+      kind: kind as (typeof FLEET_DOC_KINDS)[number]["value"],
+      originalName: file.name,
+      buffer: await fileToBuffer(file),
+      mimeType: file.type,
+    });
+    refresh();
+    return { ok: true, id: ownerId };
   } catch (error) {
     return fail(error);
   }

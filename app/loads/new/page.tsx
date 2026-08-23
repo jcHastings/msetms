@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LoadForm } from "@/components/load-form";
 import { PageHeader } from "@/components/page-header";
 import { createLoadAction } from "@/lib/actions";
-import { listCustomers, listDrivers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +39,7 @@ export default function NewLoadPage() {
         <LoadForm
           customers={customers}
           trucks={trucks}
+          trailers={listTrailers()}
           drivers={drivers}
           action={createLoadAction}
           submitLabel="Create load"

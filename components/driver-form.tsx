@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import { DRIVER_STATUSES, type ActionResult, type Driver, type Truck } from "@/lib/types";
+import { DRIVER_STATUSES, DRIVER_TYPES, type ActionResult, type Driver, type Truck } from "@/lib/types";
 
 type Props = {
   driver?: Driver;
@@ -13,6 +13,7 @@ type Props = {
 
 export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
+  const [kind, setKind] = useState(driver?.driver_type ?? "company_driver");
 
   return (
     <form action={formAction} className="card grid max-w-xl gap-4 p-6">
@@ -26,8 +27,53 @@ export function DriverForm({ driver, trucks, action, submitLabel }: Props) {
         <input id="phone" name="phone" defaultValue={driver?.phone} />
       </div>
       <div className="field">
-        <label htmlFor="license">License / CDL</label>
-        <input id="license" name="license" defaultValue={driver?.license} />
+        <label htmlFor="driver_type">Driver type</label>
+        <select
+          id="driver_type"
+          name="driver_type"
+          value={kind}
+          onChange={(event) => setKind(event.target.value as Driver["driver_type"])}
+        >
+          {DRIVER_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {kind === "owner_operator" ? (
+        <div className="field">
+          <label htmlFor="pay_percent">Default pay %</label>
+          <input
+            id="pay_percent"
+            name="pay_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            defaultValue={driver?.pay_percent ?? 75}
+          />
+        </div>
+      ) : null}
+      <div className="field">
+        <label htmlFor="license_state">License state</label>
+        <input id="license_state" name="license_state" maxLength={2} defaultValue={driver?.license_state} />
+      </div>
+      <div className="field">
+        <label htmlFor="license_number">License number</label>
+        <input id="license_number" name="license_number" defaultValue={driver?.license_number} />
+      </div>
+      <div className="field">
+        <label htmlFor="license_expires">License expiration</label>
+        <input id="license_expires" name="license_expires" type="date" defaultValue={driver?.license_expires} />
+      </div>
+      <div className="field">
+        <label htmlFor="medical_issued">Medical card issued</label>
+        <input id="medical_issued" name="medical_issued" type="date" defaultValue={driver?.medical_issued} />
+      </div>
+      <div className="field">
+        <label htmlFor="medical_expires">Medical card expiration</label>
+        <input id="medical_expires" name="medical_expires" type="date" defaultValue={driver?.medical_expires} />
       </div>
       <div className="field">
         <label htmlFor="pin">Driver app PIN</label>

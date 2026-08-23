@@ -37,7 +37,9 @@ Requires Node.js 20 or newer.
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
 - Tractor GPS and driver HOS (Samsara when a token is set; otherwise labeled demo)
-- Trailer / reefer temp (ORBCOMM when credentials or a report import exist; otherwise labeled demo)
+- Trailer / reefer status from ORBCOMM (temp, setpoint, return/supply air, alarms, last report)
+- Compliance alerts on assign: license/med card (30 days), registration (60 days), DOT inspection (30 days)
+- Company driver vs owner-operator settlement on the load
 
 ## Driver app
 
@@ -97,7 +99,16 @@ If B2B snapshot access is not enabled yet:
 
 Expected columns: `trailer_id`, `temperature_f`, `setpoint_f`, `return_air_f`, `supply_air_f`, `alarm`, `recorded_at`.
 
-A load whose trailer # or ORBCOMM asset ID matches a row shows last temp, setpoint if present, and timestamp. No credentials: seeded demo temps, labeled **demo**. Auth/API failure: error in the UI and demo fallback.
+A load whose trailer record, trailer #, or ORBCOMM asset ID matches a row shows last temp, setpoint, return/supply air if present, alarms, and timestamp. No credentials: seeded demo temps, labeled **demo**. Auth/API failure: error in the UI and demo fallback.
+
+How JC pulls the report today:
+
+1. Sign in at [platform.orbcomm.com](https://platform.orbcomm.com/#/portal/remote/ReeferStatusReport).
+2. Open **Reefer Status Report**.
+3. Export CSV or JSON.
+4. Import it on **Integrations**. Map each trailer’s ORBCOMM asset ID on **Fleet → Trailers**.
+
+When ORBCOMM enables Transportation Platform B2B access, put the username/password in `.env` and restart — the app will request a token. There is no scrape of the logged-in portal.
 
 ## Data
 
@@ -114,4 +125,4 @@ rm -rf data/tms.db data/tms.db-wal data/tms.db-shm data/uploads
 
 Next.js (App Router), TypeScript, Tailwind CSS, `better-sqlite3`, `dotenv`, `unpdf`, optional `tesseract.js`.
 
-See [ROADMAP.md](./ROADMAP.md) for native apps, live ELD, accounting, and EDI.
+See [ROADMAP.md](./ROADMAP.md) for native apps, deeper telematics, accounting, and EDI.

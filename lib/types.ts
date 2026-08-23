@@ -82,6 +82,57 @@ export const ATTACHMENT_KINDS = [
 
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]["value"];
 
+export const FLEET_DOC_KINDS = [
+  { value: "cdl", label: "Driver license" },
+  { value: "med_card", label: "Medical card" },
+  { value: "registration", label: "Registration" },
+  { value: "dot_inspection", label: "DOT inspection" },
+  { value: "insurance", label: "Insurance" },
+  { value: "other", label: "Other" },
+] as const;
+
+export type FleetDocKind = (typeof FLEET_DOC_KINDS)[number]["value"];
+
+export const TRAILER_TYPES = [
+  { value: "reefer", label: "Reefer" },
+  { value: "dry_van", label: "Dry Van" },
+  { value: "flatbed", label: "Flatbed" },
+  { value: "other", label: "Other" },
+] as const;
+
+export type TrailerType = (typeof TRAILER_TYPES)[number]["value"];
+
+export const DRIVER_TYPES = [
+  { value: "company_driver", label: "Company driver" },
+  { value: "owner_operator", label: "Owner-operator" },
+] as const;
+
+export type DriverKind = (typeof DRIVER_TYPES)[number]["value"];
+
+/** ORBCOMM reefer snapshot shown on the board, load, and driver screens. */
+export type ReeferStatus = {
+  trailerId: string;
+  temperatureF: number | null;
+  setpointF: number | null;
+  returnAirF: number | null;
+  supplyAirF: number | null;
+  alarm: string;
+  recordedAt: string;
+  source: "demo" | "orbcomm";
+};
+
+export function labelForTrailerType(type: string): string {
+  return TRAILER_TYPES.find((item) => item.value === type)?.label ?? type;
+}
+
+export function labelForDriverKind(type: string): string {
+  return DRIVER_TYPES.find((item) => item.value === type)?.label ?? type;
+}
+
+export function labelForFleetDocKind(value: string): string {
+  return FLEET_DOC_KINDS.find((item) => item.value === value)?.label ?? value;
+}
+
 export type Truck = {
   id: number;
   unit_number: string;
@@ -92,6 +143,24 @@ export type Truck = {
   samsara_trailer_id: string;
   orbcomm_asset_id: string;
   trailer_number: string;
+  registration_issued: string;
+  registration_expires: string;
+  dot_inspected_on: string;
+  dot_expires: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Trailer = {
+  id: number;
+  unit_number: string;
+  type: TrailerType;
+  orbcomm_asset_id: string;
+  registration_issued: string;
+  registration_expires: string;
+  dot_inspected_on: string;
+  dot_expires: string;
+  status: TruckStatus;
   created_at: string;
   updated_at: string;
 };
@@ -101,6 +170,13 @@ export type Driver = {
   name: string;
   phone: string;
   license: string;
+  license_number: string;
+  license_state: string;
+  license_expires: string;
+  medical_issued: string;
+  medical_expires: string;
+  driver_type: DriverKind;
+  pay_percent: number | null;
   pin: string;
   samsara_driver_id: string;
   truck_id: number | null;
@@ -134,6 +210,9 @@ export type Load = {
   po_number: string;
   reefer_setpoint_f: number | null;
   trailer_number: string;
+  trailer_id: number | null;
+  oo_percent: number | null;
+  oo_pay: number | null;
   driver_progress: DriverProgress | "";
   status: LoadStatus;
   truck_id: number | null;
@@ -149,7 +228,21 @@ export type LoadView = Load & {
   truck_samsara_id: string | null;
   truck_samsara_trailer_id: string | null;
   truck_orbcomm_asset_id: string | null;
+  trailer_unit: string | null;
+  trailer_orbcomm_asset_id: string | null;
   driver_name: string | null;
+  driver_type: DriverKind | null;
+};
+
+export type FleetDocument = {
+  id: number;
+  owner_type: "driver" | "truck" | "trailer";
+  owner_id: number;
+  kind: FleetDocKind;
+  original_name: string;
+  stored_name: string;
+  mime_type: string;
+  created_at: string;
 };
 
 export type Attachment = {
@@ -170,6 +263,8 @@ export type ReeferReading = {
   trailer_id: string;
   setpoint_f: number | null;
   temperature_f: number | null;
+  return_air_f: number | null;
+  supply_air_f: number | null;
   door_open: number | null;
   alarm: string;
   source: "demo" | "orbcomm";

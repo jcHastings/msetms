@@ -126,6 +126,31 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS trailers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      unit_number TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL DEFAULT 'reefer',
+      orbcomm_asset_id TEXT NOT NULL DEFAULT '',
+      registration_issued TEXT NOT NULL DEFAULT '',
+      registration_expires TEXT NOT NULL DEFAULT '',
+      dot_inspected_on TEXT NOT NULL DEFAULT '',
+      dot_expires TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'available',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS fleet_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_type TEXT NOT NULL,
+      owner_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS reefer_readings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       load_id INTEGER REFERENCES loads(id) ON DELETE CASCADE,
@@ -153,6 +178,22 @@ export function migrate(db: Database.Database): void {
   ensureColumn(db, "loads", "reefer_setpoint_f", "REAL");
   ensureColumn(db, "loads", "trailer_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "driver_progress", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "trailer_id", "INTEGER");
+  ensureColumn(db, "loads", "oo_percent", "REAL");
+  ensureColumn(db, "loads", "oo_pay", "REAL");
+  ensureColumn(db, "trucks", "registration_issued", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "registration_expires", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "dot_inspected_on", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "dot_expires", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "license_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "license_state", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "license_expires", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "medical_issued", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "medical_expires", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "driver_type", "TEXT NOT NULL DEFAULT 'company_driver'");
+  ensureColumn(db, "drivers", "pay_percent", "REAL");
+  ensureColumn(db, "reefer_readings", "return_air_f", "REAL");
+  ensureColumn(db, "reefer_readings", "supply_air_f", "REAL");
 }
 
 function backfillDemoPins(db: Database.Database): void {
