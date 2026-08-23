@@ -191,7 +191,8 @@ async function main() {
   queries.updateDriverProgress(loadId, otherDriverId, "delivered");
   assert.equal(queries.getLoad(loadId)?.status, "delivered");
 
-  const { addAttachment, addFleetDocument, listAttachments, listFleetDocuments } = await import("../lib/files");
+  const { addAttachment, addFleetDocument, getAttachment, getAttachmentPath, listAttachments, listFleetDocuments } =
+    await import("../lib/files");
   addAttachment({
     loadId,
     kind: "pod",
@@ -201,6 +202,29 @@ async function main() {
     uploadedBy: "driver",
   });
   assert.equal(listAttachments(loadId).some((file) => file.kind === "pod"), true);
+
+  const { imagesToPdf, pdfFileName } = await import("../lib/image-pdf");
+  // 1×1 PNG so the camera→PDF path can be tested without a phone.
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8cfc000000101000118dd8db00000000049454e44ae426082",
+    "hex",
+  );
+  const cameraPdf = Buffer.from(await imagesToPdf([{ bytes: new Uint8Array(png), format: "png" }]));
+  assert.equal(cameraPdf.subarray(0, 4).toString(), "%PDF");
+  assert.match(pdfFileName("pod", "MSE-1045"), /^pod-MSE-1045-\d{4}-\d{2}-\d{2}\.pdf$/);
+  const cameraAttachment = addAttachment({
+    loadId,
+    kind: "pod",
+    originalName: pdfFileName("pod", "MSE-SMOKE"),
+    buffer: cameraPdf,
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  const storedCamera = getAttachment(cameraAttachment.id);
+  assert.ok(storedCamera);
+  assert.equal(storedCamera.mime_type, "application/pdf");
+  assert.equal(storedCamera.uploaded_by, "driver");
+  assert.equal(fs.readFileSync(getAttachmentPath(storedCamera)).subarray(0, 4).toString(), "%PDF");
   addFleetDocument({
     ownerType: "driver",
     ownerId: otherDriverId,

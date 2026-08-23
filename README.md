@@ -92,7 +92,9 @@ Sign in at `/driver/login` with name + PIN. Seeded demo PINs:
 
 Driver statuses: en route to pickup → loaded → en route to delivery → delivered. Those move the dispatcher's load to in transit / delivered.
 
-Uploads (BOL, POD, lumper, trailer/product/seal photos) are stored under `data/uploads/` and show on the dispatcher load page.
+On a load, the driver can **take a photo with the phone camera** (or pick an existing picture), preview / retake, add more pages, then **Make PDF and upload** as BOL / POD / lumper / other. The PDF is stored on the load; the dispatcher opens it under documents. Camera uses the native file input (`capture=environment`) so it works on iPhone Safari and Android Chrome over `http://localhost` or LAN; live `getUserMedia` is used when the browser allows it. No cloud OCR.
+
+Uploads (BOL, POD, lumper, trailer/product/seal photos, camera PDFs) are stored under `data/uploads/` and show on the dispatcher load page.
 
 ## Rate confirmation ingest
 
