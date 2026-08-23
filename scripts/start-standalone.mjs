@@ -13,6 +13,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  rmSync,
   symlinkSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -43,17 +44,27 @@ function copyTree(from, to) {
   cpSync(from, to, { recursive: true, force: true });
 }
 
+function isSymlink(target) {
+  try {
+    return lstatSync(target).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** Point standalone at the project path. Next file tracing can copy `data/`. */
+function forceLink(from, to) {
+  mkdirSync(dirname(to), { recursive: true });
+  if (isSymlink(to)) return;
+  if (existsSync(to)) {
+    rmSync(to, { recursive: true, force: true });
+  }
+  symlinkSync(from, to);
+}
+
 function linkIfPresent(from, to) {
   if (!existsSync(from)) return;
-  try {
-    if (existsSync(to) || lstatSync(to).isSymbolicLink()) {
-      return;
-    }
-  } catch {
-    // target missing — create the link
-  }
-  mkdirSync(dirname(to), { recursive: true });
-  symlinkSync(from, to);
+  forceLink(from, to);
 }
 
 // Next does not copy these into standalone; server.js serves them if present.
@@ -62,8 +73,9 @@ copyTree(join(root, ".next", "static"), join(standaloneDir, ".next", "static"));
 
 // server.js chdir()s into standalone. Keep SQLite, uploads, and gitignored
 // env files on the project paths the rest of the app already uses.
-mkdirSync(join(root, "data"), { recursive: true });
-linkIfPresent(join(root, "data"), join(standaloneDir, "data"));
+const projectData = join(root, "data");
+mkdirSync(projectData, { recursive: true });
+forceLink(projectData, join(standaloneDir, "data"));
 linkIfPresent(join(root, ".env"), join(standaloneDir, ".env"));
 linkIfPresent(join(root, ".env.local"), join(standaloneDir, ".env.local"));
 
@@ -84,6 +96,7 @@ const child = spawn(process.execPath, [serverJs], {
     HOSTNAME: hostname,
     NODE_ENV: "production",
     NODE_OPTIONS: nodeOptions,
+    TMS_DB_PATH: join(projectData, "tms.db"),
   },
   stdio: ["ignore", "inherit", "inherit"],
 });
