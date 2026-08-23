@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
+import { listenAddress } from "./listen-address.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -33,7 +34,7 @@ const child = spawn(process.execPath, [nextBin, ...args], {
   cwd: root,
   env: {
     ...process.env,
-    HOSTNAME: process.env.HOSTNAME || "0.0.0.0",
+    HOSTNAME: listenAddress(),
     NODE_OPTIONS: nodeOptions,
   },
   stdio: ["ignore", "inherit", "inherit"],

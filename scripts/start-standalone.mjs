@@ -4,8 +4,9 @@
  * `next start` is not supported with `output: 'standalone'` (Next prints a
  * warning and can tear down). Official path: `node .next/standalone/server.js`.
  *
- * Bind 0.0.0.0 so a browser on another machine can open the TMS on this box.
- * Does not require Vercel. Never prints secret values.
+ * Bind 0.0.0.0 unless HOST / LISTEN_HOST / BIND_HOST is an explicit IP.
+ * Never use OS HOSTNAME (machine name, e.g. "cursor"). Does not require
+ * Vercel. Never prints secret values.
  */
 import { spawn } from "node:child_process";
 import {
@@ -20,6 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { config as loadEnv } from "dotenv";
+import { listenAddress } from "./listen-address.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -80,7 +82,7 @@ linkIfPresent(join(root, ".env"), join(standaloneDir, ".env"));
 linkIfPresent(join(root, ".env.local"), join(standaloneDir, ".env.local"));
 
 const port = process.env.PORT || "3000";
-const hostname = process.env.HOSTNAME || "0.0.0.0";
+const hostname = listenAddress();
 const preload = join(root, "scripts", "next-keep-alive.cjs");
 const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
   .filter(Boolean)

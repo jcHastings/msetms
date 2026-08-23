@@ -9,7 +9,7 @@ Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and 
 
 ## Quick start
 
-On a shared Linux box (browser-only access from another machine):
+**Node 22** (recommended):
 
 ```bash
 npm install
@@ -17,7 +17,17 @@ npm run build
 npm start
 ```
 
-Then open `http://<this-box>:3000` for dispatch and `http://<this-box>:3000/driver/login` for the driver app. The server binds `0.0.0.0` so a browser on the LAN can reach it. Override with `PORT` / `HOSTNAME` if needed.
+**Docker:**
+
+```bash
+docker compose up --build
+```
+
+Then open `http://<this-box>:3000` for dispatch and `http://<this-box>:3000/driver/login` for the driver app.
+
+`npm start` and Docker both run the Next **standalone** server on port **3000**. SQLite and uploads persist in `./data` (Compose mounts that folder). The server binds `0.0.0.0` unless you set an explicit IP with `HOST` / `LISTEN_HOST` / `BIND_HOST`. It does **not** use the OS `HOSTNAME` (that is the machine name — on some boxes it is `cursor`, and nothing useful listens).
+
+Override port with `PORT`. No Vercel account or secrets required.
 
 Local edit loop on the same machine:
 
@@ -35,19 +45,19 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | `npm install` | Install dependencies |
 | `npm run build` | Production build (writes `.next/standalone`) |
 | `npm start` | Run the standalone server and keep it listening |
+| `docker compose up --build` | Build the Node 22 image and serve port 3000 |
 | `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires Node.js 20 or newer. `better-sqlite3` 13 may warn that it prefers Node **22**; install still works on Node 20. Use Node 22 if you want to silence that warning. No Vercel account or deploy is required.
+Requires **Node.js 22**. `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
 
-`npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs`. Next 16 documents that `next start` does not work with `output: 'standalone'`.
-
-Next 16 on Linux Node 20 can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. Turbopack plus `cacheComponents` has a separate silent-exit bug. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
+Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 
 ## Dispatcher
 
+- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
 - Dashboard counts, dispatch board with status / pickup-date filters
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
