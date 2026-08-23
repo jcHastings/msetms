@@ -1,20 +1,23 @@
-import PDFDocument from "pdfkit";
-import * as pdfkit from "pdfkit";
-import Helvetica from "pdfkit/standard-fonts/Helvetica";
-import HelveticaBold from "pdfkit/standard-fonts/HelveticaBold";
+import { createRequire } from "node:module";
 
-type StandardFont = { name: string };
+type PdfkitConstructor = typeof import("pdfkit");
+type PdfkitExports = {
+  default?: PdfkitConstructor;
+  PDFDocument?: PdfkitConstructor;
+};
 
 /**
- * Next/Turbopack resolves `pdfkit` to the browser ESM build, which does not
- * auto-register Helvetica. Node's CJS build does. Register the two faces this
- * app uses whenever the browser export is what actually loaded.
+ * Next/Turbopack's ESM `import "pdfkit"` is the browser build (no Helvetica).
+ * Node `require("pdfkit")` is the CJS build, which registers standard fonts.
  */
-const registerStdFonts = (pdfkit as { registerStdFonts?: (...fonts: StandardFont[]) => void })
-  .registerStdFonts;
+const nodeRequire = createRequire(import.meta.url);
+const pdfkit = nodeRequire("pdfkit") as PdfkitConstructor | PdfkitExports;
+const PDFDocument = (
+  typeof pdfkit === "function" ? pdfkit : pdfkit.PDFDocument ?? pdfkit.default
+) as PdfkitConstructor;
 
-if (typeof registerStdFonts === "function") {
-  registerStdFonts(Helvetica, HelveticaBold);
+if (typeof PDFDocument !== "function") {
+  throw new Error("Could not load the Node pdfkit build for load confirmations.");
 }
 
 export default PDFDocument;
