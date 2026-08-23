@@ -12,6 +12,7 @@ import {
   PAY_METHODS,
   PERMISSION_GROUPS,
   isAdminRole,
+  type ComplianceWindows,
   type DispatcherUser,
   type DocumentType,
   type DropdownKind,
@@ -350,6 +351,15 @@ export function defaultOoPercent(): number {
   return getCompanySettings().default_oo_percent;
 }
 
+export function complianceWindows(): ComplianceWindows {
+  const settings = getCompanySettings();
+  return {
+    driverDays: settings.alert_driver_days,
+    registrationDays: settings.alert_registration_days,
+    dotDays: settings.alert_dot_days,
+  };
+}
+
 export function peekNextLoadNumber(): string {
   const settings = getCompanySettings();
   return `${settings.load_number_prefix}-${settings.load_number_next}`;
@@ -470,6 +480,7 @@ export function loadFormSettings(): {
   currency: string;
   targetMarginPercent: number;
   placesEnabled: boolean;
+  alertWindows: ComplianceWindows;
 } {
   const settings = getCompanySettings();
   return {
@@ -480,6 +491,7 @@ export function loadFormSettings(): {
     currency: settings.currency,
     targetMarginPercent: settings.default_gross_margin_percent,
     placesEnabled: isGooglePlacesConfigured(),
+    alertWindows: complianceWindows(),
   };
 }
 

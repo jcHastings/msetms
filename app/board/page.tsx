@@ -10,7 +10,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
-import { customLoadStatuses, defaultOoPercent } from "@/lib/settings";
+import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -161,6 +161,7 @@ export default async function BoardPage({
                             trailers={listAssignableTrailers(load.id)}
                             drivers={listAssignableDrivers(load.id)}
                             defaultOoPercent={defaultOoPercent()}
+                            alertWindows={complianceWindows()}
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}

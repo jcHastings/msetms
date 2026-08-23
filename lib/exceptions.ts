@@ -1,5 +1,6 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
+import { complianceWindows } from "./settings";
 import { formatDateTime } from "./format";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
@@ -220,11 +221,14 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
 
 function complianceExceptions(load: LoadView): InboxException[] {
   if (!statusNeedsAssets(load.status)) return [];
-  const alerts = collectAssignmentAlerts({
-    driver: load.driver_id ? getDriver(load.driver_id) : null,
-    truck: load.truck_id ? getTruck(load.truck_id) : null,
-    trailer: load.trailer_id ? getTrailer(load.trailer_id) : null,
-  });
+  const alerts = collectAssignmentAlerts(
+    {
+      driver: load.driver_id ? getDriver(load.driver_id) : null,
+      truck: load.truck_id ? getTruck(load.truck_id) : null,
+      trailer: load.trailer_id ? getTrailer(load.trailer_id) : null,
+    },
+    complianceWindows(),
+  );
   if (alerts.length === 0) return [];
   const expired = alerts.filter((alert) => alert.severity === "expired");
   return [

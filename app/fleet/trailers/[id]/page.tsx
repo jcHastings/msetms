@@ -8,6 +8,7 @@ import { updateTrailerAction } from "@/lib/actions";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { getTrailer } from "@/lib/queries";
+import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function EditTrailerPage({
         registrationExpires={trailer.registration_expires}
         inspectedOn={trailer.dot_inspected_on}
         inspectionExpires={trailer.dot_expires}
-        alerts={trailerComplianceAlerts(trailer)}
+        alerts={trailerComplianceAlerts(trailer, complianceWindows())}
       />
       <TrailerForm trailer={trailer} action={boundAction} submitLabel="Save trailer" />
       <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />

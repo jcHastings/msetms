@@ -1,20 +1,7 @@
 import { getGoogleMapsApiKey } from "./env";
+import type { PlaceDetails, PlaceSuggestion } from "./places-shared";
 
-export type PlaceSuggestion = {
-  placeId: string;
-  label: string;
-};
-
-export type PlaceDetails = {
-  name: string;
-  street: string;
-  city: string;
-  state: string;
-  zip: string;
-  formatted: string;
-  latitude: number | null;
-  longitude: number | null;
-};
+export type { PlaceDetails, PlaceSuggestion } from "./places-shared";
 
 export function placesEnabled(): boolean {
   return Boolean(getGoogleMapsApiKey());

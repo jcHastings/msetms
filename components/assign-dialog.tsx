@@ -10,6 +10,7 @@ import {
   trailerComplianceAlerts,
   truckComplianceAlerts,
 } from "@/lib/compliance";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import type { DriverWithTruck, Trailer, Truck } from "@/lib/types";
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
   drivers: DriverWithTruck[];
   label?: string;
   defaultOoPercent?: number;
+  alertWindows?: ComplianceWindows;
 };
 
 export function AssignDialog({
@@ -30,6 +32,7 @@ export function AssignDialog({
   drivers,
   label = "Assign",
   defaultOoPercent = 75,
+  alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +47,8 @@ export function AssignDialog({
   const truck = trucks.find((item) => String(item.id) === truckId);
   const trailer = trailers.find((item) => String(item.id) === trailerId);
   const alerts = useMemo(
-    () => collectAssignmentAlerts({ driver, truck, trailer }),
-    [driver, truck, trailer],
+    () => collectAssignmentAlerts({ driver, truck, trailer }, alertWindows),
+    [driver, truck, trailer, alertWindows],
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
 
@@ -104,7 +107,7 @@ export function AssignDialog({
                       {item.name}
                       {item.driver_type === "owner_operator" ? " · OO" : ""}
                       {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
-                      {driverOptionNote(item)}
+                      {driverOptionNote(item, alertWindows)}
                     </option>
                   ))}
                 </select>
@@ -125,7 +128,7 @@ export function AssignDialog({
                   {trucks.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.unit_number} · {item.type.replaceAll("_", " ")}
-                      {optionNote(truckComplianceAlerts(item))}
+                      {optionNote(truckComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}
                 </select>
@@ -145,7 +148,7 @@ export function AssignDialog({
                   {trailers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.unit_number} · {item.type.replaceAll("_", " ")}
-                      {optionNote(trailerComplianceAlerts(item))}
+                      {optionNote(trailerComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}
                 </select>
@@ -197,8 +200,8 @@ export function AssignDialog({
   );
 }
 
-function driverOptionNote(driver: DriverWithTruck): string {
-  return optionNote(driverComplianceAlerts(driver));
+function driverOptionNote(driver: DriverWithTruck, windows: ComplianceWindows): string {
+  return optionNote(driverComplianceAlerts(driver, windows));
 }
 
 function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {

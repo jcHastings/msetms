@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { updateDriverAction } from "@/lib/actions";
 import { listFleetDocuments } from "@/lib/files";
 import { getDriver, listTrucks } from "@/lib/queries";
+import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function EditDriverPage({
           </Link>
         }
       />
-      <DriverComplianceCard driver={driver} />
+      <DriverComplianceCard driver={driver} windows={complianceWindows()} />
       <DriverForm
         driver={driver}
         trucks={listTrucks()}

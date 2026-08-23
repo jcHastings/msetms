@@ -8,6 +8,7 @@ import { updateTruckAction } from "@/lib/actions";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { getTruck } from "@/lib/queries";
+import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function EditTruckPage({
         registrationExpires={truck.registration_expires}
         inspectedOn={truck.dot_inspected_on}
         inspectionExpires={truck.dot_expires}
-        alerts={truckComplianceAlerts(truck)}
+        alerts={truckComplianceAlerts(truck, complianceWindows())}
       />
       <TruckForm truck={truck} action={boundAction} submitLabel="Save truck" />
       <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />

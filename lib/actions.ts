@@ -47,7 +47,7 @@ import {
   type TruckType,
 } from "./types";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
-import { defaultOoPercent, isKnownLoadStatus } from "./settings";
+import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -151,11 +151,14 @@ function parseDateField(value: FormDataEntryValue | null): string {
 
 function enforceAssignmentCompliance(formData: FormData, truckId: number | null, driverId: number | null, trailerId: number | null): void {
   if (!truckId && !driverId && !trailerId) return;
-  const alerts = collectAssignmentAlerts({
-    truck: truckId ? getTruck(truckId) : null,
-    driver: driverId ? getDriver(driverId) : null,
-    trailer: trailerId ? getTrailer(trailerId) : null,
-  });
+  const alerts = collectAssignmentAlerts(
+    {
+      truck: truckId ? getTruck(truckId) : null,
+      driver: driverId ? getDriver(driverId) : null,
+      trailer: trailerId ? getTrailer(trailerId) : null,
+    },
+    complianceWindows(),
+  );
   const confirmed = String(formData.get("confirm_expired") ?? "") === "1";
   requireAssignmentOverride(alerts, confirmed);
 }

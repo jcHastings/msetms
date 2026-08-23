@@ -2,7 +2,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SettingsBack } from "@/components/settings-nav";
 import { canManageUsers, getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
-import { listDispatcherUsers, permissionGroupLabel } from "@/lib/settings";
+import { listDispatcherUsers } from "@/lib/settings";
+import { permissionGroupLabel } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
 

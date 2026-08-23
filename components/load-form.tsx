@@ -14,6 +14,7 @@ import { formatMoney, toInputDateTime } from "@/lib/format";
 import { PlaceSearch } from "@/components/place-search";
 import { formatLocationCityState, formatLocationLabel, formatSchedulingSummary, locationMatchesRole } from "@/lib/locations";
 import { computeOwnerOperatorPay } from "@/lib/settlement";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import {
   LOAD_STATUSES,
   labelForLoadStatus,
@@ -63,6 +64,7 @@ type Props = {
   currency?: string;
   targetMarginPercent?: number;
   placesEnabled?: boolean;
+  alertWindows?: ComplianceWindows;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };
@@ -83,6 +85,7 @@ export function LoadForm({
   currency = "USD",
   targetMarginPercent,
   placesEnabled = false,
+  alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
   action,
   submitLabel,
 }: Props) {
@@ -112,8 +115,12 @@ export function LoadForm({
   const selectedTruck = trucks.find((item) => String(item.id) === truckId);
   const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
   const alerts = useMemo(
-    () => collectAssignmentAlerts({ driver: selectedDriver, truck: selectedTruck, trailer: selectedTrailer }),
-    [selectedDriver, selectedTruck, selectedTrailer],
+    () =>
+      collectAssignmentAlerts(
+        { driver: selectedDriver, truck: selectedTruck, trailer: selectedTrailer },
+        alertWindows,
+      ),
+    [selectedDriver, selectedTruck, selectedTrailer, alertWindows],
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
   const parsedRate = rate.trim() ? Number.parseFloat(rate) : null;
@@ -361,7 +368,7 @@ export function LoadForm({
             {trailers.map((trailer) => (
               <option key={trailer.id} value={trailer.id}>
                 {trailer.unit_number}
-                {optionNote(trailerComplianceAlerts(trailer))}
+                {optionNote(trailerComplianceAlerts(trailer, alertWindows))}
               </option>
             ))}
           </select>
@@ -411,7 +418,7 @@ export function LoadForm({
             {trucks.map((truck) => (
               <option key={truck.id} value={truck.id}>
                 {truck.unit_number}
-                {optionNote(truckComplianceAlerts(truck))}
+                {optionNote(truckComplianceAlerts(truck, alertWindows))}
               </option>
             ))}
           </select>
@@ -440,7 +447,7 @@ export function LoadForm({
               <option key={driver.id} value={driver.id}>
                 {driver.name}
                 {driver.driver_type === "owner_operator" ? " · OO" : ""}
-                {driverOptionNote(driver)}
+                {driverOptionNote(driver, alertWindows)}
               </option>
             ))}
           </select>
@@ -507,8 +514,8 @@ export function LoadForm({
   );
 }
 
-function driverOptionNote(driver: DriverWithTruck): string {
-  return optionNote(driverComplianceAlerts(driver));
+function driverOptionNote(driver: DriverWithTruck, windows: ComplianceWindows): string {
+  return optionNote(driverComplianceAlerts(driver, windows));
 }
 
 function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {

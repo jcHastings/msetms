@@ -162,3 +162,15 @@ export function canEditSettings(role: string): boolean {
 export function canManageUsers(role: string): boolean {
   return isAdminRole(role);
 }
+
+export type ComplianceWindows = {
+  driverDays: number;
+  registrationDays: number;
+  dotDays: number;
+};
+
+export const DEFAULT_COMPLIANCE_WINDOWS: ComplianceWindows = {
+  driverDays: 30,
+  registrationDays: 60,
+  dotDays: 30,
+};

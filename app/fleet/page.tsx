@@ -5,6 +5,7 @@ import { DriverKindBadge, DriverStatusBadge, TruckStatusBadge } from "@/componen
 import { driverComplianceAlerts, trailerComplianceAlerts, truckComplianceAlerts } from "@/lib/compliance";
 import { formatWeight } from "@/lib/format";
 import { listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { complianceWindows } from "@/lib/settings";
 import { labelForTrailerType, labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default async function FleetPage({
   searchParams: Promise<{ type?: string }>;
 }) {
   const type = (await searchParams).type ?? "all";
+  const windows = complianceWindows();
   const trucks = listTrucks();
   const trailers = listTrailers();
   const drivers = listDrivers().filter((driver) => {
@@ -65,7 +67,7 @@ export default async function FleetPage({
                   <td>{labelForTruckType(truck.type)}</td>
                   <td>{formatWeight(truck.capacity_lbs)}</td>
                   <td>
-                    <ComplianceBadge alerts={truckComplianceAlerts(truck)} />
+                    <ComplianceBadge alerts={truckComplianceAlerts(truck, windows)} />
                   </td>
                   <td>
                     <TruckStatusBadge status={truck.status} />
@@ -102,7 +104,7 @@ export default async function FleetPage({
                   <td>{labelForTrailerType(trailer.type)}</td>
                   <td className="text-xs text-slate-500">{trailer.orbcomm_asset_id ? "Mapped" : "—"}</td>
                   <td>
-                    <ComplianceBadge alerts={trailerComplianceAlerts(trailer)} />
+                    <ComplianceBadge alerts={trailerComplianceAlerts(trailer, windows)} />
                   </td>
                   <td className="text-right">
                     <Link href={`/fleet/trailers/${trailer.id}`} className="btn btn-ghost">
@@ -160,7 +162,7 @@ export default async function FleetPage({
                     {[driver.license_state, driver.license_number].filter(Boolean).join("-") || driver.license || "—"}
                   </td>
                   <td>
-                    <ComplianceBadge alerts={driverComplianceAlerts(driver)} />
+                    <ComplianceBadge alerts={driverComplianceAlerts(driver, windows)} />
                   </td>
                   <td className="font-mono">{driver.pin || "—"}</td>
                   <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>

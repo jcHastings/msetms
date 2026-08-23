@@ -5,6 +5,7 @@ import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { RateConPicker } from "@/components/rate-con-picker";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
+import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export function RateConApply({
@@ -30,6 +31,7 @@ export function RateConApply({
     currency: string;
     targetMarginPercent: number;
     placesEnabled: boolean;
+    alertWindows: ComplianceWindows;
   };
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);

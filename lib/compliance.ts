@@ -1,6 +1,8 @@
 import { formatDate } from "./format";
-import { getCompanySettings } from "./settings";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "./settings-shared";
 import type { Driver, Trailer, Truck } from "./types";
+
+export type { ComplianceWindows };
 
 export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection";
 
@@ -14,16 +16,8 @@ export type ComplianceAlert = {
   message: string;
 };
 
-function driverWindowDays(): number {
-  return getCompanySettings().alert_driver_days;
-}
-
-function registrationWindowDays(): number {
-  return getCompanySettings().alert_registration_days;
-}
-
-function dotWindowDays(): number {
-  return getCompanySettings().alert_dot_days;
+function resolvedWindows(windows?: ComplianceWindows): ComplianceWindows {
+  return windows ?? DEFAULT_COMPLIANCE_WINDOWS;
 }
 
 export function daysUntil(dateStr: string, now = new Date()): number | null {
@@ -69,39 +63,45 @@ function alertFor(
   return null;
 }
 
-export function driverComplianceAlerts(driver: Driver): ComplianceAlert[] {
+export function driverComplianceAlerts(driver: Driver, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = driver.name;
+  const { driverDays } = resolvedWindows(windows);
   return [
-    alertFor(driver.license_expires, driverWindowDays(), subject, "driver license", "license"),
-    alertFor(driver.medical_expires, driverWindowDays(), subject, "medical card", "medical"),
+    alertFor(driver.license_expires, driverDays, subject, "driver license", "license"),
+    alertFor(driver.medical_expires, driverDays, subject, "medical card", "medical"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function truckComplianceAlerts(truck: Truck): ComplianceAlert[] {
+export function truckComplianceAlerts(truck: Truck, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = `Unit ${truck.unit_number}`;
+  const { registrationDays, dotDays } = resolvedWindows(windows);
   return [
-    alertFor(truck.registration_expires, registrationWindowDays(), subject, "registration", "registration"),
-    alertFor(truck.dot_expires, dotWindowDays(), subject, "DOT inspection", "dot_inspection"),
+    alertFor(truck.registration_expires, registrationDays, subject, "registration", "registration"),
+    alertFor(truck.dot_expires, dotDays, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function trailerComplianceAlerts(trailer: Trailer): ComplianceAlert[] {
+export function trailerComplianceAlerts(trailer: Trailer, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = `Trailer ${trailer.unit_number}`;
+  const { registrationDays, dotDays } = resolvedWindows(windows);
   return [
-    alertFor(trailer.registration_expires, registrationWindowDays(), subject, "registration", "registration"),
-    alertFor(trailer.dot_expires, dotWindowDays(), subject, "DOT inspection", "dot_inspection"),
+    alertFor(trailer.registration_expires, registrationDays, subject, "registration", "registration"),
+    alertFor(trailer.dot_expires, dotDays, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function collectAssignmentAlerts(input: {
-  driver?: Driver | null;
-  truck?: Truck | null;
-  trailer?: Trailer | null;
-}): ComplianceAlert[] {
+export function collectAssignmentAlerts(
+  input: {
+    driver?: Driver | null;
+    truck?: Truck | null;
+    trailer?: Trailer | null;
+  },
+  windows?: ComplianceWindows,
+): ComplianceAlert[] {
   return [
-    ...(input.driver ? driverComplianceAlerts(input.driver) : []),
-    ...(input.truck ? truckComplianceAlerts(input.truck) : []),
-    ...(input.trailer ? trailerComplianceAlerts(input.trailer) : []),
+    ...(input.driver ? driverComplianceAlerts(input.driver, windows) : []),
+    ...(input.truck ? truckComplianceAlerts(input.truck, windows) : []),
+    ...(input.trailer ? trailerComplianceAlerts(input.trailer, windows) : []),
   ];
 }
 

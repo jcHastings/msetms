@@ -36,7 +36,7 @@ import {
 } from "./types";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
-import { defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
+import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
 import {
   defaultSearchCriteria,
   type LoadSearchCriteria,
@@ -1326,10 +1326,11 @@ export function listAssignableTrailers(loadId?: number): Trailer[] {
 }
 
 export function listUpcomingCompliance(): ComplianceAlert[] {
+  const windows = complianceWindows();
   return [
-    ...listDrivers().flatMap((driver) => driverComplianceAlerts(driver)),
-    ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck)),
-    ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer)),
+    ...listDrivers().flatMap((driver) => driverComplianceAlerts(driver, windows)),
+    ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck, windows)),
+    ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer, windows)),
   ].sort((a, b) => a.days - b.days);
 }
 

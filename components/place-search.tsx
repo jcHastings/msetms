@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
-import type { PlaceDetails } from "@/lib/places";
+import type { PlaceDetails } from "@/lib/places-shared";
 
 export function PlaceSearch({
   enabled,

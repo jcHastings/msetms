@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
-import { SETTINGS_SECTIONS } from "@/lib/settings";
+import { SETTINGS_SECTIONS } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
 
