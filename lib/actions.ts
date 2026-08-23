@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireDispatcher } from "./dispatch-auth";
 import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import {
   assignLoad,
   createCustomer,
   createDriver,
   createLoad,
+  createLocation,
   createTrailer,
   createTruck,
   findOrCreateCustomer,
@@ -17,11 +19,13 @@ import {
   updateCustomer,
   updateDriver,
   updateLoad,
+  updateLocation,
   updateLoadStatus,
   updateTrailer,
   updateTruck,
   type LoadInput,
 } from "./queries";
+import { locationInputFromStop, parseLocationRole, parseLocationScheduling } from "./locations";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
@@ -83,10 +87,14 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
   if (!isLoadStatus(statusValue)) throw new Error("Invalid load status.");
   const truckId = parseOptionalInt(formData.get("truck_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
+  const origin = requiredString(formData.get("origin"), "Origin");
+  const destination = requiredString(formData.get("destination"), "Destination");
   const parsed: LoadInput = {
     customer_id: customerId,
-    origin: requiredString(formData.get("origin"), "Origin"),
-    destination: requiredString(formData.get("destination"), "Destination"),
+    origin,
+    destination,
+    shipper_location_id: resolveStopLocation(formData, "shipper", origin),
+    consignee_location_id: resolveStopLocation(formData, "consignee", destination),
     pickup_start: fromInputDateTime(requiredString(formData.get("pickup_start"), "Pickup start")),
     pickup_end: fromInputDateTime(requiredString(formData.get("pickup_end"), "Pickup end")),
     delivery_start: fromInputDateTime(requiredString(formData.get("delivery_start"), "Delivery start")),
@@ -174,11 +182,81 @@ function parseDriverStatus(value: FormDataEntryValue | null): DriverStatus {
   return status as DriverStatus;
 }
 
+function resolveStopLocation(
+  formData: FormData,
+  prefix: "shipper" | "consignee",
+  addressLine: string,
+): number | null {
+  const existing = parseOptionalInt(formData.get(`${prefix}_location_id`));
+  if (existing) return existing;
+  if (String(formData.get(`save_${prefix}_location`) ?? "") !== "1") return null;
+  return createLocation(
+    locationInputFromStop({
+      name: String(formData.get(`${prefix}_name`) ?? "").trim(),
+      street: String(formData.get(`${prefix}_street`) ?? "").trim(),
+      city: String(formData.get(`${prefix}_city`) ?? "").trim(),
+      state: String(formData.get(`${prefix}_state`) ?? "").trim(),
+      zip: String(formData.get(`${prefix}_zip`) ?? "").trim(),
+      addressLine,
+      role: prefix === "shipper" ? "shipper" : "receiver",
+    }),
+  );
+}
+
+export async function createLocationAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    const id = createLocation(parseLocationForm(formData));
+    refresh();
+    redirect(`/locations/${id}`);
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateLocationAction(
+  id: number,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireDispatcher();
+    updateLocation(id, parseLocationForm(formData));
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+function parseLocationForm(formData: FormData) {
+  return {
+    name: requiredString(formData.get("name"), "Location name"),
+    street: String(formData.get("street") ?? "").trim(),
+    city: String(formData.get("city") ?? "").trim(),
+    state: String(formData.get("state") ?? "").trim().toUpperCase(),
+    zip: String(formData.get("zip") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    notes: String(formData.get("notes") ?? "").trim(),
+    role: parseLocationRole(formData.get("role")),
+    scheduling_type: parseLocationScheduling(formData.get("scheduling_type")),
+    hours: String(formData.get("hours") ?? "").trim(),
+    scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
+    scheduling_email: String(formData.get("scheduling_email") ?? "").trim(),
+    scheduling_portal: String(formData.get("scheduling_portal") ?? "").trim(),
+  };
+}
+
 export async function createCustomerAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -198,6 +276,7 @@ export async function updateCustomerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -215,6 +294,7 @@ export async function createTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     const id = createTruck({
@@ -246,6 +326,7 @@ export async function updateTruckAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     updateTruck(id, {
@@ -274,6 +355,7 @@ export async function createDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createDriver({
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -310,6 +392,7 @@ export async function updateDriverAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -343,6 +426,7 @@ export async function createLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const input = parseLoadInput(formData);
     enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
     const id = createLoad(input);
@@ -365,6 +449,7 @@ export async function updateLoadAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const input = parseLoadInput(formData);
     enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
     updateLoad(id, input);
@@ -382,6 +467,7 @@ export async function updateLoadAction(
 
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     const truckId = parseOptionalInt(formData.get("truck_id"));
     const driverId = parseOptionalInt(formData.get("driver_id"));
@@ -405,6 +491,7 @@ export async function refreshIftaAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const { refreshIftaForLoad } = await import("./integrations/ifta");
@@ -421,6 +508,7 @@ export async function sendToQuickbooksAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
@@ -435,6 +523,7 @@ export async function sendToQuickbooksAction(
 
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     const status = String(formData.get("status") ?? "");
     if (!loadId) throw new Error("Load is missing.");
@@ -460,6 +549,7 @@ export async function parseRateConAction(
   formData: FormData,
 ): Promise<RateConParseState> {
   try {
+    await requireDispatcher();
     const file = formData.get("rate_con");
     if (!(file instanceof File) || file.size === 0) {
       throw new Error("Choose a rate confirmation PDF or image.");
@@ -492,6 +582,7 @@ export async function attachFileFormAction(formData: FormData): Promise<void> {
 
 export async function attachFileAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
     const file = formData.get("file");
@@ -524,6 +615,7 @@ export async function importOrbcommReportAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const pasted = String(formData.get("report_text") ?? "").trim();
     const file = formData.get("file");
     let text = pasted;
@@ -554,6 +646,7 @@ export async function createTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const id = createTrailer({
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -579,6 +672,7 @@ export async function updateTrailerAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     updateTrailer(id, {
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),
@@ -603,6 +697,7 @@ export async function attachFleetDocFormAction(formData: FormData): Promise<void
 
 export async function attachFleetDocAction(formData: FormData): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const ownerId = parseOptionalInt(formData.get("owner_id"));
     const ownerType = String(formData.get("owner_type") ?? "");
     if (!ownerId || !["driver", "truck", "trailer"].includes(ownerType)) {
@@ -636,6 +731,7 @@ export async function updateCompanyProfileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireDispatcher();
     const { updateCompanyProfile } = await import("./company");
     updateCompanyProfile({
       company_name: requiredString(formData.get("company_name"), "Company name"),

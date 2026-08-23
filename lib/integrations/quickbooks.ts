@@ -17,6 +17,14 @@ const FETCH_TIMEOUT_MS = 15_000;
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
 
+let lastDemoInvoiceStamp = 0;
+
+function uniqueDemoInvoiceStamp(): number {
+  const next = Math.max(Date.now(), lastDemoInvoiceStamp + 1);
+  lastDemoInvoiceStamp = next;
+  return next;
+}
+
 export type QboInvoicePreview = {
   configured: boolean;
   mode: "demo" | "quickbooks";
@@ -111,7 +119,7 @@ export async function sendLoadToQuickbooks(
 
   if (!isQuickbooksConfigured()) {
     const result: QboSendResult = {
-      invoiceId: `demo-${load.load_number}-${Date.now()}`,
+      invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
       invoiceNumber: load.load_number,
       sentAt,
       source: "demo",
@@ -410,7 +418,7 @@ function refreshTokenPath(): string {
 
 function readStoredRefreshToken(): string | undefined {
   try {
-    const raw = fs.readFileSync(refreshTokenPath(), "utf8");
+    const raw = fs.readFileSync(/*turbopackIgnore: true*/ refreshTokenPath(), "utf8");
     const parsed = JSON.parse(raw) as { refresh_token?: string };
     const token = typeof parsed.refresh_token === "string" ? parsed.refresh_token.trim() : "";
     return token || undefined;
@@ -421,8 +429,8 @@ function readStoredRefreshToken(): string | undefined {
 
 function writeStoredRefreshToken(token: string): void {
   const filePath = refreshTokenPath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify({ refresh_token: token, updated_at: new Date().toISOString() })}\n`, {
+  fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ filePath, `${JSON.stringify({ refresh_token: token, updated_at: new Date().toISOString() })}\n`, {
     mode: 0o600,
   });
 }

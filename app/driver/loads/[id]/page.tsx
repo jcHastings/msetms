@@ -6,7 +6,8 @@ import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
-import { getLoad } from "@/lib/queries";
+import { LocationScheduling } from "@/components/location-scheduling";
+import { getLoad, getLocation } from "@/lib/queries";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForAttachmentKind } from "@/lib/types";
 
@@ -24,6 +25,8 @@ export default async function DriverLoadPage({
   const reefer = await getLatestReeferForLoad(load.id);
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
+  const shipper = load.shipper_location_id ? getLocation(load.shipper_location_id) : null;
+  const consignee = load.consignee_location_id ? getLocation(load.consignee_location_id) : null;
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-20 pt-5">
@@ -45,9 +48,22 @@ export default async function DriverLoadPage({
         </a>
       </div>
 
+      <LocationScheduling
+        title="Pickup"
+        location={shipper}
+        fallbackAddress={load.origin}
+        audience="driver"
+      />
+      <LocationScheduling
+        title="Delivery"
+        location={consignee}
+        fallbackAddress={load.destination}
+        audience="driver"
+      />
+
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
-        <Row label="Pickup" value={`${formatDateTime(load.pickup_start)} – ${formatDateTime(load.pickup_end)}`} />
-        <Row label="Delivery" value={`${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`} />
+        <Row label="Pickup window" value={`${formatDateTime(load.pickup_start)} – ${formatDateTime(load.pickup_end)}`} />
+        <Row label="Delivery window" value={`${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`} />
         <Row label="Commodity" value={load.commodity || "—"} />
         <Row label="Weight" value={formatWeight(load.weight)} />
         <Row label="Rate" value={formatMoney(load.rate)} />
@@ -107,7 +123,12 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      <DriverLoadActions loadId={load.id} current={load.driver_progress} closed={load.status === "delivered"} />
+      <DriverLoadActions
+        loadId={load.id}
+        loadNumber={load.load_number}
+        current={load.driver_progress}
+        closed={load.status === "delivered"}
+      />
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold">Files on this load</h2>

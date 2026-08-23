@@ -67,13 +67,18 @@ export default async function SettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Set <code>SAMSARA_API_TOKEN</code> in <code>.env</code> and restart. The app calls{" "}
-          <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
-          <code>GET https://api.samsara.com/fleet/hos/clocks</code>. Map the Samsara vehicle ID on the
-          truck and the Samsara driver ID on the driver. IFTA on a load uses{" "}
-          <code>GET /fleet/reports/ifta/vehicle</code> (Read IFTA) and, when available,{" "}
-          <code>POST /ifta-detail/csv</code> for the load window (Write IFTA). Samsara is not used for
-          reefer temperature.
+          On the Windows box: copy <code>.env.example</code> to <code>.env.local</code> in Notepad (same
+          folder as <code>package.json</code>), set <code>SAMSARA_API_TOKEN=</code>, save, then{" "}
+          <code>npm start</code> again. Never paste the token into Slack, email, or chat. The token is never
+          shown here.
+        </p>
+        <p className="mt-3 text-sm text-slate-600">
+          Live calls: <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
+          <code>GET https://api.samsara.com/fleet/hos/clocks</code> with{" "}
+          <code>X-Samsara-Version: 2025-10-23</code>. Map the Samsara vehicle ID on the truck and the
+          Samsara driver ID on the driver. IFTA uses <code>POST /ifta-detail/csv</code> for the load
+          window (gzipped CSV) and falls back to <code>GET /fleet/reports/ifta/vehicle</code>. Samsara is
+          not used for reefer temperature.
         </p>
         {fleet.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -124,11 +129,14 @@ export default async function SettingsPage() {
           >
             ORBCOMM Reefer Status Report
           </a>
-          . Set <code>ORBCOMM_USERNAME</code> and <code>ORBCOMM_PASSWORD</code> (optional{" "}
-          <code>ORBCOMM_ACCOUNT_ID</code>) in <code>.env</code>. The app requests a Transportation Platform token at{" "}
-          <code>POST /SynB2BGatewayService/api/generateToken</code>. There is no scrape of the logged-in portal. If
-          B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the ORBCOMM
-          asset ID on the trailer. ORBCOMM is not used for driver HOS.
+          . On Windows, put <code>ORBCOMM_USERNAME</code> / <code>ORBCOMM_PASSWORD</code> (optional{" "}
+          <code>ORBCOMM_ORG_KEY</code>) in gitignored <code>.env.local</code> — never Slack. The app
+          requests <code>POST /SynB2BGatewayService/api/generateToken</code> with official{" "}
+          <code>userName</code> / <code>password</code> / <code>orgKey</code> fields and reads{" "}
+          <code>data.accessToken</code>. There is no scrape of the logged-in portal. If B2B snapshot
+          access is not enabled, export the report as CSV/JSON and import it below. Live snapshot URLs
+          live in one file (<code>lib/integrations/orbcomm-client.ts</code>). Map the ORBCOMM asset ID on
+          the trailer. ORBCOMM is not used for driver HOS.
         </p>
         {reefers.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
