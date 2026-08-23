@@ -27,6 +27,12 @@ export type Statement = {
 
 type BoundValue = string | number | bigint | null | Uint8Array;
 
+/** node:sqlite returns null-prototype rows; Next client props require plain objects. */
+function asPlain(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  return { ...(value as Record<string, unknown>) };
+}
+
 function bind(params: SqlParam[]): BoundValue[] {
   return params.map((value) => {
     if (value === undefined) return null;
@@ -55,8 +61,8 @@ export class Database {
     const statement = this.#db.prepare(sql);
     return {
       run: (...params: SqlParam[]) => statement.run(...bind(params)) as RunResult,
-      get: (...params: SqlParam[]) => statement.get(...bind(params)),
-      all: (...params: SqlParam[]) => statement.all(...bind(params)),
+      get: (...params: SqlParam[]) => asPlain(statement.get(...bind(params))),
+      all: (...params: SqlParam[]) => statement.all(...bind(params)).map(asPlain),
     };
   }
 

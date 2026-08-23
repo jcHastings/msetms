@@ -17,6 +17,14 @@ const FETCH_TIMEOUT_MS = 15_000;
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
 
+let lastDemoInvoiceStamp = 0;
+
+function uniqueDemoInvoiceStamp(): number {
+  const next = Math.max(Date.now(), lastDemoInvoiceStamp + 1);
+  lastDemoInvoiceStamp = next;
+  return next;
+}
+
 export type QboInvoicePreview = {
   configured: boolean;
   mode: "demo" | "quickbooks";
@@ -111,7 +119,7 @@ export async function sendLoadToQuickbooks(
 
   if (!isQuickbooksConfigured()) {
     const result: QboSendResult = {
-      invoiceId: `demo-${load.load_number}-${Date.now()}`,
+      invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
       invoiceNumber: load.load_number,
       sentAt,
       source: "demo",
