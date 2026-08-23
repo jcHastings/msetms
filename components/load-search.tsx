@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { deleteSearchReportAction, saveSearchReportAction } from "@/lib/actions";
+import { deleteSearchReportFormAction, saveSearchReportAction } from "@/lib/actions";
 import { formatDateTime } from "@/lib/format";
 import { US_STATES } from "@/lib/locations";
 import { searchLoadsAction } from "@/lib/search-actions";
@@ -367,7 +367,7 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
           <button
             className="btn btn-ghost text-rose-700"
             type="submit"
-            formAction={deleteSearchReportAction}
+            formAction={deleteSearchReportFormAction}
             name="report_id"
             value={selectedReport}
           >

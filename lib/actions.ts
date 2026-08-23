@@ -712,6 +712,11 @@ export async function deleteLocationAction(formData: FormData): Promise<ActionRe
   }
 }
 
+export async function deleteLocationFormAction(formData: FormData): Promise<void> {
+  const result = await deleteLocationAction(formData);
+  if (result && !result.ok) throw new Error(result.error);
+}
+
 function parseReportFilters(formData: FormData) {
   const filters = parseSavedFilters(String(formData.get("filters_json") ?? ""));
   return { ...defaultSearchCriteria(), ...filters };
@@ -755,6 +760,11 @@ export async function deleteSearchReportAction(formData: FormData): Promise<Acti
   } catch (error) {
     return fail(error);
   }
+}
+
+export async function deleteSearchReportFormAction(formData: FormData): Promise<void> {
+  const result = await deleteSearchReportAction(formData);
+  if (!result.ok) throw new Error(result.error);
 }
 
 export async function updateCompanyProfileAction(
