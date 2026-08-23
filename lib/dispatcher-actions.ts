@@ -376,18 +376,13 @@ export async function requestDriverDocumentsAction(formData: FormData): Promise<
   });
 }
 
-export async function assignLoadDispatcherAction(formData: FormData): Promise<ActionResult> {
-  return withRequestAuditActor(async () => {
-    try {
-      const loadId = parseOptionalInt(formData.get("load_id"));
-      if (!loadId) throw new Error("Load is missing.");
-      const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
-      assignLoadDispatcher(loadId, dispatcherId);
-      refresh();
-      return { ok: true, id: loadId, message: dispatcherId ? "Dispatcher assigned." : "Dispatcher cleared." };
-    } catch (error) {
-      return fail(error);
-    }
+export async function assignLoadDispatcherAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
+    assignLoadDispatcher(loadId, dispatcherId);
+    refresh();
   });
 }
 

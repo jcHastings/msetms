@@ -21,6 +21,8 @@ export function TotpSetupPanel({
   recoveryRemaining: number;
 }) {
   const [confirmState, confirmAction, confirming] = useActionState(confirmTotpEnrollmentAction, null);
+  const [startState, startAction, starting] = useActionState(startTotpEnrollmentAction, null);
+  const [cancelState, cancelAction, cancelling] = useActionState(cancelTotpEnrollmentAction, null);
   const recoveryCodes = confirmState?.ok ? confirmState.recoveryCodes : undefined;
 
   if (recoveryCodes?.length) {
@@ -86,9 +88,10 @@ export function TotpSetupPanel({
           </button>
         </form>
         {!required ? (
-          <form action={cancelTotpEnrollmentAction}>
-            <button className="btn btn-secondary" type="submit">
-              Cancel setup
+          <form action={cancelAction}>
+            <FormBanner result={cancelState} />
+            <button className="btn btn-secondary" type="submit" disabled={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel setup"}
             </button>
           </form>
         ) : null}
@@ -102,9 +105,10 @@ export function TotpSetupPanel({
       <p className="text-sm text-slate-600">
         Optional until an admin requires it for all dispatchers. Driver PIN login is not affected.
       </p>
-      <form action={startTotpEnrollmentAction}>
-        <button className="btn btn-primary" type="submit">
-          Set up 2-step
+      <form action={startAction}>
+        <FormBanner result={startState} />
+        <button className="btn btn-primary" type="submit" disabled={starting}>
+          {starting ? "Starting…" : "Set up 2-step"}
         </button>
       </form>
     </section>

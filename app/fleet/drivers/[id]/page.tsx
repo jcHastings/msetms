@@ -20,6 +20,7 @@ export default async function EditDriverPage({
   const driver = getDriver(Number.parseInt((await params).id, 10));
   if (!driver) notFound();
   const boundAction = updateDriverAction.bind(null, driver.id);
+  const { pin: _pin, ...driverWithoutPin } = driver;
 
   return (
     <>
@@ -34,7 +35,7 @@ export default async function EditDriverPage({
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
       <DriverFuelCard driverId={driver.id} />
       <DriverForm
-        driver={{ ...driver, pin: "" }}
+        driver={driverWithoutPin}
         hasPin={Boolean(driver.pin)}
         trucks={listTrucks()}
         action={boundAction}

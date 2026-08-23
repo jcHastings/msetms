@@ -573,13 +573,12 @@ async function main() {
   process.env.TWILIO_AUTH_TOKEN = "twilio-secret-token-do-not-log";
   process.env.TWILIO_FROM_NUMBER = "+15555550100";
   const failFetch = (async () =>
-    ({
-      ok: false,
-      status: 401,
-      json: async () => ({
+    new Response(
+      JSON.stringify({
         message: "Authenticate twilio-secret-token-do-not-log ACtestnotreal",
       }),
-    })) as typeof fetch;
+      { status: 401, statusText: "Unauthorized", headers: { "Content-Type": "application/json" } },
+    )) as typeof fetch;
   await assert.rejects(
     () => twilio.sendTwilioSms({ to: "(312) 555-0148", body: "Rolling" }, failFetch),
     (error: unknown) => {
@@ -593,7 +592,11 @@ async function main() {
   let sentBody = "";
   const okFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     sentBody = String(init?.body ?? "");
-    return { ok: true, status: 201, json: async () => ({ sid: "SM-test" }) };
+    return new Response(JSON.stringify({ sid: "SM-test" }), {
+      status: 201,
+      statusText: "Created",
+      headers: { "Content-Type": "application/json" },
+    });
   }) as typeof fetch;
   await twilio.sendTwilioSms({ to: "(312) 555-0148", body: "On time" }, okFetch);
   assert.match(sentBody, /On\+time|On%20time|On time/);
@@ -614,7 +617,7 @@ async function main() {
   }
   assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
   assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
-  const company = audit.listCompanyAudit({ loadNumber: created.load_number, user: "Ana G" });
+  const company = audit.listCompanyAudit({ loadNumber: created.load_number, actor: "Ana G" });
   assert.ok(company.length >= 1);
   addFleetDocument({
     ownerType: "driver",

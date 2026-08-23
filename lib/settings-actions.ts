@@ -291,7 +291,10 @@ export async function createDispatcherUserAction(
   }
 }
 
-export async function startTotpEnrollmentAction(): Promise<ActionResult> {
+export async function startTotpEnrollmentAction(
+  _prev: ActionResult | null,
+  _formData: FormData,
+): Promise<ActionResult> {
   try {
     const dispatcher = await requireSignedInDispatcher();
     beginTotpEnrollment(dispatcher.id);
@@ -302,7 +305,10 @@ export async function startTotpEnrollmentAction(): Promise<ActionResult> {
   }
 }
 
-export async function cancelTotpEnrollmentAction(): Promise<ActionResult> {
+export async function cancelTotpEnrollmentAction(
+  _prev: ActionResult | null,
+  _formData: FormData,
+): Promise<ActionResult> {
   try {
     const dispatcher = await requireSignedInDispatcher();
     cancelTotpEnrollment(dispatcher.id);

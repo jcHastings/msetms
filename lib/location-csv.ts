@@ -98,7 +98,7 @@ export function renderAscendLocationCsv(locations: Location[]): string {
 }
 
 export function decodeCsvBuffer(input: ArrayBuffer | Uint8Array | Buffer): string {
-  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  const buffer = toNodeBuffer(input);
   if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
     return buffer.subarray(2).toString("utf16le");
   }
@@ -106,6 +106,12 @@ export function decodeCsvBuffer(input: ArrayBuffer | Uint8Array | Buffer): strin
     return buffer.subarray(3).toString("utf8");
   }
   return buffer.toString("utf8");
+}
+
+function toNodeBuffer(input: ArrayBuffer | Uint8Array | Buffer): Buffer {
+  if (Buffer.isBuffer(input)) return input;
+  if (input instanceof ArrayBuffer) return Buffer.from(new Uint8Array(input));
+  return Buffer.from(Uint8Array.from(input));
 }
 
 export function parseAscendLocationCsv(text: string): LocationCsvParseResult {
