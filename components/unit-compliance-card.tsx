@@ -7,29 +7,37 @@ function formatDay(value: string): string {
 }
 
 export function UnitComplianceCard({
-  title,
-  issued,
-  expires,
+  registrationIssued,
+  registrationExpires,
+  inspectedOn,
+  inspectionExpires,
   alerts,
-  emptyLabel,
 }: {
-  title: string;
-  issued: string;
-  expires: string;
+  registrationIssued: string;
+  registrationExpires: string;
+  inspectedOn: string;
+  inspectionExpires: string;
   alerts: ComplianceAlert[];
-  emptyLabel: string;
 }) {
   return (
     <section className="card mb-4 p-5">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <h2 className="text-sm font-semibold">Registration & DLT / DOT inspection</h2>
       <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
         <div>
           <dt className="text-slate-500">Registration issued</dt>
-          <dd className="font-semibold">{formatDay(issued)}</dd>
+          <dd className="font-semibold">{formatDay(registrationIssued)}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Registration expires</dt>
-          <dd className="font-semibold">{formatDay(expires)}</dd>
+          <dt className="text-slate-500">Registration expires (60-day warning)</dt>
+          <dd className="font-semibold">{formatDay(registrationExpires)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">DLT / DOT inspection completed</dt>
+          <dd className="font-semibold">{formatDay(inspectedOn)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">DLT / DOT inspection expires (30-day warning)</dt>
+          <dd className="font-semibold">{formatDay(inspectionExpires)}</dd>
         </div>
       </dl>
       {alerts.length > 0 ? (
@@ -37,7 +45,9 @@ export function UnitComplianceCard({
           <ComplianceList alerts={alerts} />
         </div>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">{emptyLabel}</p>
+        <p className="mt-3 text-sm text-slate-500">
+          No registration (60 days) or DLT / DOT inspection (30 days) dates in the warning windows.
+        </p>
       )}
     </section>
   );

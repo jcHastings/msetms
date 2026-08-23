@@ -123,7 +123,7 @@ export default function DashboardPage() {
         <section className="card p-5 xl:col-span-3">
           <h2 className="text-sm font-semibold">Upcoming / expired documents</h2>
           <p className="mt-1 text-sm text-slate-500">
-            License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days.
+            License and medical card: 30 days. Registration: 60 days. DLT / DOT inspection: 30 days.
           </p>
           <div className="mt-3">
             {expirations.length === 0 ? (

@@ -86,7 +86,7 @@ export const FLEET_DOC_KINDS = [
   { value: "cdl", label: "Driver license" },
   { value: "med_card", label: "Medical card" },
   { value: "registration", label: "Registration" },
-  { value: "dot_inspection", label: "DOT inspection" },
+  { value: "dot_inspection", label: "DLT / DOT inspection" },
   { value: "insurance", label: "Insurance" },
   { value: "other", label: "Other" },
 ] as const;

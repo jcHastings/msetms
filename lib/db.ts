@@ -238,6 +238,12 @@ function backfillDemoRegistration(db: Database.Database): void {
          registration_expires = CASE WHEN registration_expires = '' THEN ? ELSE registration_expires END
      WHERE unit_number = 'TR-8801'`,
   ).run(isoDateOffset(-200), isoDateOffset(45));
+  db.prepare(
+    `UPDATE trucks
+     SET dot_inspected_on = CASE WHEN dot_inspected_on = '' THEN ? ELSE dot_inspected_on END,
+         dot_expires = CASE WHEN dot_expires = '' THEN ? ELSE dot_expires END
+     WHERE unit_number = '108'`,
+  ).run(isoDateOffset(-200), isoDateOffset(20));
 }
 
 function backfillDemoPins(db: Database.Database): void {

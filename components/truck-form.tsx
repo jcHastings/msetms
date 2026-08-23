@@ -64,12 +64,13 @@ export function TruckForm({ truck, action, submitLabel }: Props) {
         <label htmlFor="registration_expires">Expiration date</label>
         <input id="registration_expires" name="registration_expires" type="date" defaultValue={truck?.registration_expires} />
       </div>
+      <h2 className="text-sm font-semibold">DLT / DOT inspection</h2>
       <div className="field">
-        <label htmlFor="dot_inspected_on">DOT inspection completed</label>
+        <label htmlFor="dot_inspected_on">Date completed</label>
         <input id="dot_inspected_on" name="dot_inspected_on" type="date" defaultValue={truck?.dot_inspected_on} />
       </div>
       <div className="field">
-        <label htmlFor="dot_expires">DOT inspection expires</label>
+        <label htmlFor="dot_expires">Expiration date</label>
         <input id="dot_expires" name="dot_expires" type="date" defaultValue={truck?.dot_expires} />
       </div>
       <div className="field">

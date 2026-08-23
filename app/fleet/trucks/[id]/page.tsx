@@ -31,11 +31,11 @@ export default async function EditTruckPage({
         }
       />
       <UnitComplianceCard
-        title="Registration"
-        issued={truck.registration_issued}
-        expires={truck.registration_expires}
+        registrationIssued={truck.registration_issued}
+        registrationExpires={truck.registration_expires}
+        inspectedOn={truck.dot_inspected_on}
+        inspectionExpires={truck.dot_expires}
         alerts={truckComplianceAlerts(truck)}
-        emptyLabel="No registration or DOT dates in the warning windows."
       />
       <TruckForm truck={truck} action={boundAction} submitLabel="Save truck" />
       <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />

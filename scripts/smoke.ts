@@ -379,6 +379,20 @@ SPECIAL INSTRUCTIONS
   assert.equal(trailerReg.severity, "expiring");
   assert.match(trailerReg.message, /Trailer TR-8801/);
   assert.match(trailerReg.message, /registration/);
+  const truck108 = queries.listTrucks().find((truck) => truck.unit_number === "108");
+  assert.ok(truck108);
+  const truckDot = truckComplianceAlerts(truck108).find((alert) => alert.kind === "dot_inspection");
+  assert.ok(truckDot);
+  assert.equal(truckDot.severity, "expiring");
+  assert.match(truckDot.message, /Unit 108/);
+  assert.match(truckDot.message, /DLT \/ DOT inspection/);
+  const bothWindows = truckComplianceAlerts({
+    ...truck108,
+    registration_expires: truck210.registration_expires,
+    dot_expires: truck108.dot_expires,
+  });
+  assert.ok(bothWindows.some((alert) => alert.kind === "registration"));
+  assert.ok(bothWindows.some((alert) => alert.kind === "dot_inspection"));
 
   const fleet = await samsara.getSamsaraFleet();
   assert.equal(fleet.mode, "demo");

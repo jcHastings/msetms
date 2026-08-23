@@ -31,11 +31,11 @@ export default async function EditTrailerPage({
         }
       />
       <UnitComplianceCard
-        title="Registration"
-        issued={trailer.registration_issued}
-        expires={trailer.registration_expires}
+        registrationIssued={trailer.registration_issued}
+        registrationExpires={trailer.registration_expires}
+        inspectedOn={trailer.dot_inspected_on}
+        inspectionExpires={trailer.dot_expires}
         alerts={trailerComplianceAlerts(trailer)}
-        emptyLabel="No registration or DOT dates in the warning windows."
       />
       <TrailerForm trailer={trailer} action={boundAction} submitLabel="Save trailer" />
       <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />
