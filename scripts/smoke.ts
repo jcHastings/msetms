@@ -403,7 +403,11 @@ async function main() {
   assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
   assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "single"/);
-  for (const file of ["components/samsara-truck-import.tsx", "components/orbcomm-trailer-import.tsx"]) {
+  for (const file of [
+    "components/samsara-truck-import.tsx",
+    "components/orbcomm-trailer-import.tsx",
+    "components/driver-import.tsx",
+  ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(source, /["']use client["']/);
     assert.match(source, /from ["']@\/lib\/actions["']/, `${file} must import server actions itself`);
@@ -433,6 +437,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /No Samsara ID on this truck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /DriverImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Import drivers/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Show Pay|Passport Expiry/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /Christopher Howell/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /passport|fast card|hazmat|show pay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /Last GPS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /TrailerLocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Last city \/ lat-lng/);
@@ -3814,6 +3823,85 @@ Continuous reefer. Two load locks.
     country: "USA",
   });
   assert.equal(queries.getDriver(singleId)?.driver_type, "single");
+
+  const {
+    ASCEND_DRIVER_FIXTURE_NAMES,
+    parseDriverRosterText,
+    buildDriverImportPreview,
+    cleanImportedDate,
+    licenseNumberText,
+  } = await import("../lib/driver-import-shared");
+  const { applyDriverImport, previewDriversFromXlsx } = await import("../lib/driver-import");
+  const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
+  assert.equal(ASCEND_DRIVER_FIXTURE_NAMES.length, 8);
+  assert.equal(cleanImportedDate("0000-00-00"), "");
+  assert.equal(cleanImportedDate("-"), "");
+  assert.equal(cleanImportedDate("2020-03-15"), "2020-03-15");
+  assert.equal(licenseNumberText(123456789), "123456789");
+  const driverRosterCsv = [
+    "Status,Team,Name,Telephone,Alternate Telephone,Cell,Pager,E-mail,DOB,DOH,Address,City,Postal/Zip Code,Country,Province,License Number,License Expiry,Medical Date,Next Medical,Drug Test,Next Drug Test,Notes,Termination Date,Show Pay,Last Pay,Paid Driver Type,Passport Expiry,Fast Card Expiry,Hazmat Expiry,Name 2,Telephone 2",
+    'Active,single,Christopher Howell,555-1001,555-2001,555-3001,,howell@msloads.com,1984-01-02,2018-06-01,1 Main,Hastings,68901,USA,NE,123456789,2027-04-01,2025-01-01,2027-01-01,2025-02-01,2026-02-01,Nights,,1,99,company,2030-01-01,2030-01-01,2030-01-01,Ghost Driver,555-9999',
+    "Active,single,German Avila,555-1002,,,,,,0000-00-00,-,,Dallas,75201,USA,TX,AVILA-1,,,,,,,,,",
+    "Active,single,Jose Luis Torres,555-1003,,,,,,,,,,USA,TX,,,,,,,,,,",
+    "Active,single,Kelvin Whaley,555-1004,,,,,,,,,,USA,TN,,,,,,,,,,",
+    "Active,single,Lukas Olson,555-1005,,,,,,,,,,USA,NE,,,,,,,,,,",
+    "Active,single,Pike Osborne,555-1006,,,,,,,,,,USA,OK,,,,,,,,,,",
+    "Active,single,Steve Eller,555-1007,,,,,,,,,,USA,MS,,,,,,,,,,",
+    "Active,single,Yoel Feder,555-1008,,,,,,,,,,USA,FL,,,,,,,,,,",
+  ].join("\n");
+  const parsedRoster = parseDriverRosterText(driverRosterCsv);
+  assert.equal(parsedRoster.length, 8);
+  assert.deepEqual(
+    parsedRoster.map((row) => row.name),
+    [...ASCEND_DRIVER_FIXTURE_NAMES],
+  );
+  assert.equal(parsedRoster.some((row) => row.name === "Ghost Driver"), false);
+  const howellRow = parsedRoster.find((row) => row.name === "Christopher Howell");
+  assert.equal(howellRow?.driver_type, "single");
+  assert.equal(howellRow?.alt_phone, "555-2001");
+  assert.equal(howellRow?.cell_phone, "555-3001");
+  assert.equal(howellRow?.license_number, "123456789");
+  assert.equal(howellRow?.date_of_birth, "1984-01-02");
+  assert.equal(parsedRoster.find((row) => row.name === "German Avila")?.date_of_birth, "");
+  assert.equal(parsedRoster.find((row) => row.name === "German Avila")?.date_of_hire, "");
+  const rosterPreview = buildDriverImportPreview(parsedRoster, [
+    { id: howellId, name: "christopher howell" },
+    { id: ellerId, name: "Steve Eller" },
+    { id: whaleyId, name: "Kelvin Whaley" },
+  ]);
+  assert.equal(rosterPreview.filter((row) => row.action === "update").length, 3);
+  assert.equal(rosterPreview.filter((row) => row.action === "create").length, 5);
+  const howellBefore = queries.getDriver(howellId);
+  const rosterImport = applyDriverImport(rosterPreview);
+  assert.equal(rosterImport.created, 5);
+  assert.equal(rosterImport.updated, 3);
+  assert.equal(rosterImport.skipped, 0);
+  for (const name of ASCEND_DRIVER_FIXTURE_NAMES) {
+    assert.ok(queries.listDrivers().some((driver) => driver.name === name), `missing ${name}`);
+  }
+  assert.equal(queries.listDrivers().filter((driver) => driver.name === "Ghost Driver").length, 0);
+  const howellAfter = queries.getDriver(howellId);
+  assert.equal(howellAfter?.phone, "555-1001");
+  assert.equal(howellAfter?.driver_type, "single");
+  assert.equal(howellAfter?.license_number, "123456789");
+  assert.equal(howellAfter?.truck_id, howellBefore?.truck_id);
+  assert.equal(howellAfter?.pay_percent ?? null, howellBefore?.pay_percent ?? null);
+  const rosterAgain = applyDriverImport(rosterPreview);
+  assert.equal(rosterAgain.created, 0);
+  assert.equal(rosterAgain.updated, 8);
+  const xlsxPreview = previewDriversFromXlsx(
+    buildXlsxFromGrid([
+      ["Status", "Team", "Name", "Telephone", "License Number", "DOB", "Country", "Province"],
+      ["Active", "single", "Xlsx Only Driver", "555-1099", 987654321, "0000-00-00", "USA", "NE"],
+    ]),
+  );
+  assert.equal(xlsxPreview.length, 1);
+  assert.equal(xlsxPreview[0]?.name, "Xlsx Only Driver");
+  assert.equal(xlsxPreview[0]?.license_number, "987654321");
+  assert.equal(xlsxPreview[0]?.date_of_birth, "");
+  const xlsxImport = applyDriverImport(xlsxPreview);
+  assert.equal(xlsxImport.created, 1);
+  assert.equal(queries.getDriver(queries.listDrivers().find((driver) => driver.name === "Xlsx Only Driver")?.id ?? 0)?.license_number, "987654321");
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

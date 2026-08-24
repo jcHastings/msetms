@@ -1421,6 +1421,71 @@ export async function confirmOrbcommTrailersImportAction(
   }
 }
 
+export async function previewDriversImportAction(
+  _prev: DriverImportPreviewState | null,
+  formData: FormData,
+): Promise<DriverImportPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const pasted = String(formData.get("report_text") ?? "").trim();
+    const file = formData.get("file");
+    const { previewDriversFromText, previewDriversFromXlsx } = await import("./driver-import");
+    if (file instanceof File && file.size > 0) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+        const { fileToBuffer } = await import("./files");
+        const rows = previewDriversFromXlsx(new Uint8Array(await fileToBuffer(file)));
+        if (rows.length === 0) {
+          return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+        }
+        return { ok: true, rows };
+      }
+      const { decodeCsvBuffer } = await import("./location-csv");
+      const { fileToBuffer } = await import("./files");
+      const rows = previewDriversFromText(decodeCsvBuffer(await fileToBuffer(file)));
+      if (rows.length === 0) {
+        return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+      }
+      return { ok: true, rows };
+    }
+    if (pasted) {
+      const rows = previewDriversFromText(pasted);
+      if (rows.length === 0) {
+        return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+      }
+      return { ok: true, rows };
+    }
+    return { ok: false, error: "Choose an .xlsx or .csv, or paste Ascend driver rows." };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Driver preview failed." };
+  }
+}
+
+export async function confirmDriversImportAction(
+  _prev: DriverImportPreviewState | null,
+  formData: FormData,
+): Promise<DriverImportPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const selected = parseSelectedJson<DriverImportPreviewRow>(formData, "selectKey");
+    if (selected.length === 0) {
+      return { ok: false, error: "Select at least one driver to import." };
+    }
+    const { applyDriverImport } = await import("./driver-import");
+    const result = applyDriverImport(selected);
+    refresh();
+    return {
+      ok: true,
+      ...result,
+      message: `Imported drivers: created ${result.created}, updated ${result.updated}${result.skipped ? `, skipped ${result.skipped}` : ""}.`,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Driver import failed." };
+  }
+}
+
+type DriverImportPreviewState = import("./driver-import-shared").DriverImportPreviewState;
+type DriverImportPreviewRow = import("./driver-import-shared").DriverImportPreviewRow;
 type SamsaraPreviewState = import("./fleet-import-shared").FleetImportPreviewState<
   import("./fleet-import-shared").SamsaraTruckPreviewRow
 >;

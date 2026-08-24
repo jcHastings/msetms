@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
+import { DriverImport } from "@/components/driver-import";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { FleetRowActions } from "@/components/fleet-row-actions";
 import { PageHeader } from "@/components/page-header";
@@ -37,6 +38,7 @@ export default async function DriversPage() {
           </>
         }
       />
+      <DriverImport />
       <div className="card">
         <table className="table-grid">
           <thead>
