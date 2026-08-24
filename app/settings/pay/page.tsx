@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { PAY_METHODS, getCompanySettings } from "@/lib/settings";
@@ -12,7 +13,7 @@ export default async function PaySettingsPage() {
   const settings = getCompanySettings();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Pay and margin"
@@ -66,6 +67,6 @@ export default async function PaySettingsPage() {
           </div>
         </SettingsForm>
       </section>
-    </>
+    </SettingsAdminGate>
   );
 }

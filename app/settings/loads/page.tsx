@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getCompanySettings, peekNextLoadNumber } from "@/lib/settings";
@@ -12,7 +13,7 @@ export default async function LoadManagementPage() {
   const settings = getCompanySettings();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Load numbers and sample data"
@@ -48,6 +49,6 @@ export default async function LoadManagementPage() {
           </label>
         </SettingsForm>
       </section>
-    </>
+    </SettingsAdminGate>
   );
 }

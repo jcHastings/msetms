@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { DROPDOWN_KINDS, listDropdownOptions } from "@/lib/settings";
@@ -16,7 +17,7 @@ export default async function ListsSettingsPage() {
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   const options = listDropdownOptions(undefined, true);
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Dropdown lists"
@@ -89,6 +90,6 @@ export default async function ListsSettingsPage() {
           </section>
         );
       })}
-    </>
+    </SettingsAdminGate>
   );
 }

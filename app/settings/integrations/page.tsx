@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { OrbcommImportForm } from "@/components/orbcomm-import-form";
 import { PageHeader } from "@/components/page-header";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { formatDateTime } from "@/lib/format";
 import { isOrbcommConfigured, isQuickbooksConfigured } from "@/lib/env";
@@ -30,7 +31,7 @@ export default async function IntegrationsSettingsPage() {
       : "Connected";
 
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Integrations"
@@ -265,6 +266,6 @@ export default async function IntegrationsSettingsPage() {
           </tbody>
         </table>
       </section>
-    </>
+    </SettingsAdminGate>
   );
 }

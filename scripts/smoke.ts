@@ -2661,6 +2661,8 @@ Continuous reefer. Two load locks.
   assert.match(usersPage, /Add user/);
   assert.match(usersPage, /listDispatcherUsers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/users/page.tsx"), "utf8"), /redirect\("\/users"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8"), /SettingsAdminGate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/settings-admin-gate.tsx"), "utf8"), /Only an Administrator can change Settings/);
   const userForm = fs.readFileSync(path.join(process.cwd(), "components/dispatcher-user-form.tsx"), "utf8");
   assert.doesNotMatch(userForm, /user\?\.pin/);
   assert.match(userForm, /defaultValue=""/);

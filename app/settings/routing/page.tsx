@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getCompanySettings } from "@/lib/settings";
@@ -12,7 +13,7 @@ export default async function RoutingSettingsPage() {
   const settings = getCompanySettings();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Default routing notes"
@@ -32,6 +33,6 @@ export default async function RoutingSettingsPage() {
           </div>
         </SettingsForm>
       </section>
-    </>
+    </SettingsAdminGate>
   );
 }

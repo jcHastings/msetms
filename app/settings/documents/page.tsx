@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { DOCUMENT_TYPES, listDocumentDefaults } from "@/lib/settings";
@@ -12,7 +13,7 @@ export default async function DocumentSettingsPage() {
   const docs = listDocumentDefaults();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Document defaults"
@@ -69,6 +70,6 @@ export default async function DocumentSettingsPage() {
           );
         })}
       </div>
-    </>
+    </SettingsAdminGate>
   );
 }

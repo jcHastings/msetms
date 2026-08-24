@@ -1,6 +1,7 @@
 import { CompanyProfileForm } from "@/components/company-profile-form";
 import { LogoUploadForm } from "@/components/logo-upload-form";
 import { PageHeader } from "@/components/page-header";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getCompanySettings, hasCustomCompanyLogo } from "@/lib/settings";
@@ -12,7 +13,7 @@ export default async function CompanySettingsPage() {
   const settings = getCompanySettings();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="Company contact"
@@ -37,6 +38,6 @@ export default async function CompanySettingsPage() {
           />
         </div>
       </section>
-    </>
+    </SettingsAdminGate>
   );
 }

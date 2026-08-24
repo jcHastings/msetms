@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { disconnectQuickbooksAction } from "@/lib/actions";
 import { formatDateTime } from "@/lib/format";
@@ -15,7 +16,7 @@ export default async function QuickbooksSettingsPage({
   const params = await searchParams;
   const qbo = await getQuickbooksStatus();
   return (
-    <>
+    <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
         title="QuickBooks Online"
@@ -128,6 +129,6 @@ QBO_SANDBOX=true`}
           QuickBooks invoice. One invoice per load unless you confirm a resend.
         </p>
       )}
-    </>
+    </SettingsAdminGate>
   );
 }
