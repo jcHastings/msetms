@@ -90,7 +90,6 @@ async function main() {
   assert.match(cssSource, /\.desk-nav-link-active/);
   assert.match(cssSource, /#0b1f3a/);
   assert.match(cssSource, /#d4a017/);
-  const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
   assert.match(navSource, /desk-nav-section/);
   assert.match(navSource, /desk-nav-link-active/);
   const shellSource = fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8");
