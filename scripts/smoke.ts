@@ -170,6 +170,10 @@ async function main() {
   const routingLib = fs.readFileSync(path.join(process.cwd(), "lib/routing.ts"), "utf8");
   assert.match(routingLib, /maps\.googleapis\.com\/maps\/api\/directions/);
   assert.doesNotMatch(routingLib, /maps\.google\.com/);
+  const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
+  const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
+  const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
+  assert.ok(fromColAt >= 0 && fromIdxAt > fromColAt, "add from_driver_id before indexing it");
   assert.doesNotMatch(basicsChunk, /Routing guide|Refresh route|route_miles/);
   assert.doesNotMatch(paySource, /Routing guide|Refresh route|route_miles/);
   const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
@@ -185,8 +189,33 @@ async function main() {
   assert.match(docsPage, /LoadRoutingGuide/);
   assert.match(docsPage, /when="stops"/);
 
-  const { closeDb, getDb } = await import("../lib/db");
+  const { closeDb, getDb, migrate } = await import("../lib/db");
   const queries = await import("../lib/queries");
+  const { Database } = await import("../lib/sqlite");
+  const oldRelayPath = path.join(os.tmpdir(), `tms-old-relays-${Date.now()}.db`);
+  const oldRelayDb = new Database(oldRelayPath);
+  oldRelayDb.exec(`
+    CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE load_relays (
+      id INTEGER PRIMARY KEY,
+      load_id INTEGER,
+      sequence INTEGER,
+      pickup TEXT,
+      delivery TEXT,
+      driver_id INTEGER,
+      truck_id INTEGER,
+      trailer_id INTEGER,
+      oo_percent REAL,
+      oo_pay REAL,
+      notes TEXT,
+      created_at TEXT,
+      updated_at TEXT
+    );
+  `);
+  migrate(oldRelayDb);
+  const relayCols = oldRelayDb.prepare("PRAGMA table_info(load_relays)").all() as Array<{ name: string }>;
+  assert.ok(relayCols.some((col) => col.name === "from_driver_id"), "existing DBs must gain from_driver_id");
+  oldRelayDb.close();
 
   getDb();
   const seeded = queries.getDashboardStats();

@@ -444,9 +444,9 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_load_relays_load ON load_relays(load_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_load_relays_driver ON load_relays(driver_id);
-    CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);
   `);
   ensureColumn(db, "load_relays", "from_driver_id", "INTEGER");
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
   db.exec(`
 
     CREATE TABLE IF NOT EXISTS load_templates (
