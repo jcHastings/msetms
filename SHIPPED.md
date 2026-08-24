@@ -83,6 +83,7 @@ Skipped Ascend-exclusive: Pro Plan billing, Business Center legal/training/tax s
 - Start with **`npm start`** (not `next start` / `npx next start`). From the repo root: `npm install` → `npm run build` → `npm start`. That loads `.env` / `.env.local` from the project root, then runs `node .next/standalone/server.js`. Never logs secret values. `next start` prints that standalone is configured and can show `injected env (0) from .env` even when `SAMSARA_API_TOKEN` is in the real project `.env`.
 - `npm start` copies `data` / `.env` on win32. No `better-sqlite3` compile. No symlink (`EPERM`).
 - Fleet new **and** edit pages (`/fleet/trucks/new`, `/fleet/trucks/[id]`, trailers, drivers) stay `force-dynamic`. Forms import their server actions (no `.bind` props) and only receive plain JSON values (no driver PIN). Avoids standalone “This page couldn’t load”.
+- **Mike** on the dispatch board (not the driver app): side chat for ops questions from TMS data. Needs `OPENAI_API_KEY`. Never invents GPS. Never logs the key or PINs.
 
 ## Not in this PR
 

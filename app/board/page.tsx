@@ -3,12 +3,15 @@ import { AssignDialog } from "@/components/assign-dialog";
 import { BoardToolbar } from "@/components/board-toolbar";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { LoadStatusSelect } from "@/components/load-status-select";
+import { MikeChat } from "@/components/mike-chat";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { isOpenAiConfigured } from "@/lib/env";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
+import { readMikeHistory } from "@/lib/mike";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
@@ -55,6 +58,8 @@ export default async function BoardPage({
           {reefers.error}
         </p>
       ) : null}
+      <div className="flex flex-col gap-6 xl:flex-row">
+      <div className="min-w-0 flex-1">
       <BoardToolbar status={status} date={date} q={q} />
       <div className="card overflow-hidden">
         {loads.length === 0 ? (
@@ -181,6 +186,9 @@ export default async function BoardPage({
             </table>
           </div>
         )}
+      </div>
+      </div>
+      <MikeChat configured={isOpenAiConfigured()} initialMessages={await readMikeHistory()} />
       </div>
     </>
   );

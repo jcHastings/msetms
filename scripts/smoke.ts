@@ -265,6 +265,13 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8"), /driverOption/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /truckFormValues/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /MikeChat/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /MikeChat/);
+  const mikeSrc = fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8");
+  assert.match(mikeSrc, /Never invent GPS|hasPosition/);
+  assert.doesNotMatch(mikeSrc, /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /getOpenAiApiKey/);
+  assert.match(envExample, /OPENAI_API_KEY=/);
   assert.match(envExample, /GOOGLE_PLACES_API_KEY/);
   assert.match(envExample, /HTTP referrer/);
   const placeSearchSource = fs.readFileSync(path.join(process.cwd(), "components/place-search.tsx"), "utf8");

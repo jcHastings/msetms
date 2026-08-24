@@ -200,3 +200,19 @@ export function isQuickbooksConfigured(): boolean {
       getQuickbooksRealmId(),
   );
 }
+
+export function getOpenAiApiKey(): string | undefined {
+  return readSecret("OPENAI_API_KEY");
+}
+
+export function getOpenAiBaseUrl(): string {
+  return readSecret("OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
+}
+
+export function getOpenAiModel(): string {
+  return readSecret("OPENAI_MODEL") ?? "gpt-4o-mini";
+}
+
+export function isOpenAiConfigured(): boolean {
+  return Boolean(getOpenAiApiKey());
+}

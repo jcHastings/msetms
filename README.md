@@ -66,7 +66,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 ## Dispatcher
 
 - **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Ack / snooze / resolve. Seeded demo data keeps the list from being empty.
-- Dashboard counts, shift handoff, watch list, daily recap, dispatch board with status / pickup-date filters
+- Dashboard counts, shift handoff, watch list, daily recap, dispatch board with status / pickup-date filters. **Mike** is a side chat on the board (not the driver app). Needs `OPENAI_API_KEY`. Answers from TMS data only and will not invent GPS.
 - **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch. Address search uses Google Places when `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` is in `.env` (server-side; fields stay manual if the key is missing).
 - **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
 - **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
