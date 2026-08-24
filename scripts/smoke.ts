@@ -456,8 +456,12 @@ async function main() {
   assert.match(mikeSrc, /skippedNoPing/);
   assert.match(mikeSrc, /mikeGpsPointsFromFleet/);
   assert.match(mikeSrc, /buildMikeGpsContext/);
-  assert.match(mikeSrc, /resetSamsaraCache/);
-  assert.match(mikeSrc, /Do not say you have no GPS when ranked trucks exist/);
+  assert.match(mikeSrc, /attachMikeFleetTelemetry/);
+  assert.match(mikeSrc, /lastGps/);
+  assert.match(mikeSrc, /resetSamsaraCache\(\)/);
+  assert.match(mikeSrc, /Do not say you have no GPS when any lastGps.hasPosition is true/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchLinkedSamsaraVehicle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /extractSamsaraGps/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"),
     /export function resetSamsaraCache/,
@@ -3729,7 +3733,7 @@ Continuous reefer. Two load locks.
   queries.setTruckActive(assignedTruckId, false);
   assert.equal(queries.getTruck(assignedTruckId)?.active, 0);
 
-  const { buildMikeGpsContext, mikeGpsPointsFromFleet } = await import("../lib/mike");
+  const { attachMikeFleetTelemetry, buildMikeGpsContext, mikeGpsPointsFromFleet } = await import("../lib/mike");
   const mikeGps = mikeGpsPointsFromFleet({
     trucks: [
       {
@@ -3819,6 +3823,74 @@ Continuous reefer. Two load locks.
   assert.equal(ignoreDemo.gps[0]?.hasPosition, false);
   assert.equal(ignoreDemo.closestToCity?.ranked.length, 0);
   assert.equal(ignoreDemo.skippedNoPing, 1);
+  const cityOnly = attachMikeFleetTelemetry({
+    question: "what truck is closest to Oklahoma City?",
+    trucks: [
+      {
+        id: 40,
+        unit_number: "40",
+        samsara_vehicle_id: "sam-40",
+        assigned_driver_id: 9,
+        driver_name: "Pat Reed",
+      },
+      { id: 41, unit_number: "41", samsara_vehicle_id: "sam-41" },
+    ],
+    locations: [
+      {
+        vehicleId: "sam-40",
+        unitNumber: "",
+        latitude: null,
+        longitude: null,
+        address: "Oklahoma City, OK",
+        source: "samsara",
+      },
+    ],
+    hos: [
+      {
+        driverId: 9,
+        driverName: "Pat Reed",
+        dutyStatus: "driving",
+        driveRemainingMs: 4 * 3600000,
+        source: "samsara",
+      },
+    ],
+  });
+  assert.equal(cityOnly.trucks.find((row) => row.unit === "40")?.lastGps.hasPosition, true);
+  assert.equal(cityOnly.trucks.find((row) => row.unit === "40")?.lastGps.city, "Oklahoma City, OK");
+  assert.equal(cityOnly.trucks.find((row) => row.unit === "40")?.hos?.duty, "driving");
+  assert.equal(cityOnly.trucks.find((row) => row.unit === "41")?.lastGps.note, "no last GPS ping");
+  assert.equal(cityOnly.trucks.find((row) => row.unit === "41")?.hos?.note, "no live HOS");
+  assert.equal(cityOnly.closestToCity?.ranked[0]?.unit, "40");
+  assert.equal(cityOnly.skippedNoPing, 1);
+  const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
+  assert.equal(
+    matchLinkedSamsaraVehicle(
+      [{ id: 40, unit_number: "40", samsara_vehicle_id: "sam-40" }],
+      "sam-40",
+    )?.id,
+    40,
+  );
+  const linkedGps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "sam-40",
+        name: "Vehicle 99999999",
+        gps: [
+          {
+            time: "2026-08-24T16:00:00Z",
+            latitude: 35.4676,
+            longitude: -97.5164,
+            reverseGeo: { formattedLocation: "Oklahoma City, OK" },
+          },
+        ],
+      },
+    ],
+    trucks: [{ id: 40, unit_number: "40", samsara_vehicle_id: "sam-40" }],
+    loads: [],
+  });
+  assert.equal(linkedGps[0]?.unitNumber, "40", "linked Samsara id must win even when the name has other digits");
+  assert.equal(linkedGps[0]?.address, "Oklahoma City, OK");
+  assert.equal(samsara.extractSamsaraGps({ gps: [{ latitude: 35.4, longitude: -97.5, reverseGeo: { formattedLocation: "OKC" } }] }).address, "OKC");
 
   closeDb();
   const reopened = getDb();

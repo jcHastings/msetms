@@ -130,12 +130,23 @@ export function closestTrucksToCity(
     return { asked, found: false, ranked: [], skippedNoPing, skippedNoSamsaraId };
   }
   const ranked = points
-    .filter((point) => point.hasPosition && point.lat != null && point.lng != null)
-    .map((point) => ({
-      unit: point.unit,
-      miles: Math.round(haversineMiles(city.lat, city.lng, point.lat as number, point.lng as number)),
-      address: point.address?.trim() || "last GPS",
-    }))
+    .map((point) => {
+      if (point.lat != null && point.lng != null) {
+        return {
+          unit: point.unit,
+          miles: Math.round(haversineMiles(city.lat, city.lng, point.lat, point.lng)),
+          address: point.address?.trim() || "last GPS",
+        };
+      }
+      const fromCity = findCityCenter(String(point.address ?? ""), locations);
+      if (!fromCity) return null;
+      return {
+        unit: point.unit,
+        miles: Math.round(haversineMiles(city.lat, city.lng, fromCity.lat, fromCity.lng)),
+        address: point.address?.trim() || fromCity.label,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null)
     .sort((a, b) => a.miles - b.miles)
     .slice(0, 5);
   return {

@@ -376,6 +376,32 @@ function hosDemo(name: string, status: string, driveHours: number, recordedAt: s
   };
 }
 
+export function extractSamsaraGps(vehicle: Record<string, unknown>): {
+  latitude: number | null;
+  longitude: number | null;
+  speedMph: number | null;
+  address: string;
+  recordedAt: string;
+} {
+  const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+  const raw = vehicle.gps ?? nested.gps ?? vehicle.location ?? nested.location;
+  const gps = (Array.isArray(raw) ? raw[0] : raw) as Record<string, unknown> | undefined;
+  const rec = gps && typeof gps === "object" ? gps : {};
+  const reverse = (rec.reverseGeo ?? rec.reverse_geo ?? {}) as Record<string, unknown>;
+  const address =
+    (typeof reverse.formattedLocation === "string" && reverse.formattedLocation) ||
+    (typeof rec.formattedLocation === "string" && rec.formattedLocation) ||
+    (typeof rec.location === "string" && rec.location) ||
+    "";
+  return {
+    latitude: asNumber(rec.latitude ?? rec.lat),
+    longitude: asNumber(rec.longitude ?? rec.lng ?? rec.lon),
+    speedMph: asNumber(rec.speedMilesPerHour ?? rec.speedMph),
+    address: address.trim(),
+    recordedAt: typeof rec.time === "string" ? rec.time : "",
+  };
+}
+
 export function mapVehicleLocations(input: {
   vehicles: Array<Record<string, unknown>>;
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
@@ -385,10 +411,11 @@ export function mapVehicleLocations(input: {
   const claimedTruckIds = new Set<number>();
   for (const vehicle of input.vehicles) {
     const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+    const vehicleId = String(vehicle.id ?? nested.id ?? "");
     const match = matchTruckForSamsara(
       input.trucks,
       {
-        samsaraVehicleId: String(vehicle.id ?? nested.id ?? ""),
+        samsaraVehicleId: vehicleId,
         name: String(vehicle.name ?? nested.name ?? ""),
         unitNumber: String(vehicle.unitNumber ?? nested.unitNumber ?? ""),
         vin: String(vehicle.vin ?? nested.vin ?? ""),
@@ -400,19 +427,18 @@ export function mapVehicleLocations(input: {
     claimedTruckIds.add(match.id);
     const truck = input.trucks.find((item) => item.id === match.id);
     if (!truck) continue;
-    const gps = (vehicle.gps ?? {}) as Record<string, unknown>;
-    const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
+    const gps = extractSamsaraGps(vehicle);
     const load = input.loads.find((item) => item.truck_id === truck.id);
     locations.push({
       truckId: truck.id,
       loadId: load?.id ?? null,
-      vehicleId: String(vehicle.id ?? truck.samsara_vehicle_id),
+      vehicleId: vehicleId || truck.samsara_vehicle_id,
       unitNumber: truck.unit_number,
-      latitude: asNumber(gps.latitude),
-      longitude: asNumber(gps.longitude),
-      speedMph: asNumber(gps.speedMilesPerHour),
-      address: typeof reverse.formattedLocation === "string" ? reverse.formattedLocation : "",
-      recordedAt: typeof gps.time === "string" ? gps.time : new Date().toISOString(),
+      latitude: gps.latitude,
+      longitude: gps.longitude,
+      speedMph: gps.speedMph,
+      address: gps.address,
+      recordedAt: gps.recordedAt || new Date().toISOString(),
       source: "samsara",
     });
   }

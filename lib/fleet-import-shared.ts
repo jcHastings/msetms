@@ -153,7 +153,10 @@ function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boo
   const vehicleUnit = samsaraUnitDigits(vehicle);
   const truckUnit = unitDigits(truck.unit_number);
   if (!vehicleUnit || !truckUnit) return true;
-  return vehicleUnit === truckUnit;
+  if (vehicleUnit === truckUnit) return true;
+  const idDigits = unitDigits(vehicle.samsaraVehicleId ?? "");
+  if (idDigits && vehicleUnit === idDigits) return true;
+  return vehicleUnit.length >= 8;
 }
 
 function uniqueUnclaimedTruck(
@@ -163,6 +166,21 @@ function uniqueUnclaimedTruck(
 ): SamsaraMatchTruck | null {
   const hits = trucks.filter((truck) => !claimedTruckIds?.has(truck.id) && predicate(truck));
   return hits.length === 1 ? hits[0] : null;
+}
+
+/** After import, live GPS follows the stored Samsara vehicle id even if the name has other digits. */
+export function matchLinkedSamsaraVehicle(
+  trucks: SamsaraMatchTruck[],
+  vehicleId: string,
+  claimedTruckIds?: Set<number>,
+): SamsaraMatchTruck | null {
+  const id = canonicalFleetKey(vehicleId);
+  if (!id) return null;
+  return uniqueUnclaimedTruck(
+    trucks,
+    claimedTruckIds,
+    (truck) => Boolean(truck.samsara_vehicle_id?.trim()) && canonicalFleetKey(truck.samsara_vehicle_id) === id,
+  );
 }
 
 export function matchTruckForSamsara(
