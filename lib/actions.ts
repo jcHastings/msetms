@@ -1472,6 +1472,80 @@ export async function deletePayItemAction(formData: FormData): Promise<ActionRes
   });
 }
 
+export async function previewLoadsImportAction(
+  _prev: LoadImportPreviewState | null,
+  formData: FormData,
+): Promise<LoadImportPreviewState> {
+  try {
+    await requireLoadEditor();
+    const pasted = String(formData.get("report_text") ?? "").trim();
+    const file = formData.get("file");
+    const { previewLoadsFromText, previewLoadsFromXlsx } = await import("./load-import");
+    let rows: LoadImportPreviewRow[] = [];
+    if (file instanceof File && file.size > 0) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+        const { fileToBuffer } = await import("./files");
+        rows = previewLoadsFromXlsx(new Uint8Array(await fileToBuffer(file)));
+      } else {
+        const { decodeCsvBuffer } = await import("./location-csv");
+        const { fileToBuffer } = await import("./files");
+        rows = previewLoadsFromText(decodeCsvBuffer(await fileToBuffer(file)));
+      }
+    } else if (pasted) {
+      rows = previewLoadsFromText(pasted);
+    } else {
+      return { ok: false, error: "Choose an .xlsx or .csv, or paste the Ascend load header row plus data." };
+    }
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        error: "No load rows found. Use the Ascend header row starting with Load #.",
+      };
+    }
+    return {
+      ok: true,
+      rows,
+      count: rows.length,
+      sampleNumbers: rows.slice(0, 8).map((row) => row.load_number),
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Load preview failed." };
+  }
+}
+
+export async function confirmLoadsImportAction(
+  _prev: LoadImportPreviewState | null,
+  formData: FormData,
+): Promise<LoadImportPreviewState> {
+  try {
+    await requireLoadEditor();
+    const raw = String(formData.get("rows") ?? "").trim();
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    const rows = Array.isArray(parsed)
+      ? parsed.filter((item): item is LoadImportPreviewRow => Boolean(item) && typeof item === "object")
+      : [];
+    if (rows.length === 0) return { ok: false, error: "Preview the sheet first, then import." };
+    const { applyLoadImport } = await import("./load-import");
+    const result = applyLoadImport(rows);
+    refresh();
+    return {
+      ok: true,
+      ...result,
+      count: rows.length,
+      sampleNumbers: rows.slice(0, 8).map((row) => row.load_number),
+      message: `Imported loads: created ${result.created}, updated ${result.updated}${
+        result.skipped ? `, skipped ${result.skipped}` : ""
+      }.`,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Load import failed." };
+  }
+}
+
+type LoadImportPreviewState = import("./load-import-shared").LoadImportPreviewState;
+type LoadImportPreviewRow = import("./load-import-shared").LoadImportPreviewRow;
+
 function parseSelectedJson<T>(formData: FormData, ...idKeys: string[]): T[] {
   const raw = String(formData.get("rows") ?? "").trim();
   if (!raw) return [];

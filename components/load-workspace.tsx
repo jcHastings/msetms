@@ -68,6 +68,9 @@ export function LoadWorkspace({
   const [canSubmit, setCanSubmit] = useState(true);
   const [pending, setPending] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [smsNotice, setSmsNotice] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [smsPending, setSmsPending] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
   const clearDirty = useCallback(() => setDirty(false), []);
   const setSubmitState = useCallback((state: { canSubmit: boolean; pending: boolean }) => {
@@ -116,34 +119,35 @@ export function LoadWorkspace({
     router.push(href);
   }
 
+  function driverPhoneError(): string | null {
+    if (!smsConfigured) return SMS_MISSING_KEYS;
+    if (!driverAssigned) return "Assign a driver first.";
+    if (!driverPhone.trim()) return "The assigned driver needs a mobile number.";
+    return null;
+  }
+
   function requireDriverPhone(): boolean {
-    if (!smsConfigured) {
-      window.alert(SMS_MISSING_KEYS);
-      return false;
-    }
-    if (!driverAssigned) {
-      window.alert("Assign a driver first.");
-      return false;
-    }
-    if (!driverPhone.trim()) {
-      window.alert("The assigned driver needs a mobile number.");
-      return false;
-    }
-    return true;
+    const error = driverPhoneError();
+    if (!error) return true;
+    setSmsNotice({ tone: "error", text: error });
+    return false;
   }
 
   async function sendSms(kind: "message" | "load_info", body?: string) {
     if (!loadId) return;
+    setSmsPending(true);
     const formData = new FormData();
     formData.set("load_id", String(loadId));
     formData.set("kind", kind);
     if (body) formData.set("body", body);
     const result = await sendLoadSmsAction(formData);
+    setSmsPending(false);
     if (!result.ok) {
-      window.alert(result.error);
+      setSmsNotice({ tone: "error", text: result.error });
       return;
     }
-    window.alert(result.message ?? "Text sent.");
+    setDispatchOpen(false);
+    setSmsNotice({ tone: "ok", text: result.message ?? "Text sent." });
     router.refresh();
   }
 
@@ -192,8 +196,8 @@ export function LoadWorkspace({
             className="btn load-action-btn"
             onClick={() => {
               if (!requireDriverPhone()) return;
-              if (!window.confirm(`Text dispatch to ${driverPhone}?\n\n${loadSummary}`)) return;
-              void sendSms("load_info");
+              setSmsNotice(null);
+              setDispatchOpen(true);
             }}
           >
             Text dispatch to driver
@@ -337,6 +341,46 @@ export function LoadWorkspace({
           />
         </ActionMenu>
       </div>
+      ) : null}
+
+      {smsNotice ? (
+        <p
+          className={`mx-3 mb-3 rounded-md px-3 py-2 text-sm ${
+            smsNotice.tone === "error"
+              ? "border border-rose-200 bg-rose-50 text-rose-800"
+              : "border border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+          role="status"
+        >
+          {smsNotice.text}
+        </p>
+      ) : null}
+
+      {dispatchOpen ? (
+        <div className="pay-item-dialog-backdrop" role="dialog" aria-label="Text dispatch to driver">
+          <div className="pay-item-dialog card space-y-3 p-5">
+            <h3 className="text-sm font-semibold">Text dispatch to driver</h3>
+            <p className="text-sm text-slate-600">
+              Send this load confirmation to {driverPhone} (driver mobile on the load).
+            </p>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+              {loadSummary}
+            </pre>
+            <div className="flex justify-end gap-2">
+              <button className="btn btn-secondary" type="button" onClick={() => setDispatchOpen(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={smsPending}
+                onClick={() => void sendSms("load_info")}
+              >
+                {smsPending ? "Sending…" : "Send text"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <div onInput={() => setDirty(true)} onChange={() => setDirty(true)}>

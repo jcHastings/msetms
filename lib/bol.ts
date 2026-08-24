@@ -85,7 +85,7 @@ export function buildBolModel(load: LoadView): BolModel {
     trailer: load.trailer_unit || load.trailer_number || "",
     driver: load.driver_name ?? "",
     reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
-    reeferMode: reefer.setpointF != null ? labelForReeferMode(reefer.mode) || "Continuous" : "",
+    reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) || "Continuous" : "",
     specialInstructions: load.special_instructions,
     poNumber: load.po_number,
     referenceNumber: load.reference_number,
@@ -178,7 +178,7 @@ function drawBol(doc: PDFKit.PDFDocument, model: BolModel): void {
     ["Driver", model.driver],
   ]);
 
-  if (model.reeferSetpoint) {
+  if (model.reeferSetpoint || model.reeferMode) {
     y = drawReefer(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
   }
 
@@ -284,11 +284,13 @@ function drawReefer(
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#1e3a8a");
   doc.text("REEFER", x + 6, y + 6, { width: 52, lineBreak: false });
   doc.font("Helvetica").fontSize(8).fillColor("#111827");
-  if (!setpoint) return y;
-  doc.text(`Setpoint ${setpoint}     Mode: ${mode || "Continuous"}`, x + 62, y + 6, {
-    width: width - 70,
-    lineBreak: false,
-  });
+  const parts = [
+    setpoint ? `Setpoint ${setpoint}` : "",
+    mode ? `Mode: ${mode}` : "",
+  ].filter(Boolean);
+  if (parts.length) {
+    doc.text(parts.join("     "), x + 62, y + 6, { width: width - 70, lineBreak: false });
+  }
   return y + height;
 }
 

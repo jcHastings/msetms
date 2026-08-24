@@ -9,6 +9,11 @@ process.env.TMS_DB_PATH = dbPath;
 async function main() {
   assert.equal(fs.existsSync(path.join(process.cwd(), "SHIPPED.md")), true, "SHIPPED.md checklist");
   const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
+  assert.match(navSource, /Import loads/);
+  assert.match(navSource, /\/loads\/import-sheet/);
+  assert.match(navSource, /label: "Safety"/);
+  assert.match(navSource, /\/safety/);
+  assert.doesNotMatch(navSource, /CSA|hazmat|passport|FAST card/);
   assert.match(navSource, /href: "\/locations"/);
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
@@ -109,6 +114,10 @@ async function main() {
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
   assert.match(workspaceSource, /Text dispatch to driver/);
+  assert.match(workspaceSource, /Assign a driver first/);
+  assert.match(workspaceSource, /The assigned driver needs a mobile number/);
+  assert.match(workspaceSource, /Send text/);
+  assert.doesNotMatch(workspaceSource, /window\.confirm\(`Text dispatch/);
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
@@ -160,6 +169,10 @@ async function main() {
   assert.match(paySource, /Expenses/);
   assert.match(paySource, /Owner-operator \/ lumper/);
   assert.match(paySource, /not a company driver/);
+  assert.match(paySource, /Payable to/);
+  assert.match(paySource, />Lumper</);
+  assert.match(paySource, /ownerOperators/);
+  assert.match(paySource, /Other payee/);
   assert.doesNotMatch(paySource, /defaultPayee=\{driverName/);
   assert.doesNotMatch(paySource, /waiting row|blank row/);
   const stopsSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
@@ -1644,7 +1657,7 @@ Continuous reefer. Two load locks.
   assert.equal(resolveReeferSpec({ reefer_setpoint_f: -10, reefer_mode: "", special_instructions: "" }).mode, "continuous");
   assert.equal(resolveReeferSpec({ equipment: "dry_van_53" }).isReefer, false);
   assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).isReefer, true);
-  assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).mode, null);
+  assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).mode, "continuous");
   assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).setpointF, null);
 
   const { attachParsedLocationMatches, matchLocationForParsedStop } = await import("../lib/rate-con-shared");
@@ -2182,9 +2195,11 @@ Continuous reefer. Two load locks.
   assert.ok(feedLoad);
   const feedConfirm = confirmation.buildConfirmationForLoad(feedLoad.id);
   assert.equal(feedConfirm.reeferSetpoint, "", "dry van / no setpoint must not print blank degrees");
+  assert.equal(feedConfirm.reeferMode, "", "bagged feed / dry van must not invent a reefer mode");
   const feedPdf = await confirmation.renderConfirmationPdf(feedConfirm);
   const feedText = String((await extractText(new Uint8Array(feedPdf), { mergePages: true })).text ?? "");
   assert.doesNotMatch(feedText, /Setpoint —/);
+  assert.doesNotMatch(feedText, /Setpoint\s+Mode/);
 
   const filesMod = await import("../lib/files");
   assert.equal(
@@ -4563,6 +4578,146 @@ Continuous reefer. Two load locks.
   const xlsxImport = applyDriverImport(xlsxPreview);
   assert.equal(xlsxImport.created, 1);
   assert.equal(queries.getDriver(queries.listDrivers().find((driver) => driver.name === "Xlsx Only Driver")?.id ?? 0)?.license_number, "987654321");
+
+  const {
+    ASCEND_LOAD_HEADERS,
+    mapImportedEquipment,
+    mapImportedLoadStatus,
+    matchAssetUnit,
+    recordsFromLoadSheetText,
+    loadValuesFromRecords,
+    splitImportList,
+    zipImportedStops,
+  } = await import("../lib/load-import-shared");
+  assert.equal(ASCEND_LOAD_HEADERS[0], "Load #");
+  assert.equal(mapImportedEquipment("53' Reefer"), "reefer_53");
+  assert.equal(mapImportedEquipment(""), "reefer_53");
+  assert.equal(mapImportedLoadStatus("Invoiced"), "completed");
+  assert.equal(mapImportedLoadStatus("in_transit"), "in_transit");
+  assert.deepEqual(splitImportList("WSF, Lineage"), ["WSF", "Lineage"]);
+  assert.equal(zipImportedStops("pickup", ["WSF", "Lineage"], ["Kansas City", "St. Louis"], ["MO", "MO"]).length, 2);
+  assert.equal(matchAssetUnit([{ id: 7, unit_number: "36" }], "36"), 7);
+  assert.equal(matchAssetUnit([{ id: 8, unit_number: "1518" }], "MS1518"), 8);
+  assert.equal(matchAssetUnit([{ id: 9, unit_number: "41" }], "Assign Later"), null);
+  const csvCell = (value: string) => (/[",]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+  const loadSheetRow = [
+    "1005911",
+    "",
+    "PO-5911",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "Invoiced",
+    "8/1/2024",
+    "8/3/2024",
+    "M & S Loads LLC.",
+    "WSF, Lineage",
+    "Kansas City, St. Joseph",
+    "MO, MO",
+    "Lineage DC, Avenel",
+    "Avenel, Newark",
+    "NJ, NJ",
+    "Assign Later",
+    "Assign Later",
+    "53' Reefer",
+  ].map(csvCell).join(",");
+  const parsedLoads = loadValuesFromRecords(recordsFromLoadSheetText(`${ASCEND_LOAD_HEADERS.join(",")}\n${loadSheetRow}`));
+  assert.equal(parsedLoads.length, 1);
+  assert.equal(parsedLoads[0]?.load_number, "1005911");
+  assert.equal(parsedLoads[0]?.status, "completed");
+  assert.equal(parsedLoads[0]?.customer_name, "M & S Loads LLC.");
+  assert.equal(parsedLoads[0]?.wsf_po, "PO-5911");
+  assert.equal(parsedLoads[0]?.equipment, "reefer_53");
+  assert.equal(parsedLoads[0]?.pickups.length, 2);
+  assert.equal(parsedLoads[0]?.deliveries.length, 2);
+  const { applyLoadImport, previewLoadsFromText, previewLoadsFromXlsx } = await import("../lib/load-import");
+  const { listStops } = await import("../lib/stops");
+  const loadPreview = previewLoadsFromText(`${ASCEND_LOAD_HEADERS.join(",")}\n${loadSheetRow}`);
+  assert.equal(loadPreview.length, 1);
+  assert.equal(loadPreview[0]?.action, "create");
+  const loadImport = applyLoadImport(loadPreview);
+  assert.equal(loadImport.created, 1);
+  const importedLoadId = queries.findLoadIdByNumber("1005911");
+  assert.ok(importedLoadId);
+  const importedLoad = queries.getLoad(importedLoadId!);
+  assert.equal(importedLoad?.status, "completed");
+  assert.equal(importedLoad?.customer_name, "M & S Loads LLC.");
+  assert.equal(importedLoad?.po_number, "PO-5911");
+  assert.equal(importedLoad?.customer_reference, "PO-5911");
+  assert.equal(importedLoad?.equipment, "reefer_53");
+  assert.equal(importedLoad?.truck_id, null);
+  assert.equal(importedLoad?.driver_id, null);
+  const importedStops = listStops(importedLoadId!);
+  assert.equal(importedStops.filter((stop) => stop.kind === "pickup").length, 2);
+  assert.equal(importedStops.filter((stop) => stop.kind === "delivery").length, 2);
+  const loadAgain = applyLoadImport(previewLoadsFromText(`${ASCEND_LOAD_HEADERS.join(",")}\n${loadSheetRow}`));
+  assert.equal(loadAgain.created, 0);
+  assert.equal(loadAgain.updated, 1);
+  const xlsxLoads = previewLoadsFromXlsx(
+    buildXlsxFromGrid([
+      [...ASCEND_LOAD_HEADERS],
+      [
+        1005912,
+        "",
+        "PO-5912",
+        "note",
+        "",
+        "",
+        "",
+        "",
+        "Invoiced",
+        "8/4/2024",
+        "8/5/2024",
+        "M & S Loads LLC.",
+        "WSF",
+        "Kansas City",
+        "MO",
+        "Avenel",
+        "Avenel",
+        "NJ",
+        "301",
+        "",
+        "",
+      ],
+    ]),
+  );
+  assert.equal(xlsxLoads[0]?.load_number, "1005912");
+  assert.equal(xlsxLoads[0]?.equipment, "reefer_53");
+  const xlsxLoadImport = applyLoadImport(xlsxLoads);
+  assert.equal(xlsxLoadImport.created, 1);
+  assert.equal(queries.getLoad(queries.findLoadIdByNumber("1005912")!)?.truck_unit, "301");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8"), /Import/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8"), /Preview/);
+
+  const { buildSafetyBoard } = await import("../lib/safety");
+  const { expiryRank, worstSafetyRank, cleanSafetyDate } = await import("../lib/safety-shared");
+  assert.equal(cleanSafetyDate("0000-00-00"), "");
+  assert.equal(cleanSafetyDate(""), "");
+  assert.equal(expiryRank("", 30, new Date("2026-08-24T12:00:00")), "empty");
+  assert.equal(expiryRank("2026-07-01", 30, new Date("2026-08-24T12:00:00")), "expired");
+  assert.equal(expiryRank("2026-09-01", 30, new Date("2026-08-24T12:00:00")), "due_soon");
+  assert.equal(worstSafetyRank(["due_soon", "hos_violation", "expired"]), "expired");
+  const tyrellSafety = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
+  assert.ok(tyrellSafety);
+  const safetyBoard = buildSafetyBoard({
+    drivers: queries.listDrivers(),
+    windowDays: 30,
+    insurance: { provider: "Great West", policy: "POL-100", expires: "2026-07-01" },
+    tokenSet: false,
+    hos: [],
+    now: new Date("2026-08-24T12:00:00"),
+  });
+  assert.ok(safetyBoard.rows.some((row) => row.subject === "Denise Ortega"));
+  assert.ok(safetyBoard.rows.some((row) => row.subject === "Cole Brennan" && row.driverType === "owner_operator"));
+  assert.equal(safetyBoard.rows.find((row) => row.subject === "Tyrell Brooks")?.rank, "expired");
+  assert.ok(safetyBoard.rows.every((row) => !/0000-00-00/.test(`${row.licenseExpires}${row.medicalNext}${row.drugNext}`)));
+  assert.equal(safetyBoard.insurance?.rank, "expired");
+  assert.equal(safetyBoard.rows[0]?.rank, "expired");
+  assert.match(safetyBoard.rows.find((row) => row.subject === "Denise Ortega")?.hos ?? "", /Samsara token not set/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /Safety/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /CSA|hazmat|passport/);
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

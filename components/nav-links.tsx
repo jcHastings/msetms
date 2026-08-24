@@ -12,6 +12,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/board", label: "Dispatch board" },
       { href: "/search", label: "Search" },
       { href: "/loads/new", label: "New load" },
+      { href: "/loads/import-sheet", label: "Import loads" },
       { href: "/loads/templates", label: "Templates" },
       { href: "/locations", label: "Locations" },
       { href: "/audit", label: "Audit" },
@@ -26,6 +27,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/fleet/trailers", label: "Trailers" },
       { href: "/fuel", label: "Fuel" },
       { href: "/compliance", label: "Compliance" },
+      { href: "/safety", label: "Safety" },
     ],
   },
   {

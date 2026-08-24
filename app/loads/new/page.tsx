@@ -26,6 +26,9 @@ export default async function NewLoadPage() {
         subtitle="Book freight against a customer, then assign it from the board."
         actions={
           <div className="flex gap-2">
+            <Link href="/loads/import-sheet" className="btn btn-secondary">
+              Import
+            </Link>
             <Link href="/loads/import" className="btn btn-secondary">
               From rate con
             </Link>

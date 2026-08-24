@@ -12,16 +12,19 @@ export function LoadPayItems({
   customerName,
   driverName,
   driverType,
+  ownerOperators = [],
 }: {
   loadId: number;
   items: LoadPayItem[];
   customerName: string;
   driverName: string | null;
   driverType?: string | null;
+  ownerOperators?: string[];
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
   const ownerOperator = driverType === "owner_operator";
+  const ooNames = ownerOperators.filter(Boolean);
   return (
     <section data-load-tab="financials" className="space-y-4">
       <PayItemGroup
@@ -34,6 +37,7 @@ export function LoadPayItems({
         defaultCategory="flat_rate"
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
+        ownerOperators={ooNames}
       />
       <PayItemGroup
         loadId={loadId}
@@ -45,6 +49,7 @@ export function LoadPayItems({
         defaultCategory={ownerOperator ? "flat_rate" : "lumper"}
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
+        ownerOperators={ooNames}
       />
     </section>
   );
@@ -60,6 +65,7 @@ function PayItemGroup({
   defaultCategory,
   customerName,
   ownerOperatorName,
+  ownerOperators,
 }: {
   loadId: number;
   side: PayItemSide;
@@ -70,6 +76,7 @@ function PayItemGroup({
   defaultCategory: string;
   customerName: string;
   ownerOperatorName: string | null;
+  ownerOperators: string[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -113,6 +120,7 @@ function PayItemGroup({
           defaultCategory={defaultCategory}
           customerName={customerName}
           ownerOperatorName={ownerOperatorName}
+          ownerOperators={ownerOperators}
           onClose={() => setOpen(false)}
         />
       ) : null}
@@ -128,6 +136,7 @@ function PayItemDialog({
   defaultCategory,
   customerName,
   ownerOperatorName,
+  ownerOperators,
   onClose,
 }: {
   loadId: number;
@@ -137,6 +146,7 @@ function PayItemDialog({
   defaultCategory: string;
   customerName: string;
   ownerOperatorName: string | null;
+  ownerOperators: string[];
   onClose: () => void;
 }) {
   const [rate, setRate] = useState("");
@@ -152,6 +162,8 @@ function PayItemDialog({
     <div className="pay-item-dialog-backdrop" role="dialog" aria-label="Save pay item">
       <form
         action={async (formData) => {
+          const other = String(formData.get("payee_other") ?? "").trim();
+          if (other) formData.set("payee", other);
           await addPayItemAction(formData);
           onClose();
         }}
@@ -160,10 +172,31 @@ function PayItemDialog({
         <h3 className="text-sm font-semibold">Save Pay Item</h3>
         <input type="hidden" name="load_id" value={loadId} />
         <input type="hidden" name="side" value={side} />
-        <div className="field">
-          <label htmlFor={`${side}-payee`}>{side === "expense" ? "Payee (OO / lumper)" : "Payee / customer"}</label>
-          <input id={`${side}-payee`} name="payee" defaultValue={defaultPayee} />
-        </div>
+        {side === "expense" ? (
+          <div className="field">
+            <label htmlFor={`${side}-payee`}>Payable to</label>
+            <select id={`${side}-payee`} name="payee" defaultValue={defaultPayee}>
+              <option value="">Select payee</option>
+              <option value="Lumper">Lumper</option>
+              {ownerOperators.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <input
+              id={`${side}-payee-other`}
+              name="payee_other"
+              className="mt-2"
+              placeholder="Other payee (vendor / similar)"
+            />
+          </div>
+        ) : (
+          <div className="field">
+            <label htmlFor={`${side}-payee`}>Payee / customer</label>
+            <input id={`${side}-payee`} name="payee" defaultValue={defaultPayee} />
+          </div>
+        )}
         <div className="field">
           <label htmlFor={`${side}-bill-to`}>Bills</label>
           <select id={`${side}-bill-to`} name="bill_to" defaultValue={defaultBillTo}>

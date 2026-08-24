@@ -1148,7 +1148,17 @@ export function nextLoadNumber(): string {
   return takeNextLoadNumber();
 }
 
+export function findLoadIdByNumber(loadNumber: string): number | null {
+  const key = loadNumber.trim();
+  if (!key) return null;
+  const row = getDb().prepare("SELECT id FROM loads WHERE load_number = ?").get(key) as
+    | { id: number }
+    | undefined;
+  return row?.id ?? null;
+}
+
 export type LoadInput = {
+  load_number?: string;
   customer_id: number;
   origin: string;
   destination: string;
@@ -1218,7 +1228,11 @@ function validateLoadInput(input: LoadInput): void {
 export function createLoad(input: LoadInput): number {
   validateLoadInput(input);
   const timestamp = now();
-  const loadNumber = nextLoadNumber();
+  const requested = input.load_number?.trim() ?? "";
+  if (requested && findLoadIdByNumber(requested)) {
+    throw new Error(`Load ${requested} already exists.`);
+  }
+  const loadNumber = requested || nextLoadNumber();
   const db = getDb();
   const insert = db.transaction(() => {
     const result = db

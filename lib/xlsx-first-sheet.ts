@@ -2,6 +2,15 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 /** First worksheet of an .xlsx as header/value records. Shared strings stay text; numbers stay numbers. */
 export function recordsFromXlsx(buffer: Uint8Array): Array<Record<string, string | number>> {
+  const records = recordsFromFirstSheet(buffer);
+  if (!records.length) return [];
+  const headers = Object.keys(records[0] ?? {});
+  if (!headers.some((header) => normalizeLoose(header) === "name")) return [];
+  return records;
+}
+
+/** First worksheet records without requiring a Name column (Ascend load sheets). */
+export function recordsFromFirstSheet(buffer: Uint8Array): Array<Record<string, string | number>> {
   const files = unzipSync(buffer);
   const shared = parseSharedStrings(readZipText(files, "xl/sharedStrings.xml"));
   const sheetPath =
@@ -13,7 +22,6 @@ export function recordsFromXlsx(buffer: Uint8Array): Array<Record<string, string
   const grid = parseSheetGrid(sheet, shared);
   if (grid.length < 2) return [];
   const headers = (grid[0] ?? []).map((cell) => String(cell ?? "").trim());
-  if (!headers.some((header) => normalizeLoose(header) === "name")) return [];
   return grid.slice(1).map((cells) => {
     const row: Record<string, string | number> = {};
     headers.forEach((header, index) => {

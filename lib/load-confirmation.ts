@@ -189,7 +189,7 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     dispatchNotes: notes,
     internalLegs: "",
     reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
-    reeferMode: reefer.setpointF != null ? labelForReeferMode(reefer.mode) || "Continuous" : "",
+    reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) || "Continuous" : "",
   };
 }
 
@@ -320,7 +320,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ]);
   }
 
-  if (model.reeferSetpoint) {
+  if (model.reeferSetpoint || model.reeferMode) {
     y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
   }
 
@@ -455,9 +455,13 @@ function drawReeferBar(
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#1e3a8a");
   doc.text("REEFER", x + 6, y + 6, { width: 52, lineBreak: false });
   doc.font("Helvetica").fontSize(8).fillColor("#111827");
-  if (!setpoint) return y;
-  const modeText = mode ? `Mode: ${mode}` : "Mode: Continuous";
-  doc.text(`Setpoint ${setpoint}     ${modeText}`, x + 62, y + 6, { width: width - 70, lineBreak: false });
+  const parts = [
+    setpoint ? `Setpoint ${setpoint}` : "",
+    mode ? `Mode: ${mode}` : "",
+  ].filter(Boolean);
+  if (parts.length) {
+    doc.text(parts.join("     "), x + 62, y + 6, { width: width - 70, lineBreak: false });
+  }
   return y + height;
 }
 

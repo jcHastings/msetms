@@ -192,6 +192,17 @@ export function moveStop(stopId: number, direction: -1 | 1): void {
   syncLoadLaneFromStops(stop.load_id);
 }
 
+export function replaceStops(loadId: number, stops: StopInput[]): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("DELETE FROM load_stops WHERE load_id = ?").run(loadId);
+  })();
+  for (const stop of stops) {
+    addStop(loadId, stop);
+  }
+}
+
 export function deleteStop(stopId: number): void {
   const stop = getDb().prepare("SELECT * FROM load_stops WHERE id = ?").get(stopId) as LoadStop | undefined;
   if (!stop) throw new Error("Stop not found.");

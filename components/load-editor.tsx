@@ -162,6 +162,9 @@ export async function LoadEditor({
               customerName={load.customer_name}
               driverName={load.driver_name}
               driverType={load.driver_type}
+              ownerOperators={drivers
+                .filter((driver) => driver.driver_type === "owner_operator")
+                .map((driver) => driver.name)}
             />
           ) : null}
         </LoadTabPanel>

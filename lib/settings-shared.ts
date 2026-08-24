@@ -338,10 +338,14 @@ export function canLogCheckCall(role: string): boolean {
 export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/driver/login") return true;
   if (href === "/" || href === "/board" || href === "/search") return true;
-  if (href === "/loads/new" || href === "/loads/templates") return canEditLoads(role);
+  if (href === "/loads/new" || href === "/loads/templates" || href === "/loads/import-sheet") {
+    return canEditLoads(role);
+  }
   if (href === "/locations") return canEditLocations(role) || accessRole(role) === "read_only";
   if (href === "/audit") return canViewAudit(role);
-  if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance") return canEditFleet(role);
+  if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href === "/safety") {
+    return canEditFleet(role);
+  }
   if (href === "/fuel") return canUploadFuel(role);
   if (href === "/customers") return canWriteDesk(role) || accessRole(role) === "read_only";
   if (href === "/accounting" || href.startsWith("/accounting/")) return canAccessAccounting(role);
