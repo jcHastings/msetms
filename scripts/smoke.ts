@@ -436,7 +436,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /Last GPS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /TrailerLocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Last city \/ lat-lng/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /findOrbcommHeaderRowIndex/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /findOrbcommHeader/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Confirm import/);
@@ -2502,6 +2502,20 @@ Continuous reefer. Two load locks.
   );
   assert.equal(mobileReport[0]?.assetId, "mob-12");
   assert.equal(mobileReport[0]?.unitNumber, "TR-12");
+  const portalTsv = parseOrbcommFleetText(
+    [
+      "Location Tracking Report_24-Aug-2026_12-34-33",
+      "Report Generated: 24-Aug-2026 12:34:33",
+      ["Vehicle Name", "Device ID", "VIN", "Last Latitude", "Last Longitude", "Last Location"].join("\t"),
+      ["TR-5521", "orb-5521", "1REELVIN", "32.7791", "-96.8002", "Dallas, TX"].join("\t"),
+    ].join("\n"),
+  );
+  assert.equal(portalTsv[0]?.unitNumber, "TR-5521");
+  assert.equal(portalTsv[0]?.assetId, "orb-5521");
+  assert.equal(portalTsv[0]?.vin, "1REELVIN");
+  assert.equal(portalTsv[0]?.city, "Dallas, TX");
+  assert.equal(portalTsv[0]?.latitude, 32.7791);
+  assert.equal(portalTsv[0]?.longitude, -96.8002);
 
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;

@@ -458,15 +458,15 @@ export function parseOrbcommFleetText(text: string): OrbcommAssetInput[] {
 }
 
 function parseOrbcommFleetCsv(text: string): OrbcommAssetInput[] {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = text.split(/\r?\n/).map((line) => line.replace(/^\uFEFF/, "").trim()).filter(Boolean);
   if (lines.length < 2) return [];
-  const headerIdx = findOrbcommHeaderRowIndex(lines);
+  const { index: headerIdx, delimiter } = findOrbcommHeader(lines);
   if (headerIdx >= lines.length - 1) return [];
-  const headers = splitCsvLine(lines[headerIdx]).map((header) => normalizeHeader(header));
+  const headers = splitCsvLine(lines[headerIdx], delimiter).map((header) => normalizeHeader(header));
   return lines
     .slice(headerIdx + 1)
     .map((line) => {
-      const values = splitCsvLine(line);
+      const values = splitCsvLine(line, delimiter);
       const row: Record<string, string> = {};
       headers.forEach((header, index) => {
         row[header] = values[index] ?? "";
@@ -513,18 +513,33 @@ function orbcommHeaderHits(headers: string[]): number {
   }).length;
 }
 
-function findOrbcommHeaderRowIndex(lines: string[]): number {
-  let best = 0;
-  let bestHits = 0;
-  const limit = Math.min(lines.length, 16);
+function findOrbcommHeader(lines: string[]): { index: number; delimiter: string } {
+  const delimiters = [",", "\t", ";"] as const;
+  let best = { index: 0, delimiter: ",", hits: 0 };
+  const limit = Math.min(lines.length, 40);
   for (let i = 0; i < limit; i++) {
-    const hits = orbcommHeaderHits(splitCsvLine(lines[i]));
-    if (hits >= 2 && hits > bestHits) {
-      best = i;
-      bestHits = hits;
+    for (const delimiter of delimiters) {
+      const hits = orbcommHeaderHits(splitCsvLine(lines[i], delimiter));
+      if (hits >= 2 && hits > best.hits) {
+        best = { index: i, delimiter, hits };
+      }
     }
   }
-  return bestHits >= 2 ? best : 0;
+  if (best.hits >= 2) return { index: best.index, delimiter: best.delimiter };
+  return { index: 0, delimiter: detectDelimiter(lines[0]) };
+}
+
+function detectDelimiter(line: string): string {
+  const counts: Record<string, number> = { ",": 0, "\t": 0, ";": 0 };
+  let quoted = false;
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && char in counts) counts[char] += 1;
+  }
+  return (Object.entries(counts).sort((left, right) => right[1] - left[1])[0] ?? [","])[0];
 }
 
 function emptyOrbcommAsset(): OrbcommAssetInput {
@@ -577,11 +592,28 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     "asset name",
     "assetname",
     "vehicle",
+    "vehicle name",
+    "vehiclename",
   ]);
-  const name = pickHeader(item, ["name", "asset name", "assetname", "trailer", "trailer number", "vehicle"]);
+  const name = pickHeader(item, [
+    "name",
+    "asset name",
+    "assetname",
+    "trailer",
+    "trailer number",
+    "vehicle",
+    "vehicle name",
+  ]);
   const city =
     pickHeader(item, ["city", "nearest city", "last city"]) ||
-    pickHeader(item, ["address", "location", "formatted address", "formatted location", "last location"]);
+    pickHeader(item, [
+      "address",
+      "location",
+      "formatted address",
+      "formatted location",
+      "last location",
+      "last known location",
+    ]);
   return {
     assetId: assetId || pickHeader(item, ["id", "ID"]),
     unitNumber: unitNumber || name || assetId,
@@ -590,16 +622,20 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     plate: pickHeader(item, ["plate", "license plate", "licenseplate", "license_plate"]),
     type: pickHeader(item, ["type", "equipment type", "equipment", "trailer type"]),
     city,
-    latitude: asOptionalNumber(
-      pickHeader(item, ["latitude", "lat", "gps lat", "gps latitude"]) || item.latitude || item.lat,
-    ),
-    longitude: asOptionalNumber(
-      pickHeader(item, ["longitude", "lng", "lon", "long", "gps lng", "gps longitude"]) ||
-        item.longitude ||
-        item.lng ||
-        item.lon,
-    ),
+    latitude: pickCoord(item, "lat"),
+    longitude: pickCoord(item, "lng"),
   };
+}
+
+function pickCoord(item: Record<string, unknown>, kind: "lat" | "lng"): number | null {
+  const wanted = kind === "lat" ? new Set(["latitude", "lat"]) : new Set(["longitude", "lng", "lon", "long"]);
+  for (const [key, value] of Object.entries(item)) {
+    const parts = normalizeHeader(key).split(" ").filter(Boolean);
+    if (!parts.some((part) => wanted.has(part))) continue;
+    const parsed = asOptionalNumber(value);
+    if (parsed != null) return parsed;
+  }
+  return asOptionalNumber(kind === "lat" ? item.latitude ?? item.lat : item.longitude ?? item.lng ?? item.lon);
 }
 
 function hasOrbcommIdentity(row: OrbcommAssetInput): boolean {
@@ -688,7 +724,7 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function splitCsvLine(line: string): string[] {
+function splitCsvLine(line: string, delimiter = ","): string[] {
   const out: string[] = [];
   let current = "";
   let quoted = false;
@@ -697,7 +733,7 @@ function splitCsvLine(line: string): string[] {
       quoted = !quoted;
       continue;
     }
-    if (char === "," && !quoted) {
+    if (char === delimiter && !quoted) {
       out.push(current);
       current = "";
       continue;
