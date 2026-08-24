@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
+import { FleetRowActions } from "@/components/fleet-row-actions";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { PageHeader } from "@/components/page-header";
 import { SamsaraTruckImport } from "@/components/samsara-truck-import";
 import { truckComplianceAlerts } from "@/lib/compliance";
+import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import {
   getSamsaraFleet,
   hosForDriver,
@@ -12,7 +14,7 @@ import {
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
-import { listTrucks } from "@/lib/queries";
+import { assignedFleetAssetIds, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +27,9 @@ export default async function TrucksPage() {
   const windows = complianceWindows();
   const trucks = listTrucks();
   const fleet = await getSamsaraFleet();
+  const dispatcher = await getSignedInDispatcher();
+  const canDelete = canDeleteFleet(dispatcher?.role ?? "");
+  const assignedIds = assignedFleetAssetIds("truck");
 
   return (
     <>
@@ -46,7 +51,7 @@ export default async function TrucksPage() {
         }
       />
       <SamsaraTruckImport />
-      <div className="card overflow-hidden">
+      <div className="card">
         <table className="table-grid">
           <thead>
             <tr>
@@ -112,7 +117,15 @@ export default async function TrucksPage() {
                     />
                     <ActiveStatusCell active={truck.active} />
                     <td>
-                      <span className="text-sm font-medium text-navy">Edit</span>
+                      <FleetRowActions
+                        kind="truck"
+                        id={truck.id}
+                        href={`/fleet/trucks/${truck.id}`}
+                        active={truck.active !== 0}
+                        assigned={assignedIds.has(truck.id)}
+                        canDelete={canDelete}
+                        label={`unit ${truck.unit_number}`}
+                      />
                     </td>
                   </ClickableRow>
                 );

@@ -16,7 +16,11 @@ export function ClickableRow({
   return (
     <tr
       className={`cursor-pointer ${className ?? ""}`}
-      onClick={() => router.push(href)}
+      onClick={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("a, button, summary, input, select, textarea, label, form, details")) return;
+        router.push(href);
+      }}
     >
       {children}
     </tr>

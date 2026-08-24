@@ -1,17 +1,22 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
+import { FleetRowActions } from "@/components/fleet-row-actions";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
-import { listDrivers } from "@/lib/queries";
+import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { assignedFleetAssetIds, listDrivers } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
-export default function DriversPage() {
+export default async function DriversPage() {
   const windows = complianceWindows();
   const drivers = listDrivers();
+  const dispatcher = await getSignedInDispatcher();
+  const canDelete = canDeleteFleet(dispatcher?.role ?? "");
+  const assignedIds = assignedFleetAssetIds("driver");
 
   return (
     <>
@@ -32,7 +37,7 @@ export default function DriversPage() {
           </>
         }
       />
-      <div className="card overflow-hidden">
+      <div className="card">
         <table className="table-grid">
           <thead>
             <tr>
@@ -79,7 +84,15 @@ export default function DriversPage() {
                     <td>{driver.pin ? "Set" : "—"}</td>
                     <ActiveStatusCell active={driver.active} />
                     <td>
-                      <span className="text-sm font-medium text-navy">Edit</span>
+                      <FleetRowActions
+                        kind="driver"
+                        id={driver.id}
+                        href={`/fleet/drivers/${driver.id}`}
+                        active={driver.active !== 0}
+                        assigned={assignedIds.has(driver.id)}
+                        canDelete={canDelete}
+                        label={driver.name}
+                      />
                     </td>
                   </ClickableRow>
                 );

@@ -2,13 +2,24 @@ import {
   buildOrbcommTrailerPreview,
   buildSamsaraTruckPreview,
   inferTrailerType,
+  matchTruckForSamsara,
   preferFilled,
   type OrbcommAssetInput,
   type OrbcommTrailerPreviewRow,
   type SamsaraTruckPreviewRow,
   type SamsaraVehicleInput,
 } from "./fleet-import-shared";
-import { createTrailer, createTruck, getTrailer, getTruck, listTrailers, listTrucks, updateTrailer, updateTruck } from "./queries";
+import {
+  createTrailer,
+  createTruck,
+  getTrailer,
+  getTruck,
+  listTrailers,
+  listTrucks,
+  saveTruckGps,
+  updateTrailer,
+  updateTruck,
+} from "./queries";
 import type { TrailerType } from "./types";
 
 export function previewSamsaraTrucks(vehicles: SamsaraVehicleInput[]): SamsaraTruckPreviewRow[] {
@@ -18,6 +29,8 @@ export function previewSamsaraTrucks(vehicles: SamsaraVehicleInput[]): SamsaraTr
       id: truck.id,
       unit_number: truck.unit_number,
       samsara_vehicle_id: truck.samsara_vehicle_id,
+      vin: truck.vin,
+      plate: truck.plate,
     })),
   );
 }
@@ -66,14 +79,29 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         model: row.model,
         licensePlate: row.plate,
         extraKeys: [unitNumber, row.name],
+        latitude: row.latitude,
+        longitude: row.longitude,
+        city: row.city,
       },
     ])[0];
     if (!preview && !row.matchTruckId) {
       skipped += 1;
       continue;
     }
-    const matchTruckId =
-      (row.matchTruckId && getTruck(row.matchTruckId) ? row.matchTruckId : null) ?? preview?.matchTruckId ?? null;
+    const rematchedId = preview?.matchTruckId ?? null;
+    const confirmed = row.matchTruckId ? getTruck(row.matchTruckId) : null;
+    const confirmedStillMatches = Boolean(
+      confirmed &&
+        !usedTruckIds.has(confirmed.id) &&
+        matchTruckForSamsara([confirmed], {
+          samsaraVehicleId,
+          unitNumber,
+          name: row.name || unitNumber,
+          vin: row.vin,
+          licensePlate: row.plate,
+        }),
+    );
+    const matchTruckId = confirmedStillMatches ? confirmed!.id : rematchedId;
     if (matchTruckId && usedTruckIds.has(matchTruckId)) {
       skipped += 1;
       continue;
@@ -90,7 +118,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         type: existing.type,
         capacity_lbs: existing.capacity_lbs,
         status: existing.status,
-        samsara_vehicle_id: samsaraVehicleId || existing.samsara_vehicle_id, // real Samsara id, not the unit JC typed
+        samsara_vehicle_id: samsaraVehicleId || existing.samsara_vehicle_id,
         samsara_trailer_id: existing.samsara_trailer_id,
         orbcomm_asset_id: existing.orbcomm_asset_id,
         trailer_number: existing.trailer_number,
@@ -108,6 +136,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         assigned_driver_id: existing.assigned_driver_id,
       });
       usedTruckIds.add(existing.id);
+      persistImportedGps(existing.id, row);
       updated += 1;
     } else {
       const newUnit = unitNumber || samsaraVehicleId;
@@ -125,6 +154,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
           model: row.model.trim(),
         });
         usedTruckIds.add(id);
+        persistImportedGps(id, row);
         created += 1;
       } catch (error) {
         if (!String(error).includes("already exists")) throw error;
@@ -135,6 +165,20 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
   }
 
   return { created, updated, skipped };
+}
+
+function persistImportedGps(
+  truckId: number,
+  row: Pick<SamsaraTruckPreviewRow, "latitude" | "longitude" | "city">,
+): void {
+  if (row.latitude == null && row.longitude == null && !String(row.city ?? "").trim()) return;
+  saveTruckGps(truckId, {
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    address: String(row.city ?? "").trim(),
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
 }
 
 export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
+import { FleetRowActions } from "@/components/fleet-row-actions";
 import { PageHeader } from "@/components/page-header";
 import { OrbcommTrailerImport } from "@/components/orbcomm-trailer-import";
 import { trailerComplianceAlerts } from "@/lib/compliance";
+import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
-import { listTrailers } from "@/lib/queries";
+import { assignedFleetAssetIds, listTrailers } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 import { labelForTrailerType } from "@/lib/types";
 
@@ -25,9 +27,12 @@ function reeferStub(trailer: {
   return "—";
 }
 
-export default function TrailersPage() {
+export default async function TrailersPage() {
   const windows = complianceWindows();
   const trailers = listTrailers();
+  const dispatcher = await getSignedInDispatcher();
+  const canDelete = canDeleteFleet(dispatcher?.role ?? "");
+  const assignedIds = assignedFleetAssetIds("trailer");
 
   return (
     <>
@@ -46,7 +51,7 @@ export default function TrailersPage() {
         }
       />
       <OrbcommTrailerImport />
-      <div className="card overflow-hidden">
+      <div className="card">
         <table className="table-grid">
           <thead>
             <tr>
@@ -95,7 +100,15 @@ export default function TrailersPage() {
                     </td>
                     <ActiveStatusCell active={trailer.active} />
                     <td>
-                      <span className="text-sm font-medium text-navy">Edit</span>
+                      <FleetRowActions
+                        kind="trailer"
+                        id={trailer.id}
+                        href={`/fleet/trailers/${trailer.id}`}
+                        active={trailer.active !== 0}
+                        assigned={assignedIds.has(trailer.id)}
+                        canDelete={canDelete}
+                        label={`trailer ${trailer.unit_number}`}
+                      />
                     </td>
                   </ClickableRow>
                 );

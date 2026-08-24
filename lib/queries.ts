@@ -611,6 +611,66 @@ export function updateTruck(
   }
 }
 
+export function saveTruckGps(
+  id: number,
+  input: {
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+    recordedAt: string;
+    source: "samsara" | "demo";
+  },
+): void {
+  if (!getTruck(id)) throw new Error("Truck not found.");
+  if (input.source !== "samsara") return;
+  getDb()
+    .prepare(
+      `UPDATE trucks
+       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
+}
+
+export function persistedTruckLocation(truck: {
+  id: number;
+  unit_number: string;
+  samsara_vehicle_id: string;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+  gps_address?: string;
+  gps_recorded_at?: string;
+  gps_source?: string;
+}): {
+  truckId: number;
+  loadId: number | null;
+  vehicleId: string;
+  unitNumber: string;
+  latitude: number | null;
+  longitude: number | null;
+  speedMph: number | null;
+  address: string;
+  recordedAt: string;
+  source: "samsara";
+} | null {
+  if (truck.gps_source !== "samsara") return null;
+  if (truck.gps_latitude == null && truck.gps_longitude == null && !String(truck.gps_address ?? "").trim()) {
+    return null;
+  }
+  return {
+    truckId: truck.id,
+    loadId: null,
+    vehicleId: truck.samsara_vehicle_id,
+    unitNumber: truck.unit_number,
+    latitude: truck.gps_latitude ?? null,
+    longitude: truck.gps_longitude ?? null,
+    speedMph: null,
+    address: String(truck.gps_address ?? "").trim(),
+    recordedAt: truck.gps_recorded_at || "",
+    source: "samsara",
+  };
+}
+
 export function listDrivers(): DriverWithTruck[] {
   return getDb()
     .prepare(
@@ -1766,4 +1826,95 @@ export function updateLoadDetails(
 export function markInvoicePaid(loadId: number, paid: boolean): void {
   if (!getLoad(loadId)) throw new Error("Load not found.");
   getDb().prepare("UPDATE loads SET invoice_paid = ?, updated_at = ? WHERE id = ?").run(paid ? 1 : 0, now(), loadId);
+}
+
+export type FleetAssetKind = "truck" | "driver" | "trailer";
+
+const CLOSED_STATUS_SQL = ["delivered", "completed", "cancelled"].map(() => "?").join(", ");
+const CLOSED_STATUSES = ["delivered", "completed", "cancelled"] as const;
+
+function fleetAssetColumn(kind: FleetAssetKind): "truck_id" | "driver_id" | "trailer_id" {
+  if (kind === "truck") return "truck_id";
+  if (kind === "driver") return "driver_id";
+  return "trailer_id";
+}
+
+export function fleetAssignedDeleteMessage(kind: FleetAssetKind): string {
+  return `Unassign this ${kind} from the load first, or mark it Inactive.`;
+}
+
+export function assignedFleetAssetIds(kind: FleetAssetKind): Set<number> {
+  const col = fleetAssetColumn(kind);
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT ${col} AS id FROM loads
+       WHERE ${col} IS NOT NULL AND status NOT IN (${CLOSED_STATUS_SQL})
+       UNION
+       SELECT DISTINCT r.${col} AS id FROM load_relays r
+       JOIN loads l ON l.id = r.load_id
+       WHERE r.${col} IS NOT NULL AND l.status NOT IN (${CLOSED_STATUS_SQL})`,
+    )
+    .all(...CLOSED_STATUSES, ...CLOSED_STATUSES) as { id: number }[];
+  return new Set(rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id)));
+}
+
+export function fleetAssetIsAssigned(kind: FleetAssetKind, id: number): boolean {
+  return assignedFleetAssetIds(kind).has(id);
+}
+
+export function setTruckActive(id: number, active: boolean): void {
+  if (!getTruck(id)) throw new Error("Truck not found.");
+  getDb().prepare("UPDATE trucks SET active = ?, updated_at = ? WHERE id = ?").run(active ? 1 : 0, now(), id);
+}
+
+export function setDriverActive(id: number, active: boolean): void {
+  if (!getDriver(id)) throw new Error("Driver not found.");
+  getDb().prepare("UPDATE drivers SET active = ?, updated_at = ? WHERE id = ?").run(active ? 1 : 0, now(), id);
+}
+
+export function setTrailerActive(id: number, active: boolean): void {
+  if (!getTrailer(id)) throw new Error("Trailer not found.");
+  getDb().prepare("UPDATE trailers SET active = ?, updated_at = ? WHERE id = ?").run(active ? 1 : 0, now(), id);
+}
+
+function deleteFleetDocuments(ownerType: FleetAssetKind, ownerId: number): void {
+  getDb().prepare("DELETE FROM fleet_documents WHERE owner_type = ? AND owner_id = ?").run(ownerType, ownerId);
+}
+
+export function deleteTruck(id: number): void {
+  if (!getTruck(id)) throw new Error("Truck not found.");
+  if (fleetAssetIsAssigned("truck", id)) throw new Error(fleetAssignedDeleteMessage("truck"));
+  const db = getDb();
+  db.transaction(() => {
+    deleteFleetDocuments("truck", id);
+    db.prepare("UPDATE loads SET truck_id = NULL WHERE truck_id = ?").run(id);
+    db.prepare("UPDATE load_relays SET truck_id = NULL WHERE truck_id = ?").run(id);
+    db.prepare("UPDATE drivers SET truck_id = NULL WHERE truck_id = ?").run(id);
+    db.prepare("UPDATE trailers SET truck_id = NULL WHERE truck_id = ?").run(id);
+    db.prepare("DELETE FROM trucks WHERE id = ?").run(id);
+  })();
+}
+
+export function deleteDriver(id: number): void {
+  if (!getDriver(id)) throw new Error("Driver not found.");
+  if (fleetAssetIsAssigned("driver", id)) throw new Error(fleetAssignedDeleteMessage("driver"));
+  const db = getDb();
+  db.transaction(() => {
+    deleteFleetDocuments("driver", id);
+    db.prepare("UPDATE loads SET driver_id = NULL WHERE driver_id = ?").run(id);
+    db.prepare("UPDATE load_relays SET driver_id = NULL WHERE driver_id = ?").run(id);
+    db.prepare("DELETE FROM drivers WHERE id = ?").run(id);
+  })();
+}
+
+export function deleteTrailer(id: number): void {
+  if (!getTrailer(id)) throw new Error("Trailer not found.");
+  if (fleetAssetIsAssigned("trailer", id)) throw new Error(fleetAssignedDeleteMessage("trailer"));
+  const db = getDb();
+  db.transaction(() => {
+    deleteFleetDocuments("trailer", id);
+    db.prepare("UPDATE loads SET trailer_id = NULL WHERE trailer_id = ?").run(id);
+    db.prepare("UPDATE load_relays SET trailer_id = NULL WHERE trailer_id = ?").run(id);
+    db.prepare("DELETE FROM trailers WHERE id = ?").run(id);
+  })();
 }

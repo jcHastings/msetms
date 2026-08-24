@@ -278,3 +278,22 @@ summary.btn.load-action-btn:hover {
   border: 1px solid #0b1f3a;
   color: #0b1f3a;
 }
+
+.row-actions-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.45rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 700;
+  color: #0b1f3a;
+  background: #f7f3e4;
+  border: 1px solid #0b1f3a;
+}
+
+.row-actions-btn:hover {
+  background: #f3e6b8;
+}

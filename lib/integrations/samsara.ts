@@ -1,12 +1,13 @@
 import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import {
+  matchTruckForSamsara,
+  mergeSamsaraGpsOntoVehicles,
   parseSamsaraVehicleRecords,
   SAMSARA_ID_MISSING_MESSAGE,
   SAMSARA_TOKEN_MISSING_MESSAGE,
-  samsaraVehicleMatchesTruck,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
-import { listDrivers, listLoads, listTrucks } from "../queries";
+import { listDrivers, listLoads, listTrucks, persistedTruckLocation, saveTruckGps } from "../queries";
 
 export { SAMSARA_ID_MISSING_MESSAGE };
 
@@ -97,7 +98,14 @@ export async function listSamsaraVehicles(): Promise<
         throw error;
       }
     }
-    return { ok: true, vehicles: parseSamsaraVehicles(items) };
+    let vehicles = parseSamsaraVehicles(items);
+    try {
+      const stats = await fetchAllPages("/fleet/vehicles/stats", "gps");
+      vehicles = mergeSamsaraGpsOntoVehicles(vehicles, stats);
+    } catch {
+      // Import pairing still works without a GPS page.
+    }
+    return { ok: true, vehicles };
   } catch (error) {
     return { ok: false, error: publicSamsaraImportError(error) };
   }
@@ -204,22 +212,28 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
       fetchAllPages("/fleet/vehicles/stats", "gps"),
       fetchAllPages("/fleet/hos/clocks"),
     ]);
-    return {
-      mode: "samsara",
-      tokenSet: true,
-      fetchedAt: new Date().toISOString(),
-      locations: mapVehicleLocations({
+    const trucks = listTrucks();
+    const locations = persistLiveGps(
+      mapVehicleLocations({
         vehicles,
-        trucks: listTrucks().map((truck) => ({
+        trucks: trucks.map((truck) => ({
           id: truck.id,
           unit_number: truck.unit_number,
           samsara_vehicle_id: truck.samsara_vehicle_id,
+          vin: truck.vin,
+          plate: truck.plate,
         })),
         loads: listLoads({ status: "all" }).map((load) => ({
           id: load.id,
           truck_id: load.truck_id,
         })),
       }),
+    );
+    return {
+      mode: "samsara",
+      tokenSet: true,
+      fetchedAt: new Date().toISOString(),
+      locations: mergePersistedGps(locations, trucks),
       hos: mapHosClocks({
         clocks,
         drivers: listDrivers().map((driver) => ({
@@ -239,7 +253,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
       tokenSet: true,
       error: publicSamsaraError(error),
       fetchedAt: new Date().toISOString(),
-      locations: [],
+      locations: mergePersistedGps([], listTrucks()),
       hos: [],
     };
   }
@@ -364,18 +378,28 @@ function hosDemo(name: string, status: string, driveHours: number, recordedAt: s
 
 export function mapVehicleLocations(input: {
   vehicles: Array<Record<string, unknown>>;
-  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string }>;
+  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
   loads: Array<{ id: number; truck_id: number | null }>;
 }): VehicleLocation[] {
   const locations: VehicleLocation[] = [];
-  for (const truck of input.trucks) {
-    const vehicle = input.vehicles.find((item) =>
-      samsaraVehicleMatchesTruck(truck, {
-        id: String(item.id ?? ""),
-        name: String(item.name ?? ""),
-      }),
+  const claimedTruckIds = new Set<number>();
+  for (const vehicle of input.vehicles) {
+    const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+    const match = matchTruckForSamsara(
+      input.trucks,
+      {
+        samsaraVehicleId: String(vehicle.id ?? nested.id ?? ""),
+        name: String(vehicle.name ?? nested.name ?? ""),
+        unitNumber: String(vehicle.unitNumber ?? nested.unitNumber ?? ""),
+        vin: String(vehicle.vin ?? nested.vin ?? ""),
+        licensePlate: String(vehicle.licensePlate ?? nested.licensePlate ?? ""),
+      },
+      claimedTruckIds,
     );
-    if (!vehicle) continue;
+    if (!match) continue;
+    claimedTruckIds.add(match.id);
+    const truck = input.trucks.find((item) => item.id === match.id);
+    if (!truck) continue;
     const gps = (vehicle.gps ?? {}) as Record<string, unknown>;
     const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
     const load = input.loads.find((item) => item.truck_id === truck.id);
@@ -393,6 +417,45 @@ export function mapVehicleLocations(input: {
     });
   }
   return locations;
+}
+
+function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
+  for (const location of locations) {
+    if (location.source !== "samsara" || location.truckId == null) continue;
+    if (location.latitude == null && location.longitude == null && !location.address.trim()) continue;
+    saveTruckGps(location.truckId, {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+      recordedAt: location.recordedAt,
+      source: "samsara",
+    });
+  }
+  return locations;
+}
+
+function mergePersistedGps(
+  locations: VehicleLocation[],
+  trucks: Array<{
+    id: number;
+    unit_number: string;
+    samsara_vehicle_id: string;
+    gps_latitude?: number | null;
+    gps_longitude?: number | null;
+    gps_address?: string;
+    gps_recorded_at?: string;
+    gps_source?: string;
+  }>,
+): VehicleLocation[] {
+  const seen = new Set(locations.map((item) => item.truckId).filter((id): id is number => id != null));
+  const merged = [...locations];
+  for (const truck of trucks) {
+    if (seen.has(truck.id)) continue;
+    const persisted = persistedTruckLocation(truck);
+    if (!persisted) continue;
+    merged.push(persisted);
+  }
+  return merged;
 }
 
 export function mapHosClocks(input: {

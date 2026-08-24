@@ -298,6 +298,11 @@ export function canEditFleet(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+/** Administrator and Standard can delete fleet. Accounting cannot. */
+export function canDeleteFleet(role: string): boolean {
+  return canEditFleet(role);
+}
+
 export function canUploadFuel(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }

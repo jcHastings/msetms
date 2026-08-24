@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
+import { closestTrucksToCity, type MikeGpsPoint } from "./city-coords-shared";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
-import { getSamsaraFleet } from "./integrations/samsara";
+import { getSamsaraFleet, isLiveSamsaraGps } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "./mike-shared";
 
@@ -46,17 +47,42 @@ export async function writeMikeHistory(messages: MikeMessage[]): Promise<void> {
   });
 }
 
-function haversineMiles(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 3958.8 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+export function mikeGpsPointsFromFleet(input: {
+  liveGps: boolean;
+  trucks: Array<{
+    unit_number: string;
+    samsara_vehicle_id: string;
+    gps_latitude?: number | null;
+    gps_longitude?: number | null;
+    gps_address?: string;
+    gps_source?: string;
+  }>;
+  locations: Array<{
+    unitNumber: string;
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+    source: string;
+  }>;
+}): MikeGpsPoint[] {
+  return input.trucks.map((truck) => {
+    const live = input.locations.find((item) => item.unitNumber === truck.unit_number && item.source === "samsara");
+    const lat = live?.latitude ?? (truck.gps_source === "samsara" ? truck.gps_latitude ?? null : null);
+    const lng = live?.longitude ?? (truck.gps_source === "samsara" ? truck.gps_longitude ?? null : null);
+    const address = live?.address || (truck.gps_source === "samsara" ? truck.gps_address || "" : "");
+    const hasPosition = Boolean(input.liveGps || truck.gps_source === "samsara") && lat != null && lng != null;
+    return {
+      unit: truck.unit_number,
+      samsaraVehicleId: truck.samsara_vehicle_id || null,
+      lat: hasPosition ? lat : null,
+      lng: hasPosition ? lng : null,
+      address: hasPosition ? address || "last GPS" : null,
+      hasPosition,
+    };
+  });
 }
 
-async function buildOpsSnapshot(): Promise<string> {
+async function buildOpsSnapshot(question = ""): Promise<string> {
   const loads = listLoads({ status: "active" }).slice(0, 80).map((load) => ({
     load: load.load_number,
     status: load.status,
@@ -75,11 +101,13 @@ async function buildOpsSnapshot(): Promise<string> {
     type: driver.driver_type,
     active: driver.active !== 0,
   }));
-  const trucks = listTrucks().map((truck) => ({
+  const truckRows = listTrucks();
+  const trucks = truckRows.map((truck) => ({
     unit: truck.unit_number,
     status: truck.status,
     type: truck.type,
     driver: truck.driver_name || "none",
+    samsaraVehicleId: truck.samsara_vehicle_id || null,
   }));
   const trailers = listTrailers().map((trailer) => ({
     unit: trailer.unit_number,
@@ -96,45 +124,31 @@ async function buildOpsSnapshot(): Promise<string> {
     lng: location.longitude,
   }));
   const fleet = await getSamsaraFleet();
-  const gps = fleet.locations.map((item) => ({
-    unit: item.unitNumber,
-    driverLoad: item.loadId,
-    lat: item.latitude,
-    lng: item.longitude,
-    address: item.address || "unknown",
-    recordedAt: item.recordedAt || "unknown",
-    source: item.source,
-    hasPosition: item.latitude != null && item.longitude != null,
-  }));
-  const hos = fleet.hos.map((item) => ({
-    driver: item.driverName,
-    duty: item.dutyStatus,
-    driveRemainingMs: item.driveRemainingMs,
-    source: item.source,
-  }));
-
-  const liveGps = fleet.tokenSet && fleet.mode === "samsara";
-  const withGps = liveGps ? gps.filter((item) => item.hasPosition) : [];
+  const liveGps = Boolean(
+    fleet.tokenSet &&
+      fleet.mode === "samsara" &&
+      fleet.locations.some((item) => isLiveSamsaraGps(item) && item.latitude != null && item.longitude != null),
+  );
+  const gps = mikeGpsPointsFromFleet({
+    liveGps: liveGps || truckRows.some((truck) => truck.gps_source === "samsara"),
+    trucks: truckRows,
+    locations: fleet.locations,
+  });
+  const hos = fleet.hos
+    .filter((item) => item.source === "samsara" || liveGps)
+    .map((item) => ({
+      driver: item.driverName,
+      duty: item.dutyStatus,
+      driveRemainingMs: item.driveRemainingMs,
+      source: item.source,
+    }));
+  const skippedNoPing = gps.filter((item) => !item.hasPosition).length;
   const assignedNames = new Set(loads.filter((load) => load.driver !== "unassigned").map((load) => load.driver));
   const emptyDrivers = drivers.filter((driver) => driver.active && !assignedNames.has(driver.name)).map((driver) => driver.name);
   const goingEmptySoon = loads
     .filter((load) => load.emptySoon && load.driver !== "unassigned")
     .map((load) => ({ driver: load.driver, load: load.load, status: load.status, destination: load.destination }));
-  const nearestHints = locations
-    .filter((location) => location.lat != null && location.lng != null && withGps.length > 0)
-    .slice(0, 20)
-    .map((location) => {
-      const ranked = withGps
-        .map((item) => ({
-          unit: item.unit,
-          miles: Math.round(
-            haversineMiles(location.lat as number, location.lng as number, item.lat as number, item.lng as number),
-          ),
-        }))
-        .sort((a, b) => a.miles - b.miles)
-        .slice(0, 3);
-      return { place: `${location.name}, ${location.city} ${location.state}`, nearest: ranked };
-    });
+  const closestToCity = closestTrucksToCity(question, gps, locations);
 
   return JSON.stringify({
     samsara: { tokenSet: fleet.tokenSet, mode: fleet.mode, liveGps, error: fleet.error || null },
@@ -143,15 +157,16 @@ async function buildOpsSnapshot(): Promise<string> {
     trucks,
     trailers,
     locations,
-    gps: liveGps ? gps : gps.map((item) => ({ ...item, lat: null, lng: null, hasPosition: false, note: "no live GPS" })),
-    hos: liveGps ? hos : hos.map((item) => ({ ...item, note: item.source === "demo" ? "demo HOS, not live" : item.source })),
+    gps,
+    hos,
     emptyDrivers,
     goingEmptySoon,
-    nearestHints,
+    skippedNoPing,
+    closestToCity,
     rules: [
-      "Never invent GPS or HOS. If liveGps is false or hasPosition is false, say you do not have a position.",
+      "Never invent GPS or HOS. Use gps rows with hasPosition true only. Those coords are live or last persisted Samsara pings.",
       "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
-      "Closest to a city: use nearestHints only when that city is listed. If the city has no lat/lng or liveGps is false, say you cannot compute distance.",
+      "Closest to a city: use closestToCity when present. Ranked trucks have live Samsara GPS. Say skippedNoPing for trucks with no last ping. If closestToCity.found is false, say you cannot compute distance.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
@@ -165,7 +180,7 @@ export async function askMike(question: string, history: MikeMessage[]): Promise
   const key = getOpenAiApiKey();
   if (!key) return { configured: false, reply: MISSING_KEY };
 
-  const snapshot = await buildOpsSnapshot();
+  const snapshot = await buildOpsSnapshot(question);
   const body = {
     model: MIKE_OPENAI_MODEL,
     temperature: 0.2,

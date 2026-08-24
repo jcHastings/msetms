@@ -9,6 +9,8 @@ export const SAMSARA_ID_MISSING_MESSAGE =
 export const ORBCOMM_CREDS_OR_CSV_MESSAGE =
   "Add ORBCOMM_USERNAME and ORBCOMM_PASSWORD to .env and restart, or upload an ORBCOMM CSV/export.";
 
+export type SamsaraMatchBy = "vin" | "samsara_vehicle_id" | "unit_number" | "plate";
+
 export type SamsaraTruckPreviewRow = {
   selectKey: string;
   samsaraVehicleId: string;
@@ -19,8 +21,12 @@ export type SamsaraTruckPreviewRow = {
   make: string;
   model: string;
   plate: string;
+  city: string;
+  latitude: number | null;
+  longitude: number | null;
+  tmsUnit: string;
   matchTruckId: number | null;
-  matchBy: "samsara_vehicle_id" | "unit_number" | null;
+  matchBy: SamsaraMatchBy | null;
   action: "create" | "update";
 };
 
@@ -58,6 +64,26 @@ export type SamsaraVehicleInput = {
   model: string;
   licensePlate: string;
   extraKeys?: string[];
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string;
+};
+
+export type SamsaraMatchTruck = {
+  id: number;
+  unit_number: string;
+  samsara_vehicle_id: string;
+  vin?: string;
+  plate?: string;
+};
+
+export type SamsaraMatchVehicle = {
+  samsaraVehicleId: string;
+  unitNumber?: string;
+  name?: string;
+  vin?: string;
+  licensePlate?: string;
+  extraKeys?: string[];
 };
 
 export type OrbcommAssetInput = {
@@ -80,6 +106,21 @@ export function canonicalFleetKey(value: string): string {
   return key;
 }
 
+export function normalizeVin(value: string): string {
+  return value.replace(/[\s-]/g, "").toUpperCase();
+}
+
+export function normalizePlate(value: string): string {
+  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+
+/** Digits only so "36" matches "Truck 36" / "#36". Does not tokenize UUIDs. */
+export function unitDigits(value: string): string {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.replace(/^0+/, "") || "0";
+}
+
 export function preferFilled(existing: string, incoming: string): string {
   return existing.trim() ? existing : incoming.trim();
 }
@@ -95,69 +136,78 @@ export function unitNumberFromSamsaraName(name: string, fallbackId: string): str
   return trimmed;
 }
 
-function unitTokensFromText(...values: Array<string | undefined>): string[] {
-  const tokens: string[] = [];
-  for (const value of values) {
-    const text = String(value ?? "").trim();
-    if (!text) continue;
-    tokens.push(text);
-    tokens.push(unitNumberFromSamsaraName(text, ""));
-    for (const part of text.match(/\b\d{1,6}\b/g) ?? []) tokens.push(part);
+export function samsaraUnitDigits(vehicle: SamsaraMatchVehicle): string {
+  const labeled = unitNumberFromSamsaraName(vehicle.name ?? "", "");
+  for (const value of [vehicle.unitNumber, labeled, ...(vehicle.extraKeys ?? []), vehicle.name]) {
+    const digits = unitDigits(String(value ?? ""));
+    if (digits) return digits;
   }
-  return tokens;
+  return "";
 }
 
-export function samsaraVehicleMatchKeys(vehicle: {
-  id?: string;
-  samsaraVehicleId?: string;
-  name?: string;
-  unitNumber?: string;
-  extraKeys?: string[];
-}): string[] {
-  return [
-    ...new Set(
-      unitTokensFromText(
-        vehicle.id,
-        vehicle.samsaraVehicleId,
-        vehicle.name,
-        vehicle.unitNumber,
-        ...(vehicle.extraKeys ?? []),
-      )
-        .map(canonicalFleetKey)
-        .filter(Boolean),
-    ),
-  ];
-}
-
-export function truckSamsaraMatchKeys(truck: { unit_number: string; samsara_vehicle_id: string }): string[] {
-  return [...new Set([truck.samsara_vehicle_id, truck.unit_number].map(canonicalFleetKey).filter(Boolean))];
-}
-
-export function samsaraVehicleMatchesTruck(
-  truck: { unit_number: string; samsara_vehicle_id: string },
-  vehicle: { id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; extraKeys?: string[] },
-): boolean {
-  const vehicleKeys = new Set(samsaraVehicleMatchKeys(vehicle));
-  return truckSamsaraMatchKeys(truck).some((key) => vehicleKeys.has(key));
+function uniqueUnclaimedTruck(
+  trucks: SamsaraMatchTruck[],
+  claimedTruckIds: Set<number> | undefined,
+  predicate: (truck: SamsaraMatchTruck) => boolean,
+): SamsaraMatchTruck | null {
+  const hits = trucks.filter((truck) => !claimedTruckIds?.has(truck.id) && predicate(truck));
+  return hits.length === 1 ? hits[0] : null;
 }
 
 export function matchTruckForSamsara(
-  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string }>,
-  vehicle: { samsaraVehicleId: string; unitNumber: string; name?: string; extraKeys?: string[] },
-): { id: number; matchBy: "samsara_vehicle_id" | "unit_number" } | null {
+  trucks: SamsaraMatchTruck[],
+  vehicle: SamsaraMatchVehicle,
+  claimedTruckIds?: Set<number>,
+): { id: number; matchBy: SamsaraMatchBy } | null {
+  const vin = normalizeVin(vehicle.vin ?? "");
+  if (vin) {
+    const byVin = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) => normalizeVin(truck.vin ?? "") === vin);
+    if (byVin) return { id: byVin.id, matchBy: "vin" };
+  }
+
   const vehicleId = canonicalFleetKey(vehicle.samsaraVehicleId);
   if (vehicleId) {
-    const byId = trucks.find((truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId);
+    const byId = uniqueUnclaimedTruck(
+      trucks,
+      claimedTruckIds,
+      (truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId,
+    );
     if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
   }
-  const unitKeys = samsaraVehicleMatchKeys(vehicle);
-  if (unitKeys.length) {
-    const byStoredId = trucks.find((truck) => unitKeys.includes(canonicalFleetKey(truck.samsara_vehicle_id)));
-    if (byStoredId) return { id: byStoredId.id, matchBy: "samsara_vehicle_id" };
-    const byUnit = trucks.find((truck) => unitKeys.includes(canonicalFleetKey(truck.unit_number)));
+
+  const unit = samsaraUnitDigits(vehicle);
+  if (unit) {
+    const byUnit = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) => unitDigits(truck.unit_number) === unit);
     if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }
+
+  const plate = normalizePlate(vehicle.licensePlate ?? "");
+  if (plate) {
+    const byPlate = uniqueUnclaimedTruck(
+      trucks,
+      claimedTruckIds,
+      (truck) => normalizePlate(truck.plate ?? "") === plate,
+    );
+    if (byPlate) return { id: byPlate.id, matchBy: "plate" };
+  }
+
   return null;
+}
+
+export function samsaraVehicleMatchesTruck(
+  truck: SamsaraMatchTruck,
+  vehicle: { id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; vin?: string; licensePlate?: string; extraKeys?: string[] },
+): boolean {
+  return (
+    matchTruckForSamsara([truck], {
+      samsaraVehicleId: vehicle.samsaraVehicleId || vehicle.id || "",
+      unitNumber: vehicle.unitNumber,
+      name: vehicle.name,
+      vin: vehicle.vin,
+      licensePlate: vehicle.licensePlate,
+      extraKeys: vehicle.extraKeys,
+    })?.id === truck.id
+  );
 }
 
 export function matchTrailerForOrbcomm(
@@ -181,10 +231,13 @@ export function matchTrailerForOrbcomm(
 
 export function buildSamsaraTruckPreview(
   vehicles: SamsaraVehicleInput[],
-  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string }>,
+  trucks: SamsaraMatchTruck[],
 ): SamsaraTruckPreviewRow[] {
   const rows: SamsaraTruckPreviewRow[] = [];
+  const claimedTruckIds = new Set<number>();
   const seenVehicle = new Set<string>();
+  const truckById = new Map(trucks.map((truck) => [truck.id, truck]));
+
   for (const vehicle of vehicles) {
     const samsaraVehicleId = vehicle.id.trim();
     const name = vehicle.name.trim();
@@ -193,12 +246,20 @@ export function buildSamsaraTruckPreview(
     const dedupe = normalizeFleetKey(samsaraVehicleId || unitNumber);
     if (dedupe && seenVehicle.has(dedupe)) continue;
     if (dedupe) seenVehicle.add(dedupe);
-    const match = matchTruckForSamsara(trucks, {
-      samsaraVehicleId,
-      unitNumber,
-      name,
-      extraKeys: vehicle.extraKeys,
-    });
+    const match = matchTruckForSamsara(
+      trucks,
+      {
+        samsaraVehicleId,
+        unitNumber,
+        name,
+        vin: vehicle.vin,
+        licensePlate: vehicle.licensePlate,
+        extraKeys: vehicle.extraKeys,
+      },
+      claimedTruckIds,
+    );
+    if (match) claimedTruckIds.add(match.id);
+    const tms = match ? truckById.get(match.id) : undefined;
     rows.push({
       selectKey: samsaraVehicleId || unitNumber,
       samsaraVehicleId,
@@ -209,6 +270,10 @@ export function buildSamsaraTruckPreview(
       make: vehicle.make.trim(),
       model: vehicle.model.trim(),
       plate: vehicle.licensePlate.trim(),
+      city: String(vehicle.city ?? "").trim(),
+      latitude: vehicle.latitude ?? null,
+      longitude: vehicle.longitude ?? null,
+      tmsUnit: tms?.unit_number ?? "",
       matchTruckId: match?.id ?? null,
       matchBy: match?.matchBy ?? null,
       action: match ? "update" : "create",
@@ -231,14 +296,22 @@ export function samsaraReturnedNames(vehicles: Array<{ id?: string; name?: strin
   return names;
 }
 
-/** When JC’s unit (36) is not in the Samsara list, say which names did come back. */
+/** When a TMS unit is not in the Samsara list, say which names did come back. */
 export function samsaraUnmatchedUnitsWarning(
-  trucks: Array<{ unit_number: string; samsara_vehicle_id: string }>,
-  vehicles: Array<{ id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; extraKeys?: string[] }>,
+  trucks: SamsaraMatchTruck[],
+  vehicles: Array<{
+    id?: string;
+    samsaraVehicleId?: string;
+    name?: string;
+    unitNumber?: string;
+    vin?: string;
+    licensePlate?: string;
+    extraKeys?: string[];
+  }>,
 ): string {
   if (vehicles.length === 0) return "";
   const unmatched = trucks
-    .filter((truck) => truckSamsaraMatchKeys(truck).length > 0)
+    .filter((truck) => truck.unit_number.trim() || truck.samsara_vehicle_id.trim() || truck.vin?.trim() || truck.plate?.trim())
     .filter((truck) => !vehicles.some((vehicle) => samsaraVehicleMatchesTruck(truck, vehicle)))
     .map((truck) => truck.unit_number.trim() || truck.samsara_vehicle_id.trim())
     .filter(Boolean);
@@ -301,6 +374,8 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
     const key = normalizeFleetKey(id || name);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
+    const gps = (item.gps ?? nested.gps ?? {}) as Record<string, unknown>;
+    const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
     vehicles.push({
       id,
       name,
@@ -310,6 +385,12 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
       model: firstText(item, nested, ["model", "vehicleModel"]),
       licensePlate: firstText(item, nested, ["licensePlate", "license_plate", "licensePlateNumber"]),
       extraKeys: extraSamsaraIdentityKeys(item, nested),
+      latitude: asOptionalNumber(gps.latitude),
+      longitude: asOptionalNumber(gps.longitude),
+      city:
+        typeof reverse.formattedLocation === "string"
+          ? reverse.formattedLocation
+          : firstText(item, nested, ["location", "city"]),
     });
   }
   return vehicles;
@@ -442,6 +523,39 @@ function asText(value: unknown): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
+}
+
+function asOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
+export function mergeSamsaraGpsOntoVehicles(
+  vehicles: SamsaraVehicleInput[],
+  stats: Array<{ id?: string; name?: string; gps?: Record<string, unknown> }>,
+): SamsaraVehicleInput[] {
+  return vehicles.map((vehicle) => {
+    const row = stats.find(
+      (item) =>
+        canonicalFleetKey(String(item.id ?? "")) === canonicalFleetKey(vehicle.id) ||
+        (item.name && normalizeFleetKey(String(item.name)) === normalizeFleetKey(vehicle.name)),
+    );
+    if (!row) return vehicle;
+    const gps = (row.gps ?? {}) as Record<string, unknown>;
+    const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
+    return {
+      ...vehicle,
+      latitude: vehicle.latitude ?? asOptionalNumber(gps.latitude),
+      longitude: vehicle.longitude ?? asOptionalNumber(gps.longitude),
+      city:
+        vehicle.city ||
+        (typeof reverse.formattedLocation === "string" ? reverse.formattedLocation : ""),
+    };
+  });
 }
 
 function normalizeHeader(value: string): string {

@@ -15,8 +15,11 @@ import {
   createSavedReport,
   createTrailer,
   createTruck,
+  deleteDriver,
   deleteLocation,
   deleteSavedReport,
+  deleteTrailer,
+  deleteTruck,
   findOrCreateCustomer,
   getDriver,
   getTrailer,
@@ -28,6 +31,9 @@ import {
   updateLoadDetails,
   updateLoadStatus,
   updateLocation,
+  setDriverActive,
+  setTrailerActive,
+  setTruckActive,
   updateTrailer,
   updateTruck,
   type LoadInput,
@@ -69,6 +75,7 @@ import {
   canAccessAccounting,
   canAssignLoads,
   canDeleteDocuments,
+  canDeleteFleet,
   canDeleteLocations,
   canEditFleet,
   canEditLocations,
@@ -887,6 +894,102 @@ export async function updateTrailerAction(
       reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
       active: parseActive(formData),
     });
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteTruckAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canDeleteFleet, "Accounting cannot delete fleet records.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Truck not found.");
+    deleteTruck(id);
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function toggleTruckActiveAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Truck not found.");
+    setTruckActive(id, String(formData.get("active") ?? "") === "1");
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteDriverAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canDeleteFleet, "Accounting cannot delete fleet records.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Driver not found.");
+    deleteDriver(id);
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function toggleDriverActiveAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Driver not found.");
+    setDriverActive(id, String(formData.get("active") ?? "") === "1");
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteTrailerAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canDeleteFleet, "Accounting cannot delete fleet records.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Trailer not found.");
+    deleteTrailer(id);
+    refresh();
+    return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function toggleTrailerActiveAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Trailer not found.");
+    setTrailerActive(id, String(formData.get("active") ?? "") === "1");
     refresh();
     return { ok: true, id };
   } catch (error) {

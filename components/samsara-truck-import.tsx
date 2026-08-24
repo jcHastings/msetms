@@ -23,15 +23,19 @@ export function SamsaraTruckImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import from Samsara</h2>
         <p className="mt-1 text-sm text-slate-600">
-          GET fleet vehicles with the <code>SAMSARA_API_TOKEN</code> already in <code>.env</code>. Preview
-          name/unit, Samsara vehicle id, and VIN. Confirm to create or update trucks matched by Samsara
-          vehicle id, name, or unit # including <strong>36</strong> (you do not need the UUID). Import fills
-          the real Samsara vehicle id automatically. Existing trucks are not duplicated.
+          Fetches fleet vehicles with <code>SAMSARA_API_TOKEN</code> from <code>.env</code>. Preview each
+          pairing (TMS unit ← Samsara name / VIN / plate / city) before anything is written. Match is VIN,
+          then stored Samsara vehicle id, then unit number (digits only), then license plate. No match
+          creates a new truck. Confirm is required. Re-import re-pairs the same way and does not duplicate
+          trucks.
         </p>
       </div>
-      <form action={previewAction}>
+      <form action={previewAction} className="flex flex-wrap gap-2">
         <button className="btn btn-secondary" type="submit" disabled={previewPending}>
           {previewPending ? "Loading vehicles…" : "Fetch Samsara vehicles"}
+        </button>
+        <button className="btn btn-secondary" type="submit" disabled={previewPending}>
+          {previewPending ? "Re-pairing…" : "Re-import from Samsara"}
         </button>
       </form>
       {preview && !preview.ok && preview.error ? (
@@ -57,19 +61,27 @@ export function SamsaraTruckImport() {
       {rows.length > 0 ? (
         <form action={confirmAction} className="space-y-3">
           <input type="hidden" name="rows" value={JSON.stringify(rows)} />
+          <p className="text-sm text-slate-600">
+            Review pairings, then confirm to write. Uncheck any vehicle you do not want.
+          </p>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="table-grid">
               <thead>
                 <tr>
                   <th></th>
-                  <th>Name / unit</th>
-                  <th>Samsara vehicle id</th>
+                  <th>TMS unit ← Samsara</th>
                   <th>VIN</th>
-                  <th></th>
+                  <th>Plate</th>
+                  <th>City</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => {
+                  const pairing =
+                    row.action === "update"
+                      ? `${row.tmsUnit || "TMS"} ← ${row.name || row.unitNumber}`
+                      : `new ← ${row.name || row.unitNumber}`;
                   return (
                     <tr key={row.selectKey}>
                       <td>
@@ -81,10 +93,11 @@ export function SamsaraTruckImport() {
                           aria-label={`Import ${row.name || row.unitNumber}`}
                         />
                       </td>
-                      <td className="font-mono">{row.name || row.unitNumber || "—"}</td>
-                      <td className="font-mono">{row.samsaraVehicleId || "—"}</td>
+                      <td className="font-mono">{pairing}</td>
                       <td className="font-mono">{row.vin || "—"}</td>
-                      <td>{row.action === "update" ? "Update existing" : "Create"}</td>
+                      <td className="font-mono">{row.plate || "—"}</td>
+                      <td>{row.city || "—"}</td>
+                      <td>{row.action === "update" ? "update" : "new"}</td>
                     </tr>
                   );
                 })}
@@ -92,7 +105,7 @@ export function SamsaraTruckImport() {
             </table>
           </div>
           <button className="btn btn-primary" type="submit" disabled={confirmPending}>
-            {confirmPending ? "Importing…" : "Import selected trucks"}
+            {confirmPending ? "Importing…" : "Confirm import"}
           </button>
         </form>
       ) : null}

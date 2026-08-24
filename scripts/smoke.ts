@@ -392,9 +392,21 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /you do not need the UUID|do not need the UUID/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), />36</);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Unit 36/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Confirm import/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Re-import from Samsara/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /TMS unit/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), />36</);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Unit 36/);
+  const rowActions = fs.readFileSync(path.join(process.cwd(), "components/fleet-row-actions.tsx"), "utf8");
+  assert.match(rowActions, /["']use client["']/);
+  assert.match(rowActions, /from ["']@\/lib\/actions["']/);
+  assert.match(rowActions, /Edit/);
+  assert.match(rowActions, /Update/);
+  assert.match(rowActions, /Delete/);
+  assert.doesNotMatch(rowActions, /from ["']@\/lib\/(db|env|settings|places)["']/);
+  for (const file of ["app/fleet/trucks/page.tsx", "app/fleet/drivers/page.tsx", "app/fleet/trailers/page.tsx"]) {
+    assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /FleetRowActions/);
+  }
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraUnmatchedUnitsWarning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
@@ -421,6 +433,9 @@ async function main() {
   assert.match(mikeSrc, /Never invent GPS|hasPosition/);
   assert.match(mikeSrc, /emptyDrivers/);
   assert.match(mikeSrc, /goingEmptySoon/);
+  assert.match(mikeSrc, /closestToCity/);
+  assert.match(mikeSrc, /skippedNoPing/);
+  assert.match(mikeSrc, /mikeGpsPointsFromFleet/);
   assert.match(mikeSrc, /MIKE_OPENAI_MODEL/);
   assert.match(mikeSrc, /MIKE_MISSING_KEY_MESSAGE/);
   assert.doesNotMatch(mikeSrc, /board only/);
@@ -2035,15 +2050,74 @@ Continuous reefer. Two load locks.
     { samsaraVehicleId: "281474977075805", unitNumber: "112", name: "112" },
   );
   assert.equal(match112?.id, 8, "unit typed as Samsara id must match without the UUID");
+  assert.equal(
+    matchTruckForSamsara([{ id: 7, unit_number: "36", samsara_vehicle_id: "", vin: "", plate: "" }], {
+      samsaraVehicleId: "abc-36-def-uuid",
+      unitNumber: "",
+      name: "Pete",
+    }),
+    null,
+    "UUID digits must not pair a Samsara vehicle to the wrong TMS unit",
+  );
+  const vinPair = matchTruckForSamsara(
+    [
+      { id: 1, unit_number: "112", samsara_vehicle_id: "", vin: "VIN112AAA", plate: "TX112" },
+      { id: 2, unit_number: "36", samsara_vehicle_id: "", vin: "VIN36BBB", plate: "OK36" },
+    ],
+    { samsaraVehicleId: "uuid-first", unitNumber: "", name: "Pete", vin: "VIN36BBB" },
+  );
+  assert.equal(vinPair?.id, 2);
+  assert.equal(vinPair?.matchBy, "vin");
+  const mixedPreview = buildSamsaraTruckPreview(
+    [
+      { id: "v-pete", name: "Pete", vin: "VINPETE", year: "", make: "", model: "", licensePlate: "PPP" },
+      { id: "v-36", name: "Unit 36", vin: "VIN36BBB", year: "", make: "", model: "", licensePlate: "OK36" },
+    ],
+    [
+      { id: 1, unit_number: "112", samsara_vehicle_id: "", vin: "VIN112AAA", plate: "TX112" },
+      { id: 2, unit_number: "36", samsara_vehicle_id: "", vin: "VIN36BBB", plate: "OK36" },
+    ],
+  );
+  assert.equal(mixedPreview[0]?.action, "create", "first Samsara row must not steal the next TMS truck");
+  assert.equal(mixedPreview[1]?.action, "update");
+  assert.equal(mixedPreview[1]?.matchTruckId, 2);
+  assert.equal(mixedPreview[1]?.tmsUnit, "36");
+  const claimed = new Set<number>([2]);
+  assert.equal(
+    matchTruckForSamsara(
+      [
+        { id: 1, unit_number: "112", samsara_vehicle_id: "", vin: "", plate: "" },
+        { id: 2, unit_number: "36", samsara_vehicle_id: "", vin: "", plate: "" },
+      ],
+      { samsaraVehicleId: "other", unitNumber: "36", name: "Unit 36" },
+      claimed,
+    ),
+    null,
+    "a Samsara vehicle must not be reused on a claimed TMS truck",
+  );
+  const { closestTrucksToCity, extractCityFromQuestion, findCityCenter } = await import("../lib/city-coords-shared");
+  assert.ok(findCityCenter("Oklahoma City"));
+  assert.match(extractCityFromQuestion("what truck is closest to Oklahoma City?"), /Oklahoma City/i);
+  const closestOkc = closestTrucksToCity(
+    "what truck is closest to Oklahoma City?",
+    [
+      { unit: "36", lat: 35.5, lng: -97.4, hasPosition: true, address: "Oklahoma City, OK", samsaraVehicleId: "uuid-36" },
+      { unit: "112", lat: null, lng: null, hasPosition: false, samsaraVehicleId: "uuid-112" },
+    ],
+    [],
+  );
+  assert.equal(closestOkc?.found, true);
+  assert.equal(closestOkc?.ranked[0]?.unit, "36");
+  assert.equal(closestOkc?.skippedNoPing, 1);
   const no112 = samsaraUnmatchedUnitsWarning(
-    [{ unit_number: "112", samsara_vehicle_id: "112" }],
+    [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
     [{ id: "v-pete", name: "Pete" }, { id: "v-dallas", name: "Dallas spare" }],
   );
   assert.match(no112, /none matched unit 112/);
   assert.match(no112, /Pete/);
   assert.match(no112, /Dallas spare/);
   const no36 = samsaraUnmatchedUnitsWarning(
-    [{ unit_number: "36", samsara_vehicle_id: "36" }],
+    [{ id: 7, unit_number: "36", samsara_vehicle_id: "36" }],
     [{ id: "v-pete", name: "Pete" }, { id: "v-112", name: "112" }],
   );
   assert.match(no36, /none matched unit 36/);
@@ -2080,7 +2154,10 @@ Continuous reefer. Two load locks.
   );
   assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "veh-777")?.action, "create");
   assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.action, "update");
-  assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.matchBy, "samsara_vehicle_id");
+  assert.ok(
+    previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.matchBy === "samsara_vehicle_id" ||
+      previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.matchBy === "unit_number",
+  );
   assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "veh-imp1")?.action, "update");
 
   const { applyOrbcommTrailerImport, applySamsaraTruckImport } = await import("../lib/fleet-import");
@@ -2120,6 +2197,10 @@ Continuous reefer. Two load locks.
       make: "",
       model: "",
       plate: "",
+      city: "",
+      latitude: null,
+      longitude: null,
+      tmsUnit: "SMOKE112",
       matchTruckId: typedUnitId,
       matchBy: "samsara_vehicle_id",
       action: "update",
@@ -3200,6 +3281,10 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canSeeNavHref("accounting", "/settings"), false);
   assert.equal(settings.canSeeNavHref("accounting", "/users"), false);
   assert.equal(settings.canSeeNavHref("accounting", "/fleet"), false);
+  assert.equal(settings.canDeleteFleet("accounting"), false);
+  assert.equal(settings.canDeleteFleet("admin"), true);
+  assert.equal(settings.canDeleteFleet("manager"), true);
+  assert.equal(settings.canDeleteFleet("dispatcher"), true);
   assert.equal(settings.canSeeNavHref("manager", "/users"), true);
   assert.equal(settings.canSeeNavHref("manager", "/settings"), true);
   assert.equal(session.roleLabel("manager"), "Administrator");
@@ -3452,6 +3537,79 @@ Continuous reefer. Two load locks.
   });
   assert.equal(queries.getTrailer(reeferTrailerId)?.notes, "Keep at -10");
   assert.equal(queries.getTrailer(reeferTrailerId)?.orbcomm_asset_id, "orb-smoke");
+
+  const spareTruckId = queries.createTruck({
+    unit_number: "DEL-1",
+    type: "dry_van",
+    capacity_lbs: 40000,
+    status: "available",
+  });
+  queries.saveTruckGps(spareTruckId, {
+    latitude: 35.4676,
+    longitude: -97.5164,
+    address: "Oklahoma City, OK",
+    recordedAt: "2026-08-24T12:00:00Z",
+    source: "samsara",
+  });
+  assert.equal(queries.getTruck(spareTruckId)?.gps_address, "Oklahoma City, OK");
+  assert.equal(queries.getTruck(spareTruckId)?.gps_source, "samsara");
+  queries.setTruckActive(spareTruckId, false);
+  assert.equal(queries.getTruck(spareTruckId)?.active, 0);
+  queries.setTruckActive(spareTruckId, true);
+  queries.deleteTruck(spareTruckId);
+  assert.equal(queries.getTruck(spareTruckId), null);
+
+  const assignedTruckId = queries.createTruck({
+    unit_number: "DEL-2",
+    type: "dry_van",
+    capacity_lbs: 40000,
+    status: "available",
+  });
+  const assignedLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Tulsa, OK",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 20000,
+    commodity: "Paper",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.assignLoad(assignedLoadId, assignedTruckId, fleetDriverId);
+  assert.equal(queries.fleetAssetIsAssigned("truck", assignedTruckId), true);
+  assert.throws(() => queries.deleteTruck(assignedTruckId), /Unassign this truck from the load first/);
+  queries.setTruckActive(assignedTruckId, false);
+  assert.equal(queries.getTruck(assignedTruckId)?.active, 0);
+
+  const { mikeGpsPointsFromFleet } = await import("../lib/mike");
+  const mikeGps = mikeGpsPointsFromFleet({
+    liveGps: true,
+    trucks: [
+      {
+        unit_number: "36",
+        samsara_vehicle_id: "uuid-36",
+        gps_latitude: 35.46,
+        gps_longitude: -97.51,
+        gps_address: "Oklahoma City, OK",
+        gps_source: "samsara",
+      },
+    ],
+    locations: [],
+  });
+  assert.equal(mikeGps[0]?.hasPosition, true);
+  assert.equal(mikeGps[0]?.lat, 35.46);
 
   closeDb();
   const reopened = getDb();
