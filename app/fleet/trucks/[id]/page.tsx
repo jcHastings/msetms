@@ -4,9 +4,9 @@ import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { TruckForm } from "@/components/truck-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
-import { updateTruckAction } from "@/lib/actions";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
+import { driverOption, truckFormValues } from "@/lib/fleet-form-shared";
 import { getTruck, listDrivers } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -19,7 +19,6 @@ export default async function EditTruckPage({
 }) {
   const truck = getTruck(Number.parseInt((await params).id, 10));
   if (!truck) notFound();
-  const boundAction = updateTruckAction.bind(null, truck.id);
 
   return (
     <>
@@ -39,12 +38,11 @@ export default async function EditTruckPage({
         alerts={truckComplianceAlerts(truck, complianceWindows())}
       />
       <TruckForm
-        truck={truck}
-        drivers={listDrivers().map((driver) => ({ id: driver.id, name: driver.name }))}
-        action={boundAction}
+        truck={truckFormValues(truck)}
+        drivers={listDrivers().map(driverOption)}
         submitLabel="Save truck"
       />
-      <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />
+      <FleetDocsPanel ownerType="truck" ownerId={Number(truck.id)} documents={listFleetDocuments("truck", truck.id)} />
     </>
   );
 }

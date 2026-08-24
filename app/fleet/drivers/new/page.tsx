@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DriverForm } from "@/components/driver-form";
 import { PageHeader } from "@/components/page-header";
-import { createDriverAction } from "@/lib/actions";
+import { truckOption } from "@/lib/fleet-form-shared";
 import { listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default function NewDriverPage() {
           </Link>
         }
       />
-      <DriverForm trucks={listTrucks()} action={createDriverAction} submitLabel="Create driver" />
+      <DriverForm trucks={listTrucks().map(truckOption)} submitLabel="Create driver" />
     </>
   );
 }

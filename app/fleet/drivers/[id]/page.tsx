@@ -5,8 +5,8 @@ import { DriverFuelCard } from "@/components/driver-fuel-card";
 import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
-import { updateDriverAction } from "@/lib/actions";
 import { listFleetDocuments } from "@/lib/files";
+import { driverFormValues, truckOption } from "@/lib/fleet-form-shared";
 import { getDriver, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -19,8 +19,7 @@ export default async function EditDriverPage({
 }) {
   const driver = getDriver(Number.parseInt((await params).id, 10));
   if (!driver) notFound();
-  const boundAction = updateDriverAction.bind(null, driver.id);
-  const { pin: _pin, ...driverWithoutPin } = driver;
+  const { pin, ...driverWithoutPin } = driver;
 
   return (
     <>
@@ -33,15 +32,18 @@ export default async function EditDriverPage({
         }
       />
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
-      <DriverFuelCard driverId={driver.id} />
+      <DriverFuelCard driverId={Number(driver.id)} />
       <DriverForm
-        driver={driverWithoutPin}
-        hasPin={Boolean(driver.pin)}
-        trucks={listTrucks()}
-        action={boundAction}
+        driver={driverFormValues(driverWithoutPin)}
+        hasPin={Boolean(pin)}
+        trucks={listTrucks().map(truckOption)}
         submitLabel="Save driver"
       />
-      <FleetDocsPanel ownerType="driver" ownerId={driver.id} documents={listFleetDocuments("driver", driver.id)} />
+      <FleetDocsPanel
+        ownerType="driver"
+        ownerId={Number(driver.id)}
+        documents={listFleetDocuments("driver", driver.id)}
+      />
     </>
   );
 }

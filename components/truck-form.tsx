@@ -2,26 +2,22 @@
 
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import {
-  TRUCK_STATUSES,
-  TRUCK_TYPES,
-  type ActionResult,
-  type Driver,
-  type Truck,
-} from "@/lib/types";
+import { createTruckAction, updateTruckAction } from "@/lib/actions";
+import type { FleetDriverOption, TruckFormValues } from "@/lib/fleet-form-shared";
+import { TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
 
 type Props = {
-  truck?: Truck & { assigned_driver_id?: number | null };
-  drivers?: Array<Pick<Driver, "id" | "name">>;
-  action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+  truck?: TruckFormValues;
+  drivers?: FleetDriverOption[];
   submitLabel: string;
 };
 
-export function TruckForm({ truck, drivers = [], action, submitLabel }: Props) {
-  const [state, formAction, pending] = useActionState(action, null);
+export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
+  const [state, formAction, pending] = useActionState(truck ? updateTruckAction : createTruckAction, null);
 
   return (
     <form action={formAction} className="card grid max-w-xl gap-4 p-6">
+      {truck ? <input type="hidden" name="id" value={truck.id} /> : null}
       <FormBanner result={state} />
       <div className="field">
         <label htmlFor="unit_number">Unit number</label>

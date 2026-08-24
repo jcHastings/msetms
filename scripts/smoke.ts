@@ -230,21 +230,41 @@ async function main() {
   assert.match(envExample, /npm start/);
   assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
   for (const file of [
+    "app/fleet/layout.tsx",
     "app/fleet/trucks/new/page.tsx",
+    "app/fleet/trucks/[id]/page.tsx",
     "app/fleet/trailers/new/page.tsx",
+    "app/fleet/trailers/[id]/page.tsx",
     "app/fleet/drivers/new/page.tsx",
+    "app/fleet/drivers/[id]/page.tsx",
     "app/locations/new/page.tsx",
     "app/customers/new/page.tsx",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(source, /export const dynamic = "force-dynamic"/, `${file} must stay dynamic for standalone`);
   }
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /["']use client["']/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8"), /["']use client["']/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /["']use client["']/);
-  const newTruckPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8");
-  assert.match(newTruckPage, /id: driver\.id/);
-  assert.doesNotMatch(newTruckPage, /drivers=\{listDrivers\(\)\}/);
+  for (const file of [
+    "app/fleet/trucks/new/page.tsx",
+    "app/fleet/trucks/[id]/page.tsx",
+    "app/fleet/trailers/new/page.tsx",
+    "app/fleet/trailers/[id]/page.tsx",
+    "app/fleet/drivers/new/page.tsx",
+    "app/fleet/drivers/[id]/page.tsx",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.doesNotMatch(source, /\.bind\(/, `${file} must not pass bound server actions to client forms`);
+    assert.doesNotMatch(source, /action=\{/, `${file} must not pass server actions as client props`);
+  }
+  for (const file of ["components/truck-form.tsx", "components/trailer-form.tsx", "components/driver-form.tsx"]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(source, /["']use client["']/);
+    assert.match(source, /from ["']@\/lib\/actions["']/, `${file} must import server actions itself`);
+    assert.match(source, /name="id"/);
+  }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8"), /driverOption/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /truckFormValues/);
   assert.match(envExample, /GOOGLE_PLACES_API_KEY/);
   assert.match(envExample, /HTTP referrer/);
   const placeSearchSource = fs.readFileSync(path.join(process.cwd(), "components/place-search.tsx"), "utf8");

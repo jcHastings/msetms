@@ -340,12 +340,13 @@ export async function createTruckAction(
 }
 
 export async function updateTruckAction(
-  id: number,
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Truck not found.");
     const capacity = parseOptionalInt(formData.get("capacity_lbs"));
     if (capacity == null || capacity <= 0) throw new Error("Capacity must be a positive number.");
     updateTruck(id, {
@@ -417,12 +418,13 @@ export async function createDriverAction(
 }
 
 export async function updateDriverAction(
-  id: number,
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Driver not found.");
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Driver name"),
       phone: String(formData.get("phone") ?? "").trim(),
@@ -862,12 +864,13 @@ export async function createTrailerAction(
 }
 
 export async function updateTrailerAction(
-  id: number,
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null) throw new Error("Trailer not found.");
     updateTrailer(id, {
       unit_number: requiredString(formData.get("unit_number"), "Trailer number"),
       type: parseTrailerType(formData.get("type")),

@@ -4,9 +4,9 @@ import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { TrailerForm } from "@/components/trailer-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
-import { updateTrailerAction } from "@/lib/actions";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
+import { trailerFormValues, truckOption } from "@/lib/fleet-form-shared";
 import { getTrailer, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -19,7 +19,6 @@ export default async function EditTrailerPage({
 }) {
   const trailer = getTrailer(Number.parseInt((await params).id, 10));
   if (!trailer) notFound();
-  const boundAction = updateTrailerAction.bind(null, trailer.id);
 
   return (
     <>
@@ -38,8 +37,16 @@ export default async function EditTrailerPage({
         inspectionExpires={trailer.dot_expires}
         alerts={trailerComplianceAlerts(trailer, complianceWindows())}
       />
-      <TrailerForm trailer={trailer} trucks={listTrucks()} action={boundAction} submitLabel="Save trailer" />
-      <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />
+      <TrailerForm
+        trailer={trailerFormValues(trailer)}
+        trucks={listTrucks().map(truckOption)}
+        submitLabel="Save trailer"
+      />
+      <FleetDocsPanel
+        ownerType="trailer"
+        ownerId={Number(trailer.id)}
+        documents={listFleetDocuments("trailer", trailer.id)}
+      />
     </>
   );
 }

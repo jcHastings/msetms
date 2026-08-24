@@ -2,22 +2,24 @@
 
 import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import { DRIVER_STATUSES, DRIVER_TYPES, type ActionResult, type Driver, type Truck } from "@/lib/types";
+import { createDriverAction, updateDriverAction } from "@/lib/actions";
+import type { DriverFormValues, FleetTruckOption } from "@/lib/fleet-form-shared";
+import { DRIVER_STATUSES, DRIVER_TYPES, type Driver } from "@/lib/types";
 
 type Props = {
-  driver?: Omit<Driver, "pin">;
+  driver?: DriverFormValues;
   hasPin?: boolean;
-  trucks: Truck[];
-  action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+  trucks: FleetTruckOption[];
   submitLabel: string;
 };
 
-export function DriverForm({ driver, hasPin = false, trucks, action, submitLabel }: Props) {
-  const [state, formAction, pending] = useActionState(action, null);
+export function DriverForm({ driver, hasPin = false, trucks, submitLabel }: Props) {
+  const [state, formAction, pending] = useActionState(driver ? updateDriverAction : createDriverAction, null);
   const [kind, setKind] = useState(driver?.driver_type ?? "company_driver");
 
   return (
     <form action={formAction} className="card grid max-w-xl gap-4 p-6">
+      {driver ? <input type="hidden" name="id" value={driver.id} /> : null}
       <FormBanner result={state} />
       <div className="field">
         <label htmlFor="name">Name</label>

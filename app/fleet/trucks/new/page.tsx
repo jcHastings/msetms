@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { TruckForm } from "@/components/truck-form";
-import { createTruckAction } from "@/lib/actions";
+import { driverOption } from "@/lib/fleet-form-shared";
 import { listDrivers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default function NewTruckPage() {
-  const drivers = listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
+  const drivers = listDrivers().map(driverOption);
   return (
     <>
       <PageHeader
@@ -18,7 +18,7 @@ export default function NewTruckPage() {
           </Link>
         }
       />
-      <TruckForm drivers={drivers} action={createTruckAction} submitLabel="Create truck" />
+      <TruckForm drivers={drivers} submitLabel="Create truck" />
     </>
   );
 }

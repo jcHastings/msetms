@@ -27,10 +27,19 @@ export type Statement = {
 
 type BoundValue = string | number | bigint | null | Uint8Array;
 
+function jsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") return Number(value);
+  return value;
+}
+
 /** node:sqlite returns null-prototype rows; Next client props require plain objects. */
 function asPlain(value: unknown): unknown {
-  if (value == null || typeof value !== "object") return value;
-  return { ...(value as Record<string, unknown>) };
+  if (value == null || typeof value !== "object") return jsonSafe(value);
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = jsonSafe(field);
+  }
+  return out;
 }
 
 function bind(params: SqlParam[]): BoundValue[] {
