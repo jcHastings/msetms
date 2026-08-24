@@ -2,7 +2,15 @@ import Link from "next/link";
 import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { formatDateTime } from "@/lib/format";
+import {
+  getSamsaraFleet,
+  hosForLoad,
+  locationForLoad,
+  samsaraGpsEmptyState,
+  samsaraHosEmptyState,
+} from "@/lib/integrations/samsara";
 import { ComplianceList } from "@/components/compliance-badge";
 import { dailyRecap, getHandoffNote, listLiveExceptionInbox } from "@/lib/desk";
 import { saveHandoffAction } from "@/lib/dispatcher-actions";
@@ -33,6 +41,7 @@ export default async function DashboardPage({
   const unassigned = listAttentionLoads();
   const moving = listMovingLoads();
   const movingRelayLabels = extraRelayLabelsByLoad(moving);
+  const fleet = await getSamsaraFleet();
   const trucks = listTrucks();
   const drivers = listDrivers();
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
@@ -244,11 +253,16 @@ export default async function DashboardPage({
                   <th>Status</th>
                   <th>Lane</th>
                   <th>Unit</th>
+                  <th>GPS</th>
+                  <th>HOS</th>
                   <th>Delivery</th>
                 </tr>
               </thead>
               <tbody>
-                {moving.map((load) => (
+                {moving.map((load) => {
+                  const tractorLocation = locationForLoad(fleet, load);
+                  const driverHos = hosForLoad(fleet, load);
+                  return (
                   <tr key={load.id}>
                     <td>
                       <Link href={`/loads/${load.id}`} className="font-mono text-sm font-semibold hover:underline">
@@ -271,9 +285,26 @@ export default async function DashboardPage({
                         {movingRelayLabels.get(load.id) ? ` ${movingRelayLabels.get(load.id)}` : ""}
                       </div>
                     </td>
+                    <td>
+                      <LocationBadge
+                        location={tractorLocation}
+                        empty={samsaraGpsEmptyState({
+                          truckAssigned: Boolean(load.truck_id),
+                          samsaraVehicleId: load.truck_samsara_id,
+                          location: tractorLocation,
+                        })}
+                      />
+                    </td>
+                    <td>
+                      <HosBadge
+                        hos={driverHos}
+                        empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+                      />
+                    </td>
                     <td className="whitespace-nowrap">{formatDateTime(load.delivery_end)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -380,6 +380,15 @@ async function main() {
   }
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /SamsaraTruckImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /Import from Samsara|SamsaraTruckImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /LocationBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /HosBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /LocationBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /On the road/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /No Samsara ID on this truck/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
@@ -1486,6 +1495,44 @@ Continuous reefer. Two load locks.
   });
   assert.equal(mappedGps[0]?.address, "Dallas, TX");
   assert.equal(mappedGps[0]?.source, "samsara");
+  assert.equal(samsara.isLiveSamsaraGps(mappedGps[0] ?? null), true);
+  const unit36Gps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "uuid-samsara-36",
+        name: "Unit 36",
+        gps: {
+          time: "2026-08-23T13:05:00Z",
+          latitude: 35.22,
+          longitude: -101.83,
+          reverseGeo: { formattedLocation: "Amarillo, TX" },
+        },
+      },
+    ],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "36" }],
+    loads: [{ id: 99, truck_id: 36 }],
+  });
+  assert.equal(unit36Gps[0]?.address, "Amarillo, TX");
+  assert.equal(unit36Gps[0]?.unitNumber, "36");
+  assert.equal(samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "", location: null }), samsara.SAMSARA_ID_MISSING_MESSAGE);
+  assert.equal(
+    samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "36", location: null }),
+    "No live GPS from Samsara for this truck.",
+  );
+  assert.equal(samsara.samsaraGpsEmptyState({ truckAssigned: false, samsaraVehicleId: "", location: null }), "No truck assigned.");
+  const demoLoc = {
+    truckId: 1,
+    loadId: 1,
+    vehicleId: "x",
+    unitNumber: "112",
+    latitude: 32.7,
+    longitude: -96.8,
+    speedMph: 0,
+    address: "Dallas, TX",
+    recordedAt: "2026-08-23T13:05:00Z",
+    source: "demo" as const,
+  };
+  assert.equal(samsara.isLiveSamsaraGps(demoLoc), false, "demo coordinates must not count as live GPS");
 
   const mappedHos = samsara.mapHosClocks({
     clocks: [
@@ -1888,8 +1935,11 @@ Continuous reefer. Two load locks.
   globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
   try {
     const failedFleet = await samsara.getSamsaraFleet();
-    assert.equal(failedFleet.mode, "demo", "Samsara 401 should fall back to demo GPS/HOS");
+    assert.equal(failedFleet.mode, "samsara", "Samsara 401 must not invent demo GPS");
+    assert.equal(failedFleet.locations.length, 0);
+    assert.equal(failedFleet.hos.length, 0);
     assert.ok(failedFleet.error && /401/.test(failedFleet.error));
+    assert.doesNotMatch(failedFleet.error, /Showing demo/);
 
     const failedReefer = await orbcomm.getReeferSnapshots();
     assert.equal(failedReefer.mode, "demo", "ORBCOMM 401 should fall back to demo temps");
@@ -1914,10 +1964,20 @@ Continuous reefer. Two load locks.
     parseOrbcommFleetText,
     parseSamsaraVehicleRecords,
     SAMSARA_TOKEN_MISSING_MESSAGE,
+    SAMSARA_ID_MISSING_MESSAGE,
+    matchTruckForSamsara,
     unitNumberFromSamsaraName,
   } = await import("../lib/fleet-import-shared");
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
   assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
+  assert.equal(unitNumberFromSamsaraName("Unit 36", "uuid-36"), "36");
+  assert.match(SAMSARA_ID_MISSING_MESSAGE, /No Samsara ID on this truck/);
+  const match36 = matchTruckForSamsara(
+    [{ id: 7, unit_number: "36", samsara_vehicle_id: "36" }],
+    { samsaraVehicleId: "uuid-samsara-36", unitNumber: "36", name: "Unit 36" },
+  );
+  assert.equal(match36?.id, 7);
+  assert.ok(match36?.matchBy === "samsara_vehicle_id" || match36?.matchBy === "unit_number");
   const parsedVehicles = parseSamsaraVehicleRecords([
     { id: "veh-777", name: "Unit 777", vin: "VIN777AAA", year: "2022", make: "Freightliner", model: "Cascadia" },
     { id: "samsara-veh-112", name: "112", vin: "SHOULDNOTOVERWRITE" },

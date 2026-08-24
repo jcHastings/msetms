@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
+import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { PageHeader } from "@/components/page-header";
 import { SamsaraTruckImport } from "@/components/samsara-truck-import";
 import { truckComplianceAlerts } from "@/lib/compliance";
+import {
+  getSamsaraFleet,
+  hosForDriver,
+  locationForTruck,
+  samsaraGpsEmptyState,
+  samsaraHosEmptyState,
+} from "@/lib/integrations/samsara";
 import { listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -13,9 +21,10 @@ function vehicleLabel(truck: { year: string; make: string; model: string }): str
   return [truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—";
 }
 
-export default function TrucksPage() {
+export default async function TrucksPage() {
   const windows = complianceWindows();
   const trucks = listTrucks();
+  const fleet = await getSamsaraFleet();
 
   return (
     <>
@@ -45,6 +54,8 @@ export default function TrucksPage() {
               <th>Year / make / model</th>
               <th>Plate</th>
               <th>Driver</th>
+              <th>GPS</th>
+              <th>HOS</th>
               <th>Registration exp</th>
               <th>DOT inspection</th>
               <th>Status</th>
@@ -54,13 +65,15 @@ export default function TrucksPage() {
           <tbody>
             {trucks.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={10} className="px-5 py-8 text-sm text-slate-500">
                   No trucks yet.
                 </td>
               </tr>
             ) : (
               trucks.map((truck) => {
                 const alerts = truckComplianceAlerts(truck, windows);
+                const location = locationForTruck(fleet, truck.id);
+                const hos = hosForDriver(fleet, truck.assigned_driver_id);
                 return (
                   <ClickableRow
                     key={truck.id}
@@ -73,6 +86,22 @@ export default function TrucksPage() {
                     <td>{vehicleLabel(truck)}</td>
                     <td>{truck.plate || "—"}</td>
                     <td>{truck.driver_name || "—"}</td>
+                    <td>
+                      <LocationBadge
+                        location={location}
+                        empty={samsaraGpsEmptyState({
+                          truckAssigned: true,
+                          samsaraVehicleId: truck.samsara_vehicle_id,
+                          location,
+                        })}
+                      />
+                    </td>
+                    <td>
+                      <HosBadge
+                        hos={hos}
+                        empty={samsaraHosEmptyState({ assigned: Boolean(truck.assigned_driver_id), hos })}
+                      />
+                    </td>
                     <ExpiryCell
                       value={truck.registration_expires}
                       alert={alerts.find((item) => item.kind === "registration")}

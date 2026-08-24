@@ -8,7 +8,13 @@ import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
-import { getSamsaraFleet } from "@/lib/integrations/samsara";
+import {
+  getSamsaraFleet,
+  hosForLoad,
+  locationForLoad,
+  samsaraGpsEmptyState,
+  samsaraHosEmptyState,
+} from "@/lib/integrations/samsara";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
@@ -79,7 +85,10 @@ export default async function BoardPage({
                 </tr>
               </thead>
               <tbody>
-                {loads.map((load) => (
+                {loads.map((load) => {
+                  const tractorLocation = locationForLoad(fleet, load);
+                  const driverHos = hosForLoad(fleet, load);
+                  return (
                   <tr key={load.id} className={load.status === "available" ? "shadow-[inset_3px_0_0_#d4a017]" : ""}>
                     <td>
                       <Link href={`/loads/${load.id}`} className="font-mono text-sm font-semibold hover:underline">
@@ -127,7 +136,14 @@ export default async function BoardPage({
                       )}
                     </td>
                     <td>
-                      <LocationBadge location={fleet.locations.find((item) => item.loadId === load.id) ?? null} />
+                      <LocationBadge
+                        location={tractorLocation}
+                        empty={samsaraGpsEmptyState({
+                          truckAssigned: Boolean(load.truck_id),
+                          samsaraVehicleId: load.truck_samsara_id,
+                          location: tractorLocation,
+                        })}
+                      />
                     </td>
                     <td>
                       <TrailerLocationBadge
@@ -140,7 +156,10 @@ export default async function BoardPage({
                       />
                     </td>
                     <td>
-                      <HosBadge hos={fleet.hos.find((item) => item.loadId === load.id) ?? null} />
+                      <HosBadge
+                        hos={driverHos}
+                        empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+                      />
                     </td>
                     <td>
                       <ReeferBadge
@@ -176,7 +195,8 @@ export default async function BoardPage({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

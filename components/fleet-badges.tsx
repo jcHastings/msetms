@@ -1,14 +1,29 @@
 import { formatDateTime } from "@/lib/format";
 import type { TrailerLocation } from "@/lib/integrations/orbcomm";
-import { formatDutyStatus, formatDurationMs, type HosClock, type VehicleLocation } from "@/lib/integrations/samsara";
+import {
+  formatDutyStatus,
+  formatDurationMs,
+  isLiveSamsaraGps,
+  isLiveSamsaraHos,
+  type HosClock,
+  type VehicleLocation,
+} from "@/lib/integrations/samsara";
 
-export function LocationBadge({ location }: { location: VehicleLocation | null }) {
-  if (!location) return <span className="text-slate-400">—</span>;
+export function LocationBadge({
+  location,
+  empty = "—",
+}: {
+  location: VehicleLocation | null;
+  empty?: string;
+}) {
+  if (!isLiveSamsaraGps(location)) {
+    return <span className="text-sm text-slate-600">{empty}</span>;
+  }
   const label =
     location.address ||
     (location.latitude != null && location.longitude != null
       ? `${location.latitude.toFixed(3)}, ${location.longitude.toFixed(3)}`
-      : "—");
+      : empty);
   return (
     <div className="text-sm">
       <div>{label}</div>
@@ -36,8 +51,16 @@ export function TrailerLocationBadge({ location }: { location: TrailerLocation |
   );
 }
 
-export function HosBadge({ hos }: { hos: HosClock | null }) {
-  if (!hos) return <span className="text-slate-400">—</span>;
+export function HosBadge({
+  hos,
+  empty = "—",
+}: {
+  hos: HosClock | null;
+  empty?: string;
+}) {
+  if (!isLiveSamsaraHos(hos)) {
+    return <span className="text-sm text-slate-600">{empty}</span>;
+  }
   return (
     <div className="text-sm">
       <div className="font-semibold tabular-nums">{formatDurationMs(hos.driveRemainingMs)} drive</div>

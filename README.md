@@ -81,7 +81,7 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
 - **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav — add/edit records, compliance badges, document uploads (CDL, medical card, registration, DOT, insurance) under `data/uploads/fleet`. Driver PINs can be reset and are never shown in the list.
-- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo). **Trucks → Import from Samsara** previews name/unit, vehicle id, and VIN, then create/updates matched by Samsara vehicle id or unit # (no duplicates). Missing token: add `SAMSARA_API_TOKEN` to `.env` and restart. The token is never logged.
+- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set). Shown on **Trucks** (list + detail), the dispatch board, dashboard **On the road**, and the load **Carrier / Asset** tab when that truck is assigned. Match on Samsara vehicle id, name, or unit # (including a unit typed as the vehicle id). Missing ID: “No Samsara ID on this truck — Import from Samsara or paste the vehicle id.” Positions are never invented. **Trucks → Import from Samsara** previews name/unit, vehicle id, and VIN, then create/updates matched by Samsara vehicle id, name, or unit # (no duplicates). Missing token: add `SAMSARA_API_TOKEN` to `.env` and restart. The token is never logged.
 - Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report). **Trailers → Import from ORBCOMM** uses `ORBCOMM_*` when the B2B API returns assets, or a CSV/export preview-then-import. Match by ORBCOMM asset id or trailer #. No portal scrape.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
@@ -140,7 +140,7 @@ Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and re
 
 **Integrations** has separate cards. Connected vs demo is independent: one integration can be live while another is demo.
 
-Map IDs on **Fleet**: truck → Samsara vehicle ID, driver → Samsara driver ID, trailer → ORBCOMM asset ID. The board and load page show Samsara tractor/HOS and ORBCOMM trailer/reefer when those IDs are mapped.
+Map IDs on **Fleet**: truck → Samsara vehicle ID (or import / match by unit #), driver → Samsara driver ID, trailer → ORBCOMM asset ID. Truck list, truck detail, the board, On the road, and the load Carrier/Asset tab show live Samsara tractor/HOS when matched. ORBCOMM trailer/reefer stays on the board and load page.
 
 The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (ORBCOMM) when available.
 
@@ -161,7 +161,7 @@ No token: labeled **demo** by-state miles from the load’s origin and destinati
 
 Token set and IFTA returns 401/403 or another API error: the load page shows the error. The app does **not** invent live Samsara miles.
 
-No token, or 401/403 on GPS/HOS: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
+No token: Integrations can still show a labeled demo sample. Live truck/board/load GPS is not invented. 401/403 on GPS/HOS: error on Integrations / the board, empty live positions (never demo coordinates). The app does not crash.
 
 ### ORBCOMM — trailer tracking and reefer
 

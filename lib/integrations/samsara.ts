@@ -1,10 +1,14 @@
 import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import {
   parseSamsaraVehicleRecords,
+  SAMSARA_ID_MISSING_MESSAGE,
   SAMSARA_TOKEN_MISSING_MESSAGE,
+  samsaraVehicleMatchesTruck,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
 import { listDrivers, listLoads, listTrucks } from "../queries";
+
+export { SAMSARA_ID_MISSING_MESSAGE };
 
 const SAMSARA_BASE = "https://api.samsara.com";
 const CACHE_TTL_MS = 45_000;
@@ -104,19 +108,87 @@ export async function getSamsaraFleet(): Promise<SamsaraFleetResult> {
   return result;
 }
 
+export function isLiveSamsaraGps(location: VehicleLocation | null | undefined): location is VehicleLocation {
+  if (!location || location.source !== "samsara") return false;
+  return (
+    (location.latitude != null && location.longitude != null) || Boolean(location.address.trim())
+  );
+}
+
+export function isLiveSamsaraHos(hos: HosClock | null | undefined): hos is HosClock {
+  return Boolean(hos && hos.source === "samsara");
+}
+
+export function locationForTruck(fleet: SamsaraFleetResult, truckId: number | null | undefined): VehicleLocation | null {
+  if (truckId == null) return null;
+  return fleet.locations.find((item) => item.truckId === truckId) ?? null;
+}
+
+export function hosForDriver(fleet: SamsaraFleetResult, driverId: number | null | undefined): HosClock | null {
+  if (driverId == null) return null;
+  return fleet.hos.find((item) => item.driverId === driverId) ?? null;
+}
+
+export function locationForLoad(
+  fleet: SamsaraFleetResult,
+  load: { id: number; truck_id: number | null },
+): VehicleLocation | null {
+  return fleet.locations.find((item) => item.loadId === load.id) ?? locationForTruck(fleet, load.truck_id);
+}
+
+export function hosForLoad(
+  fleet: SamsaraFleetResult,
+  load: { id: number; driver_id: number | null },
+): HosClock | null {
+  return fleet.hos.find((item) => item.loadId === load.id) ?? hosForDriver(fleet, load.driver_id);
+}
+
+export function samsaraGpsEmptyState(input: {
+  truckAssigned: boolean;
+  samsaraVehicleId?: string | null;
+  location?: VehicleLocation | null;
+}): string {
+  if (!input.truckAssigned) return "No truck assigned.";
+  if (isLiveSamsaraGps(input.location ?? null)) return "";
+  if (input.location?.source === "samsara") return "No live GPS from Samsara for this truck.";
+  if (!String(input.samsaraVehicleId ?? "").trim()) return SAMSARA_ID_MISSING_MESSAGE;
+  return "No live GPS from Samsara for this truck.";
+}
+
+export function samsaraHosEmptyState(input: { assigned: boolean; hos?: HosClock | null }): string {
+  if (!input.assigned) return "—";
+  if (isLiveSamsaraHos(input.hos ?? null)) return "";
+  return "No live HOS from Samsara.";
+}
+
 export async function getLocationForLoad(loadId: number): Promise<VehicleLocation | null> {
   const fleet = await getSamsaraFleet();
-  return fleet.locations.find((item) => item.loadId === loadId) ?? null;
+  const load = listLoads({ status: "all" }).find((item) => item.id === loadId);
+  if (!load) return fleet.locations.find((item) => item.loadId === loadId) ?? null;
+  return locationForLoad(fleet, load);
 }
 
 export async function getHosForLoad(loadId: number): Promise<HosClock | null> {
   const fleet = await getSamsaraFleet();
-  return fleet.hos.find((item) => item.loadId === loadId) ?? null;
+  const load = listLoads({ status: "all" }).find((item) => item.id === loadId);
+  if (!load) return fleet.hos.find((item) => item.loadId === loadId) ?? null;
+  return hosForLoad(fleet, load);
+}
+
+export async function getLocationForTruck(truckId: number): Promise<VehicleLocation | null> {
+  const fleet = await getSamsaraFleet();
+  return locationForTruck(fleet, truckId);
+}
+
+export async function getHosForTruck(truckId: number): Promise<HosClock | null> {
+  const fleet = await getSamsaraFleet();
+  const truck = listTrucks().find((item) => item.id === truckId);
+  return hosForDriver(fleet, truck?.assigned_driver_id ?? null);
 }
 
 export async function getHosForDriver(driverId: number): Promise<HosClock | null> {
   const fleet = await getSamsaraFleet();
-  return fleet.hos.find((item) => item.driverId === driverId) ?? null;
+  return hosForDriver(fleet, driverId);
 }
 
 async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
@@ -159,9 +231,12 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
     };
   } catch (error) {
     return {
-      ...demo,
+      mode: "samsara",
       tokenSet: true,
       error: publicSamsaraError(error),
+      fetchedAt: new Date().toISOString(),
+      locations: [],
+      hos: [],
     };
   }
 }
@@ -290,15 +365,12 @@ export function mapVehicleLocations(input: {
 }): VehicleLocation[] {
   const locations: VehicleLocation[] = [];
   for (const truck of input.trucks) {
-    const vehicle = input.vehicles.find((item) => {
-      const id = normalizeKey(String(item.id ?? ""));
-      const name = normalizeKey(String(item.name ?? ""));
-      return (
-        (truck.samsara_vehicle_id && id === normalizeKey(truck.samsara_vehicle_id)) ||
-        name === normalizeKey(truck.unit_number) ||
-        id === normalizeKey(truck.unit_number)
-      );
-    });
+    const vehicle = input.vehicles.find((item) =>
+      samsaraVehicleMatchesTruck(truck, {
+        id: String(item.id ?? ""),
+        name: String(item.name ?? ""),
+      }),
+    );
     if (!vehicle) continue;
     const gps = (vehicle.gps ?? {}) as Record<string, unknown>;
     const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
@@ -433,18 +505,18 @@ function asNumber(value: unknown): number | null {
 
 function samsaraStatusMessage(status: number): string {
   if (status === 401 || status === 403) {
-    return `Samsara rejected the API token (HTTP ${status}). Check SAMSARA_API_TOKEN and token scopes, then restart. Showing demo GPS/HOS.`;
+    return `Samsara rejected the API token (HTTP ${status}). Check SAMSARA_API_TOKEN and token scopes, then restart.`;
   }
-  if (status === 429) return "Samsara rate-limited the request. Showing demo GPS/HOS.";
-  return `Samsara request failed (HTTP ${status}). Showing demo GPS/HOS.`;
+  if (status === 429) return "Samsara rate-limited the request. Try again in a minute.";
+  return `Samsara request failed (HTTP ${status}).`;
 }
 
 function publicSamsaraError(error: unknown): string {
   if (error instanceof SamsaraHttpError) return error.message;
   if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "Samsara request timed out. Showing demo GPS/HOS.";
+    return "Samsara request timed out.";
   }
-  return "Samsara request failed. Showing demo GPS/HOS.";
+  return "Samsara request failed.";
 }
 
 function publicSamsaraImportError(error: unknown): string {

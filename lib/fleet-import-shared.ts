@@ -3,6 +3,9 @@
 export const SAMSARA_TOKEN_MISSING_MESSAGE =
   "Add SAMSARA_API_TOKEN to .env and restart.";
 
+export const SAMSARA_ID_MISSING_MESSAGE =
+  "No Samsara ID on this truck — Import from Samsara or paste the vehicle id.";
+
 export const ORBCOMM_CREDS_OR_CSV_MESSAGE =
   "Add ORBCOMM_USERNAME and ORBCOMM_PASSWORD to .env and restart, or upload an ORBCOMM CSV/export.";
 
@@ -77,11 +80,36 @@ export function preferFilled(existing: string, incoming: string): string {
 export function unitNumberFromSamsaraName(name: string, fallbackId: string): string {
   const trimmed = name.trim();
   if (!trimmed) return fallbackId.trim();
-  const labeled = trimmed.match(/^(?:unit|truck|tractor)\s*#?\s*([A-Za-z0-9-]+)$/i);
+  const labeled = trimmed.match(/^(?:unit|truck|tractor)\s*#?\s*([A-Za-z0-9-]+)/i);
   if (labeled) return labeled[1];
-  const hashed = trimmed.match(/#\s*([A-Za-z0-9-]+)$/);
+  const hashed = trimmed.match(/#\s*([A-Za-z0-9-]+)/);
   if (hashed) return hashed[1];
   return trimmed;
+}
+
+export function samsaraVehicleMatchKeys(vehicle: {
+  id?: string;
+  samsaraVehicleId?: string;
+  name?: string;
+  unitNumber?: string;
+}): string[] {
+  const id = String(vehicle.id ?? vehicle.samsaraVehicleId ?? "").trim();
+  const name = String(vehicle.name ?? "").trim();
+  const unit = String(vehicle.unitNumber ?? "").trim();
+  const fromName = unitNumberFromSamsaraName(name, "");
+  return [...new Set([id, name, unit, fromName].map(normalizeFleetKey).filter(Boolean))];
+}
+
+export function truckSamsaraMatchKeys(truck: { unit_number: string; samsara_vehicle_id: string }): string[] {
+  return [...new Set([truck.samsara_vehicle_id, truck.unit_number].map(normalizeFleetKey).filter(Boolean))];
+}
+
+export function samsaraVehicleMatchesTruck(
+  truck: { unit_number: string; samsara_vehicle_id: string },
+  vehicle: { id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string },
+): boolean {
+  const vehicleKeys = new Set(samsaraVehicleMatchKeys(vehicle));
+  return truckSamsaraMatchKeys(truck).some((key) => vehicleKeys.has(key));
 }
 
 export function matchTruckForSamsara(
@@ -93,10 +121,10 @@ export function matchTruckForSamsara(
     const byId = trucks.find((truck) => normalizeFleetKey(truck.samsara_vehicle_id) === vehicleId);
     if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
   }
-  const unitKeys = [vehicle.unitNumber, vehicle.name ?? ""]
-    .map(normalizeFleetKey)
-    .filter(Boolean);
+  const unitKeys = samsaraVehicleMatchKeys(vehicle);
   if (unitKeys.length) {
+    const byStoredId = trucks.find((truck) => unitKeys.includes(normalizeFleetKey(truck.samsara_vehicle_id)));
+    if (byStoredId) return { id: byStoredId.id, matchBy: "samsara_vehicle_id" };
     const byUnit = trucks.find((truck) => unitKeys.includes(normalizeFleetKey(truck.unit_number)));
     if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }

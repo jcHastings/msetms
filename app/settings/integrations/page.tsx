@@ -22,7 +22,7 @@ export default async function IntegrationsSettingsPage() {
   const samsaraStatus = !samsaraTokenSet
     ? "Demo"
     : fleet.error
-      ? "API error — showing demo"
+      ? "API error"
       : "Connected";
   const orbcommStatus = !orbcommSet
     ? "Demo"

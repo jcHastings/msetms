@@ -25,7 +25,7 @@ import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
-import { getHosForLoad, getLocationForLoad } from "@/lib/integrations/samsara";
+import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
@@ -76,6 +76,8 @@ export default async function LoadDetailPage({
   const claims = listClaims(load.id);
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
   const relays = listRelays(load.id);
+  const tractorLocation = await getLocationForLoad(load.id);
+  const driverHos = await getHosForLoad(load.id);
 
   return (
     <>
@@ -146,13 +148,23 @@ export default async function LoadDetailPage({
             <div className="card p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
               <div className="mt-1">
-                <LocationBadge location={await getLocationForLoad(load.id)} />
+                <LocationBadge
+                  location={tractorLocation}
+                  empty={samsaraGpsEmptyState({
+                    truckAssigned: Boolean(load.truck_id),
+                    samsaraVehicleId: load.truck_samsara_id,
+                    location: tractorLocation,
+                  })}
+                />
               </div>
             </div>
             <div className="card p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
               <div className="mt-1">
-                <HosBadge hos={await getHosForLoad(load.id)} />
+                <HosBadge
+                  hos={driverHos}
+                  empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+                />
               </div>
             </div>
             <div className="card p-4">
