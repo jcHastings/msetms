@@ -4764,9 +4764,12 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8"), /Preview/);
 
   const { buildSafetyBoard } = await import("../lib/safety");
-  const { expiryRank, worstSafetyRank, cleanSafetyDate } = await import("../lib/safety-shared");
+  const { expiryRank, worstSafetyRank, cleanSafetyDate, formatSafetyDatePair } = await import("../lib/safety-shared");
   assert.equal(cleanSafetyDate("0000-00-00"), "");
   assert.equal(cleanSafetyDate(""), "");
+  assert.equal(formatSafetyDatePair("", ""), "");
+  assert.equal(formatSafetyDatePair("0000-00-00", "2026-09-01"), "2026-09-01");
+  assert.equal(formatSafetyDatePair("2026-01-01", "2026-09-01"), "2026-01-01 / 2026-09-01");
   assert.equal(expiryRank("", 30, new Date("2026-08-24T12:00:00")), "empty");
   assert.equal(expiryRank("2026-07-01", 30, new Date("2026-08-24T12:00:00")), "expired");
   assert.equal(expiryRank("2026-09-01", 30, new Date("2026-08-24T12:00:00")), "due_soon");

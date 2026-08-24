@@ -6,6 +6,7 @@ import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listDrivers } from "@/lib/queries";
 import { buildSafetyBoard } from "@/lib/safety";
+import { formatSafetyDatePair } from "@/lib/safety-shared";
 import { complianceWindows, getCompanySettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -28,8 +29,9 @@ export default async function SafetyPage() {
     tokenSet: fleet.tokenSet,
     hos: fleet.tokenSet ? fleet.hos : [],
   });
-  const expired = board.rows.filter((row) => row.rank === "expired").length;
-  const dueSoon = board.rows.filter((row) => row.rank === "due_soon").length;
+  const ranked = [...board.rows, ...(board.insurance ? [board.insurance] : [])];
+  const expired = ranked.filter((row) => row.rank === "expired").length;
+  const dueSoon = ranked.filter((row) => row.rank === "due_soon").length;
   const hosIssues = board.rows.filter((row) => row.rank === "hos_violation").length;
 
   return (
@@ -98,15 +100,9 @@ export default async function SafetyPage() {
                         {row.driverType === "owner_operator" ? "Owner-operator" : "Company driver"}
                       </div>
                     </td>
-                    <td>{row.licenseExpires || ""}</td>
-                    <td>
-                      {row.medicalLast || row.medicalNext
-                        ? `${row.medicalLast || "—"} / ${row.medicalNext || "—"}`
-                        : ""}
-                    </td>
-                    <td>
-                      {row.drugLast || row.drugNext ? `${row.drugLast || "—"} / ${row.drugNext || "—"}` : ""}
-                    </td>
+                    <td>{row.licenseExpires}</td>
+                    <td>{formatSafetyDatePair(row.medicalLast, row.medicalNext)}</td>
+                    <td>{formatSafetyDatePair(row.drugLast, row.drugNext)}</td>
                     <td>{row.hos}</td>
                     <td className="font-medium">{row.title}</td>
                   </tr>

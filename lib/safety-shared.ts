@@ -26,6 +26,14 @@ export function cleanSafetyDate(value: string | null | undefined): string {
   return raw.slice(0, 10);
 }
 
+export function formatSafetyDatePair(last: string, next: string): string {
+  const left = cleanSafetyDate(last);
+  const right = cleanSafetyDate(next);
+  if (!left && !right) return "";
+  if (left && right) return `${left} / ${right}`;
+  return left || right;
+}
+
 export function daysUntilSafetyDate(value: string, now = new Date()): number | null {
   const day = cleanSafetyDate(value);
   if (!day) return null;
