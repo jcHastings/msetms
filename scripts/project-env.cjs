@@ -60,12 +60,40 @@ function findProjectRoot(startDir = process.cwd()) {
  * @param {{ cwd?: string, processEnv?: NodeJS.ProcessEnv }} [options]
  * @returns {{ root: string, loadedFrom: string[], quiet: true }}
  */
+function trimmedEnvValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function envFileCandidates(cwd = process.cwd()) {
+  const start = resolve(cwd);
+  const root = findProjectRoot(start);
+  const dirs = [];
+  const seen = new Set();
+  for (const dir of [
+    start,
+    root,
+    join(root, ".next", "standalone"),
+    isStandaloneOutputDir(start) ? start : join(start, ".next", "standalone"),
+  ]) {
+    const normalized = resolve(dir);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    dirs.push(normalized);
+  }
+  const files = [];
+  for (const dir of dirs) {
+    files.push(join(dir, ".env"));
+    files.push(join(dir, ".env.local"));
+  }
+  return files;
+}
+
 function loadProjectEnv(options = {}) {
   const cwd = options.cwd || process.cwd();
   const target = options.processEnv || process.env;
   const root = findProjectRoot(cwd);
-  const preset = new Set(
-    Object.keys(target).filter((key) => target[key] !== undefined),
+  const originalNonEmpty = new Set(
+    Object.keys(target).filter((key) => trimmedEnvValue(target[key])),
   );
   const loadedFrom = [];
 
@@ -73,16 +101,18 @@ function loadProjectEnv(options = {}) {
     if (!existsSync(file)) return;
     const parsed = parse(readFileSync(file));
     for (const [key, value] of Object.entries(parsed)) {
-      if (preset.has(key)) continue;
-      if (target[key] === undefined || overrideFileKeys) {
-        target[key] = value;
-      }
+      const next = trimmedEnvValue(value);
+      if (!next) continue;
+      if (originalNonEmpty.has(key)) continue;
+      if (trimmedEnvValue(target[key]) && !overrideFileKeys) continue;
+      target[key] = next;
     }
     loadedFrom.push(file);
   }
 
-  apply(join(root, ".env"), false);
-  apply(join(root, ".env.local"), true);
+  for (const file of envFileCandidates(cwd)) {
+    apply(file, file.endsWith(".env.local"));
+  }
 
   if (target.DOTENV_CONFIG_QUIET === undefined) {
     target.DOTENV_CONFIG_QUIET = "true";
@@ -95,5 +125,6 @@ module.exports = {
   findProjectRoot,
   isProjectRoot,
   isStandaloneOutputDir,
+  envFileCandidates,
   loadProjectEnv,
 };

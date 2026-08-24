@@ -3,18 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
+import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
+import type { MikeMessage } from "@/lib/mike-shared";
 import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
 
 export function AppShell({
   children,
   dispatcher,
   requireTwoFactor = false,
+  mikeConfigured = false,
+  mikeMessages = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher;
   requireTwoFactor?: boolean;
+  mikeConfigured?: boolean;
+  mikeMessages?: MikeMessage[];
 }) {
   const pathname = usePathname();
   const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
@@ -42,6 +48,7 @@ export function AppShell({
       </aside>
       <div className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-[1400px] px-8 py-7">
+          <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
           {showSetupPrompt ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               <p>

@@ -2,13 +2,13 @@ import { cookies } from "next/headers";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, MIKE_OPENAI_MODEL } from "./env";
 import { getSamsaraFleet } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
-import type { MikeMessage } from "./mike-shared";
+import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "./mike-shared";
 
 export type { MikeMessage };
 
 const COOKIE = "tms_mike";
 const MAX_MESSAGES = 8;
-const MISSING_KEY = "Add OPENAI_API_KEY to .env (or .env.local) and restart. Mike stays on the dispatcher board only.";
+const MISSING_KEY = MIKE_MISSING_KEY_MESSAGE;
 
 function redactSecrets(text: string): string {
   return text

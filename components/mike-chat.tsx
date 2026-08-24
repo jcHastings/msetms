@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { askMikeAction } from "@/lib/mike-actions";
-import type { MikeMessage } from "@/lib/mike-shared";
+import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "@/lib/mike-shared";
 
 export function MikeChat({
   configured,
@@ -16,7 +16,7 @@ export function MikeChat({
   const ready = state?.configured ?? configured;
 
   return (
-    <aside className="card flex h-[min(36rem,70vh)] w-full shrink-0 flex-col xl:w-80">
+    <aside className="card flex h-full min-h-[24rem] w-full flex-col">
       <header className="border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-semibold">Mike</h2>
         <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant. TMS data only. gpt-4o-mini.</p>
@@ -24,7 +24,7 @@ export function MikeChat({
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
         {!ready ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
-            Add OPENAI_API_KEY to .env and restart.
+            {MIKE_MISSING_KEY_MESSAGE}
           </p>
         ) : null}
         {messages.length === 0 && ready ? (

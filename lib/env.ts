@@ -56,6 +56,39 @@ export type LoadLocalEnvOptions = {
  * Existing process env wins. `.env.local` overrides `.env`.
  * Uses dotenv.parse so dotenv 17 never prints `injected env (N)` or values.
  */
+export function envFileCandidates(cwd = process.cwd()): string[] {
+  const start = path.resolve(/*turbopackIgnore: true*/ cwd);
+  const root = findProjectRoot(start);
+  const dirs = uniqueDirs([
+    start,
+    root,
+    path.join(/*turbopackIgnore: true*/ root, ".next", "standalone"),
+    isStandaloneOutputDir(start) ? start : path.join(/*turbopackIgnore: true*/ start, ".next", "standalone"),
+  ]);
+  const files: string[] = [];
+  for (const dir of dirs) {
+    files.push(path.join(/*turbopackIgnore: true*/ dir, ".env"));
+    files.push(path.join(/*turbopackIgnore: true*/ dir, ".env.local"));
+  }
+  return files;
+}
+
+function uniqueDirs(dirs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dir of dirs) {
+    const normalized = path.resolve(/*turbopackIgnore: true*/ dir);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function trimmedEnvValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
   root: string;
   loadedFrom: string[];
@@ -68,9 +101,10 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
   }
   if (isDefault) loadedDefault = true;
 
-  const root = findProjectRoot(options.cwd ?? process.cwd());
-  const preset = new Set(
-    Object.keys(target).filter((key) => target[key] !== undefined),
+  const cwd = options.cwd ?? process.cwd();
+  const root = findProjectRoot(cwd);
+  const originalNonEmpty = new Set(
+    Object.keys(target).filter((key) => trimmedEnvValue(target[key])),
   );
   const loadedFrom: string[] = [];
 
@@ -78,16 +112,18 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
     if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return;
     const parsed = parse(fs.readFileSync(/*turbopackIgnore: true*/ file));
     for (const [key, value] of Object.entries(parsed)) {
-      if (preset.has(key)) continue;
-      if (target[key] === undefined || overrideFileKeys) {
-        target[key] = value;
-      }
+      const next = trimmedEnvValue(value);
+      if (!next) continue;
+      if (originalNonEmpty.has(key)) continue;
+      if (trimmedEnvValue(target[key]) && !overrideFileKeys) continue;
+      target[key] = next;
     }
     loadedFrom.push(file);
   }
 
-  apply(path.join(/*turbopackIgnore: true*/ root, ".env"), false);
-  apply(path.join(/*turbopackIgnore: true*/ root, ".env.local"), true);
+  for (const file of envFileCandidates(cwd)) {
+    apply(file, file.endsWith(".env.local"));
+  }
 
   if (target.DOTENV_CONFIG_QUIET === undefined) {
     target.DOTENV_CONFIG_QUIET = "true";
@@ -97,10 +133,8 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
 }
 
 function readSecret(name: string): string | undefined {
-  loadLocalEnv();
-  const raw = process.env[name];
-  if (typeof raw !== "string") return undefined;
-  const value = raw.trim();
+  loadLocalEnv({ force: true });
+  const value = trimmedEnvValue(process.env[name]);
   return value.length > 0 ? value : undefined;
 }
 
@@ -213,5 +247,6 @@ export function getOpenAiBaseUrl(): string {
 export const MIKE_OPENAI_MODEL = "gpt-4o-mini";
 
 export function isOpenAiConfigured(): boolean {
-  return Boolean(getOpenAiApiKey());
+  const key = getOpenAiApiKey();
+  return Boolean(key && (key.startsWith("sk-") || key.length > 0));
 }

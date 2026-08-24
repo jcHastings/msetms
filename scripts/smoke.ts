@@ -233,10 +233,18 @@ async function main() {
   const tsLoaded = loadLocalEnv({ cwd: standaloneCwd, processEnv: tsBag });
   assert.equal(tsLoaded.quiet, true);
   assert.equal(tsBag.SAMSARA_API_TOKEN, smokeToken);
+  fs.writeFileSync(path.join(standaloneCwd, ".env"), "OPENAI_API_KEY=sk-smoke-standalone-key\n");
+  const emptyFirst: Record<string, string | undefined> = { OPENAI_API_KEY: "", SAMSARA_API_TOKEN: "" };
+  const fromStandalone = loadLocalEnv({ cwd: standaloneCwd, processEnv: emptyFirst, force: true });
+  assert.ok(fromStandalone.loadedFrom.some((file) => file.replace(/\\/g, "/").includes(".next/standalone/.env")));
+  assert.equal(emptyFirst.OPENAI_API_KEY, "sk-smoke-standalone-key");
+  assert.ok(emptyFirst.OPENAI_API_KEY.startsWith("sk-"), "sk- keys count as set");
+  assert.equal(emptyFirst.SAMSARA_API_TOKEN, smokeToken);
   fs.rmSync(envRoot, { recursive: true, force: true });
 
   const envTs = fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8");
   assert.match(envTs, /findProjectRoot/);
+  assert.match(envTs, /envFileCandidates|\.next\/standalone/);
   assert.match(envTs, /dotenv\.parse|parse\(/);
   assert.doesNotMatch(envTs, /console\.log\([^)]*SAMSARA/);
   assert.doesNotMatch(envTs, /console\.log\([^)]*process\.env/);
@@ -275,6 +283,7 @@ async function main() {
   assert.match(shipped, /unstyled raw HTML/);
   assert.match(shipped, /Import from Samsara/);
   assert.match(shipped, /Import from ORBCOMM/);
+  assert.match(shipped, /every dispatcher page/);
 
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);
@@ -332,14 +341,26 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8"), /driverOption/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /truckFormValues/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /MikeChat/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /MikeChat/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /MikeLauncher/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), />\s*Mike\s*</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /force-dynamic/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /MikeLauncher|mikeConfigured/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /MikeChat/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /MikeChat|MikeLauncher/);
+  for (const file of ["components/mike-chat.tsx", "components/mike-launcher.tsx", "components/app-shell.tsx"]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
+  }
   const mikeSrc = fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8");
   assert.match(mikeSrc, /Never invent GPS|hasPosition/);
   assert.match(mikeSrc, /emptyDrivers/);
   assert.match(mikeSrc, /goingEmptySoon/);
   assert.match(mikeSrc, /MIKE_OPENAI_MODEL/);
+  assert.match(mikeSrc, /MIKE_MISSING_KEY_MESSAGE/);
+  assert.doesNotMatch(mikeSrc, /board only/);
   assert.doesNotMatch(mikeSrc, /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike-actions.ts"), "utf8"), /loadLocalEnv/);
+  assert.match(readme, /every dispatcher page/);
   const envSrc = fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8");
   assert.match(envSrc, /getOpenAiApiKey/);
   assert.match(envSrc, /gpt-4o-mini/);

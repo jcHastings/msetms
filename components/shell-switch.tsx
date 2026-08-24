@@ -3,16 +3,21 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
+import type { MikeMessage } from "@/lib/mike-shared";
 import type { PublicDispatcher } from "@/lib/settings-shared";
 
 export function ShellSwitch({
   children,
   dispatcher,
   requireTwoFactor = false,
+  mikeConfigured = false,
+  mikeMessages = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher | null;
   requireTwoFactor?: boolean;
+  mikeConfigured?: boolean;
+  mikeMessages?: MikeMessage[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -46,7 +51,12 @@ export function ShellSwitch({
     );
   }
   return (
-    <AppShell dispatcher={dispatcher} requireTwoFactor={requireTwoFactor}>
+    <AppShell
+      dispatcher={dispatcher}
+      requireTwoFactor={requireTwoFactor}
+      mikeConfigured={mikeConfigured}
+      mikeMessages={mikeMessages}
+    >
       {children}
     </AppShell>
   );

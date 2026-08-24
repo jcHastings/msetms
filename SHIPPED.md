@@ -84,7 +84,7 @@ Skipped Ascend-exclusive: Pro Plan billing, Business Center legal/training/tax s
 - After **`npm run build`**, styles must load on standalone. `next build` does not include `public` or `.next/static` in `.next/standalone`; the build script **copies** both in (Windows: never symlink). Then `npm start` or `node .next/standalone/server.js` is styled. Missing those folders = unstyled raw HTML (default blue links). `npm start` copies them again.
 - `npm start` copies `data` / `.env` / `public` / `.next/static` on win32. No `better-sqlite3` compile. No symlink (`EPERM`).
 - Fleet new **and** edit pages (`/fleet/trucks/new`, `/fleet/trucks/[id]`, trailers, drivers) stay `force-dynamic`. Forms import their server actions (no `.bind` props) and only receive plain JSON values (no driver PIN). Avoids standalone “This page couldn’t load”.
-- **Mike** on the dispatch board (not the driver app): side chat for ops questions from TMS data. Needs `OPENAI_API_KEY` only; always uses cheap `gpt-4o-mini`. Never invents GPS. Never logs the key or PINs.
+- **Mike** on every dispatcher page (header + bottom-right button), not the driver app. The panel always opens. If `OPENAI_API_KEY` is set (including `sk-` keys loaded from project `.env`, `process.cwd()/.env`, or `.next/standalone/.env`), chat works; if not, Mike says add the key to `.env` and restart. Cheap `gpt-4o-mini`. Never invents GPS. Never logs the key or PINs.
 
 ## Not in this PR
 

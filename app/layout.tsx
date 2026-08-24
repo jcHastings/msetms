@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ShellSwitch } from "@/components/shell-switch";
 import { getSignedInDispatcher, isTwoFactorRequired } from "@/lib/dispatcher-session";
+import { isOpenAiConfigured, loadLocalEnv } from "@/lib/env";
+import { readMikeHistory } from "@/lib/mike";
 import "./globals.css";
+
+export const dynamic = "force-dynamic";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,15 +24,23 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  loadLocalEnv({ force: true });
   const dispatcher = await getSignedInDispatcher();
   const requireTwoFactor = isTwoFactorRequired();
+  const mikeConfigured = isOpenAiConfigured();
+  const mikeMessages = dispatcher ? await readMikeHistory() : [];
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ShellSwitch dispatcher={dispatcher} requireTwoFactor={requireTwoFactor}>
+        <ShellSwitch
+          dispatcher={dispatcher}
+          requireTwoFactor={requireTwoFactor}
+          mikeConfigured={mikeConfigured}
+          mikeMessages={mikeMessages}
+        >
           {children}
         </ShellSwitch>
       </body>
