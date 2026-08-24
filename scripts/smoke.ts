@@ -395,8 +395,27 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Confirm import/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Re-import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /TMS unit/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), />36</);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Unit 36/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"),
+    /every fleet vehicle|Every\s+unit, name, or id/,
+  );
+  const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
+  for (const file of [
+    "components/samsara-truck-import.tsx",
+    "components/truck-form.tsx",
+    "app/fleet/trucks/page.tsx",
+    "lib/fleet-import-shared.ts",
+    "lib/fleet-import.ts",
+    "lib/integrations/samsara.ts",
+    "README.md",
+    "SHIPPED.md",
+  ]) {
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(process.cwd(), file), "utf8"),
+      unit36Copy,
+      `${file} must not hardcode unit 36 — match every Samsara vehicle the same way`,
+    );
+  }
   const rowActions = fs.readFileSync(path.join(process.cwd(), "components/fleet-row-actions.tsx"), "utf8");
   assert.match(rowActions, /["']use client["']/);
   assert.match(rowActions, /from ["']@\/lib\/actions["']/);
@@ -1553,7 +1572,7 @@ Continuous reefer. Two load locks.
     trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
     loads: [],
   });
-  assert.equal(named36Gps[0]?.unitNumber, "36", "Samsara name 36 must match truck unit 36");
+  assert.equal(named36Gps[0]?.unitNumber, "36", "Samsara name digits must match the TMS unit number");
   const padded36Gps = samsara.mapVehicleLocations({
     vehicles: [
       {
@@ -1565,7 +1584,7 @@ Continuous reefer. Two load locks.
     trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
     loads: [],
   });
-  assert.equal(padded36Gps[0]?.unitNumber, "36", "Samsara name 036 must match truck unit 36");
+  assert.equal(padded36Gps[0]?.unitNumber, "36", "Leading zeros do not change a numeric unit");
   assert.equal(samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "", location: null }), samsara.SAMSARA_ID_MISSING_MESSAGE);
   assert.equal(
     samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "36", location: null }),
@@ -2024,6 +2043,9 @@ Continuous reefer. Two load locks.
   } = await import("../lib/fleet-import-shared");
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
   assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
+  assert.equal(unitNumberFromSamsaraName("Unit 12", "uuid-12"), "12");
+  assert.equal(unitNumberFromSamsaraName("12", "uuid-12"), "12");
+  assert.equal(unitNumberFromSamsaraName("#12", "uuid-12"), "12");
   assert.equal(unitNumberFromSamsaraName("Unit 36", "uuid-36"), "36");
   assert.equal(unitNumberFromSamsaraName("36", "uuid-36"), "36");
   assert.equal(unitNumberFromSamsaraName("#36", "uuid-36"), "36");
@@ -2041,7 +2063,16 @@ Continuous reefer. Two load locks.
       name: "36",
     })?.id,
     7,
-    "Samsara vehicle named 36 must match truck unit 36",
+    "Samsara name digits must match the TMS unit number",
+  );
+  assert.equal(
+    matchTruckForSamsara([{ id: 3, unit_number: "12", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "uuid-only-12",
+      unitNumber: "012",
+      name: "Truck 12",
+    })?.id,
+    3,
+    "Any unit/name/id pair matches the same way — 12 is not special-cased",
   );
   assert.equal(
     matchTruckForSamsara([{ id: 7, unit_number: "36", samsara_vehicle_id: "" }], {
@@ -2050,7 +2081,7 @@ Continuous reefer. Two load locks.
       name: "036",
     })?.id,
     7,
-    "Samsara vehicle numbered 036 must match truck unit 36",
+    "Leading zeros do not change a numeric unit",
   );
   const match112 = matchTruckForSamsara(
     [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
@@ -2161,14 +2192,14 @@ Continuous reefer. Two load locks.
     [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
     [{ id: "v-pete", name: "Pete" }, { id: "v-dallas", name: "Dallas spare" }],
   );
-  assert.match(no112, /none matched unit 112/);
+  assert.match(no112, /none matched these TMS units: 112/);
   assert.match(no112, /Pete/);
   assert.match(no112, /Dallas spare/);
   const no36 = samsaraUnmatchedUnitsWarning(
     [{ id: 7, unit_number: "36", samsara_vehicle_id: "36" }],
     [{ id: "v-pete", name: "Pete" }, { id: "v-112", name: "112" }],
   );
-  assert.match(no36, /none matched unit 36/);
+  assert.match(no36, /none matched these TMS units: 36/);
   assert.match(no36, /Pete/);
   assert.match(no36, /112/);
   assert.deepEqual(samsaraReturnedNames([{ id: "v-pete", name: "Pete" }]), ["Pete"]);

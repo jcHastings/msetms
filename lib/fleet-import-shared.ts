@@ -99,7 +99,7 @@ export function normalizeFleetKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_\-#]/g, "");
 }
 
-/** "036" and "36" are the same unit. UUIDs are unchanged. */
+/** Numeric unit keys ignore leading zeros. UUIDs are unchanged. */
 export function canonicalFleetKey(value: string): string {
   const key = normalizeFleetKey(value);
   if (/^\d+$/.test(key)) return key.replace(/^0+/, "") || "0";
@@ -114,7 +114,7 @@ export function normalizePlate(value: string): string {
   return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
-/** Digits only so "36" matches "Truck 36" / "#36". Does not tokenize UUIDs. */
+/** Digits only so labeled names like Truck 12 or #12 match the same TMS unit. Does not tokenize UUIDs. */
 export function unitDigits(value: string): string {
   const digits = String(value ?? "").replace(/\D/g, "");
   if (!digits) return "";
@@ -334,7 +334,7 @@ export function samsaraUnmatchedUnitsWarning(
   const names = samsaraReturnedNames(vehicles);
   const units = [...new Set(unmatched)].join(", ");
   const listed = names.length ? names.join(", ") : "none";
-  return `Samsara returned vehicles but none matched unit ${units}. Names that came back: ${listed}.`;
+  return `Samsara returned vehicles but none matched these TMS units: ${units}. Names that came back: ${listed}.`;
 }
 
 export function buildOrbcommTrailerPreview(
