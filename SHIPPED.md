@@ -7,7 +7,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Sign-in
 
 - Default company logo is the official **MS Express** mark (`public/ms-express-logo.png`) on login, the dispatcher header, and load confirmation PDFs. Product name stays **MS Express TMS**. Settings → Company can upload a replacement; remove reverts to the default.
-- Dispatcher PIN login at `/login`. Demo: **MS Test / 4020** (Administrator). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code). Existing DBs rename the seeded Ana G / 4020 row to MS Test.
+- Dispatcher PIN login at `/login`. Demo: **MS Test / 4020** (Administrator). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code). Existing DBs rename that same 4020 Administrator row to MS Test.
 - **Users** in the main nav — list + add dispatchers and accounting staff on the same `dispatchers` records as Settings → Users. Roles: **Administrator**, **Standard**, **Accounting**. PIN is never shown after save. Administrator resets 2-step. Nav hides and APIs 401 anything a role cannot use.
 - **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Administrator can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so MS Test / the office PC can still use PIN until they enroll.
 - Dispatcher session lasts 12 hours from sign-in.

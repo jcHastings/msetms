@@ -1127,7 +1127,7 @@ async function main() {
   assert.equal(audit.listLoadAudit(seedLoad.id).length, 0, "existing loads are not backfilled");
   const afterDelivery = queries.getLoad(loadId);
   assert.ok(afterDelivery);
-  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+  audit.runWithAuditActor({ name: "MS Test", kind: "dispatcher" }, () => {
     queries.updateLoad(loadId, {
       customer_id: afterDelivery.customer_id,
       origin: afterDelivery.origin,
@@ -1227,7 +1227,7 @@ async function main() {
         row.action === "update" &&
         row.field === "special_instructions" &&
         row.new_value.includes("Hold at dock 4") &&
-        row.actor === "Ana G",
+        row.actor === "MS Test",
     ),
   );
   assert.ok(history.some((row) => row.action === "rate_con" && row.new_value === "rate-con-smoke.pdf"));
@@ -1312,7 +1312,7 @@ async function main() {
   const { listDispatcherUsers } = await import("../lib/settings");
   const dispatcher = listDispatcherUsers(false)[0];
   assert.ok(dispatcher);
-  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+  audit.runWithAuditActor({ name: "MS Test", kind: "dispatcher" }, () => {
     audit.recordLoadAudit({
       loadId,
       action: "check_call",
@@ -1382,7 +1382,7 @@ async function main() {
   }) as typeof fetch;
   await twilio.sendTwilioSms({ to: "(312) 555-0148", body: "On time" }, okFetch);
   assert.match(sentBody, /On\+time|On%20time|On time/);
-  audit.runWithAuditActor({ name: "Ana G", kind: "dispatcher" }, () => {
+  audit.runWithAuditActor({ name: "MS Test", kind: "dispatcher" }, () => {
     audit.recordLoadAudit({
       loadId,
       action: "sms",
@@ -1399,7 +1399,7 @@ async function main() {
   }
   assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
   assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
-  const company = audit.listCompanyAudit({ loadNumber: created.load_number, actor: "Ana G" });
+  const company = audit.listCompanyAudit({ loadNumber: created.load_number, actor: "MS Test" });
   assert.ok(company.length >= 1);
   addFleetDocument({
     ownerType: "driver",
@@ -4033,15 +4033,15 @@ Continuous reefer. Two load locks.
   assert.ok(queries.getLoad(bookedFromTemplate));
 
   const session = await import("../lib/dispatcher-session");
-  const ana = session.listDispatchers().find((row) => row.name === "MS Test");
-  assert.ok(ana);
-  assert.equal(ana.totp_enrolled, false);
-  assert.equal("pin" in ana, false);
-  assert.equal("totp_secret" in ana, false);
-  assert.equal(session.authenticateDispatcher(ana.id, "4020").role, "manager");
-  assert.throws(() => session.authenticateDispatcher(ana.id, "0000"));
-  assert.ok(session.parseSessionValue(`${ana.id}.${Date.now()}`));
-  assert.equal(session.parseSessionValue(`${ana.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
+  const msTest = session.listDispatchers().find((row) => row.name === "MS Test");
+  assert.ok(msTest);
+  assert.equal(msTest.totp_enrolled, false);
+  assert.equal("pin" in msTest, false);
+  assert.equal("totp_secret" in msTest, false);
+  assert.equal(session.authenticateDispatcher(msTest.id, "4020").role, "manager");
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"));
+  assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
+  assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
 
   const accounting = await import("../lib/accounting");
   assert.ok(accounting.listBills().some((bill) => /Lumper/i.test(bill.vendor)));
@@ -4387,7 +4387,7 @@ Continuous reefer. Two load locks.
   );
   settings.updateCompanyContact({
     company_name: "M&S Loads",
-    dispatcher_name: "Ana G",
+    dispatcher_name: "MS Test",
     dispatcher_phone: "402-302-0097",
     dispatcher_fax: "",
     dispatcher_email: "ana@msloads.com",
@@ -4486,7 +4486,7 @@ Continuous reefer. Two load locks.
   assert.ok(
     auditRows.every((row) => !new RegExp(enrollment.secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(row.detail)),
   );
-  dispatcherTotp.resetDispatcherTotp(userId, "Ana G");
+  dispatcherTotp.resetDispatcherTotp(userId, "MS Test");
   assert.equal(dispatcherTotp.isDispatcherTotpEnrolled(userId), false);
   settings.updateLoadManagementSettings({
     load_number_prefix: "ABC",
