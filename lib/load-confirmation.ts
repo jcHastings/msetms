@@ -124,6 +124,7 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
+    temperature_f: load.temperature_f,
     reefer_mode: load.reefer_mode,
     special_instructions: load.special_instructions,
     equipment: load.equipment || equipmentLabel(load),

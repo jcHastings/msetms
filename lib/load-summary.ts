@@ -11,6 +11,7 @@ export type LoadSummaryInput = {
   delivery_end: string;
   commodity: string;
   reefer_setpoint_f: number | null;
+  temperature_f?: number | null;
   reefer_mode?: string | null;
   special_instructions: string;
   appointment_notes: string;

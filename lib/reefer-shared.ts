@@ -39,6 +39,7 @@ export function parseReeferSetpointFromText(text: string): number | null {
 
 export type ReeferSpecInput = {
   reefer_setpoint_f?: number | null;
+  temperature_f?: number | null;
   reefer_mode?: string | null;
   special_instructions?: string | null;
   equipment?: string | null;
@@ -54,11 +55,11 @@ export type ReeferSpec = {
 
 export function resolveReeferSpec(load: ReeferSpecInput): ReeferSpec {
   const notes = load.special_instructions ?? "";
-  const setpointF = load.reefer_setpoint_f ?? parseReeferSetpointFromText(notes);
+  const storedSetpoint = load.reefer_setpoint_f ?? parseReeferSetpointFromText(notes);
   const storedMode = isReeferMode(load.reefer_mode) ? load.reefer_mode : null;
   const parsedMode = parseReeferModeFromText(notes);
   const looksReefer = Boolean(
-    setpointF != null ||
+    storedSetpoint != null ||
       storedMode ||
       parsedMode ||
       /reefer/i.test(load.equipment ?? "") ||
@@ -68,7 +69,7 @@ export function resolveReeferSpec(load: ReeferSpecInput): ReeferSpec {
   if (!looksReefer) return { isReefer: false, setpointF: null, mode: null };
   return {
     isReefer: true,
-    setpointF,
+    setpointF: storedSetpoint ?? load.temperature_f ?? null,
     mode: storedMode ?? parsedMode ?? "continuous",
   };
 }

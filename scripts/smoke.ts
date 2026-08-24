@@ -1661,6 +1661,8 @@ Continuous reefer. Two load locks.
   assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).isReefer, true);
   assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).mode, "continuous");
   assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).setpointF, null);
+  assert.equal(resolveReeferSpec({ equipment: "reefer_53", temperature_f: 34 }).setpointF, 34);
+  assert.equal(resolveReeferSpec({ equipment: "dry_van_53", temperature_f: 34 }).isReefer, false);
 
   const { attachParsedLocationMatches, matchLocationForParsedStop } = await import("../lib/rate-con-shared");
   const locationsBeforeMatch = queries.listLocations().length;
@@ -2202,6 +2204,73 @@ Continuous reefer. Two load locks.
   const feedText = String((await extractText(new Uint8Array(feedPdf), { mergePages: true })).text ?? "");
   assert.doesNotMatch(feedText, /Setpoint —/);
   assert.doesNotMatch(feedText, /Setpoint\s+Mode/);
+  const basicsTempId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Kansas City, MO",
+    destination: "St. Louis, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Chilled produce",
+    rate: 1400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    temperature_f: 28,
+    equipment: "reefer_53",
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const basicsTempConfirm = confirmation.buildConfirmationForLoad(basicsTempId);
+  assert.match(basicsTempConfirm.reeferSetpoint, /28/);
+  assert.equal(basicsTempConfirm.reeferMode, "Continuous");
+  const basicsTempPdf = await confirmation.renderConfirmationPdf(basicsTempConfirm);
+  const basicsTempText = String((await extractText(new Uint8Array(basicsTempPdf), { mergePages: true })).text ?? "");
+  assert.match(basicsTempText, /REEFER/);
+  assert.match(basicsTempText, /28\s*°?\s*F|28°F/);
+  assert.match(basicsTempText, /Continuous/);
+  assert.doesNotMatch(basicsTempText, /Setpoint —/);
+  const reeferNoTempId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Kansas City, MO",
+    destination: "St. Louis, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Empty reefer",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    equipment: "reefer_53",
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const reeferNoTempConfirm = confirmation.buildConfirmationForLoad(reeferNoTempId);
+  assert.equal(reeferNoTempConfirm.reeferSetpoint, "");
+  assert.equal(reeferNoTempConfirm.reeferMode, "Continuous");
+  const reeferNoTempPdf = await confirmation.renderConfirmationPdf(reeferNoTempConfirm);
+  const reeferNoTempText = String(
+    (await extractText(new Uint8Array(reeferNoTempPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(reeferNoTempText, /REEFER/);
+  assert.match(reeferNoTempText, /Continuous/);
+  assert.doesNotMatch(reeferNoTempText, /Setpoint —/);
+  assert.doesNotMatch(reeferNoTempText, /Setpoint\s+Mode/);
 
   const filesMod = await import("../lib/files");
   assert.equal(
@@ -4648,6 +4717,7 @@ Continuous reefer. Two load locks.
   assert.equal(importedLoad?.customer_name, "M & S Loads LLC.");
   assert.equal(importedLoad?.po_number, "PO-5911");
   assert.equal(importedLoad?.customer_reference, "PO-5911");
+  assert.equal(importedLoad?.reference_number, "PO-5911");
   assert.equal(importedLoad?.equipment, "reefer_53");
   assert.equal(importedLoad?.truck_id, null);
   assert.equal(importedLoad?.driver_id, null);

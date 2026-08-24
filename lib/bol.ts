@@ -45,6 +45,7 @@ export function buildBolModel(load: LoadView): BolModel {
   const consigneeLoc = load.consignee_location_id ? getLocation(load.consignee_location_id) : null;
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f,
+    temperature_f: load.temperature_f,
     reefer_mode: load.reefer_mode,
     special_instructions: load.special_instructions,
     equipment: load.equipment || equipmentLabel(load),
