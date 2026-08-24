@@ -65,13 +65,15 @@ export function DriverStatusBadge({ status }: { status: DriverStatus }) {
 }
 
 export function DriverKindBadge({ type }: { type: DriverKind | string }) {
-  const kind = type === "owner_operator" ? "owner_operator" : "company_driver";
+  const kind = type === "owner_operator" || type === "single" ? type : "company_driver";
   return (
     <Pill
       className={
         kind === "owner_operator"
           ? "bg-violet-50 text-violet-800 ring-violet-200"
-          : "bg-slate-100 text-slate-600 ring-slate-200"
+          : kind === "single"
+            ? "bg-sky-50 text-sky-800 ring-sky-200"
+            : "bg-slate-100 text-slate-600 ring-slate-200"
       }
     >
       {labelForDriverKind(kind)}

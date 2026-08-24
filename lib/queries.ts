@@ -14,6 +14,7 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
 import { driverAssignedToLoad } from "./relay-store";
 import { computeOwnerOperatorPay } from "./settlement";
@@ -713,6 +714,19 @@ export function createDriver(input: {
   pay_percent?: number | null;
   truck_id: number | null;
   status: DriverStatus;
+  alt_phone?: string;
+  cell_phone?: string;
+  pager?: string;
+  address?: string;
+  country?: string;
+  city?: string;
+  state?: string;
+  postal_zip?: string;
+  date_of_birth?: string;
+  date_of_hire?: string;
+  drug_test_last?: string;
+  drug_test_next?: string;
+  termination_date?: string;
 }): number {
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
@@ -723,8 +737,11 @@ export function createDriver(input: {
       `INSERT INTO drivers (
         name, phone, email, notes, active, license, license_number, license_state, license_expires,
         medical_issued, medical_expires, driver_type, pay_percent,
-        pin, samsara_driver_id, truck_id, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pin, samsara_driver_id, truck_id, status,
+        alt_phone, cell_phone, pager, address, country, city, state, postal_zip,
+        date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -735,15 +752,28 @@ export function createDriver(input: {
       input.license,
       input.license_number ?? "",
       input.license_state ?? "",
-      input.license_expires ?? "",
-      input.medical_issued ?? "",
-      input.medical_expires ?? "",
+      cleanDateInput(input.license_expires),
+      cleanDateInput(input.medical_issued),
+      cleanDateInput(input.medical_expires),
       input.driver_type ?? "company_driver",
       input.pay_percent ?? null,
       input.pin ?? "",
       input.samsara_driver_id ?? "",
       input.truck_id,
       input.status,
+      input.alt_phone ?? "",
+      input.cell_phone ?? "",
+      input.pager ?? "",
+      input.address ?? "",
+      input.country ?? "USA",
+      input.city ?? "",
+      input.state ?? "",
+      input.postal_zip ?? "",
+      cleanDateInput(input.date_of_birth),
+      cleanDateInput(input.date_of_hire),
+      cleanDateInput(input.drug_test_last),
+      cleanDateInput(input.drug_test_next),
+      cleanDateInput(input.termination_date),
       timestamp,
       timestamp,
     );
@@ -771,6 +801,19 @@ export function updateDriver(
     pay_percent?: number | null;
     truck_id: number | null;
     status: DriverStatus;
+    alt_phone?: string;
+    cell_phone?: string;
+    pager?: string;
+    address?: string;
+    country?: string;
+    city?: string;
+    state?: string;
+    postal_zip?: string;
+    date_of_birth?: string;
+    date_of_hire?: string;
+    drug_test_last?: string;
+    drug_test_next?: string;
+    termination_date?: string;
   },
 ): void {
   const current = getDriver(id);
@@ -784,7 +827,10 @@ export function updateDriver(
       `UPDATE drivers
        SET name = ?, phone = ?, email = ?, notes = ?, active = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
            medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?,
-           pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?, updated_at = ?
+           pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?,
+           alt_phone = ?, cell_phone = ?, pager = ?, address = ?, country = ?, city = ?, state = ?, postal_zip = ?,
+           date_of_birth = ?, date_of_hire = ?, drug_test_last = ?, drug_test_next = ?, termination_date = ?,
+           updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -795,16 +841,29 @@ export function updateDriver(
       input.active ?? 1,
       input.license,
       input.license_number ?? "",
-      input.license_state ?? "",
-      input.license_expires ?? "",
-      input.medical_issued ?? "",
-      input.medical_expires ?? "",
+      input.license_state ?? current.license_state,
+      cleanDateInput(input.license_expires ?? current.license_expires),
+      cleanDateInput(input.medical_issued ?? current.medical_issued),
+      cleanDateInput(input.medical_expires ?? current.medical_expires),
       input.driver_type ?? "company_driver",
-      input.pay_percent ?? null,
+      input.pay_percent === undefined ? current.pay_percent : input.pay_percent,
       pin,
-      input.samsara_driver_id ?? "",
+      input.samsara_driver_id ?? current.samsara_driver_id,
       input.truck_id,
       input.status,
+      input.alt_phone ?? current.alt_phone,
+      input.cell_phone ?? current.cell_phone,
+      input.pager ?? current.pager,
+      input.address ?? current.address,
+      input.country ?? current.country ?? "USA",
+      input.city ?? current.city,
+      input.state ?? current.state,
+      input.postal_zip ?? current.postal_zip,
+      cleanDateInput(input.date_of_birth ?? current.date_of_birth),
+      cleanDateInput(input.date_of_hire ?? current.date_of_hire),
+      cleanDateInput(input.drug_test_last ?? current.drug_test_last),
+      cleanDateInput(input.drug_test_next ?? current.drug_test_next),
+      cleanDateInput(input.termination_date ?? current.termination_date),
       now(),
       id,
     );

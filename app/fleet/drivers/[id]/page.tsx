@@ -6,8 +6,8 @@ import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { listFleetDocuments } from "@/lib/files";
-import { driverFormValues, truckOption } from "@/lib/fleet-form-shared";
-import { getDriver, listTrucks } from "@/lib/queries";
+import { driverFormValues } from "@/lib/fleet-form-shared";
+import { getDriver } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -35,15 +35,16 @@ export default async function EditDriverPage({
       <DriverFuelCard driverId={Number(driver.id)} />
       <DriverForm
         driver={driverFormValues(driverWithoutPin)}
-        hasPin={Boolean(pin)}
-        trucks={listTrucks().map(truckOption)}
-        submitLabel="Save driver"
+        filesHref="#driver-files"
+        submitLabel="Save"
       />
-      <FleetDocsPanel
-        ownerType="driver"
-        ownerId={Number(driver.id)}
-        documents={listFleetDocuments("driver", driver.id)}
-      />
+      <div id="driver-files">
+        <FleetDocsPanel
+          ownerType="driver"
+          ownerId={Number(driver.id)}
+          documents={listFleetDocuments("driver", driver.id)}
+        />
+      </div>
     </>
   );
 }

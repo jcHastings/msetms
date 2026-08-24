@@ -50,15 +50,23 @@ export type DriverFormValues = {
   notes: string;
   active: number;
   license_number: string;
-  license_state: string;
   license_expires: string;
   medical_issued: string;
   medical_expires: string;
   driver_type: string;
-  pay_percent: number | null;
-  samsara_driver_id: string;
-  truck_id: number | null;
-  status: string;
+  alt_phone: string;
+  cell_phone: string;
+  pager: string;
+  address: string;
+  country: string;
+  city: string;
+  state: string;
+  postal_zip: string;
+  date_of_birth: string;
+  date_of_hire: string;
+  drug_test_last: string;
+  drug_test_next: string;
+  termination_date: string;
 };
 
 function num(value: unknown): number {
@@ -138,14 +146,22 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     notes: text(driver.notes),
     active: num(driver.active),
     license_number: text(driver.license_number),
-    license_state: text(driver.license_state),
     license_expires: text(driver.license_expires),
     medical_issued: text(driver.medical_issued),
     medical_expires: text(driver.medical_expires),
     driver_type: text(driver.driver_type) || "company_driver",
-    pay_percent: numOrNull(driver.pay_percent),
-    samsara_driver_id: text(driver.samsara_driver_id),
-    truck_id: numOrNull(driver.truck_id),
-    status: text(driver.status) || "available",
+    alt_phone: text(driver.alt_phone),
+    cell_phone: text(driver.cell_phone),
+    pager: text(driver.pager),
+    address: text(driver.address),
+    country: text(driver.country) || "USA",
+    city: text(driver.city),
+    state: text(driver.state),
+    postal_zip: text(driver.postal_zip),
+    date_of_birth: text(driver.date_of_birth),
+    date_of_hire: text(driver.date_of_hire),
+    drug_test_last: text(driver.drug_test_last),
+    drug_test_next: text(driver.drug_test_next),
+    termination_date: text(driver.termination_date),
   };
 }

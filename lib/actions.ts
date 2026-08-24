@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
-import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import {
   assignLoad,
   createCustomer,
@@ -218,13 +218,13 @@ function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
 function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
   const type = String(value ?? "company_driver");
   if (!DRIVER_TYPES.some((item) => item.value === type)) {
-    throw new Error("Pick company driver or owner-operator.");
+    throw new Error("Pick a driver type.");
   }
   return type as DriverKind;
 }
 
 function parseDateField(value: FormDataEntryValue | null): string {
-  return String(value ?? "").trim();
+  return cleanDateInput(value);
 }
 
 function enforceAssignmentCompliance(formData: FormData, truckId: number | null, driverId: number | null, trailerId: number | null): void {
@@ -392,28 +392,32 @@ export async function createDriverAction(
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const id = createDriver({
-      name: requiredString(formData.get("name"), "Driver name"),
-      phone: String(formData.get("phone") ?? "").trim(),
+      name: requiredString(formData.get("name"), "Name"),
+      phone: requiredString(formData.get("phone"), "Telephone"),
       email: String(formData.get("email") ?? "").trim(),
       notes: String(formData.get("notes") ?? "").trim(),
       active: parseActive(formData),
-      license: [
-        String(formData.get("license_state") ?? "").trim().toUpperCase(),
-        String(formData.get("license_number") ?? "").trim(),
-      ]
-        .filter(Boolean)
-        .join("-"),
-      pin: String(formData.get("pin") ?? "").trim(),
-      samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
+      license: String(formData.get("license_number") ?? "").trim(),
       license_number: String(formData.get("license_number") ?? "").trim(),
-      license_state: String(formData.get("license_state") ?? "").trim().toUpperCase(),
       license_expires: parseDateField(formData.get("license_expires")),
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
       driver_type: parseDriverKind(formData.get("driver_type")),
-      pay_percent: parseOptionalFloat(formData.get("pay_percent")),
-      truck_id: parseOptionalInt(formData.get("truck_id")),
-      status: parseDriverStatus(formData.get("status")),
+      truck_id: null,
+      status: "available",
+      alt_phone: String(formData.get("alt_phone") ?? "").trim(),
+      cell_phone: String(formData.get("cell_phone") ?? "").trim(),
+      pager: String(formData.get("pager") ?? "").trim(),
+      address: String(formData.get("address") ?? "").trim(),
+      country: requiredString(formData.get("country"), "Country") || "USA",
+      city: requiredString(formData.get("city"), "City"),
+      state: requiredString(formData.get("state"), "State"),
+      postal_zip: String(formData.get("postal_zip") ?? "").trim(),
+      date_of_birth: parseDateField(formData.get("date_of_birth")),
+      date_of_hire: parseDateField(formData.get("date_of_hire")),
+      drug_test_last: parseDateField(formData.get("drug_test_last")),
+      drug_test_next: parseDateField(formData.get("drug_test_next")),
+      termination_date: parseDateField(formData.get("termination_date")),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -432,30 +436,39 @@ export async function updateDriverAction(
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const id = parseOptionalInt(formData.get("id"));
     if (id == null) throw new Error("Driver not found.");
+    const current = getDriver(id);
+    if (!current) throw new Error("Driver not found.");
     updateDriver(id, {
-      name: requiredString(formData.get("name"), "Driver name"),
-      phone: String(formData.get("phone") ?? "").trim(),
+      name: requiredString(formData.get("name"), "Name"),
+      phone: requiredString(formData.get("phone"), "Telephone"),
       email: String(formData.get("email") ?? "").trim(),
       notes: String(formData.get("notes") ?? "").trim(),
       active: parseActive(formData),
-      license: [
-        String(formData.get("license_state") ?? "").trim().toUpperCase(),
-        String(formData.get("license_number") ?? "").trim(),
-      ]
-        .filter(Boolean)
-        .join("-"),
-      pin: String(formData.get("pin") ?? "").trim(),
-      resetPin: String(formData.get("reset_pin") ?? "") === "1",
-      samsara_driver_id: String(formData.get("samsara_driver_id") ?? "").trim(),
+      license: String(formData.get("license_number") ?? "").trim() || current.license,
+      pin: "",
+      samsara_driver_id: current.samsara_driver_id,
       license_number: String(formData.get("license_number") ?? "").trim(),
-      license_state: String(formData.get("license_state") ?? "").trim().toUpperCase(),
+      license_state: current.license_state,
       license_expires: parseDateField(formData.get("license_expires")),
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
       driver_type: parseDriverKind(formData.get("driver_type")),
-      pay_percent: parseOptionalFloat(formData.get("pay_percent")),
-      truck_id: parseOptionalInt(formData.get("truck_id")),
-      status: parseDriverStatus(formData.get("status")),
+      pay_percent: current.pay_percent,
+      truck_id: current.truck_id,
+      status: current.status,
+      alt_phone: String(formData.get("alt_phone") ?? "").trim(),
+      cell_phone: String(formData.get("cell_phone") ?? "").trim(),
+      pager: String(formData.get("pager") ?? "").trim(),
+      address: String(formData.get("address") ?? "").trim(),
+      country: requiredString(formData.get("country"), "Country") || "USA",
+      city: requiredString(formData.get("city"), "City"),
+      state: requiredString(formData.get("state"), "State"),
+      postal_zip: String(formData.get("postal_zip") ?? "").trim(),
+      date_of_birth: parseDateField(formData.get("date_of_birth")),
+      date_of_hire: parseDateField(formData.get("date_of_hire")),
+      drug_test_last: parseDateField(formData.get("drug_test_last")),
+      drug_test_next: parseDateField(formData.get("drug_test_next")),
+      termination_date: parseDateField(formData.get("termination_date")),
     });
     refresh();
     return { ok: true, id };

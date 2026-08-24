@@ -218,6 +218,7 @@ export const TRAILER_TYPES = [
 export type TrailerType = (typeof TRAILER_TYPES)[number]["value"];
 
 export const DRIVER_TYPES = [
+  { value: "single", label: "Single" },
   { value: "company_driver", label: "Company driver" },
   { value: "owner_operator", label: "Owner-operator" },
 ] as const;
@@ -326,6 +327,19 @@ export type Driver = {
   samsara_driver_id: string;
   truck_id: number | null;
   status: DriverStatus;
+  alt_phone: string;
+  cell_phone: string;
+  pager: string;
+  address: string;
+  country: string;
+  city: string;
+  state: string;
+  postal_zip: string;
+  date_of_birth: string;
+  date_of_hire: string;
+  drug_test_last: string;
+  drug_test_next: string;
+  termination_date: string;
   created_at: string;
   updated_at: string;
 };

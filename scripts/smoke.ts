@@ -371,6 +371,38 @@ async function main() {
     assert.match(source, /from ["']@\/lib\/actions["']/, `${file} must import server actions itself`);
     assert.match(source, /name="id"/);
   }
+  const driverFormSrc = fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8");
+  assert.match(driverFormSrc, /Driver Type/);
+  assert.match(driverFormSrc, /DRIVER_TYPES/);
+  assert.match(driverFormSrc, /driver_type \?\? "single"/);
+  assert.match(driverFormSrc, /Name \*/);
+  assert.match(driverFormSrc, /Telephone \*/);
+  assert.match(driverFormSrc, /Alt - Tel#/);
+  assert.match(driverFormSrc, /Cell Phone/);
+  assert.match(driverFormSrc, /Pager#/);
+  assert.match(driverFormSrc, /Email Address/);
+  assert.match(driverFormSrc, /Country \*/);
+  assert.match(driverFormSrc, /State \*/);
+  assert.match(driverFormSrc, /City \*/);
+  assert.match(driverFormSrc, /Postal\/Zip/);
+  assert.match(driverFormSrc, /Date of Birth/);
+  assert.match(driverFormSrc, /Date of Hire/);
+  assert.match(driverFormSrc, /License No\./);
+  assert.match(driverFormSrc, /Exp\. Date/);
+  assert.match(driverFormSrc, /Last Medical/);
+  assert.match(driverFormSrc, /Next Medical/);
+  assert.match(driverFormSrc, /Last Drug Test/);
+  assert.match(driverFormSrc, /Next Drug Test/);
+  assert.match(driverFormSrc, /Termination Date/);
+  assert.match(driverFormSrc, /Internal Notes/);
+  assert.match(driverFormSrc, />\s*Cancel\s*</);
+  assert.match(driverFormSrc, />\s*Files\s*</);
+  assert.match(driverFormSrc, /submitLabel = "Save"/);
+  assert.match(driverFormSrc, /pending \? "Saving…" : submitLabel/);
+  assert.doesNotMatch(driverFormSrc, /Passport Expiry|Fast Card|Hazmat/);
+  assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
+  assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "single"/);
   for (const file of ["components/samsara-truck-import.tsx", "components/orbcomm-trailer-import.tsx"]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(source, /["']use client["']/);
@@ -3630,7 +3662,32 @@ Continuous reefer. Two load locks.
     pin: "3333",
     truck_id: null,
     status: "available",
+    country: "USA",
+    state: "NE",
+    city: "Hastings",
+    date_of_birth: "0000-00-00",
+    date_of_hire: "2020-03-15",
+    drug_test_last: "",
   });
+  const fleetCreated = queries.getDriver(fleetDriverId);
+  assert.equal(fleetCreated?.country, "USA");
+  assert.equal(fleetCreated?.state, "NE");
+  assert.equal(fleetCreated?.city, "Hastings");
+  assert.equal(fleetCreated?.date_of_birth, "");
+  assert.notEqual(fleetCreated?.date_of_birth, "0000-00-00");
+  assert.equal(fleetCreated?.date_of_hire, "2020-03-15");
+  const singleId = queries.createDriver({
+    name: "Single Driver",
+    phone: "555-0100",
+    license: "",
+    driver_type: "single",
+    truck_id: null,
+    status: "available",
+    city: "Tulsa",
+    state: "OK",
+    country: "USA",
+  });
+  assert.equal(queries.getDriver(singleId)?.driver_type, "single");
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",
@@ -3643,6 +3700,8 @@ Continuous reefer. Two load locks.
   });
   assert.equal(queries.getDriver(fleetDriverId)?.pin, "3333");
   assert.equal(queries.getDriver(fleetDriverId)?.email, "fleet@msloads.com");
+  assert.equal(queries.getDriver(fleetDriverId)?.date_of_hire, "2020-03-15");
+  assert.equal(queries.getDriver(fleetDriverId)?.country, "USA");
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

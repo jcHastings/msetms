@@ -83,6 +83,13 @@ export function parseOptionalFloat(value: FormDataEntryValue | null): number | n
   return parsed;
 }
 
+export function cleanDateInput(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw || /^0{4}-0{2}-0{2}/.test(raw)) return "";
+  const day = raw.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "";
+}
+
 export function requiredString(value: FormDataEntryValue | null, label: string): string {
   const text = String(value ?? "").trim();
   if (!text) throw new Error(`${label} is required.`);
