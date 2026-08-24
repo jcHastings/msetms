@@ -420,6 +420,9 @@ async function main() {
   assert.match(startSrc, /loadProjectEnv/);
   assert.match(startSrc, /DOTENV_CONFIG_QUIET/);
   assert.match(startSrc, /copyStandaloneWebAssets/);
+  assert.match(startSrc, /\["--require", preload, serverJs\]/);
+  assert.doesNotMatch(startSrc, /NODE_OPTIONS: nodeOptions/);
+  assert.doesNotMatch(startSrc, /`--require \$\{preload\}`/);
   assert.doesNotMatch(startSrc, /symlinkSync/);
   const stageSrc = fs.readFileSync(path.join(process.cwd(), "scripts/stage-standalone-assets.mjs"), "utf8");
   assert.match(stageSrc, /copyStandaloneWebAssets/);
@@ -431,6 +434,9 @@ async function main() {
   const runNextSrc = fs.readFileSync(path.join(process.cwd(), "scripts/run-next.mjs"), "utf8");
   assert.match(runNextSrc, /start-standalone/);
   assert.match(runNextSrc, /loadProjectEnv/);
+  assert.match(runNextSrc, /\["--require", preload, \.\.\.childArgs\]/);
+  assert.doesNotMatch(runNextSrc, /NODE_OPTIONS: nodeOptions/);
+  assert.doesNotMatch(runNextSrc, /`--require \$\{preload\}`/);
   const keepAliveSrc = fs.readFileSync(path.join(process.cwd(), "scripts/next-keep-alive.cjs"), "utf8");
   assert.match(keepAliveSrc, /loadProjectEnv/);
   const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");

@@ -47,10 +47,6 @@ if (args.length === 0) {
 }
 
 const preload = join(root, "scripts", "next-keep-alive.cjs");
-const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
-  .filter(Boolean)
-  .join(" ");
-
 const startStandalone = join(root, "scripts", "start-standalone.mjs");
 const childArgs =
   args[0] === "start"
@@ -63,12 +59,11 @@ if (args[0] === "start") {
   );
 }
 
-const child = spawn(resolvedNode.execPath, childArgs, {
+const child = spawn(resolvedNode.execPath, ["--require", preload, ...childArgs], {
   cwd: root,
   env: {
     ...process.env,
     HOSTNAME: listenAddress(),
-    NODE_OPTIONS: nodeOptions,
     DOTENV_CONFIG_QUIET: "true",
   },
   stdio: ["ignore", "inherit", "inherit"],

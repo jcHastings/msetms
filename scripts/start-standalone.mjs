@@ -102,20 +102,19 @@ function stageIntoStandalone(from, to, { mkdirIfMissing = false } = {}) {
 const port = process.env.PORT || "3000";
 const hostname = listenAddress();
 const preload = join(root, "scripts", "next-keep-alive.cjs");
-const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
-  .filter(Boolean)
-  .join(" ");
 
 console.log(`Starting MSE TMS (standalone) on http://${hostname}:${port}`);
 
-const child = spawn(resolvedNode.execPath, [serverJs], {
+// Pass --require as argv, not NODE_OPTIONS. Windows splits NODE_OPTIONS on
+// spaces, so `C:\...\msetms-cursor-settings-hub-ce38 (1)\scripts\...` preloads
+// the folder name and crashes MODULE_NOT_FOUND. spawn() keeps the path one arg.
+const child = spawn(resolvedNode.execPath, ["--require", preload, serverJs], {
   cwd: standaloneDir,
   env: {
     ...process.env,
     PORT: String(port),
     HOSTNAME: hostname,
     NODE_ENV: "production",
-    NODE_OPTIONS: nodeOptions,
     DOTENV_CONFIG_QUIET: "true",
     TMS_DB_PATH: join(projectData, "tms.db"),
     TMS_DATA_DIR: projectData,

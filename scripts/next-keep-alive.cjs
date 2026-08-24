@@ -12,8 +12,9 @@
  * - Turbopack + cacheComponents silent exit (vercel/next.js#91798). This
  *   app does not enable cacheComponents; `npm run dev` still forces webpack.
  *
- * This preload is required via NODE_OPTIONS so it applies to the Next CLI
- * and to any forked start-server worker. It does not print secrets.
+ * This preload is required via `node --require <file>` spawn args (not
+ * NODE_OPTIONS). Unquoted NODE_OPTIONS paths break on Windows when the
+ * folder has a space or parentheses. It does not print secrets.
  *
  * Also loads repo-root `.env` / `.env.local` before Next's dotenv runs, so
  * `node .next/standalone/server.js` still sees SAMSARA_API_TOKEN when cwd
