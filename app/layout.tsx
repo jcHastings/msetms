@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ShellSwitch } from "@/components/shell-switch";
 import { getSignedInDispatcher, isTwoFactorRequired } from "@/lib/dispatcher-session";
-import { isOpenAiConfigured, loadLocalEnv } from "@/lib/env";
+import { isOpenAiConfigured, loadRuntimeEnv } from "@/lib/env";
 import { readMikeHistory } from "@/lib/mike";
 import "./globals.css";
 
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  loadLocalEnv({ force: true });
+  await loadRuntimeEnv();
   const dispatcher = await getSignedInDispatcher();
   const requireTwoFactor = isTwoFactorRequired();
   const mikeConfigured = isOpenAiConfigured();

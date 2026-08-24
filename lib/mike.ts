@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, MIKE_OPENAI_MODEL } from "./env";
+import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
 import { getSamsaraFleet } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "./mike-shared";
@@ -158,6 +158,7 @@ async function buildOpsSnapshot(): Promise<string> {
 }
 
 export async function askMike(question: string, history: MikeMessage[]): Promise<{ configured: boolean; reply: string }> {
+  await loadRuntimeEnv();
   if (!isOpenAiConfigured()) {
     return { configured: false, reply: MISSING_KEY };
   }

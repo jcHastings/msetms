@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { askMikeAction } from "@/lib/mike-actions";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "@/lib/mike-shared";
 
@@ -12,8 +12,26 @@ export function MikeChat({
   initialMessages: MikeMessage[];
 }) {
   const [state, formAction, pending] = useActionState(askMikeAction, null);
+  const [liveConfigured, setLiveConfigured] = useState<boolean | null>(null);
   const messages = state?.messages ?? initialMessages;
-  const ready = state?.configured ?? configured;
+  const ready = state?.configured ?? liveConfigured ?? configured;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/mike", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body: { configured?: unknown }) => {
+        if (!cancelled && typeof body.configured === "boolean") {
+          setLiveConfigured(body.configured);
+        }
+      })
+      .catch(() => {
+        // Keep the server-rendered flag. Never log keys.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <aside className="card flex h-full min-h-[24rem] w-full flex-col">

@@ -59,7 +59,7 @@ export type LoadLocalEnvOptions = {
 export function envFileCandidates(cwd = process.cwd()): string[] {
   const start = path.resolve(/*turbopackIgnore: true*/ cwd);
   const root = findProjectRoot(start);
-  const dirs = uniqueDirs([
+  const dirs = uniquePaths([
     start,
     root,
     path.join(/*turbopackIgnore: true*/ root, ".next", "standalone"),
@@ -73,11 +73,11 @@ export function envFileCandidates(cwd = process.cwd()): string[] {
   return files;
 }
 
-function uniqueDirs(dirs: string[]): string[] {
+function uniquePaths(paths: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const dir of dirs) {
-    const normalized = path.resolve(/*turbopackIgnore: true*/ dir);
+  for (const item of paths) {
+    const normalized = path.resolve(/*turbopackIgnore: true*/ item);
     if (seen.has(normalized)) continue;
     seen.add(normalized);
     out.push(normalized);
@@ -85,8 +85,105 @@ function uniqueDirs(dirs: string[]): string[] {
   return out;
 }
 
-function trimmedEnvValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+/** Strip UTF-8/UTF-16 BOM and surrounding quotes. Never log the text. */
+export function cleanSecretValue(value: unknown): string {
+  let text = typeof value === "string" ? value : "";
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  text = text.trim();
+  if (
+    (text.startsWith('"') && text.endsWith('"') && text.length >= 2) ||
+    (text.startsWith("'") && text.endsWith("'") && text.length >= 2)
+  ) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+function readEnvFileText(file: string): string | null {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return null;
+  const buf = fs.readFileSync(/*turbopackIgnore: true*/ file);
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.subarray(2).toString("utf16le");
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const swapped = Buffer.allocUnsafe(buf.length - 2);
+    for (let i = 2; i + 1 < buf.length; i += 2) {
+      swapped[i - 2] = buf[i + 1];
+      swapped[i - 1] = buf[i];
+    }
+    return swapped.toString("utf16le");
+  }
+  let text = buf.toString("utf8");
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  return text;
+}
+
+function parseEnvText(text: string): Record<string, string> {
+  let parsed: Record<string, string | undefined> = {};
+  try {
+    parsed = parse(text);
+  } catch {
+    parsed = {};
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      let key = line.slice(0, eq).trim();
+      if (key.startsWith("export ")) key = key.slice(7).trim();
+      parsed[key] = line.slice(eq + 1);
+    }
+  }
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    const clean = cleanSecretValue(value);
+    if (clean) out[key] = clean;
+  }
+  return out;
+}
+
+function parseEnvFile(file: string): Record<string, string> {
+  const text = readEnvFileText(file);
+  if (text == null) return {};
+  return parseEnvText(text);
+}
+
+/** cwd/.env, project-root/.env, and .next/standalone/.env — plus .env.local. */
+export function runtimeEnvFiles(cwd = process.cwd()): string[] {
+  const start = path.resolve(/*turbopackIgnore: true*/ cwd);
+  const root = findProjectRoot(start);
+  return uniquePaths([
+    path.join(/*turbopackIgnore: true*/ start, ".env"),
+    path.join(/*turbopackIgnore: true*/ root, ".env"),
+    path.join(/*turbopackIgnore: true*/ root, ".next", "standalone", ".env"),
+    path.join(/*turbopackIgnore: true*/ start, ".next", "standalone", ".env"),
+    path.join(/*turbopackIgnore: true*/ start, ".env.local"),
+    path.join(/*turbopackIgnore: true*/ root, ".env.local"),
+    path.join(/*turbopackIgnore: true*/ root, ".next", "standalone", ".env.local"),
+  ]);
+}
+
+function liveProcessEnv(): NodeJS.ProcessEnv {
+  // Dynamic access so Next does not inline OPENAI_API_KEY / SAMSARA_API_TOKEN at build.
+  return process.env;
+}
+
+function liveEnvValue(name: string): string {
+  return cleanSecretValue(liveProcessEnv()[name]);
+}
+
+export function secretsFromEnvFiles(options: LoadLocalEnvOptions = {}): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const file of runtimeEnvFiles(options.cwd ?? process.cwd())) {
+    const parsed = parseEnvFile(file);
+    const local = file.endsWith(".env.local");
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value) continue;
+      if (merged[key] && !local) continue;
+      merged[key] = value;
+    }
+  }
+  return merged;
 }
 
 export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
@@ -104,24 +201,24 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
   const cwd = options.cwd ?? process.cwd();
   const root = findProjectRoot(cwd);
   const originalNonEmpty = new Set(
-    Object.keys(target).filter((key) => trimmedEnvValue(target[key])),
+    Object.keys(target).filter((key) => cleanSecretValue(target[key])),
   );
   const loadedFrom: string[] = [];
 
   function apply(file: string, overrideFileKeys: boolean) {
+    const parsed = parseEnvFile(file);
     if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return;
-    const parsed = parse(fs.readFileSync(/*turbopackIgnore: true*/ file));
     for (const [key, value] of Object.entries(parsed)) {
-      const next = trimmedEnvValue(value);
+      const next = cleanSecretValue(value);
       if (!next) continue;
       if (originalNonEmpty.has(key)) continue;
-      if (trimmedEnvValue(target[key]) && !overrideFileKeys) continue;
+      if (cleanSecretValue(target[key]) && !overrideFileKeys) continue;
       target[key] = next;
     }
     loadedFrom.push(file);
   }
 
-  for (const file of envFileCandidates(cwd)) {
+  for (const file of runtimeEnvFiles(cwd)) {
     apply(file, file.endsWith(".env.local"));
   }
 
@@ -132,10 +229,38 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
   return { root, loadedFrom, quiet: true };
 }
 
+function processLooksUnset(value: string): boolean {
+  const clean = cleanSecretValue(value).toLowerCase();
+  return !clean || clean === "undefined" || clean === "null";
+}
+
+export function readRuntimeSecret(name: string, options: LoadLocalEnvOptions = {}): string | undefined {
+  loadLocalEnv({ ...options, force: true });
+  const fromFiles = cleanSecretValue(secretsFromEnvFiles(options)[name]);
+  const rawProcess = options.processEnv ? options.processEnv[name] : liveEnvValue(name);
+  const fromProcess = processLooksUnset(rawProcess ?? "") ? "" : cleanSecretValue(rawProcess);
+  // Empty process (Next inlined "" / OPENAI_API_KEY=) must not hide a file value.
+  const value = fromProcess || fromFiles;
+  if (value && options.processEnv) {
+    options.processEnv[name] = value;
+  } else if (value && !fromProcess) {
+    liveProcessEnv()[name] = value;
+  }
+  return value || undefined;
+}
+
+export async function loadRuntimeEnv(): Promise<{ root: string; loadedFrom: string[]; quiet: true }> {
+  try {
+    const { connection } = await import("next/server");
+    await connection();
+  } catch {
+    // scripts / smoke have no request scope
+  }
+  return loadLocalEnv({ force: true });
+}
+
 function readSecret(name: string): string | undefined {
-  loadLocalEnv({ force: true });
-  const value = trimmedEnvValue(process.env[name]);
-  return value.length > 0 ? value : undefined;
+  return readRuntimeSecret(name);
 }
 
 export function getSamsaraApiToken(): string | undefined {
@@ -246,7 +371,12 @@ export function getOpenAiBaseUrl(): string {
 /** Cheap mini only — JC asked about cost. No model env var. */
 export const MIKE_OPENAI_MODEL = "gpt-4o-mini";
 
+export function isOpenAiKeySet(value: string | undefined): boolean {
+  const key = cleanSecretValue(value);
+  if (key.startsWith("sk-")) return true;
+  return key.length > 0;
+}
+
 export function isOpenAiConfigured(): boolean {
-  const key = getOpenAiApiKey();
-  return Boolean(key && (key.startsWith("sk-") || key.length > 0));
+  return isOpenAiKeySet(getOpenAiApiKey());
 }

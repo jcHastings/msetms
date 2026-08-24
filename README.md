@@ -61,6 +61,8 @@ Requires **Node.js 22.13+ or 24** (`node:sqlite`). **JC should start production 
 
 **After `npm run build`, styles must load on standalone.** Next does not put `public` or `.next/static` inside `.next/standalone`. The build script copies both folders in (no symlink). Then `npm start` **or** `node .next/standalone/server.js` must show the styled UI. If those folders are missing, the page is unstyled raw HTML (default blue links). Prefer `npm start` — it copies the assets again and loads `.env`.
 
+Windows standalone does not need `next start`. Mike and Samsara reread `OPENAI_API_KEY` / `SAMSARA_API_TOKEN` at request time from `process.cwd()/.env`, the project-root `.env`, and `.next/standalone/.env` (trimmed, never logged). `sk-` keys count as set. Copying `.env` next to `server.js` is enough when you run that file directly.
+
 Do **not** run `next start` or `npx next start`. This app uses `output: "standalone"`. Next 16 will print that standalone is configured and dotenv 17 can report `injected env (0) from .env` even when the real project `.env` exists — because `next start` does not load env from the repo root the way the standalone server needs. `npm run start:next` is redirected to the same `npm start` wrapper.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.

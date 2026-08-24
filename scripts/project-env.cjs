@@ -60,8 +60,28 @@ function findProjectRoot(startDir = process.cwd()) {
  * @param {{ cwd?: string, processEnv?: NodeJS.ProcessEnv }} [options]
  * @returns {{ root: string, loadedFrom: string[], quiet: true }}
  */
-function trimmedEnvValue(value) {
-  return typeof value === "string" ? value.trim() : "";
+function cleanSecretValue(value) {
+  let text = typeof value === "string" ? value : "";
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  text = text.trim();
+  if (
+    (text.startsWith('"') && text.endsWith('"') && text.length >= 2) ||
+    (text.startsWith("'") && text.endsWith("'") && text.length >= 2)
+  ) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+function readEnvFileText(file) {
+  if (!existsSync(file)) return null;
+  const buf = readFileSync(file);
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return buf.subarray(2).toString("utf16le");
+  }
+  let text = buf.toString("utf8");
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  return text;
 }
 
 function envFileCandidates(cwd = process.cwd()) {
@@ -93,18 +113,19 @@ function loadProjectEnv(options = {}) {
   const target = options.processEnv || process.env;
   const root = findProjectRoot(cwd);
   const originalNonEmpty = new Set(
-    Object.keys(target).filter((key) => trimmedEnvValue(target[key])),
+    Object.keys(target).filter((key) => cleanSecretValue(target[key])),
   );
   const loadedFrom = [];
 
   function apply(file, overrideFileKeys) {
-    if (!existsSync(file)) return;
-    const parsed = parse(readFileSync(file));
+    const text = readEnvFileText(file);
+    if (text == null) return;
+    const parsed = parse(text);
     for (const [key, value] of Object.entries(parsed)) {
-      const next = trimmedEnvValue(value);
+      const next = cleanSecretValue(value);
       if (!next) continue;
       if (originalNonEmpty.has(key)) continue;
-      if (trimmedEnvValue(target[key]) && !overrideFileKeys) continue;
+      if (cleanSecretValue(target[key]) && !overrideFileKeys) continue;
       target[key] = next;
     }
     loadedFrom.push(file);

@@ -248,6 +248,39 @@ async function main() {
   assert.equal(emptyFirst.OPENAI_API_KEY, "sk-smoke-standalone-key");
   assert.ok(emptyFirst.OPENAI_API_KEY.startsWith("sk-"), "sk- keys count as set");
   assert.equal(emptyFirst.SAMSARA_API_TOKEN, smokeToken);
+
+  const {
+    runtimeEnvFiles,
+    readRuntimeSecret,
+    isOpenAiKeySet,
+    cleanSecretValue,
+    loadRuntimeEnv,
+  } = await import("../lib/env");
+  const runtimeFiles = runtimeEnvFiles(standaloneCwd).map((file) => file.replace(/\\/g, "/"));
+  assert.ok(runtimeFiles.some((file) => file === `${envRoot.replace(/\\/g, "/")}/.env`));
+  assert.ok(runtimeFiles.some((file) => file === `${standaloneCwd.replace(/\\/g, "/")}/.env`));
+  assert.ok(runtimeFiles.some((file) => file.includes(".next/standalone/.env")));
+  assert.equal(cleanSecretValue('  "sk-quoted-key"  '), "sk-quoted-key");
+  assert.ok(isOpenAiKeySet("sk-proj-smoke"));
+  assert.ok(isOpenAiKeySet("  sk-smoke  "));
+  fs.writeFileSync(path.join(standaloneCwd, ".env"), 'OPENAI_API_KEY="sk-quoted-standalone"\n');
+  const quotedBag: Record<string, string | undefined> = { OPENAI_API_KEY: "", SAMSARA_API_TOKEN: "" };
+  assert.equal(
+    readRuntimeSecret("OPENAI_API_KEY", { cwd: standaloneCwd, processEnv: quotedBag, force: true }),
+    "sk-quoted-standalone",
+  );
+  assert.equal(
+    readRuntimeSecret("SAMSARA_API_TOKEN", { cwd: standaloneCwd, processEnv: quotedBag, force: true }),
+    smokeToken,
+  );
+  fs.writeFileSync(path.join(standaloneCwd, ".env"), Buffer.from("\uFEFFOPENAI_API_KEY=sk-bom-standalone\n", "utf8"));
+  const bomBag: Record<string, string | undefined> = { OPENAI_API_KEY: "", SAMSARA_API_TOKEN: "" };
+  assert.equal(
+    readRuntimeSecret("OPENAI_API_KEY", { cwd: standaloneCwd, processEnv: bomBag, force: true }),
+    "sk-bom-standalone",
+  );
+  const runtimeLoaded = await loadRuntimeEnv();
+  assert.equal(runtimeLoaded.quiet, true);
   fs.rmSync(envRoot, { recursive: true, force: true });
 
   const envTs = fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8");
@@ -367,12 +400,25 @@ async function main() {
   assert.match(mikeSrc, /MIKE_MISSING_KEY_MESSAGE/);
   assert.doesNotMatch(mikeSrc, /board only/);
   assert.doesNotMatch(mikeSrc, /console\.log/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike-actions.ts"), "utf8"), /loadLocalEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike-actions.ts"), "utf8"), /loadRuntimeEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/mike/route.ts"), "utf8"), /loadRuntimeEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/mike/route.ts"), "utf8"), /force-dynamic/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /loadRuntimeEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8"), /loadLocalEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8"), /loadRuntimeEnv/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /loadRuntimeEnv/);
   assert.match(readme, /every dispatcher page/);
+  assert.match(readme, /process\.cwd\(\)\/\.env/);
+  assert.match(readme, /\.next\/standalone\/\.env/);
   const envSrc = fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8");
   assert.match(envSrc, /getOpenAiApiKey/);
+  assert.match(envSrc, /runtimeEnvFiles/);
+  assert.match(envSrc, /readRuntimeSecret/);
+  assert.match(envSrc, /loadRuntimeEnv/);
+  assert.match(envSrc, /cleanSecretValue/);
   assert.match(envSrc, /gpt-4o-mini/);
   assert.doesNotMatch(envSrc, /gpt-4o"/);
+  assert.doesNotMatch(envSrc, /console\.log/);
   assert.match(envExample, /OPENAI_API_KEY=/);
   assert.doesNotMatch(envExample, /OPENAI_MODEL=/);
   assert.match(envExample, /GOOGLE_PLACES_API_KEY/);

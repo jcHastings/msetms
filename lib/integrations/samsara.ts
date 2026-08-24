@@ -1,4 +1,4 @@
-import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import {
   parseSamsaraVehicleRecords,
   SAMSARA_TOKEN_MISSING_MESSAGE,
@@ -74,6 +74,7 @@ export function parseSamsaraVehicles(items: Array<Record<string, unknown>>): Sam
 export async function listSamsaraVehicles(): Promise<
   { ok: true; vehicles: SamsaraVehicleInput[] } | { ok: false; error: string }
 > {
+  await loadRuntimeEnv();
   if (!isSamsaraTokenSet()) {
     return { ok: false, error: SAMSARA_TOKEN_MISSING_MESSAGE };
   }
@@ -95,6 +96,7 @@ export async function listSamsaraVehicles(): Promise<
 }
 
 export async function getSamsaraFleet(): Promise<SamsaraFleetResult> {
+  await loadRuntimeEnv();
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
   const result = await loadSamsaraFleet();

@@ -3,7 +3,7 @@
 import { requireSignedInDispatcher } from "./dispatcher-session";
 import { askMike, readMikeHistory, writeMikeHistory } from "./mike";
 import type { MikeMessage } from "./mike-shared";
-import { isOpenAiConfigured, loadLocalEnv } from "./env";
+import { isOpenAiConfigured, loadRuntimeEnv } from "./env";
 import type { ActionResult } from "./types";
 
 export type MikeChatState = ActionResult & {
@@ -16,7 +16,7 @@ export async function askMikeAction(
   formData: FormData,
 ): Promise<MikeChatState> {
   await requireSignedInDispatcher();
-  loadLocalEnv({ force: true });
+  await loadRuntimeEnv();
   const configured = isOpenAiConfigured();
   const history = await readMikeHistory();
   const question = String(formData.get("question") ?? "").trim();
