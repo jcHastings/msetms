@@ -29,8 +29,9 @@ export function IftaPanel({
         <div>
           <h2 className="text-sm font-semibold">IFTA mileage</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Jurisdiction miles for this load
-            {configured ? " from Samsara IFTA reports." : " — labeled demo from origin / destination."}
+            Official truck IFTA
+            {configured ? " from Samsara." : " — labeled demo from origin / destination."} The Stops tab has a
+            Google route estimate only; it does not replace this report.
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">

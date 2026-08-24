@@ -33,6 +33,7 @@ import {
 import { createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
 import { addRelay, deleteRelay, moveRelay, updateRelay } from "./relay-store";
+import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
 import { addStop, deleteStop, moveStop, updateStop, type LoadStopKind } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
 import { isBillableStatus, type ActionResult } from "./types";
@@ -260,6 +261,7 @@ export async function addStopAction(formData: FormData): Promise<void> {
       field: input.kind,
       newValue: [input.name, input.city, input.state].filter(Boolean).join(", "),
     });
+    await refreshLoadRouteQuiet(loadId);
     refresh();
   });
 }
@@ -271,6 +273,11 @@ export async function updateStopAction(formData: FormData): Promise<void> {
     if (!id) throw new Error("Stop is missing.");
     const input = parseStopInput(formData);
     updateStop(id, input);
+    const { getDb } = await import("./db");
+    const stop = getDb().prepare("SELECT load_id FROM load_stops WHERE id = ?").get(id) as
+      | { load_id: number }
+      | undefined;
+    if (stop) await refreshLoadRouteQuiet(stop.load_id);
     refresh();
   });
 }
@@ -294,6 +301,7 @@ export async function moveStopAction(formData: FormData): Promise<void> {
         oldValue: stop.sequence,
         newValue: `${stop.name} moved ${direction < 0 ? "up" : "down"}`,
       });
+      await refreshLoadRouteQuiet(stop.load_id);
     }
     refresh();
   });
@@ -317,8 +325,46 @@ export async function deleteStopAction(formData: FormData): Promise<void> {
         oldValue: [stop.name, stop.city, stop.state].filter(Boolean).join(", "),
         newValue: "",
       });
+      await refreshLoadRouteQuiet(stop.load_id);
     }
     refresh();
+  });
+}
+
+export async function refreshRouteAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const result = await refreshLoadRoute(loadId);
+      refresh();
+      if (!result.ok) return { ok: false, error: result.message };
+      return { ok: true, id: loadId, message: result.message };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function saveManualRouteMilesAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      saveManualRouteMiles(loadId, parseOptionalFloat(formData.get("route_miles")));
+      refresh();
+      return { ok: true, id: loadId, message: "Route miles saved." };
+    } catch (error) {
+      return fail(error);
+    }
   });
 }
 

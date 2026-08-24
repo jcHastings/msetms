@@ -9,6 +9,7 @@ import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
 import { LoadPayItems } from "@/components/load-pay-items";
 import { LoadRelaysPanel } from "@/components/load-relays-panel";
+import { LoadRoutingGuide } from "@/components/load-routing-guide";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
@@ -27,7 +28,8 @@ import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmpt
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
-import { isTwilioConfigured } from "@/lib/env";
+import { isGooglePlacesConfigured, isTwilioConfigured } from "@/lib/env";
+import { routeGuideFromLoad } from "@/lib/routing-shared";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { listPayItems } from "@/lib/pay-items";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
@@ -139,6 +141,11 @@ export async function LoadEditor({
 
         <LoadTabPanel when="stops">
           <LoadStopsPanel loadId={load.id} stops={stops} locations={locations} />
+          <LoadRoutingGuide
+            loadId={load.id}
+            guide={routeGuideFromLoad(load)}
+            mapsConfigured={isGooglePlacesConfigured()}
+          />
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">

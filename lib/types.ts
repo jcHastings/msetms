@@ -433,6 +433,10 @@ export type Load = {
   contact_phone: string;
   contact_ext: string;
   customer_reference: string;
+  route_miles: number | null;
+  route_state_miles: string;
+  route_calculated_at: string;
+  route_source: string;
   created_at: string;
   updated_at: string;
 };

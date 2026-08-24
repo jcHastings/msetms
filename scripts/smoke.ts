@@ -162,6 +162,16 @@ async function main() {
   assert.match(stopsSource, /\+ Add Pickup/);
   assert.match(stopsSource, /\+ Add Delivery/);
   assert.doesNotMatch(stopsSource, /stopoff|bobtail|container/);
+  const routingUi = fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8");
+  assert.match(routingUi, /Refresh route/);
+  assert.match(routingUi, /IFTA estimate/);
+  assert.match(routingUi, /Manual miles/);
+  assert.doesNotMatch(routingUi, /maps\.google\.com/);
+  const routingLib = fs.readFileSync(path.join(process.cwd(), "lib/routing.ts"), "utf8");
+  assert.match(routingLib, /maps\.googleapis\.com\/maps\/api\/directions/);
+  assert.doesNotMatch(routingLib, /maps\.google\.com/);
+  assert.doesNotMatch(basicsChunk, /Routing guide|Refresh route|route_miles/);
+  assert.doesNotMatch(paySource, /Routing guide|Refresh route|route_miles/);
   const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
   assert.match(docsPage, /AttachmentsPanel/);
   assert.match(docsPage, /when="docs"/);
@@ -172,6 +182,8 @@ async function main() {
   assert.doesNotMatch(docsPage, /relays.length > 0 \?/);
   assert.match(docsPage, /LoadExtraDetails/);
   assert.match(docsPage, /when="log"/);
+  assert.match(docsPage, /LoadRoutingGuide/);
+  assert.match(docsPage, /when="stops"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -3024,6 +3036,106 @@ Continuous reefer. Two load locks.
   const openForIfta = queries.listLoads({ status: "available" })[0];
   assert.ok(openForIfta);
   await assert.rejects(() => ifta.refreshIftaForLoad(openForIfta.id), /in transit or delivered/i);
+
+  const { usStateForPoint } = await import("../lib/us-state-lookup");
+  assert.equal(usStateForPoint(40.7128, -74.006)?.code, "NY");
+  assert.equal(usStateForPoint(41.8781, -87.6298)?.code, "IL");
+  assert.equal(usStateForPoint(39.7392, -104.9903)?.code, "CO");
+  assert.equal(usStateForPoint(32.7767, -96.797)?.code, "TX");
+  const routing = await import("../lib/routing");
+  const encoded = routing.encodePolyline([
+    { lat: 40.71, lng: -74.0 },
+    { lat: 41.88, lng: -87.63 },
+  ]);
+  const decoded = routing.decodePolyline(encoded);
+  assert.equal(decoded.length, 2);
+  assert.ok(Math.abs((decoded[0]?.lat ?? 0) - 40.71) < 0.001);
+  const { ensureDefaultStops: ensureRouteStops } = await import("../lib/stops");
+  const routeLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "New York, NY",
+    destination: "Chicago, IL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Route freight",
+    rate: 2100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-ROUTE",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  ensureRouteStops(routeLoadId);
+  const savedMapsForRoute = process.env.GOOGLE_MAPS_API_KEY;
+  const savedPlacesForRoute = process.env.GOOGLE_PLACES_API_KEY;
+  process.env.GOOGLE_MAPS_API_KEY = "";
+  process.env.GOOGLE_PLACES_API_KEY = "";
+  let googleCalls = 0;
+  const prevRouteFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    googleCalls += 1;
+    throw new Error("Google should not be called without a key");
+  };
+  const missingRoute = await routing.refreshLoadRoute(routeLoadId);
+  assert.equal(missingRoute.ok, true);
+  assert.equal(missingRoute.configured, false);
+  assert.equal(googleCalls, 0);
+  assert.equal(queries.getLoad(routeLoadId)?.route_miles ?? null, null);
+  routing.saveManualRouteMiles(routeLoadId, 12.3);
+  assert.equal(queries.getLoad(routeLoadId)?.route_miles, 12.3);
+  assert.equal(queries.getLoad(routeLoadId)?.route_source, "manual");
+  process.env.GOOGLE_MAPS_API_KEY = "test-not-a-real-maps-key";
+  globalThis.fetch = async (input) => {
+    googleCalls += 1;
+    const url = new URL(String(input));
+    assert.equal(url.hostname, "maps.googleapis.com");
+    assert.match(url.pathname, /\/maps\/api\/directions\//);
+    assert.doesNotMatch(url.hostname, /maps\.google\.com/);
+    const points = routing.encodePolyline([
+      { lat: 40.71, lng: -74.0 },
+      { lat: 40.8, lng: -77.2 },
+      { lat: 41.1, lng: -81.7 },
+      { lat: 41.6, lng: -86.2 },
+      { lat: 41.88, lng: -87.63 },
+    ]);
+    return new Response(
+      JSON.stringify({
+        status: "OK",
+        routes: [
+          {
+            overview_polyline: { points },
+            legs: [{ distance: { value: 1287475 } }],
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+  const routed = await routing.refreshLoadRoute(routeLoadId);
+  assert.equal(routed.ok, true);
+  assert.equal(routed.totalMiles, 800);
+  assert.equal(routed.source, "google");
+  assert.ok(routed.states.some((row) => ["NY", "PA", "OH", "IN", "IL"].includes(row.state)));
+  const storedRoute = queries.getLoad(routeLoadId);
+  assert.equal(storedRoute?.route_miles, 800);
+  assert.equal(storedRoute?.route_source, "google");
+  assert.match(storedRoute?.route_state_miles ?? "", /NY|PA|OH|IN|IL/);
+  const officialIfta = queries.getIftaReport(reeferLoad.id);
+  assert.ok(officialIfta);
+  assert.notEqual(officialIfta.source, "google");
+  globalThis.fetch = prevRouteFetch;
+  if (savedMapsForRoute == null) delete process.env.GOOGLE_MAPS_API_KEY;
+  else process.env.GOOGLE_MAPS_API_KEY = savedMapsForRoute;
+  if (savedPlacesForRoute == null) delete process.env.GOOGLE_PLACES_API_KEY;
+  else process.env.GOOGLE_PLACES_API_KEY = savedPlacesForRoute;
 
   process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
   const beforeIftaFail = queries.getIftaReport(reeferLoad.id);
