@@ -71,6 +71,8 @@ const ooSample: ConfirmationModel = {
   },
   dispatchNotes: "",
   internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
 
 const companySample: ConfirmationModel = {
@@ -127,6 +129,8 @@ const companySample: ConfirmationModel = {
   },
   dispatchNotes: "",
   internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
 
 async function main(): Promise<void> {

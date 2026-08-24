@@ -212,8 +212,8 @@ export function formRoleValue(role?: string): string {
   return role;
 }
 
-export function selectableDispatcherRoles(currentRole?: string) {
-  const roles = [...ASSIGNABLE_DISPATCHER_ROLES];
+export function selectableDispatcherRoles(currentRole?: string): Array<{ value: string; label: string }> {
+  const roles: Array<{ value: string; label: string }> = [...ASSIGNABLE_DISPATCHER_ROLES];
   if (currentRole === "read_only") {
     roles.push({ value: "read_only", label: "Read-only" });
   }

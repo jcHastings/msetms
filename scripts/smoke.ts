@@ -170,7 +170,7 @@ async function main() {
     findProjectRoot: (startDir?: string) => string;
     loadProjectEnv: (options?: {
       cwd?: string;
-      processEnv?: NodeJS.ProcessEnv;
+      processEnv?: Record<string, string | undefined>;
     }) => { root: string; loadedFrom: string[]; quiet: true };
   };
   const envRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tms-env-"));
@@ -185,7 +185,7 @@ async function main() {
   fs.writeFileSync(path.join(standaloneCwd, "package.json"), JSON.stringify({ name: "standalone" }));
   assert.equal(findProjectRoot(standaloneCwd), envRoot);
   assert.equal(findProjectRoot(envRoot), envRoot);
-  const bag: NodeJS.ProcessEnv = {};
+  const bag: Record<string, string | undefined> = {};
   const loaded = loadProjectEnv({ cwd: standaloneCwd, processEnv: bag });
   assert.equal(loaded.root, envRoot);
   assert.equal(loaded.quiet, true);
@@ -197,7 +197,7 @@ async function main() {
   assert.ok(loaded.loadedFrom.some((file) => file.endsWith(".env.local")));
   const { findProjectRoot: findTsRoot, loadLocalEnv } = await import("../lib/env");
   assert.equal(findTsRoot(standaloneCwd), envRoot);
-  const tsBag: NodeJS.ProcessEnv = {};
+  const tsBag: Record<string, string | undefined> = {};
   const tsLoaded = loadLocalEnv({ cwd: standaloneCwd, processEnv: tsBag });
   assert.equal(tsLoaded.quiet, true);
   assert.equal(tsBag.SAMSARA_API_TOKEN, smokeToken);

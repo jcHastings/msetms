@@ -2,26 +2,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse } from "dotenv";
 
+function existsInDir(dir: string, name: string): boolean {
+  return fs.existsSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name));
+}
+
 export function isStandaloneOutputDir(dir: string): boolean {
-  const normalized = path.resolve(dir).replace(/\\/g, "/");
+  const normalized = path.resolve(/*turbopackIgnore: true*/ dir).replace(/\\/g, "/");
   if (
     !normalized.endsWith("/.next/standalone") &&
     !normalized.endsWith(".next/standalone")
   ) {
     return false;
   }
-  return fs.existsSync(path.join(dir, "server.js"));
+  return existsInDir(dir, "server.js");
 }
 
 export function isProjectRoot(dir: string): boolean {
   if (isStandaloneOutputDir(dir)) return false;
-  if (!fs.existsSync(path.join(dir, "package.json"))) return false;
+  if (!existsInDir(dir, "package.json")) return false;
   return (
-    fs.existsSync(path.join(dir, "next.config.ts")) ||
-    fs.existsSync(path.join(dir, "next.config.js")) ||
-    fs.existsSync(path.join(dir, "next.config.mjs")) ||
-    fs.existsSync(path.join(dir, ".env")) ||
-    fs.existsSync(path.join(dir, ".env.local"))
+    existsInDir(dir, "next.config.ts") ||
+    existsInDir(dir, "next.config.js") ||
+    existsInDir(dir, "next.config.mjs") ||
+    existsInDir(dir, ".env") ||
+    existsInDir(dir, ".env.local")
   );
 }
 
@@ -43,7 +47,7 @@ let loadedDefault = false;
 
 export type LoadLocalEnvOptions = {
   cwd?: string;
-  processEnv?: NodeJS.ProcessEnv;
+  processEnv?: Record<string, string | undefined>;
   force?: boolean;
 };
 
@@ -71,8 +75,8 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
   const loadedFrom: string[] = [];
 
   function apply(file: string, overrideFileKeys: boolean) {
-    if (!fs.existsSync(file)) return;
-    const parsed = parse(fs.readFileSync(file));
+    if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return;
+    const parsed = parse(fs.readFileSync(/*turbopackIgnore: true*/ file));
     for (const [key, value] of Object.entries(parsed)) {
       if (preset.has(key)) continue;
       if (target[key] === undefined || overrideFileKeys) {
@@ -82,8 +86,8 @@ export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
     loadedFrom.push(file);
   }
 
-  apply(path.join(root, ".env"), false);
-  apply(path.join(root, ".env.local"), true);
+  apply(path.join(/*turbopackIgnore: true*/ root, ".env"), false);
+  apply(path.join(/*turbopackIgnore: true*/ root, ".env.local"), true);
 
   if (target.DOTENV_CONFIG_QUIET === undefined) {
     target.DOTENV_CONFIG_QUIET = "true";

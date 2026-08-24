@@ -75,7 +75,7 @@ export function emptyParsedRateCon(): ParsedRateCon {
   };
 }
 
-export function parsedStopHasDetails(stop: ParsedStop | null | undefined): boolean {
+export function parsedStopHasDetails(stop: ParsedStop | null | undefined): stop is ParsedStop {
   if (!stop) return false;
   return Boolean(stop.name.trim() || stop.street.trim());
 }
