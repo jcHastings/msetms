@@ -10,6 +10,8 @@
  * Vercel. Never prints secret values.
  *
  * Windows: copy or mkdir project `data` / copy `.env` — never symlink (EPERM).
+ * Also copy `public` and `.next/static` into standalone (no symlink) so CSS loads
+ * even if someone runs `node .next/standalone/server.js` after `npm run build`.
  * Node: prefer process.execPath; if PATH is 20.x, try Program Files 22/24.
  */
 import { spawn } from "node:child_process";
@@ -18,7 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { listenAddress } from "./listen-address.mjs";
-import { mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
+import { copyStandaloneWebAssets, mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
 import {
   resolveNodeExecutable,
   unsupportedNodeMessage,
@@ -51,13 +53,15 @@ if (!existsSync(serverJs)) {
   process.exit(1);
 }
 
-function copyPublicAssets(from, to) {
-  if (!existsSync(from)) return;
-  mirrorIntoStandalone(from, to);
+const stagedAssets = copyStandaloneWebAssets(root);
+if (stagedAssets.public.method === "copy" || stagedAssets.static.method === "copy") {
+  console.log("Copied public and .next/static into .next/standalone (no symlink).");
 }
-
-copyPublicAssets(join(root, "public"), join(standaloneDir, "public"));
-copyPublicAssets(join(root, ".next", "static"), join(standaloneDir, ".next", "static"));
+if (stagedAssets.static.method === "skip" && !existsSync(join(standaloneDir, ".next", "static"))) {
+  console.warn(
+    "Missing .next/standalone/.next/static. After npm run build, styles must load on standalone; without this folder the UI is unstyled raw HTML (default blue links).",
+  );
+}
 
 // server.js chdir()s into standalone. Keep SQLite, uploads, and gitignored
 // env files on the project paths the rest of the app already uses.

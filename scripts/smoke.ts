@@ -145,7 +145,7 @@ async function main() {
   assert.equal(fromOldPath.version, "24.4.0");
   assert.equal(fromOldPath.switched, true);
 
-  const { mirrorIntoStandalone } = await import("../scripts/standalone-link.mjs");
+  const { copyStandaloneWebAssets, mirrorIntoStandalone } = await import("../scripts/standalone-link.mjs");
   const linkRoot = path.join(os.tmpdir(), `tms-link-${Date.now()}`);
   const projectData = path.join(linkRoot, "data");
   const standaloneData = path.join(linkRoot, "standalone", "data");
@@ -163,6 +163,38 @@ async function main() {
   assert.equal(fs.readFileSync(path.join(standaloneData, "tms.db"), "utf8"), "db");
   assert.equal(fs.readFileSync(standaloneEnv, "utf8"), "PLACEHOLDER=1\n");
   fs.rmSync(linkRoot, { recursive: true, force: true });
+
+  const assetRoot = path.join(os.tmpdir(), `tms-web-assets-${Date.now()}`);
+  const publicDir = path.join(assetRoot, "public");
+  const staticDir = path.join(assetRoot, ".next", "static", "chunks");
+  const standaloneDir = path.join(assetRoot, ".next", "standalone");
+  fs.mkdirSync(publicDir, { recursive: true });
+  fs.mkdirSync(staticDir, { recursive: true });
+  fs.mkdirSync(standaloneDir, { recursive: true });
+  fs.writeFileSync(path.join(publicDir, "logo.png"), "logo");
+  fs.writeFileSync(path.join(staticDir, "app.css"), "body{color:red}");
+  const copiedAssets = copyStandaloneWebAssets(assetRoot, { platform: "win32" });
+  assert.equal(copiedAssets.public.method, "copy", "public must be copied into standalone (no symlink)");
+  assert.equal(copiedAssets.static.method, "copy", ".next/static must be copied into standalone (no symlink)");
+  assert.equal(fs.readFileSync(path.join(standaloneDir, "public", "logo.png"), "utf8"), "logo");
+  assert.equal(
+    fs.readFileSync(path.join(standaloneDir, ".next", "static", "chunks", "app.css"), "utf8"),
+    "body{color:red}",
+  );
+  assert.equal(fs.existsSync(path.join(standaloneDir, "public", "public")), false, "must not nest public/public");
+  assert.equal(
+    fs.existsSync(path.join(standaloneDir, ".next", "static", "static")),
+    false,
+    "must not nest static/static",
+  );
+  assert.equal(fs.lstatSync(path.join(standaloneDir, "public")).isSymbolicLink(), false);
+  assert.equal(fs.lstatSync(path.join(standaloneDir, ".next", "static")).isSymbolicLink(), false);
+  fs.rmSync(assetRoot, { recursive: true, force: true });
+  const missingStandalone = copyStandaloneWebAssets(path.join(os.tmpdir(), `tms-no-standalone-${Date.now()}`), {
+    platform: "win32",
+  });
+  assert.equal(missingStandalone.public.method, "skip");
+  assert.equal(missingStandalone.static.method, "skip");
 
   const { createRequire } = await import("node:module");
   const require = createRequire(import.meta.url);
@@ -214,6 +246,15 @@ async function main() {
   const startSrc = fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8");
   assert.match(startSrc, /loadProjectEnv/);
   assert.match(startSrc, /DOTENV_CONFIG_QUIET/);
+  assert.match(startSrc, /copyStandaloneWebAssets/);
+  assert.doesNotMatch(startSrc, /symlinkSync/);
+  const stageSrc = fs.readFileSync(path.join(process.cwd(), "scripts/stage-standalone-assets.mjs"), "utf8");
+  assert.match(stageSrc, /copyStandaloneWebAssets/);
+  const pkgScripts = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+    scripts: { build: string; start: string };
+  };
+  assert.match(pkgScripts.scripts.build, /stage-standalone-assets/);
+  assert.match(pkgScripts.scripts.start, /start-standalone/);
   const runNextSrc = fs.readFileSync(path.join(process.cwd(), "scripts/run-next.mjs"), "utf8");
   assert.match(runNextSrc, /start-standalone/);
   assert.match(runNextSrc, /loadProjectEnv/);
@@ -222,9 +263,13 @@ async function main() {
   const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");
   assert.match(readme, /JC should start production with `npm start`/);
   assert.match(readme, /Do \*\*not\*\* run `next start`/);
+  assert.match(readme, /styles must load on standalone/);
+  assert.match(readme, /unstyled raw HTML/);
   const shipped = fs.readFileSync(path.join(process.cwd(), "SHIPPED.md"), "utf8");
   assert.match(shipped, /npm start/);
   assert.match(shipped, /injected env \(0\)/);
+  assert.match(shipped, /styles must load on standalone/);
+  assert.match(shipped, /unstyled raw HTML/);
 
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);

@@ -13,7 +13,7 @@ Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is 
 
 On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
 
-`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` **copies** (or `mkdir`s) `data` and copies `.env` into `.next/standalone`. It never creates a Windows symlink or junction (`EPERM` without Developer Mode).
+`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` **copies** (or `mkdir`s) `data`, copies `.env`, and **copies** `public` plus `.next/static` into `.next/standalone`. It never creates a Windows symlink or junction (`EPERM` without Developer Mode).
 
 ```bash
 npm install
@@ -49,15 +49,17 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | Command | What it does |
 | --- | --- |
 | `npm install` | Install JavaScript dependencies (no native compile) |
-| `npm run build` | Production build (writes `.next/standalone`) |
-| `npm start` | **The start command** — load repo-root `.env` / `.env.local`, then run `node .next/standalone/server.js` |
+| `npm run build` | Production build, then **copies** `public` and `.next/static` into `.next/standalone` (no symlink) so styles load |
+| `npm start` | **The start command** — load repo-root `.env` / `.env.local`, recopy web assets, then run `node .next/standalone/server.js` |
 | `docker compose up --build` | Build the Node 22 image and serve port 3000 |
 | `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` and the Ascend-style sample |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires **Node.js 22.13+ or 24** (`node:sqlite`). **JC should start production with `npm start`** from the repo root (the folder that has `package.json` and `.env`). That script loads `.env` and `.env.local` from that same folder (so `SAMSARA_API_TOKEN` is applied), then runs `node .next/standalone/server.js` using `process.execPath` (not a different `node` from PATH). It never prints secret values.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). **JC should start production with `npm start`** from the repo root (the folder that has `package.json` and `.env`). That script loads `.env` and `.env.local` from that same folder (so `SAMSARA_API_TOKEN` is applied), recopies `public` and `.next/static` into `.next/standalone` (Windows: **copy**, never symlink), then runs `node .next/standalone/server.js` using `process.execPath` (not a different `node` from PATH). It never prints secret values.
+
+**After `npm run build`, styles must load on standalone.** Next does not put `public` or `.next/static` inside `.next/standalone`. The build script copies both folders in (no symlink). Then `npm start` **or** `node .next/standalone/server.js` must show the styled UI. If those folders are missing, the page is unstyled raw HTML (default blue links). Prefer `npm start` — it copies the assets again and loads `.env`.
 
 Do **not** run `next start` or `npx next start`. This app uses `output: "standalone"`. Next 16 will print that standalone is configured and dotenv 17 can report `injected env (0) from .env` even when the real project `.env` exists — because `next start` does not load env from the repo root the way the standalone server needs. `npm run start:next` is redirected to the same `npm start` wrapper.
 
