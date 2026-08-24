@@ -1,4 +1,9 @@
 import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import {
+  parseSamsaraVehicleRecords,
+  SAMSARA_TOKEN_MISSING_MESSAGE,
+  type SamsaraVehicleInput,
+} from "../fleet-import-shared";
 import { listDrivers, listLoads, listTrucks } from "../queries";
 
 const SAMSARA_BASE = "https://api.samsara.com";
@@ -60,6 +65,33 @@ export function isSamsaraConfigured(): boolean {
 
 export function resetSamsaraCacheForTests(): void {
   cache = null;
+}
+
+export function parseSamsaraVehicles(items: Array<Record<string, unknown>>): SamsaraVehicleInput[] {
+  return parseSamsaraVehicleRecords(items);
+}
+
+export async function listSamsaraVehicles(): Promise<
+  { ok: true; vehicles: SamsaraVehicleInput[] } | { ok: false; error: string }
+> {
+  if (!isSamsaraTokenSet()) {
+    return { ok: false, error: SAMSARA_TOKEN_MISSING_MESSAGE };
+  }
+  try {
+    let items: Array<Record<string, unknown>>;
+    try {
+      items = await fetchAllPages("/fleet/vehicles");
+    } catch (error) {
+      if (error instanceof SamsaraHttpError && error.status === 404) {
+        items = await fetchAllPages("/vehicles");
+      } else {
+        throw error;
+      }
+    }
+    return { ok: true, vehicles: parseSamsaraVehicles(items) };
+  } catch (error) {
+    return { ok: false, error: publicSamsaraImportError(error) };
+  }
 }
 
 export async function getSamsaraFleet(): Promise<SamsaraFleetResult> {
@@ -411,4 +443,18 @@ function publicSamsaraError(error: unknown): string {
     return "Samsara request timed out. Showing demo GPS/HOS.";
   }
   return "Samsara request failed. Showing demo GPS/HOS.";
+}
+
+function publicSamsaraImportError(error: unknown): string {
+  if (error instanceof SamsaraHttpError) {
+    if (error.status === 401 || error.status === 403) {
+      return `Samsara rejected the API token (HTTP ${error.status}). Check SAMSARA_API_TOKEN and token scopes, then restart.`;
+    }
+    if (error.status === 429) return "Samsara rate-limited the request. Try again in a minute.";
+    return `Samsara request failed (HTTP ${error.status}).`;
+  }
+  if (error instanceof Error && /abort|timeout/i.test(error.message)) {
+    return "Samsara request timed out.";
+  }
+  return "Samsara request failed.";
 }

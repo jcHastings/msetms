@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { PageHeader } from "@/components/page-header";
+import { SamsaraTruckImport } from "@/components/samsara-truck-import";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
@@ -20,7 +21,7 @@ export default function TrucksPage() {
     <>
       <PageHeader
         title="Trucks"
-        subtitle="Power units, plates, and compliance. Samsara vehicle ID is optional."
+        subtitle="Power units, plates, and compliance. Import from Samsara or set a vehicle ID by hand."
         actions={
           <>
             <Link href="/fuel" className="btn btn-secondary">
@@ -35,6 +36,7 @@ export default function TrucksPage() {
           </>
         }
       />
+      <SamsaraTruckImport />
       <div className="card overflow-hidden">
         <table className="table-grid">
           <thead>

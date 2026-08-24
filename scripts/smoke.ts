@@ -265,11 +265,16 @@ async function main() {
   assert.match(readme, /Do \*\*not\*\* run `next start`/);
   assert.match(readme, /styles must load on standalone/);
   assert.match(readme, /unstyled raw HTML/);
+  assert.match(readme, /Import from Samsara/);
+  assert.match(readme, /Import from ORBCOMM/);
+  assert.match(readme, /never logged/);
   const shipped = fs.readFileSync(path.join(process.cwd(), "SHIPPED.md"), "utf8");
   assert.match(shipped, /npm start/);
   assert.match(shipped, /injected env \(0\)/);
   assert.match(shipped, /styles must load on standalone/);
   assert.match(shipped, /unstyled raw HTML/);
+  assert.match(shipped, /Import from Samsara/);
+  assert.match(shipped, /Import from ORBCOMM/);
 
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);
@@ -306,6 +311,23 @@ async function main() {
     assert.match(source, /from ["']@\/lib\/actions["']/, `${file} must import server actions itself`);
     assert.match(source, /name="id"/);
   }
+  for (const file of ["components/samsara-truck-import.tsx", "components/orbcomm-trailer-import.tsx"]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(source, /["']use client["']/);
+    assert.match(source, /from ["']@\/lib\/actions["']/, `${file} must import server actions itself`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
+    assert.doesNotMatch(source, /console\.log/);
+  }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /SamsaraTruckImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /Import from Samsara|SamsaraTruckImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /console\.log/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/orbcomm.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8"), /driverOption/);
@@ -1800,6 +1822,118 @@ Continuous reefer. Two load locks.
     samsara.resetSamsaraCacheForTests();
     orbcomm.resetOrbcommCacheForTests();
   }
+
+  const {
+    buildOrbcommTrailerPreview,
+    buildSamsaraTruckPreview,
+    parseOrbcommFleetText,
+    parseSamsaraVehicleRecords,
+    SAMSARA_TOKEN_MISSING_MESSAGE,
+    unitNumberFromSamsaraName,
+  } = await import("../lib/fleet-import-shared");
+  assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
+  assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
+  const parsedVehicles = parseSamsaraVehicleRecords([
+    { id: "veh-777", name: "Unit 777", vin: "VIN777AAA", year: "2022", make: "Freightliner", model: "Cascadia" },
+    { id: "samsara-veh-112", name: "112", vin: "SHOULDNOTOVERWRITE" },
+    { id: "veh-imp1", name: "IMP1", vin: "VINIMP1" },
+  ]);
+  assert.equal(parsedVehicles[0]?.vin, "VIN777AAA");
+  queries.createTruck({
+    unit_number: "IMP1",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "veh-imp1",
+  });
+  const previewTrucks = buildSamsaraTruckPreview(
+    parsedVehicles,
+    queries.listTrucks().map((truck) => ({
+      id: truck.id,
+      unit_number: truck.unit_number,
+      samsara_vehicle_id: truck.samsara_vehicle_id,
+    })),
+  );
+  assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "veh-777")?.action, "create");
+  assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.action, "update");
+  assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "samsara-veh-112")?.matchBy, "samsara_vehicle_id");
+  assert.equal(previewTrucks.find((row) => row.samsaraVehicleId === "veh-imp1")?.action, "update");
+
+  const { applyOrbcommTrailerImport, applySamsaraTruckImport } = await import("../lib/fleet-import");
+  const samsaraFirstImport = applySamsaraTruckImport(previewTrucks);
+  assert.ok(samsaraFirstImport.created >= 1, "new Samsara vehicle should create a truck");
+  assert.ok(samsaraFirstImport.updated >= 1, "existing Samsara vehicle id or unit # should update");
+  const trucksAfter = queries.listTrucks();
+  const created777 = trucksAfter.find((truck) => truck.unit_number === "777");
+  assert.ok(created777, "created truck uses Samsara unit #");
+  assert.equal(created777?.samsara_vehicle_id, "veh-777");
+  assert.equal(created777?.vin, "VIN777AAA");
+  const updated112 = trucksAfter.find((truck) => truck.samsara_vehicle_id === "samsara-veh-112");
+  assert.ok(updated112);
+  assert.notEqual(updated112?.vin, "SHOULDNOTOVERWRITE", "import must not wipe an existing VIN");
+  const updatedImp1 = trucksAfter.find((truck) => truck.samsara_vehicle_id === "veh-imp1");
+  assert.equal(updatedImp1?.vin, "VINIMP1");
+  const samsaraSecondImport = applySamsaraTruckImport(previewTrucks);
+  assert.equal(samsaraSecondImport.created, 0, "second Samsara import must not duplicate");
+  assert.ok(samsaraSecondImport.updated >= 1);
+  assert.equal(queries.listTrucks().filter((truck) => truck.samsara_vehicle_id === "veh-777").length, 1);
+
+  const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
+  delete process.env.SAMSARA_API_TOKEN;
+  const noToken = await samsara.listSamsaraVehicles();
+  assert.equal(noToken.ok, false);
+  if (!noToken.ok) {
+    assert.equal(noToken.error, SAMSARA_TOKEN_MISSING_MESSAGE);
+    assert.doesNotMatch(noToken.error, /Bearer |sk-|tok_/);
+  }
+  process.env.SAMSARA_API_TOKEN = "tok_smoke_not_a_real_secret";
+  const importFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    assert.match(url, /\/fleet\/vehicles/);
+    assert.doesNotMatch(url, /tok_smoke_not_a_real_secret/);
+    assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, "Bearer tok_smoke_not_a_real_secret");
+    return Response.json({
+      data: [{ id: "veh-888", name: "888", vin: "VIN888" }],
+      pagination: { hasNextPage: false },
+    });
+  }) as typeof fetch;
+  try {
+    const listed = await samsara.listSamsaraVehicles();
+    assert.equal(listed.ok, true);
+    if (listed.ok) {
+      assert.equal(listed.vehicles[0]?.id, "veh-888");
+      assert.equal(listed.vehicles[0]?.vin, "VIN888");
+    }
+  } finally {
+    globalThis.fetch = importFetch;
+    if (savedTokenForImport == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = savedTokenForImport;
+  }
+
+  const orbcommCsv = parseOrbcommFleetText(
+    "Asset ID,Trailer #,VIN,Type\norb-9001,TR-9001,1TRAILERVIN,Reefer\norbcomm-tr-7742,TR-7742,UPDATEDTRAILERVIN,Reefer\n",
+  );
+  assert.equal(orbcommCsv[0]?.assetId, "orb-9001");
+  assert.equal(orbcommCsv[0]?.unitNumber, "TR-9001");
+  const previewTrailers = buildOrbcommTrailerPreview(orbcommCsv, [
+    { id: 42, unit_number: "TR-7742", orbcomm_asset_id: "orbcomm-tr-7742" },
+  ]);
+  assert.equal(previewTrailers.find((row) => row.orbcommAssetId === "orb-9001")?.action, "create");
+  assert.equal(previewTrailers.find((row) => row.orbcommAssetId === "orbcomm-tr-7742")?.action, "update");
+  const trailerImport = applyOrbcommTrailerImport(previewTrailers);
+  assert.ok(trailerImport.created >= 1);
+  assert.ok(trailerImport.updated >= 1);
+  const trailersAfter = queries.listTrailers();
+  const createdTrailer = trailersAfter.find((trailer) => trailer.unit_number === "TR-9001");
+  assert.ok(createdTrailer);
+  assert.equal(createdTrailer?.orbcomm_asset_id, "orb-9001");
+  const updatedTrailer = trailersAfter.find((trailer) => trailer.orbcomm_asset_id === "orbcomm-tr-7742");
+  assert.ok(updatedTrailer);
+  assert.equal(updatedTrailer?.vin, "UPDATEDTRAILERVIN");
+  const trailerAgain = applyOrbcommTrailerImport(previewTrailers);
+  assert.equal(trailerAgain.created, 0, "second ORBCOMM import must not duplicate");
+  assert.equal(queries.listTrailers().filter((trailer) => trailer.unit_number === "TR-9001").length, 1);
 
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;

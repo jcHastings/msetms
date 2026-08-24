@@ -1178,3 +1178,141 @@ export async function updateCompanyProfileAction(
     return fail(error);
   }
 }
+
+export async function previewSamsaraTrucksAction(
+  _prev: SamsaraPreviewState | null,
+  _formData: FormData,
+): Promise<SamsaraPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const { listSamsaraVehicles } = await import("./integrations/samsara");
+    const listed = await listSamsaraVehicles();
+    if (!listed.ok) return { ok: false, error: listed.error };
+    const { previewSamsaraTrucks } = await import("./fleet-import");
+    const rows = previewSamsaraTrucks(listed.vehicles);
+    if (rows.length === 0) {
+      return { ok: false, error: "Samsara returned no vehicles." };
+    }
+    return { ok: true, source: "samsara", rows };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Samsara preview failed." };
+  }
+}
+
+export async function confirmSamsaraTrucksImportAction(
+  _prev: SamsaraPreviewState | null,
+  formData: FormData,
+): Promise<SamsaraPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const selected = parseSelectedJson<SamsaraTruckPreviewRow>(formData, "selectKey");
+    if (selected.length === 0) {
+      return { ok: false, error: "Select at least one Samsara vehicle to import." };
+    }
+    const { applySamsaraTruckImport } = await import("./fleet-import");
+    const result = applySamsaraTruckImport(selected);
+    refresh();
+    return {
+      ok: true,
+      source: "samsara",
+      ...result,
+      message: `Imported trucks: created ${result.created}, updated ${result.updated}${result.skipped ? `, skipped ${result.skipped}` : ""}.`,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Samsara import failed." };
+  }
+}
+
+export async function previewOrbcommTrailersAction(
+  _prev: OrbcommPreviewState | null,
+  formData: FormData,
+): Promise<OrbcommPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const pasted = String(formData.get("report_text") ?? "").trim();
+    const file = formData.get("file");
+    let text = pasted;
+    if (!text && file instanceof File && file.size > 0) {
+      text = await file.text();
+    }
+    const { previewOrbcommTrailers } = await import("./fleet-import");
+    const mode = String(formData.get("mode") ?? "");
+    if (mode !== "api" && text) {
+      const { parseOrbcommFleetText } = await import("./fleet-import-shared");
+      const assets = parseOrbcommFleetText(text);
+      const rows = previewOrbcommTrailers(assets);
+      if (rows.length === 0) {
+        return {
+          ok: false,
+          error: "No trailer rows found. Use Asset ID / Trailer # columns (ORBCOMM export, not a portal scrape).",
+        };
+      }
+      return { ok: true, source: "orbcomm_csv", rows };
+    }
+    const { listOrbcommFleetAssets } = await import("./integrations/orbcomm");
+    const listed = await listOrbcommFleetAssets();
+    if (!listed.ok) return { ok: false, error: listed.error };
+    const rows = previewOrbcommTrailers(listed.assets);
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        error: "ORBCOMM API did not return a trailer list. Upload a CSV/export (do not scrape the portal).",
+      };
+    }
+    return { ok: true, source: "orbcomm_api", rows };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "ORBCOMM preview failed." };
+  }
+}
+
+export async function confirmOrbcommTrailersImportAction(
+  _prev: OrbcommPreviewState | null,
+  formData: FormData,
+): Promise<OrbcommPreviewState> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const selected = parseSelectedJson<OrbcommTrailerPreviewRow>(formData, "selectKey");
+    if (selected.length === 0) {
+      return { ok: false, error: "Select at least one trailer to import." };
+    }
+    const { applyOrbcommTrailerImport } = await import("./fleet-import");
+    const result = applyOrbcommTrailerImport(selected);
+    refresh();
+    return {
+      ok: true,
+      source: "orbcomm_csv",
+      ...result,
+      message: `Imported trailers: created ${result.created}, updated ${result.updated}${result.skipped ? `, skipped ${result.skipped}` : ""}.`,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "ORBCOMM import failed." };
+  }
+}
+
+type SamsaraPreviewState = import("./fleet-import-shared").FleetImportPreviewState<
+  import("./fleet-import-shared").SamsaraTruckPreviewRow
+>;
+type OrbcommPreviewState = import("./fleet-import-shared").FleetImportPreviewState<
+  import("./fleet-import-shared").OrbcommTrailerPreviewRow
+>;
+type SamsaraTruckPreviewRow = import("./fleet-import-shared").SamsaraTruckPreviewRow;
+type OrbcommTrailerPreviewRow = import("./fleet-import-shared").OrbcommTrailerPreviewRow;
+
+function parseSelectedJson<T>(formData: FormData, ...idKeys: string[]): T[] {
+  const raw = String(formData.get("rows") ?? "").trim();
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) return [];
+  const selected = new Set(
+    formData
+      .getAll("selected")
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+  );
+  const rows = parsed.filter((item): item is T => Boolean(item) && typeof item === "object");
+  if (selected.size === 0) return [];
+  return rows.filter((row) => {
+    const record = row as Record<string, unknown>;
+    return idKeys.some((key) => selected.has(String(record[key] ?? "").trim()));
+  });
+}

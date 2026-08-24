@@ -6,6 +6,11 @@ import {
   getOrbcommUsername,
   isOrbcommConfigured,
 } from "../env";
+import {
+  ORBCOMM_CREDS_OR_CSV_MESSAGE,
+  orbcommAssetFromUnknown,
+  type OrbcommAssetInput,
+} from "../fleet-import-shared";
 import { listLoads, listTrailers, listTrucks } from "../queries";
 import type { ReeferReading, ReeferStatus } from "../types";
 
@@ -53,6 +58,9 @@ export type OrbcommAssetReading = {
   assetId?: string;
   trailerId?: string;
   name?: string;
+  vin?: string;
+  plate?: string;
+  type?: string;
   temperatureF?: number | null;
   setpointF?: number | null;
   returnAirF?: number | null;
@@ -380,8 +388,46 @@ async function generateOrbcommToken(): Promise<string> {
   return token;
 }
 
+export async function listOrbcommFleetAssets(): Promise<
+  { ok: true; assets: OrbcommAssetInput[] } | { ok: false; error: string }
+> {
+  if (!isOrbcommConfigured()) {
+    return { ok: false, error: ORBCOMM_CREDS_OR_CSV_MESSAGE };
+  }
+  try {
+    const token = await generateOrbcommToken();
+    const readings = await tryFetchAssetStatus(token);
+    const assets = readings
+      .map((reading) =>
+        orbcommAssetFromUnknown({
+          assetId: reading.assetId,
+          trailerId: reading.trailerId,
+          name: reading.name,
+          vin: reading.vin,
+          plate: reading.plate,
+          type: reading.type,
+        }),
+      )
+      .filter((asset) => asset.assetId || asset.unitNumber);
+    if (assets.length === 0) {
+      return {
+        ok: false,
+        error:
+          "ORBCOMM API did not return a trailer list. Upload a CSV/export from ORBCOMM (do not scrape the portal).",
+      };
+    }
+    return { ok: true, assets };
+  } catch (error) {
+    return { ok: false, error: publicOrbcommImportError(error) };
+  }
+}
+
 async function tryFetchAssetStatus(token: string): Promise<OrbcommAssetReading[]> {
   const paths = [
+    "/SynB2BGatewayService/api/assets",
+    "/SynB2BGatewayService/api/GetAssets",
+    "/SynB2BGatewayService/api/assetList",
+    "/SynB2BGatewayService/api/GetAssetList",
     "/SynB2BGatewayService/api/assetStatus",
     "/SynB2BGatewayService/api/assets/status",
     "/SynB2BGatewayService/api/GetAssetLatestPositions",
@@ -428,6 +474,9 @@ function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
     assetId: firstString(item, ["assetId", "asset_id", "AssetId", "id", "ID", "unitId"]),
     trailerId: firstString(item, ["trailerId", "trailer_id", "TrailerId", "trailerNumber", "name"]),
     name: firstString(item, ["name", "Name", "trailerNumber", "trailer_id"]),
+    vin: firstString(item, ["vin", "VIN", "Vin", "vehicleVin"]),
+    plate: firstString(item, ["plate", "Plate", "licensePlate", "license_plate"]),
+    type: firstString(item, ["type", "Type", "equipmentType", "equipment"]),
     temperatureF: firstTempF(item, [
       "temperatureF",
       "temperature_f",
@@ -677,4 +726,17 @@ function publicOrbcommError(error: unknown): string {
     return "ORBCOMM request timed out. Showing demo temps.";
   }
   return "ORBCOMM request failed. Showing demo temps.";
+}
+
+function publicOrbcommImportError(error: unknown): string {
+  if (error instanceof OrbcommHttpError) {
+    if (error.status === 401 || error.status === 403) {
+      return `ORBCOMM rejected the credentials (HTTP ${error.status}). Check ORBCOMM_USERNAME / ORBCOMM_PASSWORD and restart, or upload a CSV/export.`;
+    }
+    return `ORBCOMM request failed (HTTP ${error.status}). Upload a CSV/export if the API has no trailer list.`;
+  }
+  if (error instanceof Error && /abort|timeout/i.test(error.message)) {
+    return "ORBCOMM request timed out. Upload a CSV/export, or try again.";
+  }
+  return "ORBCOMM request failed. Upload a CSV/export from ORBCOMM (do not scrape the portal).";
 }

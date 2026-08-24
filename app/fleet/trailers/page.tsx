@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { PageHeader } from "@/components/page-header";
+import { OrbcommTrailerImport } from "@/components/orbcomm-trailer-import";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
 import { listTrailers } from "@/lib/queries";
@@ -32,7 +33,7 @@ export default function TrailersPage() {
     <>
       <PageHeader
         title="Trailers"
-        subtitle="53' reefers and dry vans. ORBCOMM asset ID is optional for the last known reading."
+        subtitle="53' reefers and dry vans. Import from ORBCOMM or set an asset ID by hand."
         actions={
           <>
             <a href="/api/fleet/trailers/export" className="btn btn-secondary">
@@ -44,6 +45,7 @@ export default function TrailersPage() {
           </>
         }
       />
+      <OrbcommTrailerImport />
       <div className="card overflow-hidden">
         <table className="table-grid">
           <thead>

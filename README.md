@@ -79,8 +79,8 @@ Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when st
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
 - **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav — add/edit records, compliance badges, document uploads (CDL, medical card, registration, DOT, insurance) under `data/uploads/fleet`. Driver PINs can be reset and are never shown in the list.
-- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo)
-- Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report)
+- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo). **Trucks → Import from Samsara** previews name/unit, vehicle id, and VIN, then create/updates matched by Samsara vehicle id or unit # (no duplicates). Missing token: add `SAMSARA_API_TOKEN` to `.env` and restart. The token is never logged.
+- Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report). **Trailers → Import from ORBCOMM** uses `ORBCOMM_*` when the B2B API returns assets, or a CSV/export preview-then-import. Match by ORBCOMM asset id or trailer #. No portal scrape.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
@@ -146,9 +146,9 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 
 1. Paste the token after `SAMSARA_API_TOKEN=`.
 2. Restart.
-3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
+3. On **Fleet → Trucks**, use **Import from Samsara** (preview, then confirm) or set the Samsara vehicle ID by hand. Set the Samsara driver ID on the driver.
 
-When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
+When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles` for truck import, plus `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time. The token is never logged.
 
 In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
 
@@ -168,7 +168,7 @@ Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/po
 1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
 2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
 3. Restart.
-4. On **Fleet → Trailers**, set the ORBCOMM asset ID.
+4. On **Fleet → Trailers**, use **Import from ORBCOMM** (API list when available, or CSV/export preview then import) or set the ORBCOMM asset ID by hand. Match by asset id or trailer #. Do not scrape the portal.
 
 When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
 
