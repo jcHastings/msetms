@@ -2578,9 +2578,15 @@ Continuous reefer. Two load locks.
   assert.equal(ms2201?.orbcomm_asset_id, "GSSC0001");
   assert.equal(ms2201?.type, "reefer");
   assert.equal(ms2201?.gps_address ?? "", "", "roster import must not persist snapshot GPS");
+  assert.equal(ms2201?.gps_latitude ?? null, null);
+  assert.equal(ms2201?.gps_longitude ?? null, null);
+  assert.equal(ms2201?.gps_recorded_at ?? "", "");
+  assert.doesNotMatch(ms2201?.notes ?? "", /Unit not reporting/);
   const jfi = queries.listTrailers().find((trailer) => trailer.unit_number === "JFI4215");
   assert.equal(jfi?.orbcomm_asset_id, "GSSC0019");
   assert.equal(jfi?.type, "other");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import.ts"), "utf8"), /Snapshot city\/GPS stay preview-only/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import.ts"), "utf8"), /saveTrailerGps/);
 
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;

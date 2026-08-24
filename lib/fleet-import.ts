@@ -181,6 +181,7 @@ function persistImportedGps(
   });
 }
 
+/** Roster import writes unit, ORBCOMM device id, and type only. Snapshot city/GPS stay preview-only. */
 export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
   created: number;
   updated: number;
@@ -212,9 +213,6 @@ export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
         vin: row.vin,
         plate: row.plate,
         type: row.type,
-        city: row.city,
-        latitude: row.latitude,
-        longitude: row.longitude,
       },
     ])[0];
     if (!preview) {
