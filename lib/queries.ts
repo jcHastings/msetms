@@ -1584,33 +1584,23 @@ export function updateLoadStatus(loadId: number, status: string): void {
 
 function assertAssetFree(
   _truckId: number | null,
-  driverId: number | null,
+  _driverId: number | null,
   exceptLoadId: number,
   trailerId?: number | null,
 ): void {
-  // Same truck may sit on multiple active loads (relays, back-to-back). Trailer and driver stay unique.
-  if (!driverId && trailerId == null) return;
+  // Trucks and drivers may sit on multiple active loads. Trailer stays unique.
+  if (trailerId == null) return;
   const conflict = getDb()
     .prepare(
       `SELECT load_number FROM loads
        WHERE id != ?
          AND status IN (${BUSY_STATUS_SQL})
-         AND (
-           (? IS NOT NULL AND driver_id = ?)
-           OR (? IS NOT NULL AND trailer_id = ?)
-         )
+         AND trailer_id = ?
        LIMIT 1`,
     )
-    .get(
-      exceptLoadId,
-      ...BUSY_STATUSES,
-      driverId,
-      driverId,
-      trailerId ?? null,
-      trailerId ?? null,
-    ) as { load_number: string } | undefined;
+    .get(exceptLoadId, ...BUSY_STATUSES, trailerId) as { load_number: string } | undefined;
   if (conflict) {
-    throw new Error(`That trailer or driver is already on ${conflict.load_number}.`);
+    throw new Error(`That trailer is already on ${conflict.load_number}.`);
   }
 }
 
@@ -1688,23 +1678,8 @@ export function listAssignableTrucks(_loadId?: number): Truck[] {
   );
 }
 
-export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
-  return listDrivers().filter((driver) => {
-    if (driver.active === 0 || driver.status === "off_duty") return false;
-    const busy = getDb()
-      .prepare(
-        `SELECT id FROM loads
-         WHERE driver_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?
-         UNION
-         SELECT loads.id FROM load_relays
-         JOIN loads ON loads.id = load_relays.load_id
-         WHERE (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
-           AND loads.status IN (${BUSY_STATUS_SQL}) AND loads.id != ?
-         LIMIT 1`,
-      )
-      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1, driver.id, driver.id, ...BUSY_STATUSES, loadId ?? -1);
-    return !busy;
-  });
+export function listAssignableDrivers(_loadId?: number): DriverWithTruck[] {
+  return listDrivers().filter((driver) => driver.active !== 0 && driver.status !== "off_duty");
 }
 
 export function updateDriverProgress(loadId: number, driverId: number, progress: DriverProgress): void {

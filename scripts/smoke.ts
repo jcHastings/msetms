@@ -4963,6 +4963,49 @@ Continuous reefer. Two load locks.
     queries.listAssignableTrucks(shareLoadB).some((truck) => truck.id === shareTruckId),
     "truck already on another open load stays in the assign picker",
   );
+  const shareLoadC = queries.createLoad({
+    customer_id: customerId,
+    origin: "Austin, TX",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 36000,
+    commodity: "Produce",
+    rate: 1000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.assignLoad(shareLoadC, shareTruckId, shareDriverA);
+  assert.equal(queries.getLoad(shareLoadA)?.driver_id, shareDriverA);
+  assert.equal(queries.getLoad(shareLoadC)?.driver_id, shareDriverA);
+  assert.ok(
+    queries.listAssignableDrivers(shareLoadC).some((driver) => driver.id === shareDriverA),
+    "driver already on another open load stays in the assign picker",
+  );
+  const { addRelay } = await import("../lib/relay-store");
+  addRelay(shareLoadC, {
+    from_driver_id: shareDriverA,
+    driver_id: shareDriverB,
+    delivery: "Waco, TX",
+  });
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/relay-store.ts"), "utf8"),
+    /is already on/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"),
+    /return fail\(error\)/,
+  );
 
   const { buildSafetyBoard } = await import("../lib/safety");
   const { expiryRank, worstSafetyRank, cleanSafetyDate, formatSafetyDatePair } = await import("../lib/safety-shared");

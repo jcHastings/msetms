@@ -102,12 +102,17 @@ function RelayDialog({
 }) {
   const [fromId, setFromId] = useState(defaultFromId ? String(defaultFromId) : "");
   const [toId, setToId] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="pay-item-dialog-backdrop" role="dialog" aria-label="Add relay">
       <form
         action={async (formData) => {
-          await addRelayAction(formData);
+          const result = await addRelayAction(formData);
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
           onClose();
         }}
         className="pay-item-dialog card space-y-3 p-5"
@@ -153,6 +158,7 @@ function RelayDialog({
           <input id="relay-handoff" name="handoff" required placeholder="Handoff city" />
         </div>
         <p className="text-xs text-slate-500">Company or owner-operator on either side. Internal only — not billed.</p>
+        {error ? <p className="text-sm text-rose-700">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <button className="btn btn-secondary" type="button" onClick={onClose}>
             Cancel

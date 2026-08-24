@@ -179,23 +179,35 @@ function parseRelayForm(formData: FormData) {
   };
 }
 
-export async function addRelayAction(formData: FormData): Promise<void> {
-  await withRequestAuditActor(async () => {
-    await requireLoadEditor();
-    const loadId = parseOptionalInt(formData.get("load_id"));
-    if (!loadId) throw new Error("Load is missing.");
-    addRelay(loadId, parseRelayForm(formData));
-    refresh();
+export async function addRelayAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      addRelay(loadId, parseRelayForm(formData));
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
   });
 }
 
-export async function updateRelayAction(formData: FormData): Promise<void> {
-  await withRequestAuditActor(async () => {
-    await requireLoadEditor();
-    const id = parseOptionalInt(formData.get("relay_id"));
-    if (!id) throw new Error("Relay is missing.");
-    updateRelay(id, parseRelayForm(formData));
-    refresh();
+export async function updateRelayAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const id = parseOptionalInt(formData.get("relay_id"));
+      if (!id) throw new Error("Relay is missing.");
+      updateRelay(id, parseRelayForm(formData));
+      refresh();
+      return { ok: true, id };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
   });
 }
 

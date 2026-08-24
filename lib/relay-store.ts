@@ -7,7 +7,6 @@ import {
   type RelayInput,
 } from "./relays";
 import { computeOwnerOperatorPay } from "./settlement";
-import { ACTIVE_LOAD_STATUSES, statusNeedsAssets } from "./types";
 
 const RELAY_SELECT = `SELECT load_relays.*,
   from_drivers.name AS from_driver_name,
@@ -21,9 +20,6 @@ const RELAY_SELECT = `SELECT load_relays.*,
   LEFT JOIN drivers ON drivers.id = load_relays.driver_id
   LEFT JOIN trucks ON trucks.id = load_relays.truck_id
   LEFT JOIN trailers ON trailers.id = load_relays.trailer_id`;
-
-const BUSY_STATUSES = ACTIVE_LOAD_STATUSES.filter((status) => statusNeedsAssets(status));
-const BUSY_SQL = BUSY_STATUSES.map(() => "?").join(", ");
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -120,26 +116,6 @@ function settleRelayPay(loadRate: number | null, input: RelayInput): { percent: 
   return { percent, pay };
 }
 
-function assertRelayDriverFree(driverId: number, exceptLoadId: number): void {
-  const conflict = getDb()
-    .prepare(
-      `SELECT load_number AS load_number FROM loads
-       WHERE id != ? AND driver_id = ? AND status IN (${BUSY_SQL})
-       UNION
-       SELECT loads.load_number FROM load_relays
-       JOIN loads ON loads.id = load_relays.load_id
-       WHERE loads.id != ? AND (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
-         AND loads.status IN (${BUSY_SQL})
-       LIMIT 1`,
-    )
-    .get(exceptLoadId, driverId, ...BUSY_STATUSES, exceptLoadId, driverId, driverId, ...BUSY_STATUSES) as
-    | { load_number: string }
-    | undefined;
-  if (conflict) {
-    throw new Error(`${driverName(driverId) || "That driver"} is already on ${conflict.load_number}.`);
-  }
-}
-
 function describeRelay(relay: {
   pickup: string;
   delivery: string;
@@ -168,8 +144,6 @@ function resolveRelayDrivers(input: RelayInput, loadId: number): { fromDriverId:
   if (fromDriverId && driverId && fromDriverId === driverId) {
     throw new Error("Pick two different drivers for the handoff.");
   }
-  if (fromDriverId) assertRelayDriverFree(fromDriverId, loadId);
-  if (driverId) assertRelayDriverFree(driverId, loadId);
   return { fromDriverId, driverId };
 }
 
