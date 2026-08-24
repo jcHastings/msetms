@@ -76,6 +76,14 @@ async function main() {
   const workspaceSource = fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8");
   assert.match(workspaceSource, /Back to board/);
   assert.match(workspaceSource, /Load Actions/);
+  assert.match(workspaceSource, /load-tabs/);
+  assert.match(workspaceSource, /load-tab-active/);
+  assert.match(workspaceSource, /load-actions/);
+  assert.match(workspaceSource, /load-action-btn/);
+  const cssSource = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+  assert.match(cssSource, /\.load-tabs/);
+  assert.match(cssSource, /\.load-tab-active/);
+  assert.match(cssSource, /\.load-actions/);
   assert.match(workspaceSource, /Load Log/);
   assert.match(workspaceSource, /Dispatch and Tracking/);
   assert.match(workspaceSource, /Load Documents/);

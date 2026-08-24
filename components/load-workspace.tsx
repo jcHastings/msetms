@@ -134,16 +134,14 @@ export function LoadWorkspace({
     <LoadEditProvider
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+      <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
         <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
           {loadFormTabsForRole(role).map((item) => (
             <button
               key={item.value}
               type="button"
-              className={`rounded-t-md px-3 py-2 text-sm font-medium ${
-                tab === item.value
-                  ? "bg-white text-navy shadow-inner ring-1 ring-slate-200"
-                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+              className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
+                tab === item.value ? "load-tab-active" : ""
               }`}
               aria-current={tab === item.value ? "page" : undefined}
               onClick={() => setTab(item.value)}
@@ -162,8 +160,8 @@ export function LoadWorkspace({
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Load Actions</span>
+      <div className="load-actions mb-4 flex flex-wrap items-center gap-2 px-3 py-2">
+        <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">Load Actions</span>
         <ActionMenu label="Load Log">
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
@@ -296,7 +294,7 @@ export function LoadWorkspace({
 function ActionMenu({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <details className="relative">
-      <summary className="btn btn-secondary cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+      <summary className="btn load-action-btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         {label}
       </summary>
       <div className="absolute z-20 mt-1 min-w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">

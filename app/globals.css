@@ -168,5 +168,52 @@ button {
 }
 
 .menu-item:hover {
-  background: #f3f6f9;
+  background: #e8eef5;
+}
+
+.load-tabs {
+  background: var(--navy);
+  border: 1px solid #0b1f3a;
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.load-tab {
+  color: #d5deea;
+  background: transparent;
+}
+
+.load-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.load-tab-active {
+  background: var(--gold);
+  color: #0b1f3a;
+}
+
+.load-tab-active:hover {
+  background: var(--gold-dark);
+  color: #0b1f3a;
+}
+
+.load-actions {
+  background: #e4ebf2;
+  border: 1px solid #b7c4d3;
+  border-radius: 0.75rem;
+}
+
+.load-actions-label {
+  color: #0b1f3a;
+}
+
+.load-action-btn {
+  background: var(--navy);
+  border-color: #0b1f3a;
+  color: #fff;
+}
+
+.load-action-btn:hover {
+  background: var(--navy-mid);
+  color: #fff;
 }
