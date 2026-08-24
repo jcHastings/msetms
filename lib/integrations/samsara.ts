@@ -67,8 +67,12 @@ export function isSamsaraConfigured(): boolean {
   return isSamsaraTokenSet();
 }
 
-export function resetSamsaraCacheForTests(): void {
+export function resetSamsaraCache(): void {
   cache = null;
+}
+
+export function resetSamsaraCacheForTests(): void {
+  resetSamsaraCache();
 }
 
 export function parseSamsaraVehicles(items: Array<Record<string, unknown>>): SamsaraVehicleInput[] {

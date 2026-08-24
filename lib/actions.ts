@@ -1189,11 +1189,24 @@ export async function previewSamsaraTrucksAction(
     const listed = await listSamsaraVehicles();
     if (!listed.ok) return { ok: false, error: listed.error };
     const { previewSamsaraTrucks } = await import("./fleet-import");
+    const { samsaraReturnedNames, samsaraUnmatchedUnitsWarning } = await import("./fleet-import-shared");
+    const { listTrucks } = await import("./queries");
     const rows = previewSamsaraTrucks(listed.vehicles);
+    const names = samsaraReturnedNames(listed.vehicles);
     if (rows.length === 0) {
-      return { ok: false, error: "Samsara returned no vehicles." };
+      return {
+        ok: false,
+        error: names.length
+          ? `Samsara returned vehicles but none could be previewed. Names that came back: ${names.join(", ")}.`
+          : "Samsara returned no vehicles.",
+      };
     }
-    return { ok: true, source: "samsara", rows };
+    return {
+      ok: true,
+      source: "samsara",
+      rows,
+      warning: samsaraUnmatchedUnitsWarning(listTrucks(), listed.vehicles) || undefined,
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Samsara preview failed." };
   }
@@ -1210,7 +1223,9 @@ export async function confirmSamsaraTrucksImportAction(
       return { ok: false, error: "Select at least one Samsara vehicle to import." };
     }
     const { applySamsaraTruckImport } = await import("./fleet-import");
+    const { resetSamsaraCache } = await import("./integrations/samsara");
     const result = applySamsaraTruckImport(selected);
+    resetSamsaraCache();
     refresh();
     return {
       ok: true,

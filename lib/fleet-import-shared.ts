@@ -57,6 +57,7 @@ export type SamsaraVehicleInput = {
   make: string;
   model: string;
   licensePlate: string;
+  extraKeys?: string[];
 };
 
 export type OrbcommAssetInput = {
@@ -87,17 +88,38 @@ export function unitNumberFromSamsaraName(name: string, fallbackId: string): str
   return trimmed;
 }
 
+function unitTokensFromText(...values: Array<string | undefined>): string[] {
+  const tokens: string[] = [];
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    tokens.push(text);
+    tokens.push(unitNumberFromSamsaraName(text, ""));
+    for (const part of text.match(/\b\d{1,6}\b/g) ?? []) tokens.push(part);
+  }
+  return tokens;
+}
+
 export function samsaraVehicleMatchKeys(vehicle: {
   id?: string;
   samsaraVehicleId?: string;
   name?: string;
   unitNumber?: string;
+  extraKeys?: string[];
 }): string[] {
-  const id = String(vehicle.id ?? vehicle.samsaraVehicleId ?? "").trim();
-  const name = String(vehicle.name ?? "").trim();
-  const unit = String(vehicle.unitNumber ?? "").trim();
-  const fromName = unitNumberFromSamsaraName(name, "");
-  return [...new Set([id, name, unit, fromName].map(normalizeFleetKey).filter(Boolean))];
+  return [
+    ...new Set(
+      unitTokensFromText(
+        vehicle.id,
+        vehicle.samsaraVehicleId,
+        vehicle.name,
+        vehicle.unitNumber,
+        ...(vehicle.extraKeys ?? []),
+      )
+        .map(normalizeFleetKey)
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function truckSamsaraMatchKeys(truck: { unit_number: string; samsara_vehicle_id: string }): string[] {
@@ -114,7 +136,7 @@ export function samsaraVehicleMatchesTruck(
 
 export function matchTruckForSamsara(
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string }>,
-  vehicle: { samsaraVehicleId: string; unitNumber: string; name?: string },
+  vehicle: { samsaraVehicleId: string; unitNumber: string; name?: string; extraKeys?: string[] },
 ): { id: number; matchBy: "samsara_vehicle_id" | "unit_number" } | null {
   const vehicleId = normalizeFleetKey(vehicle.samsaraVehicleId);
   if (vehicleId) {
@@ -164,7 +186,12 @@ export function buildSamsaraTruckPreview(
     const dedupe = normalizeFleetKey(samsaraVehicleId || unitNumber);
     if (dedupe && seenVehicle.has(dedupe)) continue;
     if (dedupe) seenVehicle.add(dedupe);
-    const match = matchTruckForSamsara(trucks, { samsaraVehicleId, unitNumber, name });
+    const match = matchTruckForSamsara(trucks, {
+      samsaraVehicleId,
+      unitNumber,
+      name,
+      extraKeys: vehicle.extraKeys,
+    });
     rows.push({
       selectKey: samsaraVehicleId || unitNumber,
       samsaraVehicleId,
@@ -181,6 +208,38 @@ export function buildSamsaraTruckPreview(
     });
   }
   return rows;
+}
+
+export function samsaraReturnedNames(vehicles: Array<{ id?: string; name?: string }>): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const vehicle of vehicles) {
+    const label = String(vehicle.name || vehicle.id || "").trim();
+    if (!label) continue;
+    const key = normalizeFleetKey(label);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(label);
+  }
+  return names;
+}
+
+/** When JC’s unit (112) is not in the Samsara list, say which names did come back. */
+export function samsaraUnmatchedUnitsWarning(
+  trucks: Array<{ unit_number: string; samsara_vehicle_id: string }>,
+  vehicles: Array<{ id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; extraKeys?: string[] }>,
+): string {
+  if (vehicles.length === 0) return "";
+  const unmatched = trucks
+    .filter((truck) => truckSamsaraMatchKeys(truck).length > 0)
+    .filter((truck) => !vehicles.some((vehicle) => samsaraVehicleMatchesTruck(truck, vehicle)))
+    .map((truck) => truck.unit_number.trim() || truck.samsara_vehicle_id.trim())
+    .filter(Boolean);
+  if (unmatched.length === 0) return "";
+  const names = samsaraReturnedNames(vehicles);
+  const units = [...new Set(unmatched)].join(", ");
+  const listed = names.length ? names.join(", ") : "none";
+  return `Samsara returned vehicles but none matched unit ${units}. Names that came back: ${listed}.`;
 }
 
 export function buildOrbcommTrailerPreview(
@@ -243,6 +302,7 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
       make: firstText(item, nested, ["make", "vehicleMake"]),
       model: firstText(item, nested, ["model", "vehicleModel"]),
       licensePlate: firstText(item, nested, ["licensePlate", "license_plate", "licensePlateNumber"]),
+      extraKeys: extraSamsaraIdentityKeys(item, nested),
     });
   }
   return vehicles;
@@ -340,6 +400,23 @@ function pickHeader(item: Record<string, unknown>, keys: string[]): string {
     if (text) return text;
   }
   return "";
+}
+
+function extraSamsaraIdentityKeys(
+  item: Record<string, unknown>,
+  nested: Record<string, unknown>,
+): string[] {
+  const keys = [
+    firstText(item, nested, ["serial", "unit", "unitNumber", "unit_number", "number"]),
+  ];
+  for (const bag of [item.externalIds, nested.externalIds, item.external_ids, nested.external_ids]) {
+    if (!bag || typeof bag !== "object") continue;
+    for (const value of Object.values(bag as Record<string, unknown>)) {
+      const text = asText(value);
+      if (text) keys.push(text);
+    }
+  }
+  return keys.filter(Boolean);
 }
 
 function firstText(

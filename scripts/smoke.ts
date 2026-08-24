@@ -391,6 +391,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /you do not need the UUID|do not need the UUID/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraUnmatchedUnitsWarning/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
@@ -1966,6 +1970,8 @@ Continuous reefer. Two load locks.
     SAMSARA_TOKEN_MISSING_MESSAGE,
     SAMSARA_ID_MISSING_MESSAGE,
     matchTruckForSamsara,
+    samsaraReturnedNames,
+    samsaraUnmatchedUnitsWarning,
     unitNumberFromSamsaraName,
   } = await import("../lib/fleet-import-shared");
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
@@ -1978,6 +1984,26 @@ Continuous reefer. Two load locks.
   );
   assert.equal(match36?.id, 7);
   assert.ok(match36?.matchBy === "samsara_vehicle_id" || match36?.matchBy === "unit_number");
+  const match112 = matchTruckForSamsara(
+    [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
+    { samsaraVehicleId: "281474977075805", unitNumber: "112", name: "112" },
+  );
+  assert.equal(match112?.id, 8, "unit typed as Samsara id must match without the UUID");
+  const no112 = samsaraUnmatchedUnitsWarning(
+    [{ unit_number: "112", samsara_vehicle_id: "112" }],
+    [{ id: "v-pete", name: "Pete" }, { id: "v-dallas", name: "Dallas spare" }],
+  );
+  assert.match(no112, /none matched unit 112/);
+  assert.match(no112, /Pete/);
+  assert.match(no112, /Dallas spare/);
+  assert.deepEqual(samsaraReturnedNames([{ id: "v-pete", name: "Pete" }]), ["Pete"]);
+  const previewTyped112 = buildSamsaraTruckPreview(
+    [{ id: "uuid-real-112", name: "112", vin: "", year: "", make: "", model: "", licensePlate: "" }],
+    [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
+  );
+  assert.equal(previewTyped112[0]?.action, "update");
+  assert.equal(previewTyped112[0]?.samsaraVehicleId, "uuid-real-112");
+  assert.equal(previewTyped112[0]?.matchTruckId, 8);
   const parsedVehicles = parseSamsaraVehicleRecords([
     { id: "veh-777", name: "Unit 777", vin: "VIN777AAA", year: "2022", make: "Freightliner", model: "Cascadia" },
     { id: "samsara-veh-112", name: "112", vin: "SHOULDNOTOVERWRITE" },
@@ -2022,6 +2048,36 @@ Continuous reefer. Two load locks.
   assert.equal(samsaraSecondImport.created, 0, "second Samsara import must not duplicate");
   assert.ok(samsaraSecondImport.updated >= 1);
   assert.equal(queries.listTrucks().filter((truck) => truck.samsara_vehicle_id === "veh-777").length, 1);
+
+  const typedUnitId = queries.createTruck({
+    unit_number: "SMOKE112",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "112",
+  });
+  const fillTyped = applySamsaraTruckImport([
+    {
+      selectKey: "uuid-filled-112",
+      samsaraVehicleId: "uuid-filled-112",
+      unitNumber: "112",
+      name: "112",
+      vin: "VINFILL112",
+      year: "",
+      make: "",
+      model: "",
+      plate: "",
+      matchTruckId: typedUnitId,
+      matchBy: "samsara_vehicle_id",
+      action: "update",
+    },
+  ]);
+  assert.ok(fillTyped.updated >= 1);
+  assert.equal(
+    queries.getTruck(typedUnitId)?.samsara_vehicle_id,
+    "uuid-filled-112",
+    "import must replace a typed unit with the real Samsara vehicle id",
+  );
 
   const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
   delete process.env.SAMSARA_API_TOKEN;

@@ -25,7 +25,8 @@ export function SamsaraTruckImport() {
         <p className="mt-1 text-sm text-slate-600">
           GET fleet vehicles with the <code>SAMSARA_API_TOKEN</code> already in <code>.env</code>. Preview
           name/unit, Samsara vehicle id, and VIN. Confirm to create or update trucks matched by Samsara
-          vehicle id or unit #. Existing trucks are not duplicated.
+          vehicle id, name, or unit # (you do not need the UUID). Import fills the real Samsara vehicle id
+          automatically. Existing trucks are not duplicated.
         </p>
       </div>
       <form action={previewAction}>
@@ -36,6 +37,11 @@ export function SamsaraTruckImport() {
       {preview && !preview.ok && preview.error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {preview.error}
+        </div>
+      ) : null}
+      {preview?.ok && preview.warning ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          {preview.warning}
         </div>
       ) : null}
       {imported?.ok && imported.message ? (

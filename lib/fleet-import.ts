@@ -65,19 +65,22 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         make: row.make,
         model: row.model,
         licensePlate: row.plate,
+        extraKeys: [unitNumber, row.name],
       },
     ])[0];
-    if (!preview) {
+    if (!preview && !row.matchTruckId) {
       skipped += 1;
       continue;
     }
-    if (preview.matchTruckId && usedTruckIds.has(preview.matchTruckId)) {
+    const matchTruckId =
+      (row.matchTruckId && getTruck(row.matchTruckId) ? row.matchTruckId : null) ?? preview?.matchTruckId ?? null;
+    if (matchTruckId && usedTruckIds.has(matchTruckId)) {
       skipped += 1;
       continue;
     }
 
-    if (preview.matchTruckId) {
-      const existing = getTruck(preview.matchTruckId);
+    if (matchTruckId) {
+      const existing = getTruck(matchTruckId);
       if (!existing) {
         skipped += 1;
         continue;
@@ -87,7 +90,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         type: existing.type,
         capacity_lbs: existing.capacity_lbs,
         status: existing.status,
-        samsara_vehicle_id: samsaraVehicleId || existing.samsara_vehicle_id,
+        samsara_vehicle_id: samsaraVehicleId || existing.samsara_vehicle_id, // real Samsara id, not the unit JC typed
         samsara_trailer_id: existing.samsara_trailer_id,
         orbcomm_asset_id: existing.orbcomm_asset_id,
         trailer_number: existing.trailer_number,
