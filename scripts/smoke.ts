@@ -436,6 +436,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /Last GPS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /TrailerLocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Last city \/ lat-lng/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Device serial/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /device serial number/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /=== "asset id"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /findOrbcommHeader/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
@@ -2557,10 +2560,18 @@ Continuous reefer. Two load locks.
   assert.equal(exactPortal[0]?.assetId, "GSSC0001");
   assert.equal(exactPortal[0]?.type, "Reefer");
   assert.equal(exactPortal[0]?.city, "Oklahoma City");
+  assert.equal(exactPortal[0]?.recordedAt, "2026-08-24 12:30:00");
+  assert.equal(exactPortal[0]?.note, "Unit not reporting");
   assert.equal(exactPortal.at(-1)?.unitNumber, "JFI4215");
   assert.equal(exactPortal.at(-1)?.assetId, "GSSC0019");
-  const exactPreview = buildOrbcommTrailerPreview(exactPortal, []);
+  const exactPreview = buildOrbcommTrailerPreview(exactPortal, [
+    { id: 900, unit_number: "JFI4215", orbcomm_asset_id: "old-serial" },
+    { id: 800, unit_number: "MS2201", orbcomm_asset_id: "" },
+  ]);
   assert.equal(exactPreview.length, 19);
+  assert.equal(exactPreview.find((row) => row.unitNumber === "MS2201")?.matchBy, "unit_number");
+  assert.equal(exactPreview.find((row) => row.unitNumber === "JFI4215")?.action, "update");
+  assert.equal(exactPreview.find((row) => row.unitNumber === "MS1518")?.action, "create");
   const exactImport = applyOrbcommTrailerImport(exactPreview);
   assert.equal(exactImport.created, 19);
   const ms2201 = queries.listTrailers().find((trailer) => trailer.unit_number === "MS2201");

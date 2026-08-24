@@ -39,6 +39,8 @@ export type OrbcommTrailerPreviewRow = {
   plate: string;
   type: string;
   city: string;
+  note: string;
+  recordedAt: string;
   latitude: number | null;
   longitude: number | null;
   matchTrailerId: number | null;
@@ -97,6 +99,8 @@ export type OrbcommAssetInput = {
   plate: string;
   type: string;
   city?: string;
+  note?: string;
+  recordedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
 };
@@ -251,17 +255,15 @@ export function matchTrailerForOrbcomm(
   trailers: Array<{ id: number; unit_number: string; orbcomm_asset_id: string }>,
   asset: { orbcommAssetId: string; unitNumber: string; name?: string },
 ): { id: number; matchBy: "orbcomm_asset_id" | "unit_number" } | null {
+  const unitKeys = [asset.unitNumber, asset.name ?? ""].map(normalizeFleetKey).filter(Boolean);
+  if (unitKeys.length) {
+    const byUnit = trailers.find((trailer) => unitKeys.includes(normalizeFleetKey(trailer.unit_number)));
+    if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
+  }
   const assetId = normalizeFleetKey(asset.orbcommAssetId);
   if (assetId) {
     const byId = trailers.find((trailer) => normalizeFleetKey(trailer.orbcomm_asset_id) === assetId);
     if (byId) return { id: byId.id, matchBy: "orbcomm_asset_id" };
-  }
-  const unitKeys = [asset.unitNumber, asset.name ?? "", asset.orbcommAssetId]
-    .map(normalizeFleetKey)
-    .filter(Boolean);
-  if (unitKeys.length) {
-    const byUnit = trailers.find((trailer) => unitKeys.includes(normalizeFleetKey(trailer.unit_number)));
-    if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }
   return null;
 }
@@ -383,6 +385,8 @@ export function buildOrbcommTrailerPreview(
       plate: asset.plate.trim(),
       type: inferTrailerType(asset.type),
       city: String(asset.city ?? "").trim(),
+      note: String(asset.note ?? "").trim(),
+      recordedAt: String(asset.recordedAt ?? "").trim(),
       latitude: asset.latitude ?? null,
       longitude: asset.longitude ?? null,
       matchTrailerId: match?.id ?? null,
@@ -561,6 +565,8 @@ function emptyOrbcommAsset(): OrbcommAssetInput {
     plate: "",
     type: "",
     city: "",
+    note: "",
+    recordedAt: "",
     latitude: null,
     longitude: null,
   };
@@ -639,6 +645,15 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     plate: pickHeader(item, ["plate", "license plate", "licenseplate", "license_plate"]),
     type: pickHeader(item, ["type", "asset type", "equipment type", "equipment", "trailer type"]),
     city,
+    note: pickHeader(item, ["note", "notes", "comment"]),
+    recordedAt: pickHeader(item, [
+      "message time",
+      "last message time",
+      "last ping",
+      "recorded at",
+      "timestamp",
+      "event time",
+    ]),
     latitude: pickCoord(item, "lat"),
     longitude: pickCoord(item, "lng"),
   };

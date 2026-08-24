@@ -56,7 +56,9 @@ export function OrbcommTrailerImport() {
             id="orbcomm-fleet-text"
             name="report_text"
             rows={4}
-            placeholder={"Trailer #,Asset ID,VIN,Latitude,Longitude,City\nTR-9001,orb-9001,1ABCD...,35.46,-97.51,Oklahoma City"}
+            placeholder={
+              "Asset ID,Device Serial Number,Asset Type,City\nMS2201,GSSC0001,Reefer,Oklahoma City"
+            }
           />
         </div>
         <div>
@@ -89,9 +91,11 @@ export function OrbcommTrailerImport() {
                 <tr>
                   <th></th>
                   <th>Trailer #</th>
-                  <th>ORBCOMM asset id</th>
+                  <th>Device serial</th>
+                  <th>Type</th>
                   <th>VIN</th>
                   <th>Last city / lat-lng</th>
+                  <th>Note</th>
                   <th></th>
                 </tr>
               </thead>
@@ -110,8 +114,10 @@ export function OrbcommTrailerImport() {
                       </td>
                       <td className="font-mono">{row.unitNumber || row.name || "—"}</td>
                       <td className="font-mono">{row.orbcommAssetId || "—"}</td>
+                      <td>{row.type || "—"}</td>
                       <td className="font-mono">{row.vin || "—"}</td>
                       <td className="text-sm text-slate-700">{orbcommPreviewGps(row)}</td>
+                      <td className="text-sm text-slate-600">{row.note || row.recordedAt || "—"}</td>
                       <td>{row.action === "update" ? "Update existing" : "Create"}</td>
                     </tr>
                   );

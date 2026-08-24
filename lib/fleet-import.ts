@@ -234,7 +234,7 @@ export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
       }
       updateTrailer(existing.id, {
         unit_number: existing.unit_number,
-        type: existing.type,
+        type: row.type.trim() ? (inferTrailerType(row.type) as TrailerType) : existing.type,
         orbcomm_asset_id: orbcommAssetId || existing.orbcomm_asset_id,
         registration_issued: existing.registration_issued,
         registration_expires: existing.registration_expires,
