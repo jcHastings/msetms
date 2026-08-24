@@ -241,64 +241,56 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
   const demo = demoFleet();
   if (!isSamsaraTokenSet()) return demo;
 
-  try {
-    const [vehicles, clocks, identities] = await Promise.all([
-      fetchAllPages("/fleet/vehicles/stats", "gps"),
-      fetchAllPages("/fleet/hos/clocks"),
-      fetchAllPages("/fleet/vehicles").catch(() => []),
-    ]);
-    const trucks = listTrucks();
-    const drivers = listDrivers();
-    const locations = persistLiveGps(
-      mapVehicleLocations({
-        vehicles,
-        trucks: trucks.map((truck) => ({
-          id: truck.id,
-          unit_number: truck.unit_number,
-          samsara_vehicle_id: truck.samsara_vehicle_id,
-          vin: truck.vin,
-          plate: truck.plate,
-        })),
-        loads: listLoads({ status: "all" }).map((load) => ({
-          id: load.id,
-          truck_id: load.truck_id,
-        })),
-      }),
-    );
-    return {
-      mode: "samsara",
-      tokenSet: true,
-      fetchedAt: new Date().toISOString(),
-      locations: mergePersistedGps(locations, trucks),
-      hos: mapHosClocks({
-        clocks,
-        drivers: drivers.map((driver) => ({
-          id: driver.id,
-          name: driver.name,
-          samsara_driver_id: driver.samsara_driver_id,
-        })),
-        loads: listLoads({ status: "all" }).map((load) => ({
-          id: load.id,
-          driver_id: load.driver_id,
-        })),
-      }),
-      truckDrivers: mapTruckDrivers({
-        vehicles: parseSamsaraVehicles(identities.length ? identities : vehicles),
-        trucks,
-        drivers,
-      }),
-    };
-  } catch (error) {
-    return {
-      mode: "samsara",
-      tokenSet: true,
-      error: publicSamsaraError(error),
-      fetchedAt: new Date().toISOString(),
-      locations: mergePersistedGps([], listTrucks()),
-      hos: [],
-      truckDrivers: [],
-    };
-  }
+  const [stats, clocks, identities] = await Promise.all([
+    fetchFleetPages("/fleet/vehicles/stats", "gps"),
+    fetchFleetPages("/fleet/hos/clocks"),
+    fetchFleetPages("/fleet/vehicles"),
+  ]);
+  const trucks = listTrucks();
+  const drivers = listDrivers();
+  const locations = persistLiveGps(
+    mapVehicleLocations({
+      vehicles: stats.items,
+      trucks: trucks.map((truck) => ({
+        id: truck.id,
+        unit_number: truck.unit_number,
+        samsara_vehicle_id: truck.samsara_vehicle_id,
+        vin: truck.vin,
+        plate: truck.plate,
+      })),
+      loads: listLoads({ status: "all" }).map((load) => ({
+        id: load.id,
+        truck_id: load.truck_id,
+      })),
+    }),
+  );
+  const identityVehicles = parseSamsaraVehicles(identities.items.length ? identities.items : stats.items);
+  const truckDrivers = [
+    ...mapTruckDrivers({ vehicles: identityVehicles, trucks, drivers }),
+  ];
+  const claimed = new Set(truckDrivers.map((item) => item.truckId));
+  truckDrivers.push(...mapHosCurrentVehicleDrivers({ clocks: clocks.items, trucks, drivers, claimed }));
+  const error = clocks.error || identities.error || (stats.items.length ? "" : stats.error) || undefined;
+  return {
+    mode: "samsara",
+    tokenSet: true,
+    error,
+    fetchedAt: new Date().toISOString(),
+    locations: mergePersistedGps(locations, trucks),
+    hos: mapHosClocks({
+      clocks: clocks.items,
+      drivers: drivers.map((driver) => ({
+        id: driver.id,
+        name: driver.name,
+        samsara_driver_id: driver.samsara_driver_id,
+      })),
+      loads: listLoads({ status: "all" }).map((load) => ({
+        id: load.id,
+        driver_id: load.driver_id,
+      })),
+    }),
+    truckDrivers,
+  };
 }
 
 function demoFleet(): SamsaraFleetResult {
@@ -614,19 +606,71 @@ export function mapTruckDrivers(input: {
     }, claimed);
     if (!match) continue;
     claimed.add(match.id);
-    const tms = input.drivers.find(
-      (driver) =>
-        (vehicle.driverId && normalizeKey(driver.samsara_driver_id) === normalizeKey(vehicle.driverId)) ||
-        (vehicle.driverName && normalizeKey(driver.name) === normalizeKey(vehicle.driverName)),
-    );
-    out.push({
-      truckId: match.id,
-      samsaraDriverId: vehicle.driverId ?? "",
-      samsaraDriverName: vehicle.driverName || tms?.name || "",
-      tmsDriverId: tms?.id ?? null,
-    });
+    out.push(truckDriverRow(match.id, vehicle.driverId ?? "", vehicle.driverName ?? "", input.drivers));
   }
   return out;
+}
+
+/** Pair the HOS clock's currentVehicle to a TMS truck with the same rematch keys. */
+export function mapHosCurrentVehicleDrivers(input: {
+  clocks: Array<Record<string, unknown>>;
+  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
+  drivers: Array<{ id: number; name: string; samsara_driver_id: string }>;
+  claimed?: Set<number>;
+}): SamsaraTruckDriver[] {
+  const claimed = input.claimed ?? new Set<number>();
+  const out: SamsaraTruckDriver[] = [];
+  for (const row of input.clocks) {
+    const driver = (row.driver ?? {}) as Record<string, unknown>;
+    const vehicle = (row.currentVehicle ?? {}) as Record<string, unknown>;
+    const driverId = String(driver.id ?? "");
+    const driverName = String(driver.name ?? "");
+    if (!driverId && !driverName) continue;
+    if (!vehicle.id && !vehicle.name) continue;
+    const match = matchTruckForSamsara(
+      input.trucks,
+      {
+        samsaraVehicleId: String(vehicle.id ?? ""),
+        unitNumber: String(vehicle.name ?? ""),
+        name: String(vehicle.name ?? ""),
+      },
+      claimed,
+    );
+    if (!match) continue;
+    claimed.add(match.id);
+    out.push(truckDriverRow(match.id, driverId, driverName, input.drivers));
+  }
+  return out;
+}
+
+function truckDriverRow(
+  truckId: number,
+  samsaraDriverId: string,
+  samsaraDriverName: string,
+  drivers: Array<{ id: number; name: string; samsara_driver_id: string }>,
+): SamsaraTruckDriver {
+  const tms = drivers.find(
+    (driver) =>
+      (samsaraDriverId && normalizeKey(driver.samsara_driver_id) === normalizeKey(samsaraDriverId)) ||
+      (samsaraDriverName && normalizeKey(driver.name) === normalizeKey(samsaraDriverName)),
+  );
+  return {
+    truckId,
+    samsaraDriverId,
+    samsaraDriverName: samsaraDriverName || tms?.name || "",
+    tmsDriverId: tms?.id ?? null,
+  };
+}
+
+async function fetchFleetPages(
+  pathname: string,
+  types?: string,
+): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {
+  try {
+    return { items: await fetchAllPages(pathname, types) };
+  } catch (error) {
+    return { items: [], error: publicSamsaraError(error) };
+  }
 }
 
 async function fetchAllPages(pathname: string, types?: string): Promise<Array<Record<string, unknown>>> {

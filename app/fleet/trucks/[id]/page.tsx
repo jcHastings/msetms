@@ -8,10 +8,12 @@ import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { driverOption, truckFormValues } from "@/lib/fleet-form-shared";
+import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import {
   getHosForTruck,
   getLocationForTruck,
   getSamsaraDriverForTruck,
+  getSamsaraFleet,
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
@@ -27,6 +29,7 @@ export default async function EditTruckPage({
 }) {
   const truck = getTruck(Number.parseInt((await params).id, 10));
   if (!truck) notFound();
+  const fleet = await getSamsaraFleet();
   const location = await getLocationForTruck(truck.id);
   const hos = await getHosForTruck(truck.id);
   const samsaraDriver = await getSamsaraDriverForTruck(truck.id);
@@ -41,6 +44,15 @@ export default async function EditTruckPage({
           </Link>
         }
       />
+      {!fleet.tokenSet ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {SAMSARA_TOKEN_MISSING_MESSAGE} Driver and HOS stay empty until the token is set.
+        </p>
+      ) : fleet.error ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {fleet.error}
+        </p>
+      ) : null}
       <div className="mb-4 grid gap-3 md:grid-cols-2">
         <div className="card p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Live location (Samsara)</div>
@@ -58,7 +70,13 @@ export default async function EditTruckPage({
         <div className="card p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Samsara driver / HOS</div>
           <div className="mt-1 text-sm font-semibold">
-            {samsaraDriver?.samsaraDriverName || truck.driver_name || "No Samsara-assigned driver"}
+            {samsaraDriver?.tmsDriverId ? (
+              <Link href={`/fleet/drivers/${samsaraDriver.tmsDriverId}`} className="underline">
+                {samsaraDriver.samsaraDriverName}
+              </Link>
+            ) : (
+              samsaraDriver?.samsaraDriverName || "No Samsara-assigned driver"
+            )}
           </div>
           <div className="mt-1">
             <HosBadge

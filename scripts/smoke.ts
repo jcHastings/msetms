@@ -532,6 +532,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /Import from Samsara|SamsaraTruckImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /LocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /HosBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), />Driver</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/hos\/clocks/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /staticAssignedDriver|mapHosCurrentVehicleDrivers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /LocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /On the road/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
@@ -2651,6 +2654,49 @@ Continuous reefer. Two load locks.
     orbcomm.resetOrbcommCacheForTests();
   }
 
+  process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+  samsara.resetSamsaraCacheForTests();
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/fleet/hos/clocks")) return new Response("not found", { status: 404 });
+    if (url.includes("/fleet/vehicles/stats")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "samsara-veh-112",
+              name: "112",
+              gps: [{ latitude: 32.7767, longitude: -96.797, reverseGeo: { formattedLocation: "Dallas, TX" } }],
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (url.includes("/fleet/vehicles")) {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "samsara-veh-112", name: "112", staticAssignedDriver: { id: "88668", name: "Denise Ortega" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const mixedFleet = await samsara.getSamsaraFleet();
+    assert.equal(mixedFleet.mode, "samsara");
+    assert.ok(mixedFleet.locations.some((item) => item.unitNumber === "112"));
+    assert.equal(mixedFleet.hos.length, 0);
+    assert.ok(mixedFleet.error && /404/.test(mixedFleet.error));
+    assert.ok(mixedFleet.truckDrivers.some((item) => item.samsaraDriverName === "Denise Ortega"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousSamsara;
+    samsara.resetSamsaraCacheForTests();
+  }
+
   const {
     buildOrbcommTrailerPreview,
     buildSamsaraTruckPreview,
@@ -4035,6 +4081,7 @@ Continuous reefer. Two load locks.
   const session = await import("../lib/dispatcher-session");
   const msTest = session.listDispatchers().find((row) => row.name === "MS Test");
   assert.ok(msTest);
+  assert.equal(session.listDispatchers().some((row) => row.name === "Ana G"), false);
   assert.equal(msTest.totp_enrolled, false);
   assert.equal("pin" in msTest, false);
   assert.equal("totp_secret" in msTest, false);
@@ -4902,6 +4949,21 @@ Continuous reefer. Two load locks.
     )?.driverName,
     "Outside Driver",
   );
+  const currentVehicleDrivers = samsara.mapHosCurrentVehicleDrivers({
+    clocks: [
+      {
+        driver: { id: "88668", name: "Denise Ortega" },
+        currentVehicle: { id: "veh-36", name: "36" },
+        currentDutyStatus: { hosStatusType: "driving" },
+        clocks: { drive: { driveRemainingDurationMs: 3_600_000 } },
+      },
+    ],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "veh-36", vin: "", plate: "" }],
+    drivers: [{ id: denise.id, name: "Denise Ortega", samsara_driver_id: "88668" }],
+  });
+  assert.equal(currentVehicleDrivers[0]?.truckId, 36);
+  assert.equal(currentVehicleDrivers[0]?.samsaraDriverName, "Denise Ortega");
+  assert.equal(currentVehicleDrivers[0]?.tmsDriverId, denise.id);
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

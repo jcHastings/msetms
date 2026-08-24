@@ -15,6 +15,7 @@ import {
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
+import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { assignedFleetAssetIds, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -52,6 +53,17 @@ export default async function TrucksPage() {
         }
       />
       <SamsaraTruckImport />
+      {!fleet.tokenSet ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {SAMSARA_TOKEN_MISSING_MESSAGE} GPS stays if it was already saved. Driver and HOS stay empty until
+          the token is set.
+        </p>
+      ) : fleet.error ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {fleet.error} Live GPS is kept when the location call succeeds. Driver and HOS stay empty if those
+          Samsara endpoints failed.
+        </p>
+      ) : null}
       <div className="card">
         <table className="table-grid">
           <thead>
@@ -93,12 +105,13 @@ export default async function TrucksPage() {
                     <td>{vehicleLabel(truck)}</td>
                     <td>{truck.plate || "—"}</td>
                     <td>
-                      {samsaraDriver?.samsaraDriverName || truck.driver_name || "—"}
-                      {samsaraDriver?.samsaraDriverName &&
-                      truck.driver_name &&
-                      samsaraDriver.samsaraDriverName !== truck.driver_name ? (
-                        <div className="text-xs text-slate-500">TMS {truck.driver_name}</div>
-                      ) : null}
+                      {samsaraDriver?.tmsDriverId ? (
+                        <Link href={`/fleet/drivers/${samsaraDriver.tmsDriverId}`} className="font-semibold underline">
+                          {samsaraDriver.samsaraDriverName}
+                        </Link>
+                      ) : (
+                        samsaraDriver?.samsaraDriverName || "—"
+                      )}
                     </td>
                     <td>
                       <LocationBadge
