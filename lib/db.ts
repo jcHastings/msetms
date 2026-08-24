@@ -87,7 +87,7 @@ export function migrate(db: Database): void {
     CREATE TABLE IF NOT EXISTS trucks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       unit_number TEXT NOT NULL UNIQUE,
-      type TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'reefer',
       capacity_lbs INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'available',
       created_at TEXT NOT NULL,

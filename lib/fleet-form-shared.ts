@@ -1,5 +1,29 @@
 /** Client-safe fleet form values. No PIN, no sqlite row objects. */
 
+import {
+  DEFAULT_FLEET_TYPE,
+  TRAILER_TYPES,
+  TRUCK_TYPES,
+  type TrailerType,
+  type TruckType,
+} from "./types";
+
+export function parseTruckType(value: unknown): TruckType {
+  const type = String(value ?? "").trim() || DEFAULT_FLEET_TYPE;
+  if (!TRUCK_TYPES.some((item) => item.value === type)) {
+    throw new Error("Pick a truck type.");
+  }
+  return type as TruckType;
+}
+
+export function parseTrailerType(value: unknown): TrailerType {
+  const type = String(value ?? "").trim() || DEFAULT_FLEET_TYPE;
+  if (!TRAILER_TYPES.some((item) => item.value === type)) {
+    throw new Error("Pick a trailer type.");
+  }
+  return type as TrailerType;
+}
+
 export type FleetDriverOption = { id: number; name: string };
 export type FleetTruckOption = { id: number; unit_number: string };
 
@@ -98,7 +122,7 @@ export function truckFormValues(truck: Record<string, unknown>): TruckFormValues
   return {
     id: num(truck.id),
     unit_number: text(truck.unit_number),
-    type: text(truck.type) || "reefer",
+    type: text(truck.type) || DEFAULT_FLEET_TYPE,
     capacity_lbs: num(truck.capacity_lbs) || 45000,
     status: text(truck.status) || "available",
     samsara_vehicle_id: text(truck.samsara_vehicle_id),
@@ -121,7 +145,7 @@ export function trailerFormValues(trailer: Record<string, unknown>): TrailerForm
   return {
     id: num(trailer.id),
     unit_number: text(trailer.unit_number),
-    type: text(trailer.type) || "reefer",
+    type: text(trailer.type) || DEFAULT_FLEET_TYPE,
     vin: text(trailer.vin),
     plate: text(trailer.plate),
     truck_id: numOrNull(trailer.truck_id),

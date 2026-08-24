@@ -44,9 +44,7 @@ import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance
 import {
   DRIVER_STATUSES,
   DRIVER_TYPES,
-  TRAILER_TYPES,
   TRUCK_STATUSES,
-  TRUCK_TYPES,
   isLocationRole,
   isSchedulingType,
   type ActionResult,
@@ -55,10 +53,9 @@ import {
   type Location,
   type LocationRole,
   type SchedulingType,
-  type TrailerType,
   type TruckStatus,
-  type TruckType,
 } from "./types";
+import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
@@ -149,14 +146,6 @@ function parseContacts(formData: FormData) {
 }
 
 
-function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
-  const type = String(value ?? "").trim() || "reefer";
-  if (!TRAILER_TYPES.some((item) => item.value === type)) {
-    throw new Error("Pick a trailer type.");
-  }
-  return type as TrailerType;
-}
-
 function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
   const type = String(value ?? "company_driver");
   if (!DRIVER_TYPES.some((item) => item.value === type)) {
@@ -181,14 +170,6 @@ function enforceAssignmentCompliance(formData: FormData, truckId: number | null,
   );
   const confirmed = String(formData.get("confirm_expired") ?? "") === "1";
   requireAssignmentOverride(alerts, confirmed);
-}
-
-function parseTruckType(value: FormDataEntryValue | null): TruckType {
-  const type = String(value ?? "").trim() || "reefer";
-  if (!TRUCK_TYPES.some((item) => item.value === type)) {
-    throw new Error("Pick a truck type.");
-  }
-  return type as TruckType;
 }
 
 function parseTruckStatus(value: FormDataEntryValue | null): TruckStatus {

@@ -2604,6 +2604,7 @@ Continuous reefer. Two load locks.
   assert.ok(created777, "created truck uses Samsara unit #");
   assert.equal(created777?.samsara_vehicle_id, "veh-777");
   assert.equal(created777?.vin, "VIN777AAA");
+  assert.equal(created777?.type, "reefer", "new Samsara trucks default to Reefer");
   const updated112 = trucksAfter.find((truck) => truck.samsara_vehicle_id === "samsara-veh-112");
   assert.ok(updated112);
   assert.equal(
@@ -3722,6 +3723,38 @@ Continuous reefer. Two load locks.
     active: 1,
   });
   assert.equal(queries.getTruck(truckId)?.type, "reefer", "saving Reefer stays Reefer");
+  const { parseTrailerType, parseTruckType } = await import("../lib/fleet-form-shared");
+  assert.equal(parseTruckType(""), "reefer");
+  assert.equal(parseTrailerType(""), "reefer");
+  assert.equal(parseTruckType("reefer"), "reefer");
+  const persistTypeId = queries.createTruck({
+    unit_number: "TYPE-SAVE",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+  });
+  const persistTypeTruck = queries.getTruck(persistTypeId);
+  assert.ok(persistTypeTruck);
+  const truckTypeForm = new FormData();
+  truckTypeForm.set("id", String(persistTypeId));
+  truckTypeForm.set("unit_number", persistTypeTruck.unit_number);
+  truckTypeForm.set("type", "reefer");
+  truckTypeForm.set("capacity_lbs", String(persistTypeTruck.capacity_lbs));
+  truckTypeForm.set("status", persistTypeTruck.status);
+  queries.updateTruck(persistTypeId, {
+    unit_number: String(truckTypeForm.get("unit_number")),
+    type: parseTruckType(truckTypeForm.get("type")),
+    capacity_lbs: persistTypeTruck.capacity_lbs,
+    status: persistTypeTruck.status,
+    vin: persistTypeTruck.vin,
+    plate: persistTypeTruck.plate,
+    year: persistTypeTruck.year,
+    make: persistTypeTruck.make,
+    model: persistTypeTruck.model,
+    notes: persistTypeTruck.notes,
+    active: persistTypeTruck.active,
+  });
+  assert.equal(queries.getTruck(persistTypeId)?.type, "reefer", "saving Reefer stays Reefer");
   const typeTrailerId = queries.createTrailer({
     unit_number: "REEF-SAVE",
     type: "dry_van",
@@ -3729,9 +3762,13 @@ Continuous reefer. Two load locks.
   });
   const typeTrailer = queries.getTrailer(typeTrailerId);
   assert.ok(typeTrailer);
+  const trailerTypeForm = new FormData();
+  trailerTypeForm.set("id", String(typeTrailerId));
+  trailerTypeForm.set("unit_number", typeTrailer.unit_number);
+  trailerTypeForm.set("type", "reefer");
   queries.updateTrailer(typeTrailerId, {
-    unit_number: typeTrailer.unit_number,
-    type: "reefer",
+    unit_number: String(trailerTypeForm.get("unit_number")),
+    type: parseTrailerType(trailerTypeForm.get("type")),
     orbcomm_asset_id: typeTrailer.orbcomm_asset_id,
     registration_issued: typeTrailer.registration_issued,
     registration_expires: typeTrailer.registration_expires,
@@ -3748,12 +3785,15 @@ Continuous reefer. Two load locks.
   assert.equal(queries.getTrailer(typeTrailerId)?.type, "reefer", "saving trailer Reefer stays Reefer");
   const truckFormSrc = fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8");
   const trailerFormSrc = fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8");
-  assert.match(truckFormSrc, /truck\?\.type \|\| "reefer"/);
-  assert.match(trailerFormSrc, /trailer\?\.type \|\| "reefer"/);
-  assert.match(basicsChunk, /reefer_53/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-input.ts"), "utf8"), /reefer_53/);
+  assert.match(truckFormSrc, /formData\.set\("type"/);
+  assert.match(trailerFormSrc, /formData\.set\("type"/);
+  assert.match(truckFormSrc, /DEFAULT_FLEET_TYPE/);
+  assert.match(trailerFormSrc, /DEFAULT_FLEET_TYPE/);
+  assert.match(basicsChunk, /DEFAULT_LOAD_EQUIPMENT/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /DEFAULT_LOAD_EQUIPMENT = "reefer_53"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-input.ts"), "utf8"), /DEFAULT_LOAD_EQUIPMENT/);
   const fleetFormShared = fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8");
-  assert.match(fleetFormShared, /\|\| "reefer"/);
+  assert.match(fleetFormShared, /DEFAULT_FLEET_TYPE/);
   assert.doesNotMatch(fleetFormShared, /\|\| "dry_van"/);
   assert.equal(isClosedStatus("completed"), true);
 

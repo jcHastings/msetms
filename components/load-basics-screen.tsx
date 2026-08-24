@@ -4,7 +4,7 @@ import {
   LOAD_TRUCK_STATUSES,
 } from "@/lib/load-page-shared";
 import { REEFER_MODES } from "@/lib/reefer-shared";
-import { LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
+import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
   customer_id: number | null;
@@ -139,8 +139,8 @@ export function LoadBasicsScreen({
       </div>
       <div className="field">
         <label htmlFor="equipment">Equipment Type</label>
-        <select id="equipment" name="equipment" defaultValue={load?.equipment || "reefer_53"}>
-          {(equipmentChoices.length ? equipmentChoices : [{ value: "reefer_53", label: "53' Reefer" }]).map((item) => (
+        <select id="equipment" name="equipment" defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}>
+          {(equipmentChoices.length ? equipmentChoices : [{ value: DEFAULT_LOAD_EQUIPMENT, label: "53' Reefer" }]).map((item) => (
             <option key={item.value || "any"} value={item.value}>
               {item.label}
             </option>

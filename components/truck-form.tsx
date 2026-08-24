@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createTruckAction, updateTruckAction } from "@/lib/actions";
 import type { FleetDriverOption, TruckFormValues } from "@/lib/fleet-form-shared";
-import { TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
+import { DEFAULT_FLEET_TYPE, TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
 
 type Props = {
   truck?: TruckFormValues;
@@ -14,10 +14,16 @@ type Props = {
 
 export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(truck ? updateTruckAction : createTruckAction, null);
-  const [type, setType] = useState(truck?.type || "reefer");
+  const [type, setType] = useState(truck?.type || DEFAULT_FLEET_TYPE);
 
   return (
-    <form action={formAction} className="card grid max-w-xl gap-4 p-6">
+    <form
+      action={(formData) => {
+        formData.set("type", type || DEFAULT_FLEET_TYPE);
+        formAction(formData);
+      }}
+      className="card grid max-w-xl gap-4 p-6"
+    >
       {truck ? <input type="hidden" name="id" value={truck.id} /> : null}
       <FormBanner result={state} />
       <div className="field">

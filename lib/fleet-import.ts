@@ -20,7 +20,7 @@ import {
   updateTrailer,
   updateTruck,
 } from "./queries";
-import type { TrailerType } from "./types";
+import { DEFAULT_FLEET_TYPE, type TrailerType } from "./types";
 
 export function previewSamsaraTrucks(vehicles: SamsaraVehicleInput[]): SamsaraTruckPreviewRow[] {
   return buildSamsaraTruckPreview(
@@ -143,7 +143,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
       try {
         const id = createTruck({
           unit_number: newUnit,
-          type: "dry_van",
+          type: DEFAULT_FLEET_TYPE,
           capacity_lbs: 45000,
           status: "available",
           samsara_vehicle_id: samsaraVehicleId,

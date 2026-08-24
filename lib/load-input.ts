@@ -2,6 +2,7 @@ import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt
 import { placeholderLane } from "./load-page-shared";
 import { findOrCreateCustomer, getDriver, type LoadInput } from "./queries";
 import { isReeferMode } from "./reefer-shared";
+import { DEFAULT_LOAD_EQUIPMENT } from "./types";
 import { computeOwnerOperatorPay } from "./settlement";
 import { defaultOoPercent, isKnownLoadStatus } from "./settings";
 
@@ -131,8 +132,8 @@ function parseReeferModeField(
 }
 
 function parseEquipment(formData: FormData, existing: ExistingLoadFields | null | undefined): string {
-  if (!formData.has("equipment")) return existing?.equipment || "reefer_53";
-  return String(formData.get("equipment") ?? "").trim() || "reefer_53";
+  if (!formData.has("equipment")) return existing?.equipment || DEFAULT_LOAD_EQUIPMENT;
+  return String(formData.get("equipment") ?? "").trim() || DEFAULT_LOAD_EQUIPMENT;
 }
 
 function parseReferenceNumbers(

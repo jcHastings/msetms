@@ -47,6 +47,7 @@ import {
   type TruckStatus,
   type TruckType,
   type TruckWithDriver,
+  DEFAULT_FLEET_TYPE,
 } from "./types";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
@@ -399,7 +400,7 @@ export function createTrailer(input: {
       )
       .run(
         input.unit_number,
-        input.type,
+        input.type || DEFAULT_FLEET_TYPE,
         input.orbcomm_asset_id ?? "",
         input.registration_issued ?? "",
         input.registration_expires ?? "",
@@ -456,7 +457,7 @@ export function updateTrailer(
       )
       .run(
         input.unit_number,
-        input.type,
+        input.type || DEFAULT_FLEET_TYPE,
         input.orbcomm_asset_id ?? "",
         input.registration_issued ?? "",
         input.registration_expires ?? "",
@@ -512,7 +513,7 @@ export function createTruck(input: {
       )
       .run(
         input.unit_number,
-        input.type,
+        input.type || DEFAULT_FLEET_TYPE,
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
@@ -582,7 +583,7 @@ export function updateTruck(
       )
       .run(
         input.unit_number,
-        input.type,
+        input.type || DEFAULT_FLEET_TYPE,
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
