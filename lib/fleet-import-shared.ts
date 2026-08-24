@@ -138,11 +138,22 @@ export function unitNumberFromSamsaraName(name: string, fallbackId: string): str
 
 export function samsaraUnitDigits(vehicle: SamsaraMatchVehicle): string {
   const labeled = unitNumberFromSamsaraName(vehicle.name ?? "", "");
-  for (const value of [vehicle.unitNumber, labeled, ...(vehicle.extraKeys ?? []), vehicle.name]) {
+  for (const value of [vehicle.unitNumber, labeled, vehicle.name]) {
+    const digits = unitDigits(String(value ?? ""));
+    if (digits) return digits;
+  }
+  for (const value of vehicle.extraKeys ?? []) {
     const digits = unitDigits(String(value ?? ""));
     if (digits) return digits;
   }
   return "";
+}
+
+function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boolean {
+  const vehicleUnit = samsaraUnitDigits(vehicle);
+  const truckUnit = unitDigits(truck.unit_number);
+  if (!vehicleUnit || !truckUnit) return true;
+  return vehicleUnit === truckUnit;
 }
 
 function uniqueUnclaimedTruck(
@@ -161,18 +172,12 @@ export function matchTruckForSamsara(
 ): { id: number; matchBy: SamsaraMatchBy } | null {
   const vin = normalizeVin(vehicle.vin ?? "");
   if (vin) {
-    const byVin = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) => normalizeVin(truck.vin ?? "") === vin);
-    if (byVin) return { id: byVin.id, matchBy: "vin" };
-  }
-
-  const vehicleId = canonicalFleetKey(vehicle.samsaraVehicleId);
-  if (vehicleId) {
-    const byId = uniqueUnclaimedTruck(
+    const byVin = uniqueUnclaimedTruck(
       trucks,
       claimedTruckIds,
-      (truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId,
+      (truck) => normalizeVin(truck.vin ?? "") === vin && unitAgrees(truck, vehicle),
     );
-    if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
+    if (byVin) return { id: byVin.id, matchBy: "vin" };
   }
 
   const unit = samsaraUnitDigits(vehicle);
@@ -186,9 +191,19 @@ export function matchTruckForSamsara(
     const byPlate = uniqueUnclaimedTruck(
       trucks,
       claimedTruckIds,
-      (truck) => normalizePlate(truck.plate ?? "") === plate,
+      (truck) => normalizePlate(truck.plate ?? "") === plate && unitAgrees(truck, vehicle),
     );
     if (byPlate) return { id: byPlate.id, matchBy: "plate" };
+  }
+
+  const vehicleId = canonicalFleetKey(vehicle.samsaraVehicleId);
+  if (vehicleId) {
+    const byId = uniqueUnclaimedTruck(
+      trucks,
+      claimedTruckIds,
+      (truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId && unitAgrees(truck, vehicle),
+    );
+    if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
   }
 
   return null;
