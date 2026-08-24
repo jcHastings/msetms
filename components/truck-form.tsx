@@ -81,7 +81,7 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
           id="samsara_vehicle_id"
           name="samsara_vehicle_id"
           defaultValue={truck?.samsara_vehicle_id}
-          placeholder="Tractor ID in Samsara — not the API token"
+          placeholder="Unit 36 or Samsara id — not the API token"
         />
       </div>
       <h2 className="text-sm font-semibold">Registration</h2>

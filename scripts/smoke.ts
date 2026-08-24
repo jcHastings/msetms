@@ -393,6 +393,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /you do not need the UUID|do not need the UUID/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), />36</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Unit 36/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraUnmatchedUnitsWarning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
@@ -1518,6 +1520,30 @@ Continuous reefer. Two load locks.
   });
   assert.equal(unit36Gps[0]?.address, "Amarillo, TX");
   assert.equal(unit36Gps[0]?.unitNumber, "36");
+  const named36Gps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "uuid-named-36",
+        name: "36",
+        gps: { time: "2026-08-23T13:05:00Z", latitude: 35.2, longitude: -101.8, reverseGeo: { formattedLocation: "Amarillo, TX" } },
+      },
+    ],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
+    loads: [],
+  });
+  assert.equal(named36Gps[0]?.unitNumber, "36", "Samsara name 36 must match truck unit 36");
+  const padded36Gps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "uuid-padded-36",
+        name: "036",
+        gps: { time: "2026-08-23T13:05:00Z", latitude: 35.2, longitude: -101.8, reverseGeo: { formattedLocation: "Amarillo, TX" } },
+      },
+    ],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
+    loads: [],
+  });
+  assert.equal(padded36Gps[0]?.unitNumber, "36", "Samsara name 036 must match truck unit 36");
   assert.equal(samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "", location: null }), samsara.SAMSARA_ID_MISSING_MESSAGE);
   assert.equal(
     samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "36", location: null }),
@@ -1977,6 +2003,8 @@ Continuous reefer. Two load locks.
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
   assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
   assert.equal(unitNumberFromSamsaraName("Unit 36", "uuid-36"), "36");
+  assert.equal(unitNumberFromSamsaraName("36", "uuid-36"), "36");
+  assert.equal(unitNumberFromSamsaraName("#36", "uuid-36"), "36");
   assert.match(SAMSARA_ID_MISSING_MESSAGE, /No Samsara ID on this truck/);
   const match36 = matchTruckForSamsara(
     [{ id: 7, unit_number: "36", samsara_vehicle_id: "36" }],
@@ -1984,6 +2012,24 @@ Continuous reefer. Two load locks.
   );
   assert.equal(match36?.id, 7);
   assert.ok(match36?.matchBy === "samsara_vehicle_id" || match36?.matchBy === "unit_number");
+  assert.equal(
+    matchTruckForSamsara([{ id: 7, unit_number: "36", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "uuid-only-36",
+      unitNumber: "36",
+      name: "36",
+    })?.id,
+    7,
+    "Samsara vehicle named 36 must match truck unit 36",
+  );
+  assert.equal(
+    matchTruckForSamsara([{ id: 7, unit_number: "36", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "uuid-padded-36",
+      unitNumber: "036",
+      name: "036",
+    })?.id,
+    7,
+    "Samsara vehicle numbered 036 must match truck unit 36",
+  );
   const match112 = matchTruckForSamsara(
     [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
     { samsaraVehicleId: "281474977075805", unitNumber: "112", name: "112" },
@@ -1996,6 +2042,13 @@ Continuous reefer. Two load locks.
   assert.match(no112, /none matched unit 112/);
   assert.match(no112, /Pete/);
   assert.match(no112, /Dallas spare/);
+  const no36 = samsaraUnmatchedUnitsWarning(
+    [{ unit_number: "36", samsara_vehicle_id: "36" }],
+    [{ id: "v-pete", name: "Pete" }, { id: "v-112", name: "112" }],
+  );
+  assert.match(no36, /none matched unit 36/);
+  assert.match(no36, /Pete/);
+  assert.match(no36, /112/);
   assert.deepEqual(samsaraReturnedNames([{ id: "v-pete", name: "Pete" }]), ["Pete"]);
   const previewTyped112 = buildSamsaraTruckPreview(
     [{ id: "uuid-real-112", name: "112", vin: "", year: "", make: "", model: "", licensePlate: "" }],

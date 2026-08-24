@@ -73,6 +73,13 @@ export function normalizeFleetKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_\-#]/g, "");
 }
 
+/** "036" and "36" are the same unit. UUIDs are unchanged. */
+export function canonicalFleetKey(value: string): string {
+  const key = normalizeFleetKey(value);
+  if (/^\d+$/.test(key)) return key.replace(/^0+/, "") || "0";
+  return key;
+}
+
 export function preferFilled(existing: string, incoming: string): string {
   return existing.trim() ? existing : incoming.trim();
 }
@@ -81,7 +88,7 @@ export function preferFilled(existing: string, incoming: string): string {
 export function unitNumberFromSamsaraName(name: string, fallbackId: string): string {
   const trimmed = name.trim();
   if (!trimmed) return fallbackId.trim();
-  const labeled = trimmed.match(/^(?:unit|truck|tractor)\s*#?\s*([A-Za-z0-9-]+)/i);
+  const labeled = trimmed.match(/^(?:unit|truck|tractor|trk|veh(?:icle)?)\s*#?\s*([A-Za-z0-9-]+)/i);
   if (labeled) return labeled[1];
   const hashed = trimmed.match(/#\s*([A-Za-z0-9-]+)/);
   if (hashed) return hashed[1];
@@ -116,19 +123,19 @@ export function samsaraVehicleMatchKeys(vehicle: {
         vehicle.unitNumber,
         ...(vehicle.extraKeys ?? []),
       )
-        .map(normalizeFleetKey)
+        .map(canonicalFleetKey)
         .filter(Boolean),
     ),
   ];
 }
 
 export function truckSamsaraMatchKeys(truck: { unit_number: string; samsara_vehicle_id: string }): string[] {
-  return [...new Set([truck.samsara_vehicle_id, truck.unit_number].map(normalizeFleetKey).filter(Boolean))];
+  return [...new Set([truck.samsara_vehicle_id, truck.unit_number].map(canonicalFleetKey).filter(Boolean))];
 }
 
 export function samsaraVehicleMatchesTruck(
   truck: { unit_number: string; samsara_vehicle_id: string },
-  vehicle: { id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string },
+  vehicle: { id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; extraKeys?: string[] },
 ): boolean {
   const vehicleKeys = new Set(samsaraVehicleMatchKeys(vehicle));
   return truckSamsaraMatchKeys(truck).some((key) => vehicleKeys.has(key));
@@ -138,16 +145,16 @@ export function matchTruckForSamsara(
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string }>,
   vehicle: { samsaraVehicleId: string; unitNumber: string; name?: string; extraKeys?: string[] },
 ): { id: number; matchBy: "samsara_vehicle_id" | "unit_number" } | null {
-  const vehicleId = normalizeFleetKey(vehicle.samsaraVehicleId);
+  const vehicleId = canonicalFleetKey(vehicle.samsaraVehicleId);
   if (vehicleId) {
-    const byId = trucks.find((truck) => normalizeFleetKey(truck.samsara_vehicle_id) === vehicleId);
+    const byId = trucks.find((truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId);
     if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
   }
   const unitKeys = samsaraVehicleMatchKeys(vehicle);
   if (unitKeys.length) {
-    const byStoredId = trucks.find((truck) => unitKeys.includes(normalizeFleetKey(truck.samsara_vehicle_id)));
+    const byStoredId = trucks.find((truck) => unitKeys.includes(canonicalFleetKey(truck.samsara_vehicle_id)));
     if (byStoredId) return { id: byStoredId.id, matchBy: "samsara_vehicle_id" };
-    const byUnit = trucks.find((truck) => unitKeys.includes(normalizeFleetKey(truck.unit_number)));
+    const byUnit = trucks.find((truck) => unitKeys.includes(canonicalFleetKey(truck.unit_number)));
     if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }
   return null;
@@ -224,7 +231,7 @@ export function samsaraReturnedNames(vehicles: Array<{ id?: string; name?: strin
   return names;
 }
 
-/** When JC’s unit (112) is not in the Samsara list, say which names did come back. */
+/** When JC’s unit (36) is not in the Samsara list, say which names did come back. */
 export function samsaraUnmatchedUnitsWarning(
   trucks: Array<{ unit_number: string; samsara_vehicle_id: string }>,
   vehicles: Array<{ id?: string; samsaraVehicleId?: string; name?: string; unitNumber?: string; extraKeys?: string[] }>,
