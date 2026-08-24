@@ -150,6 +150,17 @@ button {
   background: #e8eef5;
 }
 
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary:disabled:hover,
+.btn-secondary[disabled]:hover {
+  background: #fff;
+}
+
 .card {
   background: #fff;
   border: 1px solid #dce3ec;

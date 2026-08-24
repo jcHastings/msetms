@@ -2487,9 +2487,9 @@ Continuous reefer. Two load locks.
   assert.equal(locationImport.created, 1);
   const importedLocation = queries.listTrailers().find((trailer) => trailer.unit_number === "TR-2401");
   assert.equal(importedLocation?.orbcomm_asset_id, "orb-2401");
-  assert.equal(importedLocation?.gps_address, "Oklahoma City");
-  assert.equal(importedLocation?.gps_source, "orbcomm");
-  assert.equal(importedLocation?.gps_latitude, 35.4676);
+  assert.equal(importedLocation?.gps_address ?? "", "");
+  assert.equal(importedLocation?.gps_source ?? "", "");
+  assert.equal(importedLocation?.gps_latitude ?? null, null);
 
   const deviceReport = parseOrbcommFleetText(
     "Device ID,Vehicle,Lat,Lng,Address\ndev-88,TR-88,40.8448,-73.8648,\"Bronx, NY\"\n",
@@ -2516,6 +2516,60 @@ Continuous reefer. Two load locks.
   assert.equal(portalTsv[0]?.city, "Dallas, TX");
   assert.equal(portalTsv[0]?.latitude, 32.7791);
   assert.equal(portalTsv[0]?.longitude, -96.8002);
+
+  const portalUnits = [
+    "MS2201",
+    "MS1518",
+    "MS1527",
+    "MS1533",
+    "MS1540",
+    "MS1602",
+    "MS1611",
+    "MS1704",
+    "MS1808",
+    "MS1901",
+    "MS2003",
+    "MS2012",
+    "MS2106",
+    "MS2119",
+    "MS2304",
+    "MS2310",
+    "MS2408",
+    "MS2501",
+    "JFI4215",
+  ];
+  const exactPortal = parseOrbcommFleetText(
+    [
+      "",
+      "Account: MS Express / Report: Location Tracking Report",
+      "Created on: 24-Aug-2026 12:34:33",
+      "Time Zone: US/Central",
+      "",
+      "Asset ID,Device Serial Number,Account,Parent Account,Message Time,Asset Type,Product Type,Latitude,Longitude,Address,City,State,Country,Moving,Speed,Note,Tractor ID",
+      ...portalUnits.map(
+        (unit, index) =>
+          `${unit},GSSC${String(index + 1).padStart(4, "0")},MS Express,,2026-08-24 12:30:00,${index === 0 ? "Reefer" : "Other"},GT,35.46,-97.51,Yard,Oklahoma City,OK,USA,No,0,Unit not reporting,`,
+      ),
+    ].join("\n"),
+  );
+  assert.equal(exactPortal.length, 19, "Location Tracking Report must keep every asset after banner rows");
+  assert.equal(exactPortal[0]?.unitNumber, "MS2201");
+  assert.equal(exactPortal[0]?.assetId, "GSSC0001");
+  assert.equal(exactPortal[0]?.type, "Reefer");
+  assert.equal(exactPortal[0]?.city, "Oklahoma City");
+  assert.equal(exactPortal.at(-1)?.unitNumber, "JFI4215");
+  assert.equal(exactPortal.at(-1)?.assetId, "GSSC0019");
+  const exactPreview = buildOrbcommTrailerPreview(exactPortal, []);
+  assert.equal(exactPreview.length, 19);
+  const exactImport = applyOrbcommTrailerImport(exactPreview);
+  assert.equal(exactImport.created, 19);
+  const ms2201 = queries.listTrailers().find((trailer) => trailer.unit_number === "MS2201");
+  assert.equal(ms2201?.orbcomm_asset_id, "GSSC0001");
+  assert.equal(ms2201?.type, "reefer");
+  assert.equal(ms2201?.gps_address ?? "", "", "roster import must not persist snapshot GPS");
+  const jfi = queries.listTrailers().find((trailer) => trailer.unit_number === "JFI4215");
+  assert.equal(jfi?.orbcomm_asset_id, "GSSC0019");
+  assert.equal(jfi?.type, "other");
 
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;

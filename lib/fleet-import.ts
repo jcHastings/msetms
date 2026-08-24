@@ -16,7 +16,6 @@ import {
   getTruck,
   listTrailers,
   listTrucks,
-  saveTrailerGps,
   saveTruckGps,
   updateTrailer,
   updateTruck,
@@ -249,7 +248,6 @@ export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
         reefer_setpoint_f: existing.reefer_setpoint_f,
         active: existing.active,
       });
-      persistImportedTrailerGps(existing.id, row);
       usedTrailerIds.add(existing.id);
       updated += 1;
     } else {
@@ -263,7 +261,6 @@ export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
           vin: row.vin.trim(),
           plate: row.plate.trim(),
         });
-        persistImportedTrailerGps(id, row);
         usedTrailerIds.add(id);
         created += 1;
       } catch (error) {
@@ -275,18 +272,4 @@ export function applyOrbcommTrailerImport(rows: OrbcommTrailerPreviewRow[]): {
   }
 
   return { created, updated, skipped };
-}
-
-function persistImportedTrailerGps(
-  trailerId: number,
-  row: Pick<OrbcommTrailerPreviewRow, "latitude" | "longitude" | "city">,
-): void {
-  if (row.latitude == null && row.longitude == null && !String(row.city ?? "").trim()) return;
-  saveTrailerGps(trailerId, {
-    latitude: row.latitude ?? null,
-    longitude: row.longitude ?? null,
-    address: String(row.city ?? "").trim(),
-    recordedAt: new Date().toISOString(),
-    source: "orbcomm",
-  });
 }

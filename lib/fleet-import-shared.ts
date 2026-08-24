@@ -490,6 +490,8 @@ const ORBCOMM_HEADER_HINTS = new Set([
   "mobile id",
   "device",
   "device id",
+  "device serial",
+  "serial",
   "vehicle",
   "name",
   "vin",
@@ -515,8 +517,16 @@ function orbcommHeaderHits(headers: string[]): number {
 
 function findOrbcommHeader(lines: string[]): { index: number; delimiter: string } {
   const delimiters = [",", "\t", ";"] as const;
-  let best = { index: 0, delimiter: ",", hits: 0 };
   const limit = Math.min(lines.length, 40);
+  for (let i = 0; i < limit; i++) {
+    for (const delimiter of delimiters) {
+      const cells = splitCsvLine(lines[i], delimiter);
+      if (normalizeHeader(cells[0] ?? "") === "asset id" && cells.length >= 2) {
+        return { index: i, delimiter };
+      }
+    }
+  }
+  let best = { index: 0, delimiter: ",", hits: 0 };
   for (let i = 0; i < limit; i++) {
     for (const delimiter of delimiters) {
       const hits = orbcommHeaderHits(splitCsvLine(lines[i], delimiter));
@@ -561,7 +571,13 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     return emptyOrbcommAsset();
   }
   const item = value as Record<string, unknown>;
-  const assetId = pickHeader(item, [
+  const deviceSerial = pickHeader(item, [
+    "device serial number",
+    "device serial",
+    "serial number",
+    "serial",
+  ]);
+  const assetIdColumn = pickHeader(item, [
     "asset id",
     "assetid",
     "asset_id",
@@ -595,6 +611,7 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     "vehicle name",
     "vehiclename",
   ]);
+  const assetId = deviceSerial || assetIdColumn;
   const name = pickHeader(item, [
     "name",
     "asset name",
@@ -616,11 +633,11 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     ]);
   return {
     assetId: assetId || pickHeader(item, ["id", "ID"]),
-    unitNumber: unitNumber || name || assetId,
+    unitNumber: unitNumber || (deviceSerial ? assetIdColumn : "") || name || assetId,
     name: name || unitNumber,
     vin: pickHeader(item, ["vin", "vehicle identification", "vehicle identification number", "vehicle_vin"]),
     plate: pickHeader(item, ["plate", "license plate", "licenseplate", "license_plate"]),
-    type: pickHeader(item, ["type", "equipment type", "equipment", "trailer type"]),
+    type: pickHeader(item, ["type", "asset type", "equipment type", "equipment", "trailer type"]),
     city,
     latitude: pickCoord(item, "lat"),
     longitude: pickCoord(item, "lng"),

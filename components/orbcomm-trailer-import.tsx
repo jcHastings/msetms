@@ -25,8 +25,9 @@ export function OrbcommTrailerImport() {
         <p className="mt-1 text-sm text-slate-600">
           Uses <code>ORBCOMM_*</code> from <code>.env</code> when the B2B API returns assets. If there is
           no API list yet, upload an ORBCOMM CSV/export (Location Tracking Report or Reefer Status Report),
-          preview, then import. Title and date banner rows are skipped. Match by ORBCOMM asset id or
-          trailer #. Do not scrape the logged-in portal.
+          preview, then import. Title and date banner rows are skipped. Asset ID is the trailer unit;
+          Device Serial Number is the ORBCOMM device. Preview can show last city so you can see the
+          file parsed; import saves identity only, not GPS. Do not scrape the logged-in portal.
         </p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
