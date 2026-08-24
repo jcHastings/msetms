@@ -4815,10 +4815,10 @@ Continuous reefer. Two load locks.
   assert.equal(xlsxLoadImport.created, 1);
   assert.equal(queries.getLoad(queries.findLoadIdByNumber("1005912")!)?.truck_unit, "301");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8"), /Import/);
-  const importUi = fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8");
-  assert.match(importUi, /Preview/);
-  assert.match(importUi, /will import in this one/);
-  assert.match(importUi, /JSON\.stringify\(rows\)/);
+  const loadImportUi = fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8");
+  assert.match(loadImportUi, /Preview/);
+  assert.match(loadImportUi, /will import in this one/);
+  assert.match(loadImportUi, /JSON\.stringify\(rows\)/);
   const assignUi = fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8");
   const truckOptionBlock = assignUi.slice(assignUi.indexOf("Select truck"), assignUi.indexOf("Trailer"));
   assert.match(truckOptionBlock, /\{item\.unit_number\}/);
