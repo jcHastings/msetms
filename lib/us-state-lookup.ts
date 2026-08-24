@@ -11,6 +11,9 @@ export type UsStateBox = {
 
 /** Bounding boxes + centroids for IFTA *estimate* only — not official jurisdiction miles. */
 export const US_STATE_BOXES: UsStateBox[] = [
+  { code: "NY", name: "New York", minLat: 40.49, maxLat: 40.92, minLng: -74.05, maxLng: -73.7, lat: 40.73, lng: -73.94 },
+  { code: "NY", name: "New York", minLat: 40.55, maxLat: 41.2, minLng: -73.75, maxLng: -71.85, lat: 40.8, lng: -73.1 },
+  { code: "PA", name: "Pennsylvania", minLat: 39.87, maxLat: 40.15, minLng: -75.28, maxLng: -74.96, lat: 39.95, lng: -75.16 },
   { code: "AL", name: "Alabama", minLat: 30.22, maxLat: 35.01, minLng: -88.47, maxLng: -84.89, lat: 32.81, lng: -86.79 },
   { code: "AK", name: "Alaska", minLat: 51.21, maxLat: 71.54, minLng: -179.15, maxLng: -129.98, lat: 64.2, lng: -153.37 },
   { code: "AZ", name: "Arizona", minLat: 31.33, maxLat: 37.0, minLng: -114.82, maxLng: -109.05, lat: 34.05, lng: -111.09 },
@@ -68,6 +71,10 @@ function contains(box: UsStateBox, lat: number, lng: number): boolean {
   return lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
 }
 
+function boxArea(box: UsStateBox): number {
+  return Math.max(0, box.maxLat - box.minLat) * Math.max(0, box.maxLng - box.minLng);
+}
+
 function distanceSq(box: UsStateBox, lat: number, lng: number): number {
   const dLat = box.lat - lat;
   const dLng = box.lng - lng;
@@ -78,7 +85,11 @@ export function usStateForPoint(lat: number, lng: number): { code: string; name:
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const hits = US_STATE_BOXES.filter((box) => contains(box, lat, lng));
   if (hits.length === 0) return null;
-  const best = hits.reduce((winner, box) => (distanceSq(box, lat, lng) < distanceSq(winner, lat, lng) ? box : winner));
+  const best = hits.reduce((winner, box) => {
+    const areaDelta = boxArea(box) - boxArea(winner);
+    if (Math.abs(areaDelta) > 1e-6) return areaDelta < 0 ? box : winner;
+    return distanceSq(box, lat, lng) < distanceSq(winner, lat, lng) ? box : winner;
+  });
   return { code: best.code, name: best.name };
 }
 

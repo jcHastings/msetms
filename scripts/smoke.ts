@@ -3039,6 +3039,7 @@ Continuous reefer. Two load locks.
 
   const { usStateForPoint } = await import("../lib/us-state-lookup");
   assert.equal(usStateForPoint(40.7128, -74.006)?.code, "NY");
+  assert.equal(usStateForPoint(40.7357, -74.1724)?.code, "NJ");
   assert.equal(usStateForPoint(41.8781, -87.6298)?.code, "IL");
   assert.equal(usStateForPoint(39.7392, -104.9903)?.code, "CO");
   assert.equal(usStateForPoint(32.7767, -96.797)?.code, "TX");
