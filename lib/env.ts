@@ -209,9 +209,8 @@ export function getOpenAiBaseUrl(): string {
   return readSecret("OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
 }
 
-export function getOpenAiModel(): string {
-  return readSecret("OPENAI_MODEL") ?? "gpt-4o-mini";
-}
+/** Cheap mini only — JC asked about cost. No model env var. */
+export const MIKE_OPENAI_MODEL = "gpt-4o-mini";
 
 export function isOpenAiConfigured(): boolean {
   return Boolean(getOpenAiApiKey());

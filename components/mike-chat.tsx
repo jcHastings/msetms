@@ -19,7 +19,7 @@ export function MikeChat({
     <aside className="card flex h-[min(36rem,70vh)] w-full shrink-0 flex-col xl:w-80">
       <header className="border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-semibold">Mike</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant. TMS data only.</p>
+        <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant. TMS data only. gpt-4o-mini.</p>
       </header>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
         {!ready ? (

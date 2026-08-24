@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getOpenAiApiKey, getOpenAiBaseUrl, getOpenAiModel, isOpenAiConfigured } from "./env";
+import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, MIKE_OPENAI_MODEL } from "./env";
 import { getSamsaraFleet } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import type { MikeMessage } from "./mike-shared";
@@ -113,15 +113,23 @@ async function buildOpsSnapshot(): Promise<string> {
     source: item.source,
   }));
 
-  const withGps = gps.filter((item) => item.hasPosition);
+  const liveGps = fleet.tokenSet && fleet.mode === "samsara";
+  const withGps = liveGps ? gps.filter((item) => item.hasPosition) : [];
+  const assignedNames = new Set(loads.filter((load) => load.driver !== "unassigned").map((load) => load.driver));
+  const emptyDrivers = drivers.filter((driver) => driver.active && !assignedNames.has(driver.name)).map((driver) => driver.name);
+  const goingEmptySoon = loads
+    .filter((load) => load.emptySoon && load.driver !== "unassigned")
+    .map((load) => ({ driver: load.driver, load: load.load, status: load.status, destination: load.destination }));
   const nearestHints = locations
-    .filter((location) => location.lat != null && location.lng != null)
+    .filter((location) => location.lat != null && location.lng != null && withGps.length > 0)
     .slice(0, 20)
     .map((location) => {
       const ranked = withGps
         .map((item) => ({
           unit: item.unit,
-          miles: haversineMiles(location.lat as number, location.lng as number, item.lat as number, item.lng as number),
+          miles: Math.round(
+            haversineMiles(location.lat as number, location.lng as number, item.lat as number, item.lng as number),
+          ),
         }))
         .sort((a, b) => a.miles - b.miles)
         .slice(0, 3);
@@ -129,19 +137,22 @@ async function buildOpsSnapshot(): Promise<string> {
     });
 
   return JSON.stringify({
-    samsara: { tokenSet: fleet.tokenSet, mode: fleet.mode, error: fleet.error || null },
+    samsara: { tokenSet: fleet.tokenSet, mode: fleet.mode, liveGps, error: fleet.error || null },
     loads,
     drivers,
     trucks,
     trailers,
     locations,
-    gps,
-    hos,
+    gps: liveGps ? gps : gps.map((item) => ({ ...item, lat: null, lng: null, hasPosition: false, note: "no live GPS" })),
+    hos: liveGps ? hos : hos.map((item) => ({ ...item, note: item.source === "demo" ? "demo HOS, not live" : item.source })),
+    emptyDrivers,
+    goingEmptySoon,
     nearestHints,
     rules: [
-      "Never invent GPS or HOS. If hasPosition is false or source is demo and tokenSet is false, say the position is unknown or demo.",
+      "Never invent GPS or HOS. If liveGps is false or hasPosition is false, say you do not have a position.",
+      "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
+      "Closest to a city: use nearestHints only when that city is listed. If the city has no lat/lng or liveGps is false, say you cannot compute distance.",
       "Never mention API keys, tokens, PINs, or passwords.",
-      "Going empty soon means at delivery / unloading / delivered with no next load.",
     ],
   });
 }
@@ -155,7 +166,7 @@ export async function askMike(question: string, history: MikeMessage[]): Promise
 
   const snapshot = await buildOpsSnapshot();
   const body = {
-    model: getOpenAiModel(),
+    model: MIKE_OPENAI_MODEL,
     temperature: 0.2,
     messages: [
       {
