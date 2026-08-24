@@ -154,8 +154,6 @@ function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boo
   const truckUnit = unitDigits(truck.unit_number);
   if (!vehicleUnit || !truckUnit) return true;
   if (vehicleUnit === truckUnit) return true;
-  const idDigits = unitDigits(vehicle.samsaraVehicleId ?? "");
-  if (idDigits && vehicleUnit === idDigits) return true;
   return vehicleUnit.length >= 8;
 }
 

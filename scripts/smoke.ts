@@ -387,6 +387,17 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
+  const matchFn =
+    fs
+      .readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8")
+      .split("export function matchTruckForSamsara")[1]
+      ?.split("export function")[0] ?? "";
+  assert.ok(matchFn.includes('matchBy: "vin"') && matchFn.includes('matchBy: "unit_number"') && matchFn.includes('matchBy: "plate"'));
+  assert.ok(
+    matchFn.indexOf('matchBy: "vin"') < matchFn.indexOf('matchBy: "unit_number"') &&
+      matchFn.indexOf('matchBy: "unit_number"') < matchFn.indexOf('matchBy: "plate"'),
+    "Samsara rematch must be VIN, then unit number, then plate — never list index",
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /No Samsara ID on this truck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
@@ -2139,42 +2150,54 @@ Continuous reefer. Two load locks.
   );
 
   const swappedTrucks = [
-    { id: 36, unit_number: "36", samsara_vehicle_id: "sam-32", vin: "VIN32WRONG", plate: "OK32" },
-    { id: 32, unit_number: "32", samsara_vehicle_id: "sam-36", vin: "VIN36WRONG", plate: "NY36" },
+    { id: 36, unit_number: "36", samsara_vehicle_id: "sam-32", vin: "VIN32", plate: "OK32" },
+    { id: 32, unit_number: "32", samsara_vehicle_id: "sam-36", vin: "VIN36", plate: "NY36" },
   ];
   const swappedVehicles = [
-    { id: "sam-32", name: "32", vin: "VIN32", year: "", make: "", model: "", licensePlate: "OK32", city: "Oklahoma City, OK", latitude: 35.4676, longitude: -97.5164 },
-    { id: "sam-36", name: "36", vin: "VIN36", year: "", make: "", model: "", licensePlate: "NY36", city: "Bronx, NY", latitude: 40.8448, longitude: -73.8648 },
+    { id: "sam-32", name: "32", vin: "VIN32", year: "", make: "", model: "", licensePlate: "OK32", city: "Bronx, NY", latitude: 40.8448, longitude: -73.8648 },
+    { id: "sam-36", name: "36", vin: "VIN36", year: "", make: "", model: "", licensePlate: "NY36", city: "Oklahoma City, OK", latitude: 35.4676, longitude: -97.5164 },
   ];
   const rematchPreview = buildSamsaraTruckPreview(swappedVehicles, swappedTrucks);
+  assert.equal(
+    matchTruckForSamsara(swappedTrucks, {
+      samsaraVehicleId: "sam-36",
+      unitNumber: "36",
+      name: "36",
+      vin: "VIN36",
+      licensePlate: "NY36",
+    })?.matchBy,
+    "unit_number",
+    "VIN/plate copied onto the other TMS row must not keep the swap",
+  );
   assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-36")?.matchTruckId, 36);
   assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-36")?.tmsUnit, "36");
-  assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-36")?.city, "Bronx, NY");
+  assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-36")?.matchBy, "unit_number");
+  assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-36")?.city, "Oklahoma City, OK");
   assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-32")?.matchTruckId, 32);
   assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-32")?.tmsUnit, "32");
-  assert.equal(rematchPreview.find((row) => row.samsaraVehicleId === "sam-32")?.city, "Oklahoma City, OK");
+  assert.notEqual(rematchPreview.find((row) => row.samsaraVehicleId === "sam-32")?.city, "Oklahoma City, OK");
+  assert.equal(rematchPreview[0]?.name, "32", "list order is 32 then 36 — pairing must not follow array index");
   const swappedGps = samsara.mapVehicleLocations({
     vehicles: [
       {
         id: "sam-32",
         name: "32",
         vin: "VIN32",
-        gps: { time: "2026-08-24T16:00:00Z", latitude: 35.4676, longitude: -97.5164, reverseGeo: { formattedLocation: "Oklahoma City, OK" } },
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 40.8448, longitude: -73.8648, reverseGeo: { formattedLocation: "Bronx, NY" } },
       },
       {
         id: "sam-36",
         name: "36",
         vin: "VIN36",
-        gps: { time: "2026-08-24T16:00:00Z", latitude: 40.8448, longitude: -73.8648, reverseGeo: { formattedLocation: "Bronx, NY" } },
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 35.4676, longitude: -97.5164, reverseGeo: { formattedLocation: "Oklahoma City, OK" } },
       },
     ],
     trucks: swappedTrucks,
     loads: [],
   });
-  assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.address, "Bronx, NY");
-  assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.address, "Oklahoma City, OK");
-  assert.notEqual(swappedGps.find((row) => row.unitNumber === "36")?.address, "Oklahoma City, OK");
-  assert.notEqual(swappedGps.find((row) => row.unitNumber === "32")?.address, "Hastings, NE");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.address, "Oklahoma City, OK");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.address, "Bronx, NY");
+  assert.notEqual(swappedGps.find((row) => row.unitNumber === "32")?.address, "Oklahoma City, OK");
 
   const { closestTrucksToCity, extractCityFromQuestion, findCityCenter } = await import("../lib/city-coords-shared");
   assert.ok(findCityCenter("Oklahoma City"));
@@ -2182,15 +2205,15 @@ Continuous reefer. Two load locks.
   const closestOkc = closestTrucksToCity(
     "what truck is closest to Oklahoma City?",
     [
-      { unit: "32", lat: 35.4676, lng: -97.5164, hasPosition: true, address: "Oklahoma City, OK", samsaraVehicleId: "sam-32" },
-      { unit: "36", lat: 40.8448, lng: -73.8648, hasPosition: true, address: "Bronx, NY", samsaraVehicleId: "sam-36" },
+      { unit: "32", lat: 40.8448, lng: -73.8648, hasPosition: true, address: "Bronx, NY", samsaraVehicleId: "sam-32" },
+      { unit: "36", lat: 35.4676, lng: -97.5164, hasPosition: true, address: "Oklahoma City, OK", samsaraVehicleId: "sam-36" },
       { unit: "112", lat: null, lng: null, hasPosition: false, samsaraVehicleId: "uuid-112" },
     ],
     [],
   );
   assert.equal(closestOkc?.found, true);
-  assert.equal(closestOkc?.ranked[0]?.unit, "32", "unit 32 is in Oklahoma City; unit 36 is in the Bronx");
-  assert.notEqual(closestOkc?.ranked[0]?.unit, "36");
+  assert.equal(closestOkc?.ranked[0]?.unit, "36", "Samsara vehicle named 36 has Oklahoma City; 32 must not receive that ping");
+  assert.notEqual(closestOkc?.ranked[0]?.unit, "32");
   assert.equal(closestOkc?.skippedNoPing, 1);
   const no112 = samsaraUnmatchedUnitsWarning(
     [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
@@ -2306,7 +2329,7 @@ Continuous reefer. Two load locks.
     capacity_lbs: 45000,
     status: "available",
     samsara_vehicle_id: "sam-32",
-    vin: "VIN32WRONG",
+    vin: "VIN32",
     plate: "OK32",
   });
   const truck32Id = queries.createTruck({
@@ -2315,20 +2338,20 @@ Continuous reefer. Two load locks.
     capacity_lbs: 45000,
     status: "available",
     samsara_vehicle_id: "sam-36",
-    vin: "VIN36WRONG",
+    vin: "VIN36",
     plate: "NY36",
   });
   queries.saveTruckGps(truck36Id, {
-    latitude: 35.4676,
-    longitude: -97.5164,
-    address: "Oklahoma City, OK",
+    latitude: 40.8448,
+    longitude: -73.8648,
+    address: "Bronx, NY",
     recordedAt: "2026-08-23T12:00:00Z",
     source: "samsara",
   });
   queries.saveTruckGps(truck32Id, {
-    latitude: 40.5861,
-    longitude: -98.3884,
-    address: "Hastings, NE",
+    latitude: 35.4676,
+    longitude: -97.5164,
+    address: "Oklahoma City, OK",
     recordedAt: "2026-08-23T12:00:00Z",
     source: "samsara",
   });
@@ -2345,11 +2368,10 @@ Continuous reefer. Two load locks.
   const swapImport = applySamsaraTruckImport(liveSwapPreview);
   assert.ok(swapImport.updated >= 2);
   assert.equal(queries.getTruck(truck36Id)?.samsara_vehicle_id, "sam-36");
-  assert.equal(queries.getTruck(truck36Id)?.gps_address, "Bronx, NY");
+  assert.equal(queries.getTruck(truck36Id)?.gps_address, "Oklahoma City, OK");
   assert.equal(queries.getTruck(truck32Id)?.samsara_vehicle_id, "sam-32");
-  assert.equal(queries.getTruck(truck32Id)?.gps_address, "Oklahoma City, OK");
-  assert.notEqual(queries.getTruck(truck36Id)?.gps_address, "Oklahoma City, OK");
-  assert.notEqual(queries.getTruck(truck32Id)?.gps_address, "Hastings, NE");
+  assert.notEqual(queries.getTruck(truck32Id)?.gps_address, "Oklahoma City, OK");
+  assert.equal(queries.getTruck(truck32Id)?.gps_address, "Bronx, NY");
 
   const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
   delete process.env.SAMSARA_API_TOKEN;
@@ -3740,25 +3762,25 @@ Continuous reefer. Two load locks.
         id: 36,
         unit_number: "36",
         samsara_vehicle_id: "sam-36",
-        gps_latitude: 40.8448,
-        gps_longitude: -73.8648,
-        gps_address: "Bronx, NY",
+        gps_latitude: 35.4676,
+        gps_longitude: -97.5164,
+        gps_address: "Oklahoma City, OK",
         gps_source: "samsara",
       },
       {
         id: 32,
         unit_number: "32",
         samsara_vehicle_id: "sam-32",
-        gps_latitude: 35.4676,
-        gps_longitude: -97.5164,
-        gps_address: "Oklahoma City, OK",
+        gps_latitude: 40.8448,
+        gps_longitude: -73.8648,
+        gps_address: "Bronx, NY",
         gps_source: "samsara",
       },
     ],
     locations: [],
   });
-  assert.equal(mikeGps.find((row) => row.unit === "36")?.address, "Bronx, NY");
-  assert.equal(mikeGps.find((row) => row.unit === "32")?.address, "Oklahoma City, OK");
+  assert.equal(mikeGps.find((row) => row.unit === "36")?.address, "Oklahoma City, OK");
+  assert.equal(mikeGps.find((row) => row.unit === "32")?.address, "Bronx, NY");
   const liveByVehicleId = buildMikeGpsContext("what truck is closest to Oklahoma City?", {
     trucks: [
       { id: 36, unit_number: "36", samsara_vehicle_id: "sam-36" },
@@ -3770,25 +3792,25 @@ Continuous reefer. Two load locks.
         truckId: 32,
         vehicleId: "sam-32",
         unitNumber: "32",
-        latitude: 35.4676,
-        longitude: -97.5164,
-        address: "Oklahoma City, OK",
-        source: "samsara",
-      },
-      {
-        vehicleId: "sam-36",
-        unitNumber: "Unit 36",
         latitude: 40.8448,
         longitude: -73.8648,
         address: "Bronx, NY",
         source: "samsara",
       },
+      {
+        vehicleId: "sam-36",
+        unitNumber: "Unit 36",
+        latitude: 35.4676,
+        longitude: -97.5164,
+        address: "Oklahoma City, OK",
+        source: "samsara",
+      },
     ],
   });
   assert.equal(liveByVehicleId.closestToCity?.found, true);
-  assert.equal(liveByVehicleId.closestToCity?.ranked[0]?.unit, "32");
+  assert.equal(liveByVehicleId.closestToCity?.ranked[0]?.unit, "36");
   assert.equal(liveByVehicleId.closestToCity?.ranked[0]?.address, "Oklahoma City, OK");
-  assert.notEqual(liveByVehicleId.closestToCity?.ranked[0]?.unit, "36");
+  assert.notEqual(liveByVehicleId.closestToCity?.ranked[0]?.unit, "32");
   assert.equal(liveByVehicleId.skippedNoPing, 1);
   assert.equal(liveByVehicleId.gps.find((row) => row.unit === "99")?.note, "no last GPS ping");
   assert.equal(liveByVehicleId.gps.find((row) => row.unit === "36")?.hasPosition, true);
