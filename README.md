@@ -50,14 +50,16 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | --- | --- |
 | `npm install` | Install JavaScript dependencies (no native compile) |
 | `npm run build` | Production build (writes `.next/standalone`) |
-| `npm start` | Run the standalone server and keep it listening |
+| `npm start` | **The start command** — load repo-root `.env` / `.env.local`, then run `node .next/standalone/server.js` |
 | `docker compose up --build` | Build the Node 22 image and serve port 3000 |
 | `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
 | `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` and the Ascend-style sample |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). **JC should start production with `npm start`** from the repo root (the folder that has `package.json` and `.env`). That script loads `.env` and `.env.local` from that same folder (so `SAMSARA_API_TOKEN` is applied), then runs `node .next/standalone/server.js` using `process.execPath` (not a different `node` from PATH). It never prints secret values.
+
+Do **not** run `next start` or `npx next start`. This app uses `output: "standalone"`. Next 16 will print that standalone is configured and dotenv 17 can report `injected env (0) from .env` even when the real project `.env` exists — because `next start` does not load env from the repo root the way the standalone server needs. `npm run start:next` is redirected to the same `npm start` wrapper.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 

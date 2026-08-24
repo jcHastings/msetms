@@ -1,15 +1,95 @@
+import fs from "node:fs";
 import path from "node:path";
-import { config } from "dotenv";
+import { parse } from "dotenv";
 
-let loaded = false;
+export function isStandaloneOutputDir(dir: string): boolean {
+  const normalized = path.resolve(dir).replace(/\\/g, "/");
+  if (
+    !normalized.endsWith("/.next/standalone") &&
+    !normalized.endsWith(".next/standalone")
+  ) {
+    return false;
+  }
+  return fs.existsSync(path.join(dir, "server.js"));
+}
 
-/** Load gitignored .env then .env.local. Never logs secret values. */
-export function loadLocalEnv(): void {
-  if (loaded) return;
-  loaded = true;
-  const cwd = process.cwd();
-  config({ path: path.join(cwd, ".env") });
-  config({ path: path.join(cwd, ".env.local"), override: true });
+export function isProjectRoot(dir: string): boolean {
+  if (isStandaloneOutputDir(dir)) return false;
+  if (!fs.existsSync(path.join(dir, "package.json"))) return false;
+  return (
+    fs.existsSync(path.join(dir, "next.config.ts")) ||
+    fs.existsSync(path.join(dir, "next.config.js")) ||
+    fs.existsSync(path.join(dir, "next.config.mjs")) ||
+    fs.existsSync(path.join(dir, ".env")) ||
+    fs.existsSync(path.join(dir, ".env.local"))
+  );
+}
+
+/** Repo root even when cwd is `.next/standalone` (`server.js` chdir()s there). */
+export function findProjectRoot(startDir = process.cwd()): string {
+  let dir = path.resolve(startDir);
+  const seen = new Set<string>();
+  while (!seen.has(dir)) {
+    seen.add(dir);
+    if (isProjectRoot(dir)) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(startDir);
+}
+
+let loadedDefault = false;
+
+export type LoadLocalEnvOptions = {
+  cwd?: string;
+  processEnv?: NodeJS.ProcessEnv;
+  force?: boolean;
+};
+
+/**
+ * Load gitignored `.env` then `.env.local` from the project root.
+ * Existing process env wins. `.env.local` overrides `.env`.
+ * Uses dotenv.parse so dotenv 17 never prints `injected env (N)` or values.
+ */
+export function loadLocalEnv(options: LoadLocalEnvOptions = {}): {
+  root: string;
+  loadedFrom: string[];
+  quiet: true;
+} {
+  const target = options.processEnv ?? process.env;
+  const isDefault = target === process.env;
+  if (isDefault && loadedDefault && !options.force) {
+    return { root: findProjectRoot(options.cwd), loadedFrom: [], quiet: true };
+  }
+  if (isDefault) loadedDefault = true;
+
+  const root = findProjectRoot(options.cwd ?? process.cwd());
+  const preset = new Set(
+    Object.keys(target).filter((key) => target[key] !== undefined),
+  );
+  const loadedFrom: string[] = [];
+
+  function apply(file: string, overrideFileKeys: boolean) {
+    if (!fs.existsSync(file)) return;
+    const parsed = parse(fs.readFileSync(file));
+    for (const [key, value] of Object.entries(parsed)) {
+      if (preset.has(key)) continue;
+      if (target[key] === undefined || overrideFileKeys) {
+        target[key] = value;
+      }
+    }
+    loadedFrom.push(file);
+  }
+
+  apply(path.join(root, ".env"), false);
+  apply(path.join(root, ".env.local"), true);
+
+  if (target.DOTENV_CONFIG_QUIET === undefined) {
+    target.DOTENV_CONFIG_QUIET = "true";
+  }
+
+  return { root, loadedFrom, quiet: true };
 }
 
 function readSecret(name: string): string | undefined {

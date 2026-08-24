@@ -80,6 +80,7 @@ Skipped Ascend-exclusive: Pro Plan billing, Business Center legal/training/tax s
 
 ## Windows
 
+- Start with **`npm start`** (not `next start` / `npx next start`). From the repo root: `npm install` → `npm run build` → `npm start`. That loads `.env` / `.env.local` from the project root, then runs `node .next/standalone/server.js`. Never logs secret values. `next start` prints that standalone is configured and can show `injected env (0) from .env` even when `SAMSARA_API_TOKEN` is in the real project `.env`.
 - `npm start` copies `data` / `.env` on win32. No `better-sqlite3` compile. No symlink (`EPERM`).
 
 ## Not in this PR

@@ -2,7 +2,8 @@
  * Run the Next standalone server and do not exit after Ready.
  *
  * `next start` is not supported with `output: 'standalone'` (Next prints a
- * warning and can tear down). Official path: `node .next/standalone/server.js`.
+ * warning and can miss the project `.env`). JC should run `npm start`.
+ * That loads repo-root `.env` / `.env.local` then `node .next/standalone/server.js`.
  *
  * Bind 0.0.0.0 unless HOST / LISTEN_HOST / BIND_HOST is an explicit IP.
  * Never use OS HOSTNAME (machine name, e.g. "cursor"). Does not require
@@ -16,7 +17,6 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { config as loadEnv } from "dotenv";
 import { listenAddress } from "./listen-address.mjs";
 import { mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
 import {
@@ -26,7 +26,9 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
+const { loadProjectEnv } = require("./project-env.cjs");
 require("./next-keep-alive.cjs");
+loadProjectEnv({ cwd: root });
 
 const resolvedNode = resolveNodeExecutable();
 if (resolvedNode.unsupported) {
@@ -38,9 +40,6 @@ if (resolvedNode.switched) {
     `Using Node ${resolvedNode.version} at ${resolvedNode.execPath} (PATH had Node ${process.versions.node})`,
   );
 }
-
-loadEnv({ path: join(root, ".env") });
-loadEnv({ path: join(root, ".env.local"), override: true });
 
 const standaloneDir = join(root, ".next", "standalone");
 const serverJs = join(standaloneDir, "server.js");
@@ -113,6 +112,7 @@ const child = spawn(resolvedNode.execPath, [serverJs], {
     HOSTNAME: hostname,
     NODE_ENV: "production",
     NODE_OPTIONS: nodeOptions,
+    DOTENV_CONFIG_QUIET: "true",
     TMS_DB_PATH: join(projectData, "tms.db"),
     TMS_DATA_DIR: projectData,
   },

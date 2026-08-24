@@ -14,8 +14,15 @@
  *
  * This preload is required via NODE_OPTIONS so it applies to the Next CLI
  * and to any forked start-server worker. It does not print secrets.
+ *
+ * Also loads repo-root `.env` / `.env.local` before Next's dotenv runs, so
+ * `node .next/standalone/server.js` still sees SAMSARA_API_TOKEN when cwd
+ * is the standalone folder.
  */
 "use strict";
+
+const { loadProjectEnv } = require("./project-env.cjs");
+loadProjectEnv();
 
 function ignoreBrokenPipe(stream) {
   if (!stream || typeof stream.on !== "function") return;
