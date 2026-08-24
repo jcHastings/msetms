@@ -15,6 +15,7 @@ import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
+import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { RateConApply } from "@/components/rate-con-apply";
 import { ReeferBadge } from "@/components/reefer-badge";
@@ -24,6 +25,7 @@ import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
+import { buildTmsInvoice } from "@/lib/invoice";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
@@ -156,16 +158,33 @@ export async function LoadEditor({
 
         <LoadTabPanel when="financials">
           {showFinancials ? (
-            <LoadPayItems
-              loadId={load.id}
-              items={payItems}
-              customerName={load.customer_name}
-              driverName={load.driver_name}
-              driverType={load.driver_type}
-              ownerOperators={drivers
-                .filter((driver) => driver.driver_type === "owner_operator")
-                .map((driver) => driver.name)}
-            />
+            <>
+              <TmsInvoicePanel
+                loadId={load.id}
+                status={load.status}
+                invoice={
+                  load.tms_invoice_number
+                    ? (() => {
+                        try {
+                          return buildTmsInvoice(load);
+                        } catch {
+                          return null;
+                        }
+                      })()
+                    : null
+                }
+              />
+              <LoadPayItems
+                loadId={load.id}
+                items={payItems}
+                customerName={load.customer_name}
+                driverName={load.driver_name}
+                driverType={load.driver_type}
+                ownerOperators={drivers
+                  .filter((driver) => driver.driver_type === "owner_operator")
+                  .map((driver) => driver.name)}
+              />
+            </>
           ) : null}
         </LoadTabPanel>
 

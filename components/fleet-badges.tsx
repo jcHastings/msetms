@@ -63,10 +63,13 @@ export function HosBadge({
   }
   return (
     <div className="text-sm">
-      <div className="font-semibold tabular-nums">{formatDurationMs(hos.driveRemainingMs)} drive</div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">
-        {hos.source} · {formatDutyStatus(hos.dutyStatus)}
+      <div className="font-semibold">{formatDutyStatus(hos.dutyStatus) || "HOS"}</div>
+      <div className="tabular-nums text-[11px] text-slate-600">
+        {formatDurationMs(hos.driveRemainingMs)} drive
+        {hos.shiftRemainingMs != null ? ` · ${formatDurationMs(hos.shiftRemainingMs)} on-duty` : ""}
+        {hos.cycleRemainingMs != null ? ` · ${formatDurationMs(hos.cycleRemainingMs)} cycle` : ""}
       </div>
+      <div className="text-[11px] uppercase tracking-wide text-slate-400">{hos.source}</div>
     </div>
   );
 }

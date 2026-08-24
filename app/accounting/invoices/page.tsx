@@ -15,11 +15,16 @@ export default function InvoicesPage() {
     <>
       <PageHeader
         title="Invoices (AR)"
-        subtitle="Delivered and completed loads. Bill the customer rate. Mark paid locally, or send from QuickBooks on the load."
+        subtitle="Delivered and completed loads. Create the customer invoice on the load (Income / Budget only). Download the Excel/CSV for QuickBooks. QBO connect is optional."
         actions={
-          <Link href="/accounting/quickbooks" className="btn btn-secondary">
-            QuickBooks
-          </Link>
+          <div className="flex gap-2">
+            <a href="/api/accounting/invoices/export" className="btn btn-secondary">
+              Download invoices
+            </a>
+            <Link href="/accounting/quickbooks" className="btn btn-secondary">
+              QuickBooks
+            </Link>
+          </div>
         }
       />
       <div className="card overflow-hidden">
@@ -58,7 +63,7 @@ export default function InvoicesPage() {
                     </div>
                   </td>
                 ) : null}
-                <td className="text-slate-600">{row.invoiceLabel}</td>
+                <td className="text-slate-600">{row.tms_invoice_number || row.invoiceLabel}</td>
                 <td>{row.paid ? "Paid" : "Open"}</td>
                 <td className="text-right">
                   {row.paid ? null : (

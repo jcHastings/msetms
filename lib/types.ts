@@ -437,6 +437,8 @@ export type Load = {
   route_state_miles: string;
   route_calculated_at: string;
   route_source: string;
+  tms_invoice_number: string;
+  tms_invoice_at: string;
   created_at: string;
   updated_at: string;
 };

@@ -43,6 +43,13 @@ export type HosClock = {
   source: "demo" | "samsara";
 };
 
+export type SamsaraTruckDriver = {
+  truckId: number;
+  samsaraDriverId: string;
+  samsaraDriverName: string;
+  tmsDriverId: number | null;
+};
+
 export type SamsaraFleetResult = {
   mode: "demo" | "samsara";
   tokenSet: boolean;
@@ -50,6 +57,7 @@ export type SamsaraFleetResult = {
   fetchedAt: string;
   locations: VehicleLocation[];
   hos: HosClock[];
+  truckDrivers: SamsaraTruckDriver[];
 };
 
 type CacheEntry = { expiresAt: number; result: SamsaraFleetResult };
@@ -141,6 +149,26 @@ export function hosForDriver(fleet: SamsaraFleetResult, driverId: number | null 
   return fleet.hos.find((item) => item.driverId === driverId) ?? null;
 }
 
+export function driverForTruck(fleet: SamsaraFleetResult, truckId: number | null | undefined): SamsaraTruckDriver | null {
+  if (truckId == null) return null;
+  return fleet.truckDrivers.find((item) => item.truckId === truckId) ?? null;
+}
+
+export function hosForAssignedTruck(
+  fleet: SamsaraFleetResult,
+  truck: { id: number; assigned_driver_id?: number | null },
+): HosClock | null {
+  const assigned = driverForTruck(fleet, truck.id);
+  if (assigned?.samsaraDriverId) {
+    const bySamsara = fleet.hos.find(
+      (item) => item.samsaraDriverId && normalizeKey(item.samsaraDriverId) === normalizeKey(assigned.samsaraDriverId),
+    );
+    if (bySamsara) return bySamsara;
+  }
+  if (assigned?.tmsDriverId) return hosForDriver(fleet, assigned.tmsDriverId);
+  return hosForDriver(fleet, truck.assigned_driver_id ?? null);
+}
+
 export function locationForLoad(
   fleet: SamsaraFleetResult,
   load: { id: number; truck_id: number | null },
@@ -195,7 +223,13 @@ export async function getLocationForTruck(truckId: number): Promise<VehicleLocat
 export async function getHosForTruck(truckId: number): Promise<HosClock | null> {
   const fleet = await getSamsaraFleet();
   const truck = listTrucks().find((item) => item.id === truckId);
-  return hosForDriver(fleet, truck?.assigned_driver_id ?? null);
+  if (!truck) return null;
+  return hosForAssignedTruck(fleet, truck);
+}
+
+export async function getSamsaraDriverForTruck(truckId: number): Promise<SamsaraTruckDriver | null> {
+  const fleet = await getSamsaraFleet();
+  return driverForTruck(fleet, truckId);
 }
 
 export async function getHosForDriver(driverId: number): Promise<HosClock | null> {
@@ -208,11 +242,13 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
   if (!isSamsaraTokenSet()) return demo;
 
   try {
-    const [vehicles, clocks] = await Promise.all([
+    const [vehicles, clocks, identities] = await Promise.all([
       fetchAllPages("/fleet/vehicles/stats", "gps"),
       fetchAllPages("/fleet/hos/clocks"),
+      fetchAllPages("/fleet/vehicles").catch(() => []),
     ]);
     const trucks = listTrucks();
+    const drivers = listDrivers();
     const locations = persistLiveGps(
       mapVehicleLocations({
         vehicles,
@@ -236,7 +272,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
       locations: mergePersistedGps(locations, trucks),
       hos: mapHosClocks({
         clocks,
-        drivers: listDrivers().map((driver) => ({
+        drivers: drivers.map((driver) => ({
           id: driver.id,
           name: driver.name,
           samsara_driver_id: driver.samsara_driver_id,
@@ -245,6 +281,11 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
           id: load.id,
           driver_id: load.driver_id,
         })),
+      }),
+      truckDrivers: mapTruckDrivers({
+        vehicles: parseSamsaraVehicles(identities.length ? identities : vehicles),
+        trucks,
+        drivers,
       }),
     };
   } catch (error) {
@@ -255,6 +296,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
       fetchedAt: new Date().toISOString(),
       locations: mergePersistedGps([], listTrucks()),
       hos: [],
+      truckDrivers: [],
     };
   }
 }
@@ -293,6 +335,7 @@ function demoFleet(): SamsaraFleetResult {
     fetchedAt: new Date().toISOString(),
     locations,
     hos,
+    truckDrivers: [],
   };
 }
 
@@ -522,7 +565,68 @@ export function mapHosClocks(input: {
       source: "samsara",
     });
   }
+  const seen = new Set(clocks.map((item) => normalizeKey(item.samsaraDriverId)).filter(Boolean));
+  for (const row of input.clocks) {
+    const info = (row.driver ?? {}) as Record<string, unknown>;
+    const samsaraDriverId = String(info.id ?? "");
+    const key = normalizeKey(samsaraDriverId);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    const clock = (row.clocks ?? {}) as Record<string, unknown>;
+    const drive = (clock.drive ?? {}) as Record<string, unknown>;
+    const shift = (clock.shift ?? {}) as Record<string, unknown>;
+    const cycle = (clock.cycle ?? {}) as Record<string, unknown>;
+    const brk = (clock.break ?? {}) as Record<string, unknown>;
+    const status = (row.currentDutyStatus ?? {}) as Record<string, unknown>;
+    clocks.push({
+      driverId: null,
+      loadId: null,
+      samsaraDriverId,
+      driverName: String(info.name ?? ""),
+      dutyStatus: String(status.hosStatusType ?? ""),
+      driveRemainingMs: asNumber(drive.driveRemainingDurationMs),
+      shiftRemainingMs: asNumber(shift.shiftRemainingDurationMs),
+      cycleRemainingMs: asNumber(cycle.cycleRemainingDurationMs),
+      timeUntilBreakMs: asNumber(brk.timeUntilBreakDurationMs),
+      recordedAt: new Date().toISOString(),
+      source: "samsara",
+    });
+  }
   return clocks;
+}
+
+export function mapTruckDrivers(input: {
+  vehicles: SamsaraVehicleInput[];
+  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
+  drivers: Array<{ id: number; name: string; samsara_driver_id: string }>;
+}): SamsaraTruckDriver[] {
+  const claimed = new Set<number>();
+  const out: SamsaraTruckDriver[] = [];
+  for (const vehicle of input.vehicles) {
+    if (!vehicle.driverName && !vehicle.driverId) continue;
+    const match = matchTruckForSamsara(input.trucks, {
+      samsaraVehicleId: vehicle.id,
+      unitNumber: vehicle.name,
+      name: vehicle.name,
+      vin: vehicle.vin,
+      licensePlate: vehicle.licensePlate,
+      extraKeys: vehicle.extraKeys,
+    }, claimed);
+    if (!match) continue;
+    claimed.add(match.id);
+    const tms = input.drivers.find(
+      (driver) =>
+        (vehicle.driverId && normalizeKey(driver.samsara_driver_id) === normalizeKey(vehicle.driverId)) ||
+        (vehicle.driverName && normalizeKey(driver.name) === normalizeKey(vehicle.driverName)),
+    );
+    out.push({
+      truckId: match.id,
+      samsaraDriverId: vehicle.driverId ?? "",
+      samsaraDriverName: vehicle.driverName || tms?.name || "",
+      tmsDriverId: tms?.id ?? null,
+    });
+  }
+  return out;
 }
 
 async function fetchAllPages(pathname: string, types?: string): Promise<Array<Record<string, unknown>>> {

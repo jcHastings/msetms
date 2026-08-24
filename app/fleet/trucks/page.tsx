@@ -9,7 +9,8 @@ import { truckComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import {
   getSamsaraFleet,
-  hosForDriver,
+  driverForTruck,
+  hosForAssignedTruck,
   locationForTruck,
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
@@ -78,7 +79,8 @@ export default async function TrucksPage() {
               trucks.map((truck) => {
                 const alerts = truckComplianceAlerts(truck, windows);
                 const location = locationForTruck(fleet, truck.id);
-                const hos = hosForDriver(fleet, truck.assigned_driver_id);
+                const samsaraDriver = driverForTruck(fleet, truck.id);
+                const hos = hosForAssignedTruck(fleet, truck);
                 return (
                   <ClickableRow
                     key={truck.id}
@@ -90,7 +92,14 @@ export default async function TrucksPage() {
                     </td>
                     <td>{vehicleLabel(truck)}</td>
                     <td>{truck.plate || "—"}</td>
-                    <td>{truck.driver_name || "—"}</td>
+                    <td>
+                      {samsaraDriver?.samsaraDriverName || truck.driver_name || "—"}
+                      {samsaraDriver?.samsaraDriverName &&
+                      truck.driver_name &&
+                      samsaraDriver.samsaraDriverName !== truck.driver_name ? (
+                        <div className="text-xs text-slate-500">TMS {truck.driver_name}</div>
+                      ) : null}
+                    </td>
                     <td>
                       <LocationBadge
                         location={location}
@@ -104,7 +113,10 @@ export default async function TrucksPage() {
                     <td>
                       <HosBadge
                         hos={hos}
-                        empty={samsaraHosEmptyState({ assigned: Boolean(truck.assigned_driver_id), hos })}
+                        empty={samsaraHosEmptyState({
+                          assigned: Boolean(samsaraDriver || truck.assigned_driver_id),
+                          hos,
+                        })}
                       />
                     </td>
                     <ExpiryCell

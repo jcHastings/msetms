@@ -76,6 +76,8 @@ async function main() {
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MS Test/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8"), /companyLogoPath/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MSE Transport/);
@@ -2155,7 +2157,7 @@ Continuous reefer. Two load locks.
   assert.equal(hasCustomCompanyLogo(), false);
   assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
   assert.equal(companyLogoPath(), defaultCompanyLogoPath());
-  assert.equal(header.dispatcher_name, "Ana G");
+  assert.equal(header.dispatcher_name, "MS Test");
   const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
   assert.equal(coleConfirm.style, "owner_operator");
   assert.equal(coleConfirm.loadNumber, coleLoad.load_number);
@@ -3962,7 +3964,7 @@ Continuous reefer. Two load locks.
   assert.ok(queries.getLoad(bookedFromTemplate));
 
   const session = await import("../lib/dispatcher-session");
-  const ana = session.listDispatchers().find((row) => row.name === "Ana G");
+  const ana = session.listDispatchers().find((row) => row.name === "MS Test");
   assert.ok(ana);
   assert.equal(ana.totp_enrolled, false);
   assert.equal("pin" in ana, false);
@@ -4718,6 +4720,104 @@ Continuous reefer. Two load locks.
   assert.match(safetyBoard.rows.find((row) => row.subject === "Denise Ortega")?.hos ?? "", /Samsara token not set/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /Safety/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /CSA|hazmat|passport/);
+
+  const payItemsMod = await import("../lib/pay-items");
+  const { createTmsInvoice, tmsCustomerInvoiceLines, renderInvoicesCsv } = await import("../lib/invoice");
+  const invoiceLoadId = queries.findLoadIdByNumber("1005911");
+  assert.ok(invoiceLoadId);
+  payItemsMod.addPayItem(invoiceLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "M & S Loads LLC.",
+    category: "flat_rate",
+    rate: 1500,
+    qty: 1,
+    total: 1500,
+    notes: "",
+  });
+  payItemsMod.addPayItem(invoiceLoadId, {
+    side: "expense",
+    bill_to: "driver",
+    payee: "Lumper",
+    category: "lumper",
+    rate: 150,
+    qty: 1,
+    total: 150,
+    notes: "",
+  });
+  const invoiceLines = tmsCustomerInvoiceLines(queries.getLoad(invoiceLoadId)!);
+  assert.equal(invoiceLines.length, 1);
+  assert.equal(invoiceLines[0]?.amount, 1500);
+  assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
+  const made = await createTmsInvoice(invoiceLoadId);
+  assert.equal(made.invoiceNumber, "INV-1005911");
+  assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");
+  assert.match(renderInvoicesCsv([
+    {
+      invoiceNumber: "INV-1005911",
+      loadNumber: "1005911",
+      customerName: "M & S Loads LLC.",
+      date: "2024-08-03",
+      poNumber: "PO-5911",
+      customerReference: "PO-5911",
+      lane: "Kansas City, MO → Avenel, NJ",
+      lines: invoiceLines,
+      total: 1500,
+      companyName: "M&S Loads",
+    },
+  ]), /INV-1005911/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8"), /Create invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8"), /Download invoices/);
+
+  const mappedDrivers = samsara.mapTruckDrivers({
+    vehicles: [
+      {
+        id: "veh-36",
+        name: "36",
+        vin: "",
+        year: "",
+        make: "",
+        model: "",
+        licensePlate: "",
+        driverId: "drv-pat",
+        driverName: "Pat Reed",
+      },
+    ],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "veh-36", vin: "", plate: "" }],
+    drivers: [{ id: 99, name: "Pat Reed", samsara_driver_id: "drv-pat" }],
+  });
+  assert.equal(mappedDrivers[0]?.truckId, 36);
+  assert.equal(mappedDrivers[0]?.samsaraDriverName, "Pat Reed");
+  assert.equal(mappedDrivers[0]?.tmsDriverId, 99);
+  const unmatchedHos = samsara.mapHosClocks({
+    clocks: [
+      {
+        driver: { id: "drv-outside", name: "Outside Driver" },
+        clocks: { drive: { driveRemainingDurationMs: 3_600_000 }, shift: { shiftRemainingDurationMs: 7_200_000 } },
+        currentDutyStatus: { hosStatusType: "driving" },
+      },
+    ],
+    drivers: [],
+    loads: [],
+  });
+  assert.equal(unmatchedHos[0]?.driverName, "Outside Driver");
+  assert.equal(unmatchedHos[0]?.driverId, null);
+  assert.equal(
+    samsara.hosForAssignedTruck(
+      {
+        mode: "samsara",
+        tokenSet: true,
+        fetchedAt: new Date().toISOString(),
+        locations: [],
+        hos: unmatchedHos,
+        truckDrivers: [
+          { truckId: 36, samsaraDriverId: "drv-outside", samsaraDriverName: "Outside Driver", tmsDriverId: null },
+        ],
+      },
+      { id: 36, assigned_driver_id: null },
+    )?.driverName,
+    "Outside Driver",
+  );
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

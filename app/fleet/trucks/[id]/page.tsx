@@ -11,6 +11,7 @@ import { driverOption, truckFormValues } from "@/lib/fleet-form-shared";
 import {
   getHosForTruck,
   getLocationForTruck,
+  getSamsaraDriverForTruck,
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
@@ -28,6 +29,7 @@ export default async function EditTruckPage({
   if (!truck) notFound();
   const location = await getLocationForTruck(truck.id);
   const hos = await getHosForTruck(truck.id);
+  const samsaraDriver = await getSamsaraDriverForTruck(truck.id);
 
   return (
     <>
@@ -54,11 +56,14 @@ export default async function EditTruckPage({
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Samsara driver / HOS</div>
+          <div className="mt-1 text-sm font-semibold">
+            {samsaraDriver?.samsaraDriverName || truck.driver_name || "No Samsara-assigned driver"}
+          </div>
           <div className="mt-1">
             <HosBadge
               hos={hos}
-              empty={samsaraHosEmptyState({ assigned: Boolean(truck.assigned_driver_id), hos })}
+              empty={samsaraHosEmptyState({ assigned: Boolean(samsaraDriver || truck.assigned_driver_id), hos })}
             />
           </div>
         </div>

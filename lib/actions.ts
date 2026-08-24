@@ -1472,6 +1472,25 @@ export async function deletePayItemAction(formData: FormData): Promise<ActionRes
   });
 }
 
+export async function createTmsInvoiceAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const { createTmsInvoice } = await import("./invoice");
+      const result = await createTmsInvoice(loadId);
+      refresh();
+      return { ok: true, id: result.attachmentId, message: `Invoice ${result.invoiceNumber} saved on Load Documents.` };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function previewLoadsImportAction(
   _prev: LoadImportPreviewState | null,
   formData: FormData,

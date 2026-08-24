@@ -72,6 +72,8 @@ export type SamsaraVehicleInput = {
   latitude?: number | null;
   longitude?: number | null;
   city?: string;
+  driverId?: string;
+  driverName?: string;
 };
 
 export type SamsaraMatchTruck = {
@@ -420,6 +422,11 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
     if (key) seen.add(key);
     const gps = (item.gps ?? nested.gps ?? {}) as Record<string, unknown>;
     const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
+    const driver = (item.staticAssignedDriver ??
+      nested.staticAssignedDriver ??
+      item.driver ??
+      nested.driver ??
+      {}) as Record<string, unknown>;
     vehicles.push({
       id,
       name,
@@ -435,6 +442,8 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
         typeof reverse.formattedLocation === "string"
           ? reverse.formattedLocation
           : firstText(item, nested, ["location", "city"]),
+      driverId: firstText(driver, {}, ["id", "driverId", "driver_id"]),
+      driverName: firstText(driver, {}, ["name", "driverName", "driver_name"]),
     });
   }
   return vehicles;

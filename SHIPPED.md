@@ -7,9 +7,9 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Sign-in
 
 - Default company logo is the official **MS Express** mark (`public/ms-express-logo.png`) on login, the dispatcher header, and load confirmation PDFs. Product name stays **MS Express TMS**. Settings → Company can upload a replacement; remove reverts to the default.
-- Dispatcher PIN login at `/login`. Demo: **Ana G / 4020** (Administrator). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code).
+- Dispatcher PIN login at `/login`. Demo: **MS Test / 4020** (Administrator). After PIN, enrolled users enter a 6-digit authenticator code (or a one-time recovery code). Existing DBs rename the seeded Ana G / 4020 row to MS Test.
 - **Users** in the main nav — list + add dispatchers and accounting staff on the same `dispatchers` records as Settings → Users. Roles: **Administrator**, **Standard**, **Accounting**. PIN is never shown after save. Administrator resets 2-step. Nav hides and APIs 401 anything a role cannot use.
-- **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Administrator can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so Ana G / the office PC can still use PIN until they enroll.
+- **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Administrator can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so MS Test / the office PC can still use PIN until they enroll.
 - Dispatcher session lasts 12 hours from sign-in.
 - Driver app unchanged: `/driver/login` with seeded driver PINs. No TOTP.
 
@@ -53,6 +53,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 ## Fleet / admin
 
 - **Safety** in Fleet nav — ranked CDL / medical / drug-test / insurance / Samsara HOS exceptions. Empty dates stay empty. Not a CSA/ELD/accident board.
+- **Invoice** on Financials (delivered/completed): customer Income/Budget lines only — no driver/OO/lumper/relay. PDF saved on Load Documents. **Invoices (AR)** has Download invoices CSV (invoice #, load #, customer, date, description, amount, PO). QBO connect stays optional.
 - **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav (plus the Fleet overview). Each list has a UTF-8 CSV download (own columns; driver PIN is never exported).
 - **Fuel** in Fleet nav — daily fuel-card CSV or Transaction Activity Report PDF (`unpdf`). Four first-class buckets on every import and total: Truck diesel, Reefer diesel, DEF, Scale (none of these is “Other”; DEF is never dumped into truck diesel). Match by driver name (including NName last, first) or unit / prompt #. Dedup on invoice + category + qty when invoice is present. Per-driver and per-truck totals. Unmatched queue. Template + export. Driver and truck pages link here. No live card API.
 - Drivers: Add/Edit matches Ascend Driver 1 only (no Pay / Recur tabs). Required Name, Telephone, Country, State, City. Driver Type includes Single plus Company / Owner-operator. Phones, address, hire/term, License No., Exp. Date, last/next medical and drug test, Internal Notes, Active/Inactive. Cancel / Files / Save. Empty dates stay empty. List row ⋯ still has Edit / Delete / Update. **Import drivers** accepts an Ascend .xlsx/.csv (header row 1): preview then import. Maps Status, Team→Driver Type, Name, phones, email, address, Country/Province/City/Zip, DOB/DOH, license + exp, last/next medical and drug test, notes, termination. Ignores pay, Show Pay, Last Pay, Paid Driver Type, passport/FAST/hazmat, and team-2 columns. `0000-00-00` and `-` stay empty. License Number stays a string. Match by exact name (case-insensitive) to update, else create.

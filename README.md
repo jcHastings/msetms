@@ -5,7 +5,7 @@ A local Transportation Management System for a small trucking company. Two inter
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant. Dispatcher PIN login (demo: **Ana G / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Optional authenticator 2-step after PIN once a user enrolls in **Settings → 2-step verification**. Driver PIN login is unchanged. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. Dispatcher PIN login (demo: **MS Test / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Optional authenticator 2-step after PIN once a user enrolls in **Settings → 2-step verification**. Driver PIN login is unchanged. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -21,7 +21,7 @@ npm run build
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch (sign in as Ana G / 4020). Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
+Open [http://localhost:3000](http://localhost:3000) for dispatch (sign in as MS Test / 4020). Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
 
 Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
 

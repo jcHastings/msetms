@@ -1531,6 +1531,13 @@ export function markCustomerNeedsQbo(customerId: number): void {
     .run(now(), customerId);
 }
 
+export function markTmsInvoice(loadId: number, invoiceNumber: string, invoicedAt: string): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  getDb()
+    .prepare("UPDATE loads SET tms_invoice_number = ?, tms_invoice_at = ?, updated_at = ? WHERE id = ?")
+    .run(invoiceNumber, invoicedAt, invoicedAt, loadId);
+}
+
 export function markQboInvoice(
   loadId: number,
   input: {

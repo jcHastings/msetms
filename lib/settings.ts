@@ -69,7 +69,7 @@ export type DocumentDefaults = {
 
 const SETTINGS_DEFAULTS: CompanySettings = {
   company_name: "M&S Loads",
-  dispatcher_name: "Ana G",
+  dispatcher_name: "MS Test",
   dispatcher_phone: "402-302-0097",
   dispatcher_fax: "",
   dispatcher_email: "ana@msloads.com",

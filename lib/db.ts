@@ -177,7 +177,7 @@ export function migrate(db: Database): void {
 
     INSERT OR IGNORE INTO company_profile (
       id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
-    ) VALUES (1, 'M&S Loads', 'Ana G', '402-302-0097', '', 'ana@msloads.com');
+    ) VALUES (1, 'M&S Loads', 'MS Test', '402-302-0097', '', 'ana@msloads.com');
 
     CREATE TABLE IF NOT EXISTS reefer_readings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -638,6 +638,10 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "route_state_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_calculated_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "tms_invoice_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "tms_invoice_at", "TEXT NOT NULL DEFAULT ''");
+  db.prepare("UPDATE dispatchers SET name = 'MS Test' WHERE name = 'Ana G' AND pin = '4020'").run();
+  db.prepare("UPDATE company_profile SET dispatcher_name = 'MS Test' WHERE id = 1 AND dispatcher_name = 'Ana G'").run();
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
@@ -655,7 +659,7 @@ function backfillDispatchers(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM dispatchers").get() as { count: number }).count;
   if (count > 0) return;
   db.prepare("INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)").run(
-    "Ana G",
+    "MS Test",
     "4020",
     "manager",
     "ana@msloads.com",

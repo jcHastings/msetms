@@ -37,7 +37,7 @@ export default async function AuditPage({
         </div>
         <div className="field">
           <label htmlFor="user">User</label>
-          <input id="user" name="user" defaultValue={filters.user ?? ""} placeholder="Ana G" list="audit-actors" />
+          <input id="user" name="user" defaultValue={filters.user ?? ""} placeholder="MS Test" list="audit-actors" />
           <datalist id="audit-actors">
             {actors.map((actor) => (
               <option key={actor} value={actor} />
