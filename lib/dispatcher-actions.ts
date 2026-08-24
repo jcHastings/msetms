@@ -544,9 +544,15 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
       if (!phone) throw new Error("The assigned driver needs a mobile number.");
       const kind = String(formData.get("kind") ?? "message");
       const { formatLoadSummary } = await import("./load-summary");
+      const { formatRelayLane } = await import("./relays");
+      const { relayForDriver } = await import("./relay-store");
+      const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
       const body =
         kind === "load_info"
-          ? formatLoadSummary(load)
+          ? formatLoadSummary({
+              ...load,
+              your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
+            })
           : requiredString(formData.get("body"), "Message");
       await sendTwilioSms({ to: phone, body });
       recordLoadAudit({

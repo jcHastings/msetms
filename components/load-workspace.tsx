@@ -186,6 +186,19 @@ export function LoadWorkspace({
       {loadId ? (
       <div className="load-actions mb-4 flex flex-wrap items-center gap-2 px-3 py-2">
         <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">Load Actions</span>
+        {canSendSms(role) ? (
+          <button
+            type="button"
+            className="btn load-action-btn"
+            onClick={() => {
+              if (!requireDriverPhone()) return;
+              if (!window.confirm(`Text dispatch to ${driverPhone}?\n\n${loadSummary}`)) return;
+              void sendSms("load_info");
+            }}
+          >
+            Text dispatch to driver
+          </button>
+        ) : null}
         <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
@@ -217,17 +230,6 @@ export function LoadWorkspace({
                 }}
               >
                 Send Text Message
-              </button>
-              <button
-                type="button"
-                className="menu-item"
-                onClick={() => {
-                  if (!requireDriverPhone()) return;
-                  if (!window.confirm(`Text this load information to ${driverPhone}?\n\n${loadSummary}`)) return;
-                  void sendSms("load_info");
-                }}
-              >
-                Text Load Information
               </button>
             </>
           ) : null}

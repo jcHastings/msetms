@@ -108,7 +108,8 @@ async function main() {
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
-  assert.match(workspaceSource, /Text Load Information/);
+  assert.match(workspaceSource, /Text dispatch to driver/);
+  assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
   assert.match(workspaceSource, /Send to Accounting/);
@@ -157,6 +158,9 @@ async function main() {
   assert.match(paySource, /Save Pay Item/);
   assert.match(paySource, /Income \/ Budget/);
   assert.match(paySource, /Expenses/);
+  assert.match(paySource, /Owner-operator \/ lumper/);
+  assert.match(paySource, /not a company driver/);
+  assert.doesNotMatch(paySource, /defaultPayee=\{driverName/);
   assert.doesNotMatch(paySource, /waiting row|blank row/);
   const stopsSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
   assert.match(stopsSource, /\+ Add Pickup/);
@@ -1233,6 +1237,10 @@ async function main() {
     oo_pay: null,
   });
   assert.match(companySummary, /MSE-TEST/);
+  assert.match(companySummary, /Shipper A/);
+  assert.match(companySummary, /Receiver B/);
+  assert.match(companySummary, /34\s*°F|34°F/);
+  assert.match(companySummary, /Continuous/);
   assert.match(companySummary, /localhost:3000\/driver/);
   assert.doesNotMatch(companySummary, /2150|\$2/);
   const ooSummary = formatLoadSummary({
@@ -1256,6 +1264,36 @@ async function main() {
     },
   });
   assert.match(ooSummary, /1,500|1500/);
+  const dispatchSummary = formatLoadSummary({
+    load_number: "MSE-DISPATCH",
+    origin: "Nashville, TN",
+    destination: "Dallas, TX",
+    pickup_start: "2026-08-23T12:00:00.000Z",
+    pickup_end: "2026-08-23T14:00:00.000Z",
+    delivery_start: "2026-08-24T12:00:00.000Z",
+    delivery_end: "2026-08-24T16:00:00.000Z",
+    commodity: "Chilled dairy",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    special_instructions: "Call receiver.",
+    appointment_notes: "",
+    notes: "Scale ticket in the door.",
+    driver_name: "Denise Ortega",
+    driver_phone: "555-0100",
+    driver_type: "company_driver",
+    rate: 3100,
+    oo_pay: null,
+    truck_unit: "112",
+    trailer_number: "TR-7742",
+    your_leg: "Nashville, TN → Memphis, TN",
+  });
+  assert.match(dispatchSummary, /Truck 112/);
+  assert.match(dispatchSummary, /Trailer TR-7742/);
+  assert.match(dispatchSummary, /34°F/);
+  assert.match(dispatchSummary, /Continuous/);
+  assert.match(dispatchSummary, /Your leg: Nashville, TN → Memphis, TN/);
+  assert.match(dispatchSummary, /Scale ticket/);
+  assert.doesNotMatch(dispatchSummary, /3100|\$3/);
   const { listDispatcherUsers } = await import("../lib/settings");
   const dispatcher = listDispatcherUsers(false)[0];
   assert.ok(dispatcher);
@@ -1605,6 +1643,9 @@ Continuous reefer. Two load locks.
   assert.equal(parseReeferSetpointFromText("Maintain 34°F."), 34);
   assert.equal(resolveReeferSpec({ reefer_setpoint_f: -10, reefer_mode: "", special_instructions: "" }).mode, "continuous");
   assert.equal(resolveReeferSpec({ equipment: "dry_van_53" }).isReefer, false);
+  assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).isReefer, true);
+  assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).mode, null);
+  assert.equal(resolveReeferSpec({ equipment: "reefer_53" }).setpointF, null);
 
   const { attachParsedLocationMatches, matchLocationForParsedStop } = await import("../lib/rate-con-shared");
   const locationsBeforeMatch = queries.listLocations().length;
@@ -2137,6 +2178,13 @@ Continuous reefer. Two load locks.
   assert.equal(deniseConfirm.reeferMode, "Continuous");
   assert.match(deniseConfirm.reeferSetpoint, /34/);
   assert.equal(deniseLoad.reefer_mode, "continuous");
+  const feedLoad = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1046");
+  assert.ok(feedLoad);
+  const feedConfirm = confirmation.buildConfirmationForLoad(feedLoad.id);
+  assert.equal(feedConfirm.reeferSetpoint, "", "dry van / no setpoint must not print blank degrees");
+  const feedPdf = await confirmation.renderConfirmationPdf(feedConfirm);
+  const feedText = String((await extractText(new Uint8Array(feedPdf), { mergePages: true })).text ?? "");
+  assert.doesNotMatch(feedText, /Setpoint —/);
 
   const filesMod = await import("../lib/files");
   assert.equal(
@@ -2362,7 +2410,8 @@ Continuous reefer. Two load locks.
   assert.equal(qboPreview.lane, "New York, NY → Denver, CO");
   assert.doesNotMatch(qboPreview.memo, /Chicago|internal \$900|Relay Bravo/);
   const relaySms = formatLoadSummary(queries.getLoad(relayLoadId)!);
-  assert.match(relaySms, /New York, NY → Denver, CO/);
+  assert.match(relaySms, /Shipper New York, NY/);
+  assert.match(relaySms, /Receiver Denver, CO/);
   assert.doesNotMatch(relaySms, /Chicago|internal \$900|Relay Bravo/);
   const relayAudit = audit.listLoadAudit(relayLoadId);
   assert.ok(relayAudit.some((row) => row.action === "relay" && row.actor));

@@ -1437,7 +1437,7 @@ export async function addPayItemAction(formData: FormData): Promise<ActionResult
       if (!loadId) throw new Error("Load is missing.");
       const side = String(formData.get("side") ?? "");
       if (side !== "income" && side !== "expense") throw new Error("Pick income or expenses.");
-      const billTo = String(formData.get("bill_to") ?? (side === "income" ? "customer" : "driver"));
+      const billTo = String(formData.get("bill_to") ?? "customer");
       if (billTo !== "customer" && billTo !== "driver") throw new Error("Pick who this bills.");
       addPayItem(loadId, {
         side,

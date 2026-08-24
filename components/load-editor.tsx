@@ -31,6 +31,8 @@ import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/se
 import { isGooglePlacesConfigured, isTwilioConfigured } from "@/lib/env";
 import { routeGuideFromLoad } from "@/lib/routing-shared";
 import { formatLoadSummary } from "@/lib/load-summary";
+import { formatRelayLane } from "@/lib/relays";
+import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
@@ -77,6 +79,7 @@ export async function LoadEditor({
   const driverHos = await getHosForLoad(load.id);
   const stops = ensureDefaultStops(load.id);
   const payItems = listPayItems(load.id);
+  const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
@@ -99,7 +102,10 @@ export async function LoadEditor({
         loadId={load.id}
         status={load.status}
         initialTab={tab}
-        loadSummary={formatLoadSummary(load)}
+        loadSummary={formatLoadSummary({
+          ...load,
+          your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
+        })}
         driverAssigned={Boolean(load.driver_id)}
         driverPhone={load.driver_phone ?? ""}
         dispatcherId={load.dispatcher_id}
@@ -155,6 +161,7 @@ export async function LoadEditor({
               items={payItems}
               customerName={load.customer_name}
               driverName={load.driver_name}
+              driverType={load.driver_type}
             />
           ) : null}
         </LoadTabPanel>

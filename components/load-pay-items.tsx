@@ -11,14 +11,17 @@ export function LoadPayItems({
   items,
   customerName,
   driverName,
+  driverType,
 }: {
   loadId: number;
   items: LoadPayItem[];
   customerName: string;
   driverName: string | null;
+  driverType?: string | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
+  const ownerOperator = driverType === "owner_operator";
   return (
     <section data-load-tab="financials" className="space-y-4">
       <PayItemGroup
@@ -28,18 +31,20 @@ export function LoadPayItems({
         items={income}
         defaultPayee={customerName}
         defaultBillTo="customer"
+        defaultCategory="flat_rate"
         customerName={customerName}
-        driverName={driverName}
+        ownerOperatorName={ownerOperator ? driverName : null}
       />
       <PayItemGroup
         loadId={loadId}
         side="expense"
         title="Expenses"
         items={expenses}
-        defaultPayee={driverName ?? ""}
-        defaultBillTo="driver"
+        defaultPayee={ownerOperator ? driverName ?? "" : ""}
+        defaultBillTo={ownerOperator ? "driver" : "customer"}
+        defaultCategory={ownerOperator ? "flat_rate" : "lumper"}
         customerName={customerName}
-        driverName={driverName}
+        ownerOperatorName={ownerOperator ? driverName : null}
       />
     </section>
   );
@@ -52,8 +57,9 @@ function PayItemGroup({
   items,
   defaultPayee,
   defaultBillTo,
+  defaultCategory,
   customerName,
-  driverName,
+  ownerOperatorName,
 }: {
   loadId: number;
   side: PayItemSide;
@@ -61,8 +67,9 @@ function PayItemGroup({
   items: LoadPayItem[];
   defaultPayee: string;
   defaultBillTo: "customer" | "driver";
+  defaultCategory: string;
   customerName: string;
-  driverName: string | null;
+  ownerOperatorName: string | null;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -103,8 +110,9 @@ function PayItemGroup({
           side={side}
           defaultPayee={defaultPayee}
           defaultBillTo={defaultBillTo}
+          defaultCategory={defaultCategory}
           customerName={customerName}
-          driverName={driverName}
+          ownerOperatorName={ownerOperatorName}
           onClose={() => setOpen(false)}
         />
       ) : null}
@@ -117,16 +125,18 @@ function PayItemDialog({
   side,
   defaultPayee,
   defaultBillTo,
+  defaultCategory,
   customerName,
-  driverName,
+  ownerOperatorName,
   onClose,
 }: {
   loadId: number;
   side: PayItemSide;
   defaultPayee: string;
   defaultBillTo: "customer" | "driver";
+  defaultCategory: string;
   customerName: string;
-  driverName: string | null;
+  ownerOperatorName: string | null;
   onClose: () => void;
 }) {
   const [rate, setRate] = useState("");
@@ -151,22 +161,23 @@ function PayItemDialog({
         <input type="hidden" name="load_id" value={loadId} />
         <input type="hidden" name="side" value={side} />
         <div className="field">
-          <label htmlFor={`${side}-payee`}>Payee / customer</label>
+          <label htmlFor={`${side}-payee`}>{side === "expense" ? "Payee (OO / lumper)" : "Payee / customer"}</label>
           <input id={`${side}-payee`} name="payee" defaultValue={defaultPayee} />
         </div>
         <div className="field">
           <label htmlFor={`${side}-bill-to`}>Bills</label>
           <select id={`${side}-bill-to`} name="bill_to" defaultValue={defaultBillTo}>
             <option value="customer">{customerName || "Customer invoice"}</option>
-            <option value="driver">{driverName || "Driver / OO pay"}</option>
+            <option value="driver">{ownerOperatorName || "Owner-operator / lumper"}</option>
           </select>
           <p className="text-xs text-slate-500">
-            QBO invoices customer line items only. Driver/OO pay stays off the customer invoice.
+            QBO invoices customer line items only. Expenses are payable to an owner-operator, lumper, or similar
+            — not a company driver.
           </p>
         </div>
         <div className="field">
           <label htmlFor={`${side}-category`}>Category</label>
-          <select id={`${side}-category`} name="category" defaultValue="flat_rate">
+          <select id={`${side}-category`} name="category" defaultValue={defaultCategory}>
             {PAY_ITEM_CATEGORIES.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}

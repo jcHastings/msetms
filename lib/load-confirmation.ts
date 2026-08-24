@@ -123,7 +123,7 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     .join("\n");
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
   const reefer = resolveReeferSpec({
-    reefer_setpoint_f: load.reefer_setpoint_f,
+    reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
     reefer_mode: load.reefer_mode,
     special_instructions: load.special_instructions,
     equipment: load.equipment || equipmentLabel(load),
@@ -188,8 +188,8 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     },
     dispatchNotes: notes,
     internalLegs: "",
-    reeferSetpoint: reefer.isReefer ? formatReeferSetpoint(reefer.setpointF) : "",
-    reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) : "",
+    reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
+    reeferMode: reefer.setpointF != null ? labelForReeferMode(reefer.mode) || "Continuous" : "",
   };
 }
 
@@ -320,7 +320,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ]);
   }
 
-  if (model.reeferSetpoint || model.reeferMode) {
+  if (model.reeferSetpoint) {
     y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
   }
 
@@ -455,9 +455,9 @@ function drawReeferBar(
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#1e3a8a");
   doc.text("REEFER", x + 6, y + 6, { width: 52, lineBreak: false });
   doc.font("Helvetica").fontSize(8).fillColor("#111827");
-  const setpointText = setpoint ? `Setpoint ${setpoint}` : "Setpoint —";
+  if (!setpoint) return y;
   const modeText = mode ? `Mode: ${mode}` : "Mode: Continuous";
-  doc.text(`${setpointText}     ${modeText}`, x + 62, y + 6, { width: width - 70, lineBreak: false });
+  doc.text(`Setpoint ${setpoint}     ${modeText}`, x + 62, y + 6, { width: width - 70, lineBreak: false });
   return y + height;
 }
 

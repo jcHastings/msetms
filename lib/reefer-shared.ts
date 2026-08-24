@@ -69,7 +69,7 @@ export function resolveReeferSpec(load: ReeferSpecInput): ReeferSpec {
   return {
     isReefer: true,
     setpointF,
-    mode: storedMode ?? parsedMode ?? "continuous",
+    mode: storedMode ?? parsedMode ?? (setpointF != null ? "continuous" : null),
   };
 }
 
