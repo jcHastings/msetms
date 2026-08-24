@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { createLocationAction } from "@/lib/actions";
 import { isGooglePlacesConfigured } from "@/lib/env";
 
+export const dynamic = "force-dynamic";
+
 export default function NewLocationPage() {
   return (
     <>

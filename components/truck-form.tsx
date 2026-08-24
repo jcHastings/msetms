@@ -12,7 +12,7 @@ import {
 
 type Props = {
   truck?: Truck & { assigned_driver_id?: number | null };
-  drivers?: Driver[];
+  drivers?: Array<Pick<Driver, "id" | "name">>;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
 };

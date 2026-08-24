@@ -38,7 +38,12 @@ export default async function EditTruckPage({
         inspectionExpires={truck.dot_expires}
         alerts={truckComplianceAlerts(truck, complianceWindows())}
       />
-      <TruckForm truck={truck} drivers={listDrivers()} action={boundAction} submitLabel="Save truck" />
+      <TruckForm
+        truck={truck}
+        drivers={listDrivers().map((driver) => ({ id: driver.id, name: driver.name }))}
+        action={boundAction}
+        submitLabel="Save truck"
+      />
       <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />
     </>
   );

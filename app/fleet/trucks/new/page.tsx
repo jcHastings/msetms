@@ -4,7 +4,10 @@ import { TruckForm } from "@/components/truck-form";
 import { createTruckAction } from "@/lib/actions";
 import { listDrivers } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export default function NewTruckPage() {
+  const drivers = listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
   return (
     <>
       <PageHeader
@@ -15,7 +18,7 @@ export default function NewTruckPage() {
           </Link>
         }
       />
-      <TruckForm drivers={listDrivers()} action={createTruckAction} submitLabel="Create truck" />
+      <TruckForm drivers={drivers} action={createTruckAction} submitLabel="Create truck" />
     </>
   );
 }

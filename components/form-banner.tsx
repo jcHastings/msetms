@@ -1,3 +1,5 @@
+"use client";
+
 import type { ActionResult } from "@/lib/types";
 
 export function FormBanner({

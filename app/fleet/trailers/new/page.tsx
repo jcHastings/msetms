@@ -4,6 +4,8 @@ import { TrailerForm } from "@/components/trailer-form";
 import { createTrailerAction } from "@/lib/actions";
 import { listTrucks } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export default function NewTrailerPage() {
   return (
     <>

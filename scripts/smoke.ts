@@ -229,6 +229,22 @@ async function main() {
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);
   assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
+  for (const file of [
+    "app/fleet/trucks/new/page.tsx",
+    "app/fleet/trailers/new/page.tsx",
+    "app/fleet/drivers/new/page.tsx",
+    "app/locations/new/page.tsx",
+    "app/customers/new/page.tsx",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(source, /export const dynamic = "force-dynamic"/, `${file} must stay dynamic for standalone`);
+  }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /["']use client["']/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8"), /["']use client["']/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /["']use client["']/);
+  const newTruckPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8");
+  assert.match(newTruckPage, /id: driver\.id/);
+  assert.doesNotMatch(newTruckPage, /drivers=\{listDrivers\(\)\}/);
   assert.match(envExample, /GOOGLE_PLACES_API_KEY/);
   assert.match(envExample, /HTTP referrer/);
   const placeSearchSource = fs.readFileSync(path.join(process.cwd(), "components/place-search.tsx"), "utf8");
