@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Driver Mobile Consent Form | M&amp;S Loads LLC — MS Express TMS</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", Times, serif;
+      color: #1a1f24;
+      background: #f6f4ef;
+      line-height: 1.5;
+    }
+    .sheet {
+      max-width: 46rem;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 2rem;
+    }
+    .kicker {
+      margin: 0 0 0.4rem;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #4d5660;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0 0 1rem;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 0.92rem;
+      color: #4d5660;
+    }
+    header {
+      border-bottom: 1px solid #d5d0c6;
+      padding-bottom: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    h2 {
+      margin: 1.1rem 0 0.4rem;
+      font-size: 1.05rem;
+    }
+    p { margin: 0 0 0.75rem; font-size: 1rem; }
+    .consent {
+      border: 1px solid #c9c3b8;
+      background: #fff;
+      padding: 0.85rem 1rem;
+      margin: 0 0 1rem;
+    }
+    .consent p { margin: 0; }
+    address {
+      font-style: normal;
+      margin: 0 0 0.75rem;
+      font-size: 0.98rem;
+    }
+    a { color: #163a5f; }
+    .fields {
+      margin: 1rem 0 0;
+    }
+    .field {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.6rem;
+      margin: 0 0 1.15rem;
+      min-height: 2.1rem;
+    }
+    .field label {
+      flex: 0 0 8.5rem;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 0.92rem;
+      color: #2a3138;
+    }
+    .line {
+      flex: 1;
+      border-bottom: 1px solid #1a1f24;
+      height: 1.6rem;
+    }
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 1.25rem;
+    }
+    footer {
+      border-top: 1px solid #d5d0c6;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      font-size: 0.85rem;
+      color: #4d5660;
+    }
+    footer p { margin: 0 0 0.35rem; font-size: 0.85rem; }
+    @media print {
+      @page { size: letter; margin: 0.6in; }
+      body { background: #fff; }
+      .sheet { max-width: none; padding: 0; }
+      a { color: inherit; text-decoration: underline; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <p class="kicker">M&amp;S Loads LLC · MS Express TMS</p>
+      <h1>Driver Mobile Consent Form</h1>
+      <p class="subtitle">One-page SMS consent for hired drivers and owner-operators. Print, sign, and keep with the driver file.</p>
+    </header>
+
+    <h2>Company</h2>
+    <address>
+      M&amp;S Loads LLC<br>
+      600 East 39th Street, Hastings, NE 68901<br>
+      1750 N University Drive, Suite 217, Coral Springs, FL 33071
+    </address>
+    <p>
+      Phone: <a href="tel:+18777333966">(877) 733-3966</a><br>
+      Email: <a href="mailto:jc@msloads.com">jc@msloads.com</a> ·
+      <a href="mailto:info@msloads.com">info@msloads.com</a>
+    </p>
+
+    <h2>Consent</h2>
+    <div class="consent">
+      <p>
+        By giving this mobile number the driver agrees to receive MS Express TMS load dispatch texts (pickup, delivery, reefer setpoint, and load updates). Message frequency varies with assigned loads. Message and data rates may apply. Reply STOP to opt out, HELP for help. Numbers are not shared or sold.
+      </p>
+    </div>
+    <p>
+      These texts are operational work dispatch from M&amp;S Loads LLC. They are not marketing.
+      Full notices:
+      <a href="/msetms/sms-privacy.html">SMS Privacy Policy</a>
+      and
+      <a href="/msetms/sms-terms.html">SMS Terms and Conditions</a>.
+    </p>
+
+    <h2>Driver acknowledgment</h2>
+    <div class="fields">
+      <div class="pair">
+        <div class="field">
+          <label for="printed-name">Printed name</label>
+          <span class="line" id="printed-name"></span>
+        </div>
+        <div class="field">
+          <label for="mobile-number">Mobile number</label>
+          <span class="line" id="mobile-number"></span>
+        </div>
+      </div>
+      <div class="pair">
+        <div class="field">
+          <label for="signature">Signature</label>
+          <span class="line" id="signature"></span>
+        </div>
+        <div class="field">
+          <label for="date">Date</label>
+          <span class="line" id="date"></span>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>M&amp;S Loads LLC · MS Express TMS · driver mobile consent form</p>
+      <p>This page collects no data in the browser. Sign on paper or a printed copy.</p>
+    </footer>
+  </div>
+</body>
+</html>
