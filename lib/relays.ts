@@ -4,6 +4,7 @@ export type LoadRelay = {
   sequence: number;
   pickup: string;
   delivery: string;
+  from_driver_id: number | null;
   driver_id: number | null;
   truck_id: number | null;
   trailer_id: number | null;
@@ -15,6 +16,8 @@ export type LoadRelay = {
 };
 
 export type LoadRelayView = LoadRelay & {
+  from_driver_name: string | null;
+  from_driver_type: string | null;
   driver_name: string | null;
   driver_type: string | null;
   truck_unit: string | null;
@@ -22,8 +25,9 @@ export type LoadRelayView = LoadRelay & {
 };
 
 export type RelayInput = {
-  pickup: string;
+  pickup?: string;
   delivery: string;
+  from_driver_id?: number | null;
   driver_id?: number | null;
   truck_id?: number | null;
   trailer_id?: number | null;
@@ -38,13 +42,23 @@ export function formatRelayLane(pickup: string, delivery: string): string {
 
 export function extraRelayCount(
   primaryDriverId: number | null | undefined,
-  relays: Array<{ driver_id: number | null }>,
+  relays: Array<{ driver_id: number | null; from_driver_id?: number | null }>,
 ): number {
-  return new Set(
-    relays
-      .map((relay) => relay.driver_id)
-      .filter((id): id is number => id != null && id !== primaryDriverId),
-  ).size;
+  const ids = new Set<number>();
+  for (const relay of relays) {
+    if (relay.driver_id != null) ids.add(relay.driver_id);
+    if (relay.from_driver_id != null) ids.add(relay.from_driver_id);
+  }
+  if (primaryDriverId != null) ids.delete(primaryDriverId);
+  return ids.size;
+}
+
+export function formatRelayHandoff(
+  fromName: string | null | undefined,
+  toName: string | null | undefined,
+  city: string,
+): string {
+  return `${fromName?.trim() || "Unassigned"} → ${toName?.trim() || "Unassigned"} at ${city.trim()}`;
 }
 
 export function boardRelayLabel(count: number): string {
@@ -75,7 +89,7 @@ export function formatInternalRelayLines(relays: LoadRelayView[]): string {
           : relay.oo_percent != null
             ? ` · internal ${relay.oo_percent}%`
             : "";
-      return `${index + 1}. ${relay.driver_name || "Unassigned"} · ${formatRelayLane(relay.pickup, relay.delivery)}${pay}`;
+      return `${index + 1}. ${formatRelayHandoff(relay.from_driver_name, relay.driver_name, relay.delivery || relay.pickup)}${pay}`;
     })
     .join("\n");
 }

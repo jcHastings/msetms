@@ -124,6 +124,19 @@ export async function LoadEditor({
           />
         </LoadTabPanel>
 
+        <LoadTabPanel when="assets">
+          <LoadRelaysPanel
+            loadId={load.id}
+            relays={relays}
+            drivers={drivers.map((driver) => ({
+              id: driver.id,
+              name: driver.name,
+              driver_type: driver.driver_type,
+            }))}
+            primaryDriverId={load.driver_id}
+          />
+        </LoadTabPanel>
+
         <LoadTabPanel when="stops">
           <LoadStopsPanel loadId={load.id} stops={stops} locations={locations} />
         </LoadTabPanel>
@@ -180,16 +193,6 @@ export async function LoadEditor({
               </div>
             </div>
           </div>
-          {relays.length > 0 ? (
-            <LoadRelaysPanel
-              loadId={load.id}
-              origin={load.origin}
-              destination={load.destination}
-              drivers={drivers}
-              trucks={trucks}
-              trailers={trailers}
-            />
-          ) : null}
           {canViewIfta(role) &&
           (load.status === "in_transit" ||
             load.status === "picked_up" ||

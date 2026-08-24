@@ -940,7 +940,8 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
            loads.driver_id = ?
            OR EXISTS (
              SELECT 1 FROM load_relays
-             WHERE load_relays.load_id = loads.id AND load_relays.driver_id = ?
+             WHERE load_relays.load_id = loads.id
+               AND (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
            )
          )
        ORDER BY CASE loads.status
@@ -955,7 +956,7 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
          ELSE 3
        END, loads.pickup_start ASC`,
     )
-    .all(driverId, driverId) as LoadView[];
+    .all(driverId, driverId, driverId) as LoadView[];
 }
 
 export function findOrCreateCustomer(name: string): number {
@@ -1685,10 +1686,11 @@ export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {
          UNION
          SELECT loads.id FROM load_relays
          JOIN loads ON loads.id = load_relays.load_id
-         WHERE load_relays.driver_id = ? AND loads.status IN (${BUSY_STATUS_SQL}) AND loads.id != ?
+         WHERE (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
+           AND loads.status IN (${BUSY_STATUS_SQL}) AND loads.id != ?
          LIMIT 1`,
       )
-      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1, driver.id, ...BUSY_STATUSES, loadId ?? -1);
+      .get(driver.id, ...BUSY_STATUSES, loadId ?? -1, driver.id, driver.id, ...BUSY_STATUSES, loadId ?? -1);
     return !busy;
   });
 }
@@ -2009,6 +2011,13 @@ export function fleetAssignedDeleteMessage(kind: FleetAssetKind): string {
 
 export function assignedFleetAssetIds(kind: FleetAssetKind): Set<number> {
   const col = fleetAssetColumn(kind);
+  const extraDriver =
+    kind === "driver"
+      ? `UNION
+         SELECT DISTINCT r.from_driver_id AS id FROM load_relays r
+         JOIN loads l ON l.id = r.load_id
+         WHERE r.from_driver_id IS NOT NULL AND l.status NOT IN (${CLOSED_STATUS_SQL})`
+      : "";
   const rows = getDb()
     .prepare(
       `SELECT DISTINCT ${col} AS id FROM loads
@@ -2016,9 +2025,14 @@ export function assignedFleetAssetIds(kind: FleetAssetKind): Set<number> {
        UNION
        SELECT DISTINCT r.${col} AS id FROM load_relays r
        JOIN loads l ON l.id = r.load_id
-       WHERE r.${col} IS NOT NULL AND l.status NOT IN (${CLOSED_STATUS_SQL})`,
+       WHERE r.${col} IS NOT NULL AND l.status NOT IN (${CLOSED_STATUS_SQL})
+       ${extraDriver}`,
     )
-    .all(...CLOSED_STATUSES, ...CLOSED_STATUSES) as { id: number }[];
+    .all(
+      ...CLOSED_STATUSES,
+      ...CLOSED_STATUSES,
+      ...(kind === "driver" ? CLOSED_STATUSES : []),
+    ) as { id: number }[];
   return new Set(rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id)));
 }
 
@@ -2067,6 +2081,7 @@ export function deleteDriver(id: number): void {
     deleteFleetDocuments("driver", id);
     db.prepare("UPDATE loads SET driver_id = NULL WHERE driver_id = ?").run(id);
     db.prepare("UPDATE load_relays SET driver_id = NULL WHERE driver_id = ?").run(id);
+    db.prepare("UPDATE load_relays SET from_driver_id = NULL WHERE from_driver_id = ?").run(id);
     db.prepare("DELETE FROM drivers WHERE id = ?").run(id);
   })();
 }

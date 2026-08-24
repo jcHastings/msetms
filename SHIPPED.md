@@ -22,7 +22,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 - Multi-stop (add / reorder / remove; at least two stops).
 - Load workspace is five screens — **Load Basics**, **Customer Info**, **Carrier and Driver Info**, **Edit Stops**, **Financials**. Only the active screen is mounted. Save on a tab writes that screen’s fields and keeps the rest. Watch / template / cancel live under Load Actions. GPS, HOS, IFTA, claims, rate-con, and QBO stay on Load Log / Load Documents.
 - Load workspace tabs sit on a navy bar with gold for the active tab (navy label). Load Actions is a gold-green strip with navy buttons and dark labels, not white-on-white. Action menus use cream panels with navy text. Dispatcher sidebar is navy with gold section labels and a gold active item.
-- **Relays** on Load Log (and markers on the board): ordered legs with pickup/handoff, driver, optional truck/trailer, optional internal OO pay. Load-only — never a billed customer stop, never on the customer confirmation or invoice. Driver app shows “Your leg”. Board shows primary driver + “+1 relay”. Audit/log records who added or changed a relay.
+- **Relays** on Carrier and Driver Info (`+ Add Relay`, same pattern as line items / stops). Each relay is Driver A, Driver B, and a handoff city. Company or OO on either side. Add as many as needed and remove any. Internal only — never a billed customer stop, never on the customer confirmation, QBO invoice, or SMS summary. Driver app still shows “Your leg”. Board shows primary driver + “+1 relay”. Audit/log records who added or changed a relay.
 - Duplicate load and save/book **templates**.
 - Watch list (pin from the load).
 - Document checklist + extra kinds (temp log, scale ticket, claim).

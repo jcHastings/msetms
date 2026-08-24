@@ -10,11 +10,14 @@ import { computeOwnerOperatorPay } from "./settlement";
 import { ACTIVE_LOAD_STATUSES, statusNeedsAssets } from "./types";
 
 const RELAY_SELECT = `SELECT load_relays.*,
+  from_drivers.name AS from_driver_name,
+  from_drivers.driver_type AS from_driver_type,
   drivers.name AS driver_name,
   drivers.driver_type AS driver_type,
   trucks.unit_number AS truck_unit,
   trailers.unit_number AS trailer_unit
   FROM load_relays
+  LEFT JOIN drivers AS from_drivers ON from_drivers.id = load_relays.from_driver_id
   LEFT JOIN drivers ON drivers.id = load_relays.driver_id
   LEFT JOIN trucks ON trucks.id = load_relays.truck_id
   LEFT JOIN trailers ON trailers.id = load_relays.trailer_id`;
@@ -30,6 +33,10 @@ function requiredPlace(value: string | undefined, label: string): string {
   const trimmed = (value ?? "").trim();
   if (!trimmed) throw new Error(`${label} is required.`);
   return trimmed;
+}
+
+function optionalId(value: number | null | undefined): number | null {
+  return value ?? null;
 }
 
 function loadOriginDest(loadId: number): { origin: string; destination: string; driver_id: number | null; rate: number | null } {
@@ -58,10 +65,10 @@ export function relayForDriver(loadId: number, driverId: number): LoadRelayView 
   return (
     (getDb()
       .prepare(
-        `${RELAY_SELECT} WHERE load_relays.load_id = ? AND load_relays.driver_id = ?
+        `${RELAY_SELECT} WHERE load_relays.load_id = ? AND (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
          ORDER BY load_relays.sequence LIMIT 1`,
       )
-      .get(loadId, driverId) as LoadRelayView | undefined) ?? null
+      .get(loadId, driverId, driverId) as LoadRelayView | undefined) ?? null
   );
 }
 
@@ -74,8 +81,10 @@ export function driverAssignedToLoad(loadId: number, driverId: number, primaryDr
     if (load?.driver_id === driverId) return true;
   }
   const row = getDb()
-    .prepare("SELECT id FROM load_relays WHERE load_id = ? AND driver_id = ?")
-    .get(loadId, driverId) as { id: number } | undefined;
+    .prepare(
+      "SELECT id FROM load_relays WHERE load_id = ? AND (driver_id = ? OR from_driver_id = ?)",
+    )
+    .get(loadId, driverId, driverId) as { id: number } | undefined;
   return Boolean(row);
 }
 
@@ -88,14 +97,14 @@ export function extraRelayLabelsByLoad(
   const placeholders = ids.map(() => "?").join(", ");
   const rows = getDb()
     .prepare(
-      `SELECT load_id, driver_id FROM load_relays
-       WHERE load_id IN (${placeholders}) AND driver_id IS NOT NULL`,
+      `SELECT load_id, driver_id, from_driver_id FROM load_relays
+       WHERE load_id IN (${placeholders}) AND (driver_id IS NOT NULL OR from_driver_id IS NOT NULL)`,
     )
-    .all(...ids) as Array<{ load_id: number; driver_id: number }>;
-  const byLoad = new Map<number, Array<{ driver_id: number | null }>>();
+    .all(...ids) as Array<{ load_id: number; driver_id: number | null; from_driver_id: number | null }>;
+  const byLoad = new Map<number, Array<{ driver_id: number | null; from_driver_id: number | null }>>();
   for (const row of rows) {
     const list = byLoad.get(row.load_id) ?? [];
-    list.push({ driver_id: row.driver_id });
+    list.push({ driver_id: row.driver_id, from_driver_id: row.from_driver_id });
     byLoad.set(row.load_id, list);
   }
   for (const load of loads) {
@@ -119,10 +128,11 @@ function assertRelayDriverFree(driverId: number, exceptLoadId: number): void {
        UNION
        SELECT loads.load_number FROM load_relays
        JOIN loads ON loads.id = load_relays.load_id
-       WHERE loads.id != ? AND load_relays.driver_id = ? AND loads.status IN (${BUSY_SQL})
+       WHERE loads.id != ? AND (load_relays.driver_id = ? OR load_relays.from_driver_id = ?)
+         AND loads.status IN (${BUSY_SQL})
        LIMIT 1`,
     )
-    .get(exceptLoadId, driverId, ...BUSY_STATUSES, exceptLoadId, driverId, ...BUSY_STATUSES) as
+    .get(exceptLoadId, driverId, ...BUSY_STATUSES, exceptLoadId, driverId, driverId, ...BUSY_STATUSES) as
     | { load_number: string }
     | undefined;
   if (conflict) {
@@ -133,6 +143,7 @@ function assertRelayDriverFree(driverId: number, exceptLoadId: number): void {
 function describeRelay(relay: {
   pickup: string;
   delivery: string;
+  from_driver_id?: number | null;
   driver_id: number | null;
   truck_id: number | null;
   trailer_id: number | null;
@@ -140,8 +151,9 @@ function describeRelay(relay: {
   oo_pay: number | null;
 }): string {
   const bits = [
-    formatRelayLane(relay.pickup, relay.delivery),
-    relay.driver_id ? driverName(relay.driver_id) : "Unassigned",
+    `${relay.from_driver_id ? driverName(relay.from_driver_id) : "Unassigned"} → ${
+      relay.driver_id ? driverName(relay.driver_id) : "Unassigned"
+    } at ${relay.delivery || relay.pickup}`,
   ];
   if (relay.truck_id) bits.push(truckUnit(relay.truck_id));
   if (relay.trailer_id) bits.push(trailerUnit(relay.trailer_id));
@@ -150,12 +162,33 @@ function describeRelay(relay: {
   return bits.filter(Boolean).join(" · ");
 }
 
+function resolveRelayDrivers(input: RelayInput, loadId: number): { fromDriverId: number | null; driverId: number | null } {
+  const fromDriverId = optionalId(input.from_driver_id);
+  const driverId = optionalId(input.driver_id);
+  if (fromDriverId && driverId && fromDriverId === driverId) {
+    throw new Error("Pick two different drivers for the handoff.");
+  }
+  if (fromDriverId) assertRelayDriverFree(fromDriverId, loadId);
+  if (driverId) assertRelayDriverFree(driverId, loadId);
+  return { fromDriverId, driverId };
+}
+
+function resolveRelayPlaces(loadId: number, input: RelayInput, existingPickup?: string): { pickup: string; delivery: string } {
+  const load = loadOriginDest(loadId);
+  const delivery = requiredPlace(input.delivery, "Relay point");
+  const previous = listRelays(loadId);
+  const pickup =
+    (input.pickup ?? "").trim() ||
+    existingPickup?.trim() ||
+    previous[previous.length - 1]?.delivery ||
+    load.origin;
+  return { pickup, delivery };
+}
+
 export function addRelay(loadId: number, input: RelayInput): number {
   const load = loadOriginDest(loadId);
-  const pickup = requiredPlace(input.pickup, "Relay pickup");
-  const delivery = requiredPlace(input.delivery, "Relay delivery");
-  const driverId = input.driver_id ?? null;
-  if (driverId) assertRelayDriverFree(driverId, loadId);
+  const { pickup, delivery } = resolveRelayPlaces(loadId, input);
+  const { fromDriverId, driverId } = resolveRelayDrivers(input, loadId);
   const settled = settleRelayPay(load.rate, input);
   const nextSeq =
     (
@@ -167,15 +200,16 @@ export function addRelay(loadId: number, input: RelayInput): number {
   const result = getDb()
     .prepare(
       `INSERT INTO load_relays (
-        load_id, sequence, pickup, delivery, driver_id, truck_id, trailer_id,
+        load_id, sequence, pickup, delivery, from_driver_id, driver_id, truck_id, trailer_id,
         oo_percent, oo_pay, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       loadId,
       nextSeq,
       pickup,
       delivery,
+      fromDriverId,
       driverId,
       input.truck_id ?? null,
       input.trailer_id ?? null,
@@ -186,9 +220,9 @@ export function addRelay(loadId: number, input: RelayInput): number {
       timestamp,
     );
   const id = Number(result.lastInsertRowid);
-  if (!load.driver_id && driverId) {
+  if (!load.driver_id && fromDriverId) {
     getDb().prepare("UPDATE loads SET driver_id = ?, updated_at = ? WHERE id = ? AND driver_id IS NULL").run(
-      driverId,
+      fromDriverId,
       timestamp,
       loadId,
     );
@@ -201,6 +235,7 @@ export function addRelay(loadId: number, input: RelayInput): number {
     newValue: describeRelay({
       pickup,
       delivery,
+      from_driver_id: fromDriverId,
       driver_id: driverId,
       truck_id: input.truck_id ?? null,
       trailer_id: input.trailer_id ?? null,
@@ -214,25 +249,24 @@ export function addRelay(loadId: number, input: RelayInput): number {
 export function updateRelay(id: number, input: RelayInput): void {
   const existing = getRelay(id);
   if (!existing) throw new Error("Relay is missing.");
-  const pickup = requiredPlace(input.pickup, "Relay pickup");
-  const delivery = requiredPlace(input.delivery, "Relay delivery");
-  const driverId = input.driver_id ?? null;
-  if (driverId) assertRelayDriverFree(driverId, existing.load_id);
+  const { pickup, delivery } = resolveRelayPlaces(existing.load_id, input, existing.pickup);
+  const { fromDriverId, driverId } = resolveRelayDrivers(input, existing.load_id);
   const load = loadOriginDest(existing.load_id);
   const settled = settleRelayPay(load.rate, input);
   getDb()
     .prepare(
       `UPDATE load_relays
-       SET pickup = ?, delivery = ?, driver_id = ?, truck_id = ?, trailer_id = ?,
+       SET pickup = ?, delivery = ?, from_driver_id = ?, driver_id = ?, truck_id = ?, trailer_id = ?,
            oo_percent = ?, oo_pay = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
       pickup,
       delivery,
+      fromDriverId,
       driverId,
-      input.truck_id ?? null,
-      input.trailer_id ?? null,
+      input.truck_id ?? existing.truck_id,
+      input.trailer_id ?? existing.trailer_id,
       settled.percent,
       settled.pay,
       (input.notes ?? "").trim(),
@@ -247,9 +281,10 @@ export function updateRelay(id: number, input: RelayInput): void {
     newValue: describeRelay({
       pickup,
       delivery,
+      from_driver_id: fromDriverId,
       driver_id: driverId,
-      truck_id: input.truck_id ?? null,
-      trailer_id: input.trailer_id ?? null,
+      truck_id: input.truck_id ?? existing.truck_id,
+      trailer_id: input.trailer_id ?? existing.trailer_id,
       oo_percent: settled.percent,
       oo_pay: settled.pay,
     }),

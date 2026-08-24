@@ -1,208 +1,167 @@
-import {
-  addRelayAction,
-  deleteRelayAction,
-  moveRelayAction,
-  updateRelayAction,
-} from "@/lib/dispatcher-actions";
-import { formatMoney } from "@/lib/format";
-import { listRelays } from "@/lib/relay-store";
-import { formatRelayLane, nextRelayDefaults } from "@/lib/relays";
-import type { DriverWithTruck, Trailer, TruckWithDriver } from "@/lib/types";
+"use client";
+
+import { useState } from "react";
+import { addRelayAction, deleteRelayAction } from "@/lib/dispatcher-actions";
+import { formatRelayHandoff, type LoadRelayView } from "@/lib/relays";
+
+type RelayDriverOption = {
+  id: number;
+  name: string;
+  driver_type: string;
+};
 
 export function LoadRelaysPanel({
   loadId,
-  origin,
-  destination,
+  relays,
   drivers,
-  trucks,
-  trailers,
+  primaryDriverId,
 }: {
   loadId: number;
-  origin: string;
-  destination: string;
-  drivers: DriverWithTruck[];
-  trucks: TruckWithDriver[];
-  trailers: Trailer[];
+  relays: LoadRelayView[];
+  drivers: RelayDriverOption[];
+  primaryDriverId?: number | null;
 }) {
-  const relays = listRelays(loadId);
-  const defaults = nextRelayDefaults({ origin, destination }, relays);
+  const [open, setOpen] = useState(false);
+  const last = relays[relays.length - 1];
+  const defaultFromId = last?.driver_id ?? primaryDriverId ?? null;
 
   return (
     <section className="card mb-4 p-5" id="relays">
-      <h2 className="text-sm font-semibold">Relays</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Internal legs only. Handoff cities stay on this load and the driver app — not a billed customer stop,
-        not on the invoice or customer confirmation.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Relays</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Internal only. Handoff cities stay on this load and the driver app — not a billed customer stop,
+            not on the invoice or customer confirmation.
+          </p>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
+          + Add Relay
+        </button>
+      </div>
       {relays.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-600">No relays yet. First/last can match the load origin and destination.</p>
+        <p className="mt-3 text-sm text-slate-500">No relays yet. Click + Add Relay.</p>
       ) : (
-        <ol className="mt-3 space-y-3">
+        <ol className="mt-3 divide-y divide-slate-100">
           {relays.map((relay) => (
-            <li key={relay.id} className="rounded-lg border border-slate-200 p-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Leg {relay.sequence}
-                  </div>
-                  <div className="font-medium">{formatRelayLane(relay.pickup, relay.delivery)}</div>
-                  <div className="text-sm text-slate-600">
-                    {relay.driver_name || "Unassigned"}
-                    {relay.driver_type === "owner_operator" ? " · OO" : ""}
-                    {relay.truck_unit ? ` · Unit ${relay.truck_unit}` : ""}
-                    {relay.trailer_unit ? ` · Trailer ${relay.trailer_unit}` : ""}
-                    {relay.oo_pay != null ? ` · internal ${formatMoney(relay.oo_pay)}` : ""}
-                  </div>
+            <li key={relay.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+              <div>
+                <div className="font-medium">
+                  {formatRelayHandoff(relay.from_driver_name, relay.driver_name, relay.delivery || relay.pickup)}
                 </div>
-                <div className="flex gap-1">
-                  <form action={moveRelayAction}>
-                    <input type="hidden" name="relay_id" value={relay.id} />
-                    <input type="hidden" name="direction" value="-1" />
-                    <button className="btn btn-ghost" type="submit">
-                      Up
-                    </button>
-                  </form>
-                  <form action={moveRelayAction}>
-                    <input type="hidden" name="relay_id" value={relay.id} />
-                    <input type="hidden" name="direction" value="1" />
-                    <button className="btn btn-ghost" type="submit">
-                      Down
-                    </button>
-                  </form>
-                  <form action={deleteRelayAction}>
-                    <input type="hidden" name="relay_id" value={relay.id} />
-                    <button className="btn btn-ghost text-rose-700" type="submit">
-                      Remove
-                    </button>
-                  </form>
+                <div className="text-xs text-slate-500">
+                  {driverKindLabel(relay.from_driver_type)} → {driverKindLabel(relay.driver_type)}
                 </div>
               </div>
-              <form action={updateRelayAction} className="mt-3 grid gap-3 md:grid-cols-6">
+              <form
+                action={async (formData) => {
+                  await deleteRelayAction(formData);
+                }}
+              >
                 <input type="hidden" name="relay_id" value={relay.id} />
-                <RelayFields
-                  drivers={drivers}
-                  trucks={trucks}
-                  trailers={trailers}
-                  defaults={{
-                    pickup: relay.pickup,
-                    delivery: relay.delivery,
-                    driverId: relay.driver_id,
-                    truckId: relay.truck_id,
-                    trailerId: relay.trailer_id,
-                    ooPercent: relay.oo_percent,
-                    ooPay: relay.oo_pay,
-                    notes: relay.notes,
-                  }}
-                />
-                <button className="btn btn-secondary self-end" type="submit">
-                  Save leg
+                <button className="btn btn-ghost text-rose-700" type="submit">
+                  Remove
                 </button>
               </form>
             </li>
           ))}
         </ol>
       )}
-      <form action={addRelayAction} className="mt-4 grid gap-3 border-t border-slate-200 pt-4 md:grid-cols-6">
-        <input type="hidden" name="load_id" value={loadId} />
-        <RelayFields
+      {open ? (
+        <RelayDialog
+          loadId={loadId}
           drivers={drivers}
-          trucks={trucks}
-          trailers={trailers}
-          defaults={{
-            pickup: defaults.pickup,
-            delivery: defaults.delivery,
-            driverId: null,
-            truckId: null,
-            trailerId: null,
-            ooPercent: null,
-            ooPay: null,
-            notes: "",
-          }}
+          defaultFromId={defaultFromId}
+          onClose={() => setOpen(false)}
         />
-        <button className="btn btn-secondary self-end" type="submit">
-          Add relay
-        </button>
-      </form>
+      ) : null}
     </section>
   );
 }
 
-function RelayFields({
+function driverKindLabel(type: string | null | undefined): string {
+  if (type === "owner_operator") return "OO";
+  if (type) return "Company";
+  return "Unassigned";
+}
+
+function driverOptionLabel(driver: RelayDriverOption): string {
+  return `${driver.name}${driver.driver_type === "owner_operator" ? " · OO" : " · Company"}`;
+}
+
+function RelayDialog({
+  loadId,
   drivers,
-  trucks,
-  trailers,
-  defaults,
+  defaultFromId,
+  onClose,
 }: {
-  drivers: DriverWithTruck[];
-  trucks: TruckWithDriver[];
-  trailers: Trailer[];
-  defaults: {
-    pickup: string;
-    delivery: string;
-    driverId: number | null;
-    truckId: number | null;
-    trailerId: number | null;
-    ooPercent: number | null;
-    ooPay: number | null;
-    notes: string;
-  };
+  loadId: number;
+  drivers: RelayDriverOption[];
+  defaultFromId: number | null;
+  onClose: () => void;
 }) {
+  const [fromId, setFromId] = useState(defaultFromId ? String(defaultFromId) : "");
+  const [toId, setToId] = useState("");
+
   return (
-    <>
-      <div className="field md:col-span-2">
-        <label>Pickup</label>
-        <input name="pickup" required defaultValue={defaults.pickup} placeholder="New York, NY" />
-      </div>
-      <div className="field md:col-span-2">
-        <label>Delivery / handoff</label>
-        <input name="delivery" required defaultValue={defaults.delivery} placeholder="Chicago, IL" />
-      </div>
-      <div className="field">
-        <label>Driver</label>
-        <select name="driver_id" defaultValue={defaults.driverId ?? ""}>
-          <option value="">Unassigned</option>
-          {drivers.map((driver) => (
-            <option key={driver.id} value={driver.id}>
-              {driver.name}
-              {driver.driver_type === "owner_operator" ? " · OO" : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>Truck (optional)</label>
-        <select name="truck_id" defaultValue={defaults.truckId ?? ""}>
-          <option value="">Same / none</option>
-          {trucks.map((truck) => (
-            <option key={truck.id} value={truck.id}>
-              {truck.unit_number}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>Trailer (optional)</label>
-        <select name="trailer_id" defaultValue={defaults.trailerId ?? ""}>
-          <option value="">Same / none</option>
-          {trailers.map((trailer) => (
-            <option key={trailer.id} value={trailer.id}>
-              {trailer.unit_number}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>Internal OO %</label>
-        <input name="oo_percent" type="number" min={0} max={100} step="0.1" defaultValue={defaults.ooPercent ?? ""} />
-      </div>
-      <div className="field">
-        <label>Internal pay</label>
-        <input name="oo_pay" type="number" min={0} step="0.01" defaultValue={defaults.ooPay ?? ""} />
-      </div>
-      <div className="field md:col-span-2">
-        <label>Internal notes</label>
-        <input name="notes" defaultValue={defaults.notes} />
-      </div>
-    </>
+    <div className="pay-item-dialog-backdrop" role="dialog" aria-label="Add relay">
+      <form
+        action={async (formData) => {
+          await addRelayAction(formData);
+          onClose();
+        }}
+        className="pay-item-dialog card space-y-3 p-5"
+      >
+        <h3 className="text-sm font-semibold">Add Relay</h3>
+        <input type="hidden" name="load_id" value={loadId} />
+        <div className="field">
+          <label htmlFor="relay-driver-a">Driver A</label>
+          <select
+            id="relay-driver-a"
+            name="from_driver_id"
+            required
+            value={fromId}
+            onChange={(event) => setFromId(event.target.value)}
+          >
+            <option value="">Select driver</option>
+            {drivers.map((driver) => (
+              <option key={driver.id} value={driver.id}>
+                {driverOptionLabel(driver)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="relay-driver-b">Driver B</label>
+          <select
+            id="relay-driver-b"
+            name="driver_id"
+            required
+            value={toId}
+            onChange={(event) => setToId(event.target.value)}
+          >
+            <option value="">Select driver</option>
+            {drivers.map((driver) => (
+              <option key={driver.id} value={driver.id} disabled={String(driver.id) === fromId}>
+                {driverOptionLabel(driver)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="relay-handoff">Relay point</label>
+          <input id="relay-handoff" name="handoff" required placeholder="Handoff city" />
+        </div>
+        <p className="text-xs text-slate-500">Company or owner-operator on either side. Internal only — not billed.</p>
+        <div className="flex justify-end gap-2">
+          <button className="btn btn-secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="submit" disabled={Boolean(fromId) && fromId === toId}>
+            Save Relay
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

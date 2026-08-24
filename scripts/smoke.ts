@@ -44,8 +44,13 @@ async function main() {
   const editorSource = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
   assert.match(editorSource, /LoadWorkspace/);
   assert.match(editorSource, /LoadRelaysPanel/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /Add relay/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /not a billed customer stop/);
+  const relayPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8");
+  assert.match(relayPanelSource, /\+ Add Relay/);
+  assert.match(relayPanelSource, /not a billed customer stop/);
+  assert.match(relayPanelSource, /Driver A/);
+  assert.match(relayPanelSource, /Driver B/);
+  assert.match(relayPanelSource, /Relay point/);
+  assert.doesNotMatch(relayPanelSource, /Save leg|Internal OO %|name="pickup"|blank waiting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
   const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
   assert.match(qboSettingsPage, /Connect QuickBooks/);
@@ -162,6 +167,9 @@ async function main() {
   assert.match(docsPage, /when="docs"/);
   assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
   assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
+  assert.match(docsPage, /when="assets"/);
+  assert.match(docsPage, /LoadRelaysPanel/);
+  assert.doesNotMatch(docsPage, /relays.length > 0 \?/);
   assert.match(docsPage, /LoadExtraDetails/);
   assert.match(docsPage, /when="log"/);
 
@@ -2210,11 +2218,13 @@ Continuous reefer. Two load locks.
   const freshOoPdf = await confirmation.renderConfirmationPdf(freshOo);
   assert.equal(freshOoPdf.subarray(0, 4).toString(), "%PDF");
 
-  const { extraRelayCount, boardRelayLabel, formatRelayLane } = await import("../lib/relays");
+  const { extraRelayCount, boardRelayLabel, formatRelayLane, formatRelayHandoff } = await import("../lib/relays");
   const relayStore = await import("../lib/relay-store");
   assert.equal(extraRelayCount(1, [{ driver_id: 1 }, { driver_id: 2 }]), 1);
+  assert.equal(extraRelayCount(1, [{ driver_id: 2, from_driver_id: 1 }]), 1);
   assert.equal(boardRelayLabel(1), "+1 relay");
   assert.equal(formatRelayLane("New York, NY", "Chicago, IL"), "New York, NY → Chicago, IL");
+  assert.equal(formatRelayHandoff("Able", "Baker", "Memphis, TN"), "Able → Baker at Memphis, TN");
   const relayTruckA = queries.createTruck({
     unit_number: "RA-1",
     type: "dry_van",
@@ -2318,6 +2328,98 @@ Continuous reefer. Two load locks.
   assert.ok(audit.listLoadLog(relayLoadId).some((row) => row.action === "relay"));
   queries.updateDriverProgress(relayLoadId, relayDriverB, "en_route_pickup");
   assert.equal(queries.getLoad(relayLoadId)?.status, "in_transit");
+
+  const handoffTruckA = queries.createTruck({
+    unit_number: "HA-1",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const handoffTruckB = queries.createTruck({
+    unit_number: "HB-1",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const handoffPrimary = queries.createDriver({
+    name: "Handoff Primary",
+    phone: "555-0710",
+    license: "GA-CDL-HANDP",
+    pin: "7100",
+    truck_id: null,
+    status: "available",
+  });
+  const handoffDriverA = queries.createDriver({
+    name: "Handoff Able",
+    phone: "555-0711",
+    license: "TX-CDL-HANDA",
+    pin: "7101",
+    truck_id: handoffTruckA,
+    status: "available",
+  });
+  const handoffDriverB = queries.createDriver({
+    name: "Handoff Baker",
+    phone: "555-0712",
+    license: "TN-CDL-HANDB",
+    pin: "7102",
+    truck_id: handoffTruckB,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const handoffLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Dallas, TX",
+    destination: "Atlanta, GA",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 38000,
+    commodity: "Handoff freight",
+    rate: 2800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-HANDOFF",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: handoffTruckA,
+    driver_id: handoffPrimary,
+  });
+  relayStore.addRelay(handoffLoadId, {
+    from_driver_id: handoffDriverA,
+    driver_id: handoffDriverB,
+    delivery: "Memphis, TN",
+  });
+  const handoffRows = relayStore.listRelays(handoffLoadId);
+  assert.equal(handoffRows.length, 1);
+  assert.equal(handoffRows[0]?.from_driver_id, handoffDriverA);
+  assert.equal(handoffRows[0]?.driver_id, handoffDriverB);
+  assert.equal(handoffRows[0]?.delivery, "Memphis, TN");
+  assert.equal(handoffRows[0]?.pickup, "Dallas, TX");
+  assert.equal(handoffRows[0]?.from_driver_name, "Handoff Able");
+  assert.equal(queries.listLoadsForDriver(handoffDriverA).some((load) => load.id === handoffLoadId), true);
+  assert.equal(queries.listLoadsForDriver(handoffDriverB).some((load) => load.id === handoffLoadId), true);
+  assert.throws(
+    () =>
+      relayStore.addRelay(handoffLoadId, {
+        from_driver_id: handoffDriverB,
+        driver_id: handoffDriverB,
+        delivery: "Nashville, TN",
+      }),
+    /two different drivers/,
+  );
+  const handoffCustomer = confirmation.buildConfirmationForLoad(handoffLoadId);
+  assert.equal(handoffCustomer.internalLegs, "");
+  assert.doesNotMatch(handoffCustomer.dispatchNotes, /Memphis|Handoff Baker/i);
+  const handoffQbo = (await import("../lib/integrations/quickbooks")).previewQuickbooksInvoice(
+    queries.getLoad(handoffLoadId)!,
+  );
+  assert.doesNotMatch(handoffQbo.memo, /Memphis|Handoff Baker/);
+  assert.doesNotMatch(formatLoadSummary(queries.getLoad(handoffLoadId)!), /Memphis|Handoff Baker/);
 
   const { pathToFileURL } = await import("node:url");
   const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);

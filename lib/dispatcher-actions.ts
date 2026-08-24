@@ -163,10 +163,13 @@ export async function saveLoadDetailsAction(formData: FormData): Promise<void> {
 }
 
 function parseRelayForm(formData: FormData) {
+  const handoff = String(formData.get("handoff") ?? formData.get("delivery") ?? "").trim();
+  const pickup = String(formData.get("pickup") ?? "").trim();
   return {
-    pickup: requiredString(formData.get("pickup"), "Relay pickup"),
-    delivery: requiredString(formData.get("delivery"), "Relay delivery"),
-    driver_id: parseOptionalInt(formData.get("driver_id")),
+    pickup: pickup || undefined,
+    delivery: requiredString(handoff, "Relay point"),
+    from_driver_id: parseOptionalInt(formData.get("from_driver_id") ?? formData.get("driver_a_id")),
+    driver_id: parseOptionalInt(formData.get("driver_id") ?? formData.get("driver_b_id")),
     truck_id: parseOptionalInt(formData.get("truck_id")),
     trailer_id: parseOptionalInt(formData.get("trailer_id")),
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
