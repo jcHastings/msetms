@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
+import { TrailerLocationBadge } from "@/components/fleet-badges";
 import { FleetRowActions } from "@/components/fleet-row-actions";
-import { PageHeader } from "@/components/page-header";
 import { OrbcommTrailerImport } from "@/components/orbcomm-trailer-import";
+import { PageHeader } from "@/components/page-header";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
-import { assignedFleetAssetIds, listTrailers } from "@/lib/queries";
+import { assignedFleetAssetIds, listTrailers, persistedTrailerLocation } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 import { labelForTrailerType } from "@/lib/types";
 
@@ -61,6 +62,7 @@ export default async function TrailersPage() {
               <th>Registration exp</th>
               <th>DOT inspection</th>
               <th>Reefer / ORBCOMM</th>
+              <th>Last GPS</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -68,7 +70,7 @@ export default async function TrailersPage() {
           <tbody>
             {trailers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={9} className="px-5 py-8 text-sm text-slate-500">
                   No trailers yet.
                 </td>
               </tr>
@@ -97,6 +99,9 @@ export default async function TrailersPage() {
                     <td className="text-xs text-slate-600">
                       {reeferStub(trailer)}
                       {trailer.reefer_setpoint_f != null ? <div>Setpoint {trailer.reefer_setpoint_f}°F</div> : null}
+                    </td>
+                    <td>
+                      <TrailerLocationBadge location={persistedTrailerLocation(trailer)} />
                     </td>
                     <ActiveStatusCell active={trailer.active} />
                     <td>

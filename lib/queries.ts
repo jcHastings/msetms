@@ -612,6 +612,59 @@ export function updateTruck(
   }
 }
 
+export function saveTrailerGps(
+  id: number,
+  input: {
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+    recordedAt: string;
+    source: "orbcomm" | "demo";
+  },
+): void {
+  if (!getTrailer(id)) throw new Error("Trailer not found.");
+  if (input.source !== "orbcomm") return;
+  getDb()
+    .prepare(
+      `UPDATE trailers
+       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
+}
+
+export function persistedTrailerLocation(trailer: {
+  id: number;
+  unit_number: string;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+  gps_address?: string;
+  gps_recorded_at?: string;
+  gps_source?: string;
+}): {
+  loadId: number | null;
+  trailerId: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
+  recordedAt: string;
+  source: "orbcomm";
+} | null {
+  if (trailer.gps_source !== "orbcomm") return null;
+  if (trailer.gps_latitude == null && trailer.gps_longitude == null && !String(trailer.gps_address ?? "").trim()) {
+    return null;
+  }
+  return {
+    loadId: null,
+    trailerId: trailer.unit_number,
+    latitude: trailer.gps_latitude ?? null,
+    longitude: trailer.gps_longitude ?? null,
+    address: String(trailer.gps_address ?? "").trim(),
+    recordedAt: trailer.gps_recorded_at || "",
+    source: "orbcomm",
+  };
+}
+
 export function saveTruckGps(
   id: number,
   input: {

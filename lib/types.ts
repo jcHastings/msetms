@@ -300,6 +300,11 @@ export type Trailer = {
   notes: string;
   reefer_setpoint_f: number | null;
   active: number;
+  gps_latitude: number | null;
+  gps_longitude: number | null;
+  gps_address: string;
+  gps_recorded_at: string;
+  gps_source: string;
   created_at: string;
   updated_at: string;
 };

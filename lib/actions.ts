@@ -1375,7 +1375,8 @@ export async function previewOrbcommTrailersAction(
       if (rows.length === 0) {
         return {
           ok: false,
-          error: "No trailer rows found. Use Asset ID / Trailer # columns (ORBCOMM export, not a portal scrape).",
+          error:
+            "No trailer rows found. Use a Location Tracking Report or export with Trailer # / Asset ID / VIN / Lat-Lng columns (title rows are skipped). Not a portal scrape.",
         };
       }
       return { ok: true, source: "orbcomm_csv", rows };

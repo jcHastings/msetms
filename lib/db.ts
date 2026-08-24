@@ -344,6 +344,11 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trailers", "notes", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trailers", "reefer_setpoint_f", "REAL");
   ensureColumn(db, "trailers", "active", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "trailers", "gps_latitude", "REAL");
+  ensureColumn(db, "trailers", "gps_longitude", "REAL");
+  ensureColumn(db, "trailers", "gps_address", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailers", "gps_recorded_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailers", "gps_source", "TEXT NOT NULL DEFAULT ''");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS load_stops (

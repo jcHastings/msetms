@@ -433,6 +433,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /No Samsara ID on this truck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /Last GPS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /TrailerLocationBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Last city \/ lat-lng/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /findOrbcommHeaderRowIndex/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Import from Samsara/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /preview\.warning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Confirm import/);
@@ -2461,6 +2465,43 @@ Continuous reefer. Two load locks.
   const trailerAgain = applyOrbcommTrailerImport(previewTrailers);
   assert.equal(trailerAgain.created, 0, "second ORBCOMM import must not duplicate");
   assert.equal(queries.listTrailers().filter((trailer) => trailer.unit_number === "TR-9001").length, 1);
+
+  const locationReport = parseOrbcommFleetText(
+    [
+      "Location Tracking Report",
+      "Generated: 24-Aug-2026 12:34:33",
+      "",
+      "Trailer #,Asset ID,VIN,Latitude,Longitude,City",
+      "TR-2401,orb-2401,1LOCVIN,35.4676,-97.5164,Oklahoma City",
+    ].join("\n"),
+  );
+  assert.equal(locationReport.length, 1);
+  assert.equal(locationReport[0]?.unitNumber, "TR-2401");
+  assert.equal(locationReport[0]?.assetId, "orb-2401");
+  assert.equal(locationReport[0]?.vin, "1LOCVIN");
+  assert.equal(locationReport[0]?.city, "Oklahoma City");
+  assert.equal(locationReport[0]?.latitude, 35.4676);
+  const locationPreview = buildOrbcommTrailerPreview(locationReport, []);
+  assert.equal(locationPreview[0]?.city, "Oklahoma City");
+  const locationImport = applyOrbcommTrailerImport(locationPreview);
+  assert.equal(locationImport.created, 1);
+  const importedLocation = queries.listTrailers().find((trailer) => trailer.unit_number === "TR-2401");
+  assert.equal(importedLocation?.orbcomm_asset_id, "orb-2401");
+  assert.equal(importedLocation?.gps_address, "Oklahoma City");
+  assert.equal(importedLocation?.gps_source, "orbcomm");
+  assert.equal(importedLocation?.gps_latitude, 35.4676);
+
+  const deviceReport = parseOrbcommFleetText(
+    "Device ID,Vehicle,Lat,Lng,Address\ndev-88,TR-88,40.8448,-73.8648,\"Bronx, NY\"\n",
+  );
+  assert.equal(deviceReport[0]?.assetId, "dev-88");
+  assert.equal(deviceReport[0]?.unitNumber, "TR-88");
+  assert.equal(deviceReport[0]?.city, "Bronx, NY");
+  const mobileReport = parseOrbcommFleetText(
+    "Mobile ID,Asset Name,VIN\nmob-12,TR-12,1MOBILEVIN\n",
+  );
+  assert.equal(mobileReport[0]?.assetId, "mob-12");
+  assert.equal(mobileReport[0]?.unitNumber, "TR-12");
 
   const ifta = await import("../lib/integrations/ifta");
   delete process.env.SAMSARA_API_TOKEN;

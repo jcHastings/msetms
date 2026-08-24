@@ -38,6 +38,9 @@ export type OrbcommTrailerPreviewRow = {
   vin: string;
   plate: string;
   type: string;
+  city: string;
+  latitude: number | null;
+  longitude: number | null;
   matchTrailerId: number | null;
   matchBy: "orbcomm_asset_id" | "unit_number" | null;
   action: "create" | "update";
@@ -93,6 +96,9 @@ export type OrbcommAssetInput = {
   vin: string;
   plate: string;
   type: string;
+  city?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export function normalizeFleetKey(value: string): string {
@@ -376,6 +382,9 @@ export function buildOrbcommTrailerPreview(
       vin: asset.vin.trim(),
       plate: asset.plate.trim(),
       type: inferTrailerType(asset.type),
+      city: String(asset.city ?? "").trim(),
+      latitude: asset.latitude ?? null,
+      longitude: asset.longitude ?? null,
       matchTrailerId: match?.id ?? null,
       matchBy: match?.matchBy ?? null,
       action: match ? "update" : "create",
@@ -451,9 +460,11 @@ export function parseOrbcommFleetText(text: string): OrbcommAssetInput[] {
 function parseOrbcommFleetCsv(text: string): OrbcommAssetInput[] {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2) return [];
-  const headers = splitCsvLine(lines[0]).map((header) => normalizeHeader(header));
+  const headerIdx = findOrbcommHeaderRowIndex(lines);
+  if (headerIdx >= lines.length - 1) return [];
+  const headers = splitCsvLine(lines[headerIdx]).map((header) => normalizeHeader(header));
   return lines
-    .slice(1)
+    .slice(headerIdx + 1)
     .map((line) => {
       const values = splitCsvLine(line);
       const row: Record<string, string> = {};
@@ -465,9 +476,74 @@ function parseOrbcommFleetCsv(text: string): OrbcommAssetInput[] {
     .filter(hasOrbcommIdentity);
 }
 
+const ORBCOMM_HEADER_HINTS = new Set([
+  "asset",
+  "asset id",
+  "assetid",
+  "asset name",
+  "trailer",
+  "trailer number",
+  "trailer id",
+  "unit",
+  "unit number",
+  "mobile",
+  "mobile id",
+  "device",
+  "device id",
+  "vehicle",
+  "name",
+  "vin",
+  "latitude",
+  "lat",
+  "longitude",
+  "lng",
+  "lon",
+  "long",
+  "city",
+  "address",
+  "location",
+]);
+
+function orbcommHeaderHits(headers: string[]): number {
+  return headers.filter((header) => {
+    const key = normalizeHeader(header);
+    if (!key) return false;
+    if (ORBCOMM_HEADER_HINTS.has(key)) return true;
+    return key.split(" ").some((part) => ORBCOMM_HEADER_HINTS.has(part));
+  }).length;
+}
+
+function findOrbcommHeaderRowIndex(lines: string[]): number {
+  let best = 0;
+  let bestHits = 0;
+  const limit = Math.min(lines.length, 16);
+  for (let i = 0; i < limit; i++) {
+    const hits = orbcommHeaderHits(splitCsvLine(lines[i]));
+    if (hits >= 2 && hits > bestHits) {
+      best = i;
+      bestHits = hits;
+    }
+  }
+  return bestHits >= 2 ? best : 0;
+}
+
+function emptyOrbcommAsset(): OrbcommAssetInput {
+  return {
+    assetId: "",
+    unitNumber: "",
+    name: "",
+    vin: "",
+    plate: "",
+    type: "",
+    city: "",
+    latitude: null,
+    longitude: null,
+  };
+}
+
 export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
   if (!value || typeof value !== "object") {
-    return { assetId: "", unitNumber: "", name: "", vin: "", plate: "", type: "" };
+    return emptyOrbcommAsset();
   }
   const item = value as Record<string, unknown>;
   const assetId = pickHeader(item, [
@@ -479,6 +555,11 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     "assetId",
     "AssetId",
     "unitId",
+    "mobile id",
+    "mobileid",
+    "device id",
+    "deviceid",
+    "device",
   ]);
   const unitNumber = pickHeader(item, [
     "trailer #",
@@ -495,8 +576,12 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     "name",
     "asset name",
     "assetname",
+    "vehicle",
   ]);
-  const name = pickHeader(item, ["name", "asset name", "assetname", "trailer", "trailer number"]);
+  const name = pickHeader(item, ["name", "asset name", "assetname", "trailer", "trailer number", "vehicle"]);
+  const city =
+    pickHeader(item, ["city", "nearest city", "last city"]) ||
+    pickHeader(item, ["address", "location", "formatted address", "formatted location", "last location"]);
   return {
     assetId: assetId || pickHeader(item, ["id", "ID"]),
     unitNumber: unitNumber || name || assetId,
@@ -504,6 +589,16 @@ export function orbcommAssetFromUnknown(value: unknown): OrbcommAssetInput {
     vin: pickHeader(item, ["vin", "vehicle identification", "vehicle identification number", "vehicle_vin"]),
     plate: pickHeader(item, ["plate", "license plate", "licenseplate", "license_plate"]),
     type: pickHeader(item, ["type", "equipment type", "equipment", "trailer type"]),
+    city,
+    latitude: asOptionalNumber(
+      pickHeader(item, ["latitude", "lat", "gps lat", "gps latitude"]) || item.latitude || item.lat,
+    ),
+    longitude: asOptionalNumber(
+      pickHeader(item, ["longitude", "lng", "lon", "long", "gps lng", "gps longitude"]) ||
+        item.longitude ||
+        item.lng ||
+        item.lon,
+    ),
   };
 }
 

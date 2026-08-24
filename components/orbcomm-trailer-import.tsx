@@ -24,8 +24,9 @@ export function OrbcommTrailerImport() {
         <h2 className="text-base font-semibold text-slate-900">Import from ORBCOMM</h2>
         <p className="mt-1 text-sm text-slate-600">
           Uses <code>ORBCOMM_*</code> from <code>.env</code> when the B2B API returns assets. If there is
-          no API list yet, upload an ORBCOMM CSV/export, preview, then import. Match by ORBCOMM asset id
-          or trailer #. Do not scrape the logged-in portal.
+          no API list yet, upload an ORBCOMM CSV/export (Location Tracking Report or Reefer Status Report),
+          preview, then import. Title and date banner rows are skipped. Match by ORBCOMM asset id or
+          trailer #. Do not scrape the logged-in portal.
         </p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
@@ -54,7 +55,7 @@ export function OrbcommTrailerImport() {
             id="orbcomm-fleet-text"
             name="report_text"
             rows={4}
-            placeholder={"Asset ID,Trailer #,VIN\norb-9001,TR-9001,1ABCD..."}
+            placeholder={"Trailer #,Asset ID,VIN,Latitude,Longitude,City\nTR-9001,orb-9001,1ABCD...,35.46,-97.51,Oklahoma City"}
           />
         </div>
         <div>
@@ -89,6 +90,7 @@ export function OrbcommTrailerImport() {
                   <th>Trailer #</th>
                   <th>ORBCOMM asset id</th>
                   <th>VIN</th>
+                  <th>Last city / lat-lng</th>
                   <th></th>
                 </tr>
               </thead>
@@ -108,6 +110,7 @@ export function OrbcommTrailerImport() {
                       <td className="font-mono">{row.unitNumber || row.name || "—"}</td>
                       <td className="font-mono">{row.orbcommAssetId || "—"}</td>
                       <td className="font-mono">{row.vin || "—"}</td>
+                      <td className="text-sm text-slate-700">{orbcommPreviewGps(row)}</td>
                       <td>{row.action === "update" ? "Update existing" : "Create"}</td>
                     </tr>
                   );
@@ -122,4 +125,13 @@ export function OrbcommTrailerImport() {
       ) : null}
     </section>
   );
+}
+
+function orbcommPreviewGps(row: OrbcommTrailerPreviewRow): string {
+  const city = row.city.trim();
+  if (city) return city;
+  if (row.latitude != null && row.longitude != null) {
+    return `${row.latitude.toFixed(3)}, ${row.longitude.toFixed(3)}`;
+  }
+  return "—";
 }
