@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createTruckAction, updateTruckAction } from "@/lib/actions";
 import type { FleetDriverOption, TruckFormValues } from "@/lib/fleet-form-shared";
@@ -14,6 +14,7 @@ type Props = {
 
 export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(truck ? updateTruckAction : createTruckAction, null);
+  const [type, setType] = useState(truck?.type || "reefer");
 
   return (
     <form action={formAction} className="card grid max-w-xl gap-4 p-6">
@@ -25,7 +26,7 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
       </div>
       <div className="field">
         <label htmlFor="type">Type</label>
-        <select id="type" name="type" defaultValue={truck?.type ?? "dry_van"}>
+        <select id="type" name="type" value={type} onChange={(event) => setType(event.target.value)}>
           {TRUCK_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
               {type.label}

@@ -33,7 +33,7 @@ import {
 import { createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
 import { addRelay, deleteRelay, moveRelay, updateRelay } from "./relay-store";
-import { addStop, deleteStop, moveStop } from "./stops";
+import { addStop, deleteStop, moveStop, updateStop, type LoadStopKind } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
 import { isBillableStatus, type ActionResult } from "./types";
 
@@ -216,32 +216,58 @@ export async function moveRelayAction(formData: FormData): Promise<void> {
   });
 }
 
+function parseStopKind(value: FormDataEntryValue | null): LoadStopKind {
+  const kind = String(value ?? "pickup");
+  if (kind !== "pickup" && kind !== "delivery") throw new Error("Stop type is Pickup or Delivery.");
+  return kind;
+}
+
+function parseStopInput(formData: FormData) {
+  const windowStart = String(formData.get("window_start") ?? "").trim();
+  const windowEnd = String(formData.get("window_end") ?? "").trim();
+  return {
+    kind: parseStopKind(formData.get("kind")),
+    name: requiredString(formData.get("name"), "Stop name"),
+    street: String(formData.get("street") ?? "").trim(),
+    city: String(formData.get("city") ?? "").trim(),
+    state: String(formData.get("state") ?? "").trim(),
+    zip: String(formData.get("zip") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    window_start: windowStart ? fromInputDateTime(windowStart) : "",
+    window_end: windowEnd ? fromInputDateTime(windowEnd) : "",
+    confirmation: String(formData.get("confirmation") ?? "").trim(),
+    cargo: String(formData.get("cargo") ?? "").trim(),
+    reference: String(formData.get("reference") ?? "").trim(),
+    instructions: String(formData.get("instructions") ?? "").trim(),
+    notes: String(formData.get("notes") ?? "").trim(),
+    location_id: parseOptionalInt(formData.get("location_id")),
+  };
+}
+
 export async function addStopAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
     await requireLoadEditor();
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!loadId) throw new Error("Load is missing.");
-    const kind = String(formData.get("kind") ?? "stopoff");
-    if (kind !== "pickup" && kind !== "delivery" && kind !== "stopoff") {
-      throw new Error("Pick a stop type.");
-    }
-    const name = requiredString(formData.get("name"), "Stop name");
-    const city = String(formData.get("city") ?? "").trim();
-    const state = String(formData.get("state") ?? "").trim();
-    addStop(loadId, {
-      kind,
-      name,
-      city,
-      state,
-      confirmation: String(formData.get("confirmation") ?? "").trim(),
-      notes: String(formData.get("notes") ?? "").trim(),
-    });
+    const input = parseStopInput(formData);
+    addStop(loadId, input);
     recordLoadAudit({
       loadId,
       action: "stop",
-      field: kind,
-      newValue: [name, city, state].filter(Boolean).join(", "),
+      field: input.kind,
+      newValue: [input.name, input.city, input.state].filter(Boolean).join(", "),
     });
+    refresh();
+  });
+}
+
+export async function updateStopAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("stop_id"));
+    if (!id) throw new Error("Stop is missing.");
+    const input = parseStopInput(formData);
+    updateStop(id, input);
     refresh();
   });
 }

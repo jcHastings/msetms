@@ -98,7 +98,7 @@ export function truckFormValues(truck: Record<string, unknown>): TruckFormValues
   return {
     id: num(truck.id),
     unit_number: text(truck.unit_number),
-    type: text(truck.type) || "dry_van",
+    type: text(truck.type) || "reefer",
     capacity_lbs: num(truck.capacity_lbs) || 45000,
     status: text(truck.status) || "available",
     samsara_vehicle_id: text(truck.samsara_vehicle_id),

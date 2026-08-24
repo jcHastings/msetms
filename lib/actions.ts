@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
 import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { placeholderLane, safeReturnTo } from "./load-page-shared";
+import { addPayItem, deletePayItem } from "./pay-items";
 import {
   assignLoad,
   createCustomer,
@@ -148,7 +150,49 @@ function parseContacts(formData: FormData) {
   }
 }
 
-function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
+function parseLaneDate(
+  formData: FormData,
+  key: string,
+  fallback: string | undefined,
+  placeholder: string,
+): string {
+  const raw = String(formData.get(key) ?? "").trim();
+  if (raw) return fromInputDateTime(raw);
+  if (fallback) return fallback;
+  return placeholder;
+}
+
+function parseAssignmentId(
+  formData: FormData,
+  key: "truck_id" | "driver_id" | "trailer_id",
+  existing: number | null | undefined,
+): number | null {
+  if (!formData.has(key)) return existing ?? null;
+  return parseOptionalInt(formData.get(key));
+}
+
+function parseLoadInput(
+  formData: FormData,
+  requireCustomer = true,
+  existing?: {
+    origin: string;
+    destination: string;
+    pickup_start: string;
+    pickup_end: string;
+    delivery_start: string;
+    delivery_end: string;
+    rate: number | null;
+    notes: string;
+    special_instructions: string;
+    appointment_notes: string;
+    truck_id: number | null;
+    driver_id: number | null;
+    trailer_id: number | null;
+    trailer_number: string;
+    shipper_location_id: number | null;
+    consignee_location_id: number | null;
+  } | null,
+): LoadInput {
   let customerId = parseOptionalInt(formData.get("customer_id"));
   if (!customerId && requireCustomer) {
     const extractedName = String(formData.get("customer_name") ?? "").trim();
@@ -157,36 +201,62 @@ function parseLoadInput(formData: FormData, requireCustomer = true): LoadInput {
     }
   }
   if (!customerId) throw new Error("Pick a customer.");
-  const statusValue = String(formData.get("status") ?? "available");
-  if (!isKnownLoadStatus(statusValue)) throw new Error("Invalid load status.");
-  const truckId = parseOptionalInt(formData.get("truck_id"));
-  const driverId = parseOptionalInt(formData.get("driver_id"));
+  const status = String(formData.get("status") ?? "available");
+  if (!isKnownLoadStatus(status)) throw new Error("Invalid load status.");
+  const lane = placeholderLane();
+  const truckId = parseAssignmentId(formData, "truck_id", existing?.truck_id);
+  const driverId = parseAssignmentId(formData, "driver_id", existing?.driver_id);
+  const trailerId = parseAssignmentId(formData, "trailer_id", existing?.trailer_id);
   const parsed: LoadInput = {
     customer_id: customerId,
-    origin: requiredString(formData.get("origin"), "Origin"),
-    destination: requiredString(formData.get("destination"), "Destination"),
-    pickup_start: fromInputDateTime(requiredString(formData.get("pickup_start"), "Pickup start")),
-    pickup_end: fromInputDateTime(requiredString(formData.get("pickup_end"), "Pickup end")),
-    delivery_start: fromInputDateTime(requiredString(formData.get("delivery_start"), "Delivery start")),
-    delivery_end: fromInputDateTime(requiredString(formData.get("delivery_end"), "Delivery end")),
+    origin: String(formData.get("origin") ?? "").trim() || existing?.origin || lane.origin,
+    destination: String(formData.get("destination") ?? "").trim() || existing?.destination || lane.destination,
+    pickup_start: parseLaneDate(formData, "pickup_start", existing?.pickup_start, lane.pickup_start),
+    pickup_end: parseLaneDate(formData, "pickup_end", existing?.pickup_end, lane.pickup_end),
+    delivery_start: parseLaneDate(formData, "delivery_start", existing?.delivery_start, lane.delivery_start),
+    delivery_end: parseLaneDate(formData, "delivery_end", existing?.delivery_end, lane.delivery_end),
     weight: parseOptionalInt(formData.get("weight")),
     commodity: String(formData.get("commodity") ?? "").trim(),
-    rate: parseOptionalFloat(formData.get("rate")),
-    notes: String(formData.get("notes") ?? "").trim(),
-    special_instructions: String(formData.get("special_instructions") ?? "").trim(),
-    appointment_notes: String(formData.get("appointment_notes") ?? "").trim(),
+    rate: formData.has("rate") ? parseOptionalFloat(formData.get("rate")) : existing?.rate ?? null,
+    notes: String(formData.get("notes") ?? existing?.notes ?? "").trim(),
+    special_instructions: String(formData.get("special_instructions") ?? existing?.special_instructions ?? "").trim(),
+    appointment_notes: String(formData.get("appointment_notes") ?? existing?.appointment_notes ?? "").trim(),
     reference_number: String(formData.get("reference_number") ?? "").trim(),
-    po_number: String(formData.get("po_number") ?? "").trim(),
+    po_number: String(formData.get("po_number") ?? "").trim() || String(formData.get("customer_reference") ?? "").trim(),
     reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
     reefer_mode: parseReeferModeField(formData.get("reefer_mode")),
-    trailer_number: String(formData.get("trailer_number") ?? "").trim(),
-    trailer_id: parseOptionalInt(formData.get("trailer_id")),
-    shipper_location_id: parseOptionalInt(formData.get("shipper_location_id")),
-    consignee_location_id: parseOptionalInt(formData.get("consignee_location_id")),
+    trailer_number: String(formData.get("trailer_number") ?? existing?.trailer_number ?? "").trim(),
+    trailer_id: trailerId,
+    shipper_location_id: formData.has("shipper_location_id")
+      ? parseOptionalInt(formData.get("shipper_location_id"))
+      : existing?.shipper_location_id ?? null,
+    consignee_location_id: formData.has("consignee_location_id")
+      ? parseOptionalInt(formData.get("consignee_location_id"))
+      : existing?.consignee_location_id ?? null,
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
-    status: statusValue,
+    status,
     truck_id: truckId,
     driver_id: driverId,
+    truck_status: String(formData.get("truck_status") ?? "").trim(),
+    branch: String(formData.get("branch") ?? "").trim(),
+    declared_value: parseOptionalFloat(formData.get("declared_value")),
+    load_size: String(formData.get("load_size") ?? "").trim(),
+    condition_new_used: String(formData.get("condition_new_used") ?? "").trim(),
+    equipment: String(formData.get("equipment") ?? "").trim(),
+    equipment_length: String(formData.get("equipment_length") ?? "").trim(),
+    temperature_f: parseOptionalFloat(formData.get("temperature_f")),
+    temp_low_f: parseOptionalFloat(formData.get("temp_low_f")),
+    temp_high_f: parseOptionalFloat(formData.get("temp_high_f")),
+    temp_time_tolerance: String(formData.get("temp_time_tolerance") ?? "").trim(),
+    container_number: String(formData.get("container_number") ?? "").trim(),
+    last_free_day: cleanDateInput(formData.get("last_free_day")),
+    public_notes: String(formData.get("public_notes") ?? "").trim(),
+    posting_notes: String(formData.get("posting_notes") ?? "").trim(),
+    contact_name: String(formData.get("contact_name") ?? "").trim(),
+    contact_email: String(formData.get("contact_email") ?? "").trim(),
+    contact_phone: String(formData.get("contact_phone") ?? "").trim(),
+    contact_ext: String(formData.get("contact_ext") ?? "").trim(),
+    customer_reference: String(formData.get("customer_reference") ?? "").trim(),
   };
   const driver = driverId ? getDriver(driverId) : null;
   if (driver?.driver_type === "owner_operator") {
@@ -208,7 +278,7 @@ function parseReeferModeField(value: FormDataEntryValue | null): string {
 }
 
 function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
-  const type = String(value ?? "");
+  const type = String(value ?? "").trim() || "reefer";
   if (!TRAILER_TYPES.some((item) => item.value === type)) {
     throw new Error("Pick a trailer type.");
   }
@@ -242,7 +312,7 @@ function enforceAssignmentCompliance(formData: FormData, truckId: number | null,
 }
 
 function parseTruckType(value: FormDataEntryValue | null): TruckType {
-  const type = String(value ?? "");
+  const type = String(value ?? "").trim() || "reefer";
   if (!TRUCK_TYPES.some((item) => item.value === type)) {
     throw new Error("Pick a truck type.");
   }
@@ -379,8 +449,10 @@ export async function updateTruckAction(
       assigned_driver_id: parseOptionalInt(formData.get("assigned_driver_id")),
     });
     refresh();
-    return { ok: true, id };
+    redirect("/fleet/trucks");
+    return { ok: true, id: id ?? undefined };
   } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }
@@ -471,8 +543,10 @@ export async function updateDriverAction(
       termination_date: parseDateField(formData.get("termination_date")),
     });
     refresh();
-    return { ok: true, id };
+    redirect("/fleet/drivers");
+    return { ok: true, id: id ?? undefined };
   } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }
@@ -493,7 +567,7 @@ export async function createLoadAction(
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
       refresh();
-      redirect(`/loads/${id}`);
+      redirect(safeReturnTo(formData.get("return_to"), "/board"));
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);
@@ -510,7 +584,7 @@ export async function updateLoadAction(
     try {
       const actor = await requireLoadEditor();
       const existing = getLoad(id);
-      const input = applyLoadPermissions(parseLoadInput(formData), actor.role, existing ?? undefined);
+      const input = applyLoadPermissions(parseLoadInput(formData, true, existing), actor.role, existing ?? undefined);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
       if (String(formData.get("save_load_details") ?? "") === "1") {
@@ -539,8 +613,9 @@ export async function updateLoadAction(
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
       refresh();
-      return { ok: true, id };
+      redirect(safeReturnTo(formData.get("return_to"), "/board"));
     } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);
     }
   });
@@ -623,8 +698,12 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
       }
       updateLoadStatus(loadId, status);
       refresh();
+      if (status === "cancelled") {
+        redirect(safeReturnTo(formData.get("return_to"), "/board"));
+      }
       return { ok: true, id: loadId };
     } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);
     }
   });
@@ -908,8 +987,10 @@ export async function updateTrailerAction(
       active: parseActive(formData),
     });
     refresh();
-    return { ok: true, id };
+    redirect("/fleet/trailers");
+    return { ok: true, id: id ?? undefined };
   } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }
@@ -1494,6 +1575,49 @@ type OrbcommPreviewState = import("./fleet-import-shared").FleetImportPreviewSta
 >;
 type SamsaraTruckPreviewRow = import("./fleet-import-shared").SamsaraTruckPreviewRow;
 type OrbcommTrailerPreviewRow = import("./fleet-import-shared").OrbcommTrailerPreviewRow;
+
+export async function addPayItemAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const side = String(formData.get("side") ?? "");
+      if (side !== "income" && side !== "expense") throw new Error("Pick income or expenses.");
+      const billTo = String(formData.get("bill_to") ?? (side === "income" ? "customer" : "driver"));
+      if (billTo !== "customer" && billTo !== "driver") throw new Error("Pick who this bills.");
+      addPayItem(loadId, {
+        side,
+        bill_to: billTo,
+        payee: String(formData.get("payee") ?? "").trim(),
+        category: String(formData.get("category") ?? ""),
+        rate: parseOptionalFloat(formData.get("rate")),
+        qty: parseOptionalFloat(formData.get("qty")) ?? 1,
+        total: parseOptionalFloat(formData.get("total")),
+        notes: String(formData.get("notes") ?? "").trim(),
+      });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function deletePayItemAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const id = parseOptionalInt(formData.get("pay_item_id"));
+      if (!id) throw new Error("Pay item is missing.");
+      deletePayItem(id);
+      refresh();
+      return { ok: true };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
 
 function parseSelectedJson<T>(formData: FormData, ...idKeys: string[]): T[] {
   const raw = String(formData.get("rows") ?? "").trim();

@@ -1173,6 +1173,26 @@ export type LoadInput = {
   status: string;
   truck_id: number | null;
   driver_id: number | null;
+  truck_status?: string;
+  branch?: string;
+  declared_value?: number | null;
+  load_size?: string;
+  condition_new_used?: string;
+  equipment?: string;
+  equipment_length?: string;
+  temperature_f?: number | null;
+  temp_low_f?: number | null;
+  temp_high_f?: number | null;
+  temp_time_tolerance?: string;
+  container_number?: string;
+  last_free_day?: string;
+  public_notes?: string;
+  posting_notes?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_ext?: string;
+  customer_reference?: string;
 };
 
 function validateLoadInput(input: LoadInput): void {
@@ -1191,20 +1211,9 @@ function validateLoadInput(input: LoadInput): void {
   if (new Date(input.delivery_end) < new Date(input.delivery_start)) {
     throw new Error("Delivery window end must be after the start.");
   }
-  if (statusNeedsAssets(input.status) && (!input.truck_id || !input.driver_id)) {
-    throw new Error("Assign a truck and driver before setting this status.");
-  }
-}
-
-function normalizeAssignment(input: LoadInput): LoadInput {
-  if (input.status === "available") {
-    return { ...input, truck_id: null, driver_id: null };
-  }
-  return input;
 }
 
 export function createLoad(input: LoadInput): number {
-  input = normalizeAssignment(input);
   validateLoadInput(input);
   const timestamp = now();
   const loadNumber = nextLoadNumber();
@@ -1253,7 +1262,8 @@ export function createLoad(input: LoadInput): number {
         timestamp,
       );
     const id = Number(result.lastInsertRowid);
-    syncAssignment(id, input.status, input.truck_id, input.driver_id);
+    persistLoadPageFields(id, input, null);
+    syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
     return id;
   });
   const id = insert();
@@ -1274,7 +1284,6 @@ export function createLoad(input: LoadInput): number {
 export function updateLoad(id: number, input: LoadInput): void {
   const existing = getLoad(id);
   if (!existing) throw new Error("Load not found.");
-  input = normalizeAssignment(input);
   validateLoadInput(input);
   const db = getDb();
   db.transaction(() => {
@@ -1319,7 +1328,8 @@ export function updateLoad(id: number, input: LoadInput): void {
       now(),
       id,
     );
-    syncAssignment(id, input.status, input.truck_id, input.driver_id);
+    persistLoadPageFields(id, input, existing);
+    syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
   })();
   recordLoadChanges(id, input.status === "cancelled" ? "cancel" : "update", [
     { field: "customer", oldValue: existing.customer_name, newValue: customerName(input.customer_id) },
@@ -1527,21 +1537,13 @@ export function markQboInvoice(
 export function updateLoadStatus(loadId: number, status: string): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (statusNeedsAssets(status) && (!load.truck_id || !load.driver_id)) {
-    throw new Error("Assign a truck and driver first.");
-  }
   const db = getDb();
   db.transaction(() => {
     db.prepare("UPDATE loads SET status = ?, updated_at = ? WHERE id = ?").run(status, now(), loadId);
-    if (status === "available") {
-      db.prepare("UPDATE loads SET truck_id = NULL, driver_id = NULL, updated_at = ? WHERE id = ?").run(
-        now(),
-        loadId,
-      );
-      releaseAssetsIfNeeded(load);
-    } else if (statusNeedsAssets(status)) {
+    if (load.truck_id || load.driver_id) {
       markAssetsOnDuty(load.truck_id, load.driver_id);
-    } else if (status !== "hold") {
+    }
+    if (status === "cancelled" || status === "completed" || status === "delivered") {
       releaseAssetsIfNeeded(load);
     }
   })();
@@ -1558,22 +1560,34 @@ export function updateLoadStatus(loadId: number, status: string): void {
 }
 
 function assertAssetFree(
-  truckId: number,
-  driverId: number,
+  truckId: number | null,
+  driverId: number | null,
   exceptLoadId: number,
   trailerId?: number | null,
 ): void {
+  if (!truckId && !driverId && trailerId == null) return;
   const conflict = getDb()
     .prepare(
       `SELECT load_number FROM loads
        WHERE id != ?
          AND status IN (${BUSY_STATUS_SQL})
-         AND (truck_id = ? OR driver_id = ? OR (? IS NOT NULL AND trailer_id = ?))
+         AND (
+           (? IS NOT NULL AND truck_id = ?)
+           OR (? IS NOT NULL AND driver_id = ?)
+           OR (? IS NOT NULL AND trailer_id = ?)
+         )
        LIMIT 1`,
     )
-    .get(exceptLoadId, ...BUSY_STATUSES, truckId, driverId, trailerId ?? null, trailerId ?? null) as
-    | { load_number: string }
-    | undefined;
+    .get(
+      exceptLoadId,
+      ...BUSY_STATUSES,
+      truckId,
+      truckId,
+      driverId,
+      driverId,
+      trailerId ?? null,
+      trailerId ?? null,
+    ) as { load_number: string } | undefined;
   if (conflict) {
     throw new Error(`That truck, trailer, or driver is already on ${conflict.load_number}.`);
   }
@@ -1636,12 +1650,10 @@ function syncAssignment(
   status: string,
   truckId: number | null,
   driverId: number | null,
+  trailerId?: number | null,
 ): void {
-  if (statusNeedsAssets(status)) {
-    if (!truckId || !driverId) {
-      throw new Error("Assign a truck and driver before setting this status.");
-    }
-    assertAssetFree(truckId, driverId, loadId);
+  assertAssetFree(truckId, driverId, loadId, trailerId ?? null);
+  if (truckId || driverId) {
     markAssetsOnDuty(truckId, driverId);
   } else if (status !== "hold") {
     const load = getLoad(loadId);
@@ -1872,6 +1884,45 @@ export function setLoadWatched(loadId: number, watched: boolean): void {
 
 export function listWatchedLoads(): LoadView[] {
   return listLoads({ status: "all" }).filter((load) => load.watched);
+}
+
+function persistLoadPageFields(id: number, input: LoadInput, existing: Load | null): void {
+  const current = existing ?? getLoad(id);
+  if (!current) return;
+  getDb()
+    .prepare(
+      `UPDATE loads SET
+        truck_status = ?, branch = ?, declared_value = ?, load_size = ?, condition_new_used = ?,
+        equipment = ?, equipment_length = ?, temperature_f = ?, temp_low_f = ?, temp_high_f = ?,
+        temp_time_tolerance = ?, container_number = ?, last_free_day = ?,
+        public_notes = ?, posting_notes = ?,
+        contact_name = ?, contact_email = ?, contact_phone = ?, contact_ext = ?,
+        customer_reference = ?
+       WHERE id = ?`,
+    )
+    .run(
+      input.truck_status ?? current.truck_status ?? "",
+      input.branch ?? current.branch ?? "",
+      input.declared_value !== undefined ? input.declared_value : current.declared_value,
+      input.load_size ?? current.load_size ?? "",
+      input.condition_new_used ?? current.condition_new_used ?? "",
+      input.equipment ?? current.equipment ?? "",
+      input.equipment_length ?? current.equipment_length ?? "",
+      input.temperature_f !== undefined ? input.temperature_f : current.temperature_f,
+      input.temp_low_f !== undefined ? input.temp_low_f : current.temp_low_f,
+      input.temp_high_f !== undefined ? input.temp_high_f : current.temp_high_f,
+      input.temp_time_tolerance ?? current.temp_time_tolerance ?? "",
+      input.container_number ?? current.container_number ?? "",
+      input.last_free_day ?? current.last_free_day ?? "",
+      input.public_notes ?? current.public_notes ?? "",
+      input.posting_notes ?? current.posting_notes ?? "",
+      input.contact_name ?? current.contact_name ?? "",
+      input.contact_email ?? current.contact_email ?? "",
+      input.contact_phone ?? current.contact_phone ?? "",
+      input.contact_ext ?? current.contact_ext ?? "",
+      input.customer_reference ?? current.customer_reference ?? "",
+      id,
+    );
 }
 
 export function updateLoadDetails(

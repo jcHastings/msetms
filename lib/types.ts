@@ -40,12 +40,12 @@ export const STATUS_REASONS = [
 ] as const;
 
 export const EQUIPMENT_REQUIRED = [
-  { value: "", label: "Any" },
   { value: "reefer_53", label: "53' Reefer" },
   { value: "dry_van_53", label: "53' Dry Van" },
   { value: "flatbed", label: "Flatbed" },
   { value: "box", label: "Box Truck" },
   { value: "power_only", label: "Power Only" },
+  { value: "", label: "Any" },
 ] as const;
 
 export function isClosedStatus(status: string): boolean {
@@ -77,12 +77,15 @@ export function statusNeedsAssets(status: string): boolean {
 }
 
 export const TRUCK_TYPES = [
-  { value: "dry_van", label: "Dry Van" },
   { value: "reefer", label: "Reefer" },
+  { value: "dry_van", label: "Dry Van" },
   { value: "flatbed", label: "Flatbed" },
   { value: "box", label: "Box Truck" },
   { value: "power_only", label: "Power Only" },
 ] as const;
+
+export const DEFAULT_FLEET_TYPE = "reefer";
+export const DEFAULT_LOAD_EQUIPMENT = "reefer_53";
 
 export type TruckType = (typeof TRUCK_TYPES)[number]["value"];
 
@@ -411,6 +414,25 @@ export type Load = {
   docs_requested: number;
   docs_requested_at: string;
   ready_to_invoice: number;
+  truck_status: string;
+  branch: string;
+  declared_value: number | null;
+  load_size: string;
+  condition_new_used: string;
+  equipment_length: string;
+  temperature_f: number | null;
+  temp_low_f: number | null;
+  temp_high_f: number | null;
+  temp_time_tolerance: string;
+  container_number: string;
+  last_free_day: string;
+  public_notes: string;
+  posting_notes: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_ext: string;
+  customer_reference: string;
   created_at: string;
   updated_at: string;
 };

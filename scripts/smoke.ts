@@ -39,10 +39,11 @@ async function main() {
   assert.equal(parseLoadTab("tracking"), "assets");
   assert.equal(parseLoadTab(""), "basics");
   const loadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
-  assert.match(loadPage, /LoadWorkspace/);
+  assert.match(loadPage, /LoadEditor/);
   assert.match(loadPage, /searchParams/);
-  assert.match(loadPage, /LoadRelaysPanel/);
-  assert.match(loadPage, /Relay markers/);
+  const editorSource = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
+  assert.match(editorSource, /LoadWorkspace/);
+  assert.match(editorSource, /LoadRelaysPanel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /Add relay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8"), /not a billed customer stop/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
@@ -70,11 +71,11 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MSE Transport/);
   assert.match(tabSource, /Load Basics/);
   assert.match(tabSource, /Customer Info/);
-  assert.match(tabSource, /Carrier \/ Asset Info/);
+  assert.match(tabSource, /Carrier and Driver Info/);
   assert.match(tabSource, /Edit Stops/);
   assert.match(tabSource, /Financials/);
   const workspaceSource = fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8");
-  assert.match(workspaceSource, /Back to board/);
+  assert.match(workspaceSource, /Close/);
   assert.match(workspaceSource, /Load Actions/);
   assert.match(workspaceSource, /load-tabs/);
   assert.match(workspaceSource, /load-tab-active/);
@@ -115,7 +116,43 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Customer Portal/);
   assert.match(workspaceSource, /form=\{formId\}/);
   assert.match(workspaceSource, /beforeunload/);
-  const docsPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
+  assert.match(workspaceSource, /onMouseEnter/);
+  assert.match(workspaceSource, /onMouseLeave/);
+  assert.match(workspaceSource, /openMenu === label/);
+  assert.match(workspaceSource, /setOpenMenu\(label\)/);
+  assert.match(workspaceSource, /setOpenMenu\(null\)/);
+  assert.doesNotMatch(workspaceSource, /<details/);
+  assert.doesNotMatch(workspaceSource, /Delete This Load/);
+  const loadFormSource = fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8");
+  const basicsChunk = loadFormSource.slice(
+    loadFormSource.indexOf('data-load-tab="basics"'),
+    loadFormSource.indexOf('data-load-tab="customer"'),
+  );
+  assert.match(basicsChunk, /Reefer setpoint/);
+  assert.match(basicsChunk, /Reefer mode/);
+  assert.match(basicsChunk, /continuous/);
+  assert.match(basicsChunk, /Load Status/);
+  assert.match(basicsChunk, /Truck Status/);
+  assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
+  const assetsChunk = loadFormSource.slice(
+    loadFormSource.indexOf('data-load-tab="assets"'),
+    loadFormSource.length,
+  );
+  assert.match(assetsChunk, /Company driver/);
+  assert.match(assetsChunk, /Owner-operator/);
+  assert.match(assetsChunk, /name="driver_id"/);
+  assert.doesNotMatch(assetsChunk, /name="truck_id"|Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
+  const paySource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
+  assert.match(paySource, /\+ Add Line Item/);
+  assert.match(paySource, /Save Pay Item/);
+  assert.match(paySource, /Income \/ Budget/);
+  assert.match(paySource, /Expenses/);
+  assert.doesNotMatch(paySource, /waiting row|blank row/);
+  const stopsSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
+  assert.match(stopsSource, /\+ Add Pickup/);
+  assert.match(stopsSource, /\+ Add Delivery/);
+  assert.doesNotMatch(stopsSource, /stopoff|bobtail|container/);
+  const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
   assert.match(docsPage, /AttachmentsPanel/);
   assert.match(docsPage, /when="docs"/);
 
@@ -422,7 +459,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /On the road/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /samsaraGpsEmptyState/);
   const matchFn =
     fs
       .readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8")
@@ -716,6 +753,216 @@ async function main() {
   assert.ok(created);
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
+
+  const jamesId = queries.createDriver({
+    name: "James Whitaker Smoke",
+    phone: "555-0109",
+    license: "MO-CDL-SMOKE-J",
+    pin: "3311",
+    truck_id: null,
+    status: "available",
+    driver_type: "company_driver",
+    country: "USA",
+    city: "St Louis",
+    state: "MO",
+  });
+  const yoelId = queries.createDriver({
+    name: "Yoel Feder Smoke",
+    phone: "555-0110",
+    license: "FL-CDL-SMOKE-Y",
+    pin: "3312",
+    truck_id: null,
+    status: "available",
+    driver_type: "company_driver",
+    country: "USA",
+    city: "Miami",
+    state: "FL",
+  });
+  const persistLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Bronx, NY",
+    destination: "Oklahoma City, OK",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Produce",
+    rate: 2200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "MSE-ASSIGN",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: jamesId,
+  });
+  assert.equal(queries.getLoad(persistLoadId)?.driver_id, jamesId, "available load keeps the assigned driver");
+  const persistBase = queries.getLoad(persistLoadId);
+  assert.ok(persistBase);
+  queries.updateLoad(persistLoadId, {
+    customer_id: persistBase.customer_id,
+    origin: persistBase.origin,
+    destination: persistBase.destination,
+    pickup_start: persistBase.pickup_start,
+    pickup_end: persistBase.pickup_end,
+    delivery_start: persistBase.delivery_start,
+    delivery_end: persistBase.delivery_end,
+    weight: persistBase.weight,
+    commodity: persistBase.commodity,
+    rate: persistBase.rate,
+    notes: persistBase.notes,
+    special_instructions: persistBase.special_instructions,
+    appointment_notes: persistBase.appointment_notes,
+    reference_number: persistBase.reference_number,
+    po_number: persistBase.po_number,
+    reefer_setpoint_f: persistBase.reefer_setpoint_f,
+    reefer_mode: persistBase.reefer_mode,
+    trailer_number: persistBase.trailer_number,
+    trailer_id: persistBase.trailer_id,
+    shipper_location_id: persistBase.shipper_location_id,
+    consignee_location_id: persistBase.consignee_location_id,
+    status: persistBase.status,
+    truck_id: persistBase.truck_id,
+    driver_id: yoelId,
+  });
+  assert.equal(queries.getLoad(persistLoadId)?.driver_id, yoelId, "driver assignment persists on save");
+
+  const unassignedSaveId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Dallas, TX",
+    destination: "Houston, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 10000,
+    commodity: "Dry",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const unassignedBase = queries.getLoad(unassignedSaveId);
+  assert.ok(unassignedBase);
+  queries.updateLoad(unassignedSaveId, {
+    customer_id: unassignedBase.customer_id,
+    origin: unassignedBase.origin,
+    destination: unassignedBase.destination,
+    pickup_start: unassignedBase.pickup_start,
+    pickup_end: unassignedBase.pickup_end,
+    delivery_start: unassignedBase.delivery_start,
+    delivery_end: unassignedBase.delivery_end,
+    weight: unassignedBase.weight,
+    commodity: unassignedBase.commodity,
+    rate: unassignedBase.rate,
+    notes: unassignedBase.notes,
+    special_instructions: unassignedBase.special_instructions,
+    appointment_notes: unassignedBase.appointment_notes,
+    reference_number: unassignedBase.reference_number,
+    po_number: unassignedBase.po_number,
+    reefer_setpoint_f: unassignedBase.reefer_setpoint_f,
+    trailer_number: unassignedBase.trailer_number,
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  const savedUnassigned = queries.getLoad(unassignedSaveId);
+  assert.equal(savedUnassigned?.status, "dispatched");
+  assert.equal(savedUnassigned?.truck_id, null);
+  assert.equal(savedUnassigned?.driver_id, null);
+
+  const cancelBoardId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Memphis, TN",
+    destination: "Nashville, TN",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 8000,
+    commodity: "Mixed",
+    rate: 500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.listLoads({ status: "active" }).some((load) => load.id === cancelBoardId), true);
+  queries.updateLoadStatus(cancelBoardId, "cancelled");
+  assert.equal(queries.getLoad(cancelBoardId)?.status, "cancelled");
+  assert.equal(
+    queries.listLoads({ status: "active" }).some((load) => load.id === cancelBoardId),
+    false,
+    "cancel removes the load from the board list",
+  );
+
+  const { addPayItem, listPayItems } = await import("../lib/pay-items");
+  const payLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Atlanta, GA",
+    destination: "Macon, GA",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 12000,
+    commodity: "Food",
+    rate: 1100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(listPayItems(payLoadId).length, 0, "financials start with no blank row");
+  addPayItem(payLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Smoke Test Shipper",
+    category: "flat_rate",
+    rate: 1100,
+    qty: 1,
+    total: 1100,
+    notes: "",
+  });
+  addPayItem(payLoadId, {
+    side: "expense",
+    bill_to: "driver",
+    payee: "Yoel Feder Smoke",
+    category: "lumper",
+    rate: 150,
+    qty: 1,
+    total: 150,
+    notes: "",
+  });
+  const payRows = listPayItems(payLoadId);
+  assert.equal(payRows.length, 2, "add line item appends without a blank row");
+  assert.equal(payRows.filter((item) => item.bill_to === "customer").length, 1);
+  assert.equal(payRows.filter((item) => item.bill_to === "driver").length, 1);
+  assert.equal(queries.getLoad(payLoadId)?.rate, 1100);
 
   queries.assignLoad(loadId, truckId, driverId);
   const assigned = queries.getLoad(loadId);
@@ -3362,7 +3609,7 @@ Continuous reefer. Two load locks.
   const loadStops = await import("../lib/stops");
   const defaultStops = loadStops.ensureDefaultStops(clonedId);
   assert.ok(defaultStops.length >= 2);
-  loadStops.addStop(clonedId, { kind: "stopoff", name: "Nashville DC", city: "Nashville", state: "TN" });
+  loadStops.addStop(clonedId, { kind: "pickup", name: "Nashville DC", city: "Nashville", state: "TN" });
   assert.equal(loadStops.listStops(clonedId).length, defaultStops.length + 1);
 
   const templates = await import("../lib/templates");
@@ -3427,6 +3674,52 @@ Continuous reefer. Two load locks.
   assert.equal(queries.getTruck(truckId)?.vin, "1FTSW21P04EB12345");
   assert.equal(queries.getTruck(truckId)?.model, "Cascadia");
   assert.equal(queries.getTruck(truckId)?.notes, "Shop next week");
+  queries.updateTruck(truckId, {
+    unit_number: smokeTruck.unit_number,
+    type: "reefer",
+    capacity_lbs: smokeTruck.capacity_lbs,
+    status: smokeTruck.status,
+    vin: "1FTSW21P04EB12345",
+    plate: "TN-SMOKE",
+    year: "2022",
+    make: "Freightliner",
+    model: "Cascadia",
+    notes: "Shop next week",
+    active: 1,
+  });
+  assert.equal(queries.getTruck(truckId)?.type, "reefer", "saving Reefer stays Reefer");
+  const typeTrailerId = queries.createTrailer({
+    unit_number: "REEF-SAVE",
+    type: "dry_van",
+    status: "available",
+  });
+  const typeTrailer = queries.getTrailer(typeTrailerId);
+  assert.ok(typeTrailer);
+  queries.updateTrailer(typeTrailerId, {
+    unit_number: typeTrailer.unit_number,
+    type: "reefer",
+    orbcomm_asset_id: typeTrailer.orbcomm_asset_id,
+    registration_issued: typeTrailer.registration_issued,
+    registration_expires: typeTrailer.registration_expires,
+    dot_inspected_on: typeTrailer.dot_inspected_on,
+    dot_expires: typeTrailer.dot_expires,
+    status: typeTrailer.status,
+    vin: typeTrailer.vin,
+    plate: typeTrailer.plate,
+    truck_id: typeTrailer.truck_id,
+    notes: typeTrailer.notes,
+    reefer_setpoint_f: typeTrailer.reefer_setpoint_f,
+    active: typeTrailer.active,
+  });
+  assert.equal(queries.getTrailer(typeTrailerId)?.type, "reefer", "saving trailer Reefer stays Reefer");
+  const truckFormSrc = fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8");
+  const trailerFormSrc = fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8");
+  assert.match(truckFormSrc, /truck\?\.type \|\| "reefer"/);
+  assert.match(trailerFormSrc, /trailer\?\.type \|\| "reefer"/);
+  assert.match(loadFormSource, /reefer_53/);
+  const fleetFormShared = fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8");
+  assert.match(fleetFormShared, /\|\| "reefer"/);
+  assert.doesNotMatch(fleetFormShared, /\|\| "dry_van"/);
   assert.equal(isClosedStatus("completed"), true);
 
   queries.deleteLocation(oneOffShipper);

@@ -33,9 +33,10 @@ export function LoadWorkspace({
   docsRequested,
   smsConfigured,
   role,
+  returnTo = "/board",
   children,
 }: {
-  loadId: number;
+  loadId: number | null;
   status: string;
   initialTab: string;
   loadSummary: string;
@@ -46,6 +47,7 @@ export function LoadWorkspace({
   docsRequested: boolean;
   smsConfigured: boolean;
   role: string;
+  returnTo?: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -59,6 +61,7 @@ export function LoadWorkspace({
   const [dirty, setDirty] = useState(false);
   const [canSubmit, setCanSubmit] = useState(true);
   const [pending, setPending] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const markDirty = useCallback(() => setDirty(true), []);
   const clearDirty = useCallback(() => setDirty(false), []);
   const setSubmitState = useCallback((state: { canSubmit: boolean; pending: boolean }) => {
@@ -117,6 +120,7 @@ export function LoadWorkspace({
   }
 
   async function sendSms(kind: "message" | "load_info", body?: string) {
+    if (!loadId) return;
     const formData = new FormData();
     formData.set("load_id", String(loadId));
     formData.set("kind", kind);
@@ -154,15 +158,16 @@ export function LoadWorkspace({
           <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
             {pending ? "Saving…" : "Save"}
           </button>
-          <button className="btn load-tab-back" type="button" onClick={() => confirmLeave("/board")}>
-            Back to board
+          <button className="btn load-tab-back" type="button" onClick={() => confirmLeave(returnTo)}>
+            Close
           </button>
         </div>
       </div>
 
+      {loadId ? (
       <div className="load-actions mb-4 flex flex-wrap items-center gap-2 px-3 py-2">
         <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">Load Actions</span>
-        <ActionMenu label="Load Log">
+        <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
               Log Check Call
@@ -172,8 +177,8 @@ export function LoadWorkspace({
             View Load Log
           </button>
         </ActionMenu>
-        <ActionMenu label="Dispatch and Tracking">
-          <button type="button" className="menu-item" onClick={() => setTab("assets")}>
+        <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+          <button type="button" className="menu-item" onClick={() => setTab("log")}>
             Tracking and status
           </button>
           {canSendSms(role) ? (
@@ -208,7 +213,7 @@ export function LoadWorkspace({
             </>
           ) : null}
         </ActionMenu>
-        <ActionMenu label="Load Documents">
+        <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
             View load docs
           </button>
@@ -226,7 +231,7 @@ export function LoadWorkspace({
           />
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
-        <ActionMenu label="Admin / Financials">
+        <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           {canViewLoadFinancials(role) ? (
             <MenuAction
               label="Send to Accounting"
@@ -267,7 +272,7 @@ export function LoadWorkspace({
           ) : null}
         </ActionMenu>
         ) : null}
-        <ActionMenu label="Copy / Cancel / Archive">
+        <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           <form action={cloneLoadAction}>
             <input type="hidden" name="load_id" value={loadId} />
             <button className="menu-item w-full text-left" type="submit">
@@ -278,11 +283,19 @@ export function LoadWorkspace({
             loadId={loadId}
             status="completed"
             label="Archive This Load"
+            returnTo={returnTo}
             disabled={status === "completed" || status === "cancelled"}
           />
-          <StatusAction loadId={loadId} status="cancelled" label="Cancel This Load" disabled={status === "cancelled"} />
+          <StatusAction
+            loadId={loadId}
+            status="cancelled"
+            label="Cancel This Load"
+            returnTo={returnTo}
+            disabled={status === "cancelled"}
+          />
         </ActionMenu>
       </div>
+      ) : null}
 
       <div onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
         {children}
@@ -291,16 +304,29 @@ export function LoadWorkspace({
   );
 }
 
-function ActionMenu({ label, children }: { label: string; children: React.ReactNode }) {
+function ActionMenu({
+  label,
+  openMenu,
+  setOpenMenu,
+  children,
+}: {
+  label: string;
+  openMenu: string | null;
+  setOpenMenu: (label: string | null) => void;
+  children: React.ReactNode;
+}) {
+  const open = openMenu === label;
   return (
-    <details className="relative">
-      <summary className="btn load-action-btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+    <div
+      className="relative"
+      onMouseEnter={() => setOpenMenu(label)}
+      onMouseLeave={() => setOpenMenu(null)}
+    >
+      <button type="button" className="btn load-action-btn">
         {label}
-      </summary>
-      <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg">
-        {children}
-      </div>
-    </details>
+      </button>
+      {open ? <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg">{children}</div> : null}
+    </div>
   );
 }
 
@@ -339,11 +365,13 @@ function StatusAction({
   loadId,
   status,
   label,
+  returnTo,
   disabled,
 }: {
   loadId: number;
   status: string;
   label: string;
+  returnTo: string;
   disabled?: boolean;
 }) {
   const router = useRouter();
@@ -358,9 +386,14 @@ function StatusAction({
         const formData = new FormData();
         formData.set("load_id", String(loadId));
         formData.set("status", status);
+        formData.set("return_to", returnTo);
         const result = await updateLoadStatusAction(formData);
         if (!result.ok) {
           window.alert(result.error);
+          return;
+        }
+        if (status === "cancelled") {
+          router.push(returnTo);
           return;
         }
         router.refresh();

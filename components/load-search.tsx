@@ -9,6 +9,7 @@ import { deleteSearchReportFormAction, saveSearchReportAction } from "@/lib/acti
 import { formatDateTime } from "@/lib/format";
 import { US_STATES } from "@/lib/locations";
 import { searchLoadsAction } from "@/lib/search-actions";
+import { overlayHref } from "@/lib/load-page-shared";
 import {
   SEARCH_COLUMNS,
   defaultSearchColumns,
@@ -32,11 +33,43 @@ type Props = {
   initialResults: LoadView[];
 };
 
+const SEARCH_STATE_KEY = "msetms-search-state";
+
 export function LoadSearch({ customers, drivers, trucks, trailers, reports, initialResults }: Props) {
   const [criteria, setCriteria] = useState<LoadSearchCriteria>(defaultSearchCriteria());
   const [columns, setColumns] = useState<SearchColumnKey[]>(defaultSearchColumns());
   const [results, setResults] = useState<LoadView[]>(initialResults);
   const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        criteria?: LoadSearchCriteria;
+        columns?: SearchColumnKey[];
+        results?: LoadView[];
+        searched?: boolean;
+      };
+      if (saved.criteria) setCriteria(saved.criteria);
+      if (saved.columns?.length) setColumns(saved.columns);
+      if (saved.results) setResults(saved.results);
+      if (saved.searched) setSearched(true);
+    } catch {
+      // ignore a bad saved search
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        SEARCH_STATE_KEY,
+        JSON.stringify({ criteria, columns, results, searched }),
+      );
+    } catch {
+      // ignore quota
+    }
+  }, [criteria, columns, results, searched]);
   const [reportName, setReportName] = useState("");
   const [selectedReport, setSelectedReport] = useState("");
   const [saveState, saveAction, savePending] = useActionState(saveSearchReportAction, null);
@@ -397,7 +430,7 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
                 <tr key={load.id}>
                   {visible.has("load_id") ? (
                     <td>
-                      <Link href={`/loads/${load.id}`} className="font-mono font-semibold underline">
+                      <Link href={overlayHref("/search", load.id)} className="font-mono font-semibold underline">
                         {load.load_number}
                       </Link>
                     </td>

@@ -3,7 +3,7 @@ import { canViewLoadFinancials } from "./settings-shared";
 export const LOAD_TABS = [
   { value: "basics", label: "Load Basics" },
   { value: "customer", label: "Customer Info" },
-  { value: "assets", label: "Carrier / Asset Info" },
+  { value: "assets", label: "Carrier and Driver Info" },
   { value: "stops", label: "Edit Stops" },
   { value: "financials", label: "Financials" },
 ] as const;

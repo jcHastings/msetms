@@ -23,6 +23,8 @@ import {
   listUpcomingCompliance,
   listWatchedLoads,
 } from "@/lib/queries";
+import { LoadOverlay } from "@/components/load-overlay";
+import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { labelForTruckType } from "@/lib/types";
@@ -32,9 +34,11 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; q?: string }>;
+  searchParams: Promise<{ kind?: string; q?: string; open?: string }>;
 }) {
   const params = await searchParams;
+  const openId = parseOpenLoadId(params.open);
+  const current = { kind: params.kind, q: params.q };
   const dispatcher = await getSignedInDispatcher();
   const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
   const stats = getDashboardStats();
@@ -134,7 +138,7 @@ export default async function DashboardPage({
             <ul className="mt-3 space-y-2 text-sm">
               {watched.map((load) => (
                 <li key={load.id} className="flex justify-between gap-2">
-                  <Link href={`/loads/${load.id}`} className="font-mono font-semibold hover:underline">
+                  <Link href={overlayHref("/", load.id, current)} className="font-mono font-semibold hover:underline">
                     {load.load_number}
                   </Link>
                   <LoadStatusBadge status={load.status} />
@@ -179,7 +183,7 @@ export default async function DashboardPage({
                     </td>
                     <td className="whitespace-nowrap">{formatDateTime(load.pickup_start)}</td>
                     <td className="text-right">
-                      <Link href={`/loads/${load.id}`} className="btn btn-ghost">
+                      <Link href={overlayHref("/", load.id, current)} className="btn btn-ghost">
                         Open
                       </Link>
                     </td>
@@ -265,7 +269,7 @@ export default async function DashboardPage({
                   return (
                   <tr key={load.id}>
                     <td>
-                      <Link href={`/loads/${load.id}`} className="font-mono text-sm font-semibold hover:underline">
+                      <Link href={overlayHref("/", load.id, current)} className="font-mono text-sm font-semibold hover:underline">
                         {load.load_number}
                       </Link>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>
@@ -310,6 +314,7 @@ export default async function DashboardPage({
           )}
         </section>
       </div>
+      {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/", current)} /> : null}
     </>
   );
 }

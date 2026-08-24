@@ -18,6 +18,8 @@ import {
   markCustomerQboMapped,
   markQboInvoice,
 } from "../queries";
+import { labelForPayCategory } from "../load-page-shared";
+import { customerInvoicePayItems } from "../pay-items";
 import type { LoadView } from "../types";
 
 const MINOR_VERSION = "75";
@@ -134,8 +136,16 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 }
 
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
-  const rate = requireCustomerRate(load);
+  const payItems = customerInvoicePayItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
+  if (payItems.length) {
+    return payItems.map((item) => ({
+      name: labelForPayCategory(item.category),
+      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+      amount: item.total ?? 0,
+    }));
+  }
+  const rate = requireCustomerRate(load);
   const lines: QboInvoiceLine[] = [
     { name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
   ];

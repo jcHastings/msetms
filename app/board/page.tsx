@@ -15,6 +15,8 @@ import {
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
+import { LoadOverlay } from "@/components/load-overlay";
+import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
@@ -25,12 +27,14 @@ export const dynamic = "force-dynamic";
 export default async function BoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; date?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string }>;
 }) {
   const params = await searchParams;
   const status = params.status ?? "active";
   const date = params.date ?? "";
   const q = params.q ?? "";
+  const openId = parseOpenLoadId(params.open);
+  const current = { status, date, q };
   const loads = listLoads({ status, date, q });
   const relayLabels = extraRelayLabelsByLoad(loads);
   const reefers = await getReeferSnapshots();
@@ -91,7 +95,7 @@ export default async function BoardPage({
                   return (
                   <tr key={load.id} className={load.status === "available" ? "shadow-[inset_3px_0_0_#d4a017]" : ""}>
                     <td>
-                      <Link href={`/loads/${load.id}`} className="font-mono text-sm font-semibold hover:underline">
+                      <Link href={overlayHref("/board", load.id, current)} className="font-mono text-sm font-semibold hover:underline">
                         {load.load_number}
                       </Link>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>
@@ -189,7 +193,7 @@ export default async function BoardPage({
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}
-                        <Link href={`/loads/${load.id}`} className="btn btn-ghost">
+                        <Link href={overlayHref("/board", load.id, current)} className="btn btn-ghost">
                           Edit
                         </Link>
                       </div>
@@ -202,6 +206,7 @@ export default async function BoardPage({
           </div>
         )}
       </div>
+      {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} /> : null}
     </>
   );
 }

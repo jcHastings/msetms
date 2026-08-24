@@ -1,16 +1,23 @@
 import Link from "next/link";
 import { LoadForm } from "@/components/load-form";
+import { LoadWorkspace } from "@/components/load-workspace";
 import { PageHeader } from "@/components/page-header";
 import { createLoadAction } from "@/lib/actions";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
-import { getCompanySettings, loadFormSettings } from "@/lib/settings";
+import { equipmentOptions, getCompanySettings, loadFormSettings } from "@/lib/settings";
+import { EQUIPMENT_REQUIRED } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default function NewLoadPage() {
+export default async function NewLoadPage() {
   const customers = listCustomers();
   const trucks = listTrucks();
   const drivers = listDrivers();
+  const dispatcher = await getSignedInDispatcher();
+  const role = dispatcher?.role ?? "dispatcher";
+  const equipment = equipmentOptions();
+  const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
 
   return (
     <>
@@ -40,17 +47,34 @@ export default function NewLoadPage() {
           .
         </div>
       ) : (
-        <LoadForm
-          customers={customers}
-          trucks={trucks}
-          trailers={listTrailers()}
-          locations={listLocations()}
-          drivers={drivers}
-          defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
-          {...loadFormSettings()}
-          action={createLoadAction}
-          submitLabel="Create load"
-        />
+        <LoadWorkspace
+          loadId={null}
+          status="available"
+          initialTab="basics"
+          loadSummary=""
+          driverAssigned={false}
+          driverPhone=""
+          dispatcherId={null}
+          dispatchers={[]}
+          docsRequested={false}
+          smsConfigured={false}
+          role={role}
+          returnTo="/board"
+        >
+          <LoadForm
+            customers={customers}
+            trucks={trucks}
+            trailers={listTrailers()}
+            locations={listLocations()}
+            drivers={drivers}
+            defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
+            equipmentChoices={equipmentChoices}
+            returnTo="/board"
+            {...loadFormSettings()}
+            action={createLoadAction}
+            submitLabel="Create load"
+          />
+        </LoadWorkspace>
       )}
     </>
   );

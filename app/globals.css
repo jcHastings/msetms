@@ -308,3 +308,32 @@ summary.btn.load-action-btn:hover {
 .row-actions-btn:hover {
   background: #f3e6b8;
 }
+
+.load-overlay-backdrop,
+.pay-item-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1.25rem;
+  background: rgba(11, 31, 58, 0.45);
+  overflow: auto;
+}
+
+.load-overlay-panel,
+.pay-item-dialog {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 2.5rem);
+  overflow: auto;
+  background: #eef2f6;
+  border-radius: 0.85rem;
+  box-shadow: 0 18px 50px rgba(11, 31, 58, 0.28);
+}
+
+.pay-item-dialog {
+  width: min(520px, 100%);
+  background: #ffffff;
+  margin-top: 3rem;
+}

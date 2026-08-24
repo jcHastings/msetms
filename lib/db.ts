@@ -311,6 +311,42 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "docs_requested", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "docs_requested_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "ready_to_invoice", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "truck_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "branch", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "declared_value", "REAL");
+  ensureColumn(db, "loads", "load_size", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "condition_new_used", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "equipment_length", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "temperature_f", "REAL");
+  ensureColumn(db, "loads", "temp_low_f", "REAL");
+  ensureColumn(db, "loads", "temp_high_f", "REAL");
+  ensureColumn(db, "loads", "temp_time_tolerance", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "container_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "last_free_day", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "public_notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "posting_notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "contact_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "contact_email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "contact_phone", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "contact_ext", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "customer_reference", "TEXT NOT NULL DEFAULT ''");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_pay_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      side TEXT NOT NULL,
+      bill_to TEXT NOT NULL,
+      payee TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL,
+      rate REAL,
+      qty REAL,
+      total REAL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_pay_items_load ON load_pay_items(load_id, side);
+  `);
   ensureColumn(db, "customers", "credit_hold", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "customers", "qbo_customer_id", "TEXT NOT NULL DEFAULT ''");
@@ -366,6 +402,30 @@ export function migrate(db: Database): void {
       notes TEXT NOT NULL DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS load_pay_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      side TEXT NOT NULL,
+      bill_to TEXT NOT NULL,
+      payee TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL,
+      rate REAL,
+      qty REAL,
+      total REAL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_pay_items_load ON load_pay_items(load_id, side);
+  `);
+
+  ensureColumn(db, "load_stops", "street", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "zip", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "phone", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "cargo", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "reference", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "instructions", "TEXT NOT NULL DEFAULT ''");
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS load_relays (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
