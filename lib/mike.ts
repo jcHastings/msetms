@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
-import { closestTrucksToCity, type MikeGpsPoint } from "./city-coords-shared";
+import { closestTrucksToCity, type ClosestCityResult, type MikeGpsPoint } from "./city-coords-shared";
+import { canonicalFleetKey, unitDigits } from "./fleet-import-shared";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
-import { getSamsaraFleet, isLiveSamsaraGps } from "./integrations/samsara";
+import { getSamsaraFleet, isLiveSamsaraGps, resetSamsaraCache } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "./mike-shared";
 
@@ -48,8 +49,9 @@ export async function writeMikeHistory(messages: MikeMessage[]): Promise<void> {
 }
 
 export function mikeGpsPointsFromFleet(input: {
-  liveGps: boolean;
+  liveGps?: boolean;
   trucks: Array<{
+    id?: number;
     unit_number: string;
     samsara_vehicle_id: string;
     gps_latitude?: number | null;
@@ -58,6 +60,8 @@ export function mikeGpsPointsFromFleet(input: {
     gps_source?: string;
   }>;
   locations: Array<{
+    truckId?: number | null;
+    vehicleId?: string;
     unitNumber: string;
     latitude: number | null;
     longitude: number | null;
@@ -66,20 +70,75 @@ export function mikeGpsPointsFromFleet(input: {
   }>;
 }): MikeGpsPoint[] {
   return input.trucks.map((truck) => {
-    const live = input.locations.find((item) => item.unitNumber === truck.unit_number && item.source === "samsara");
-    const lat = live?.latitude ?? (truck.gps_source === "samsara" ? truck.gps_latitude ?? null : null);
-    const lng = live?.longitude ?? (truck.gps_source === "samsara" ? truck.gps_longitude ?? null : null);
-    const address = live?.address || (truck.gps_source === "samsara" ? truck.gps_address || "" : "");
-    const hasPosition = Boolean(input.liveGps || truck.gps_source === "samsara") && lat != null && lng != null;
+    const live = input.locations.find((item) => {
+      if (item.source !== "samsara") return false;
+      if (truck.id != null && item.truckId === truck.id) return true;
+      if (
+        truck.samsara_vehicle_id &&
+        item.vehicleId &&
+        canonicalFleetKey(item.vehicleId) === canonicalFleetKey(truck.samsara_vehicle_id)
+      ) {
+        return true;
+      }
+      const locUnit = unitDigits(item.unitNumber);
+      const truckUnit = unitDigits(truck.unit_number);
+      return Boolean(locUnit && truckUnit && locUnit === truckUnit);
+    });
+    const persisted = truck.gps_source === "samsara";
+    const lat = live?.latitude ?? (persisted ? truck.gps_latitude ?? null : null);
+    const lng = live?.longitude ?? (persisted ? truck.gps_longitude ?? null : null);
+    const address = live?.address || (persisted ? truck.gps_address || "" : "");
+    const hasPosition = lat != null && lng != null;
+    const note = hasPosition
+      ? undefined
+      : truck.samsara_vehicle_id
+        ? "no last GPS ping"
+        : "no Samsara ID";
     return {
       unit: truck.unit_number,
       samsaraVehicleId: truck.samsara_vehicle_id || null,
       lat: hasPosition ? lat : null,
       lng: hasPosition ? lng : null,
-      address: hasPosition ? address || "last GPS" : null,
+      address: hasPosition ? address || "last GPS" : address || null,
       hasPosition,
+      note,
     };
   });
+}
+
+export function buildMikeGpsContext(
+  question: string,
+  input: {
+    trucks: Array<{
+      id?: number;
+      unit_number: string;
+      samsara_vehicle_id: string;
+      gps_latitude?: number | null;
+      gps_longitude?: number | null;
+      gps_address?: string;
+      gps_source?: string;
+    }>;
+    locations: Array<{
+      truckId?: number | null;
+      vehicleId?: string;
+      unitNumber: string;
+      latitude: number | null;
+      longitude: number | null;
+      address: string;
+      source: string;
+    }>;
+    tmsLocations?: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }>;
+  },
+): { gps: MikeGpsPoint[]; skippedNoPing: number; closestToCity: ClosestCityResult | null } {
+  const gps = mikeGpsPointsFromFleet({
+    trucks: input.trucks,
+    locations: input.locations.filter((item) => item.source === "samsara"),
+  });
+  return {
+    gps,
+    skippedNoPing: gps.filter((item) => !item.hasPosition).length,
+    closestToCity: closestTrucksToCity(question, gps, input.tmsLocations ?? []),
+  };
 }
 
 async function buildOpsSnapshot(question = ""): Promise<string> {
@@ -102,13 +161,6 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     active: driver.active !== 0,
   }));
   const truckRows = listTrucks();
-  const trucks = truckRows.map((truck) => ({
-    unit: truck.unit_number,
-    status: truck.status,
-    type: truck.type,
-    driver: truck.driver_name || "none",
-    samsaraVehicleId: truck.samsara_vehicle_id || null,
-  }));
   const trailers = listTrailers().map((trailer) => ({
     unit: trailer.unit_number,
     type: trailer.type,
@@ -123,32 +175,52 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     lat: location.latitude,
     lng: location.longitude,
   }));
+  if (/\b(closest|nearest|near|gps|where)\b/i.test(question)) {
+    resetSamsaraCache();
+  }
   const fleet = await getSamsaraFleet();
   const liveGps = Boolean(
     fleet.tokenSet &&
       fleet.mode === "samsara" &&
       fleet.locations.some((item) => isLiveSamsaraGps(item) && item.latitude != null && item.longitude != null),
   );
-  const gps = mikeGpsPointsFromFleet({
-    liveGps: liveGps || truckRows.some((truck) => truck.gps_source === "samsara"),
+  const { gps, skippedNoPing, closestToCity } = buildMikeGpsContext(question, {
     trucks: truckRows,
     locations: fleet.locations,
+    tmsLocations: locations,
+  });
+  const trucks = truckRows.map((truck) => {
+    const point = gps.find((item) => item.unit === truck.unit_number);
+    return {
+      unit: truck.unit_number,
+      status: truck.status,
+      type: truck.type,
+      driver: truck.driver_name || "none",
+      samsaraVehicleId: truck.samsara_vehicle_id || null,
+      lastGps: point
+        ? {
+            lat: point.lat,
+            lng: point.lng,
+            city: point.address,
+            hasPosition: point.hasPosition,
+            note: point.note ?? null,
+          }
+        : null,
+    };
   });
   const hos = fleet.hos
-    .filter((item) => item.source === "samsara" || liveGps)
+    .filter((item) => item.source === "samsara")
     .map((item) => ({
       driver: item.driverName,
       duty: item.dutyStatus,
       driveRemainingMs: item.driveRemainingMs,
       source: item.source,
     }));
-  const skippedNoPing = gps.filter((item) => !item.hasPosition).length;
   const assignedNames = new Set(loads.filter((load) => load.driver !== "unassigned").map((load) => load.driver));
   const emptyDrivers = drivers.filter((driver) => driver.active && !assignedNames.has(driver.name)).map((driver) => driver.name);
   const goingEmptySoon = loads
     .filter((load) => load.emptySoon && load.driver !== "unassigned")
     .map((load) => ({ driver: load.driver, load: load.load, status: load.status, destination: load.destination }));
-  const closestToCity = closestTrucksToCity(question, gps, locations);
 
   return JSON.stringify({
     samsara: { tokenSet: fleet.tokenSet, mode: fleet.mode, liveGps, error: fleet.error || null },
@@ -188,7 +260,7 @@ export async function askMike(question: string, history: MikeMessage[]): Promise
       {
         role: "system",
         content:
-          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. If GPS is missing, say you do not have a position. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
+          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. Closest-to-city: use closestToCity.ranked when it has trucks — name the unit, miles, and last city. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when ranked trucks exist. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),

@@ -16,6 +16,7 @@ export type MikeGpsPoint = {
   address?: string | null;
   hasPosition: boolean;
   samsaraVehicleId?: string | null;
+  note?: string;
 };
 
 export type ClosestCityResult = {

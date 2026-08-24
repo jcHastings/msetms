@@ -436,6 +436,13 @@ async function main() {
   assert.match(mikeSrc, /closestToCity/);
   assert.match(mikeSrc, /skippedNoPing/);
   assert.match(mikeSrc, /mikeGpsPointsFromFleet/);
+  assert.match(mikeSrc, /buildMikeGpsContext/);
+  assert.match(mikeSrc, /resetSamsaraCache/);
+  assert.match(mikeSrc, /Do not say you have no GPS when ranked trucks exist/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"),
+    /export function resetSamsaraCache/,
+  );
   assert.match(mikeSrc, /MIKE_OPENAI_MODEL/);
   assert.match(mikeSrc, /MIKE_MISSING_KEY_MESSAGE/);
   assert.doesNotMatch(mikeSrc, /board only/);
@@ -3691,11 +3698,11 @@ Continuous reefer. Two load locks.
   queries.setTruckActive(assignedTruckId, false);
   assert.equal(queries.getTruck(assignedTruckId)?.active, 0);
 
-  const { mikeGpsPointsFromFleet } = await import("../lib/mike");
+  const { buildMikeGpsContext, mikeGpsPointsFromFleet } = await import("../lib/mike");
   const mikeGps = mikeGpsPointsFromFleet({
-    liveGps: true,
     trucks: [
       {
+        id: 36,
         unit_number: "36",
         samsara_vehicle_id: "sam-36",
         gps_latitude: 40.8448,
@@ -3704,6 +3711,7 @@ Continuous reefer. Two load locks.
         gps_source: "samsara",
       },
       {
+        id: 32,
         unit_number: "32",
         samsara_vehicle_id: "sam-32",
         gps_latitude: 35.4676,
@@ -3716,6 +3724,70 @@ Continuous reefer. Two load locks.
   });
   assert.equal(mikeGps.find((row) => row.unit === "36")?.address, "Bronx, NY");
   assert.equal(mikeGps.find((row) => row.unit === "32")?.address, "Oklahoma City, OK");
+  const liveByVehicleId = buildMikeGpsContext("what truck is closest to Oklahoma City?", {
+    trucks: [
+      { id: 36, unit_number: "36", samsara_vehicle_id: "sam-36" },
+      { id: 32, unit_number: "32", samsara_vehicle_id: "sam-32" },
+      { id: 99, unit_number: "99", samsara_vehicle_id: "sam-99" },
+    ],
+    locations: [
+      {
+        truckId: 32,
+        vehicleId: "sam-32",
+        unitNumber: "32",
+        latitude: 35.4676,
+        longitude: -97.5164,
+        address: "Oklahoma City, OK",
+        source: "samsara",
+      },
+      {
+        vehicleId: "sam-36",
+        unitNumber: "Unit 36",
+        latitude: 40.8448,
+        longitude: -73.8648,
+        address: "Bronx, NY",
+        source: "samsara",
+      },
+    ],
+  });
+  assert.equal(liveByVehicleId.closestToCity?.found, true);
+  assert.equal(liveByVehicleId.closestToCity?.ranked[0]?.unit, "32");
+  assert.equal(liveByVehicleId.closestToCity?.ranked[0]?.address, "Oklahoma City, OK");
+  assert.notEqual(liveByVehicleId.closestToCity?.ranked[0]?.unit, "36");
+  assert.equal(liveByVehicleId.skippedNoPing, 1);
+  assert.equal(liveByVehicleId.gps.find((row) => row.unit === "99")?.note, "no last GPS ping");
+  assert.equal(liveByVehicleId.gps.find((row) => row.unit === "36")?.hasPosition, true);
+  const matchByIdOnly = buildMikeGpsContext("what truck is closest to Oklahoma City?", {
+    trucks: [{ id: 40, unit_number: "40", samsara_vehicle_id: "sam-40" }],
+    locations: [
+      {
+        vehicleId: "sam-40",
+        unitNumber: "",
+        latitude: 35.4676,
+        longitude: -97.5164,
+        address: "Oklahoma City, OK",
+        source: "samsara",
+      },
+    ],
+  });
+  assert.equal(matchByIdOnly.closestToCity?.ranked[0]?.unit, "40");
+  assert.equal(matchByIdOnly.gps[0]?.hasPosition, true);
+  const ignoreDemo = buildMikeGpsContext("what truck is closest to Oklahoma City?", {
+    trucks: [{ id: 40, unit_number: "40", samsara_vehicle_id: "sam-40" }],
+    locations: [
+      {
+        vehicleId: "sam-40",
+        unitNumber: "40",
+        latitude: 35.4676,
+        longitude: -97.5164,
+        address: "Oklahoma City, OK",
+        source: "demo",
+      },
+    ],
+  });
+  assert.equal(ignoreDemo.gps[0]?.hasPosition, false);
+  assert.equal(ignoreDemo.closestToCity?.ranked.length, 0);
+  assert.equal(ignoreDemo.skippedNoPing, 1);
 
   closeDb();
   const reopened = getDb();
