@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateLoadStatusAction } from "@/lib/actions";
+import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import { LOAD_STATUSES, labelForLoadStatus, type LoadStatus } from "@/lib/types";
 
 export function LoadStatusSelect({
@@ -30,7 +31,7 @@ export function LoadStatusSelect({
   return (
     <div className="min-w-36">
       <select
-        className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium"
+        className={`w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium ${loadStatusBadgeClass(status)}`}
         defaultValue={status}
         disabled={pending}
         onChange={(event) => onChange(event.target.value)}

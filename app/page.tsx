@@ -27,6 +27,7 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
+import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 
 export const dynamic = "force-dynamic";
 
@@ -136,8 +137,11 @@ export default async function DashboardPage({
           ) : (
             <ul className="mt-3 space-y-2 text-sm">
               {watched.map((load) => (
-                <li key={load.id} className="flex justify-between gap-2">
-                  <Link href={overlayHref("/", load.id, current)} className="font-mono font-semibold hover:underline">
+                <li key={load.id} className={`flex justify-between gap-2 ${loadStatusRowClass(load.status)} px-2 py-1`}>
+                  <Link
+                    href={overlayHref("/", load.id, current)}
+                    className={`font-mono font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                  >
                     {load.load_number}
                   </Link>
                   <LoadStatusBadge status={load.status} />
@@ -170,9 +174,14 @@ export default async function DashboardPage({
               </thead>
               <tbody>
                 {unassigned.map((load) => (
-                  <tr key={load.id}>
+                  <tr key={load.id} className={loadStatusRowClass(load.status)}>
                     <td>
-                      <div className="font-mono text-sm font-semibold">{load.load_number}</div>
+                      <div className={`font-mono text-sm font-semibold ${loadStatusTextClass(load.status)}`}>
+                        {load.load_number}
+                      </div>
+                      <div className="mt-1">
+                        <LoadStatusBadge status={load.status} />
+                      </div>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>
                     </td>
                     <td>
@@ -265,9 +274,12 @@ export default async function DashboardPage({
                   const tractorLocation = locationForLoad(fleet, load);
                   const driverHos = hosForLoad(fleet, load);
                   return (
-                  <tr key={load.id}>
+                  <tr key={load.id} className={loadStatusRowClass(load.status)}>
                     <td>
-                      <Link href={overlayHref("/", load.id, current)} className="font-mono text-sm font-semibold hover:underline">
+                      <Link
+                        href={overlayHref("/", load.id, current)}
+                        className={`font-mono text-sm font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                      >
                         {load.load_number}
                       </Link>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>

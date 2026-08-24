@@ -17,6 +17,7 @@ import {
 } from "@/lib/integrations/samsara";
 import { LoadOverlay } from "@/components/load-overlay";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
+import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
@@ -93,9 +94,12 @@ export default async function BoardPage({
                   const tractorLocation = locationForLoad(fleet, load);
                   const driverHos = hosForLoad(fleet, load);
                   return (
-                  <tr key={load.id} className={load.status === "available" ? "shadow-[inset_3px_0_0_#d4a017]" : ""}>
+                  <tr key={load.id} className={loadStatusRowClass(load.status)}>
                     <td>
-                      <Link href={overlayHref("/board", load.id, current)} className="font-mono text-sm font-semibold hover:underline">
+                      <Link
+                        href={overlayHref("/board", load.id, current)}
+                        className={`font-mono text-sm font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                      >
                         {load.load_number}
                       </Link>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>
