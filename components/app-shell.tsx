@@ -26,7 +26,7 @@ export function AppShell({
   const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-navy text-slate-100">
+      <aside className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col">
         <div className="border-b border-white/10 px-5 py-5">
           <Link href="/" className="block">
             <BrandMark variant="dark" size="sm" />

@@ -20,7 +20,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 - Richer load statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.
 - Status reason, cover-by, equipment required, hazmat, commodity class, seals, pallets/cases, team, lumper, detention start/stop, appointment confirmation, unload type, cancel reason.
 - Multi-stop (add / reorder / remove; at least two stops).
-- Load workspace tabs (Basics, Customer, Carrier/Asset, Stops, Financials) use navy + gold so the active tab is obvious. Load Actions is a distinct navy-button bar on a gray-blue strip, not white-on-white. Sidebar section labels use gold on navy.
+- Load workspace tabs (Basics, Customer, Carrier/Asset, Stops, Financials) sit on a navy bar with gold for the active tab (navy label). Load Actions is a gold-green strip with navy buttons and dark labels, not white-on-white. Action menus use cream panels with navy text. Dispatcher sidebar is navy with gold section labels and a gold active item.
 - **Relays** on Carrier / Asset (and markers on Basics): ordered legs with pickup/handoff, driver, optional truck/trailer, optional internal OO pay. Load-only — never a billed customer stop, never on the customer confirmation or invoice. Driver app shows “Your leg”. Board shows primary driver + “+1 relay”. Audit/log records who added or changed a relay.
 - Duplicate load and save/book **templates**.
 - Watch list (pin from the load).

@@ -66,7 +66,7 @@ export function NavLinks({ role }: { role: string }) {
     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
       {sections.map((section) => (
         <div key={section.title}>
-          <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold">
+          <div className="desk-nav-section px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em]">
             {section.title}
           </div>
           <div className="flex flex-col gap-0.5">
@@ -79,8 +79,8 @@ export function NavLinks({ role }: { role: string }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                    active ? "bg-gold text-navy" : "text-slate-100 hover:bg-white/15 hover:text-white"
+                  className={`desk-nav-link rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    active ? "desk-nav-link-active" : ""
                   }`}
                 >
                   {item.label}

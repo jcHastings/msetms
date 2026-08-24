@@ -161,45 +161,98 @@ button {
   display: block;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  color: #1c2b3c;
+  color: #0b1f3a;
   background: transparent;
   border: 0;
   cursor: pointer;
 }
 
 .menu-item:hover {
-  background: #e8eef5;
+  background: #f3e6b8;
+  color: #0b1f3a;
+}
+
+.desk-sidebar {
+  background: #0b1f3a;
+  color: #e8eef6;
+}
+
+.desk-sidebar .btn-ghost {
+  color: #d5deea;
+}
+
+.desk-sidebar .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.desk-nav-section {
+  color: #d4a017;
+}
+
+.desk-nav-link {
+  color: #d5deea;
+}
+
+.desk-nav-link:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.desk-nav-link-active {
+  background: #d4a017;
+  color: #0b1f3a;
+}
+
+.desk-nav-link-active:hover {
+  background: #b8860b;
+  color: #0b1f3a;
 }
 
 .load-tabs {
-  background: var(--navy);
+  background: #0b1f3a;
+  color: #e8eef6;
   border: 1px solid #0b1f3a;
   border-radius: 0.75rem 0.75rem 0 0;
 }
 
-.load-tab {
+button.load-tab {
   color: #d5deea;
   background: transparent;
+  border: 1px solid transparent;
 }
 
-.load-tab:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+button.load-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
-.load-tab-active {
-  background: var(--gold);
+button.load-tab-active,
+button.load-tab.load-tab-active {
+  background: #d4a017;
   color: #0b1f3a;
 }
 
-.load-tab-active:hover {
-  background: var(--gold-dark);
+button.load-tab-active:hover,
+button.load-tab.load-tab-active:hover {
+  background: #b8860b;
   color: #0b1f3a;
+}
+
+.load-tab-back {
+  background: transparent;
+  border-color: #d5deea;
+  color: #ffffff;
+}
+
+.load-tab-back:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .load-actions {
-  background: #e4ebf2;
-  border: 1px solid #b7c4d3;
+  background: #e4e6d4;
+  border: 1px solid #b7c08a;
   border-radius: 0.75rem;
 }
 
@@ -207,13 +260,21 @@ button {
   color: #0b1f3a;
 }
 
-.load-action-btn {
-  background: var(--navy);
+button.btn.load-action-btn,
+summary.btn.load-action-btn {
+  background: #0b1f3a;
   border-color: #0b1f3a;
-  color: #fff;
+  color: #ffffff;
 }
 
-.load-action-btn:hover {
-  background: var(--navy-mid);
-  color: #fff;
+button.btn.load-action-btn:hover,
+summary.btn.load-action-btn:hover {
+  background: #132a4a;
+  color: #ffffff;
+}
+
+.load-action-menu {
+  background: #f7f3e4;
+  border: 1px solid #0b1f3a;
+  color: #0b1f3a;
 }

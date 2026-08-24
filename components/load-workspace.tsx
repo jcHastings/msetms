@@ -154,7 +154,7 @@ export function LoadWorkspace({
           <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
             {pending ? "Saving…" : "Save"}
           </button>
-          <button className="btn btn-secondary" type="button" onClick={() => confirmLeave("/board")}>
+          <button className="btn load-tab-back" type="button" onClick={() => confirmLeave("/board")}>
             Back to board
           </button>
         </div>
@@ -297,7 +297,7 @@ function ActionMenu({ label, children }: { label: string; children: React.ReactN
       <summary className="btn load-action-btn cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         {label}
       </summary>
-      <div className="absolute z-20 mt-1 min-w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+      <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg">
         {children}
       </div>
     </details>
