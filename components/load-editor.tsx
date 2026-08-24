@@ -162,17 +162,14 @@ export async function LoadEditor({
               <TmsInvoicePanel
                 loadId={load.id}
                 status={load.status}
-                invoice={
-                  load.tms_invoice_number
-                    ? (() => {
-                        try {
-                          return buildTmsInvoice(load);
-                        } catch {
-                          return null;
-                        }
-                      })()
-                    : null
-                }
+                saved={Boolean(load.tms_invoice_number)}
+                invoice={(() => {
+                  try {
+                    return buildTmsInvoice(load);
+                  } catch {
+                    return null;
+                  }
+                })()}
               />
               <LoadPayItems
                 loadId={load.id}

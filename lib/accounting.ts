@@ -34,9 +34,9 @@ export function listReceivables(): Array<
     .filter((load) => load.status === "delivered" || load.status === "completed")
     .map((load) => ({
       ...load,
-      billed: Boolean(load.qbo_invoice_id),
+      billed: Boolean(load.tms_invoice_number || load.qbo_invoice_id),
       paid: Boolean(load.invoice_paid),
-      invoiceLabel: load.qbo_invoice_number || load.qbo_invoice_id || "Unbilled",
+      invoiceLabel: load.tms_invoice_number || load.qbo_invoice_number || load.qbo_invoice_id || "Unbilled",
     }));
 }
 

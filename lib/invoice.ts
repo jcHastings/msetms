@@ -28,12 +28,12 @@ export type TmsInvoiceModel = {
 };
 
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
-  const payItems = customerInvoicePayItems(load.id);
+  const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
   const lane = `${load.origin} → ${load.destination}`;
   if (payItems.length) {
     return payItems.map((item) => ({
       name: labelForPayCategory(item.category),
-      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+      description: `${load.load_number} ${lane}`,
       amount: item.total ?? 0,
     }));
   }

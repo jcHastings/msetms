@@ -4816,12 +4816,23 @@ Continuous reefer. Two load locks.
     rate: 150,
     qty: 1,
     total: 150,
-    notes: "",
+    notes: "internal lumper",
+  });
+  payItemsMod.addPayItem(invoiceLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Lumper",
+    category: "lumper",
+    rate: 150,
+    qty: 1,
+    total: 150,
+    notes: "do not bill lumper",
   });
   const invoiceLines = tmsCustomerInvoiceLines(queries.getLoad(invoiceLoadId)!);
   assert.equal(invoiceLines.length, 1);
   assert.equal(invoiceLines[0]?.amount, 1500);
   assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
+  assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
   const made = await createTmsInvoice(invoiceLoadId);
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");

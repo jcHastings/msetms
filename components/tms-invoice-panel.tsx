@@ -9,10 +9,12 @@ export function TmsInvoicePanel({
   loadId,
   status,
   invoice,
+  saved = false,
 }: {
   loadId: number;
   status: string;
   invoice: TmsInvoiceModel | null;
+  saved?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(createTmsInvoiceAction, null);
   const canInvoice = status === "delivered" || status === "completed";
@@ -77,7 +79,7 @@ export function TmsInvoicePanel({
       <form action={formAction} className="mt-4">
         <input type="hidden" name="load_id" value={loadId} />
         <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
-          {pending ? "Creating…" : invoice ? "Rebuild invoice" : "Create invoice"}
+          {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
         </button>
       </form>
     </section>
