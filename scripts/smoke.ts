@@ -4632,7 +4632,8 @@ Continuous reefer. Two load locks.
     licenseNumberText,
   } = await import("../lib/driver-import-shared");
   const { applyDriverImport, previewDriversFromXlsx } = await import("../lib/driver-import");
-  const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
+  const { buildXlsxFromGrid, buildXlsxFromSheets, recordsFromFirstSheet, recordsFromLoadWorkbook } =
+    await import("../lib/xlsx-first-sheet");
   assert.equal(ASCEND_DRIVER_FIXTURE_NAMES.length, 8);
   assert.equal(cleanImportedDate("0000-00-00"), "");
   assert.equal(cleanImportedDate("-"), "");
@@ -4814,7 +4815,154 @@ Continuous reefer. Two load locks.
   assert.equal(xlsxLoadImport.created, 1);
   assert.equal(queries.getLoad(queries.findLoadIdByNumber("1005912")!)?.truck_unit, "301");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8"), /Import/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8"), /Preview/);
+  const importUi = fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8");
+  assert.match(importUi, /Preview/);
+  assert.match(importUi, /will import in this one/);
+  assert.match(importUi, /JSON\.stringify\(rows\)/);
+  const assignUi = fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8");
+  const truckOptionBlock = assignUi.slice(assignUi.indexOf("Select truck"), assignUi.indexOf("Trailer"));
+  assert.match(truckOptionBlock, /\{item\.unit_number\}/);
+  assert.doesNotMatch(truckOptionBlock, /item\.type/);
+  assert.doesNotMatch(truckOptionBlock, /dry van/i);
+  const dashUi = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(dashUi, /Unit \{truck\.unit_number\}/);
+  assert.doesNotMatch(dashUi, /labelForTruckType/);
+
+  const ascendRow = (loadNumber: string | number, truck = ""): Array<string | number> => [
+    loadNumber,
+    "",
+    `PO-${loadNumber}`,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "Open",
+    "8/4/2024",
+    "8/5/2024",
+    "M & S Loads LLC.",
+    "WSF",
+    "Kansas City",
+    "MO",
+    "Avenel",
+    "Avenel",
+    "NJ",
+    truck,
+    "",
+    "53' Reefer",
+  ];
+  const pageOneNumbers = Array.from({ length: 12 }, (_, index) => 1006101 + index);
+  const pageTwoNumbers = [1006113, 1006114, 1006115, 1006116];
+  const pagedWorkbook = buildXlsxFromSheets([
+    [[...ASCEND_LOAD_HEADERS], ...pageOneNumbers.map((number) => ascendRow(number))],
+    [["Page 2"], [...ASCEND_LOAD_HEADERS], ...pageTwoNumbers.map((number) => ascendRow(number))],
+  ]);
+  assert.equal(recordsFromFirstSheet(pagedWorkbook).length, 12, "old first-sheet helper still stops at page 1");
+  assert.equal(recordsFromLoadWorkbook(pagedWorkbook).length, 16);
+  const pagedPreview = previewLoadsFromXlsx(pagedWorkbook);
+  assert.equal(pagedPreview.length, 16, "print-layout pages / extra sheets must all preview");
+  const pagedImport = applyLoadImport(pagedPreview);
+  assert.equal(pagedImport.created, 16);
+  assert.equal(pagedImport.updated, 0);
+  for (const number of [...pageOneNumbers, ...pageTwoNumbers]) {
+    assert.ok(queries.findLoadIdByNumber(String(number)), `imported ${number}`);
+  }
+  const reprintWorkbook = buildXlsxFromGrid([
+    ["MS Express loads — page 1"],
+    [...ASCEND_LOAD_HEADERS],
+    ascendRow(1006121),
+    ascendRow(1006122),
+    ["MS Express loads — page 2"],
+    [...ASCEND_LOAD_HEADERS],
+    ascendRow(1006123),
+    ascendRow(1006124),
+  ]);
+  const reprintPreview = previewLoadsFromXlsx(reprintWorkbook);
+  assert.equal(reprintPreview.length, 4, "repeated print headers on one sheet must not drop later loads");
+  assert.equal(applyLoadImport(reprintPreview).created, 4);
+
+  const shareTruckId = queries.createTruck({
+    unit_number: "SHARE-36",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const shareDriverA = queries.createDriver({
+    name: "Share Truck A",
+    phone: "555-0361",
+    license: "MO-SHARE-A",
+    pin: "8361",
+    truck_id: null,
+    status: "available",
+    driver_type: "company_driver",
+    country: "USA",
+    city: "St Louis",
+    state: "MO",
+  });
+  const shareDriverB = queries.createDriver({
+    name: "Share Truck B",
+    phone: "555-0362",
+    license: "MO-SHARE-B",
+    pin: "8362",
+    truck_id: null,
+    status: "available",
+    driver_type: "company_driver",
+    country: "USA",
+    city: "St Louis",
+    state: "MO",
+  });
+  const shareLoadA = queries.createLoad({
+    customer_id: customerId,
+    origin: "Dallas, TX",
+    destination: "Houston, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Produce",
+    rate: 1200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const shareLoadB = queries.createLoad({
+    customer_id: customerId,
+    origin: "Houston, TX",
+    destination: "Austin, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 38000,
+    commodity: "Produce",
+    rate: 1100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.assignLoad(shareLoadA, shareTruckId, shareDriverA);
+  queries.assignLoad(shareLoadB, shareTruckId, shareDriverB);
+  assert.equal(queries.getLoad(shareLoadA)?.truck_id, shareTruckId);
+  assert.equal(queries.getLoad(shareLoadB)?.truck_id, shareTruckId);
+  assert.ok(
+    queries.listAssignableTrucks(shareLoadB).some((truck) => truck.id === shareTruckId),
+    "truck already on another open load stays in the assign picker",
+  );
 
   const { buildSafetyBoard } = await import("../lib/safety");
   const { expiryRank, worstSafetyRank, cleanSafetyDate, formatSafetyDatePair } = await import("../lib/safety-shared");

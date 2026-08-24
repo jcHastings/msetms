@@ -182,10 +182,15 @@ export function loadValuesFromRecords(records: Array<Record<string, unknown>>): 
   const seen = new Map<string, LoadImportValues>();
   for (const record of records) {
     const mapped = mapLoadRecord(record);
-    if (!mapped.load_number) continue;
+    if (!mapped.load_number || isRepeatedLoadHeader(mapped.load_number)) continue;
     seen.set(mapped.load_number, mapped);
   }
   return [...seen.values()];
+}
+
+function isRepeatedLoadHeader(value: string): boolean {
+  const key = normalizeHeader(value);
+  return key === "load" || key === "load number" || key === "load no";
 }
 
 export function buildLoadImportPreview(

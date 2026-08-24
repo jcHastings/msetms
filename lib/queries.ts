@@ -1583,20 +1583,20 @@ export function updateLoadStatus(loadId: number, status: string): void {
 }
 
 function assertAssetFree(
-  truckId: number | null,
+  _truckId: number | null,
   driverId: number | null,
   exceptLoadId: number,
   trailerId?: number | null,
 ): void {
-  if (!truckId && !driverId && trailerId == null) return;
+  // Same truck may sit on multiple active loads (relays, back-to-back). Trailer and driver stay unique.
+  if (!driverId && trailerId == null) return;
   const conflict = getDb()
     .prepare(
       `SELECT load_number FROM loads
        WHERE id != ?
          AND status IN (${BUSY_STATUS_SQL})
          AND (
-           (? IS NOT NULL AND truck_id = ?)
-           OR (? IS NOT NULL AND driver_id = ?)
+           (? IS NOT NULL AND driver_id = ?)
            OR (? IS NOT NULL AND trailer_id = ?)
          )
        LIMIT 1`,
@@ -1604,15 +1604,13 @@ function assertAssetFree(
     .get(
       exceptLoadId,
       ...BUSY_STATUSES,
-      truckId,
-      truckId,
       driverId,
       driverId,
       trailerId ?? null,
       trailerId ?? null,
     ) as { load_number: string } | undefined;
   if (conflict) {
-    throw new Error(`That truck, trailer, or driver is already on ${conflict.load_number}.`);
+    throw new Error(`That trailer or driver is already on ${conflict.load_number}.`);
   }
 }
 
@@ -1684,17 +1682,10 @@ function syncAssignment(
   }
 }
 
-export function listAssignableTrucks(loadId?: number): Truck[] {
-  return listTrucks().filter((truck) => {
-    if (truck.active === 0 || truck.status === "maintenance" || truck.status === "out_of_service") return false;
-    const busy = getDb()
-      .prepare(
-        `SELECT id FROM loads
-         WHERE truck_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
-      )
-      .get(truck.id, ...BUSY_STATUSES, loadId ?? -1);
-    return !busy;
-  });
+export function listAssignableTrucks(_loadId?: number): Truck[] {
+  return listTrucks().filter(
+    (truck) => truck.active !== 0 && truck.status !== "maintenance" && truck.status !== "out_of_service",
+  );
 }
 
 export function listAssignableDrivers(loadId?: number): DriverWithTruck[] {

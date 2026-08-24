@@ -1,4 +1,4 @@
-import { recordsFromFirstSheet } from "./xlsx-first-sheet";
+import { recordsFromLoadWorkbook } from "./xlsx-first-sheet";
 import {
   buildLoadImportPreview,
   loadValuesFromRecords,
@@ -28,7 +28,7 @@ export function previewLoadsFromText(text: string): LoadImportPreviewRow[] {
 }
 
 export function previewLoadsFromXlsx(buffer: Uint8Array): LoadImportPreviewRow[] {
-  return buildLoadImportPreview(loadValuesFromRecords(recordsFromFirstSheet(buffer)), listLoads({ status: "all" }));
+  return buildLoadImportPreview(loadValuesFromRecords(recordsFromLoadWorkbook(buffer)), listLoads({ status: "all" }));
 }
 
 export function applyLoadImport(rows: LoadImportPreviewRow[]): {

@@ -75,7 +75,8 @@ export function LoadSheetImport() {
         <form action={confirmAction} className="space-y-3">
           <input type="hidden" name="rows" value={JSON.stringify(rows)} />
           <p className="text-sm text-slate-700">
-            <strong>{rows.length}</strong> load{rows.length === 1 ? "" : "s"} ready. First numbers:{" "}
+            <strong>{rows.length}</strong> load{rows.length === 1 ? "" : "s"} will import in this one
+            step. First numbers:{" "}
             {(preview?.sampleNumbers ?? rows.slice(0, 8).map((row) => row.load_number)).join(", ")}
             {rows.length > 8 ? "…" : ""}
           </p>
@@ -106,7 +107,10 @@ export function LoadSheetImport() {
             </table>
           </div>
           {rows.length > 12 ? (
-            <p className="text-xs text-slate-500">Showing the first 12 of {rows.length}.</p>
+            <p className="text-xs text-slate-500">
+              Table shows the first 12 of {rows.length}. Import still creates or updates every listed
+              load.
+            </p>
           ) : null}
           <button className="btn btn-primary" type="submit" disabled={confirmPending}>
             {confirmPending ? "Importing…" : "Import"}

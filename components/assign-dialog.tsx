@@ -127,7 +127,7 @@ export function AssignDialog({
                   <option value="">Select truck</option>
                   {trucks.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.unit_number} · {item.type.replaceAll("_", " ")}
+                      {item.unit_number}
                       {optionNote(truckComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}

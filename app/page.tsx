@@ -27,7 +27,6 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
-import { labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -216,7 +215,6 @@ export default async function DashboardPage({
             {availableTrucks.slice(0, 4).map((truck) => (
               <li key={truck.id} className="flex justify-between text-slate-600">
                 <span>Unit {truck.unit_number}</span>
-                <span>{labelForTruckType(truck.type)}</span>
               </li>
             ))}
           </ul>

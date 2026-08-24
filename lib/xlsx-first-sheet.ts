@@ -13,24 +13,93 @@ export function recordsFromXlsx(buffer: Uint8Array): Array<Record<string, string
 export function recordsFromFirstSheet(buffer: Uint8Array): Array<Record<string, string | number>> {
   const files = unzipSync(buffer);
   const shared = parseSharedStrings(readZipText(files, "xl/sharedStrings.xml"));
-  const sheetPath =
-    Object.keys(files)
-      .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
-      .sort()[0] ?? "";
+  const sheetPath = listSheetPaths(files)[0] ?? "";
   const sheet = readZipText(files, sheetPath);
   if (!sheet) return [];
-  const grid = parseSheetGrid(sheet, shared);
+  return recordsFromGrid(parseSheetGrid(sheet, shared), { firstRowIsHeader: true });
+}
+
+/**
+ * Every worksheet that looks like a load sheet (Load # header).
+ * Merges print-layout pages / extra sheets and skips repeated headers.
+ */
+export function recordsFromLoadWorkbook(buffer: Uint8Array): Array<Record<string, string | number>> {
+  const files = unzipSync(buffer);
+  const shared = parseSharedStrings(readZipText(files, "xl/sharedStrings.xml"));
+  const merged: Array<Record<string, string | number>> = [];
+  const seen = new Set<string>();
+  for (const sheetPath of listSheetPaths(files)) {
+    const records = recordsFromGrid(parseSheetGrid(readZipText(files, sheetPath), shared), {
+      firstRowIsHeader: false,
+    });
+    for (const record of records) {
+      const loadNumber = loadNumberFromRecord(record).toLowerCase();
+      if (loadNumber && seen.has(loadNumber)) continue;
+      if (loadNumber) seen.add(loadNumber);
+      merged.push(record);
+    }
+  }
+  return merged;
+}
+
+function listSheetPaths(files: Record<string, Uint8Array>): string[] {
+  return Object.keys(files)
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name.replaceAll("\\", "/")))
+    .sort((left, right) => sheetIndex(left) - sheetIndex(right));
+}
+
+function sheetIndex(path: string): number {
+  return Number((path.replaceAll("\\", "/").match(/sheet(\d+)\.xml$/i) ?? [])[1] ?? 0);
+}
+
+function isLoadHeaderRow(cells: Array<string | number>): boolean {
+  return cells.some((cell) => {
+    const key = normalizeLoose(String(cell ?? ""));
+    return key === "load" || key === "load number";
+  });
+}
+
+function loadNumberFromRecord(record: Record<string, string | number>): string {
+  for (const [key, value] of Object.entries(record)) {
+    const header = normalizeLoose(key);
+    if (header === "load" || header === "load number") return String(value ?? "").trim();
+  }
+  return "";
+}
+
+function recordsFromGrid(
+  grid: Array<Array<string | number>>,
+  options: { firstRowIsHeader: boolean },
+): Array<Record<string, string | number>> {
   if (grid.length < 2) return [];
-  const headers = (grid[0] ?? []).map((cell) => String(cell ?? "").trim());
-  return grid.slice(1).map((cells) => {
+  const headerIndex = options.firstRowIsHeader ? 0 : grid.findIndex(isLoadHeaderRow);
+  if (headerIndex < 0) return [];
+  const headers = (grid[headerIndex] ?? []).map((cell) => String(cell ?? "").trim());
+  if (!options.firstRowIsHeader && !headers.some((header) => {
+    const key = normalizeLoose(header);
+    return key === "load" || key === "load number";
+  })) {
+    return [];
+  }
+  const records: Array<Record<string, string | number>> = [];
+  for (const cells of grid.slice(headerIndex + 1)) {
+    if (!options.firstRowIsHeader && isLoadHeaderRow(cells)) continue;
+    if (cells.every((cell) => String(cell ?? "").trim() === "")) continue;
     const row: Record<string, string | number> = {};
     headers.forEach((header, index) => {
       if (!header) return;
       const value = cells[index];
       if (value !== undefined) row[header] = value;
     });
-    return row;
-  });
+    if (!options.firstRowIsHeader) {
+      const loadNumber = loadNumberFromRecord(row);
+      if (!loadNumber) continue;
+      const key = normalizeLoose(loadNumber);
+      if (key === "load" || key === "load number") continue;
+    }
+    records.push(row);
+  }
+  return records;
 }
 
 function readZipText(files: Record<string, Uint8Array>, name: string): string {
@@ -111,33 +180,39 @@ function normalizeLoose(value: string): string {
 }
 
 export function buildXlsxFromGrid(rows: Array<Array<string | number>>): Uint8Array {
+  return buildXlsxFromSheets([rows]);
+}
+
+export function buildXlsxFromSheets(sheets: Array<Array<Array<string | number>>>): Uint8Array {
   const shared: string[] = [];
   const share = (text: string) => {
     shared.push(escapeXml(text));
     return shared.length - 1;
   };
-  const sheetRows = rows.map((cells, rowIndex) => {
-    const xml = cells
-      .map((value, colIndex) => {
-        const ref = `${colLetter(colIndex)}${rowIndex + 1}`;
-        if (typeof value === "number" && Number.isFinite(value)) {
-          return `<c r="${ref}"><v>${value}</v></c>`;
-        }
-        return `<c r="${ref}" t="s"><v>${share(String(value ?? ""))}</v></c>`;
-      })
-      .join("");
-    return `<row r="${rowIndex + 1}">${xml}</row>`;
+  const files: Record<string, Uint8Array> = {};
+  sheets.forEach((rows, sheetIndex) => {
+    const sheetRows = rows.map((cells, rowIndex) => {
+      const xml = cells
+        .map((value, colIndex) => {
+          const ref = `${colLetter(colIndex)}${rowIndex + 1}`;
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return `<c r="${ref}"><v>${value}</v></c>`;
+          }
+          return `<c r="${ref}" t="s"><v>${share(String(value ?? ""))}</v></c>`;
+        })
+        .join("");
+      return `<row r="${rowIndex + 1}">${xml}</row>`;
+    });
+    const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows.join("")}</sheetData></worksheet>`;
+    files[`xl/worksheets/sheet${sheetIndex + 1}.xml`] = strToU8(sheetXml);
   });
   const sharedXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${shared.length}" uniqueCount="${shared.length}">${shared
     .map((text) => `<si><t>${text}</t></si>`)
     .join("")}</sst>`;
-  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows.join("")}</sheetData></worksheet>`;
-  return zipSync({
-    "xl/sharedStrings.xml": strToU8(sharedXml),
-    "xl/worksheets/sheet1.xml": strToU8(sheetXml),
-  });
+  files["xl/sharedStrings.xml"] = strToU8(sharedXml);
+  return zipSync(files);
 }
 
 function colLetter(index: number): string {
