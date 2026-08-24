@@ -32,7 +32,7 @@ function Pill({ className, children }: { className: string; children: React.Reac
   );
 }
 
-export function LoadStatusBadge({ status }: { status: LoadStatus | string }) {
+export function LoadStatusBadge({ status }: { status: string }) {
   return <Pill className={loadStatusBadgeClass(status)}>{labelForLoadStatus(status)}</Pill>;
 }
 
