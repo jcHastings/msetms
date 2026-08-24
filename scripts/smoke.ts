@@ -124,24 +124,29 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /<details/);
   assert.doesNotMatch(workspaceSource, /Delete This Load/);
   const loadFormSource = fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8");
-  const basicsChunk = loadFormSource.slice(
-    loadFormSource.indexOf('data-load-tab="basics"'),
-    loadFormSource.indexOf('data-load-tab="customer"'),
-  );
+  const basicsChunk = fs.readFileSync(path.join(process.cwd(), "components/load-basics-screen.tsx"), "utf8");
+  const customerChunk = fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8");
+  const assetsChunk = fs.readFileSync(path.join(process.cwd(), "components/load-carrier-screen.tsx"), "utf8");
+  assert.match(loadFormSource, /LoadBasicsScreen/);
+  assert.match(loadFormSource, /LoadCustomerScreen/);
+  assert.match(loadFormSource, /LoadCarrierScreen/);
+  assert.doesNotMatch(loadFormSource, /name="truck_id"|name="origin"|name="destination"|name="pickup_start"|hidden leftover/);
+  assert.match(basicsChunk, /data-load-tab="basics"/);
   assert.match(basicsChunk, /Reefer setpoint/);
   assert.match(basicsChunk, /Reefer mode/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
-  const assetsChunk = loadFormSource.slice(
-    loadFormSource.indexOf('data-load-tab="assets"'),
-    loadFormSource.length,
-  );
+  assert.match(customerChunk, /data-load-tab="customer"/);
+  assert.match(customerChunk, /Customer reference/);
+  assert.doesNotMatch(customerChunk, /credit_hold|MC#|EDI/);
   assert.match(assetsChunk, /Company driver/);
   assert.match(assetsChunk, /Owner-operator/);
   assert.match(assetsChunk, /name="driver_id"/);
   assert.doesNotMatch(assetsChunk, /name="truck_id"|Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
+  assert.match(workspaceSource, /Watch this load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible\) return null/);
   const paySource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
   assert.match(paySource, /\+ Add Line Item/);
   assert.match(paySource, /Save Pay Item/);
@@ -155,6 +160,10 @@ async function main() {
   const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
   assert.match(docsPage, /AttachmentsPanel/);
   assert.match(docsPage, /when="docs"/);
+  assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
+  assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
+  assert.match(docsPage, /LoadExtraDetails/);
+  assert.match(docsPage, /when="log"/);
 
   const { closeDb, getDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -598,6 +607,10 @@ async function main() {
     "components/rate-con-apply.tsx",
     "components/rate-con-location-review.tsx",
     "components/load-form.tsx",
+    "components/load-basics-screen.tsx",
+    "components/load-customer-screen.tsx",
+    "components/load-carrier-screen.tsx",
+    "components/load-lane-fields.tsx",
     "lib/rate-con-shared.ts",
     "lib/reefer-shared.ts",
     "components/make-bol-button.tsx",
@@ -831,6 +844,27 @@ async function main() {
     driver_id: yoelId,
   });
   assert.equal(queries.getLoad(persistLoadId)?.driver_id, yoelId, "driver assignment persists on save");
+  const { parseLoadInput } = await import("../lib/load-input");
+  const persistAfter = queries.getLoad(persistLoadId);
+  assert.ok(persistAfter);
+  const basicsOnly = new FormData();
+  basicsOnly.set("status", "dispatched");
+  basicsOnly.set("commodity", "Berries");
+  basicsOnly.set("equipment", "reefer_53");
+  const mergedBasics = parseLoadInput(basicsOnly, true, persistAfter);
+  assert.equal(mergedBasics.customer_id, persistAfter.customer_id, "basics save keeps customer");
+  assert.equal(mergedBasics.driver_id, persistAfter.driver_id, "basics save keeps assigned driver");
+  assert.equal(mergedBasics.origin, persistAfter.origin, "basics save keeps origin");
+  assert.equal(mergedBasics.commodity, "Berries");
+  assert.equal(mergedBasics.status, "dispatched");
+  const customerOnly = new FormData();
+  customerOnly.set("customer_id", String(persistAfter.customer_id));
+  customerOnly.set("contact_name", "Pat");
+  const mergedCustomer = parseLoadInput(customerOnly, true, persistAfter);
+  assert.equal(mergedCustomer.commodity, persistAfter.commodity, "customer save keeps commodity");
+  assert.equal(mergedCustomer.driver_id, persistAfter.driver_id, "customer save keeps driver");
+  assert.equal(mergedCustomer.contact_name, "Pat");
+  assert.throws(() => parseLoadInput(new FormData()), /Pick a customer/);
 
   const unassignedSaveId = queries.createLoad({
     customer_id: customerId,
@@ -3716,7 +3750,8 @@ Continuous reefer. Two load locks.
   const trailerFormSrc = fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8");
   assert.match(truckFormSrc, /truck\?\.type \|\| "reefer"/);
   assert.match(trailerFormSrc, /trailer\?\.type \|\| "reefer"/);
-  assert.match(loadFormSource, /reefer_53/);
+  assert.match(basicsChunk, /reefer_53/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-input.ts"), "utf8"), /reefer_53/);
   const fleetFormShared = fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8");
   assert.match(fleetFormShared, /\|\| "reefer"/);
   assert.doesNotMatch(fleetFormShared, /\|\| "dry_van"/);

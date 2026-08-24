@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
-import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
-import { placeholderLane, safeReturnTo } from "./load-page-shared";
+import { cleanDateInput, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { parseLoadInput } from "./load-input";
+import { safeReturnTo } from "./load-page-shared";
 import { addPayItem, deletePayItem } from "./pay-items";
 import {
   assignLoad,
@@ -22,7 +23,6 @@ import {
   deleteSavedReport,
   deleteTrailer,
   deleteTruck,
-  findOrCreateCustomer,
   getDriver,
   getTrailer,
   getTruck,
@@ -41,7 +41,6 @@ import {
   type LoadInput,
 } from "./queries";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
-import { computeOwnerOperatorPay } from "./settlement";
 import {
   DRIVER_STATUSES,
   DRIVER_TYPES,
@@ -61,10 +60,9 @@ import {
   type TruckType,
 } from "./types";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
-import { complianceWindows, defaultOoPercent, isKnownLoadStatus } from "./settings";
+import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
-import { isReeferMode } from "./reefer-shared";
 import { type FuelImportResult } from "./fuel";
 import { assignFuelTransactionDriver, importFuelFromText } from "./fuel-store";
 import {
@@ -150,132 +148,6 @@ function parseContacts(formData: FormData) {
   }
 }
 
-function parseLaneDate(
-  formData: FormData,
-  key: string,
-  fallback: string | undefined,
-  placeholder: string,
-): string {
-  const raw = String(formData.get(key) ?? "").trim();
-  if (raw) return fromInputDateTime(raw);
-  if (fallback) return fallback;
-  return placeholder;
-}
-
-function parseAssignmentId(
-  formData: FormData,
-  key: "truck_id" | "driver_id" | "trailer_id",
-  existing: number | null | undefined,
-): number | null {
-  if (!formData.has(key)) return existing ?? null;
-  return parseOptionalInt(formData.get(key));
-}
-
-function parseLoadInput(
-  formData: FormData,
-  requireCustomer = true,
-  existing?: {
-    origin: string;
-    destination: string;
-    pickup_start: string;
-    pickup_end: string;
-    delivery_start: string;
-    delivery_end: string;
-    rate: number | null;
-    notes: string;
-    special_instructions: string;
-    appointment_notes: string;
-    truck_id: number | null;
-    driver_id: number | null;
-    trailer_id: number | null;
-    trailer_number: string;
-    shipper_location_id: number | null;
-    consignee_location_id: number | null;
-  } | null,
-): LoadInput {
-  let customerId = parseOptionalInt(formData.get("customer_id"));
-  if (!customerId && requireCustomer) {
-    const extractedName = String(formData.get("customer_name") ?? "").trim();
-    if (extractedName) {
-      customerId = findOrCreateCustomer(extractedName);
-    }
-  }
-  if (!customerId) throw new Error("Pick a customer.");
-  const status = String(formData.get("status") ?? "available");
-  if (!isKnownLoadStatus(status)) throw new Error("Invalid load status.");
-  const lane = placeholderLane();
-  const truckId = parseAssignmentId(formData, "truck_id", existing?.truck_id);
-  const driverId = parseAssignmentId(formData, "driver_id", existing?.driver_id);
-  const trailerId = parseAssignmentId(formData, "trailer_id", existing?.trailer_id);
-  const parsed: LoadInput = {
-    customer_id: customerId,
-    origin: String(formData.get("origin") ?? "").trim() || existing?.origin || lane.origin,
-    destination: String(formData.get("destination") ?? "").trim() || existing?.destination || lane.destination,
-    pickup_start: parseLaneDate(formData, "pickup_start", existing?.pickup_start, lane.pickup_start),
-    pickup_end: parseLaneDate(formData, "pickup_end", existing?.pickup_end, lane.pickup_end),
-    delivery_start: parseLaneDate(formData, "delivery_start", existing?.delivery_start, lane.delivery_start),
-    delivery_end: parseLaneDate(formData, "delivery_end", existing?.delivery_end, lane.delivery_end),
-    weight: parseOptionalInt(formData.get("weight")),
-    commodity: String(formData.get("commodity") ?? "").trim(),
-    rate: formData.has("rate") ? parseOptionalFloat(formData.get("rate")) : existing?.rate ?? null,
-    notes: String(formData.get("notes") ?? existing?.notes ?? "").trim(),
-    special_instructions: String(formData.get("special_instructions") ?? existing?.special_instructions ?? "").trim(),
-    appointment_notes: String(formData.get("appointment_notes") ?? existing?.appointment_notes ?? "").trim(),
-    reference_number: String(formData.get("reference_number") ?? "").trim(),
-    po_number: String(formData.get("po_number") ?? "").trim() || String(formData.get("customer_reference") ?? "").trim(),
-    reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
-    reefer_mode: parseReeferModeField(formData.get("reefer_mode")),
-    trailer_number: String(formData.get("trailer_number") ?? existing?.trailer_number ?? "").trim(),
-    trailer_id: trailerId,
-    shipper_location_id: formData.has("shipper_location_id")
-      ? parseOptionalInt(formData.get("shipper_location_id"))
-      : existing?.shipper_location_id ?? null,
-    consignee_location_id: formData.has("consignee_location_id")
-      ? parseOptionalInt(formData.get("consignee_location_id"))
-      : existing?.consignee_location_id ?? null,
-    oo_percent: parseOptionalFloat(formData.get("oo_percent")),
-    status,
-    truck_id: truckId,
-    driver_id: driverId,
-    truck_status: String(formData.get("truck_status") ?? "").trim(),
-    branch: String(formData.get("branch") ?? "").trim(),
-    declared_value: parseOptionalFloat(formData.get("declared_value")),
-    load_size: String(formData.get("load_size") ?? "").trim(),
-    condition_new_used: String(formData.get("condition_new_used") ?? "").trim(),
-    equipment: String(formData.get("equipment") ?? "").trim(),
-    equipment_length: String(formData.get("equipment_length") ?? "").trim(),
-    temperature_f: parseOptionalFloat(formData.get("temperature_f")),
-    temp_low_f: parseOptionalFloat(formData.get("temp_low_f")),
-    temp_high_f: parseOptionalFloat(formData.get("temp_high_f")),
-    temp_time_tolerance: String(formData.get("temp_time_tolerance") ?? "").trim(),
-    container_number: String(formData.get("container_number") ?? "").trim(),
-    last_free_day: cleanDateInput(formData.get("last_free_day")),
-    public_notes: String(formData.get("public_notes") ?? "").trim(),
-    posting_notes: String(formData.get("posting_notes") ?? "").trim(),
-    contact_name: String(formData.get("contact_name") ?? "").trim(),
-    contact_email: String(formData.get("contact_email") ?? "").trim(),
-    contact_phone: String(formData.get("contact_phone") ?? "").trim(),
-    contact_ext: String(formData.get("contact_ext") ?? "").trim(),
-    customer_reference: String(formData.get("customer_reference") ?? "").trim(),
-  };
-  const driver = driverId ? getDriver(driverId) : null;
-  if (driver?.driver_type === "owner_operator") {
-    const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
-    parsed.oo_percent = percent;
-    parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);
-  } else {
-    parsed.oo_percent = null;
-    parsed.oo_pay = null;
-  }
-  return parsed;
-}
-
-function parseReeferModeField(value: FormDataEntryValue | null): string {
-  const mode = String(value ?? "").trim();
-  if (!mode) return "";
-  if (!isReeferMode(mode)) throw new Error("Pick Continuous or Start/Stop.");
-  return mode;
-}
 
 function parseTrailerType(value: FormDataEntryValue | null): TrailerType {
   const type = String(value ?? "").trim() || "reefer";

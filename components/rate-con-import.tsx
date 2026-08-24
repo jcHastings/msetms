@@ -167,6 +167,9 @@ function RateConImportedLoad({
       {book.review}
       <LoadForm
         key={book.formKey}
+        standalone
+        screen="all"
+        includeLane
         customers={customers}
         trucks={trucks}
         trailers={trailers}

@@ -7,5 +7,6 @@ export function LoadTabPanel({ when, children }: { when: LoadTab | LoadTab[]; ch
   const edit = useLoadEdit();
   const tab = edit?.tab ?? "basics";
   const visible = Array.isArray(when) ? when.includes(tab) : tab === when;
-  return <div hidden={!visible}>{children}</div>;
+  if (!visible) return null;
+  return <>{children}</>;
 }

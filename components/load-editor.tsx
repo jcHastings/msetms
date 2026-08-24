@@ -2,8 +2,7 @@ import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { IftaPanel } from "@/components/ifta-panel";
-import { CustomerSnapshot } from "@/components/customer-snapshot";
-import { LoadExtraDetails, LoadWatchRow } from "@/components/load-extra-details";
+import { LoadExtraDetails } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
 import { LoadLogSection } from "@/components/load-log-section";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
@@ -31,7 +30,7 @@ import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/se
 import { isTwilioConfigured } from "@/lib/env";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { listPayItems } from "@/lib/pay-items";
-import { getCustomer, getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
@@ -67,7 +66,6 @@ export async function LoadEditor({
   const trailers = listTrailers();
   const locations = listLocations();
   const drivers = listDrivers();
-  const customer = load.customer_id ? getCustomer(load.customer_id) : null;
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
   const claims = listClaims(load.id);
@@ -108,27 +106,22 @@ export async function LoadEditor({
         smsConfigured={isTwilioConfigured()}
         role={role}
         returnTo={returnTo}
+        watched={Boolean(load.watched)}
       >
-        <LoadForm
-          customers={customers}
-          trucks={trucks}
-          trailers={trailers}
-          locations={locations}
-          drivers={drivers}
-          load={load}
-          equipmentChoices={equipmentChoices}
-          returnTo={returnTo}
-          {...formSettings}
-          action={boundAction}
-          submitLabel="Save load"
-        />
-
-        <LoadTabPanel when="customer">
-          <CustomerSnapshot customer={customer} />
-        </LoadTabPanel>
-
-        <LoadTabPanel when="basics">
-          <LoadWatchRow load={load} />
+        <LoadTabPanel when={["basics", "customer", "assets"]}>
+          <LoadForm
+            customers={customers}
+            trucks={trucks}
+            trailers={trailers}
+            locations={locations}
+            drivers={drivers}
+            load={load}
+            equipmentChoices={equipmentChoices}
+            returnTo={returnTo}
+            {...formSettings}
+            action={boundAction}
+            submitLabel="Save load"
+          />
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
@@ -144,42 +137,6 @@ export async function LoadEditor({
               driverName={load.driver_name}
             />
           ) : null}
-          {showFinancials && load.driver_type === "owner_operator" && load.oo_pay != null ? (
-            <div className="mb-4 card p-4 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner-operator pay</div>
-              <div className="mt-1 font-semibold">
-                {load.oo_percent}% of {load.rate != null ? `$${load.rate.toLocaleString()}` : "rate"} = $
-                {load.oo_pay.toLocaleString()}
-              </div>
-              <p className="mt-1 text-slate-600">Settled outside QuickBooks. Customer invoices use customer line items only.</p>
-            </div>
-          ) : null}
-          {showFinancials && canViewIfta(role) &&
-          (load.status === "in_transit" ||
-            load.status === "picked_up" ||
-            load.status === "at_delivery" ||
-            load.status === "unloading" ||
-            load.status === "delivered" ||
-            load.status === "completed" ||
-            ifta.report) ? (
-            <IftaPanel
-              loadId={load.id}
-              report={ifta.report}
-              canRefresh={ifta.canRefresh}
-              configured={ifta.configured}
-              reason={ifta.reason}
-            />
-          ) : null}
-          {showFinancials && (load.status === "delivered" || load.status === "completed") ? (
-            load.rate != null ? (
-              <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
-            ) : (
-              <section className="card mb-4 p-5 text-sm text-slate-600">
-                Add a customer income line item on a delivered load to send a QuickBooks invoice.
-              </section>
-            )
-          ) : null}
-          <LoadExtraDetails load={load} claims={claims} />
         </LoadTabPanel>
 
         <LoadTabPanel when="log">
@@ -233,6 +190,23 @@ export async function LoadEditor({
               trailers={trailers}
             />
           ) : null}
+          {canViewIfta(role) &&
+          (load.status === "in_transit" ||
+            load.status === "picked_up" ||
+            load.status === "at_delivery" ||
+            load.status === "unloading" ||
+            load.status === "delivered" ||
+            load.status === "completed" ||
+            ifta.report) ? (
+            <IftaPanel
+              loadId={load.id}
+              report={ifta.report}
+              canRefresh={ifta.canRefresh}
+              configured={ifta.configured}
+              reason={ifta.reason}
+            />
+          ) : null}
+          <LoadExtraDetails load={load} claims={claims} />
           <LoadLogSection loadId={load.id} />
           <LoadAuditSection loadId={load.id} />
         </LoadTabPanel>
@@ -264,6 +238,15 @@ export async function LoadEditor({
               })}
             </ul>
           </section>
+          {showFinancials && (load.status === "delivered" || load.status === "completed") ? (
+            load.rate != null ? (
+              <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
+            ) : (
+              <section className="card mb-4 p-5 text-sm text-slate-600">
+                Add a customer income line item on a delivered load to send a QuickBooks invoice.
+              </section>
+            )
+          ) : null}
           <MakeBolPanel loadId={load.id} attachments={attachments} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
         </LoadTabPanel>

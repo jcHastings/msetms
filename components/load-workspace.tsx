@@ -7,12 +7,14 @@ import {
   assignLoadDispatcherAction,
   cloneLoadAction,
   requestDriverDocumentsAction,
+  saveTemplateAction,
   sendLoadSmsAction,
   sendToAccountingAction,
+  watchLoadAction,
 } from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
-import { loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
+import { isFormTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
   canLogCheckCall,
@@ -34,6 +36,8 @@ export function LoadWorkspace({
   smsConfigured,
   role,
   returnTo = "/board",
+  watched = false,
+  create = false,
   children,
 }: {
   loadId: number | null;
@@ -48,6 +52,8 @@ export function LoadWorkspace({
   smsConfigured: boolean;
   role: string;
   returnTo?: string;
+  watched?: boolean;
+  create?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -69,16 +75,23 @@ export function LoadWorkspace({
     setPending(state.pending);
   }, []);
 
-  const setTab = useCallback((next: LoadTab, hash?: string) => {
-    setTabState(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    url.hash = hash ? hash.replace(/^#/, "") : "";
-    window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
-    if (hash) {
-      window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
-    }
-  }, []);
+  const setTab = useCallback(
+    (next: LoadTab, hash?: string) => {
+      if (dirty && tab !== next && isFormTab(tab)) {
+        if (!window.confirm("You have unsaved changes on this screen. Switch anyway?")) return;
+        setDirty(false);
+      }
+      setTabState(next);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      url.hash = hash ? hash.replace(/^#/, "") : "";
+      window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+      if (hash) {
+        window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
+      }
+    },
+    [dirty, tab],
+  );
 
   useEffect(() => {
     function onPop() {
@@ -139,25 +152,31 @@ export function LoadWorkspace({
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
       <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
-        <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
-          {loadFormTabsForRole(role).map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
-                tab === item.value ? "load-tab-active" : ""
-              }`}
-              aria-current={tab === item.value ? "page" : undefined}
-              onClick={() => setTab(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        {create ? (
+          <p className="px-3 py-2 text-sm font-semibold text-slate-600">New load</p>
+        ) : (
+          <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
+            {loadFormTabsForRole(role).map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
+                  tab === item.value ? "load-tab-active" : ""
+                }`}
+                aria-current={tab === item.value ? "page" : undefined}
+                onClick={() => setTab(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        )}
         <div className="flex items-center gap-2">
-          <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
-            {pending ? "Saving…" : "Save"}
-          </button>
+          {create || isFormTab(tab) ? (
+            <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
+              {pending ? "Saving…" : "Save"}
+            </button>
+          ) : null}
           <button className="btn load-tab-back" type="button" onClick={() => confirmLeave(returnTo)}>
             Close
           </button>
@@ -277,6 +296,27 @@ export function LoadWorkspace({
             <input type="hidden" name="load_id" value={loadId} />
             <button className="menu-item w-full text-left" type="submit">
               Copy This Load
+            </button>
+          </form>
+          <form action={watchLoadAction}>
+            <input type="hidden" name="load_id" value={loadId} />
+            <input type="hidden" name="watched" value={watched ? "0" : "1"} />
+            <button className="menu-item w-full text-left" type="submit">
+              {watched ? "Unwatch" : "Watch this load"}
+            </button>
+          </form>
+          <form action={saveTemplateAction} className="border-t border-slate-100 px-3 py-2">
+            <input type="hidden" name="load_id" value={loadId} />
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Save template
+            </label>
+            <input
+              name="name"
+              placeholder="Template name"
+              className="mb-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+            />
+            <button className="menu-item w-full px-0 text-left" type="submit">
+              Save as template
             </button>
           </form>
           <StatusAction

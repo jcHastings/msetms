@@ -168,6 +168,8 @@ function RateConAppliedLoad({
       <LoadForm
         key={book.formKey}
         standalone
+        screen="all"
+        includeLane
         customers={customers}
         trucks={trucks}
         trailers={trailers}

@@ -1,7 +1,6 @@
 "use client";
 
 import { createClaimAction, saveTemplateAction, watchLoadAction } from "@/lib/dispatcher-actions";
-import { useLoadEdit } from "@/components/load-edit-context";
 import type { LoadView } from "@/lib/types";
 
 type ClaimRow = { id: number; claim_number: string; kind: string; status: string };
@@ -13,10 +12,6 @@ export function LoadExtraDetails({
   load: LoadView;
   claims: ClaimRow[];
 }) {
-  const edit = useLoadEdit();
-  const tab = edit?.tab ?? "all";
-  if (tab !== "financials" && tab !== "all") return null;
-
   return (
     <section className="card mt-4 p-5">
       <h2 className="text-sm font-semibold">Claim / OS&D</h2>

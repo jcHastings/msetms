@@ -47,7 +47,7 @@ export function parseLoadTab(value: string | null | undefined): LoadTab {
 }
 
 export function isFormTab(tab: LoadTab): boolean {
-  return tab === "basics" || tab === "customer" || tab === "assets" || tab === "financials";
+  return tab === "basics" || tab === "customer" || tab === "assets";
 }
 
 export function loadFormTabsForRole(role: string) {

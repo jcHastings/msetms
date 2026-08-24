@@ -60,8 +60,10 @@ export default async function NewLoadPage() {
           smsConfigured={false}
           role={role}
           returnTo="/board"
+          create
         >
           <LoadForm
+            screen="all"
             customers={customers}
             trucks={trucks}
             trailers={listTrailers()}
