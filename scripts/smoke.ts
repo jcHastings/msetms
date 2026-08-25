@@ -4214,7 +4214,9 @@ Continuous reefer. Two load locks.
     queries.listTrucks().find((truck) => truck.unit_number === "32")?.id ??
     queries.createTruck({ unit_number: "32", type: "reefer", capacity_lbs: 44000, status: "available" });
   const truck26 = queries.createTruck({ unit_number: "26", type: "reefer", capacity_lbs: 44000, status: "available" });
-  const truck28 = queries.createTruck({ unit_number: "28", type: "dry_van", capacity_lbs: 44000, status: "available" });
+  const truck28 =
+    queries.listTrucks().find((truck) => truck.unit_number === "28")?.id ??
+    queries.createTruck({ unit_number: "28", type: "dry_van", capacity_lbs: 44000, status: "available" });
   const howellId = queries.createDriver({
     name: "Christopher Howell",
     phone: "555-0032",
