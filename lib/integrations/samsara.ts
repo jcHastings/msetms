@@ -1,10 +1,14 @@
 import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import {
+  canonicalFleetKey,
+  keepActiveSamsaraVehicles,
+  matchLinkedSamsaraVehicle,
   matchTruckForSamsara,
   mergeSamsaraGpsOntoVehicles,
   parseSamsaraVehicleRecords,
   SAMSARA_ID_MISSING_MESSAGE,
   SAMSARA_TOKEN_MISSING_MESSAGE,
+  samsaraRecordIsActive,
   unionSamsaraVehicles,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
@@ -115,7 +119,7 @@ export async function listSamsaraVehicles(): Promise<
     } catch {
       // Import pairing still works without a GPS page.
     }
-    return { ok: true, vehicles };
+    return { ok: true, vehicles: keepActiveSamsaraVehicles(vehicles) };
   } catch (error) {
     return { ok: false, error: publicSamsaraImportError(error) };
   }
@@ -250,6 +254,12 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
   ]);
   const trucks = listTrucks();
   const drivers = listDrivers();
+  const identityVehicles = keepActiveSamsaraVehicles(
+    parseSamsaraVehicles(identities.items.length ? identities.items : stats.items),
+  );
+  const activeVehicleIds = new Set(
+    identityVehicles.map((vehicle) => canonicalFleetKey(vehicle.id)).filter(Boolean),
+  );
   const locations = persistLiveGps(
     mapVehicleLocations({
       vehicles: stats.items,
@@ -264,9 +274,9 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
         id: load.id,
         truck_id: load.truck_id,
       })),
+      activeVehicleIds,
     }),
   );
-  const identityVehicles = parseSamsaraVehicles(identities.items.length ? identities.items : stats.items);
   const truckDrivers = [
     ...mapTruckDrivers({ vehicles: identityVehicles, trucks, drivers }),
   ];
@@ -443,23 +453,31 @@ export function mapVehicleLocations(input: {
   vehicles: Array<Record<string, unknown>>;
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
   loads: Array<{ id: number; truck_id: number | null }>;
+  activeVehicleIds?: Set<string>;
 }): VehicleLocation[] {
   const locations: VehicleLocation[] = [];
   const claimedTruckIds = new Set<number>();
   for (const vehicle of input.vehicles) {
+    if (!samsaraRecordIsActive(vehicle)) continue;
     const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
     const vehicleId = String(vehicle.id ?? nested.id ?? "");
-    const match = matchTruckForSamsara(
-      input.trucks,
-      {
-        samsaraVehicleId: vehicleId,
-        name: String(vehicle.name ?? nested.name ?? ""),
-        unitNumber: String(vehicle.unitNumber ?? nested.unitNumber ?? ""),
-        vin: String(vehicle.vin ?? nested.vin ?? ""),
-        licensePlate: String(vehicle.licensePlate ?? nested.licensePlate ?? ""),
-      },
-      claimedTruckIds,
-    );
+    const activeKey = canonicalFleetKey(vehicleId);
+    if (input.activeVehicleIds?.size && activeKey && !input.activeVehicleIds.has(activeKey)) continue;
+    const linked = matchLinkedSamsaraVehicle(input.trucks, vehicleId, claimedTruckIds);
+    const match =
+      linked != null
+        ? { id: linked.id, matchBy: "samsara_vehicle_id" as const }
+        : matchTruckForSamsara(
+            input.trucks,
+            {
+              samsaraVehicleId: vehicleId,
+              name: String(vehicle.name ?? nested.name ?? ""),
+              unitNumber: String(vehicle.unitNumber ?? nested.unitNumber ?? ""),
+              vin: String(vehicle.vin ?? nested.vin ?? ""),
+              licensePlate: String(vehicle.licensePlate ?? nested.licensePlate ?? ""),
+            },
+            claimedTruckIds,
+          );
     if (!match) continue;
     claimedTruckIds.add(match.id);
     const truck = input.trucks.find((item) => item.id === match.id);

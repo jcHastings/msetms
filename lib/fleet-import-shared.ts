@@ -74,6 +74,8 @@ export type SamsaraVehicleInput = {
   city?: string;
   driverId?: string;
   driverName?: string;
+  notes?: string;
+  active?: boolean;
 };
 
 export type SamsaraMatchTruck = {
@@ -322,7 +324,7 @@ export function buildSamsaraTruckPreview(
   const seenVehicle = new Set<string>();
   const truckById = new Map(trucks.map((truck) => [truck.id, truck]));
 
-  for (const vehicle of vehicles) {
+  for (const vehicle of keepActiveSamsaraVehicles(vehicles)) {
     const samsaraVehicleId = vehicle.id.trim();
     const name = vehicle.name.trim();
     const unitNumber = unitNumberFromSamsaraName(name, samsaraVehicleId || vehicle.vin.trim());
@@ -428,6 +430,44 @@ export function samsaraOmittedVehiclesWarning(
   return `Samsara returned vehicles that were not listed for import: ${names.length ? names.join(", ") : "unnamed"}.`;
 }
 
+const INACTIVE_STATUS = /^(inactive|deactivated|retired|archived|deleted|historical)$/i;
+const INACTIVE_LABEL = /\b(inactive|deactivated|retired|archived|deleted|historical)\b/i;
+const INACTIVE_OLD_UNIT = /\bold(?:\s+(?:unit|truck|tractor|veh(?:icle)?)|#)?\s*#?\s*\d+/i;
+
+export function samsaraRecordIsActive(item: Record<string, unknown>): boolean {
+  const nested = (item.vehicle ?? item.staticAssignedVehicle ?? {}) as Record<string, unknown>;
+  if (item.isDeactivated === true || nested.isDeactivated === true) return false;
+  if (item.deactivated === true || nested.deactivated === true) return false;
+  for (const key of ["deactivatedAt", "deactivatedAtTime", "deactivated_at", "deactivatedAtTime"]) {
+    if (asText(item[key]) || asText(nested[key])) return false;
+  }
+  const status = firstText(item, nested, [
+    "status",
+    "vehicleStatus",
+    "activationStatus",
+    "vehicleActivationStatus",
+    "assetStatus",
+    "driverActivationStatus",
+  ]);
+  if (status && INACTIVE_STATUS.test(status)) return false;
+  const name = firstText(item, nested, ["name", "vehicleName", "vehicle_name"]);
+  const notes = firstText(item, nested, ["notes", "note"]);
+  if (INACTIVE_LABEL.test(name) || INACTIVE_LABEL.test(notes) || INACTIVE_OLD_UNIT.test(name) || INACTIVE_OLD_UNIT.test(notes)) {
+    return false;
+  }
+  return true;
+}
+
+export function samsaraVehicleIsActive(vehicle: Pick<SamsaraVehicleInput, "active" | "name" | "notes">): boolean {
+  if (vehicle.active === false) return false;
+  if (vehicle.active === true) return true;
+  return samsaraRecordIsActive({ name: vehicle.name, notes: vehicle.notes ?? "" });
+}
+
+export function keepActiveSamsaraVehicles(vehicles: SamsaraVehicleInput[]): SamsaraVehicleInput[] {
+  return vehicles.filter((vehicle) => samsaraVehicleIsActive(vehicle));
+}
+
 export function unionSamsaraVehicles(
   primary: SamsaraVehicleInput[],
   extra: SamsaraVehicleInput[],
@@ -530,6 +570,8 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
           : firstText(item, nested, ["location", "city"]),
       driverId: firstText(driver, {}, ["id", "driverId", "driver_id"]),
       driverName: firstText(driver, {}, ["name", "driverName", "driver_name"]),
+      notes: firstText(item, nested, ["notes", "note"]),
+      active: samsaraRecordIsActive(item),
     });
   }
   return vehicles;
