@@ -5131,6 +5131,23 @@ Continuous reefer. Two load locks.
     driver_id: shareDriverB,
     delivery: "Waco, TX",
   });
+  const shareTrailerId = queries.createTrailer({
+    unit_number: "SHARE-TR",
+    type: "reefer",
+    status: "available",
+  });
+  queries.assignLoad(shareLoadA, shareTruckId, shareDriverA, shareTrailerId);
+  queries.assignLoad(shareLoadB, shareTruckId, shareDriverB, shareTrailerId);
+  assert.equal(queries.getLoad(shareLoadA)?.trailer_id, shareTrailerId);
+  assert.equal(queries.getLoad(shareLoadB)?.trailer_id, shareTrailerId);
+  assert.ok(
+    queries.listAssignableTrailers(shareLoadB).some((trailer) => trailer.id === shareTrailerId),
+    "trailer already on another open load stays in the assign picker",
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"),
+    /already on/,
+  );
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "lib/relay-store.ts"), "utf8"),
     /is already on/,

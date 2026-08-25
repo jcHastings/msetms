@@ -1585,23 +1585,10 @@ export function updateLoadStatus(loadId: number, status: string): void {
 function assertAssetFree(
   _truckId: number | null,
   _driverId: number | null,
-  exceptLoadId: number,
-  trailerId?: number | null,
+  _exceptLoadId: number,
+  _trailerId?: number | null,
 ): void {
-  // Trucks and drivers may sit on multiple active loads. Trailer stays unique.
-  if (trailerId == null) return;
-  const conflict = getDb()
-    .prepare(
-      `SELECT load_number FROM loads
-       WHERE id != ?
-         AND status IN (${BUSY_STATUS_SQL})
-         AND trailer_id = ?
-       LIMIT 1`,
-    )
-    .get(exceptLoadId, ...BUSY_STATUSES, trailerId) as { load_number: string } | undefined;
-  if (conflict) {
-    throw new Error(`That trailer is already on ${conflict.load_number}.`);
-  }
+  // Trucks, trailers, and drivers may sit on multiple active loads (relays, back-to-back).
 }
 
 function markAssetsOnDuty(truckId: number | null, driverId: number | null): void {
@@ -1745,17 +1732,10 @@ export function listMovingLoads(): LoadView[] {
   return listLoads({ status: "all" }).filter((load) => isRollingStatus(load.status));
 }
 
-export function listAssignableTrailers(loadId?: number): Trailer[] {
-  return listTrailers().filter((trailer) => {
-    if (trailer.active === 0 || trailer.status === "maintenance" || trailer.status === "out_of_service") return false;
-    const busy = getDb()
-      .prepare(
-        `SELECT id FROM loads
-         WHERE trailer_id = ? AND status IN (${BUSY_STATUS_SQL}) AND id != ?`,
-      )
-      .get(trailer.id, ...BUSY_STATUSES, loadId ?? -1);
-    return !busy;
-  });
+export function listAssignableTrailers(_loadId?: number): Trailer[] {
+  return listTrailers().filter(
+    (trailer) => trailer.active !== 0 && trailer.status !== "maintenance" && trailer.status !== "out_of_service",
+  );
 }
 
 export function listUpcomingCompliance(): ComplianceAlert[] {
