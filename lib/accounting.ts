@@ -3,6 +3,7 @@ import { getLoad, listDrivers, listLoads } from "./queries";
 import { listPayItems, markPayItemPaid, type LoadPayItem } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
 import type { LoadView } from "./types";
+import { buildXlsxFromGrid } from "./xlsx-first-sheet";
 
 export type Bill = {
   id: number;
@@ -193,6 +194,21 @@ export function renderDriverPayCsv(lines: DriverPayLine[]): string {
       .join(","),
   );
   return [header.join(","), ...rows].join("\n");
+}
+
+export function renderDriverPayXlsx(lines: DriverPayLine[]): Uint8Array {
+  return buildXlsxFromGrid([
+    ["Driver", "Load #", "Description", "Amount", "Status", "Delivery", "Customer"],
+    ...lines.map((line) => [
+      line.driverName,
+      line.load.load_number,
+      line.description,
+      Number(line.amount.toFixed(2)),
+      line.status,
+      (line.load.delivery_end || line.load.delivery_start || "").slice(0, 10),
+      line.load.customer_name,
+    ]),
+  ]);
 }
 
 

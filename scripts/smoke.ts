@@ -274,8 +274,19 @@ async function main() {
   assert.match(mapLibSource, /geocodeAddress/);
   assert.doesNotMatch(mapLibSource, /demo-112|32\.7767/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8"), /Close period/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Book from template/);
+  const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
+  assert.match(payPageSource, /Close period/);
+  assert.match(payPageSource, /Download Excel/);
+  assert.match(payPageSource, /Customer invoices stay customer-only/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8"), /GPS quiet window/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/location-form.tsx"), "utf8"),
+    /liftgate|inside pickup/i,
+  );
   const routingUi = fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8");
   assert.match(routingUi, /Refresh route/);
   assert.match(routingUi, /IFTA estimate/);
@@ -4741,7 +4752,15 @@ Continuous reefer. Two load locks.
   const loadStops = await import("../lib/stops");
   const defaultStops = loadStops.ensureDefaultStops(clonedId);
   assert.ok(defaultStops.length >= 2);
-  loadStops.addStop(clonedId, { kind: "pickup", name: "Nashville DC", city: "Nashville", state: "TN" });
+  loadStops.addStop(clonedId, {
+    kind: "pickup",
+    name: "Nashville DC",
+    street: "500 Cold Storage Rd",
+    city: "Nashville",
+    state: "TN",
+    zip: "37201",
+    phone: "615-555-0100",
+  });
   assert.equal(loadStops.listStops(clonedId).length, defaultStops.length + 1);
 
   const templates = await import("../lib/templates");
@@ -4765,6 +4784,12 @@ Continuous reefer. Two load locks.
   assert.equal(bookedLaneLoad.rate, null);
   assert.notEqual(bookedLaneLoad.load_number, queries.getLoad(clonedId)?.load_number);
   assert.ok(loadStops.listStops(bookedLane).length >= 2);
+  assert.ok(
+    loadStops.listStops(bookedLane).some(
+      (stop) => stop.street === "500 Cold Storage Rd" && stop.phone === "615-555-0100" && stop.zip === "37201",
+    ),
+    "template booking must copy full stop addresses",
+  );
   assert.equal((await import("../lib/pay-items")).listPayItems(bookedLane).length, 0);
 
   const rules = await import("../lib/location-rules-shared");
@@ -4838,7 +4863,8 @@ Continuous reefer. Two load locks.
     assert.ok(quietInbox.items.some((item) => item.kind === "gps_quiet"));
   }
 
-  const driverPayRows = (await import("../lib/accounting")).listDriverPay();
+  const accountingPay = await import("../lib/accounting");
+  const driverPayRows = accountingPay.listDriverPay();
   assert.ok(Array.isArray(driverPayRows));
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
@@ -4982,6 +5008,57 @@ Continuous reefer. Two load locks.
   const onePoint = await mapLib.buildLoadMapPoints(oneStopLoadId);
   assert.equal(onePoint.length, 1);
   assert.equal(onePoint[0].kind, "pickup");
+  audit.runWithAuditActor({ name: "MS Test", kind: "dispatcher" }, () => {
+    audit.recordLoadAudit({
+      loadId: mapLoadId,
+      action: "check_call",
+      field: "notes",
+      oldValue: "2026-08-25T12:00:00.000Z",
+      newValue: "Rolling I-80, on time",
+    });
+  });
+  const mapEvents = await mapLib.listLoadTrackingEvents(mapLoadId);
+  assert.ok(mapEvents.some((event) => event.source === "check_call" && event.note === "Rolling I-80, on time"));
+  assert.ok(mapEvents.some((event) => event.source === "samsara" && event.gps?.includes("41.25")));
+  assert.equal(mapEvents.some((event) => event.source === "samsara" && event.note.includes("Dallas")), false);
+
+  const settlementPayItems = await import("../lib/pay-items");
+  const invoiceGuard = await import("../lib/invoice");
+  queries.updateLoadStatus(mapLoadId, "delivered");
+  const driverPayItemId = settlementPayItems.addPayItem(mapLoadId, {
+    side: "expense",
+    bill_to: "driver",
+    payee: "Map Smoke Driver",
+    category: "flat_rate",
+    rate: 250,
+    qty: 1,
+    total: 250,
+    notes: "Driver settlement only",
+  });
+  const customerRateItemId = settlementPayItems.addPayItem(mapLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Map Customer",
+    category: "flat_rate",
+    rate: 1000,
+    qty: 1,
+    total: 1000,
+    notes: "Customer freight",
+  });
+  const payLines = accountingPay.listDriverPay();
+  assert.ok(payLines.some((line) => line.payItem?.id === driverPayItemId && line.status === "open"));
+  assert.equal(payLines.some((line) => line.payItem?.id === customerRateItemId), false);
+  const invoiceModel = invoiceGuard.buildTmsInvoice(queries.getLoad(mapLoadId)!);
+  assert.doesNotMatch(JSON.stringify(invoiceModel), /Driver settlement only/);
+  assert.doesNotMatch(invoiceModel.publicNotes ?? "", /PRIVATE/);
+  settlementPayItems.markPayItemPaid(driverPayItemId);
+  assert.ok(accountingPay.listDriverPay().some((line) => line.payItem?.id === driverPayItemId && line.status === "paid"));
+  const payXlsx = accountingPay.renderDriverPayXlsx(accountingPay.listDriverPay());
+  const paySheet = (await import("../lib/xlsx-first-sheet")).recordsFromFirstSheet(payXlsx);
+  assert.ok(paySheet.some((row) => String(row["Load #"] ?? "").includes(queries.getLoad(mapLoadId)?.load_number ?? "___")));
+  const payDay = (delivery.toISOString() || "").slice(0, 10);
+  const closed = accountingPay.closeDriverPayPeriod(payDay, payDay);
+  assert.ok(closed >= 0);
 
   const session = await import("../lib/dispatcher-session");
   const msTest = session.listDispatchers().find((row) => row.name === "MS Test");

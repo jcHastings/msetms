@@ -52,10 +52,10 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
               ))}
             </ol>
           )}
+          <div className="mt-4">
+            <LoadLogSection loadId={loadId} />
+          </div>
         </div>
-      </div>
-      <div className="mt-4">
-        <LoadLogSection loadId={loadId} />
       </div>
     </section>
   );

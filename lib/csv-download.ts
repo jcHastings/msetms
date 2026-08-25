@@ -19,3 +19,24 @@ export async function dispatcherCsvResponse(
     },
   });
 }
+
+export async function dispatcherBinaryResponse(
+  filename: string,
+  body: Uint8Array,
+  contentType: string,
+  allowed: (role: string) => boolean = canExportCsv,
+): Promise<Response> {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher || !allowed(dispatcher.role)) {
+    return unauthorizedResponse();
+  }
+  const safeName = filename.replaceAll('"', "");
+  const bytes = Buffer.from(body);
+  return new Response(bytes, {
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${safeName}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}

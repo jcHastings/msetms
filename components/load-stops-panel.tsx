@@ -194,13 +194,19 @@ function StopGridBlock({
               </option>
             ))}
           </select>
-          {draft.locationId
-            ? locationRuleLabels(locations.find((location) => String(location.id) === draft.locationId)).map((rule) => (
-                <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
-                  {rule}
-                </p>
-              ))
-            : null}
+          {locationRuleLabels(
+            locations.find((location) => String(location.id) === draft.locationId) ??
+              matchLocationForStop(locations, {
+                name: draft.name,
+                street: draft.street,
+                city: draft.city,
+                state: draft.state,
+              }),
+          ).map((rule) => (
+            <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
+              {rule}
+            </p>
+          ))}
         </td>
         <td className="align-top min-w-36">
           <input form={`stop-form-${stop.id}`} name="street" value={draft.street} onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))} />
