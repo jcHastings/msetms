@@ -216,7 +216,8 @@ async function main() {
   assert.match(basicsChunk, /data-load-tab="basics"/);
   assert.match(basicsChunk, /Reefer setpoint/);
   assert.match(basicsChunk, /Reefer mode/);
-  assert.match(basicsChunk, /isFirstAssign/);
+  assert.match(basicsChunk, /useLoadAssignPersist/);
+  assert.match(basicsChunk, /handleAssign/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
@@ -226,6 +227,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8"), /applyLocationToStop/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
   assert.match(customerChunk, /data-load-tab="customer"/);
+  assert.match(customerChunk, /useLoadAssignPersist/);
   assert.match(customerChunk, /Customer reference/);
   assert.doesNotMatch(customerChunk, /credit_hold|MC#|EDI/);
   assert.match(assetsChunk, /Company driver/);
@@ -233,8 +235,10 @@ async function main() {
   assert.match(assetsChunk, /name="driver_id"/);
   assert.match(assetsChunk, /name="truck_id"/);
   assert.match(assetsChunk, /name="trailer_id"/);
-  assert.match(assetsChunk, /isFirstAssign/);
-  assert.match(assetsChunk, /stay_on_load/);
+  assert.match(assetsChunk, /useLoadAssignPersist/);
+  assert.match(assetsChunk, /handleAssign/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8"), /stay_on_load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8"), /isAssignEdit/);
   assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible\) return null/);
@@ -281,11 +285,15 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /stop-front/);
   assert.match(stopsSource, /data-stop-autosave/);
   assert.match(stopsSource, /persistStop/);
+  assert.match(stopsSource, /isFirstAssign/);
+  assert.match(stopsSource, /isAssignEdit/);
   assert.match(stopsSource, /clearDirty/);
   assert.match(stopsSource, /updateStopAction/);
+  assert.match(stopsSource, /Save to keep this location change/);
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
   assert.match(laneSource, /LocationPicker/);
+  assert.match(laneSource, /useLoadAssignPersist/);
   assert.doesNotMatch(laneSource, /<select[^>]*name="shipper_location_id"/);
   const pickerSource = fs.readFileSync(path.join(process.cwd(), "components/location-picker.tsx"), "utf8");
   assert.match(pickerSource, /data-location-picker/);
@@ -4880,6 +4888,11 @@ Continuous reefer. Two load locks.
   assert.equal(firstAssign.isFirstAssign("", "12"), true);
   assert.equal(firstAssign.isFirstAssign(12, "15"), false);
   assert.equal(firstAssign.isFirstAssign(12, ""), false);
+  assert.equal(firstAssign.isAssignEdit(null, "12"), false);
+  assert.equal(firstAssign.isAssignEdit("", "12"), false);
+  assert.equal(firstAssign.isAssignEdit(12, "15"), true);
+  assert.equal(firstAssign.isAssignEdit(12, "12"), false);
+  assert.equal(firstAssign.isAssignEdit(12, ""), true);
   assert.deepEqual(locSearch.filterLocationsForPicker(book, "cold").map((row) => row.id), [1]);
   assert.deepEqual(locSearch.filterLocationsForPicker(book, "heart").map((row) => row.id), [2]);
   assert.deepEqual(locSearch.filterLocationsForPicker(book, "westside").map((row) => row.id), [2, 3]);

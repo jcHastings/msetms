@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LoadFormDefaults } from "@/components/load-basics-screen";
+import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import type { Customer, Load } from "@/lib/types";
 
 export function LoadCustomerScreen({
@@ -15,6 +16,7 @@ export function LoadCustomerScreen({
   defaults?: LoadFormDefaults;
   card?: boolean;
 }) {
+  const { handleAssign } = useLoadAssignPersist(load?.id);
   const [customerId, setCustomerId] = useState(
     load?.customer_id
       ? String(load.customer_id)
@@ -51,9 +53,12 @@ export function LoadCustomerScreen({
           name="customer_id"
           required={!createName}
           value={customerId}
+          data-first-assign={load?.customer_id ? undefined : ""}
           onChange={(event) => {
-            setCustomerId(event.target.value);
-            if (event.target.value) setCreateName("");
+            const next = event.target.value;
+            setCustomerId(next);
+            if (next) setCreateName("");
+            if (load) handleAssign(load.customer_id, next, "customer_id", event);
           }}
         >
           <option value="">{createName ? `Create “${createName}”` : "Select customer"}</option>

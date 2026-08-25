@@ -1,8 +1,10 @@
+"use client";
+
 import {
   LOAD_SIZES,
   LOAD_TRUCK_STATUSES,
 } from "@/lib/load-page-shared";
-import { isFirstAssign } from "@/lib/first-assign";
+import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
@@ -39,7 +41,6 @@ export function LoadBasicsScreen({
   weightUnit = "lb",
   equipmentChoices = [],
   card = true,
-  onFirstAssign,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -48,8 +49,8 @@ export function LoadBasicsScreen({
   weightUnit?: string;
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
-  onFirstAssign?: (fields: Record<string, string>) => void;
 }) {
+  const { handleAssign } = useLoadAssignPersist(load?.id);
   const looksReefer = Boolean(
     load?.reefer_mode ||
       defaults.reefer_mode ||
@@ -68,7 +69,16 @@ export function LoadBasicsScreen({
       <div className="field">
         <label htmlFor="status">Load Status</label>
         <div className="flex flex-wrap items-center gap-2">
-          <select id="status" name="status" defaultValue={load?.status ?? "available"} className="flex-1">
+          <select
+            id="status"
+            name="status"
+            defaultValue={load?.status ?? "available"}
+            className="flex-1"
+            data-first-assign={load?.status ? undefined : ""}
+            onChange={(event) => {
+              if (load) handleAssign(load.status, event.target.value, "status", event);
+            }}
+          >
             {LOAD_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {labelForLoadStatus(status)}
@@ -85,7 +95,15 @@ export function LoadBasicsScreen({
       </div>
       <div className="field">
         <label htmlFor="truck_status">Truck Status</label>
-        <select id="truck_status" name="truck_status" defaultValue={load?.truck_status ?? ""}>
+        <select
+          id="truck_status"
+          name="truck_status"
+          defaultValue={load?.truck_status ?? ""}
+          data-first-assign={load?.truck_status ? undefined : ""}
+          onChange={(event) => {
+            if (load) handleAssign(load.truck_status, event.target.value, "truck_status", event);
+          }}
+        >
           {LOAD_TRUCK_STATUSES.map((item) => (
             <option key={item.value || "blank"} value={item.value}>
               {item.label}
@@ -127,7 +145,15 @@ export function LoadBasicsScreen({
       </div>
       <div className="field">
         <label htmlFor="load_size">Full/Partial</label>
-        <select id="load_size" name="load_size" defaultValue={load?.load_size ?? ""}>
+        <select
+          id="load_size"
+          name="load_size"
+          defaultValue={load?.load_size ?? ""}
+          data-first-assign={load?.load_size ? undefined : ""}
+          onChange={(event) => {
+            if (load) handleAssign(load.load_size, event.target.value, "load_size", event);
+          }}
+        >
           {LOAD_SIZES.map((item) => (
             <option key={item.value || "blank"} value={item.value}>
               {item.label}
@@ -137,7 +163,15 @@ export function LoadBasicsScreen({
       </div>
       <div className="field">
         <label htmlFor="equipment">Equipment Type</label>
-        <select id="equipment" name="equipment" defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}>
+        <select
+          id="equipment"
+          name="equipment"
+          defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}
+          data-first-assign={load?.equipment ? undefined : ""}
+          onChange={(event) => {
+            if (load) handleAssign(load.equipment, event.target.value, "equipment", event);
+          }}
+        >
           {(equipmentChoices.length ? equipmentChoices : [{ value: DEFAULT_LOAD_EQUIPMENT, label: "53' Reefer" }]).map((item) => (
             <option key={item.value || "any"} value={item.value}>
               {item.label}
@@ -171,11 +205,7 @@ export function LoadBasicsScreen({
           defaultValue={load?.reefer_mode || defaults.reefer_mode || (looksReefer ? "continuous" : "")}
           data-first-assign={load?.reefer_mode ? undefined : ""}
           onChange={(event) => {
-            const next = event.target.value;
-            if (onFirstAssign && isFirstAssign(load?.reefer_mode || defaults.reefer_mode, next)) {
-              event.stopPropagation();
-              onFirstAssign({ reefer_mode: next });
-            }
+            if (load) handleAssign(load.reefer_mode, event.target.value, "reefer_mode", event);
           }}
         >
           <option value="">Not a reefer</option>

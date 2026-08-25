@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
 import { LocationPicker } from "@/components/location-picker";
 import { useLoadEdit } from "@/components/load-edit-context";
+import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, toInputDateTime } from "@/lib/format";
@@ -29,7 +30,8 @@ export function LoadStopsPanel({
         <div>
           <h2 className="text-sm font-semibold">Stops</h2>
           <p className="mt-1 text-xs text-slate-600">
-            Type · name + address · date/time on each row. Picking a location saves that stop immediately.
+            Type · name + address · date/time on each row. The first location pick on an empty stop
+            saves immediately. Changing a saved location needs Save.
           </p>
         </div>
         <div className="flex gap-2">
@@ -161,7 +163,7 @@ function StopGridBlock({
     if (!locationId) {
       const next = { ...draft, locationId: "" };
       setDraft(next);
-      if (stop.location_id) edit?.markDirty();
+      if (isAssignEdit(stop.location_id, "")) edit?.markDirty();
       return;
     }
     const location = locations.find((row) => String(row.id) === locationId);
@@ -177,8 +179,13 @@ function StopGridBlock({
       phone: location.phone ?? "",
     };
     setDraft(next);
-    edit?.clearDirty();
-    void persistStop(next);
+    if (isFirstAssign(stop.location_id, locationId)) {
+      void persistStop(next);
+      return;
+    }
+    if (isAssignEdit(stop.location_id, locationId)) {
+      edit?.markDirty();
+    }
   }
 
   const pickup = kind === "pickup";
@@ -244,9 +251,11 @@ function StopGridBlock({
             <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
               {saving
                 ? "Saving location…"
-                : saved || stop.location_id
-                  ? "Location is saved on this stop."
-                  : "Pick a saved location — it stays without Save."}
+                : isAssignEdit(stop.location_id, draft.locationId)
+                  ? "Save to keep this location change."
+                  : saved || stop.location_id
+                    ? "Location is saved on this stop."
+                    : "Pick a saved location — the first pick stays without Save."}
             </p>
             {rules.map((rule) => (
               <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">

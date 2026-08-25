@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ComplianceList } from "@/components/compliance-badge";
-import { updateLoadAction } from "@/lib/actions";
+import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { collectAssignmentAlerts, driverComplianceAlerts } from "@/lib/compliance";
-import { isFirstAssign } from "@/lib/first-assign";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import type { DriverWithTruck, Load, Trailer, Truck } from "@/lib/types";
 
@@ -28,7 +26,7 @@ export function LoadCarrierScreen({
   card?: boolean;
   onExpiredChange?: (expired: boolean, confirmed: boolean) => void;
 }) {
-  const router = useRouter();
+  const { handleAssign } = useLoadAssignPersist(load?.id);
   const initialDriver = load?.driver_id ? drivers.find((item) => item.id === load.driver_id) : null;
   const [driverKind, setDriverKind] = useState<"company" | "owner_operator">(
     initialDriver?.driver_type === "owner_operator" ? "owner_operator" : "company",
@@ -59,20 +57,6 @@ export function LoadCarrierScreen({
 
   function syncConfirm(nextConfirmed: boolean) {
     setConfirmed(nextConfirmed);
-  }
-
-  async function persistFirst(fields: Record<string, string>) {
-    if (!load?.id) return;
-    const formData = new FormData();
-    formData.set("stay_on_load", "1");
-    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
-    if (confirmed) formData.set("confirm_expired", "1");
-    const result = await updateLoadAction(load.id, null, formData);
-    if (result && "error" in result && result.error) {
-      window.alert(result.error);
-      return;
-    }
-    router.refresh();
   }
 
   return (
@@ -116,9 +100,14 @@ export function LoadCarrierScreen({
             const next = event.target.value;
             setDriverId(next);
             syncConfirm(false);
-            if (load && isFirstAssign(load.driver_id, next)) {
-              event.stopPropagation();
-              void persistFirst({ driver_id: next });
+            if (load) {
+              handleAssign(
+                load.driver_id,
+                next,
+                "driver_id",
+                event,
+                confirmed ? { confirm_expired: "1" } : undefined,
+              );
             }
           }}
         >
@@ -141,10 +130,7 @@ export function LoadCarrierScreen({
           onChange={(event) => {
             const next = event.target.value;
             setTruckId(next);
-            if (load && isFirstAssign(load.truck_id, next)) {
-              event.stopPropagation();
-              void persistFirst({ truck_id: next });
-            }
+            if (load) handleAssign(load.truck_id, next, "truck_id", event);
           }}
         >
           <option value="">Unassigned</option>
@@ -165,10 +151,7 @@ export function LoadCarrierScreen({
           onChange={(event) => {
             const next = event.target.value;
             setTrailerId(next);
-            if (load && isFirstAssign(load.trailer_id, next)) {
-              event.stopPropagation();
-              void persistFirst({ trailer_id: next });
-            }
+            if (load) handleAssign(load.trailer_id, next, "trailer_id", event);
           }}
         >
           <option value="">Unassigned</option>

@@ -1,6 +1,9 @@
+"use client";
+
 import { toInputDateTime } from "@/lib/format";
 import type { LoadFormDefaults } from "@/components/load-basics-screen";
 import { LocationPicker } from "@/components/location-picker";
+import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import type { Load, Location } from "@/lib/types";
 
 export function LoadLaneFields({
@@ -12,6 +15,7 @@ export function LoadLaneFields({
   defaults?: LoadFormDefaults;
   locations?: Location[];
 }) {
+  const { handleAssign } = useLoadAssignPersist(load?.id);
   return (
     <section data-load-tab="lane" className="card grid gap-4 p-6 md:grid-cols-2">
       <h2 className="md:col-span-2 text-sm font-semibold">Lane from rate con</h2>
@@ -75,6 +79,9 @@ export function LoadLaneFields({
           defaultValue={String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "")}
           emptyLabel="No saved location"
           placeholder="Type any name or address"
+          onChange={(next) => {
+            if (load) handleAssign(load.shipper_location_id, next, "shipper_location_id");
+          }}
         />
       </div>
       <div className="field">
@@ -86,6 +93,9 @@ export function LoadLaneFields({
           defaultValue={String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "")}
           emptyLabel="No saved location"
           placeholder="Type any name or address"
+          onChange={(next) => {
+            if (load) handleAssign(load.consignee_location_id, next, "consignee_location_id");
+          }}
         />
       </div>
       <div className="field md:col-span-2">
