@@ -2,6 +2,7 @@ import {
   LOAD_SIZES,
   LOAD_TRUCK_STATUSES,
 } from "@/lib/load-page-shared";
+import { isFirstAssign } from "@/lib/first-assign";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
@@ -38,6 +39,7 @@ export function LoadBasicsScreen({
   weightUnit = "lb",
   equipmentChoices = [],
   card = true,
+  onFirstAssign,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -46,6 +48,7 @@ export function LoadBasicsScreen({
   weightUnit?: string;
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
+  onFirstAssign?: (fields: Record<string, string>) => void;
 }) {
   const looksReefer = Boolean(
     load?.reefer_mode ||
@@ -162,10 +165,18 @@ export function LoadBasicsScreen({
       </div>
       <div className="field">
         <label htmlFor="reefer_mode">Reefer mode</label>
-        <select
+          <select
           id="reefer_mode"
           name="reefer_mode"
           defaultValue={load?.reefer_mode || defaults.reefer_mode || (looksReefer ? "continuous" : "")}
+          data-first-assign={load?.reefer_mode ? undefined : ""}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (onFirstAssign && isFirstAssign(load?.reefer_mode || defaults.reefer_mode, next)) {
+              event.stopPropagation();
+              onFirstAssign({ reefer_mode: next });
+            }
+          }}
         >
           <option value="">Not a reefer</option>
           {REEFER_MODES.map((mode) => (

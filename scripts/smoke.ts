@@ -216,6 +216,7 @@ async function main() {
   assert.match(basicsChunk, /data-load-tab="basics"/);
   assert.match(basicsChunk, /Reefer setpoint/);
   assert.match(basicsChunk, /Reefer mode/);
+  assert.match(basicsChunk, /isFirstAssign/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
@@ -6200,7 +6201,11 @@ Continuous reefer. Two load locks.
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
-  assert.match(made.buffer.toString("latin1"), /INVOICE|Invoice/);
+  const invoiceLibSource = fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8");
+  assert.match(invoiceLibSource, /INVOICE/);
+  assert.match(invoiceLibSource, /Customer Information/);
+  assert.match(invoiceLibSource, /Stops \/ Actions/);
+  assert.match(invoiceLibSource, /paperworkCompanyName/);
   assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");
   const invoiceFiles = (await import("../lib/files")).listAttachments(invoiceLoadId).filter((file) => file.kind === "invoice");
   assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));

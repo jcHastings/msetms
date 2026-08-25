@@ -2,6 +2,7 @@
 
 import { useActionState, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { updateLoadAction } from "@/lib/actions";
 import { FormBanner } from "@/components/form-banner";
 import { LoadBasicsScreen, type LoadFormDefaults } from "@/components/load-basics-screen";
 import { LoadCarrierScreen } from "@/components/load-carrier-screen";
@@ -102,6 +103,22 @@ export function LoadForm({
           weightUnit={weightUnit}
           equipmentChoices={equipmentChoices}
           card={card}
+          onFirstAssign={
+            load
+              ? (fields) => {
+                  const formData = new FormData();
+                  formData.set("stay_on_load", "1");
+                  for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+                  void updateLoadAction(load.id, null, formData).then((result) => {
+                    if (result && "error" in result && result.error) {
+                      window.alert(result.error);
+                      return;
+                    }
+                    router.refresh();
+                  });
+                }
+              : undefined
+          }
         />
       ) : null}
       {resolvedScreen === "customer" || resolvedScreen === "all" ? (
