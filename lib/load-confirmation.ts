@@ -2,7 +2,8 @@ import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
 import { formatLocationAddress, formatSchedulingSummary } from "./locations";
-import { getCustomer, getLoad, getLocation, getTrailer } from "./queries";
+import { getLoad, getLocation, getTrailer } from "./queries";
+import { listStops, type LoadStop } from "./stops";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
@@ -106,17 +107,55 @@ function appointmentLabel(notes: string): string {
   return "Yes";
 }
 
+function formatStopAddress(stop: LoadStop): string {
+  const cityState = [stop.city.trim(), stop.state.trim()].filter(Boolean).join(", ");
+  const cityZip = [cityState, stop.zip.trim()].filter(Boolean).join(" ");
+  return [stop.street.trim(), cityZip].filter(Boolean).join(", ");
+}
+
+function confirmationParty(
+  stop: LoadStop | undefined,
+  fallbackLocationId: number | null,
+  laneFallback = "",
+) {
+  const location = getLocation(stop?.location_id ?? fallbackLocationId ?? 0);
+  if (location) {
+    return {
+      name: location.name,
+      address: formatLocationAddress(location),
+      phone: location.phone,
+      hours: location.hours,
+      extra: location.scheduling_notes,
+      appointment: location.scheduling_type === "appointment" ? "Yes" : "No",
+      location,
+    };
+  }
+  if (!stop) {
+    return { name: "", address: laneFallback.trim(), phone: "", hours: "", extra: "", appointment: "", location: null };
+  }
+  return {
+    name: stop.name.trim(),
+    address: formatStopAddress(stop) || laneFallback.trim(),
+    phone: stop.phone.trim(),
+    hours: "",
+    extra: [stop.instructions, stop.notes].map((value) => value.trim()).filter(Boolean).join("\n"),
+    appointment: "",
+    location: null,
+  };
+}
+
 export function buildConfirmationModel(load: LoadView, company = getCompanyProfile()): ConfirmationModel {
-  const customer = getCustomer(load.customer_id);
-  const contact = customer?.contacts[0];
-  const shipperLoc = load.shipper_location_id ? getLocation(load.shipper_location_id) : null;
-  const consigneeLoc = load.consignee_location_id ? getLocation(load.consignee_location_id) : null;
+  const stops = listStops(load.id);
+  const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
+  const delivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
+  const shipper = confirmationParty(pickup, load.shipper_location_id, load.origin);
+  const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination);
   const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
   const notes = [
     load.special_instructions,
     load.appointment_notes,
-    shipperLoc ? `Pickup: ${formatSchedulingSummary(shipperLoc)}` : "",
-    consigneeLoc ? `Delivery: ${formatSchedulingSummary(consigneeLoc)}` : "",
+    shipper.location ? `Pickup: ${formatSchedulingSummary(shipper.location)}` : "",
+    consignee.location ? `Delivery: ${formatSchedulingSummary(consignee.location)}` : "",
     load.notes,
   ]
     .filter(Boolean)
@@ -149,42 +188,38 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     loadStatus: confirmationStatus(load),
     shipper: {
       title: "Shipper 1",
-      name: shipperLoc?.name ?? load.customer_name,
-      address: shipperLoc ? formatLocationAddress(shipperLoc) : load.origin,
-      phone: shipperLoc?.phone || contact?.phone || "",
-      date: formatMdY(load.pickup_start),
-      time: formatClock(load.pickup_start),
+      name: shipper.name,
+      address: shipper.address,
+      phone: shipper.phone,
+      date: formatMdY(pickup?.window_start || load.pickup_start),
+      time: formatClock(pickup?.window_start || load.pickup_start),
       type: "",
       quantity: "",
       weight: load.weight != null ? String(load.weight) : "",
-      poNumber: load.po_number,
-      confirmationNumber: load.reference_number,
-      extra: shipperLoc?.scheduling_notes ?? "",
+      poNumber: pickup?.reference.trim() || load.po_number,
+      confirmationNumber: pickup?.confirmation.trim() || load.reference_number,
+      extra: shipper.extra,
       hoursLabel: "Shipping Hours",
-      hours: shipperLoc?.hours ?? "",
-      appointment:
-        shipperLoc?.scheduling_type === "appointment" ? "Yes" : appointmentLabel(load.appointment_notes),
+      hours: shipper.hours,
+      appointment: shipper.appointment || appointmentLabel(load.appointment_notes),
       description: load.commodity,
     },
     consignee: {
       title: "Consignee 1",
-      name: consigneeLoc?.name ?? load.destination,
-      address: consigneeLoc ? formatLocationAddress(consigneeLoc) : load.destination,
-      phone: consigneeLoc?.phone ?? "",
-      date: formatMdY(load.delivery_start),
-      time: formatClock(load.delivery_start),
+      name: consignee.name,
+      address: consignee.address,
+      phone: consignee.phone,
+      date: formatMdY(delivery?.window_start || load.delivery_start),
+      time: formatClock(delivery?.window_start || load.delivery_start),
       type: "",
       quantity: "",
       weight: load.weight != null ? String(load.weight) : "",
-      poNumber: load.po_number,
-      confirmationNumber: load.reference_number,
-      extra: consigneeLoc?.scheduling_notes ?? "",
+      poNumber: delivery?.reference.trim() || load.po_number,
+      confirmationNumber: delivery?.confirmation.trim() || load.reference_number,
+      extra: consignee.extra,
       hoursLabel: "Receiving Hours",
-      hours: consigneeLoc?.hours ?? "",
-      appointment:
-        consigneeLoc?.scheduling_type === "appointment"
-          ? "Yes"
-          : appointmentLabel(load.appointment_notes),
+      hours: consignee.hours,
+      appointment: consignee.appointment || appointmentLabel(load.appointment_notes),
       description: load.commodity,
     },
     dispatchNotes: notes,

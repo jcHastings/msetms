@@ -2230,6 +2230,119 @@ Continuous reefer. Two load locks.
   const feedConfirm = confirmation.buildConfirmationForLoad(feedLoad.id);
   assert.equal(feedConfirm.reeferSetpoint, "", "dry van / no setpoint must not print blank degrees");
   assert.equal(feedConfirm.reeferMode, "", "bagged feed / dry van must not invent a reefer mode");
+  assert.equal(deniseConfirm.shipper.name, "River City Nashville Cooler");
+  assert.match(deniseConfirm.shipper.address, /700 Cowan St/);
+  assert.match(deniseConfirm.shipper.phone, /615/);
+  assert.doesNotMatch(deniseConfirm.shipper.name, /M&S Loads|M & S Loads/i);
+  const { replaceStops } = await import("../lib/stops");
+  const confirmImportId = queries.createLoad({
+    customer_id: customerId,
+    load_number: "1006149",
+    origin: "Avenel, NJ",
+    destination: "Hastings, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 42000,
+    commodity: "Frozen beef",
+    rate: 2800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "PO-6149",
+    po_number: "PO-6149",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  replaceStops(confirmImportId, [
+    {
+      kind: "pickup",
+      name: "Lineage Logistics - Avenel",
+      city: "Avenel",
+      state: "NJ",
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Nebraska Cold Storage",
+      city: "Hastings",
+      state: "NE",
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+  ]);
+  const importedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
+  assert.equal(importedConfirm.shipper.name, "Lineage Logistics - Avenel");
+  assert.equal(importedConfirm.shipper.address, "Avenel, NJ");
+  assert.equal(importedConfirm.consignee.name, "Nebraska Cold Storage");
+  assert.equal(importedConfirm.consignee.address, "Hastings, NE");
+  assert.notEqual(importedConfirm.shipper.name, queries.getLoad(confirmImportId)?.customer_name);
+  assert.doesNotMatch(importedConfirm.shipper.name, /M & S Loads/i);
+  const linkedShipper = queries.createLocation({
+    name: "Lineage Logistics - Avenel",
+    street: "1 Lineage Dr",
+    city: "Avenel",
+    state: "NJ",
+    zip: "07001",
+    phone: "(732) 555-0100",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 06:00–14:00",
+    scheduling_notes: "Appointment required.",
+  });
+  const linkedConsignee = queries.createLocation({
+    name: "Nebraska Cold Storage",
+    street: "200 Ice House Rd",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    phone: "(402) 555-0199",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "fcfs",
+    hours: "Daily 07:00–17:00",
+    scheduling_notes: "",
+  });
+  replaceStops(confirmImportId, [
+    {
+      kind: "pickup",
+      name: "Avenel",
+      city: "Avenel",
+      state: "NJ",
+      location_id: linkedShipper,
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Hastings",
+      city: "Hastings",
+      state: "NE",
+      location_id: linkedConsignee,
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+  ]);
+  const linkedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
+  const linkedDriverPacket = confirmation.buildConfirmationForLoad(confirmImportId, { packet: "internal" });
+  assert.equal(linkedConfirm.shipper.name, "Lineage Logistics - Avenel");
+  assert.match(linkedConfirm.shipper.address, /1 Lineage Dr/);
+  assert.match(linkedConfirm.shipper.address, /07001/);
+  assert.equal(linkedConfirm.shipper.phone, "(732) 555-0100");
+  assert.equal(linkedConfirm.shipper.hours, "Mon–Fri 06:00–14:00");
+  assert.equal(linkedConfirm.consignee.name, "Nebraska Cold Storage");
+  assert.match(linkedConfirm.consignee.address, /200 Ice House Rd/);
+  assert.equal(linkedConfirm.consignee.phone, "(402) 555-0199");
+  assert.equal(linkedDriverPacket.shipper.name, linkedConfirm.shipper.name);
+  assert.equal(linkedDriverPacket.consignee.address, linkedConfirm.consignee.address);
+  assert.match(linkedConfirm.reeferSetpoint, /34/);
+  assert.equal(linkedConfirm.reeferMode, "Continuous");
   const feedPdf = await confirmation.renderConfirmationPdf(feedConfirm);
   const feedText = String((await extractText(new Uint8Array(feedPdf), { mergePages: true })).text ?? "");
   assert.doesNotMatch(feedText, /Setpoint —/);
