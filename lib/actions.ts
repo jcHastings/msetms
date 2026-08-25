@@ -1492,7 +1492,7 @@ export async function createTmsInvoiceAction(
       const { createTmsInvoice } = await import("./invoice");
       const result = await createTmsInvoice(loadId);
       refresh();
-      return { ok: true, id: result.attachmentId, message: `Invoice ${result.invoiceNumber} saved on Load Documents.` };
+      return { ok: true, id: result.attachmentId, message: `Invoice ${result.invoiceNumber}` };
     } catch (error) {
       return fail(error);
     }

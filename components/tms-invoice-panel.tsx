@@ -1,23 +1,58 @@
 "use client";
 
-import { useActionState } from "react";
-import { createTmsInvoiceAction } from "@/lib/actions";
-import { formatMoney } from "@/lib/format";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { formatDateTime, formatMoney } from "@/lib/format";
+import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
+import { labelForUploader, type Attachment } from "@/lib/types";
 
 export function TmsInvoicePanel({
   loadId,
   status,
   invoice,
   saved = false,
+  invoices = [],
 }: {
   loadId: number;
   status: string;
   invoice: TmsInvoiceModel | null;
   saved?: boolean;
+  invoices?: Attachment[];
 }) {
-  const [state, formAction, pending] = useActionState(createTmsInvoiceAction, null);
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
   const canInvoice = status === "delivered" || status === "completed";
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    const preview = window.open("about:blank", "_blank");
+    try {
+      const response = await fetch(`/api/loads/${loadId}/invoice`, { method: "POST" });
+      if (!response.ok) {
+        preview?.close();
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        setError(body?.error || "Could not create invoice.");
+        return;
+      }
+      const blob = await response.blob();
+      const filename = filenameFromContentDisposition(
+        response.headers.get("content-disposition"),
+        "invoice.pdf",
+      );
+      downloadAndOpenPdf(blob, filename, preview);
+      router.refresh();
+    } catch (cause) {
+      preview?.close();
+      setError(cause instanceof Error ? cause.message : "Could not create invoice.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <section className="card mb-4 p-5" data-invoice-panel="">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -66,22 +101,40 @@ export function TmsInvoicePanel({
           ))}
         </ul>
       ) : null}
-      {state && !state.ok ? (
+      {error ? (
         <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {state.error}
+          {error}
         </p>
       ) : null}
-      {state?.ok && state.message ? (
-        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {state.message}
-        </p>
-      ) : null}
-      <form action={formAction} className="mt-4">
-        <input type="hidden" name="load_id" value={loadId} />
+      <form onSubmit={onSubmit} className="mt-4">
         <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
           {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
         </button>
       </form>
+      {invoices.length > 0 ? (
+        <ul className="mt-4 divide-y divide-slate-100">
+          {invoices.map((file) => (
+            <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+              <div>
+                <a href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
+                  {file.original_name}
+                </a>
+                <div className="text-xs text-slate-500">
+                  Invoice · {labelForUploader(file.uploaded_by)} · {formatDateTime(file.created_at)}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
+                  Open
+                </a>
+                <a className="btn btn-ghost" href={`/api/attachments/${file.id}?download=1`}>
+                  Download
+                </a>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

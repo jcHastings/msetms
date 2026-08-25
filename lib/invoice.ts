@@ -66,21 +66,27 @@ export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
   };
 }
 
-export async function createTmsInvoice(loadId: number): Promise<{ invoiceNumber: string; attachmentId: number }> {
+export async function createTmsInvoice(loadId: number): Promise<{
+  invoiceNumber: string;
+  attachmentId: number;
+  filename: string;
+  buffer: Buffer;
+}> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   const model = buildTmsInvoice(load);
+  const filename = `${model.invoiceNumber}.pdf`;
   const buffer = await renderTmsInvoicePdf(model);
   const attachment = addAttachment({
     loadId,
     kind: "invoice",
-    originalName: `${model.invoiceNumber}.pdf`,
+    originalName: filename,
     buffer,
     mimeType: "application/pdf",
     uploadedBy: "dispatcher",
   });
   markTmsInvoice(loadId, model.invoiceNumber, new Date().toISOString());
-  return { invoiceNumber: model.invoiceNumber, attachmentId: attachment.id };
+  return { invoiceNumber: model.invoiceNumber, attachmentId: attachment.id, filename, buffer };
 }
 
 export function renderInvoicesCsv(rows: TmsInvoiceModel[]): string {

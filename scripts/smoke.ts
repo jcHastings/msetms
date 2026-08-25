@@ -5703,7 +5703,19 @@ Continuous reefer. Two load locks.
   assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
   const made = await createTmsInvoice(invoiceLoadId);
   assert.equal(made.invoiceNumber, "INV-1005911");
+  assert.equal(made.filename, "INV-1005911.pdf");
+  assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
   assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");
+  const invoiceFiles = (await import("../lib/files")).listAttachments(invoiceLoadId).filter((file) => file.kind === "invoice");
+  assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));
+  const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
+  assert.match(invoicePanel, /Create invoice/);
+  assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
+  assert.match(invoicePanel, /downloadAndOpenPdf/);
+  assert.match(invoicePanel, /about:blank/);
+  assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /Content-Disposition.*attachment/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8"), /createObjectURL/);
   assert.match(renderInvoicesCsv([
     {
       invoiceNumber: "INV-1005911",

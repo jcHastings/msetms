@@ -163,6 +163,7 @@ export async function LoadEditor({
                 loadId={load.id}
                 status={load.status}
                 saved={Boolean(load.tms_invoice_number)}
+                invoices={attachments.filter((file) => file.kind === "invoice")}
                 invoice={(() => {
                   try {
                     return buildTmsInvoice(load);
