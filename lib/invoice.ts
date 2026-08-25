@@ -1,7 +1,7 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { addAttachment } from "./files";
-import { formatInvoiceMoney, formatWeight } from "./format";
+import { formatInvoiceMoney, formatStopWindow, formatWeight } from "./format";
 import { labelForPayCategory } from "./load-page-shared";
 import { formatLocationAddress } from "./locations";
 import { customerInvoicePayItems } from "./pay-items";
@@ -19,7 +19,9 @@ export type TmsInvoiceLine = {
 };
 
 export type TmsInvoiceStop = {
+  sequence: number;
   kind: string;
+  window: string;
   name: string;
   street: string;
   city: string;
@@ -65,25 +67,26 @@ export function paperworkCompanyName(name: string): string {
 
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
-  const lane = `${load.origin} → ${load.destination}`;
   if (payItems.length) {
     return payItems.map((item) => ({
       name: labelForPayCategory(item.category),
-      description: item.notes.trim() || `${load.load_number} ${lane}`,
+      description: item.notes.trim(),
       amount: item.total ?? 0,
       qty: item.qty,
       rate: item.rate,
     }));
   }
   if (load.rate != null && load.rate > 0) {
-    return [{ name: "Line Haul", description: `${load.load_number} ${lane}`, amount: load.rate, qty: 1, rate: load.rate }];
+    return [{ name: "Flat Rate", description: "", amount: load.rate, qty: 1, rate: load.rate }];
   }
   return [];
 }
 
 function invoiceStops(load: LoadView): TmsInvoiceStop[] {
-  return listStops(load.id).map((stop) => ({
+  return listStops(load.id).map((stop, index) => ({
+    sequence: stop.sequence || index + 1,
     kind: stop.kind === "delivery" ? "Delivery" : "Pickup",
+    window: formatStopWindow(stop.window_start, stop.window_end),
     name: stop.name,
     street: stop.street,
     city: stop.city,
@@ -93,6 +96,10 @@ function invoiceStops(load: LoadView): TmsInvoiceStop[] {
     reference: stop.reference || stop.confirmation,
     cargo: stop.cargo,
   }));
+}
+
+function companyAddressLines(street: string, cityStateZip: string): string[] {
+  return [street, cityStateZip].map((line) => line.trim()).filter(Boolean);
 }
 
 function customerBlock(load: LoadView): {
@@ -202,121 +209,143 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   });
 
   const left = 36;
-  const pageW = 612;
-  const width = pageW - 72;
-  const navy = "#12315c";
+  const width = 540;
+  const navy = "#111111";
   let y = 36;
 
   const logo = companyLogoPath();
   if (logo) {
     try {
-      doc.image(logo, left, y, { fit: [78, 48] });
+      doc.image(logo, left, y, { fit: [72, 48] });
     } catch {
       // Skip a bad logo rather than failing the invoice.
     }
   }
 
-  doc.font("Helvetica-Bold").fontSize(18).fillColor(navy);
-  doc.text("INVOICE", left + 90, y, { width: width - 90, align: "right" });
-  y += 22;
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(navy).text(model.companyLegalName, left + 90, y, { width: 220 });
-  doc.font("Helvetica").fontSize(9).fillColor("#111827");
-  const metaX = left + 320;
+  const companyX = logo ? left + 84 : left;
+  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111").text(model.companyLegalName, companyX, y, {
+    width: 240,
+  });
+  let companyY = y + 16;
+  for (const line of companyAddressLines(
+    settings.street,
+    [[settings.city, settings.state].filter(Boolean).join(", "), settings.zip].filter(Boolean).join(" "),
+  )) {
+    doc.font("Helvetica").fontSize(8).fillColor("#111111").text(line, companyX, companyY, { width: 240 });
+    companyY += 11;
+  }
+  if (model.companyPhone) {
+    doc.font("Helvetica").fontSize(8).text(`Phone: ${model.companyPhone}`, companyX, companyY, { width: 240 });
+    companyY += 11;
+  }
+
+  doc.font("Helvetica-Bold").fontSize(22).fillColor("#111111");
+  doc.text("INVOICE", left, y, { width, align: "right" });
   const meta = [
     ["Invoice #", model.invoiceNumber],
     ["Date", model.date],
     ["Reference", model.customerReference || model.poNumber],
     ["Weight", model.weight],
-    ["Miles", model.miles],
+    ["Distance", model.miles ? `${model.miles} miles` : ""],
   ].filter(([, value]) => value);
-  let metaY = y;
+  let metaY = y + 26;
   for (const [label, value] of meta) {
-    doc.font("Helvetica-Bold").fontSize(8).text(`${label}:`, metaX, metaY, { width: 70, lineBreak: false });
-    doc.font("Helvetica").text(value, metaX + 70, metaY, { width: 110, lineBreak: false });
+    doc.font("Helvetica-Bold").fontSize(8).text(`${label}:`, left + 330, metaY, { width: 70, lineBreak: false });
+    doc.font("Helvetica").text(value, left + 400, metaY, { width: 140, lineBreak: false });
     metaY += 12;
   }
+  y = Math.max(companyY, metaY) + 12;
+
+  doc.moveTo(left, y).lineTo(left + width, y).strokeColor("#111111").lineWidth(0.8).stroke();
+  y += 10;
+  doc.font("Helvetica-Bold").fontSize(10).text("Customer Information", left, y);
+  y += 6;
+  doc.moveTo(left, y + 8).lineTo(left + width, y + 8).strokeColor("#111111").lineWidth(0.4).stroke();
   y += 16;
-  if (model.companyAddress) {
-    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(model.companyAddress, left + 90, y, { width: 220 });
-    y += 12;
+  doc.font("Helvetica-Bold").fontSize(10).text(model.customerName, left, y, { width: 280 });
+  if (model.customerContact) {
+    doc.font("Helvetica").fontSize(9).text(`Primary Contact: ${model.customerContact}`, left + 300, y, { width: 240 });
   }
-  const phoneLine = [model.companyPhone, model.companyEmail].filter(Boolean).join("  ·  ");
-  if (phoneLine) {
-    doc.text(phoneLine, left + 90, y, { width: 220 });
-    y += 12;
-  }
-  y = Math.max(y + 8, metaY + 10);
-
-  doc.moveTo(left, y).lineTo(left + width, y).strokeColor(navy).lineWidth(1).stroke();
-  y += 12;
-
-  doc.font("Helvetica-Bold").fontSize(10).fillColor(navy).text("Customer Information", left, y);
-  y += 14;
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(model.customerName, left, y);
   y += 13;
-  doc.font("Helvetica").fontSize(9);
-  if (model.customerStreet) {
-    doc.text(model.customerStreet, left, y);
-    y += 12;
-  }
-  if (model.customerCityStateZip) {
-    doc.text(model.customerCityStateZip, left, y);
+  for (const line of companyAddressLines(model.customerStreet, model.customerCityStateZip)) {
+    doc.font("Helvetica").fontSize(9).text(line, left, y, { width: 280 });
     y += 12;
   }
   if (model.customerPhone) {
-    doc.text(model.customerPhone, left, y);
+    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.customerPhone}`, left, y, { width: 280 });
     y += 12;
   }
-  if (model.customerContact) {
-    doc.text(`Contact: ${model.customerContact}`, left, y);
-    y += 12;
-  }
-  y += 8;
+  y += 10;
 
   y = drawTable(
     doc,
     left,
     y,
     width,
-    ["Description", "Qty", "Rate", "Amount"],
-    [260, 50, 90, 100],
+    ["Description", "Notes", "Quantity", "Rate", "Amount"],
+    [140, 160, 70, 80, 90],
     model.lines.map((line) => [
-      [line.name, line.description].filter(Boolean).join(" — "),
+      line.name,
+      line.description,
       line.qty != null ? String(line.qty) : "",
       formatInvoiceMoney(line.rate, currency),
       formatInvoiceMoney(line.amount, currency),
     ]),
     navy,
   );
-  y += 16;
+  y += 8;
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111");
+  doc.text(`Total ${formatInvoiceMoney(model.total, currency)}`, left, y, { width, align: "right" });
+  y += 18;
 
   if (model.stops.length) {
-    doc.font("Helvetica-Bold").fontSize(10).fillColor(navy).text("Stops / Actions", left, y);
-    y += 14;
+    if (y > 680) {
+      doc.addPage();
+      y = 36;
+    }
+    doc.font("Helvetica-Bold").fontSize(10).text("Stops / Actions", left, y);
+    y += 6;
+    doc.moveTo(left, y + 8).lineTo(left + width, y + 8).strokeColor("#111111").lineWidth(0.4).stroke();
+    y += 16;
     y = drawTable(
       doc,
       left,
       y,
       width,
-      ["Type", "Name + address", "Phone", "Ref / cargo"],
-      [70, 250, 90, 130],
+      ["#", "Action", "Date/Time", "Location", "Contact"],
+      [28, 70, 90, 230, 122],
       model.stops.map((stop) => [
+        String(stop.sequence),
         stop.kind,
-        [stop.name, formatLocationAddress(stop)].filter(Boolean).join(" — "),
+        stop.window,
+        [stop.name, formatLocationAddress(stop)].filter(Boolean).join("\n"),
         stop.phone,
-        [stop.reference, stop.cargo].filter(Boolean).join(" · "),
       ]),
       navy,
     );
-    y += 12;
+    y += 8;
+    for (const stop of model.stops) {
+      if (!stop.reference && !stop.cargo) continue;
+      if (y > 720) {
+        doc.addPage();
+        y = 36;
+      }
+      doc.font("Helvetica-Bold").fontSize(8).text(`Stop ${stop.sequence}`, left, y);
+      y += 11;
+      if (stop.reference) {
+        doc.font("Helvetica").fontSize(8).text(`References: ${stop.reference}`, left + 12, y, { width });
+        y += 11;
+      }
+      if (stop.cargo) {
+        doc.font("Helvetica").fontSize(8).text(`Cargo: ${stop.cargo}`, left + 12, y, { width });
+        y += 11;
+      }
+    }
   }
 
-  doc.font("Helvetica-Bold").fontSize(12).fillColor(navy);
-  doc.text(`Total ${formatInvoiceMoney(model.total, currency)}`, left, y, { width, align: "right" });
-  y += 18;
-
   if (model.publicNotes?.trim()) {
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#111827").text("Notes", left, y);
+    y += 8;
+    doc.font("Helvetica-Bold").fontSize(9).text("Notes", left, y);
     y += 12;
     doc.font("Helvetica").fontSize(8).fillColor("#374151").text(model.publicNotes, left, y, { width });
     y += 16;
@@ -343,29 +372,34 @@ function drawTable(
   rows: string[][],
   navy: string,
 ): number {
-  const rowH = 16;
-  doc.rect(x, y, width, rowH).fill(navy);
+  const headerH = 16;
+  doc.rect(x, y, width, headerH).fill(navy);
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
   let cx = x + 4;
   headers.forEach((header, index) => {
     doc.text(header, cx, y + 4, { width: widths[index] - 8, lineBreak: false });
     cx += widths[index];
   });
-  y += rowH;
-  doc.font("Helvetica").fontSize(8).fillColor("#111827");
+  y += headerH;
+  const startY = y;
+  doc.font("Helvetica").fontSize(8).fillColor("#111111");
   rows.forEach((row, rowIndex) => {
+    const heights = row.map((cell, index) =>
+      doc.heightOfString(cell || " ", { width: widths[index] - 8 }),
+    );
+    const rowH = Math.max(16, ...heights) + 6;
     if (rowIndex % 2 === 1) {
       doc.rect(x, y, width, rowH).fill("#f3f4f6");
-      doc.fillColor("#111827");
+      doc.fillColor("#111111");
     }
     cx = x + 4;
     row.forEach((cell, index) => {
-      doc.text(cell || "", cx, y + 4, { width: widths[index] - 8, lineBreak: false });
+      doc.fillColor("#111111").text(cell || "", cx, y + 4, { width: widths[index] - 8 });
       cx += widths[index];
     });
     y += rowH;
   });
-  doc.strokeColor("#d1d5db").lineWidth(0.5).rect(x, y - rows.length * rowH - rowH, width, rows.length * rowH + rowH).stroke();
+  doc.strokeColor("#d1d5db").lineWidth(0.5).rect(x, startY - headerH, width, y - startY + headerH).stroke();
   return y;
 }
 

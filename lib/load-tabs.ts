@@ -50,6 +50,10 @@ export function isFormTab(tab: LoadTab): boolean {
   return tab === "basics" || tab === "customer" || tab === "assets";
 }
 
+export function isSaveTab(tab: LoadTab): boolean {
+  return isFormTab(tab) || tab === "stops" || tab === "financials";
+}
+
 export function loadFormTabsForRole(role: string) {
   return LOAD_TABS.filter((tab) => tab.value !== "financials" || canViewLoadFinancials(role));
 }

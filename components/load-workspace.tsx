@@ -14,7 +14,7 @@ import {
 } from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
-import { isFormTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
+import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
   canLogCheckCall,
@@ -173,7 +173,7 @@ export function LoadWorkspace({
           </nav>
         )}
         <div className="flex items-center gap-2">
-          {create || isFormTab(tab) ? (
+          {create || isSaveTab(tab) ? (
             <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
               {pending ? "Saving…" : "Save"}
             </button>

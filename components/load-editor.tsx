@@ -118,7 +118,7 @@ export async function LoadEditor({
         returnTo={returnTo}
         watched={Boolean(load.watched)}
       >
-        <LoadTabPanel when={["basics", "customer", "assets"]}>
+        <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
           <LoadForm
             customers={customers}
             trucks={trucks}

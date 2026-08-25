@@ -209,6 +209,8 @@ async function main() {
   assert.match(loadFormSource, /LoadBasicsScreen/);
   assert.match(loadFormSource, /LoadCustomerScreen/);
   assert.match(loadFormSource, /LoadCarrierScreen/);
+  assert.match(loadFormSource, /data-assign-fields/);
+  assert.match(loadFormSource, /hidden=\{resolvedScreen !== "assets"/);
   assert.match(loadFormSource, /stay_on_load/);
   assert.match(loadFormSource, /\/loads\/\$\{load\.id\}/);
   const actionsSource = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
@@ -247,7 +249,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8"), /isAssignEdit/);
   assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible\) return null/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible && !keepMounted\) return null/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /keepMounted/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8"), /isSaveTab/);
   const paySource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
   assert.match(paySource, /\+ Add Line Item/);
   assert.match(paySource, /Save Pay Item/);
@@ -1115,6 +1120,8 @@ async function main() {
   const firstDriverMerged = parseLoadInput(firstDriverOnly, true, { ...persistAfter, driver_id: null });
   assert.equal(firstDriverMerged.driver_id, jamesId, "first driver pick parses onto the existing load");
   assert.equal(firstDriverMerged.customer_id, persistAfter.customer_id);
+  queries.updateLoad(persistLoadId, firstDriverMerged);
+  assert.equal(queries.getLoad(persistLoadId)?.driver_id, jamesId, "first driver pick writes driver_id to sqlite");
   assert.equal(mergedBasics.commodity, "Berries");
   assert.equal(mergedBasics.status, "dispatched");
   const customerOnly = new FormData();
@@ -6295,7 +6302,13 @@ Continuous reefer. Two load locks.
   assert.match(invoiceLibSource, /INVOICE/);
   assert.match(invoiceLibSource, /Customer Information/);
   assert.match(invoiceLibSource, /Stops \/ Actions/);
+  assert.match(invoiceLibSource, /Primary Contact/);
+  assert.match(invoiceLibSource, /Date\/Time/);
+  assert.match(invoiceLibSource, /Quantity/);
   assert.match(invoiceLibSource, /paperworkCompanyName/);
+  assert.equal(tmsInvoiceModel.lines[0]?.name, "Flat Rate");
+  assert.ok(tmsInvoiceModel.stops[0]?.name);
+  assert.ok("window" in tmsInvoiceModel.stops[0]!);
   assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");
   const invoiceFiles = (await import("../lib/files")).listAttachments(invoiceLoadId).filter((file) => file.kind === "invoice");
   assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));

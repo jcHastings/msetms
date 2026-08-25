@@ -93,7 +93,7 @@ export function LoadForm({
       <input type="hidden" name="return_to" value={load ? `/loads/${load.id}` : returnTo} />
       {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
 
-      {resolvedScreen === "basics" || resolvedScreen === "all" ? (
+      <div hidden={resolvedScreen !== "basics" && resolvedScreen !== "all"}>
         <LoadBasicsScreen
           load={load}
           defaults={extraDefaults}
@@ -103,11 +103,11 @@ export function LoadForm({
           equipmentChoices={equipmentChoices}
           card={card}
         />
-      ) : null}
-      {resolvedScreen === "customer" || resolvedScreen === "all" ? (
+      </div>
+      <div hidden={resolvedScreen !== "customer" && resolvedScreen !== "all"}>
         <LoadCustomerScreen customers={customers} load={load} defaults={extraDefaults} card={card} />
-      ) : null}
-      {resolvedScreen === "assets" || resolvedScreen === "all" ? (
+      </div>
+      <div hidden={resolvedScreen !== "assets" && resolvedScreen !== "all"} data-assign-fields="">
         <LoadCarrierScreen
           drivers={drivers}
           trucks={trucks}
@@ -118,7 +118,7 @@ export function LoadForm({
           card={card}
           onExpiredChange={onExpiredChange}
         />
-      ) : null}
+      </div>
       {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}
       {resolvedScreen === "all" && !includeLane && !load ? (
         <section className={card ? "card p-6" : undefined}>
