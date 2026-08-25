@@ -38,6 +38,8 @@ async function main() {
   assert.match(navSource, /label: "Samsara"/);
   assert.match(navSource, /href: "\/fleet\/orbcomm"/);
   assert.match(navSource, /label: "ORBCOMM"/);
+  assert.match(navSource, /href: "\/reports\/manage"/);
+  assert.match(navSource, /href: "\/reports\/statistics"/);
   const { loadStatusBand, loadStatusBadgeClass, loadStatusRowClass } = await import("../lib/load-status-style");
   const { LOAD_STATUSES } = await import("../lib/types");
   assert.equal(loadStatusBand("available"), "needs_work");
@@ -305,7 +307,11 @@ async function main() {
   assert.match(stopsSource, /clearDirty/);
   assert.match(stopsSource, /updateStopAction/);
   assert.match(stopsSource, /Save to keep this location change/);
+  assert.match(stopsSource, /data-add-stop-dialog/);
+  assert.match(stopsSource, /reorderStopsAction/);
+  assert.match(stopsSource, /draggable/);
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /export function reorderStops/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
   assert.match(laneSource, /LocationPicker/);
   assert.match(laneSource, /useLoadAssignPersist/);
@@ -2892,6 +2898,45 @@ Continuous reefer. Two load locks.
   assert.equal(qboPreview.amount, 3200);
   assert.equal(qboPreview.lane, "New York, NY → Denver, CO");
   assert.doesNotMatch(qboPreview.memo, /Chicago|internal \$900|Relay Bravo/);
+  const splitLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Dallas, TX",
+    destination: "Chicago, IL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Split freight",
+    rate: 5000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: relayTruckA,
+    driver_id: relayDriverA,
+  });
+  relayStore.addRelay(splitLoadId, {
+    pickup: "Dallas, TX",
+    delivery: "Memphis, TN",
+    from_driver_id: relayDriverA,
+    driver_id: relayDriverB,
+  });
+  const { getDb } = await import("../lib/db");
+  getDb()
+    .prepare("UPDATE load_relays SET from_leg_miles = 500, to_leg_miles = 500 WHERE load_id = ?")
+    .run(splitLoadId);
+  const relaySplit = (await import("../lib/reports-relay-revenue")).splitLoadRevenueByRelayMiles(splitLoadId);
+  assert.equal(relaySplit.length, 2);
+  assert.equal(relaySplit[0]?.allocatedRevenue, 2500);
+  assert.equal(relaySplit[1]?.allocatedRevenue, 2500);
+  const invoiceAfterSplit = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(splitLoadId)!);
+  assert.doesNotMatch(JSON.stringify(invoiceAfterSplit.stops), /Memphis/);
+  assert.doesNotMatch(invoiceAfterSplit.lines.map((line) => line.name).join(" "), /relay/i);
   const relaySms = formatLoadSummary(queries.getLoad(relayLoadId)!);
   assert.match(relaySms, /Shipper New York, NY/);
   assert.match(relaySms, /Receiver Denver, CO/);
@@ -4534,6 +4579,15 @@ Continuous reefer. Two load locks.
   const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
+  assert.match(fuelPage, /data-fuel-match-queue/);
+  assert.match(fuelPage, /Receipt match/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /fuel_receipt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-fuel-receipt.tsx"), "utf8"), /fuel_receipt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/manage/page.tsx"), "utf8"), /REPORT_EXPORT_COLUMNS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /buildStatistics/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.googleapis\.com\/maps\/api\/directions\/json/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.google\.com\/maps\?/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /listRelays|splitLoadRevenue/);
   assert.match(fuelPage, /Unassigned/);
   assert.match(fuelPage, /Per-truck totals/);
   assert.match(fuelPage, /Truck diesel/);
@@ -5282,7 +5336,7 @@ Continuous reefer. Two load locks.
   assert.equal(reeferPin?.href, `/fleet/trailers/${fleetReeferId}`);
   assert.equal(orbcommFleetMap.pins.some((pin) => pin.label === "FM-DRY"), false, "dry-van trailers stay off the reefer map");
   assert.ok(orbcommFleetMap.missing.some((item) => item.label === "FM-R0" && item.id === fleetEmptyReeferId));
-  assert.match(orbcommFleetMap.sourceNote, /not set|stored/i);
+  assert.match(orbcommFleetMap.sourceNote, /stored|not connected/i);
   queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId, fleetReeferId);
   const assignedOrbcommMap = await fleetMap.buildOrbcommFleetMap();
   assert.equal(assignedOrbcommMap.pins.find((pin) => pin.label === "FM-R1")?.href, `/loads/${mapLoadId}`);
@@ -5290,6 +5344,15 @@ Continuous reefer. Two load locks.
   else process.env.ORBCOMM_USERNAME = previousOrbcommUser;
   if (previousOrbcommPass == null) delete process.env.ORBCOMM_PASSWORD;
   else process.env.ORBCOMM_PASSWORD = previousOrbcommPass;
+
+  const reorderIds = loadStops.listStops(mapLoadId).map((stop) => stop.id);
+  if (reorderIds.length >= 2) {
+    loadStops.reorderStops(mapLoadId, [reorderIds[1], reorderIds[0], ...reorderIds.slice(2)]);
+    const reordered = loadStops.listStops(mapLoadId);
+    assert.equal(reordered[0]?.id, reorderIds[1]);
+    assert.equal(reordered[1]?.id, reorderIds[0]);
+    loadStops.reorderStops(mapLoadId, reorderIds);
+  }
 
   const oneStopLoadId = queries.createLoad({
     customer_id: customerId,
@@ -5709,6 +5772,9 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canDeleteFleet("dispatcher"), true);
   assert.equal(settings.canSeeNavHref("manager", "/users"), true);
   assert.equal(settings.canSeeNavHref("manager", "/settings"), true);
+  assert.equal(settings.canSeeNavHref("manager", "/reports/manage"), true);
+  assert.equal(settings.canSeeNavHref("manager", "/reports/statistics"), true);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/reports/statistics"), false);
   assert.equal(session.roleLabel("manager"), "Administrator");
   const usersPage = fs.readFileSync(path.join(process.cwd(), "app/users/page.tsx"), "utf8");
   assert.match(usersPage, /Add user/);

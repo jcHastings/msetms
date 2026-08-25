@@ -33,9 +33,10 @@ import {
 import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
-import { addRelay, deleteRelay, moveRelay, updateRelay } from "./relay-store";
+import { refreshRelayLegMilesQuiet } from "./relay-routing";
+import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay } from "./relay-store";
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
-import { addStop, deleteStop, moveStop, updateStop, type LoadStopKind } from "./stops";
+import { addStop, deleteStop, moveStop, reorderStops, updateStop, type LoadStopKind } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
 import { isBillableStatus, type ActionResult } from "./types";
 
@@ -187,6 +188,7 @@ export async function addRelayAction(formData: FormData): Promise<ActionResult> 
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       addRelay(loadId, parseRelayForm(formData));
+      await refreshRelayLegMilesQuiet(loadId);
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -203,6 +205,8 @@ export async function updateRelayAction(formData: FormData): Promise<ActionResul
       const id = parseOptionalInt(formData.get("relay_id"));
       if (!id) throw new Error("Relay is missing.");
       updateRelay(id, parseRelayForm(formData));
+      const relay = getRelay(id);
+      if (relay) await refreshRelayLegMilesQuiet(relay.load_id);
       refresh();
       return { ok: true, id };
     } catch (error) {
@@ -316,6 +320,27 @@ export async function moveStopAction(formData: FormData): Promise<void> {
       });
       await refreshLoadRouteQuiet(stop.load_id);
     }
+    refresh();
+  });
+}
+
+export async function reorderStopsAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const orderedIds = String(formData.get("stop_ids") ?? "")
+      .split(",")
+      .map((value) => Number.parseInt(value.trim(), 10))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    reorderStops(loadId, orderedIds);
+    recordLoadAudit({
+      loadId,
+      action: "stop",
+      field: "sequence",
+      newValue: orderedIds.join(","),
+    });
+    await refreshLoadRouteQuiet(loadId);
     refresh();
   });
 }

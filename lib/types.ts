@@ -186,6 +186,7 @@ export const ATTACHMENT_KINDS = [
   { value: "ifta", label: "IFTA report" },
   { value: "temp_log", label: "Temp log" },
   { value: "scale_ticket", label: "Scale ticket" },
+  { value: "fuel_receipt", label: "Fuel receipt" },
   { value: "claim", label: "Claim evidence" },
   { value: "other", label: "Other" },
 ] as const;

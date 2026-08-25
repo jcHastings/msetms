@@ -10,6 +10,8 @@ export type LoadRelay = {
   trailer_id: number | null;
   oo_percent: number | null;
   oo_pay: number | null;
+  from_leg_miles: number | null;
+  to_leg_miles: number | null;
   notes: string;
   created_at: string;
   updated_at: string;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { DriverFuelReceipt } from "@/components/driver-fuel-receipt";
 import { DriverLoadActions } from "@/components/driver-load-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
@@ -154,6 +155,7 @@ export default async function DriverLoadPage({
         current={load.driver_progress}
         closed={isClosedStatus(load.status)}
       />
+      <DriverFuelReceipt loadId={load.id} />
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold">Files on this load</h2>

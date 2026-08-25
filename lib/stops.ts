@@ -235,6 +235,28 @@ export function replaceStops(loadId: number, stops: StopInput[]): void {
   }
 }
 
+export function reorderStops(loadId: number, orderedIds: number[]): void {
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  const existing = (
+    getDb()
+      .prepare("SELECT id FROM load_stops WHERE load_id = ? ORDER BY sequence, id")
+      .all(loadId) as Array<{ id: number }>
+  ).map((row) => row.id);
+  if (!existing.length) return;
+  if (orderedIds.length !== existing.length || new Set(orderedIds).size !== existing.length) {
+    throw new Error("Stop order is incomplete.");
+  }
+  const allowed = new Set(existing);
+  if (orderedIds.some((id) => !allowed.has(id))) throw new Error("Stop order does not match this load.");
+  const db = getDb();
+  db.transaction(() => {
+    orderedIds.forEach((id, index) => {
+      db.prepare("UPDATE load_stops SET sequence = ? WHERE id = ? AND load_id = ?").run(index + 1, id, loadId);
+    });
+  })();
+  syncLoadLaneFromStops(loadId);
+}
+
 export function deleteStop(stopId: number): void {
   const stop = getDb().prepare("SELECT * FROM load_stops WHERE id = ?").get(stopId) as LoadStop | undefined;
   if (!stop) throw new Error("Stop not found.");

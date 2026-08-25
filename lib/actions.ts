@@ -1096,16 +1096,17 @@ export async function importFuelCsvAction(
     await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
     const file = formData.get("csv");
     if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Choose a CSV or PDF." };
+      return { ok: false, error: "Choose a CSV, Excel, or PDF." };
     }
     const name = file.name.toLowerCase();
     const mime = (file.type || "").toLowerCase();
     const isPdf = name.endsWith(".pdf") || mime.includes("pdf");
+    const isXlsx = name.endsWith(".xlsx") || mime.includes("spreadsheet");
     if (isPdf ? file.size > 15 * 1024 * 1024 : file.size > 5 * 1024 * 1024) {
-      return { ok: false, error: isPdf ? "PDF is too large (max 15 MB)." : "CSV is too large (max 5 MB)." };
+      return { ok: false, error: isPdf ? "PDF is too large (max 15 MB)." : "File is too large (max 5 MB)." };
     }
-    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-      return { ok: false, error: "Upload a CSV or PDF. In Excel use File → Save As → CSV UTF-8." };
+    if (name.endsWith(".xls") && !isXlsx) {
+      return { ok: false, error: "Save the workbook as .xlsx or CSV UTF-8." };
     }
     const buffer = await fileToBuffer(file);
     let text = "";
@@ -1115,6 +1116,17 @@ export async function importFuelCsvAction(
       if (!text.trim()) {
         return { ok: false, error: "Couldn't read text from this PDF. Save the report as CSV and upload that." };
       }
+    } else if (isXlsx) {
+      const { recordsFromFirstSheet } = await import("./xlsx-first-sheet");
+      const records = recordsFromFirstSheet(new Uint8Array(buffer));
+      if (!records.length) return { ok: false, error: "Excel sheet is empty." };
+      const headers = Object.keys(records[0] ?? {});
+      text = [
+        headers.join(","),
+        ...records.map((row) =>
+          headers.map((header) => `"${String(row[header] ?? "").replaceAll('"', '""')}"`).join(","),
+        ),
+      ].join("\n");
     } else {
       text = decodeCsvBuffer(buffer);
     }
@@ -1124,6 +1136,16 @@ export async function importFuelCsvAction(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
   }
+}
+
+export async function linkFuelReceiptAction(formData: FormData): Promise<void> {
+  await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
+  const receiptId = parseOptionalInt(formData.get("receipt_id"));
+  const fuelId = parseOptionalInt(formData.get("fuel_id"));
+  if (!receiptId || !fuelId) throw new Error("Pick a receipt and a fuel row.");
+  const { linkFuelReceipt } = await import("./fuel-receipts");
+  linkFuelReceipt(receiptId, fuelId);
+  refresh();
 }
 
 export async function assignFuelDriverAction(formData: FormData): Promise<void> {

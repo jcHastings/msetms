@@ -237,8 +237,8 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   const sourceNote = configured
     ? liveCount
       ? "Live ORBCOMM GPS for reefer trailers. Units without a position are listed, not plotted."
-      : "ORBCOMM is configured but returned no live positions. Showing last stored ORBCOMM GPS only."
-    : "ORBCOMM credentials are not set. Showing last stored trailer GPS only. No invented pins.";
+      : "Live ORBCOMM returned no positions. Showing last stored trailer GPS from import only."
+    : "Live ORBCOMM is not connected yet. Showing last stored trailer GPS from import only. Empty units are listed, not plotted.";
 
   return {
     title: "ORBCOMM",

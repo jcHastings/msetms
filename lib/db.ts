@@ -446,6 +446,8 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_load_relays_driver ON load_relays(driver_id);
   `);
   ensureColumn(db, "load_relays", "from_driver_id", "INTEGER");
+  ensureColumn(db, "load_relays", "from_leg_miles", "REAL");
+  ensureColumn(db, "load_relays", "to_leg_miles", "REAL");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
   db.exec(`
 
@@ -581,6 +583,19 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_fuel_driver ON fuel_transactions(driver_id, occurred_at);
     CREATE INDEX IF NOT EXISTS idx_fuel_occurred ON fuel_transactions(occurred_at);
+    CREATE TABLE IF NOT EXISTS fuel_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL,
+      fuel_transaction_id INTEGER REFERENCES fuel_transactions(id) ON DELETE SET NULL,
+      occurred_at TEXT NOT NULL DEFAULT '',
+      gallons REAL,
+      state TEXT NOT NULL DEFAULT '',
+      station TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
   `);
 
   for (const [column, definition] of [

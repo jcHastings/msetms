@@ -3,7 +3,8 @@ import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { PageHeader } from "@/components/page-header";
-import { assignFuelDriverAction } from "@/lib/actions";
+import { assignFuelDriverAction, linkFuelReceiptAction } from "@/lib/actions";
+import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { labelForFuelBucket } from "@/lib/fuel";
@@ -46,7 +47,7 @@ export default async function FuelPage({
     <>
       <PageHeader
         title="Fuel"
-        subtitle="Daily fuel-card CSV or Transaction Activity Report PDF. Totals always split Truck diesel, Reefer diesel, DEF, and Scale."
+        subtitle="EFS/card file plus driver receipt photos. Official IFTA stays Samsara. Match queue: photo, state vs GPS/card, and gallons."
         actions={
           <>
             {canExportCsv(dispatcher.role) ? (
@@ -61,6 +62,7 @@ export default async function FuelPage({
         }
       />
       <FuelCsvImport />
+      <FuelMatchQueue />
 
       {unmatched.length > 0 ? (
         <section className="card mb-6 overflow-hidden">
@@ -186,5 +188,91 @@ export default async function FuelPage({
         )}
       </section>
     </>
+  );
+}
+
+function matchIcon(status: "matched" | "no_photo" | "wrong_state" | "gallons_off"): string {
+  if (status === "matched") return "✓";
+  if (status === "no_photo") return "○";
+  if (status === "wrong_state") return "!";
+  return "±";
+}
+
+function FuelMatchQueue() {
+  const queue = listFuelMatchQueue();
+  const linked = new Set(queue.map((row) => row.receipt?.id).filter((id): id is number => id != null));
+  const looseReceipts = listFuelReceipts().filter((receipt) => !linked.has(receipt.id));
+  return (
+    <section className="card mb-6 overflow-hidden" data-fuel-match-queue="">
+      <header className="border-b border-slate-200 px-5 py-3">
+        <h2 className="text-sm font-semibold">Receipt match</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Status icons: matched, no photo, wrong state vs card/GPS, gallons off. Official IFTA stays Samsara.
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="table-grid">
+          <thead>
+            <tr>
+              <th></th>
+              <th>When</th>
+              <th>Unit</th>
+              <th>Gallons</th>
+              <th>Location</th>
+              <th>Load</th>
+              <th>Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queue.map((row) => (
+              <tr key={row.transaction.id}>
+                <td title={row.status}>{matchIcon(row.status)}</td>
+                <td>{formatDateTime(row.transaction.occurred_at)}</td>
+                <td>{row.transaction.truck_unit || row.transaction.unit_number || "—"}</td>
+                <td>{formatGallons(row.transaction.gallons)}</td>
+                <td>{row.transaction.location || "—"}</td>
+                <td>
+                  {row.loadId ? (
+                    <Link href={`/loads/${row.loadId}`} className="underline">
+                      {row.loadNumber || row.loadId}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td>
+                  {row.receipt && row.status !== "matched" ? (
+                    <form action={linkFuelReceiptAction}>
+                      <input type="hidden" name="receipt_id" value={row.receipt.id} />
+                      <input type="hidden" name="fuel_id" value={row.transaction.id} />
+                      <button className="btn btn-ghost" type="submit">
+                        Match
+                      </button>
+                    </form>
+                  ) : (
+                    row.status.replaceAll("_", " ")
+                  )}
+                </td>
+              </tr>
+            ))}
+            {looseReceipts.map((receipt) => (
+              <tr key={`r-${receipt.id}`}>
+                <td title="unmatched photo">○</td>
+                <td>{formatDateTime(receipt.occurred_at || receipt.created_at)}</td>
+                <td>—</td>
+                <td>{receipt.gallons ?? "—"}</td>
+                <td>{receipt.state || receipt.station || "—"}</td>
+                <td>
+                  <Link href={`/loads/${receipt.load_id}`} className="underline">
+                    {receipt.load_id}
+                  </Link>
+                </td>
+                <td>no card row</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

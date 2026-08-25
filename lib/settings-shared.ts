@@ -351,7 +351,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/accounting" || href.startsWith("/accounting/")) return canAccessAccounting(role);
   if (href === "/users") return canManageUsers(role);
   if (href === "/claims") return canWriteDesk(role);
-  if (href === "/reports") return canViewReports(role);
+  if (href === "/reports" || href.startsWith("/reports/")) return canViewReports(role);
   if (href === "/settings" || href.startsWith("/settings/")) return canEditSettings(role) || href === "/settings/security";
   return isAdminRole(role);
 }

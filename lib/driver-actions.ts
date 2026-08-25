@@ -78,7 +78,7 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
       throw new Error("Pick a document type.");
     }
     const { addAttachment, fileToBuffer } = await import("./files");
-    await addAttachment({
+    const attachment = await addAttachment({
       loadId,
       kind: kind as AttachmentKind,
       originalName: file.name,
@@ -86,6 +86,17 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
       mimeType: file.type,
       uploadedBy: "driver",
     });
+    if (kind === "fuel_receipt") {
+      const { addFuelReceipt } = await import("./fuel-receipts");
+      addFuelReceipt({
+        loadId,
+        driverId: driver.id,
+        attachmentId: attachment.id,
+        gallons: Number.parseFloat(String(formData.get("gallons") ?? "")) || null,
+        state: String(formData.get("state") ?? "").trim(),
+        station: String(formData.get("station") ?? "").trim(),
+      });
+    }
     refresh();
     return { ok: true, id: loadId };
   } catch (error) {

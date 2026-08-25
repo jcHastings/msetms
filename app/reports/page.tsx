@@ -38,13 +38,21 @@ export default async function ReportsPage() {
     <>
       <PageHeader
         title="Reports"
-        subtitle="On-time, revenue by customer, daily recap, audit, and a loads CSV. Local numbers only."
+        subtitle="On-time, revenue by customer, daily recap, Manage Reports export, and 13-month Statistics. Relay revenue split is reporting-only."
         actions={
-          canExportCsv(dispatcher.role) ? (
-            <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
-              Download loads CSV
-            </a>
-          ) : null
+          <div className="flex flex-wrap gap-2">
+            <Link href="/reports/manage" className="btn btn-secondary">
+              Manage reports
+            </Link>
+            <Link href="/reports/statistics" className="btn btn-secondary">
+              Statistics
+            </Link>
+            {canExportCsv(dispatcher.role) ? (
+              <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
+                Download loads CSV
+              </a>
+            ) : null}
+          </div>
         }
       />
       <div className="mb-4 grid gap-4 md:grid-cols-4">

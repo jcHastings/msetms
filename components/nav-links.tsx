@@ -53,6 +53,8 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/users", label: "Users" },
       { href: "/claims", label: "Claims" },
       { href: "/reports", label: "Reports" },
+      { href: "/reports/manage", label: "Manage reports" },
+      { href: "/reports/statistics", label: "Statistics" },
       { href: "/settings", label: "Settings" },
       { href: "/driver/login", label: "Driver app" },
     ],
