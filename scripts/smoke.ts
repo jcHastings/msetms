@@ -3341,6 +3341,31 @@ Continuous reefer. Two load locks.
   assert.equal(attach28.created, 0);
   assert.equal(queries.getTruck(stub28Id)?.samsara_vehicle_id, "sam-28");
   assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "28").length, 1);
+  const skipInactiveImport = applySamsaraTruckImport([
+    {
+      selectKey: "sam-old-38",
+      samsaraVehicleId: "sam-old-38",
+      unitNumber: "38",
+      name: "old 38",
+      vin: "VIN38OLD",
+      year: "",
+      make: "",
+      model: "",
+      plate: "",
+      city: "Houston, TX",
+      latitude: 29.76,
+      longitude: -95.36,
+      tmsUnit: "28",
+      matchTruckId: stub28Id,
+      matchBy: "samsara_vehicle_id",
+      action: "update",
+    },
+  ]);
+  assert.equal(skipInactiveImport.updated, 0);
+  assert.equal(skipInactiveImport.created, 0);
+  assert.ok(skipInactiveImport.skipped >= 1);
+  assert.equal(queries.getTruck(stub28Id)?.samsara_vehicle_id, "sam-28");
+  assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "38").length, 0);
   const created28Preview = buildSamsaraTruckPreview(
     [{ id: "sam-new-40", name: "Kenworth 40", vin: "", year: "", make: "", model: "", licensePlate: "" }],
     queries.listTrucks().map((truck) => ({
@@ -3388,7 +3413,14 @@ Continuous reefer. Two load locks.
   assert.equal(samsaraRecordIsActive({ id: "old2", name: "38", isDeactivated: true }), false);
   assert.equal(samsaraRecordIsActive({ id: "old3", name: "38", deactivatedAtTime: "2024-01-01T00:00:00Z" }), false);
   assert.equal(samsaraRecordIsActive({ id: "old4", name: "38", status: "inactive" }), false);
+  assert.equal(samsaraRecordIsActive({ id: "old5", name: "38", tags: [{ name: "Retired" }] }), false);
+  assert.equal(
+    samsaraRecordIsActive({ id: "old6", name: "38", attributes: [{ name: "Status", stringValues: ["Inactive"] }] }),
+    false,
+  );
+  assert.equal(samsaraRecordIsActive({ id: "live-tag", name: "28 in use", tags: [{ name: "Region West" }] }), true);
   assert.equal(samsaraVehicleIsActive({ name: "38 (inactive)" }), false);
+  assert.equal(samsaraVehicleIsActive({ name: "old 38", active: true }), false);
   const mixedActive = keepActiveSamsaraVehicles([
     { id: "sam-28", name: "28 in use", vin: "", year: "", make: "", model: "", licensePlate: "", active: true },
     { id: "sam-old-38", name: "old 38", vin: "", year: "", make: "", model: "", licensePlate: "", active: false },
@@ -3444,7 +3476,11 @@ Continuous reefer. Two load locks.
     assert.doesNotMatch(url, /tok_smoke_not_a_real_secret/);
     assert.equal((init?.headers as Record<string, string> | undefined)?.Authorization, "Bearer tok_smoke_not_a_real_secret");
     return Response.json({
-      data: [{ id: "veh-888", name: "888", vin: "VIN888" }],
+      data: [
+        { id: "veh-888", name: "888", vin: "VIN888" },
+        { id: "veh-old", name: "old 38", isDeactivated: true },
+        { id: "veh-retired", name: "99", notes: "Retired from fleet" },
+      ],
       pagination: { hasNextPage: false },
     });
   }) as typeof fetch;
@@ -3452,8 +3488,10 @@ Continuous reefer. Two load locks.
     const listed = await samsara.listSamsaraVehicles();
     assert.equal(listed.ok, true);
     if (listed.ok) {
+      assert.equal(listed.vehicles.length, 1);
       assert.equal(listed.vehicles[0]?.id, "veh-888");
       assert.equal(listed.vehicles[0]?.vin, "VIN888");
+      assert.ok(!listed.vehicles.some((vehicle) => vehicle.id === "veh-old" || vehicle.id === "veh-retired"));
     }
   } finally {
     globalThis.fetch = importFetch;
@@ -3470,6 +3508,7 @@ Continuous reefer. Two load locks.
         data: [
           { id: "veh-888", name: "888" },
           { id: "veh-28", name: "28 in use" },
+          { id: "veh-old-38", name: "old 38" },
         ],
         pagination: { hasNextPage: false },
       });
@@ -3485,6 +3524,7 @@ Continuous reefer. Two load locks.
     if (listedWithStats.ok) {
       assert.equal(listedWithStats.vehicles.length, 2);
       assert.ok(listedWithStats.vehicles.some((vehicle) => vehicle.id === "veh-28" && vehicle.name === "28 in use"));
+      assert.ok(!listedWithStats.vehicles.some((vehicle) => vehicle.id === "veh-old-38"));
     }
   } finally {
     globalThis.fetch = statsOnlyFetch;
@@ -5605,6 +5645,37 @@ Continuous reefer. Two load locks.
   assert.equal(currentVehicleDrivers[0]?.truckId, 36);
   assert.equal(currentVehicleDrivers[0]?.samsaraDriverName, "Denise Ortega");
   assert.equal(currentVehicleDrivers[0]?.tmsDriverId, denise.id);
+  assert.equal(
+    samsara.mapHosCurrentVehicleDrivers({
+      clocks: [
+        {
+          driver: { id: "drv-old", name: "Historical Driver" },
+          currentVehicle: { id: "sam-old-38", name: "old 38" },
+          currentDutyStatus: { hosStatusType: "offDuty" },
+        },
+      ],
+      trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-old-38", vin: "", plate: "" }],
+      drivers: [],
+    }).length,
+    0,
+    "inactive currentVehicle must not attach HOS/driver to a live TMS truck",
+  );
+  assert.equal(
+    samsara.mapHosCurrentVehicleDrivers({
+      clocks: [
+        {
+          driver: { id: "drv-old", name: "Historical Driver" },
+          currentVehicle: { id: "sam-old-38", name: "38" },
+          currentDutyStatus: { hosStatusType: "offDuty" },
+        },
+      ],
+      trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-old-38", vin: "", plate: "" }],
+      drivers: [],
+      activeVehicleIds: new Set([canonicalFleetKey("sam-28")]),
+    }).length,
+    0,
+    "HOS must ignore a stored id that is not in the active Samsara vehicle list",
+  );
   queries.updateDriver(fleetDriverId, {
     name: "Fleet Smoke",
     phone: "555-0144",

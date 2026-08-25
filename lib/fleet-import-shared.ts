@@ -463,10 +463,16 @@ export function samsaraOmittedVehiclesWarning(
   return `Samsara returned vehicles that were not listed for import: ${names.length ? names.join(", ") : "unnamed"}.`;
 }
 
-const INACTIVE_STATUS = /^(inactive|deactivated|retired|archived|deleted|historical)$/i;
-const INACTIVE_LABEL = /\b(inactive|deactivated|retired|archived|deleted|historical)\b/i;
+const INACTIVE_STATUS = /^(inactive|deactivated|retired|archived|deleted|historical|old)$/i;
+const INACTIVE_LABEL = /\b(inactive|deactivated|retired|archived|deleted|historical|old)\b/i;
 const INACTIVE_OLD_UNIT = /\bold(?:\s+(?:unit|truck|tractor|veh(?:icle)?)|#)?\s*#?\s*\d+/i;
 
+/**
+ * Samsara's vehicle object has no official isDeactivated query or field
+ * (GET /fleet/vehicles returns every record; retired units are marked on
+ * name, notes, or tags). Honor those labels plus driver-style status fields
+ * when a payload includes them.
+ */
 export function samsaraRecordIsActive(item: Record<string, unknown>): boolean {
   const nested = (item.vehicle ?? item.staticAssignedVehicle ?? {}) as Record<string, unknown>;
   if (item.isDeactivated === true || nested.isDeactivated === true) return false;
@@ -483,17 +489,14 @@ export function samsaraRecordIsActive(item: Record<string, unknown>): boolean {
     "driverActivationStatus",
   ]);
   if (status && INACTIVE_STATUS.test(status)) return false;
-  const name = firstText(item, nested, ["name", "vehicleName", "vehicle_name"]);
-  const notes = firstText(item, nested, ["notes", "note"]);
-  if (INACTIVE_LABEL.test(name) || INACTIVE_LABEL.test(notes) || INACTIVE_OLD_UNIT.test(name) || INACTIVE_OLD_UNIT.test(notes)) {
-    return false;
+  for (const label of samsaraRecordLabels(item, nested)) {
+    if (INACTIVE_LABEL.test(label) || INACTIVE_OLD_UNIT.test(label)) return false;
   }
   return true;
 }
 
 export function samsaraVehicleIsActive(vehicle: Pick<SamsaraVehicleInput, "active" | "name" | "notes">): boolean {
   if (vehicle.active === false) return false;
-  if (vehicle.active === true) return true;
   return samsaraRecordIsActive({ name: vehicle.name, notes: vehicle.notes ?? "" });
 }
 
@@ -852,6 +855,39 @@ function pickHeader(item: Record<string, unknown>, keys: string[]): string {
     if (text) return text;
   }
   return "";
+}
+
+function samsaraRecordLabels(item: Record<string, unknown>, nested: Record<string, unknown>): string[] {
+  const labels: string[] = [];
+  const add = (value: unknown) => {
+    const text = asText(value);
+    if (text) labels.push(text);
+  };
+  add(firstText(item, nested, ["name", "vehicleName", "vehicle_name"]));
+  add(firstText(item, nested, ["notes", "note"]));
+  for (const bag of [item.tags, nested.tags, item.tag, nested.tag]) {
+    if (Array.isArray(bag)) {
+      for (const tag of bag) {
+        if (tag && typeof tag === "object") add((tag as Record<string, unknown>).name);
+        else add(tag);
+      }
+    } else if (bag && typeof bag === "object") {
+      add((bag as Record<string, unknown>).name);
+    } else {
+      add(bag);
+    }
+  }
+  for (const bag of [item.attributes, nested.attributes]) {
+    if (!Array.isArray(bag)) continue;
+    for (const attr of bag) {
+      if (!attr || typeof attr !== "object") continue;
+      const rec = attr as Record<string, unknown>;
+      add(rec.name);
+      add(rec.value);
+      if (Array.isArray(rec.stringValues)) rec.stringValues.forEach(add);
+    }
+  }
+  return labels;
 }
 
 function extraSamsaraIdentityKeys(

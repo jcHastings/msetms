@@ -118,6 +118,7 @@ export async function listSamsaraVehicles(): Promise<
     } catch {
       // Import pairing still works without a GPS page.
     }
+    // /fleet/vehicles has no active-only query; drop inactive after the fetch.
     return { ok: true, vehicles: keepActiveSamsaraVehicles(vehicles) };
   } catch (error) {
     return { ok: false, error: publicSamsaraImportError(error) };
@@ -280,7 +281,9 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
     ...mapTruckDrivers({ vehicles: identityVehicles, trucks, drivers }),
   ];
   const claimed = new Set(truckDrivers.map((item) => item.truckId));
-  truckDrivers.push(...mapHosCurrentVehicleDrivers({ clocks: clocks.items, trucks, drivers, claimed }));
+  truckDrivers.push(
+    ...mapHosCurrentVehicleDrivers({ clocks: clocks.items, trucks, drivers, claimed, activeVehicleIds }),
+  );
   const error = clocks.error || identities.error || (stats.items.length ? "" : stats.error) || undefined;
   return {
     mode: "samsara",
@@ -631,6 +634,7 @@ export function mapHosCurrentVehicleDrivers(input: {
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
   drivers: Array<{ id: number; name: string; samsara_driver_id: string }>;
   claimed?: Set<number>;
+  activeVehicleIds?: Set<string>;
 }): SamsaraTruckDriver[] {
   const claimed = input.claimed ?? new Set<number>();
   const out: SamsaraTruckDriver[] = [];
@@ -641,6 +645,9 @@ export function mapHosCurrentVehicleDrivers(input: {
     const driverName = String(driver.name ?? "");
     if (!driverId && !driverName) continue;
     if (!vehicle.id && !vehicle.name) continue;
+    if (!samsaraRecordIsActive(vehicle)) continue;
+    const activeKey = canonicalFleetKey(String(vehicle.id ?? ""));
+    if (input.activeVehicleIds?.size && activeKey && !input.activeVehicleIds.has(activeKey)) continue;
     const match = matchTruckForSamsaraLive(
       input.trucks,
       {

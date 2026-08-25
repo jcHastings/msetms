@@ -84,7 +84,7 @@ export function applySamsaraTruckImport(rows: SamsaraTruckPreviewRow[]): {
         city: row.city,
       },
     ])[0];
-    if (!preview && !row.matchTruckId) {
+    if (!preview) {
       skipped += 1;
       continue;
     }
