@@ -210,8 +210,14 @@ async function main() {
   assert.match(loadFormSource, /LoadCustomerScreen/);
   assert.match(loadFormSource, /LoadCarrierScreen/);
   assert.match(loadFormSource, /stay_on_load/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /stay_on_load/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /redirect\(`\/loads\/\$\{id\}`\)/);
+  assert.match(loadFormSource, /\/loads\/\$\{load\.id\}/);
+  const actionsSource = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
+  assert.match(actionsSource, /redirect\(`\/loads\/\$\{id\}`\)/);
+  assert.match(actionsSource, /Existing-load Save must stay on this load/);
+  assert.doesNotMatch(
+    actionsSource,
+    /redirect\(safeReturnTo\(formData.get\("return_to"\), `\/loads\/\$\{id\}`\)\)/,
+  );
   assert.doesNotMatch(loadFormSource, /name="origin"|name="destination"|name="pickup_start"|hidden leftover/);
   assert.match(basicsChunk, /data-load-tab="basics"/);
   assert.match(basicsChunk, /Reefer setpoint/);

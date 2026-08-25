@@ -90,7 +90,7 @@ export function LoadForm({
     <form id={formId} action={formAction} className={workspace ? "space-y-6" : "card space-y-6 p-6"}>
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
-      <input type="hidden" name="return_to" value={returnTo} />
+      <input type="hidden" name="return_to" value={load ? `/loads/${load.id}` : returnTo} />
       {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
 
       {resolvedScreen === "basics" || resolvedScreen === "all" ? (

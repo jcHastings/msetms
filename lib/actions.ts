@@ -466,10 +466,8 @@ export async function updateLoadAction(
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
       refresh();
-      if (String(formData.get("stay_on_load") ?? "") === "1") {
-        return { ok: true, id };
-      }
-      redirect(safeReturnTo(formData.get("return_to"), `/loads/${id}`));
+      // Existing-load Save must stay on this load/tab. Close is what leaves.
+      return { ok: true, id };
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);
