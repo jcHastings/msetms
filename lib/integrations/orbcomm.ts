@@ -353,12 +353,28 @@ function mappingTrailers(): MappedTrailer[] {
   }));
 }
 
+function accessTokenFromOrbcommBody(body: Record<string, unknown>): string | undefined {
+  const data =
+    body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? (body.data as Record<string, unknown>)
+      : null;
+  return (
+    asString(data?.accessToken) ||
+    asString(data?.access_token) ||
+    asString(body.accessToken) ||
+    asString(body.access_token) ||
+    asString(body.token) ||
+    asString(body.Token)
+  );
+}
+
 async function generateOrbcommToken(): Promise<string> {
-  const username = getOrbcommUsername();
+  const userName = getOrbcommUsername();
   const password = getOrbcommPassword();
-  if (!username || !password) throw new Error("ORBCOMM credentials are not set.");
+  if (!userName || !password) throw new Error("ORBCOMM credentials are not set.");
 
   const url = new URL("/SynB2BGatewayService/api/generateToken", getOrbcommApiBase());
+  const orgKey = getOrbcommAccountId();
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -366,9 +382,9 @@ async function generateOrbcommToken(): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      username,
+      userName,
       password,
-      accountId: getOrbcommAccountId(),
+      ...(orgKey ? { orgKey } : {}),
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -377,11 +393,7 @@ async function generateOrbcommToken(): Promise<string> {
   if (!response.ok) throw new OrbcommHttpError(response.status);
 
   const body = (await response.json()) as Record<string, unknown>;
-  const token =
-    asString(body.token) ||
-    asString(body.accessToken) ||
-    asString(body.access_token) ||
-    asString(body.Token);
+  const token = accessTokenFromOrbcommBody(body);
   if (!token) {
     throw new Error("ORBCOMM token response did not include an access token.");
   }

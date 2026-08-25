@@ -132,8 +132,10 @@ export default async function IntegrationsSettingsPage() {
             ORBCOMM Reefer Status Report
           </a>
           . Set <code>ORBCOMM_USERNAME</code> and <code>ORBCOMM_PASSWORD</code> (optional{" "}
-          <code>ORBCOMM_ACCOUNT_ID</code>) in <code>.env</code>. The app requests a Transportation Platform token at{" "}
-          <code>POST /SynB2BGatewayService/api/generateToken</code>. There is no scrape of the logged-in portal. If
+          <code>ORBCOMM_ACCOUNT_ID</code> sent as <code>orgKey</code>) in <code>.env</code>. The app requests a
+          Transportation Platform token at{" "}
+          <code>POST /SynB2BGatewayService/api/generateToken</code> as <code>userName</code>, <code>password</code>,{" "}
+          <code>orgKey</code>. There is no scrape of the logged-in portal. If
           B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the ORBCOMM
           asset ID on the trailer. ORBCOMM is not used for driver HOS.
         </p>

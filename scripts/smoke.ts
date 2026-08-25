@@ -840,7 +840,12 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /console\.log/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/orbcomm.ts"), "utf8"), /console\.log/);
+  const orbcommAuth = fs.readFileSync(path.join(process.cwd(), "lib/integrations/orbcomm.ts"), "utf8");
+  assert.doesNotMatch(orbcommAuth, /console\.log/);
+  assert.match(orbcommAuth, /userName/);
+  assert.match(orbcommAuth, /orgKey/);
+  assert.match(orbcommAuth, /data\?\.accessToken|data\.accessToken/);
+  assert.doesNotMatch(orbcommAuth, /accountId:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
@@ -3098,10 +3103,18 @@ Continuous reefer. Two load locks.
   process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
   process.env.ORBCOMM_USERNAME = "demo-user";
   process.env.ORBCOMM_PASSWORD = "demo-pass";
+  const previousAccount = process.env.ORBCOMM_ACCOUNT_ID;
+  process.env.ORBCOMM_ACCOUNT_ID = "test-org";
   samsara.resetSamsaraCacheForTests();
   orbcomm.resetOrbcommCacheForTests();
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
+  let orbcommTokenBody = "";
+  globalThis.fetch = (async (input, init) => {
+    if (String(input).includes("generateToken")) {
+      orbcommTokenBody = String(init?.body ?? "");
+    }
+    return new Response("unauthorized", { status: 401 });
+  }) as typeof fetch;
   try {
     const failedFleet = await samsara.getSamsaraFleet();
     assert.equal(failedFleet.mode, "samsara", "Samsara 401 must not invent demo GPS");
@@ -3115,6 +3128,10 @@ Continuous reefer. Two load locks.
     assert.ok(failedReefer.error && /401/.test(failedReefer.error));
     const fallbackReading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
     assert.equal(fallbackReading?.source, "demo");
+    assert.match(orbcommTokenBody, /"userName":"demo-user"/);
+    assert.match(orbcommTokenBody, /"orgKey":"test-org"/);
+    assert.doesNotMatch(orbcommTokenBody, /"username":/);
+    assert.doesNotMatch(orbcommTokenBody, /accountId/);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
@@ -3123,7 +3140,38 @@ Continuous reefer. Two load locks.
     else process.env.ORBCOMM_USERNAME = previousUser;
     if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
     else process.env.ORBCOMM_PASSWORD = previousPass;
+    if (previousAccount == null) delete process.env.ORBCOMM_ACCOUNT_ID;
+    else process.env.ORBCOMM_ACCOUNT_ID = previousAccount;
     samsara.resetSamsaraCacheForTests();
+    orbcomm.resetOrbcommCacheForTests();
+  }
+
+  process.env.ORBCOMM_USERNAME = "demo-user";
+  process.env.ORBCOMM_PASSWORD = "demo-pass";
+  process.env.ORBCOMM_ACCOUNT_ID = "test-org";
+  orbcomm.resetOrbcommCacheForTests();
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        data: { accessToken: "nested-access", refreshToken: "nested-refresh" },
+        message: "Success",
+        code: 200,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )) as typeof fetch;
+  try {
+    const nestedToken = await orbcomm.getReeferSnapshots();
+    assert.equal(nestedToken.credentialsSet, true);
+    assert.doesNotMatch(nestedToken.error ?? "", /did not include an access token/);
+    assert.doesNotMatch(JSON.stringify(nestedToken), /nested-access|nested-refresh/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUser == null) delete process.env.ORBCOMM_USERNAME;
+    else process.env.ORBCOMM_USERNAME = previousUser;
+    if (previousPass == null) delete process.env.ORBCOMM_PASSWORD;
+    else process.env.ORBCOMM_PASSWORD = previousPass;
+    if (previousAccount == null) delete process.env.ORBCOMM_ACCOUNT_ID;
+    else process.env.ORBCOMM_ACCOUNT_ID = previousAccount;
     orbcomm.resetOrbcommCacheForTests();
   }
 
