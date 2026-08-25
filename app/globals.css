@@ -76,6 +76,11 @@ button {
   background: #f4f8fc;
 }
 
+.table-grid tbody tr[hidden],
+.table-grid tbody tr.is-filtered-out {
+  display: none !important;
+}
+
 .field {
   display: flex;
   flex-direction: column;

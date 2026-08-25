@@ -114,7 +114,7 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
           </label>
           <p className="mt-1 text-xs text-slate-500">
             Warns the dispatcher and prints on the driver confirmation. Appointment required is the Scheduling
-            dropdown. No liftgate or inside pickup/delivery.
+            dropdown.
           </p>
         </div>
         <div className="field md:col-span-2 note-public">

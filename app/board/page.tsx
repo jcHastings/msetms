@@ -28,12 +28,13 @@ export const dynamic = "force-dynamic";
 export default async function BoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string }>;
+  searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string; tab?: string }>;
 }) {
   const params = await searchParams;
   const status = params.status ?? "active";
   const date = params.date ?? "";
   const openId = parseOpenLoadId(params.open);
+  const openTab = params.tab;
   const current = { status, date };
   const loads = listLoads({ status, date });
   const relayLabels = extraRelayLabelsByLoad(loads);
@@ -224,7 +225,9 @@ export default async function BoardPage({
           </div>
         )}
       </div>
-      {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} /> : null}
+      {openId ? (
+        <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
+      ) : null}
     </>
   );
 }

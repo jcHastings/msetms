@@ -16,7 +16,9 @@ export function BoardToolbar({ status, date }: Props) {
     const term = q.trim().toLowerCase();
     document.querySelectorAll<HTMLElement>("[data-load-search]").forEach((row) => {
       const hay = (row.dataset.loadSearch ?? "").toLowerCase();
-      row.hidden = Boolean(term) && !hay.includes(term);
+      const hide = Boolean(term) && !hay.includes(term);
+      row.hidden = hide;
+      row.classList.toggle("is-filtered-out", hide);
     });
   }, [q]);
 
