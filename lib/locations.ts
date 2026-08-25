@@ -32,10 +32,46 @@ export function formatLocationCityState(location: Pick<Location, "city" | "state
   return cityState || location.name;
 }
 
-export function formatLocationAddress(location: Location): string {
+export function formatLocationAddress(location: Pick<Location, "street" | "city" | "state" | "zip">): string {
   const line2 = [location.city.trim(), location.state.trim()].filter(Boolean).join(", ");
   const cityZip = [line2, location.zip.trim()].filter(Boolean).join(" ");
   return [location.street.trim(), cityZip].filter(Boolean).join(", ");
+}
+
+export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip">;
+
+export function locationSearchHaystack(location: LocationPickerRow): string {
+  return [location.name, location.street, location.city, location.state, location.zip]
+    .map((part) => String(part ?? "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function locationQueryTokens(query: string): string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+export function locationMatchesQuery(location: LocationPickerRow, query: string): boolean {
+  const tokens = locationQueryTokens(query);
+  if (!tokens.length) return false;
+  const haystack = locationSearchHaystack(location);
+  return tokens.every((token) => haystack.includes(token));
+}
+
+/** Typeahead matches only. Empty query returns nothing so a 3300-row book is never dumped. */
+export function filterLocationsForPicker<T extends LocationPickerRow>(
+  locations: T[],
+  query: string,
+  limit = 50,
+): T[] {
+  if (!locationQueryTokens(query).length) return [];
+  const matched: T[] = [];
+  for (const location of locations) {
+    if (!locationMatchesQuery(location, query)) continue;
+    matched.push(location);
+    if (matched.length >= limit) break;
+  }
+  return matched;
 }
 
 export function formatLocationLabel(location: Location): string {

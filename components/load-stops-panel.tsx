@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
-import { applyLocationToStop, formatLocationLabel, matchLocationForStop } from "@/lib/locations";
+import { LocationPicker } from "@/components/location-picker";
+import { applyLocationToStop, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
@@ -180,20 +181,15 @@ function StopGridBlock({
         </td>
         <td className="align-top min-w-40">
           <input form={`stop-form-${stop.id}`} name="name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} required />
-          <select
+          <LocationPicker
             form={`stop-form-${stop.id}`}
             name="location_id"
+            locations={locations}
             value={draft.locationId}
-            className="mt-1"
-            onChange={(event) => pickLocation(event.target.value)}
-          >
-            <option value="">One-off address</option>
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {formatLocationLabel(location)}
-              </option>
-            ))}
-          </select>
+            onChange={pickLocation}
+            emptyLabel="One-off address"
+            placeholder="Type a name or address"
+          />
           {locationRuleLabels(
             locations.find((location) => String(location.id) === draft.locationId) ??
               matchLocationForStop(locations, {

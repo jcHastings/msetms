@@ -263,6 +263,16 @@ async function main() {
   assert.match(stopsSource, /applyLocationToStop/);
   assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com|liftgate|inside pickup/i);
   assert.match(stopsSource, /locationRuleLabels/);
+  assert.match(stopsSource, /LocationPicker/);
+  assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
+  const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
+  assert.match(laneSource, /LocationPicker/);
+  assert.doesNotMatch(laneSource, /<select[^>]*name="shipper_location_id"/);
+  const pickerSource = fs.readFileSync(path.join(process.cwd(), "components/location-picker.tsx"), "utf8");
+  assert.match(pickerSource, /data-location-picker/);
+  assert.match(pickerSource, /filterLocationsForPicker/);
+  assert.match(pickerSource, /formatLocationAddress/);
+  assert.doesNotMatch(pickerSource, /locations\.map\(\(location\) =>/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Not a fleet map/);
   const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
@@ -4798,6 +4808,51 @@ Continuous reefer. Two load locks.
     "Call before pickup/delivery",
   ]);
   assert.doesNotMatch(rules.locationRuleLabels({ scheduling_type: "fcfs", call_before: 0 }).join(" "), /liftgate|inside/i);
+
+  const tysonDakota = {
+    id: 1,
+    name: "Tyson Fresh Meats",
+    street: "800 39th Ave",
+    city: "Dakota City",
+    state: "NE",
+    zip: "68731",
+  };
+  const tysonHastings = {
+    id: 2,
+    name: "Tyson Foods",
+    street: "1200 W 2nd St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+  };
+  const westside = {
+    id: 3,
+    name: "Westside Frozen",
+    street: "9 Quiet St",
+    city: "Omaha",
+    state: "NE",
+    zip: "68102",
+  };
+  const locSearch = await import("../lib/locations");
+  assert.deepEqual(
+    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "tyso").map((row) => row.id),
+    [1, 2],
+  );
+  assert.deepEqual(
+    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "t y s o").map((row) => row.id),
+    [1, 2],
+  );
+  assert.deepEqual(
+    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "Hastings").map((row) => row.id),
+    [2],
+  );
+  assert.deepEqual(
+    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "39th").map((row) => row.id),
+    [1],
+  );
+  assert.deepEqual(locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], ""), []);
+  assert.match(locSearch.formatLocationAddress(tysonHastings), /1200 W 2nd St/);
+  assert.match(locSearch.formatLocationAddress(tysonHastings), /Hastings, NE 68901/);
 
   const secretLocation = queries.createLocation({
     name: "Notes Leak Yard",

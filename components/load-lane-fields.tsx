@@ -1,5 +1,6 @@
 import { toInputDateTime } from "@/lib/format";
 import type { LoadFormDefaults } from "@/components/load-basics-screen";
+import { LocationPicker } from "@/components/location-picker";
 import type { Load, Location } from "@/lib/types";
 
 export function LoadLaneFields({
@@ -66,34 +67,26 @@ export function LoadLaneFields({
         <input id="rate" name="rate" type="number" min={0} step="0.01" defaultValue={load?.rate ?? defaults.rate ?? ""} />
       </div>
       <div className="field">
-        <label htmlFor="shipper_location_id">Shipper location</label>
-        <select
-          id="shipper_location_id"
+        <label htmlFor="shipper_location_id-search">Shipper location</label>
+        <LocationPicker
+          id="shipper_location_id-search"
           name="shipper_location_id"
-          defaultValue={load?.shipper_location_id ?? defaults.shipper_location_id ?? ""}
-        >
-          <option value="">—</option>
-          {locations.map((location) => (
-            <option key={location.id} value={location.id}>
-              {location.name}
-            </option>
-          ))}
-        </select>
+          locations={locations}
+          defaultValue={String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "")}
+          emptyLabel="No saved location"
+          placeholder="Type a name or address"
+        />
       </div>
       <div className="field">
-        <label htmlFor="consignee_location_id">Consignee location</label>
-        <select
-          id="consignee_location_id"
+        <label htmlFor="consignee_location_id-search">Consignee location</label>
+        <LocationPicker
+          id="consignee_location_id-search"
           name="consignee_location_id"
-          defaultValue={load?.consignee_location_id ?? defaults.consignee_location_id ?? ""}
-        >
-          <option value="">—</option>
-          {locations.map((location) => (
-            <option key={location.id} value={location.id}>
-              {location.name}
-            </option>
-          ))}
-        </select>
+          locations={locations}
+          defaultValue={String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "")}
+          emptyLabel="No saved location"
+          placeholder="Type a name or address"
+        />
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="special_instructions">Special instructions</label>
