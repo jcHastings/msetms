@@ -275,7 +275,10 @@ async function main() {
   assert.match(stopsSource, /LocationPicker/);
   assert.match(stopsSource, /data-stop-window/);
   assert.match(stopsSource, /formatStopWindow/);
-  assert.match(stopsSource, /isFirstAssign/);
+  assert.match(stopsSource, /data-stop-autosave/);
+  assert.match(stopsSource, /persistStop/);
+  assert.match(stopsSource, /clearDirty/);
+  assert.match(stopsSource, /updateStopAction/);
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
   assert.match(laneSource, /LocationPicker/);
@@ -4885,6 +4888,70 @@ Continuous reefer. Two load locks.
   assert.match(locSearch.formatLocationAddress(nebraskaCold), /4100 Industrial Rd/);
   assert.match(locSearch.formatLocationAddress(nebraskaCold), /Hastings, NE 68901/);
   assert.match(locSearch.formatLocationAddress(heartland), /3900 Westside Ave/);
+
+  const autoSaveLoc = queries.createLocation({
+    name: "Auto Save Cold",
+    street: "100 Dock Rd",
+    city: "Lincoln",
+    state: "NE",
+    zip: "68501",
+    phone: "402-555-0199",
+    notes: "",
+    role: "both",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    call_before: 1,
+  });
+  const autoSaveLoad = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 10000,
+    commodity: "Auto-save stop",
+    rate: 400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const blankStopId = loadStops.addStop(autoSaveLoad, {
+    kind: "pickup",
+    name: "Pickup",
+    city: "",
+    state: "",
+  });
+  assert.equal(loadStops.listStops(autoSaveLoad).find((row) => row.id === blankStopId)?.location_id ?? null, null);
+  const pickedRow = queries.getLocation(autoSaveLoc);
+  assert.ok(pickedRow);
+  loadStops.updateStop(blankStopId, {
+    kind: "pickup",
+    name: pickedRow.name,
+    street: pickedRow.street,
+    city: pickedRow.city,
+    state: pickedRow.state,
+    zip: pickedRow.zip,
+    phone: pickedRow.phone,
+    location_id: pickedRow.id,
+  });
+  const savedPick = loadStops.listStops(autoSaveLoad).find((row) => row.id === blankStopId);
+  assert.equal(savedPick?.location_id, autoSaveLoc, "picking a location persists location_id on the stop");
+  assert.equal(savedPick?.name, "Auto Save Cold");
+  assert.equal(savedPick?.street, "100 Dock Rd");
+  assert.equal(savedPick?.city, "Lincoln");
+  assert.equal(savedPick?.state, "NE");
+  assert.equal(savedPick?.zip, "68501");
+  assert.equal(savedPick?.phone, "402-555-0199");
 
   const secretLocation = queries.createLocation({
     name: "Notes Leak Yard",

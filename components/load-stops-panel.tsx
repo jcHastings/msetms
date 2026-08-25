@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
 import { LocationPicker } from "@/components/location-picker";
 import { useLoadEdit } from "@/components/load-edit-context";
-import { isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, toInputDateTime } from "@/lib/format";
@@ -29,7 +29,7 @@ export function LoadStopsPanel({
         <div>
           <h2 className="text-sm font-semibold">Stops</h2>
           <p className="mt-1 text-xs text-slate-600">
-            Type · name + address · date/time on each row. Pickup rows are green. Delivery rows are red.
+            Type · name + address · date/time on each row. Picking a location saves that stop immediately.
           </p>
         </div>
         <div className="flex gap-2">
@@ -94,7 +94,21 @@ function AddStopButton({ loadId, kind }: { loadId: number; kind: "pickup" | "del
   );
 }
 
-function initialStopDraft(stop: LoadStop, locations: Location[]) {
+type StopDraft = {
+  locationId: string;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  windowStart: string;
+  windowEnd: string;
+  reference: string;
+  instructions: string;
+};
+
+function initialStopDraft(stop: LoadStop, locations: Location[]): StopDraft {
   const picked = stop.location_id ? locations.find((location) => location.id === stop.location_id) : null;
   const matched = picked ?? matchLocationForStop(locations, stop);
   const filled = matched ? applyLocationToStop(stop, matched) : stop;
@@ -108,6 +122,8 @@ function initialStopDraft(stop: LoadStop, locations: Location[]) {
     phone: filled.phone ?? "",
     windowStart: toInputDateTime(stop.window_start),
     windowEnd: toInputDateTime(stop.window_end),
+    reference: stop.reference || stop.confirmation || "",
+    instructions: stop.instructions || stop.notes || "",
   };
 }
 
@@ -122,30 +138,51 @@ function StopGridBlock({
   locations: Location[];
   gapMiles: number | null;
 }) {
+  const router = useRouter();
   const edit = useLoadEdit();
   const [kind, setKind] = useState(stop.kind);
   const [draft, setDraft] = useState(() => initialStopDraft(stop, locations));
-  const persistFirstPick = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    if (!persistFirstPick.current) return;
-    persistFirstPick.current = false;
-    const form = document.getElementById(`stop-form-${stop.id}`) as HTMLFormElement | null;
-    form?.requestSubmit();
-    edit?.clearDirty();
-  }, [draft, stop.id, edit]);
+  async function persistStop(next: StopDraft, nextKind = kind) {
+    const formData = new FormData();
+    formData.set("stop_id", String(stop.id));
+    formData.set("kind", nextKind);
+    formData.set("name", next.name);
+    formData.set("street", next.street);
+    formData.set("city", next.city);
+    formData.set("state", next.state);
+    formData.set("zip", next.zip);
+    formData.set("phone", next.phone);
+    formData.set("location_id", next.locationId);
+    formData.set("window_start", next.windowStart);
+    formData.set("window_end", next.windowEnd);
+    formData.set("cargo", stop.cargo);
+    formData.set("reference", next.reference);
+    formData.set("instructions", next.instructions);
+    setSaving(true);
+    try {
+      await updateStopAction(formData);
+      edit?.clearDirty();
+      setSaved(true);
+      router.refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not save the stop.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function pickLocation(locationId: string) {
     if (!locationId) {
-      setDraft((current) => ({ ...current, locationId: "" }));
+      const next = { ...draft, locationId: "" };
+      setDraft(next);
       if (stop.location_id) edit?.markDirty();
       return;
     }
     const location = locations.find((row) => String(row.id) === locationId);
-    if (!location) {
-      setDraft((current) => ({ ...current, locationId }));
-      return;
-    }
+    if (!location) return;
     const next = {
       ...draft,
       locationId,
@@ -157,15 +194,21 @@ function StopGridBlock({
       phone: location.phone ?? "",
     };
     setDraft(next);
-    if (isFirstAssign(stop.location_id, locationId)) {
-      persistFirstPick.current = true;
-    } else if (String(stop.location_id) !== locationId) {
-      edit?.markDirty();
-    }
+    edit?.clearDirty();
+    void persistStop(next);
   }
 
   const pickup = kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end);
+  const rules = locationRuleLabels(
+    locations.find((location) => String(location.id) === draft.locationId) ??
+      matchLocationForStop(locations, {
+        name: draft.name,
+        street: draft.street,
+        city: draft.city,
+        state: draft.state,
+      }),
+  );
   return (
     <>
       <tr className={pickup ? "stop-row-pickup" : "stop-row-delivery"}>
@@ -202,6 +245,9 @@ function StopGridBlock({
             emptyLabel="One-off address"
             placeholder="Type any name or address"
           />
+          <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
+            {saving ? "Saving location…" : saved || stop.location_id ? "Location is saved on this stop." : "Pick a saved location — it stays without Save."}
+          </p>
           {windowLabel ? (
             <p className="mt-1 text-xs font-semibold text-slate-800" data-stop-window="">
               {windowLabel}
@@ -228,15 +274,7 @@ function StopGridBlock({
             onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
           />
           <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
-          {locationRuleLabels(
-            locations.find((location) => String(location.id) === draft.locationId) ??
-              matchLocationForStop(locations, {
-                name: draft.name,
-                street: draft.street,
-                city: draft.city,
-                state: draft.state,
-              }),
-          ).map((rule) => (
+          {rules.map((rule) => (
             <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
               {rule}
             </p>
@@ -256,10 +294,21 @@ function StopGridBlock({
           <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} />
         </td>
         <td className="align-top min-w-28">
-          <input form={`stop-form-${stop.id}`} name="reference" defaultValue={stop.reference || stop.confirmation} />
+          <input
+            form={`stop-form-${stop.id}`}
+            name="reference"
+            value={draft.reference}
+            onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
+          />
         </td>
         <td className="align-top min-w-40">
-          <textarea form={`stop-form-${stop.id}`} name="instructions" rows={2} defaultValue={stop.instructions || stop.notes} />
+          <textarea
+            form={`stop-form-${stop.id}`}
+            name="instructions"
+            rows={2}
+            value={draft.instructions}
+            onChange={(event) => setDraft((current) => ({ ...current, instructions: event.target.value }))}
+          />
         </td>
         <td className="align-top whitespace-nowrap">
           <button className="btn btn-secondary" type="submit" form={`stop-form-${stop.id}`}>
