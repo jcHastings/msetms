@@ -156,6 +156,10 @@ async function main() {
   assert.match(cssSource, /#d4a017/);
   assert.match(cssSource, /\[data-load-list-chrome\]/);
   assert.match(cssSource, /\.stop-row-pickup/);
+  assert.match(cssSource, /\.stop-chip-delivery/);
+  assert.match(cssSource, /\.finance-income/);
+  assert.match(cssSource, /\.finance-head/);
+  assert.match(cssSource, /\.section-head/);
   assert.match(cssSource, /\.stop-row-delivery/);
   assert.match(cssSource, /\.note-public/);
   assert.match(cssSource, /\.note-private/);
@@ -243,12 +247,17 @@ async function main() {
   assert.match(paySource, /View Carrier Confirmation/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /View Invoice/);
   assert.match(paySource, /data-financials-totals/);
+  assert.match(paySource, /finance-income/);
+  assert.match(paySource, /finance-expense/);
+  assert.match(paySource, /finance-head/);
   assert.doesNotMatch(paySource, /defaultPayee=\{driverName/);
   assert.doesNotMatch(paySource, /waiting row|blank row/);
   const stopsSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
   assert.match(stopsSource, /\+ Add Pickup/);
   assert.match(stopsSource, /\+ Add Delivery/);
   assert.match(stopsSource, /data-stops-grid/);
+  assert.match(stopsSource, /stop-chip-pickup/);
+  assert.match(stopsSource, /stop-chip-delivery/);
   assert.match(stopsSource, /data-leg-miles/);
   assert.match(stopsSource, /milesForStopGap/);
   assert.match(stopsSource, /applyLocationToStop/);

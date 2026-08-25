@@ -21,12 +21,12 @@ export function LoadStopsPanel({
   routeGuide?: LoadRouteGuide;
 }) {
   return (
-    <section data-load-tab="stops" className="card space-y-4 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section data-load-tab="stops" className="card overflow-hidden">
+      <div className="section-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
         <div>
-          <h2 className="text-sm font-semibold">Edit Stops</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            One grid for every pickup and delivery. Miles show between legs when a route exists.
+          <h2 className="text-sm font-semibold">Stops</h2>
+          <p className="mt-1 text-xs text-slate-600">
+            Pickup rows are green. Delivery rows are red. Miles show between legs when a route exists.
           </p>
         </div>
         <div className="flex gap-2">
@@ -34,6 +34,7 @@ export function LoadStopsPanel({
           <AddStopButton loadId={loadId} kind="delivery" />
         </div>
       </div>
+      <div className="space-y-4 p-5">
       {stops.length === 0 ? (
         <p className="text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
       ) : (
@@ -71,6 +72,7 @@ export function LoadStopsPanel({
           </table>
         </div>
       )}
+      </div>
     </section>
   );
 }
@@ -162,11 +164,14 @@ function StopGridBlock({
         <td className="align-top">
           <form action={updateStopAction} id={`stop-form-${stop.id}`} className="contents">
             <input type="hidden" name="stop_id" value={stop.id} />
+            <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
+              {pickup ? "Pickup" : "Delivery"}
+            </span>
             <select
               name="kind"
               value={kind}
               onChange={(event) => setKind(event.target.value as "pickup" | "delivery")}
-              className={pickup ? "stop-kind-pickup" : "stop-kind-delivery"}
+              className={`mt-1 ${pickup ? "stop-kind-pickup" : "stop-kind-delivery"}`}
             >
               <option value="pickup">Pickup</option>
               <option value="delivery">Delivery</option>

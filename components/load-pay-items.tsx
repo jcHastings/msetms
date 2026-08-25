@@ -131,10 +131,10 @@ function PayItemGroup({
   actions?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const tone = side === "income" ? "border-emerald-200" : "border-amber-200";
+  const tone = side === "income" ? "finance-income" : "finance-expense";
   return (
-    <section className={`card p-5 ${tone}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className={`card overflow-hidden ${tone}`}>
+      <div className="finance-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           {actions}
@@ -143,10 +143,11 @@ function PayItemGroup({
           </button>
         </div>
       </div>
+      <div className="p-5">
       {items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">No line items. Click + Add Line Item.</p>
+        <p className="text-sm text-slate-500">No line items. Click + Add Line Item.</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        <div className="overflow-x-auto">
           <table className="table-grid text-sm">
             <thead>
               <tr>
@@ -191,6 +192,7 @@ function PayItemGroup({
           </table>
         </div>
       )}
+      </div>
       {open ? (
         <PayItemDialog
           loadId={loadId}

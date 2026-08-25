@@ -3,6 +3,7 @@ import {
   LOAD_TRUCK_STATUSES,
 } from "@/lib/load-page-shared";
 import { REEFER_MODES } from "@/lib/reefer-shared";
+import { LoadStatusBadge } from "@/components/status-badge";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
@@ -54,21 +55,30 @@ export function LoadBasicsScreen({
       /reefer/i.test(load?.equipment ?? ""),
   );
   return (
-    <section data-load-tab="basics" className={card ? "card grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+    <section data-load-tab="basics" className={card ? "card overflow-hidden" : undefined}>
+      {card ? (
+        <div className="section-head px-6 py-3">
+          <h2 className="text-sm font-semibold">Basic load information</h2>
+        </div>
+      ) : null}
+      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <div className="field">
         <label htmlFor="status">Load Status</label>
-        <select id="status" name="status" defaultValue={load?.status ?? "available"}>
-          {LOAD_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {labelForLoadStatus(status)}
-            </option>
-          ))}
-          {extraStatuses.map((status) => (
-            <option key={status.value} value={status.value}>
-              {status.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select id="status" name="status" defaultValue={load?.status ?? "available"} className="flex-1">
+            {LOAD_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {labelForLoadStatus(status)}
+              </option>
+            ))}
+            {extraStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+          {load?.status ? <LoadStatusBadge status={load.status} /> : null}
+        </div>
       </div>
       <div className="field">
         <label htmlFor="truck_status">Truck Status</label>
@@ -179,6 +189,7 @@ export function LoadBasicsScreen({
       <div className="field md:col-span-2">
         <label htmlFor="posting_notes">Posting notes</label>
         <textarea id="posting_notes" name="posting_notes" rows={2} defaultValue={load?.posting_notes ?? ""} />
+      </div>
       </div>
     </section>
   );

@@ -68,16 +68,15 @@ export function TmsInvoicePanel({
   }
 
   return (
-    <section className="card mb-4 p-5" data-invoice-panel="">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Invoice</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Customer Income / Budget lines only. Driver pay, owner-operator pay, lumper expenses, and
-            relays stay off this invoice. QuickBooks connect is not required.
-          </p>
-        </div>
+    <section className="card mb-4 overflow-hidden" data-invoice-panel="" data-load-tab="financials">
+      <div className="section-head px-5 py-3">
+        <h2 className="text-sm font-semibold">Invoice</h2>
       </div>
+      <div className="p-5">
+      <p className="text-sm text-slate-600">
+        Customer Income / Budget lines only. Driver pay, owner-operator pay, lumper expenses, and
+        relays stay off this invoice. QuickBooks connect is not required.
+      </p>
       {invoice ? (
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
@@ -155,6 +154,7 @@ export function TmsInvoicePanel({
           ))}
         </ul>
       ) : null}
+      </div>
     </section>
   );
 }

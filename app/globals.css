@@ -262,7 +262,7 @@ button {
 }
 
 [data-load-list-chrome] {
-  background: #eef3f8;
+  background: #e8eef6;
   border-color: #0b1f3a;
 }
 
@@ -270,8 +270,15 @@ button {
   border-radius: 0.6rem 0.6rem 0 0;
 }
 
+.section-head {
+  background: #eef2f6;
+  border-bottom: 1px solid #dce3ec;
+  color: #0b1f3a;
+}
+
 [data-load-tab="basics"] {
   border-left: 4px solid #64748b;
+  background: #f8fafc;
 }
 
 [data-load-tab="customer"] {
@@ -279,7 +286,7 @@ button {
 }
 
 [data-load-tab="assets"] {
-  border-left: 4px solid #7c3aed;
+  border-left: 4px solid #0b1f3a;
 }
 
 [data-load-tab="stops"] {
@@ -299,21 +306,57 @@ button {
 }
 
 .stop-row-pickup {
-  background: rgb(240 249 255 / 0.85);
+  background: #ecfdf5;
 }
 
 .stop-row-delivery {
-  background: rgb(255 241 242 / 0.8);
+  background: #fff1f2;
 }
 
 .stop-kind-pickup {
   font-weight: 600;
-  color: #075985;
+  color: #166534;
 }
 
 .stop-kind-delivery {
   font-weight: 600;
   color: #9f1239;
+}
+
+.stop-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.stop-chip-pickup {
+  background: #166534;
+  color: #ecfdf5;
+}
+
+.stop-chip-delivery {
+  background: #be123c;
+  color: #fff1f2;
+}
+
+.finance-income {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.finance-expense {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.finance-head {
+  background: #0b1f3a;
+  color: #e8eef6;
 }
 
 .note-public {
@@ -354,7 +397,7 @@ button {
 }
 
 .load-actions-label {
-  color: #0b1f3a;
+  color: #3f6212;
 }
 
 button.btn.load-action-btn,
