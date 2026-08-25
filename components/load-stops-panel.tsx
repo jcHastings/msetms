@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
-import { formatLocationLabel } from "@/lib/locations";
+import { applyLocationToStop, formatLocationLabel, matchLocationForStop } from "@/lib/locations";
 import { toInputDateTime } from "@/lib/format";
 import type { LoadStop } from "@/lib/stops";
 import type { Location } from "@/lib/types";
@@ -58,6 +58,21 @@ function AddStopButton({ loadId, kind }: { loadId: number; kind: "pickup" | "del
   );
 }
 
+function initialStopDraft(stop: LoadStop, locations: Location[]) {
+  const picked = stop.location_id ? locations.find((location) => location.id === stop.location_id) : null;
+  const matched = picked ?? matchLocationForStop(locations, stop);
+  const filled = matched ? applyLocationToStop(stop, matched) : stop;
+  return {
+    locationId: filled.location_id ? String(filled.location_id) : "",
+    name: filled.name,
+    street: filled.street ?? "",
+    city: filled.city ?? "",
+    state: filled.state ?? "",
+    zip: filled.zip ?? "",
+    phone: filled.phone ?? "",
+  };
+}
+
 function StopCard({
   stop,
   index,
@@ -68,6 +83,43 @@ function StopCard({
   locations: Location[];
 }) {
   const [kind, setKind] = useState(stop.kind);
+  const [draft, setDraft] = useState(() => initialStopDraft(stop, locations));
+
+  function pickLocation(locationId: string) {
+    if (!locationId) {
+      setDraft((current) => ({ ...current, locationId: "" }));
+      return;
+    }
+    const location = locations.find((row) => String(row.id) === locationId);
+    if (!location) {
+      setDraft((current) => ({ ...current, locationId }));
+      return;
+    }
+    setDraft((current) => {
+      const filled = applyLocationToStop(
+        {
+          name: current.name,
+          street: current.street,
+          city: current.city,
+          state: current.state,
+          zip: current.zip,
+          phone: current.phone,
+          location_id: Number(locationId),
+        },
+        location,
+      );
+      return {
+        locationId,
+        name: filled.name,
+        street: filled.street ?? "",
+        city: filled.city ?? "",
+        state: filled.state ?? "",
+        zip: filled.zip ?? "",
+        phone: filled.phone ?? "",
+      };
+    });
+  }
+
   return (
     <form action={updateStopAction} className="rounded-lg border border-slate-200 p-4">
       <input type="hidden" name="stop_id" value={stop.id} />
@@ -89,7 +141,11 @@ function StopCard({
         </div>
         <div className="field">
           <label>Saved location</label>
-          <select name="location_id" defaultValue={stop.location_id ?? ""}>
+          <select
+            name="location_id"
+            value={draft.locationId}
+            onChange={(event) => pickLocation(event.target.value)}
+          >
             <option value="">One-off address</option>
             {locations.map((location) => (
               <option key={location.id} value={location.id}>
@@ -100,27 +156,53 @@ function StopCard({
         </div>
         <div className="field">
           <label>Location name</label>
-          <input name="name" defaultValue={stop.name} required />
+          <input
+            name="name"
+            value={draft.name}
+            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+            required
+          />
         </div>
         <div className="field">
           <label>Street</label>
-          <input name="street" defaultValue={stop.street} />
+          <input
+            name="street"
+            value={draft.street}
+            onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))}
+          />
         </div>
         <div className="field">
           <label>City</label>
-          <input name="city" defaultValue={stop.city} />
+          <input
+            name="city"
+            value={draft.city}
+            onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))}
+          />
         </div>
         <div className="field">
           <label>State</label>
-          <input name="state" defaultValue={stop.state} maxLength={2} />
+          <input
+            name="state"
+            value={draft.state}
+            onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))}
+            maxLength={2}
+          />
         </div>
         <div className="field">
           <label>Zip</label>
-          <input name="zip" defaultValue={stop.zip} />
+          <input
+            name="zip"
+            value={draft.zip}
+            onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))}
+          />
         </div>
         <div className="field">
           <label>Phone</label>
-          <input name="phone" defaultValue={stop.phone} />
+          <input
+            name="phone"
+            value={draft.phone}
+            onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+          />
         </div>
         <div className="field">
           <label>Window start</label>

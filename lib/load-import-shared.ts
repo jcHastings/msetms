@@ -34,6 +34,9 @@ export type ImportedStop = {
   name: string;
   city: string;
   state: string;
+  street?: string;
+  zip?: string;
+  phone?: string;
 };
 
 export type LoadImportValues = {
@@ -127,14 +130,20 @@ export function zipImportedStops(
   names: string[],
   cities: string[],
   states: string[],
+  streets: string[] = [],
+  zips: string[] = [],
+  phones: string[] = [],
 ): ImportedStop[] {
-  const count = Math.max(names.length, cities.length, states.length);
+  const count = Math.max(names.length, cities.length, states.length, streets.length, zips.length, phones.length);
   if (count === 0) return [];
   return Array.from({ length: count }, (_, index) => ({
     kind,
     name: names[index] || names[0] || "",
     city: cities[index] || "",
     state: states[index] || "",
+    street: streets[index] || "",
+    zip: zips[index] || "",
+    phone: phones[index] || "",
   }));
 }
 
@@ -221,12 +230,18 @@ export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues
     splitImportList(get("shipper")),
     splitImportList(get("shipper city")),
     splitImportList(get("shipper st", "shipper st.", "shipper state")),
+    splitImportList(get("shipper street", "shipper address", "shipper addr", "shipper address 1", "pickup street", "pickup address")),
+    splitImportList(get("shipper zip", "shipper zip code", "shipper postal", "pickup zip")),
+    splitImportList(get("shipper phone", "shipper phone #", "shipper tel", "pickup phone")),
   );
   const deliveries = zipImportedStops(
     "delivery",
     splitImportList(get("consignee")),
     splitImportList(get("consignee city")),
     splitImportList(get("consignee st", "consignee st.", "consignee state")),
+    splitImportList(get("consignee street", "consignee address", "consignee addr", "consignee address 1", "delivery street", "delivery address")),
+    splitImportList(get("consignee zip", "consignee zip code", "consignee postal", "delivery zip")),
+    splitImportList(get("consignee phone", "consignee phone #", "consignee tel", "delivery phone")),
   );
   const notes = NOTE_COLUMNS.map((column) => {
     const value = get(column);

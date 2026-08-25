@@ -1,8 +1,15 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { computeOwnerOperatorPay } from "./settlement";
-import { formatLocationAddress, formatSchedulingSummary } from "./locations";
-import { getLoad, getLocation, getTrailer } from "./queries";
+import {
+  applyLocationToStop,
+  formatSchedulingSummary,
+  formatStopPartyAddress,
+  isPlaceholderStopName,
+  matchLocationForStop,
+  normalizeLocationName,
+} from "./locations";
+import { getLoad, getLocation, getTrailer, listLocations } from "./queries";
 import { listStops, type LoadStop } from "./stops";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
@@ -107,40 +114,66 @@ function appointmentLabel(notes: string): string {
   return "Yes";
 }
 
-function formatStopAddress(stop: LoadStop): string {
-  const cityState = [stop.city.trim(), stop.state.trim()].filter(Boolean).join(", ");
-  const cityZip = [cityState, stop.zip.trim()].filter(Boolean).join(" ");
-  return [stop.street.trim(), cityZip].filter(Boolean).join(", ");
-}
-
 function confirmationParty(
   stop: LoadStop | undefined,
   fallbackLocationId: number | null,
   laneFallback = "",
+  customerName = "",
 ) {
-  const location = getLocation(stop?.location_id ?? fallbackLocationId ?? 0);
-  if (location) {
-    return {
-      name: location.name,
-      address: formatLocationAddress(location),
-      phone: location.phone,
-      hours: location.hours,
-      extra: location.scheduling_notes,
-      appointment: location.scheduling_type === "appointment" ? "Yes" : "No",
-      location,
-    };
-  }
-  if (!stop) {
-    return { name: "", address: laneFallback.trim(), phone: "", hours: "", extra: "", appointment: "", location: null };
+  const linked = getLocation(stop?.location_id ?? fallbackLocationId ?? 0);
+  const matched = linked ?? (stop ? matchLocationForStop(listLocations(), stop) : null);
+  const base = stop
+    ? {
+        name: stop.name,
+        street: stop.street,
+        city: stop.city,
+        state: stop.state,
+        zip: stop.zip,
+        phone: stop.phone,
+        location_id: stop.location_id,
+      }
+    : matched
+      ? {
+          name: matched.name,
+          street: matched.street,
+          city: matched.city,
+          state: matched.state,
+          zip: matched.zip,
+          phone: matched.phone,
+          location_id: matched.id,
+        }
+      : null;
+  const merged = base
+    ? applyLocationToStop(
+        base,
+        matched ?? { id: 0, name: "", street: "", city: "", state: "", zip: "", phone: "" },
+      )
+    : null;
+  const address = merged
+    ? formatStopPartyAddress(merged) || laneFallback.trim()
+    : laneFallback.trim();
+  let name = merged?.name.trim() || matched?.name.trim() || "";
+  if (isPlaceholderStopName(name, merged?.city ?? "") && matched?.name.trim()) name = matched.name.trim();
+  if (customerName && normalizeLocationName(name) === normalizeLocationName(customerName)) {
+    name = matched && normalizeLocationName(matched.name) !== normalizeLocationName(customerName)
+      ? matched.name.trim()
+      : "";
   }
   return {
-    name: stop.name.trim(),
-    address: formatStopAddress(stop) || laneFallback.trim(),
-    phone: stop.phone.trim(),
-    hours: "",
-    extra: [stop.instructions, stop.notes].map((value) => value.trim()).filter(Boolean).join("\n"),
-    appointment: "",
-    location: null,
+    name,
+    address,
+    phone: (merged?.phone || matched?.phone || "").trim(),
+    hours: matched?.hours ?? "",
+    extra: [
+      matched?.scheduling_notes ?? "",
+      stop?.instructions,
+      stop?.notes,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join("\n"),
+    appointment: matched?.scheduling_type === "appointment" ? "Yes" : matched ? "No" : "",
+    location: matched,
   };
 }
 
@@ -148,8 +181,8 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
   const stops = listStops(load.id);
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
   const delivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
-  const shipper = confirmationParty(pickup, load.shipper_location_id, load.origin);
-  const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination);
+  const shipper = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
+  const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination, load.customer_name);
   const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
   const notes = [
     load.special_instructions,
@@ -520,9 +553,9 @@ function drawStop(
     lineBreak: false,
   });
   doc.font("Helvetica").fontSize(8);
-  doc.text(stop.address || " ", x + 6, y + 36, { width: leftW - 8, height: 22 });
+  doc.text(stop.address || " ", x + 6, y + 36, { width: leftW - 8, height: 28, lineBreak: true });
   if (stop.phone) {
-    doc.text(`Phone: ${stop.phone}`, x + 6, y + 62, { width: leftW - 8, lineBreak: false });
+    doc.text(`Phone: ${stop.phone}`, x + 6, y + 68, { width: leftW - 8, lineBreak: false });
   }
 
   const gridX = x + leftW;

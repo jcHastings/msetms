@@ -175,6 +175,10 @@ async function main() {
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
+  assert.match(basicsChunk, /Load Reference ID/);
+  assert.match(basicsChunk, /Reefer setpoint/);
+  assert.doesNotMatch(basicsChunk, /htmlFor="branch"|New\/Used|Lower temp threshold|Upper temp threshold|Temp time tolerance|Container #|Last free day/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8"), /applyLocationToStop/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
   assert.match(customerChunk, /data-load-tab="customer"/);
   assert.match(customerChunk, /Customer reference/);
@@ -2291,61 +2295,69 @@ Continuous reefer. Two load locks.
     },
     {
       kind: "delivery",
-      name: "Nebraska Cold Storage",
-      city: "Hastings",
-      state: "NE",
+      name: "Westside Foods Test Yard",
+      city: "Kansas City",
+      state: "MO",
       window_start: delivery.toISOString(),
       window_end: deliveryEnd.toISOString(),
     },
   ]);
+  const { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } = await import("../lib/locations");
+  assert.equal(
+    formatStopPartyAddress({ street: "275 Blair rd", city: "Avenel", state: "NJ", zip: "07001" }),
+    "275 Blair rd\nAvenel, NJ 07001",
+  );
+  assert.equal(formatStopPartyAddress({ city: "Hastings", state: "NE" }), "Hastings, NE");
+  const lineage = queries.listLocations().find((location) => location.name === "Lineage Logistics - Avenel");
+  assert.ok(lineage);
+  assert.equal(
+    matchLocationForStop(queries.listLocations(), { name: "Unknown Plant LLC", city: "Avenel", state: "NJ" }),
+    null,
+  );
   const importedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
   assert.equal(importedConfirm.shipper.name, "Lineage Logistics - Avenel");
-  assert.equal(importedConfirm.shipper.address, "Avenel, NJ");
-  assert.equal(importedConfirm.consignee.name, "Nebraska Cold Storage");
-  assert.equal(importedConfirm.consignee.address, "Hastings, NE");
+  assert.equal(importedConfirm.shipper.address, "275 Blair rd\nAvenel, NJ 07001");
+  assert.match(importedConfirm.shipper.phone, /732/);
+  assert.equal(importedConfirm.consignee.name, "Westside Foods Test Yard");
+  assert.equal(importedConfirm.consignee.address, "Kansas City, MO");
+  assert.equal(importedConfirm.consignee.phone, "");
   assert.notEqual(importedConfirm.shipper.name, queries.getLoad(confirmImportId)?.customer_name);
   assert.doesNotMatch(importedConfirm.shipper.name, /M & S Loads/i);
-  const linkedShipper = queries.createLocation({
-    name: "Lineage Logistics - Avenel",
-    street: "1 Lineage Dr",
-    city: "Avenel",
-    state: "NJ",
-    zip: "07001",
-    phone: "(732) 555-0100",
-    notes: "",
-    role: "shipper",
-    scheduling_type: "appointment",
-    hours: "Mon–Fri 06:00–14:00",
-    scheduling_notes: "Appointment required.",
-  });
+  const firstPickup = (await import("../lib/stops")).listStops(confirmImportId).find((stop) => stop.kind === "pickup");
+  assert.equal(firstPickup?.location_id, lineage.id);
+  assert.match(firstPickup?.street ?? "", /275 Blair/);
   const linkedConsignee = queries.createLocation({
-    name: "Nebraska Cold Storage",
-    street: "200 Ice House Rd",
-    city: "Hastings",
-    state: "NE",
-    zip: "68901",
-    phone: "(402) 555-0199",
+    name: "Westside Foods Test Yard",
+    street: "12 Test Dock Rd",
+    city: "Kansas City",
+    state: "MO",
+    zip: "64120",
+    phone: "(816) 555-0140",
     notes: "",
     role: "receiver",
     scheduling_type: "fcfs",
     hours: "Daily 07:00–17:00",
     scheduling_notes: "",
   });
+  const matchedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
+  assert.equal(matchedConfirm.shipper.address, "275 Blair rd\nAvenel, NJ 07001");
+  assert.equal(matchedConfirm.consignee.address, "12 Test Dock Rd\nKansas City, MO 64120");
+  assert.equal(matchedConfirm.consignee.phone, "(816) 555-0140");
   replaceStops(confirmImportId, [
     {
       kind: "pickup",
       name: "Avenel",
       city: "Avenel",
       state: "NJ",
-      location_id: linkedShipper,
+      location_id: lineage.id,
       window_start: pickup.toISOString(),
       window_end: pickupEnd.toISOString(),
     },
     {
       kind: "delivery",
-      name: "Hastings",
-      city: "Hastings",
-      state: "NE",
+      name: "Kansas City",
+      city: "Kansas City",
+      state: "MO",
       location_id: linkedConsignee,
       window_start: delivery.toISOString(),
       window_end: deliveryEnd.toISOString(),
@@ -2354,15 +2366,52 @@ Continuous reefer. Two load locks.
   const linkedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
   const linkedDriverPacket = confirmation.buildConfirmationForLoad(confirmImportId, { packet: "internal" });
   assert.equal(linkedConfirm.shipper.name, "Lineage Logistics - Avenel");
-  assert.match(linkedConfirm.shipper.address, /1 Lineage Dr/);
-  assert.match(linkedConfirm.shipper.address, /07001/);
-  assert.equal(linkedConfirm.shipper.phone, "(732) 555-0100");
-  assert.equal(linkedConfirm.shipper.hours, "Mon–Fri 06:00–14:00");
-  assert.equal(linkedConfirm.consignee.name, "Nebraska Cold Storage");
-  assert.match(linkedConfirm.consignee.address, /200 Ice House Rd/);
-  assert.equal(linkedConfirm.consignee.phone, "(402) 555-0199");
+  assert.equal(linkedConfirm.shipper.address, "275 Blair rd\nAvenel, NJ 07001");
+  assert.equal(linkedConfirm.shipper.phone, lineage.phone);
+  assert.equal(linkedConfirm.consignee.name, "Westside Foods Test Yard");
+  assert.equal(linkedConfirm.consignee.address, "12 Test Dock Rd\nKansas City, MO 64120");
+  assert.equal(linkedConfirm.consignee.phone, "(816) 555-0140");
+  assert.equal(linkedConfirm.consignee.hours, "Daily 07:00–17:00");
   assert.equal(linkedDriverPacket.shipper.name, linkedConfirm.shipper.name);
   assert.equal(linkedDriverPacket.consignee.address, linkedConfirm.consignee.address);
+  const keptFromLocation = applyLocationToStop(
+    {
+      name: "Lineage Logistics - Avenel",
+      street: "Dispatcher St",
+      city: "Avenel",
+      state: "NJ",
+      zip: "",
+      phone: "",
+    },
+    lineage,
+  );
+  assert.equal(keptFromLocation.street, "Dispatcher St");
+  replaceStops(confirmImportId, [
+    {
+      kind: "pickup",
+      name: "Lineage Logistics - Avenel",
+      street: "Dispatcher St",
+      city: "Avenel",
+      state: "NJ",
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Westside Foods Test Yard",
+      city: "Kansas City",
+      state: "MO",
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+  ]);
+  const keptStreetConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
+  assert.match(keptStreetConfirm.shipper.address, /Dispatcher St/);
+  assert.doesNotMatch(keptStreetConfirm.shipper.address, /275 Blair/);
+  assert.match(keptStreetConfirm.shipper.address, /07001/);
+  const typedPickup = (await import("../lib/stops")).listStops(confirmImportId).find((stop) => stop.kind === "pickup");
+  assert.equal(typedPickup?.street, "Dispatcher St");
+  assert.equal(typedPickup?.location_id, lineage.id);
   assert.match(linkedConfirm.reeferSetpoint, /34/);
   assert.equal(linkedConfirm.reeferMode, "Continuous");
   const feedPdf = await confirmation.renderConfirmationPdf(feedConfirm);
@@ -5241,6 +5290,7 @@ Continuous reefer. Two load locks.
     loadValuesFromRecords,
     splitImportList,
     zipImportedStops,
+    buildLoadImportPreview,
   } = await import("../lib/load-import-shared");
   assert.equal(ASCEND_LOAD_HEADERS[0], "Load #");
   assert.equal(mapImportedEquipment("53' Reefer"), "reefer_53");
@@ -5249,6 +5299,37 @@ Continuous reefer. Two load locks.
   assert.equal(mapImportedLoadStatus("in_transit"), "in_transit");
   assert.deepEqual(splitImportList("WSF, Lineage"), ["WSF", "Lineage"]);
   assert.equal(zipImportedStops("pickup", ["WSF", "Lineage"], ["Kansas City", "St. Louis"], ["MO", "MO"]).length, 2);
+  const addressedImport = loadValuesFromRecords([
+    {
+      "Load #": "1007777",
+      Status: "Available",
+      Shipper: "Westside Foods",
+      "Shipper City": "Avenel",
+      "Shipper St.": "NJ",
+      "Shipper Street": "10 Cold Rd",
+      "Shipper Zip": "07001",
+      "Shipper Phone": "732-555-0001",
+      Consignee: "Nebraska Cold Storage",
+      "Consignee City": "Hastings",
+      "Consignee St.": "NE",
+      "Consignee Address": "200 Ice House Rd",
+      "Consignee Zip": "68901",
+      "Consignee Phone": "402-555-0002",
+    },
+  ]);
+  assert.equal(addressedImport[0]?.pickups[0]?.state, "NJ", "Shipper St. stays the state abbreviation");
+  assert.equal(addressedImport[0]?.pickups[0]?.street, "10 Cold Rd");
+  assert.equal(addressedImport[0]?.pickups[0]?.zip, "07001");
+  assert.equal(addressedImport[0]?.pickups[0]?.phone, "732-555-0001");
+  assert.equal(addressedImport[0]?.deliveries[0]?.street, "200 Ice House Rd");
+  const { applyLoadImport, previewLoadsFromText, previewLoadsFromXlsx } = await import("../lib/load-import");
+  const addressedApplied = applyLoadImport(buildLoadImportPreview(addressedImport, []));
+  assert.equal(addressedApplied.created, 1);
+  const addressedLoadId = queries.findLoadIdByNumber("1007777");
+  const addressedStops = (await import("../lib/stops")).listStops(addressedLoadId!);
+  assert.equal(addressedStops.find((stop) => stop.kind === "pickup")?.street, "10 Cold Rd");
+  assert.equal(addressedStops.find((stop) => stop.kind === "pickup")?.phone, "732-555-0001");
+  assert.equal(addressedStops.find((stop) => stop.kind === "delivery")?.zip, "68901");
   assert.equal(matchAssetUnit([{ id: 7, unit_number: "36" }], "36"), 7);
   assert.equal(matchAssetUnit([{ id: 8, unit_number: "1518" }], "MS1518"), 8);
   assert.equal(matchAssetUnit([{ id: 9, unit_number: "41" }], "Assign Later"), null);
@@ -5285,7 +5366,6 @@ Continuous reefer. Two load locks.
   assert.equal(parsedLoads[0]?.equipment, "reefer_53");
   assert.equal(parsedLoads[0]?.pickups.length, 2);
   assert.equal(parsedLoads[0]?.deliveries.length, 2);
-  const { applyLoadImport, previewLoadsFromText, previewLoadsFromXlsx } = await import("../lib/load-import");
   const { listStops } = await import("../lib/stops");
   const loadPreview = previewLoadsFromText(`${ASCEND_LOAD_HEADERS.join(",")}\n${loadSheetRow}`);
   assert.equal(loadPreview.length, 1);

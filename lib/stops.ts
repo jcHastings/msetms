@@ -1,5 +1,6 @@
 import { getDb } from "./db";
-import { getLoad } from "./queries";
+import { applyLocationToStop, matchLocationForStop } from "./locations";
+import { getLoad, getLocation, listLocations } from "./queries";
 
 export type LoadStopKind = "pickup" | "delivery";
 
@@ -69,12 +70,35 @@ function asStop(row: Record<string, unknown>): LoadStop {
   };
 }
 
+function hydrateStopFromLocations(
+  stop: LoadStop,
+  locations: ReturnType<typeof listLocations>,
+): LoadStop {
+  const picked = stop.location_id ? locations.find((location) => location.id === stop.location_id) ?? null : null;
+  const matched = picked ?? matchLocationForStop(locations, stop);
+  if (!matched) return stop;
+  const filled = applyLocationToStop(stop, matched);
+  return {
+    ...stop,
+    location_id: filled.location_id ?? stop.location_id,
+    name: filled.name,
+    street: filled.street ?? "",
+    city: filled.city ?? "",
+    state: filled.state ?? "",
+    zip: filled.zip ?? "",
+    phone: filled.phone ?? "",
+  };
+}
+
 export function listStops(loadId: number): LoadStop[] {
+  const locations = listLocations();
   return (
     getDb()
       .prepare("SELECT * FROM load_stops WHERE load_id = ? ORDER BY sequence, id")
       .all(loadId) as Array<Record<string, unknown>>
-  ).map(asStop);
+  )
+    .map(asStop)
+    .map((stop) => hydrateStopFromLocations(stop, locations));
 }
 
 export function ensureDefaultStops(loadId: number): LoadStop[] {
@@ -104,8 +128,15 @@ export function ensureDefaultStops(loadId: number): LoadStop[] {
   return listStops(loadId);
 }
 
+function resolveStopLocation(input: StopInput): StopInput {
+  const picked = input.location_id ? getLocation(input.location_id) : null;
+  const matched = picked ?? matchLocationForStop(listLocations(), input);
+  return matched ? applyLocationToStop(input, matched) : input;
+}
+
 export function addStop(loadId: number, input: StopInput): number {
   if (!getLoad(loadId)) throw new Error("Load not found.");
+  input = resolveStopLocation(input);
   const max = getDb()
     .prepare("SELECT COALESCE(MAX(sequence), 0) as seq FROM load_stops WHERE load_id = ?")
     .get(loadId) as { seq: number };
@@ -144,6 +175,7 @@ export function updateStop(stopId: number, input: StopInput): void {
     | Record<string, unknown>
     | undefined;
   if (!stop) throw new Error("Stop not found.");
+  input = resolveStopLocation(input);
   getDb()
     .prepare(
       `UPDATE load_stops SET

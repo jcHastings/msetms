@@ -53,6 +53,109 @@ export function locationMatchesRole(location: Location, role: "shipper" | "recei
   return location.role === "both" || location.role === role;
 }
 
+export type StopLocationMatch = {
+  name: string;
+  street?: string;
+  city?: string;
+  state?: string;
+};
+
+export function normalizeLocationName(value: string): string {
+  return value.trim().toLowerCase().replace(/[.,#']/g, "").replace(/\s+/g, " ");
+}
+
+function cityStateAgrees(
+  location: Pick<Location, "city" | "state">,
+  stop: StopLocationMatch,
+): boolean {
+  const city = normalizeLocationName(stop.city ?? "");
+  const state = (stop.state ?? "").trim().toUpperCase();
+  if (city && normalizeLocationName(location.city) && normalizeLocationName(location.city) !== city) {
+    return false;
+  }
+  if (state.length === 2 && location.state.trim() && location.state.trim().toUpperCase() !== state) {
+    return false;
+  }
+  return true;
+}
+
+function pickUniqueLocation<T extends Pick<Location, "id" | "name" | "city" | "state">>(
+  hits: T[],
+  stop: StopLocationMatch,
+): T | null {
+  if (hits.length === 1) return cityStateAgrees(hits[0], stop) ? hits[0] : null;
+  if (hits.length > 1) {
+    const narrowed = hits.filter((location) => cityStateAgrees(location, stop));
+    return narrowed.length === 1 ? narrowed[0] : null;
+  }
+  return null;
+}
+
+/** Exact name, or one unique contains-match when city/state agree. Never invent a row. */
+export function matchLocationForStop<T extends Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip" | "phone">>(
+  locations: T[],
+  stop: StopLocationMatch,
+): T | null {
+  const needle = normalizeLocationName(stop.name);
+  if (!needle || needle.length < 3) return null;
+  const city = normalizeLocationName(stop.city ?? "");
+  if (city && needle === city) return null;
+
+  const exact = pickUniqueLocation(
+    locations.filter((location) => normalizeLocationName(location.name) === needle),
+    stop,
+  );
+  if (exact) return exact;
+
+  return pickUniqueLocation(
+    locations.filter((location) => {
+      const name = normalizeLocationName(location.name);
+      if (name.length < 3) return false;
+      return name.includes(needle) || needle.includes(name);
+    }),
+    stop,
+  );
+}
+
+export function isPlaceholderStopName(name: string, city = ""): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (/^(pickup|delivery)$/i.test(trimmed)) return true;
+  return Boolean(city.trim() && normalizeLocationName(trimmed) === normalizeLocationName(city));
+}
+
+export function fillBlank(existing: string, incoming: string): string {
+  return existing.trim() ? existing : incoming.trim();
+}
+
+export function applyLocationToStop<T extends {
+  name: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  phone?: string;
+  location_id?: number | null;
+}>(stop: T, location: Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip" | "phone">): T {
+  return {
+    ...stop,
+    location_id: stop.location_id ?? location.id,
+    name: isPlaceholderStopName(stop.name, stop.city ?? "") ? location.name : fillBlank(stop.name, location.name),
+    street: fillBlank(stop.street ?? "", location.street),
+    city: fillBlank(stop.city ?? "", location.city),
+    state: fillBlank(stop.state ?? "", location.state),
+    zip: fillBlank(stop.zip ?? "", location.zip),
+    phone: fillBlank(stop.phone ?? "", location.phone),
+  };
+}
+
+export function formatStopPartyAddress(parts: { street?: string; city?: string; state?: string; zip?: string }): string {
+  const cityState = [parts.city?.trim(), parts.state?.trim()].filter(Boolean).join(", ");
+  const cityZip = [cityState, parts.zip?.trim()].filter(Boolean).join(" ");
+  const street = parts.street?.trim() ?? "";
+  return [street, cityZip].filter(Boolean).join("\n");
+}
+
 export function extractStateCode(place: string): string {
   const trimmed = place.trim();
   const zip = trimmed.match(/,\s*([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/);

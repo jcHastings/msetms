@@ -1,5 +1,4 @@
 import {
-  LOAD_CONDITIONS,
   LOAD_SIZES,
   LOAD_TRUCK_STATUSES,
 } from "@/lib/load-page-shared";
@@ -82,10 +81,6 @@ export function LoadBasicsScreen({
         </select>
       </div>
       <div className="field">
-        <label htmlFor="branch">Branch</label>
-        <input id="branch" name="branch" defaultValue={load?.branch ?? ""} />
-      </div>
-      <div className="field">
         <label htmlFor="reference_number">Load Reference ID/Numbers</label>
         <input
           id="reference_number"
@@ -128,16 +123,6 @@ export function LoadBasicsScreen({
         </select>
       </div>
       <div className="field">
-        <label htmlFor="condition_new_used">New/Used</label>
-        <select id="condition_new_used" name="condition_new_used" defaultValue={load?.condition_new_used ?? ""}>
-          {LOAD_CONDITIONS.map((item) => (
-            <option key={item.value || "blank"} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
         <label htmlFor="equipment">Equipment Type</label>
         <select id="equipment" name="equipment" defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}>
           {(equipmentChoices.length ? equipmentChoices : [{ value: DEFAULT_LOAD_EQUIPMENT, label: "53' Reefer" }]).map((item) => (
@@ -154,26 +139,6 @@ export function LoadBasicsScreen({
       <div className="field">
         <label htmlFor="temperature_f">Temperature °F</label>
         <input id="temperature_f" name="temperature_f" type="number" step="0.1" defaultValue={load?.temperature_f ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="temp_low_f">Lower temp threshold</label>
-        <input id="temp_low_f" name="temp_low_f" type="number" step="0.1" defaultValue={load?.temp_low_f ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="temp_high_f">Upper temp threshold</label>
-        <input id="temp_high_f" name="temp_high_f" type="number" step="0.1" defaultValue={load?.temp_high_f ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="temp_time_tolerance">Temp time tolerance</label>
-        <input id="temp_time_tolerance" name="temp_time_tolerance" defaultValue={load?.temp_time_tolerance ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="container_number">Container #</label>
-        <input id="container_number" name="container_number" defaultValue={load?.container_number ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="last_free_day">Last free day</label>
-        <input id="last_free_day" name="last_free_day" type="date" defaultValue={load?.last_free_day ?? ""} />
       </div>
       <div className="field">
         <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
