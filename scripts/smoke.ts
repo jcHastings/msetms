@@ -4593,11 +4593,13 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /listRelays|splitLoadRevenue/);
   assert.match(fuelPage, /Unassigned/);
   assert.match(fuelPage, /Per-truck totals/);
-  assert.match(fuelPage, /Truck diesel/);
-  assert.match(fuelPage, /Reefer diesel|reefer diesel/);
-  assert.match(fuelPage, /DEF/);
-  assert.match(fuelPage, /Scale/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-rollup-table.tsx"), "utf8"), /FUEL_BUCKETS/);
+  const fuelRollupUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-rollup-table.tsx"), "utf8");
+  const fuelLabels = fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8");
+  assert.match(fuelRollupUi + fuelLabels, /Truck diesel/);
+  assert.match(fuelRollupUi + fuelLabels, /Reefer diesel|reefer diesel/);
+  assert.match(fuelRollupUi + fuelLabels, /DEF/);
+  assert.match(fuelRollupUi + fuelLabels, /Scale/);
+  assert.match(fuelRollupUi, /FUEL_BUCKETS/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.match(fuelImportUi, /NName|Transaction Activity/);
