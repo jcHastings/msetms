@@ -34,6 +34,10 @@ async function main() {
   assert.match(navSource, /label: "Users"/);
   assert.match(navSource, /href: "\/audit"/);
   assert.match(navSource, /label: "Audit"/);
+  assert.match(navSource, /href: "\/fleet\/samsara"/);
+  assert.match(navSource, /label: "Samsara"/);
+  assert.match(navSource, /href: "\/fleet\/orbcomm"/);
+  assert.match(navSource, /label: "ORBCOMM"/);
   const { loadStatusBand, loadStatusBadgeClass, loadStatusRowClass } = await import("../lib/load-status-style");
   const { LOAD_STATUSES } = await import("../lib/types");
   assert.equal(loadStatusBand("available"), "needs_work");
@@ -325,10 +329,26 @@ async function main() {
   assert.match(mapCanvasSource, /maps\.googleapis\.com\/maps\/api\/js/);
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
+  assert.match(mapCanvasSource, /point\.href/);
   const mapLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8");
   assert.match(mapLibSource, /persistedTruckLocation/);
   assert.match(mapLibSource, /geocodeAddress/);
   assert.doesNotMatch(mapLibSource, /demo-112|32\.7767/);
+  const fleetMapSource = fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8");
+  assert.match(fleetMapSource, /getSamsaraFleet/);
+  assert.match(fleetMapSource, /persistedTruckLocation/);
+  assert.match(fleetMapSource, /getReeferSnapshots/);
+  assert.match(fleetMapSource, /persistedTrailerLocation/);
+  assert.match(fleetMapSource, /active !== 0/);
+  assert.match(fleetMapSource, /type === "reefer"/);
+  assert.doesNotMatch(fleetMapSource, /withDemoTrailerLocation|demoCoordsForTrailer/);
+  assert.doesNotMatch(fleetMapSource, /AIza[0-9A-Za-z_-]+/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /buildSamsaraFleetMap|buildOrbcommFleetMap|FleetMapView/);
+  const fleetMapView = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
+  assert.doesNotMatch(fleetMapView, /from ["']@\/lib\/(db|env|settings|places)["']/);
+  assert.match(fleetMapView, /GOOGLE_MAPS_API_KEY/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/samsara/page.tsx"), "utf8"), /buildSamsaraFleetMap/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Book from template/);
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
@@ -629,6 +649,8 @@ async function main() {
     "app/fleet/trailers/[id]/page.tsx",
     "app/fleet/drivers/new/page.tsx",
     "app/fleet/drivers/[id]/page.tsx",
+    "app/fleet/samsara/page.tsx",
+    "app/fleet/orbcomm/page.tsx",
     "app/locations/new/page.tsx",
     "app/customers/new/page.tsx",
   ]) {
@@ -753,6 +775,9 @@ async function main() {
     "lib/fleet-import-shared.ts",
     "lib/fleet-import.ts",
     "lib/integrations/samsara.ts",
+    "lib/fleet-map.ts",
+    "app/fleet/samsara/page.tsx",
+    "app/fleet/orbcomm/page.tsx",
     "README.md",
     "SHIPPED.md",
   ]) {
@@ -5158,6 +5183,114 @@ Continuous reefer. Two load locks.
   assert.ok(truckPin);
   assert.equal(truckPin?.lat, 41.25);
   assert.equal(truckPin?.lng, -95.93);
+
+  const previousOrbcommUser = process.env.ORBCOMM_USERNAME;
+  const previousOrbcommPass = process.env.ORBCOMM_PASSWORD;
+  delete process.env.ORBCOMM_USERNAME;
+  delete process.env.ORBCOMM_PASSWORD;
+  const fleetMap = await import("../lib/fleet-map");
+  const { isPlottableCoord } = await import("../lib/fleet-map-shared");
+  assert.equal(isPlottableCoord(41.25, -95.93), true);
+  assert.equal(isPlottableCoord(null, -95.93), false);
+  assert.equal(isPlottableCoord(Number.NaN, -95.93), false);
+  const fleetMapTruckId = queries.createTruck({
+    unit_number: "FM-SAM-1",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "sam-fm-1",
+  });
+  queries.saveTruckGps(fleetMapTruckId, {
+    latitude: 41.2565,
+    longitude: -95.9345,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  const fleetMapOldId = queries.createTruck({
+    unit_number: "FM-OLD",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "sam-fm-old",
+  });
+  queries.saveTruckGps(fleetMapOldId, {
+    latitude: 32.7767,
+    longitude: -96.797,
+    address: "Dallas, TX",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  queries.setTruckActive(fleetMapOldId, false);
+  const fleetMapEmptyId = queries.createTruck({
+    unit_number: "FM-EMPTY",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const samsaraFleetMap = await fleetMap.buildSamsaraFleetMap();
+  const liveTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-1");
+  assert.ok(liveTruckPin, "active truck with stored Samsara GPS must plot");
+  assert.equal(liveTruckPin?.lat, 41.2565);
+  assert.equal(liveTruckPin?.lng, -95.9345);
+  assert.equal(liveTruckPin?.href, `/fleet/trucks/${fleetMapTruckId}`);
+  assert.equal(
+    samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
+    false,
+    "deactivated trucks stay off the live Samsara map",
+  );
+  assert.ok(samsaraFleetMap.missing.some((item) => item.label === "FM-EMPTY" && item.id === fleetMapEmptyId));
+  queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId);
+  const assignedSamsaraMap = await fleetMap.buildSamsaraFleetMap();
+  assert.equal(
+    assignedSamsaraMap.pins.find((pin) => pin.label === "FM-SAM-1")?.href,
+    `/loads/${mapLoadId}`,
+  );
+  const fleetReeferId = queries.createTrailer({
+    unit_number: "FM-R1",
+    type: "reefer",
+    orbcomm_asset_id: "orb-fm-r1",
+  });
+  queries.saveTrailerGps(fleetReeferId, {
+    latitude: 39.7684,
+    longitude: -86.1581,
+    address: "Indianapolis, IN",
+    recordedAt: new Date().toISOString(),
+    source: "orbcomm",
+  });
+  const fleetDryId = queries.createTrailer({
+    unit_number: "FM-DRY",
+    type: "dry_van",
+    orbcomm_asset_id: "orb-fm-dry",
+  });
+  queries.saveTrailerGps(fleetDryId, {
+    latitude: 36.1627,
+    longitude: -86.7816,
+    address: "Nashville, TN",
+    recordedAt: new Date().toISOString(),
+    source: "orbcomm",
+  });
+  const fleetEmptyReeferId = queries.createTrailer({
+    unit_number: "FM-R0",
+    type: "reefer",
+  });
+  const orbcommFleetMap = await fleetMap.buildOrbcommFleetMap();
+  const reeferPin = orbcommFleetMap.pins.find((pin) => pin.label === "FM-R1");
+  assert.ok(reeferPin, "reefer with stored ORBCOMM GPS must plot");
+  assert.equal(reeferPin?.lat, 39.7684);
+  assert.equal(reeferPin?.lng, -86.1581);
+  assert.equal(reeferPin?.href, `/fleet/trailers/${fleetReeferId}`);
+  assert.equal(orbcommFleetMap.pins.some((pin) => pin.label === "FM-DRY"), false, "dry-van trailers stay off the reefer map");
+  assert.ok(orbcommFleetMap.missing.some((item) => item.label === "FM-R0" && item.id === fleetEmptyReeferId));
+  assert.match(orbcommFleetMap.sourceNote, /not set|stored/i);
+  queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId, fleetReeferId);
+  const assignedOrbcommMap = await fleetMap.buildOrbcommFleetMap();
+  assert.equal(assignedOrbcommMap.pins.find((pin) => pin.label === "FM-R1")?.href, `/loads/${mapLoadId}`);
+  if (previousOrbcommUser == null) delete process.env.ORBCOMM_USERNAME;
+  else process.env.ORBCOMM_USERNAME = previousOrbcommUser;
+  if (previousOrbcommPass == null) delete process.env.ORBCOMM_PASSWORD;
+  else process.env.ORBCOMM_PASSWORD = previousOrbcommPass;
+
   const oneStopLoadId = queries.createLoad({
     customer_id: customerId,
     origin: "Nashville, TN",

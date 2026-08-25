@@ -30,7 +30,7 @@ export default async function FleetPage({
         title="Fleet"
         subtitle="Trucks, trailers, and drivers. Assign a unit to a load from the dispatch board."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/fleet/drivers" className="btn btn-secondary">
               Drivers
             </Link>
@@ -39,6 +39,12 @@ export default async function FleetPage({
             </Link>
             <Link href="/fleet/trailers" className="btn btn-secondary">
               Trailers
+            </Link>
+            <Link href="/fleet/samsara" className="btn btn-secondary">
+              Samsara
+            </Link>
+            <Link href="/fleet/orbcomm" className="btn btn-secondary">
+              ORBCOMM
             </Link>
           </div>
         }

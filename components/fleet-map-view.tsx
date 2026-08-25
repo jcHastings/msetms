@@ -1,0 +1,53 @@
+import Link from "next/link";
+import { LoadMapCanvas } from "@/components/load-map-canvas";
+import { PageHeader } from "@/components/page-header";
+import type { FleetMapModel } from "@/lib/fleet-map-shared";
+
+export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: string }) {
+  return (
+    <>
+      <PageHeader title={model.title} subtitle={model.sourceNote} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" data-fleet-map={model.title.toLowerCase()}>
+        <section className="card overflow-hidden">
+          <LoadMapCanvas
+            apiKey={apiKey}
+            points={model.pins}
+            className="h-[36rem] w-full bg-slate-100"
+            missingKeyMessage="Add GOOGLE_MAPS_API_KEY with Maps JavaScript API enabled to show this map."
+            emptyMessage="No units with a stored or live GPS position. Empty units are listed — no invented pins."
+          />
+        </section>
+        <aside className="card p-4">
+          <h2 className="text-sm font-semibold">On the map</h2>
+          {model.pins.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">No GPS pins. Nothing was invented.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-slate-100 text-sm">
+              {model.pins.map((pin) => (
+                <li key={pin.id} className="py-1.5">
+                  <Link href={pin.href} className="font-semibold underline">
+                    {pin.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h2 className="mt-5 text-sm font-semibold">No GPS</h2>
+          {model.missing.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">Every listed unit has a position.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-slate-100 text-sm">
+              {model.missing.map((unit) => (
+                <li key={unit.id} className="py-1.5">
+                  <Link href={unit.href} className="underline">
+                    {unit.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+      </div>
+    </>
+  );
+}

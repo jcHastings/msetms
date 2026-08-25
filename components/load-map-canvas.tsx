@@ -7,7 +7,9 @@ type GoogleMaps = {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => {
     fitBounds: (bounds: { extend: (latLng: { lat: number; lng: number }) => void }) => void;
   };
-  Marker: new (opts: Record<string, unknown>) => unknown;
+  Marker: new (opts: Record<string, unknown>) => {
+    addListener: (event: string, handler: () => void) => void;
+  };
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
   SymbolPath: { CIRCLE: unknown };
 };
@@ -53,7 +55,19 @@ function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
   });
 }
 
-export function LoadMapCanvas({ apiKey, points }: { apiKey: string; points: LoadMapPoint[] }) {
+export function LoadMapCanvas({
+  apiKey,
+  points,
+  className,
+  missingKeyMessage,
+  emptyMessage,
+}: {
+  apiKey: string;
+  points: LoadMapPoint[];
+  className?: string;
+  missingKeyMessage?: string;
+  emptyMessage?: string;
+}) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,10 +87,19 @@ export function LoadMapCanvas({ apiKey, points }: { apiKey: string; points: Load
         const bounds = new maps.LatLngBounds();
         for (const point of points) {
           const position = { lat: point.lat, lng: point.lng };
-          new maps.Marker({
+          const marker = new maps.Marker({
             map,
             position,
             title: [point.label, point.detail].filter(Boolean).join(" — "),
+            label:
+              point.kind === "track"
+                ? undefined
+                : {
+                    text: point.label,
+                    color: "#0f172a",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                  },
             icon: {
               path: maps.SymbolPath.CIRCLE,
               scale: point.kind === "track" ? 4 : 8,
@@ -86,6 +109,12 @@ export function LoadMapCanvas({ apiKey, points }: { apiKey: string; points: Load
               strokeWeight: 1,
             },
           });
+          if (point.href) {
+            const href = point.href;
+            marker.addListener("click", () => {
+              window.location.assign(href);
+            });
+          }
           bounds.extend(position);
         }
         if (points.length > 1) map.fitBounds(bounds);
@@ -99,19 +128,19 @@ export function LoadMapCanvas({ apiKey, points }: { apiKey: string; points: Load
   if (!apiKey) {
     return (
       <p className="px-4 py-8 text-sm text-slate-600">
-        Add GOOGLE_MAPS_API_KEY with Maps JavaScript API enabled to show the load map. Stops and addresses still
-        save without it.
+        {missingKeyMessage ??
+          "Add GOOGLE_MAPS_API_KEY with Maps JavaScript API enabled to show the load map. Stops and addresses still save without it."}
       </p>
     );
   }
   if (points.length === 0) {
     return (
       <p className="px-4 py-8 text-sm text-slate-600">
-        No mappable points yet. Save a stop with a full address or a Locations row that has coordinates, or assign
-        a truck that already has Samsara GPS.
+        {emptyMessage ??
+          "No mappable points yet. Save a stop with a full address or a Locations row that has coordinates, or assign a truck that already has Samsara GPS."}
       </p>
     );
   }
 
-  return <div ref={host} className="h-80 w-full rounded-lg bg-slate-100" data-load-map="" />;
+  return <div ref={host} className={className ?? "h-80 w-full rounded-lg bg-slate-100"} data-load-map="" />;
 }

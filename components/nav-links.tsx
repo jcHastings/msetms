@@ -25,6 +25,8 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/fleet/drivers", label: "Drivers" },
       { href: "/fleet/trucks", label: "Trucks" },
       { href: "/fleet/trailers", label: "Trailers" },
+      { href: "/fleet/samsara", label: "Samsara" },
+      { href: "/fleet/orbcomm", label: "ORBCOMM" },
       { href: "/fuel", label: "Fuel" },
       { href: "/compliance", label: "Compliance" },
       { href: "/safety", label: "Safety" },

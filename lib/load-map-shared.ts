@@ -9,6 +9,7 @@ export type LoadMapPoint = {
   lat: number;
   lng: number;
   detail?: string;
+  href?: string;
 };
 
 export type LoadTrackingEvent = {
