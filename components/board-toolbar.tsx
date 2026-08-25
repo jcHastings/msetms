@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useBoardFilter } from "@/components/board-filter";
 import { LOAD_LIST_TABS } from "@/lib/load-list-shared";
 
 type Props = {
@@ -10,17 +10,7 @@ type Props = {
 };
 
 export function BoardToolbar({ status, date }: Props) {
-  const [q, setQ] = useState("");
-
-  useEffect(() => {
-    const term = q.trim().toLowerCase();
-    document.querySelectorAll<HTMLElement>("[data-load-search]").forEach((row) => {
-      const hay = (row.dataset.loadSearch ?? "").toLowerCase();
-      const hide = Boolean(term) && !hay.includes(term);
-      row.hidden = hide;
-      row.classList.toggle("is-filtered-out", hide);
-    });
-  }, [q]);
+  const { q, setQ } = useBoardFilter();
 
   function tabHref(value: string) {
     const params = new URLSearchParams();

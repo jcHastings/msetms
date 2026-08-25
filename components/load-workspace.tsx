@@ -58,12 +58,7 @@ export function LoadWorkspace({
 }) {
   const router = useRouter();
   const formId = useId().replace(/:/g, "") + "-load-form";
-  const [tab, setTabState] = useState<LoadTab>(() => {
-    if (typeof window !== "undefined") {
-      return parseLoadTab(new URLSearchParams(window.location.search).get("tab"));
-    }
-    return parseLoadTab(initialTab);
-  });
+  const [tab, setTabState] = useState<LoadTab>(() => parseLoadTab(initialTab));
   const [dirty, setDirty] = useState(false);
   const [canSubmit, setCanSubmit] = useState(true);
   const [pending, setPending] = useState(false);
@@ -88,12 +83,14 @@ export function LoadWorkspace({
       const url = new URL(window.location.href);
       url.searchParams.set("tab", next);
       url.hash = hash ? hash.replace(/^#/, "") : "";
-      window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+      router.replace(`${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`, {
+        scroll: false,
+      });
       if (hash) {
         window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
       }
     },
-    [dirty, tab],
+    [dirty, tab, router],
   );
 
   useEffect(() => {

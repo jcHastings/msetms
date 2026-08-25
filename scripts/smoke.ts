@@ -76,7 +76,7 @@ async function main() {
     ),
     false,
   );
-  assert.match(boardUi, /data-load-search/);
+  assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
   assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
   assert.doesNotMatch(boardUi, /Find New Shippers|EDI \/ Tenders|Post\/Search Load Boards/);
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");

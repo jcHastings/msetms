@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AssignDialog } from "@/components/assign-dialog";
+import { BoardFilterProvider, BoardFilterRow } from "@/components/board-filter";
 import { BoardToolbar } from "@/components/board-toolbar";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { LoadStatusSelect } from "@/components/load-status-select";
@@ -46,7 +47,7 @@ export default async function BoardPage({
   }
 
   return (
-    <>
+    <BoardFilterProvider>
       <PageHeader
         title="Dispatch board"
         subtitle="Filter by status or pickup date, assign a unit, and move loads through the lane."
@@ -94,10 +95,10 @@ export default async function BoardPage({
                   const tractorLocation = locationForLoad(fleet, load);
                   const driverHos = hosForLoad(fleet, load);
                   return (
-                  <tr
+                  <BoardFilterRow
                     key={load.id}
                     className={loadStatusRowClass(load.status)}
-                    data-load-search={[
+                    haystack={[
                       load.load_number,
                       load.customer_name,
                       load.origin,
@@ -217,7 +218,7 @@ export default async function BoardPage({
                         </Link>
                       </div>
                     </td>
-                  </tr>
+                  </BoardFilterRow>
                   );
                 })}
               </tbody>
@@ -228,6 +229,6 @@ export default async function BoardPage({
       {openId ? (
         <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
       ) : null}
-    </>
+    </BoardFilterProvider>
   );
 }
