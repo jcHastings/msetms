@@ -745,7 +745,16 @@ export function isDriverLoginEligible(driver: { active: number; termination_date
 }
 
 export function listDriversForLogin(): DriverWithTruck[] {
-  return listDrivers().filter(isDriverLoginEligible);
+  return getDb()
+    .prepare(
+      `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
+       FROM drivers
+       LEFT JOIN trucks ON trucks.id = drivers.truck_id
+       WHERE drivers.active != 0
+         AND TRIM(COALESCE(drivers.termination_date, '')) = ''
+       ORDER BY drivers.name COLLATE NOCASE`,
+    )
+    .all() as DriverWithTruck[];
 }
 
 export function getDriver(id: number): DriverWithTruck | null {

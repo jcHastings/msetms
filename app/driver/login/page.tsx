@@ -17,7 +17,8 @@ export default async function DriverLoginPage() {
         <BrandMark size="lg" />
         <h1 className="mt-4 text-3xl font-semibold">Driver dispatch</h1>
         <p className="mt-2 text-base text-slate-600">
-          Sign in with your name and PIN. Local v1 — no password reset.
+          Sign in with your name and the PIN dispatch set on your driver record. No PIN yet — ask dispatch to set
+          one on the Drivers page.
         </p>
       </div>
       <DriverLoginForm

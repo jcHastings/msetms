@@ -134,7 +134,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /parseDriverPin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /listDriversForLogin/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /backfillDemoPins/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /backfillDemoPins|backfillDemoDriverCompliance/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/seed.ts"), "utf8"), /driverCount > 0/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
@@ -439,6 +439,10 @@ async function main() {
   assert.ok(seeded.availableTrucks >= 1, "seed should create available trucks");
   assert.ok(queries.listLoads({ status: "in_transit" }).length >= 1, "seed should include in-transit loads");
   assert.ok(queries.listCustomers().length >= 1, "seed should include customers");
+  const driverCountAfterSeed = queries.listDrivers().length;
+  assert.ok(driverCountAfterSeed >= 1, "empty-dev seed may create demo drivers");
+  (await import("../lib/seed")).seedDatabase(getDb());
+  assert.equal(queries.listDrivers().length, driverCountAfterSeed, "never insert demo drivers when a roster exists");
 
   const { listenAddress } = await import("../scripts/listen-address.mjs");
   const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };

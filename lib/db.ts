@@ -44,7 +44,6 @@ export function getDb(): Database {
   if (customerCount.count === 0 && driverCount.count === 0 && process.env.TMS_SKIP_SEED !== "1") {
     seedDatabase(db);
   } else {
-    backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
     backfillDemoTruckDetails(db);
     backfillDemoInboxExceptions(db);
@@ -883,24 +882,6 @@ function isoDateOffset(offsetDays: number): string {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
   return date.toISOString().slice(0, 10);
-}
-
-function backfillDemoDriverCompliance(db: Database): void {
-  const rows: Array<[string, string, string, string, string]> = [
-    ["Denise Ortega", "772110", "TN", isoDateOffset(25), isoDateOffset(200)],
-    ["Tyrell Brooks", "104552", "MS", isoDateOffset(400), isoDateOffset(-10)],
-  ];
-  const update = db.prepare(
-    `UPDATE drivers
-     SET license_number = CASE WHEN license_number = '' THEN ? ELSE license_number END,
-         license_state = CASE WHEN license_state = '' THEN ? ELSE license_state END,
-         license_expires = CASE WHEN license_expires = '' THEN ? ELSE license_expires END,
-         medical_expires = CASE WHEN medical_expires = '' THEN ? ELSE medical_expires END
-     WHERE name = ?`,
-  );
-  for (const [name, number, state, licenseExpires, medicalExpires] of rows) {
-    update.run(number, state, licenseExpires, medicalExpires, name);
-  }
 }
 
 function backfillDemoRegistration(db: Database): void {
