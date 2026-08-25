@@ -2926,7 +2926,6 @@ Continuous reefer. Two load locks.
     from_driver_id: relayDriverA,
     driver_id: relayDriverB,
   });
-  const { getDb } = await import("../lib/db");
   getDb()
     .prepare("UPDATE load_relays SET from_leg_miles = 500, to_leg_miles = 500 WHERE load_id = ?")
     .run(splitLoadId);
