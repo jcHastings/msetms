@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   defaultReportColumns,
@@ -41,8 +42,8 @@ export function ManageReportForm({
   }
 
   return (
-    <form className="card space-y-4 p-5" action="/api/reports/export" method="get">
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+    <form className="card space-y-5 p-5" action="/api/reports/export" method="get">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
         <div className="field">
           <label htmlFor="report-category">Category</label>
           <select
@@ -70,20 +71,13 @@ export function ManageReportForm({
           </select>
         </div>
         <div className="field">
-          <label htmlFor="report-basis">Filter by</label>
+          <label htmlFor="report-basis">Filter By</label>
           <select id="report-basis" name="dateBasis" defaultValue="pickup">
             {REPORT_DATE_BASES.map((item) => (
               <option key={item.value} value={item.value}>
-                {item.label}
+                {item.shortLabel}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="report-format">Format</label>
-          <select id="report-format" name="format" defaultValue="csv">
-            <option value="csv">CSV</option>
-            <option value="xlsx">Excel</option>
           </select>
         </div>
         <div className="field">
@@ -95,21 +89,25 @@ export function ManageReportForm({
           <input id="report-to" name="to" type="date" />
         </div>
       </div>
-      <fieldset data-column-chooser="" className="rounded-lg border border-slate-200 p-4">
-        <legend className="px-1 text-sm font-semibold">Columns</legend>
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={() => setChecked(defaultReportColumns())}
-          >
-            {allOn ? "All selected" : "Select all"}
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={() => setChecked([])}>
-            Clear
-          </button>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="field max-w-xs">
+        <label htmlFor="report-format">Format</label>
+        <select id="report-format" name="format" defaultValue="csv">
+          <option value="csv">CSV</option>
+          <option value="xlsx">Excel</option>
+        </select>
+      </div>
+      <fieldset data-column-chooser="" className="space-y-3">
+        <legend className="text-sm font-bold text-slate-900">Display Options</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input
+              type="checkbox"
+              checked={allOn}
+              onChange={(event) => setChecked(event.target.checked ? defaultReportColumns() : [])}
+            />
+            Check All
+          </label>
+          <span />
           {REPORT_EXPORT_COLUMNS.map((column) => (
             <label key={column.key} className="flex items-center gap-2 text-sm">
               <input
@@ -124,9 +122,14 @@ export function ManageReportForm({
           ))}
         </div>
       </fieldset>
-      <button className="btn btn-primary" type="submit">
-        Download
-      </button>
+      <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+        <Link href="/reports" className="btn btn-secondary">
+          Cancel
+        </Link>
+        <button className="btn btn-primary" type="submit">
+          Download
+        </button>
+      </div>
     </form>
   );
 }

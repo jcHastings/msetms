@@ -32,12 +32,17 @@ export type StatsMatrix = {
 export type StatsDrillRow = {
   loadId: number;
   loadNumber: string;
+  entityId: number | null;
+  entityName: string;
+  customer: string;
   origin: string;
   destination: string;
   miles: number | null;
   emptyMiles: number | null;
   revenue: number | null;
+  fees: number | null;
   allocatedRevenue: number | null;
+  share: number | null;
 };
 
 function emptyMetrics(): StatsMetrics {
@@ -91,8 +96,9 @@ export function buildStatistics(input: {
   category: ReportCategory;
   entityId: number | null;
   dateBasis: ReportDateBasis;
+  end?: Date;
 }): StatsMatrix {
-  const months = rollingMonthKeys();
+  const months = rollingMonthKeys(input.end);
   const monthSet = new Set(months);
   const byKey = new Map<string, StatsEntityRow>();
 
@@ -177,20 +183,27 @@ export function listStatisticsDrill(input: {
   for (const load of listLoads({ status: "all" })) {
     if (load.status === "cancelled") continue;
     if (loadMonth(load, input.dateBasis) !== input.month) continue;
+    const fees = loadAccessorials(load.id);
     if (input.category === "driver") {
       const legs = splitLoadRevenueByRelayMiles(load.id);
       if (legs.length) {
         for (const leg of legs) {
           if (input.entityId != null && leg.driverId !== input.entityId) continue;
+          const feeShare = leg.share != null ? Math.round(fees * leg.share * 100) / 100 : null;
           rows.push({
             loadId: load.id,
             loadNumber: load.load_number,
+            entityId: leg.driverId,
+            entityName: leg.driverName,
+            customer: load.customer_name,
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles,
             emptyMiles: null,
             revenue: load.rate,
+            fees: feeShare,
             allocatedRevenue: leg.allocatedRevenue,
+            share: leg.share,
           });
         }
         continue;
@@ -201,13 +214,57 @@ export function listStatisticsDrill(input: {
     rows.push({
       loadId: load.id,
       loadNumber: load.load_number,
+      entityId: entity.id,
+      entityName: entity.name,
+      customer: load.customer_name,
       origin: load.origin,
       destination: load.destination,
       miles: load.route_miles,
       emptyMiles: null,
       revenue: load.rate,
+      fees,
       allocatedRevenue: load.rate,
+      share: 1,
     });
   }
   return rows;
+}
+
+export type StatsDrillGroup = {
+  entityId: number | null;
+  entityName: string;
+  rows: StatsDrillRow[];
+  miles: number;
+  emptyMiles: number;
+  gross: number;
+  fees: number;
+  net: number;
+};
+
+export function groupStatisticsDrill(rows: StatsDrillRow[]): StatsDrillGroup[] {
+  const groups = new Map<string, StatsDrillGroup>();
+  for (const row of rows) {
+    const key = `${row.entityId ?? "none"}:${row.entityName}`;
+    const existing = groups.get(key);
+    const group =
+      existing ??
+      ({
+        entityId: row.entityId,
+        entityName: row.entityName,
+        rows: [],
+        miles: 0,
+        emptyMiles: 0,
+        gross: 0,
+        fees: 0,
+        net: 0,
+      } satisfies StatsDrillGroup);
+    group.rows.push(row);
+    group.miles += row.miles ?? 0;
+    group.emptyMiles += row.emptyMiles ?? 0;
+    group.gross += row.allocatedRevenue ?? 0;
+    group.fees += row.fees ?? 0;
+    group.net += (row.allocatedRevenue ?? 0) - (row.fees ?? 0);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((left, right) => left.entityName.localeCompare(right.entityName));
 }

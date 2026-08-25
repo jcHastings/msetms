@@ -193,9 +193,9 @@ export default async function FuelPage({
 
 const FUEL_STATUS_META = {
   matched: { icon: "✓", label: "Matched" },
-  no_photo: { icon: "○", label: "No photo" },
+  no_photo: { icon: "–", label: "No photo" },
   wrong_state: { icon: "!", label: "Wrong state" },
-  gallons_off: { icon: "±", label: "Gallons off" },
+  gallons_off: { icon: "↕", label: "Gallons off" },
 } as const;
 
 function FuelStatusIcon({
@@ -221,22 +221,15 @@ function FuelMatchQueue() {
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">Receipt match</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Status icons per row. One-click Match ties a driver photo to the EFS/card row. Official IFTA stays Samsara.
+          Verification icons per row. One-click Match ties a driver photo to the EFS/card row. Official IFTA stays
+          Samsara. Receipts come from the driver app, not a manual quarterly key-in.
         </p>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
-          {(Object.keys(FUEL_STATUS_META) as Array<keyof typeof FUEL_STATUS_META>).map((status) => (
-            <span key={status} className="inline-flex items-center gap-1.5">
-              <FuelStatusIcon status={status} />
-              {FUEL_STATUS_META[status].label}
-            </span>
-          ))}
-        </div>
       </header>
       <div className="overflow-x-auto">
         <table className="table-grid">
           <thead>
             <tr>
-              <th></th>
+              <th>Verification</th>
               <th>When</th>
               <th>Unit</th>
               <th>Gallons</th>
@@ -340,6 +333,14 @@ function FuelMatchQueue() {
           </tbody>
         </table>
       </div>
+      <footer className="fuel-status-legend">
+        {(Object.keys(FUEL_STATUS_META) as Array<keyof typeof FUEL_STATUS_META>).map((status) => (
+          <span key={status} className="inline-flex items-center gap-1.5">
+            <FuelStatusIcon status={status} />
+            {FUEL_STATUS_META[status].label}
+          </span>
+        ))}
+      </footer>
     </section>
   );
 }
