@@ -19,8 +19,8 @@ declare global {
 }
 
 const MARKER_COLOR: Record<LoadMapPoint["kind"], string> = {
-  pickup: "#0284c7",
-  delivery: "#e11d48",
+  pickup: "#166534",
+  delivery: "#be123c",
   truck: "#0b1f3a",
   trailer: "#d97706",
   track: "#64748b",

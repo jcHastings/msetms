@@ -8,7 +8,14 @@ import {
   type LoadMapPoint,
   type LoadTrackingEvent,
 } from "./load-map-shared";
-import { getLocation, getLoad } from "./queries";
+import {
+  getLoad,
+  getLocation,
+  getTrailer,
+  getTruck,
+  persistedTrailerLocation,
+  persistedTruckLocation,
+} from "./queries";
 import { geocodeAddress } from "./places";
 import { listStops } from "./stops";
 
@@ -18,6 +25,33 @@ export function mapsBrowserKey(): string {
 
 function validPoint(lat: number | null | undefined, lng: number | null | undefined): boolean {
   return lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+function storedGps<T extends { source?: string; latitude?: number | null; longitude?: number | null }>(
+  location: T | null | undefined,
+  source: "samsara" | "orbcomm",
+): T | null {
+  if (!location || location.source !== source) return null;
+  if (!validPoint(location.latitude, location.longitude)) return null;
+  return location;
+}
+
+async function truckGpsForLoad(loadId: number, truckId: number | null) {
+  const live = storedGps(await getLocationForLoad(loadId), "samsara");
+  if (live) return live;
+  if (truckId == null) return null;
+  const truck = getTruck(truckId);
+  if (!truck) return null;
+  return storedGps(persistedTruckLocation(truck), "samsara");
+}
+
+async function trailerGpsForLoad(loadId: number, trailerId: number | null) {
+  const live = storedGps(await getTrailerLocationForLoad(loadId), "orbcomm");
+  if (live) return live;
+  if (trailerId == null) return null;
+  const trailer = getTrailer(trailerId);
+  if (!trailer) return null;
+  return storedGps(persistedTrailerLocation(trailer), "orbcomm");
 }
 
 export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]> {
@@ -52,20 +86,20 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
     });
   }
 
-  const truck = await getLocationForLoad(loadId);
-  if (truck && validPoint(truck.latitude, truck.longitude)) {
+  const truck = await truckGpsForLoad(loadId, load.truck_id);
+  if (truck) {
     points.push({
       id: "truck",
       kind: "truck",
-      label: `Truck ${truck.unitNumber || load.truck_unit || ""}`.trim(),
+      label: `Truck ${("unitNumber" in truck ? truck.unitNumber : "") || load.truck_unit || ""}`.trim(),
       lat: truck.latitude as number,
       lng: truck.longitude as number,
       detail: [truck.address, truck.recordedAt].filter(Boolean).join(" · ") || undefined,
     });
   }
 
-  const trailer = await getTrailerLocationForLoad(loadId);
-  if (trailer && validPoint(trailer.latitude, trailer.longitude)) {
+  const trailer = await trailerGpsForLoad(loadId, load.trailer_id);
+  if (trailer) {
     points.push({
       id: "trailer",
       kind: "trailer",
@@ -122,7 +156,8 @@ export async function listLoadTrackingEvents(loadId: number): Promise<LoadTracki
     });
   }
 
-  const truck = await getLocationForLoad(loadId);
+  const load = getLoad(loadId);
+  const truck = await truckGpsForLoad(loadId, load?.truck_id ?? null);
   if (truck?.recordedAt && validPoint(truck.latitude, truck.longitude)) {
     events.push({
       id: "samsara-latest",
@@ -134,7 +169,7 @@ export async function listLoadTrackingEvents(loadId: number): Promise<LoadTracki
     });
   }
 
-  const trailer = await getTrailerLocationForLoad(loadId);
+  const trailer = await trailerGpsForLoad(loadId, load?.trailer_id ?? null);
   if (trailer?.recordedAt && validPoint(trailer.latitude, trailer.longitude)) {
     events.push({
       id: "orbcomm-latest",

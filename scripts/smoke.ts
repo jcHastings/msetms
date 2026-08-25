@@ -264,8 +264,15 @@ async function main() {
   assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com|liftgate|inside pickup/i);
   assert.match(stopsSource, /locationRuleLabels/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.googleapis\.com\/maps\/api\/js/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.google\.com\/maps\?/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Not a fleet map/);
+  const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
+  assert.match(mapCanvasSource, /maps\.googleapis\.com\/maps\/api\/js/);
+  assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
+  assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
+  const mapLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8");
+  assert.match(mapLibSource, /persistedTruckLocation/);
+  assert.match(mapLibSource, /geocodeAddress/);
+  assert.doesNotMatch(mapLibSource, /demo-112|32\.7767/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8"), /Close period/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8"), /GPS quiet window/);
@@ -4835,6 +4842,146 @@ Continuous reefer. Two load locks.
   assert.ok(Array.isArray(driverPayRows));
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
+  const mapLib = await import("../lib/load-map");
+  const mapPickupLoc = queries.createLocation({
+    name: "Map Pickup Yard",
+    street: "100 Cold Storage Rd",
+    city: "Nashville",
+    state: "TN",
+    zip: "37201",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 36.1627,
+    longitude: -86.7816,
+  });
+  const mapDropLoc = queries.createLocation({
+    name: "Map Delivery Dock",
+    street: "200 Commerce St",
+    city: "Dallas",
+    state: "TX",
+    zip: "75201",
+    phone: "",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "fcfs",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 32.7767,
+    longitude: -96.797,
+  });
+  const mapLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Nashville, TN",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 20000,
+    commodity: "Map smoke",
+    rate: 1000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    shipper_location_id: mapPickupLoc,
+    consignee_location_id: mapDropLoc,
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  loadStops.addStop(mapLoadId, {
+    kind: "pickup",
+    name: "Map Pickup Yard",
+    city: "Nashville",
+    state: "TN",
+    location_id: mapPickupLoc,
+  });
+  loadStops.addStop(mapLoadId, {
+    kind: "delivery",
+    name: "Map Delivery Dock",
+    city: "Dallas",
+    state: "TX",
+    location_id: mapDropLoc,
+  });
+  const stopOnlyPoints = await mapLib.buildLoadMapPoints(mapLoadId);
+  assert.ok(stopOnlyPoints.some((point) => point.kind === "pickup" && point.lat === 36.1627));
+  assert.ok(stopOnlyPoints.some((point) => point.kind === "delivery" && point.lat === 32.7767));
+  assert.equal(stopOnlyPoints.some((point) => point.kind === "truck"), false);
+  const mapTruckId = queries.createTruck({
+    unit_number: "MAP-77",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+  });
+  const mapDriverId = queries.createDriver({
+    name: "Map Smoke Driver",
+    phone: "555-0177",
+    license: "NE-CDL-MAP",
+    pin: "1777",
+    truck_id: mapTruckId,
+    status: "available",
+  });
+  queries.assignLoad(mapLoadId, mapTruckId, mapDriverId);
+  const assignedNoGps = await mapLib.buildLoadMapPoints(mapLoadId);
+  assert.equal(
+    assignedNoGps.some((point) => point.kind === "truck"),
+    false,
+    "do not invent a truck pin without stored Samsara GPS",
+  );
+  queries.saveTruckGps(mapTruckId, {
+    latitude: 41.25,
+    longitude: -95.93,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  const withTruck = await mapLib.buildLoadMapPoints(mapLoadId);
+  const truckPin = withTruck.find((point) => point.kind === "truck");
+  assert.ok(truckPin);
+  assert.equal(truckPin?.lat, 41.25);
+  assert.equal(truckPin?.lng, -95.93);
+  const oneStopLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Nashville, TN",
+    destination: "Nashville, TN",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 1000,
+    commodity: "One pin",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    shipper_location_id: mapPickupLoc,
+    consignee_location_id: null,
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  loadStops.addStop(oneStopLoadId, {
+    kind: "pickup",
+    name: "Map Pickup Yard",
+    city: "Nashville",
+    state: "TN",
+    location_id: mapPickupLoc,
+  });
+  const onePoint = await mapLib.buildLoadMapPoints(oneStopLoadId);
+  assert.equal(onePoint.length, 1);
+  assert.equal(onePoint[0].kind, "pickup");
 
   const session = await import("../lib/dispatcher-session");
   const msTest = session.listDispatchers().find((row) => row.name === "MS Test");
