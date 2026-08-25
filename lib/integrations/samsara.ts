@@ -5,6 +5,7 @@ import {
   parseSamsaraVehicleRecords,
   SAMSARA_ID_MISSING_MESSAGE,
   SAMSARA_TOKEN_MISSING_MESSAGE,
+  unionSamsaraVehicles,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
 import { listDrivers, listLoads, listTrucks, persistedTruckLocation, saveTruckGps } from "../queries";
@@ -109,6 +110,7 @@ export async function listSamsaraVehicles(): Promise<
     let vehicles = parseSamsaraVehicles(items);
     try {
       const stats = await fetchAllPages("/fleet/vehicles/stats", "gps");
+      vehicles = unionSamsaraVehicles(vehicles, parseSamsaraVehicles(stats));
       vehicles = mergeSamsaraGpsOntoVehicles(vehicles, stats);
     } catch {
       // Import pairing still works without a GPS page.
@@ -682,6 +684,7 @@ async function fetchAllPages(pathname: string, types?: string): Promise<Array<Re
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const url = new URL(pathname, SAMSARA_BASE);
+    url.searchParams.set("limit", "512");
     if (types) url.searchParams.set("types", types);
     if (after) url.searchParams.set("after", after);
 

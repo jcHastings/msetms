@@ -603,6 +603,7 @@ async function main() {
     /every fleet vehicle|Every\s+unit, name, or id/,
   );
   const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
+  const unit28Copy = /unit 28|including 28|Unit 28|JC.?s unit \*\*28/i;
   for (const file of [
     "components/samsara-truck-import.tsx",
     "components/truck-form.tsx",
@@ -618,6 +619,11 @@ async function main() {
       unit36Copy,
       `${file} must not hardcode unit 36 — match every Samsara vehicle the same way`,
     );
+    assert.doesNotMatch(
+      fs.readFileSync(path.join(process.cwd(), file), "utf8"),
+      unit28Copy,
+      `${file} must not hardcode unit 28 — match every Samsara vehicle the same way`,
+    );
   }
   const rowActions = fs.readFileSync(path.join(process.cwd(), "components/fleet-row-actions.tsx"), "utf8");
   assert.match(rowActions, /["']use client["']/);
@@ -630,6 +636,9 @@ async function main() {
     assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /FleetRowActions/);
   }
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraUnmatchedUnitsWarning/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraOmittedVehiclesWarning/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /fleetUnitTokens/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /unionSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
@@ -2848,6 +2857,9 @@ Continuous reefer. Two load locks.
     samsaraReturnedNames,
     samsaraUnmatchedUnitsWarning,
     unitNumberFromSamsaraName,
+    fleetUnitTokens,
+    unionSamsaraVehicles,
+    samsaraOmittedVehiclesWarning,
   } = await import("../lib/fleet-import-shared");
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
   assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
@@ -2857,6 +2869,38 @@ Continuous reefer. Two load locks.
   assert.equal(unitNumberFromSamsaraName("Unit 36", "uuid-36"), "36");
   assert.equal(unitNumberFromSamsaraName("36", "uuid-36"), "36");
   assert.equal(unitNumberFromSamsaraName("#36", "uuid-36"), "36");
+  assert.equal(unitNumberFromSamsaraName("28 in use", "veh-x"), "28");
+  assert.equal(unitNumberFromSamsaraName("28 - Unassigned", "veh-x"), "28");
+  assert.equal(unitNumberFromSamsaraName("Kenworth 28", "veh-x"), "28");
+  assert.equal(unitNumberFromSamsaraName("2024 Freightliner 28", "veh-x"), "28");
+  assert.equal(unitNumberFromSamsaraName("Unit 28 (in use)", "veh-x"), "28");
+  assert.deepEqual(fleetUnitTokens("2024 Freightliner 28"), ["28"]);
+  assert.equal(
+    matchTruckForSamsara([{ id: 28, unit_number: "28", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "uuid-only-28",
+      unitNumber: "",
+      name: "2024 Freightliner 28",
+    })?.id,
+    28,
+    "name tokens must match a TMS stub even when the label includes a year",
+  );
+  assert.equal(
+    matchTruckForSamsara([{ id: 28, unit_number: "28", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "uuid-unassigned-28",
+      unitNumber: "",
+      name: "28 - Unassigned",
+    })?.id,
+    28,
+  );
+  assert.equal(
+    matchTruckForSamsara([{ id: 28, unit_number: "28", samsara_vehicle_id: "" }], {
+      samsaraVehicleId: "281474977075805",
+      unitNumber: "",
+      name: "Pete",
+    }),
+    null,
+    "Samsara vehicle-id digits must not pair to a TMS unit",
+  );
   assert.match(SAMSARA_ID_MISSING_MESSAGE, /No Samsara ID on this truck/);
   const match36 = matchTruckForSamsara(
     [{ id: 7, unit_number: "36", samsara_vehicle_id: "36" }],
@@ -3167,6 +3211,93 @@ Continuous reefer. Two load locks.
   assert.notEqual(queries.getTruck(truck32Id)?.gps_address, "Oklahoma City, OK");
   assert.equal(queries.getTruck(truck32Id)?.gps_address, "Bronx, NY");
 
+  const stub28Id = queries.createTruck({
+    unit_number: "28",
+    type: "reefer",
+    capacity_lbs: 45000,
+    status: "in_use",
+    samsara_vehicle_id: "",
+  });
+  const named28Preview = buildSamsaraTruckPreview(
+    [
+      {
+        id: "sam-28",
+        name: "2024 Freightliner 28",
+        vin: "VIN28AAA",
+        year: "2024",
+        make: "Freightliner",
+        model: "Cascadia",
+        licensePlate: "",
+      },
+      {
+        id: "sam-28-use",
+        name: "28 in use",
+        vin: "",
+        year: "",
+        make: "",
+        model: "",
+        licensePlate: "",
+      },
+    ],
+    queries.listTrucks().map((truck) => ({
+      id: truck.id,
+      unit_number: truck.unit_number,
+      samsara_vehicle_id: truck.samsara_vehicle_id,
+      vin: truck.vin,
+      plate: truck.plate,
+    })),
+  );
+  assert.equal(named28Preview.find((row) => row.samsaraVehicleId === "sam-28")?.matchTruckId, stub28Id);
+  assert.equal(named28Preview.find((row) => row.samsaraVehicleId === "sam-28")?.action, "update");
+  assert.equal(named28Preview.find((row) => row.samsaraVehicleId === "sam-28")?.unitNumber, "28");
+  const attach28 = applySamsaraTruckImport(named28Preview.filter((row) => row.samsaraVehicleId === "sam-28"));
+  assert.equal(attach28.updated, 1);
+  assert.equal(attach28.created, 0);
+  assert.equal(queries.getTruck(stub28Id)?.samsara_vehicle_id, "sam-28");
+  assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "28").length, 1);
+  const created28Preview = buildSamsaraTruckPreview(
+    [{ id: "sam-new-40", name: "Kenworth 40", vin: "", year: "", make: "", model: "", licensePlate: "" }],
+    queries.listTrucks().map((truck) => ({
+      id: truck.id,
+      unit_number: truck.unit_number,
+      samsara_vehicle_id: truck.samsara_vehicle_id,
+    })),
+  );
+  assert.equal(created28Preview[0]?.action, "create");
+  assert.equal(created28Preview[0]?.unitNumber, "40");
+  const create40 = applySamsaraTruckImport(created28Preview);
+  assert.equal(create40.created, 1);
+  assert.equal(queries.listTrucks().find((truck) => truck.unit_number === "40")?.samsara_vehicle_id, "sam-new-40");
+  assert.match(
+    samsaraUnmatchedUnitsWarning(
+      [{ id: stub28Id, unit_number: "28", samsara_vehicle_id: "sam-28" }],
+      [{ id: "v-pete", name: "Pete" }, { id: "v-112", name: "112" }],
+    ),
+    /none matched these TMS units: 28/,
+  );
+  assert.equal(
+    samsaraOmittedVehiclesWarning(
+      [
+        { id: "sam-28", name: "2024 Freightliner 28", vin: "", year: "", make: "", model: "", licensePlate: "" },
+        { id: "missing-id", name: "Spare 99", vin: "", year: "", make: "", model: "", licensePlate: "" },
+      ],
+      [{ samsaraVehicleId: "sam-28", unitNumber: "28", name: "2024 Freightliner 28" }],
+    ),
+    "Samsara returned vehicles that were not listed for import: Spare 99.",
+  );
+  const unioned = unionSamsaraVehicles(
+    [
+      { id: "a", name: "32", vin: "", year: "", make: "", model: "", licensePlate: "" },
+      { id: "b", name: "36", vin: "", year: "", make: "", model: "", licensePlate: "" },
+    ],
+    [
+      { id: "b", name: "36", vin: "", year: "", make: "", model: "", licensePlate: "" },
+      { id: "c", name: "28 in use", vin: "", year: "", make: "", model: "", licensePlate: "" },
+    ],
+  );
+  assert.equal(unioned.length, 3);
+  assert.ok(unioned.some((vehicle) => vehicle.id === "c" && vehicle.name === "28 in use"));
+
   const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
   delete process.env.SAMSARA_API_TOKEN;
   const noToken = await samsara.listSamsaraVehicles();
@@ -3196,6 +3327,37 @@ Continuous reefer. Two load locks.
     }
   } finally {
     globalThis.fetch = importFetch;
+    if (savedTokenForImport == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = savedTokenForImport;
+  }
+
+  process.env.SAMSARA_API_TOKEN = "tok_smoke_not_a_real_secret";
+  const statsOnlyFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/fleet/vehicles/stats")) {
+      return Response.json({
+        data: [
+          { id: "veh-888", name: "888" },
+          { id: "veh-28", name: "28 in use" },
+        ],
+        pagination: { hasNextPage: false },
+      });
+    }
+    return Response.json({
+      data: [{ id: "veh-888", name: "888", vin: "VIN888" }],
+      pagination: { hasNextPage: false },
+    });
+  }) as typeof fetch;
+  try {
+    const listedWithStats = await samsara.listSamsaraVehicles();
+    assert.equal(listedWithStats.ok, true);
+    if (listedWithStats.ok) {
+      assert.equal(listedWithStats.vehicles.length, 2);
+      assert.ok(listedWithStats.vehicles.some((vehicle) => vehicle.id === "veh-28" && vehicle.name === "28 in use"));
+    }
+  } finally {
+    globalThis.fetch = statsOnlyFetch;
     if (savedTokenForImport == null) delete process.env.SAMSARA_API_TOKEN;
     else process.env.SAMSARA_API_TOKEN = savedTokenForImport;
   }

@@ -1239,7 +1239,9 @@ export async function previewSamsaraTrucksAction(
     const listed = await listSamsaraVehicles();
     if (!listed.ok) return { ok: false, error: listed.error };
     const { previewSamsaraTrucks } = await import("./fleet-import");
-    const { samsaraReturnedNames, samsaraUnmatchedUnitsWarning } = await import("./fleet-import-shared");
+    const { samsaraOmittedVehiclesWarning, samsaraReturnedNames, samsaraUnmatchedUnitsWarning } = await import(
+      "./fleet-import-shared"
+    );
     const { listTrucks } = await import("./queries");
     const rows = previewSamsaraTrucks(listed.vehicles);
     const names = samsaraReturnedNames(listed.vehicles);
@@ -1251,11 +1253,17 @@ export async function previewSamsaraTrucksAction(
           : "Samsara returned no vehicles.",
       };
     }
+    const warning = [
+      samsaraUnmatchedUnitsWarning(listTrucks(), listed.vehicles),
+      samsaraOmittedVehiclesWarning(listed.vehicles, rows),
+    ]
+      .filter(Boolean)
+      .join(" ");
     return {
       ok: true,
       source: "samsara",
       rows,
-      warning: samsaraUnmatchedUnitsWarning(listTrucks(), listed.vehicles) || undefined,
+      warning: warning || undefined,
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Samsara preview failed." };

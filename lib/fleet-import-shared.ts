@@ -133,40 +133,81 @@ export function unitDigits(value: string): string {
   return digits.replace(/^0+/, "") || "0";
 }
 
+function isYearToken(value: string): boolean {
+  return /^(19|20)\d{2}$/.test(value);
+}
+
+/** Distinct fleet-unit numbers in a label. Skips years and 8+ digit ids so "2024 Freightliner 28" is 28, not 202428. */
+export function fleetUnitTokens(value: string): string[] {
+  const text = String(value ?? "");
+  if (!text.trim()) return [];
+  const tokens: string[] = [];
+  const add = (raw: string) => {
+    const token = unitDigits(raw);
+    if (!token || token.length >= 8 || isYearToken(token) || tokens.includes(token)) return;
+    tokens.push(token);
+  };
+  for (const match of text.matchAll(/(?:unit|truck|tractor|trk|veh(?:icle)?)\s*#?\s*([A-Za-z0-9-]+)/gi)) {
+    add(match[1] ?? "");
+  }
+  for (const match of text.matchAll(/#\s*([A-Za-z0-9-]+)/g)) {
+    add(match[1] ?? "");
+  }
+  for (const match of text.matchAll(/(?<![A-Za-z0-9])(\d+)(?![A-Za-z0-9])/g)) {
+    add(match[1] ?? "");
+  }
+  return tokens;
+}
+
+function samsaraUnitTokenSet(vehicle: SamsaraMatchVehicle): string[] {
+  const tokens: string[] = [];
+  const add = (value: string | undefined) => {
+    for (const token of fleetUnitTokens(String(value ?? ""))) {
+      if (!tokens.includes(token)) tokens.push(token);
+    }
+  };
+  add(vehicle.unitNumber);
+  add(vehicle.name);
+  for (const key of vehicle.extraKeys ?? []) add(key);
+  return tokens;
+}
+
 export function preferFilled(existing: string, incoming: string): string {
   return existing.trim() ? existing : incoming.trim();
 }
 
-/** Use Samsara vehicle name as the unit #; strip a leading Unit/Truck/Tractor/# label. */
+/** Use Samsara vehicle name as the unit #; strip Unit/Truck/Tractor/# labels and years. */
 export function unitNumberFromSamsaraName(name: string, fallbackId: string): string {
   const trimmed = name.trim();
   if (!trimmed) return fallbackId.trim();
-  const labeled = trimmed.match(/^(?:unit|truck|tractor|trk|veh(?:icle)?)\s*#?\s*([A-Za-z0-9-]+)/i);
-  if (labeled) return labeled[1];
+  const labeled = trimmed.match(/(?:unit|truck|tractor|trk|veh(?:icle)?)\s*#?\s*([A-Za-z0-9-]+)/i);
+  if (labeled?.[1] && !isYearToken(unitDigits(labeled[1]))) return labeled[1];
   const hashed = trimmed.match(/#\s*([A-Za-z0-9-]+)/);
-  if (hashed) return hashed[1];
+  if (hashed?.[1]) return hashed[1];
+  if (/^\d+[A-Za-z0-9-]*$/.test(trimmed) && !isYearToken(unitDigits(trimmed))) {
+    return unitDigits(trimmed) || trimmed;
+  }
+  const tokens = fleetUnitTokens(trimmed);
+  if (tokens.length === 1) return tokens[0];
+  const leading = trimmed.match(/^(\d+[A-Za-z0-9-]*)\b/);
+  if (leading?.[1] && !isYearToken(unitDigits(leading[1]))) return leading[1];
+  if (tokens.length > 1) return tokens[tokens.length - 1];
   return trimmed;
 }
 
 export function samsaraUnitDigits(vehicle: SamsaraMatchVehicle): string {
-  const labeled = unitNumberFromSamsaraName(vehicle.name ?? "", "");
-  for (const value of [vehicle.unitNumber, labeled, vehicle.name]) {
-    const digits = unitDigits(String(value ?? ""));
-    if (digits) return digits;
-  }
-  for (const value of vehicle.extraKeys ?? []) {
-    const digits = unitDigits(String(value ?? ""));
-    if (digits) return digits;
-  }
+  const tokens = samsaraUnitTokenSet(vehicle);
+  if (tokens.length === 1) return tokens[0];
+  if (tokens.length > 1) return tokens[tokens.length - 1];
   return "";
 }
 
 function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boolean {
-  const vehicleUnit = samsaraUnitDigits(vehicle);
+  const tokens = samsaraUnitTokenSet(vehicle);
   const truckUnit = unitDigits(truck.unit_number);
-  if (!vehicleUnit || !truckUnit) return true;
-  if (vehicleUnit === truckUnit) return true;
-  return vehicleUnit.length >= 8;
+  if (!tokens.length || !truckUnit) return true;
+  if (tokens.includes(truckUnit)) return true;
+  return tokens.some((token) => token.length >= 8);
 }
 
 function uniqueUnclaimedTruck(
@@ -208,9 +249,11 @@ export function matchTruckForSamsara(
     if (byVin) return { id: byVin.id, matchBy: "vin" };
   }
 
-  const unit = samsaraUnitDigits(vehicle);
-  if (unit) {
-    const byUnit = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) => unitDigits(truck.unit_number) === unit);
+  const unitTokens = samsaraUnitTokenSet(vehicle);
+  if (unitTokens.length) {
+    const byUnit = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) =>
+      unitTokens.includes(unitDigits(truck.unit_number)),
+    );
     if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }
 
@@ -282,7 +325,7 @@ export function buildSamsaraTruckPreview(
   for (const vehicle of vehicles) {
     const samsaraVehicleId = vehicle.id.trim();
     const name = vehicle.name.trim();
-    const unitNumber = unitNumberFromSamsaraName(name, samsaraVehicleId);
+    const unitNumber = unitNumberFromSamsaraName(name, samsaraVehicleId || vehicle.vin.trim());
     if (!samsaraVehicleId && !unitNumber) continue;
     const dedupe = normalizeFleetKey(samsaraVehicleId || unitNumber);
     if (dedupe && seenVehicle.has(dedupe)) continue;
@@ -363,6 +406,47 @@ export function samsaraUnmatchedUnitsWarning(
   return `Samsara returned vehicles but none matched these TMS units: ${units}. Names that came back: ${listed}.`;
 }
 
+/** Vehicles Samsara sent that never made it into the import preview. */
+export function samsaraOmittedVehiclesWarning(
+  vehicles: SamsaraVehicleInput[],
+  previewRows: Array<{ samsaraVehicleId?: string; unitNumber?: string; name?: string }>,
+): string {
+  if (vehicles.length === 0) return "";
+  const previewed = new Set(
+    previewRows.flatMap((row) =>
+      [row.samsaraVehicleId, row.unitNumber, row.name]
+        .map((value) => canonicalFleetKey(String(value ?? "")))
+        .filter(Boolean),
+    ),
+  );
+  const omitted = vehicles.filter((vehicle) => {
+    const keys = [vehicle.id, vehicle.name, vehicle.vin].map((value) => canonicalFleetKey(String(value ?? ""))).filter(Boolean);
+    return keys.length > 0 && !keys.some((key) => previewed.has(key));
+  });
+  if (omitted.length === 0) return "";
+  const names = samsaraReturnedNames(omitted);
+  return `Samsara returned vehicles that were not listed for import: ${names.length ? names.join(", ") : "unnamed"}.`;
+}
+
+export function unionSamsaraVehicles(
+  primary: SamsaraVehicleInput[],
+  extra: SamsaraVehicleInput[],
+): SamsaraVehicleInput[] {
+  const out = [...primary];
+  const seen = new Set(
+    primary
+      .map((vehicle) => canonicalFleetKey(vehicle.id) || normalizeFleetKey(vehicle.name))
+      .filter(Boolean),
+  );
+  for (const vehicle of extra) {
+    const key = canonicalFleetKey(vehicle.id) || normalizeFleetKey(vehicle.name);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push(vehicle);
+  }
+  return out;
+}
+
 export function buildOrbcommTrailerPreview(
   assets: OrbcommAssetInput[],
   trailers: Array<{ id: number; unit_number: string; orbcomm_asset_id: string }>,
@@ -416,7 +500,9 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
     const nested = (item.vehicle ?? item.staticAssignedVehicle ?? {}) as Record<string, unknown>;
     const id = firstText(item, nested, ["id", "vehicleId", "vehicle_id"]);
     const name = firstText(item, nested, ["name", "vehicleName", "vehicle_name"]);
-    if (!id && !name) continue;
+    const vin = firstText(item, nested, ["vin", "vehicleVin", "vehicle_vin"]);
+    const licensePlate = firstText(item, nested, ["licensePlate", "license_plate", "licensePlateNumber"]);
+    if (!id && !name && !vin && !licensePlate) continue;
     const key = normalizeFleetKey(id || name);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
@@ -430,11 +516,11 @@ export function parseSamsaraVehicleRecords(items: Array<Record<string, unknown>>
     vehicles.push({
       id,
       name,
-      vin: firstText(item, nested, ["vin", "vehicleVin", "vehicle_vin"]),
+      vin,
       year: firstText(item, nested, ["year", "vehicleYear"]),
       make: firstText(item, nested, ["make", "vehicleMake"]),
       model: firstText(item, nested, ["model", "vehicleModel"]),
-      licensePlate: firstText(item, nested, ["licensePlate", "license_plate", "licensePlateNumber"]),
+      licensePlate,
       extraKeys: extraSamsaraIdentityKeys(item, nested),
       latitude: asOptionalNumber(gps.latitude),
       longitude: asOptionalNumber(gps.longitude),

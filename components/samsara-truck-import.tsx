@@ -23,12 +23,14 @@ export function SamsaraTruckImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import from Samsara</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Fetches every fleet vehicle with <code>SAMSARA_API_TOKEN</code> from <code>.env</code>. Preview
-          each pairing (TMS unit ← Samsara name / VIN / plate / city) before anything is written. Every
-          unit, name, or id is matched the same way: VIN (only if the unit number agrees), then unit number
-          (digits only), then license plate. A stored Samsara id is last and is ignored when it contradicts
-          the unit. No match creates a new truck. Confirm is required. Re-import re-pairs the same way and
-          does not duplicate trucks.
+          Fetches every fleet vehicle with <code>SAMSARA_API_TOKEN</code> from <code>.env</code>, including
+          vehicles that only appear on the GPS stats feed. Unassigned, in-use, or differently labeled names
+          stay in the list. Preview each pairing (TMS unit ← Samsara name / VIN / plate / city) before
+          anything is written. Every unit, name, or id is matched the same way: VIN (only if the unit
+          number agrees), then unit number (digits in the name, not concatenated years), then license
+          plate. A stored Samsara id is last and is ignored when it contradicts the unit. No match creates
+          a new truck. A TMS stub with the same unit number is updated, not duplicated. Confirm is
+          required. Re-import re-pairs the same way.
         </p>
       </div>
       <form action={previewAction} className="flex flex-wrap gap-2">
