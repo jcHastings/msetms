@@ -47,11 +47,12 @@ export function listRelayLegs(loadId: number): RelayLeg[] {
   const legs: RelayLeg[] = [];
   relays.forEach((relay, index) => {
     const next = relays[index + 1];
+    const fromDriverId = relay.from_driver_id ?? (index === 0 ? load.driver_id : relays[index - 1]?.driver_id);
     legs.push({
       relayId: relay.id,
       loadId,
-      driverId: relay.from_driver_id,
-      driverName: relay.from_driver_name || "Unassigned",
+      driverId: fromDriverId,
+      driverName: relay.from_driver_name || (fromDriverId === load.driver_id ? load.driver_name : null) || "Unassigned",
       origin: relay.pickup || load.origin,
       destination: relay.delivery,
       miles: relay.from_leg_miles,

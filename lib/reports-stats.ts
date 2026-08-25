@@ -1,3 +1,4 @@
+import { listPayItems } from "./pay-items";
 import { listLoads } from "./queries";
 import { splitLoadRevenueByRelayMiles } from "./reports-relay-revenue";
 import type { ReportCategory, ReportDateBasis } from "./reports-shared";
@@ -19,6 +20,13 @@ export type StatsEntityRow = {
   name: string;
   months: Record<StatsMonthKey, StatsMetrics>;
   totals: StatsMetrics;
+};
+
+export type StatsMatrix = {
+  months: StatsMonthKey[];
+  cells: Record<StatsMonthKey, StatsMetrics>;
+  totals: StatsMetrics;
+  rows: StatsEntityRow[];
 };
 
 export type StatsDrillRow = {
@@ -43,6 +51,17 @@ function addMetrics(into: StatsMetrics, add: StatsMetrics): void {
   into.gross += add.gross;
   into.fees += add.fees;
   into.net += add.net;
+}
+
+function loadAccessorials(loadId: number): number {
+  return listPayItems(loadId, "income")
+    .filter((item) => item.bill_to === "customer" && item.category !== "flat_rate")
+    .reduce((sum, item) => sum + (item.total ?? 0), 0);
+}
+
+export function statsPct(metrics: StatsMetrics): number | null {
+  if (!metrics.gross) return null;
+  return Math.round((metrics.net / metrics.gross) * 1000) / 10;
 }
 
 export function rollingMonthKeys(end = new Date(), count = 13): StatsMonthKey[] {
@@ -72,7 +91,7 @@ export function buildStatistics(input: {
   category: ReportCategory;
   entityId: number | null;
   dateBasis: ReportDateBasis;
-}): { months: StatsMonthKey[]; rows: StatsEntityRow[] } {
+}): StatsMatrix {
   const months = rollingMonthKeys();
   const monthSet = new Set(months);
   const byKey = new Map<string, StatsEntityRow>();
@@ -95,19 +114,23 @@ export function buildStatistics(input: {
     if (load.status === "cancelled") continue;
     const month = loadMonth(load, input.dateBasis);
     if (!monthSet.has(month)) continue;
+    const fees = loadAccessorials(load.id);
     if (input.category === "driver") {
       const legs = splitLoadRevenueByRelayMiles(load.id);
       if (legs.length) {
         for (const leg of legs) {
           if (input.entityId != null && leg.driverId !== input.entityId) continue;
           const entity = rowFor(leg.driverId, leg.driverName);
+          const share = leg.share ?? 0;
+          const gross = leg.allocatedRevenue ?? 0;
+          const feeShare = Math.round(fees * share * 100) / 100;
           const slice: StatsMetrics = {
             loads: 1,
             miles: leg.miles ?? 0,
             emptyMiles: 0,
-            gross: leg.allocatedRevenue ?? 0,
-            fees: 0,
-            net: leg.allocatedRevenue ?? 0,
+            gross,
+            fees: feeShare,
+            net: Math.round((gross - feeShare) * 100) / 100,
           };
           addMetrics(entity.months[month], slice);
           addMetrics(entity.totals, slice);
@@ -118,22 +141,30 @@ export function buildStatistics(input: {
     const entity = entityFor(load, input.category);
     if (input.entityId != null && entity.id !== input.entityId) continue;
     const target = rowFor(entity.id, entity.name);
+    const gross = load.rate ?? 0;
     const slice: StatsMetrics = {
       loads: 1,
       miles: load.route_miles ?? 0,
       emptyMiles: 0,
-      gross: load.rate ?? 0,
-      fees: 0,
-      net: load.rate ?? 0,
+      gross,
+      fees,
+      net: Math.round((gross - fees) * 100) / 100,
     };
     addMetrics(target.months[month], slice);
     addMetrics(target.totals, slice);
   }
 
-  return {
-    months,
-    rows: [...byKey.values()].sort((left, right) => right.totals.gross - left.totals.gross),
-  };
+  const rows = [...byKey.values()].sort((left, right) => right.totals.gross - left.totals.gross);
+  const cells = Object.fromEntries(months.map((month) => [month, emptyMetrics()])) as Record<
+    StatsMonthKey,
+    StatsMetrics
+  >;
+  const totals = emptyMetrics();
+  for (const row of rows) {
+    for (const month of months) addMetrics(cells[month], row.months[month]);
+    addMetrics(totals, row.totals);
+  }
+  return { months, cells, totals, rows };
 }
 
 export function listStatisticsDrill(input: {

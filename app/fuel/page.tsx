@@ -191,24 +191,46 @@ export default async function FuelPage({
   );
 }
 
-function matchIcon(status: "matched" | "no_photo" | "wrong_state" | "gallons_off"): string {
-  if (status === "matched") return "✓";
-  if (status === "no_photo") return "○";
-  if (status === "wrong_state") return "!";
-  return "±";
+const FUEL_STATUS_META = {
+  matched: { icon: "✓", label: "Matched" },
+  no_photo: { icon: "○", label: "No photo" },
+  wrong_state: { icon: "!", label: "Wrong state" },
+  gallons_off: { icon: "±", label: "Gallons off" },
+} as const;
+
+function FuelStatusIcon({
+  status,
+}: {
+  status: "matched" | "no_photo" | "wrong_state" | "gallons_off";
+}) {
+  const meta = FUEL_STATUS_META[status];
+  return (
+    <span className={`fuel-status fuel-status-${status}`} data-fuel-status={status} title={meta.label}>
+      {meta.icon}
+    </span>
+  );
 }
 
 function FuelMatchQueue() {
   const queue = listFuelMatchQueue();
   const linked = new Set(queue.map((row) => row.receipt?.id).filter((id): id is number => id != null));
   const looseReceipts = listFuelReceipts().filter((receipt) => !linked.has(receipt.id));
+  const unmatchedCards = queue.filter((row) => row.status === "no_photo");
   return (
     <section className="card mb-6 overflow-hidden" data-fuel-match-queue="">
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">Receipt match</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Status icons: matched, no photo, wrong state vs card/GPS, gallons off. Official IFTA stays Samsara.
+          Status icons per row. One-click Match ties a driver photo to the EFS/card row. Official IFTA stays Samsara.
         </p>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+          {(Object.keys(FUEL_STATUS_META) as Array<keyof typeof FUEL_STATUS_META>).map((status) => (
+            <span key={status} className="inline-flex items-center gap-1.5">
+              <FuelStatusIcon status={status} />
+              {FUEL_STATUS_META[status].label}
+            </span>
+          ))}
+        </div>
       </header>
       <div className="overflow-x-auto">
         <table className="table-grid">
@@ -218,7 +240,8 @@ function FuelMatchQueue() {
               <th>When</th>
               <th>Unit</th>
               <th>Gallons</th>
-              <th>Location</th>
+              <th>Amount</th>
+              <th>Station</th>
               <th>Load</th>
               <th>Fix</th>
             </tr>
@@ -226,10 +249,13 @@ function FuelMatchQueue() {
           <tbody>
             {queue.map((row) => (
               <tr key={row.transaction.id}>
-                <td title={row.status}>{matchIcon(row.status)}</td>
+                <td>
+                  <FuelStatusIcon status={row.status} />
+                </td>
                 <td>{formatDateTime(row.transaction.occurred_at)}</td>
                 <td>{row.transaction.truck_unit || row.transaction.unit_number || "—"}</td>
                 <td>{formatGallons(row.transaction.gallons)}</td>
+                <td>{formatFuelMoney(row.transaction.amount)}</td>
                 <td>{row.transaction.location || "—"}</td>
                 <td>
                   {row.loadId ? (
@@ -241,33 +267,74 @@ function FuelMatchQueue() {
                   )}
                 </td>
                 <td>
-                  {row.receipt && row.status !== "matched" ? (
-                    <form action={linkFuelReceiptAction}>
+                  {row.status === "matched" ? (
+                    <span className="text-xs text-slate-500">matched</span>
+                  ) : row.receipt ? (
+                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="receipt_id" value={row.receipt.id} />
                       <input type="hidden" name="fuel_id" value={row.transaction.id} />
                       <button className="btn btn-ghost" type="submit">
                         Match
                       </button>
                     </form>
+                  ) : looseReceipts.length ? (
+                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="fuel_id" value={row.transaction.id} />
+                      <select name="receipt_id" className="rounded-md border border-slate-300 px-2 py-1 text-sm" required>
+                        <option value="">Photo…</option>
+                        {looseReceipts.map((receipt) => (
+                          <option key={receipt.id} value={receipt.id}>
+                            Load {receipt.load_id}
+                            {receipt.gallons != null ? ` · ${receipt.gallons} gal` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn btn-ghost" type="submit">
+                        Match
+                      </button>
+                    </form>
                   ) : (
-                    row.status.replaceAll("_", " ")
+                    <span className="text-xs text-slate-500">no photo</span>
                   )}
                 </td>
               </tr>
             ))}
             {looseReceipts.map((receipt) => (
               <tr key={`r-${receipt.id}`}>
-                <td title="unmatched photo">○</td>
+                <td>
+                  <FuelStatusIcon status="no_photo" />
+                </td>
                 <td>{formatDateTime(receipt.occurred_at || receipt.created_at)}</td>
                 <td>—</td>
                 <td>{receipt.gallons ?? "—"}</td>
-                <td>{receipt.state || receipt.station || "—"}</td>
+                <td>—</td>
+                <td>{receipt.station || receipt.state || "—"}</td>
                 <td>
                   <Link href={`/loads/${receipt.load_id}`} className="underline">
                     {receipt.load_id}
                   </Link>
                 </td>
-                <td>no card row</td>
+                <td>
+                  {unmatchedCards.length ? (
+                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="receipt_id" value={receipt.id} />
+                      <select name="fuel_id" className="rounded-md border border-slate-300 px-2 py-1 text-sm" required>
+                        <option value="">Card row…</option>
+                        {unmatchedCards.map((row) => (
+                          <option key={row.transaction.id} value={row.transaction.id}>
+                            {row.transaction.truck_unit || row.transaction.unit_number || "card"} ·{" "}
+                            {formatDateTime(row.transaction.occurred_at)}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn btn-ghost" type="submit">
+                        Match
+                      </button>
+                    </form>
+                  ) : (
+                    <span className="text-xs text-slate-500">no card row</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

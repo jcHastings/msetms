@@ -4583,8 +4583,12 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /Receipt match/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /fuel_receipt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-fuel-receipt.tsx"), "utf8"), /fuel_receipt/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/manage/page.tsx"), "utf8"), /REPORT_EXPORT_COLUMNS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /REPORT_EXPORT_COLUMNS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /data-column-chooser/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /buildStatistics/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /data-stats-matrix/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /Gross Rev/);
+  assert.match(fuelPage, /data-fuel-status/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.googleapis\.com\/maps\/api\/directions\/json/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /listRelays|splitLoadRevenue/);

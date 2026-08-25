@@ -39,3 +39,22 @@ export type ReportExportColumn = (typeof REPORT_EXPORT_COLUMNS)[number]["key"];
 export function defaultReportColumns(): ReportExportColumn[] {
   return REPORT_EXPORT_COLUMNS.map((column) => column.key);
 }
+
+export const STATS_METRIC_ROWS = [
+  { key: "loads", label: "Loads" },
+  { key: "miles", label: "Miles" },
+  { key: "emptyMiles", label: "Empty miles" },
+  { key: "gross", label: "Gross Rev" },
+  { key: "fees", label: "Fees" },
+  { key: "net", label: "Net" },
+  { key: "pct", label: "%" },
+] as const;
+
+export type StatsMetricKey = (typeof STATS_METRIC_ROWS)[number]["key"];
+
+export function reportMonthLabel(key: string): string {
+  const [year, month] = key.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  if (Number.isNaN(date.getTime())) return key;
+  return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+}

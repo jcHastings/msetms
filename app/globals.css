@@ -508,3 +508,47 @@ summary.btn.load-action-btn:hover {
   background: #ffffff;
   margin-top: 3rem;
 }
+
+.stats-matrix th:first-child,
+.stats-matrix td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+.stats-matrix thead th:first-child {
+  background: #f8fafc;
+}
+
+.fuel-status {
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fuel-status-matched {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.fuel-status-no_photo {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.fuel-status-wrong_state {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.fuel-status-gallons_off {
+  background: #fef3c7;
+  color: #b45309;
+}
