@@ -5711,10 +5711,13 @@ Continuous reefer. Two load locks.
   const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
   assert.match(invoicePanel, /Create invoice/);
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
+  assert.match(invoicePanel, /method="POST"/);
+  assert.match(invoicePanel, /target="_blank"/);
   assert.match(invoicePanel, /downloadAndOpenPdf/);
   assert.match(invoicePanel, /about:blank/);
   assert.match(invoicePanel, /X-Attachment-Id/);
   assert.match(invoicePanel, /\/api\/attachments\/\$\{attachmentId\}\?download=1/);
+  assert.match(invoicePanel, /setTab\("financials"\)/);
   assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /Content-Disposition.*attachment/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);

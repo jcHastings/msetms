@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useLoadEdit } from "@/components/load-edit-context";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
@@ -21,6 +22,7 @@ export function TmsInvoicePanel({
   invoices?: Attachment[];
 }) {
   const router = useRouter();
+  const edit = useLoadEdit();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const canInvoice = status === "delivered" || status === "completed";
@@ -55,6 +57,7 @@ export function TmsInvoicePanel({
             }
           : undefined,
       );
+      edit?.setTab("financials");
       router.refresh();
     } catch (cause) {
       preview?.close();
@@ -117,7 +120,13 @@ export function TmsInvoicePanel({
           {error}
         </p>
       ) : null}
-      <form onSubmit={onSubmit} className="mt-4">
+      <form
+        action={`/api/loads/${loadId}/invoice`}
+        method="POST"
+        target="_blank"
+        onSubmit={onSubmit}
+        className="mt-4"
+      >
         <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
           {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
         </button>
