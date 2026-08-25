@@ -198,18 +198,24 @@ export function unitNumberFromSamsaraName(name: string, fallbackId: string): str
 }
 
 export function samsaraUnitDigits(vehicle: SamsaraMatchVehicle): string {
-  const tokens = samsaraUnitTokenSet(vehicle);
-  if (tokens.length === 1) return tokens[0];
-  if (tokens.length > 1) return tokens[tokens.length - 1];
-  return "";
+  return samsaraExactUnit(vehicle);
+}
+
+/** One unit number only. Names that mention two units (28 vs 38) do not count as exact. */
+export function samsaraExactUnit(vehicle: { unitNumber?: string; name?: string; extraKeys?: string[] }): string {
+  const tokens = samsaraUnitTokenSet({
+    samsaraVehicleId: "",
+    unitNumber: vehicle.unitNumber,
+    name: vehicle.name,
+  });
+  return tokens.length === 1 ? tokens[0] : "";
 }
 
 function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boolean {
-  const tokens = samsaraUnitTokenSet(vehicle);
+  const exact = samsaraExactUnit(vehicle);
   const truckUnit = unitDigits(truck.unit_number);
-  if (!tokens.length || !truckUnit) return true;
-  if (tokens.includes(truckUnit)) return true;
-  return tokens.some((token) => token.length >= 8);
+  if (!exact || !truckUnit) return !exact;
+  return exact === truckUnit;
 }
 
 function uniqueUnclaimedTruck(
@@ -251,10 +257,12 @@ export function matchTruckForSamsara(
     if (byVin) return { id: byVin.id, matchBy: "vin" };
   }
 
-  const unitTokens = samsaraUnitTokenSet(vehicle);
-  if (unitTokens.length) {
-    const byUnit = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) =>
-      unitTokens.includes(unitDigits(truck.unit_number)),
+  const exactUnit = samsaraExactUnit(vehicle);
+  if (exactUnit) {
+    const byUnit = uniqueUnclaimedTruck(
+      trucks,
+      claimedTruckIds,
+      (truck) => unitDigits(truck.unit_number) === exactUnit,
     );
     if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
   }
@@ -501,7 +509,29 @@ export function samsaraVehicleIsActive(vehicle: Pick<SamsaraVehicleInput, "activ
 }
 
 export function keepActiveSamsaraVehicles(vehicles: SamsaraVehicleInput[]): SamsaraVehicleInput[] {
-  return vehicles.filter((vehicle) => samsaraVehicleIsActive(vehicle));
+  const inactiveIds = new Set<string>();
+  const inactiveUnits = new Set<string>();
+  for (const vehicle of vehicles) {
+    if (samsaraVehicleIsActive(vehicle)) continue;
+    const id = canonicalFleetKey(vehicle.id);
+    if (id) inactiveIds.add(id);
+    const unit = samsaraExactUnit(vehicle);
+    if (unit) inactiveUnits.add(unit);
+  }
+  return vehicles.filter((vehicle) => {
+    if (!samsaraVehicleIsActive(vehicle)) return false;
+    const id = canonicalFleetKey(vehicle.id);
+    if (id && inactiveIds.has(id)) return false;
+    const unit = samsaraExactUnit(vehicle);
+    if (unit && inactiveUnits.has(unit) && isBareSamsaraUnitEcho(vehicle, unit)) return false;
+    return true;
+  });
+}
+
+function isBareSamsaraUnitEcho(vehicle: SamsaraVehicleInput, unit: string): boolean {
+  if (vehicle.vin?.trim() || vehicle.licensePlate?.trim() || vehicle.notes?.trim()) return false;
+  const tokens = fleetUnitTokens(vehicle.name);
+  return tokens.length === 1 && tokens[0] === unit;
 }
 
 export function unionSamsaraVehicles(
@@ -521,6 +551,58 @@ export function unionSamsaraVehicles(
     out.push(vehicle);
   }
   return out;
+}
+
+/** Identity list plus GPS stats, minus inactive units and stats echoes of those units. */
+export function unionActiveSamsaraVehicles(
+  identity: SamsaraVehicleInput[],
+  stats: SamsaraVehicleInput[],
+): SamsaraVehicleInput[] {
+  const inactiveIds = new Set<string>();
+  const inactiveUnits = new Set<string>();
+  for (const vehicle of identity) {
+    if (samsaraVehicleIsActive(vehicle)) continue;
+    const id = canonicalFleetKey(vehicle.id);
+    if (id) inactiveIds.add(id);
+    const unit = samsaraExactUnit(vehicle);
+    if (unit) inactiveUnits.add(unit);
+  }
+  const activeIdentity = identity.filter((vehicle) => samsaraVehicleIsActive(vehicle));
+  const seen = new Set(
+    identity
+      .map((vehicle) => canonicalFleetKey(vehicle.id) || normalizeFleetKey(vehicle.name))
+      .filter(Boolean),
+  );
+  const extras: SamsaraVehicleInput[] = [];
+  for (const vehicle of stats) {
+    const key = canonicalFleetKey(vehicle.id) || normalizeFleetKey(vehicle.name);
+    if (key && seen.has(key)) continue;
+    if (key && inactiveIds.has(key)) continue;
+    if (!samsaraVehicleIsActive(vehicle)) continue;
+    const unit = samsaraExactUnit(vehicle);
+    if (unit && inactiveUnits.has(unit)) continue;
+    if (key) seen.add(key);
+    extras.push(vehicle);
+  }
+  return keepActiveSamsaraVehicles([...activeIdentity, ...extras]);
+}
+
+export function inactiveSamsaraVehicleIds(vehicles: SamsaraVehicleInput[]): Set<string> {
+  return new Set(
+    vehicles
+      .filter((vehicle) => !samsaraVehicleIsActive(vehicle))
+      .map((vehicle) => canonicalFleetKey(vehicle.id))
+      .filter(Boolean),
+  );
+}
+
+export function inactiveSamsaraUnits(vehicles: SamsaraVehicleInput[]): Set<string> {
+  return new Set(
+    vehicles
+      .filter((vehicle) => !samsaraVehicleIsActive(vehicle))
+      .map((vehicle) => samsaraExactUnit(vehicle))
+      .filter(Boolean),
+  );
 }
 
 export function buildOrbcommTrailerPreview(
@@ -940,9 +1022,7 @@ export function mergeSamsaraGpsOntoVehicles(
 ): SamsaraVehicleInput[] {
   return vehicles.map((vehicle) => {
     const row = stats.find(
-      (item) =>
-        canonicalFleetKey(String(item.id ?? "")) === canonicalFleetKey(vehicle.id) ||
-        (item.name && normalizeFleetKey(String(item.name)) === normalizeFleetKey(vehicle.name)),
+      (item) => canonicalFleetKey(String(item.id ?? "")) === canonicalFleetKey(vehicle.id),
     );
     if (!row) return vehicle;
     const gps = (row.gps ?? {}) as Record<string, unknown>;

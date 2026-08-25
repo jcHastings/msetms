@@ -645,6 +645,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /samsaraOmittedVehiclesWarning/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /fleetUnitTokens/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /unionSamsaraVehicles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /unionActiveSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /keepActiveSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /samsaraRecordIsActive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchTruckForSamsaraLive/);
@@ -2872,8 +2873,11 @@ Continuous reefer. Two load locks.
     unitNumberFromSamsaraName,
     fleetUnitTokens,
     unionSamsaraVehicles,
+    unionActiveSamsaraVehicles,
     samsaraOmittedVehiclesWarning,
     keepActiveSamsaraVehicles,
+    samsaraExactUnit,
+    mergeSamsaraGpsOntoVehicles,
     samsaraRecordIsActive,
     samsaraVehicleIsActive,
     canonicalFleetKey,
@@ -2917,6 +2921,19 @@ Continuous reefer. Two load locks.
     }),
     null,
     "Samsara vehicle-id digits must not pair to a TMS unit",
+  );
+  assert.equal(samsaraExactUnit({ name: "2024 Freightliner 28" }), "28");
+  assert.equal(samsaraExactUnit({ name: "38 / 28", extraKeys: ["38", "28"] }), "");
+  assert.equal(
+    matchTruckForSamsara(
+      [
+        { id: 28, unit_number: "28", samsara_vehicle_id: "" },
+        { id: 38, unit_number: "38", samsara_vehicle_id: "" },
+      ],
+      { samsaraVehicleId: "sam-old", name: "38 / 28", extraKeys: ["38", "28"] },
+    ),
+    null,
+    "a name that mentions two units must not attach the inactive unit to a live truck",
   );
   assert.match(SAMSARA_ID_MISSING_MESSAGE, /No Samsara ID on this truck/);
   const match36 = matchTruckForSamsara(
@@ -3427,6 +3444,30 @@ Continuous reefer. Two load locks.
     { id: "sam-38-inactive", name: "38", vin: "", year: "", make: "", model: "", licensePlate: "", notes: "Retired from fleet" },
   ]);
   assert.deepEqual(mixedActive.map((vehicle) => vehicle.id), ["sam-28"]);
+  assert.deepEqual(
+    keepActiveSamsaraVehicles([
+      { id: "sam-old-38", name: "old 38", vin: "", year: "", make: "", model: "", licensePlate: "", active: false },
+      { id: "stats-38", name: "38", vin: "", year: "", make: "", model: "", licensePlate: "", active: true },
+      { id: "sam-28", name: "28 in use", vin: "", year: "", make: "", model: "", licensePlate: "", active: true },
+    ]).map((vehicle) => vehicle.id),
+    ["sam-28"],
+    "a GPS-stats echo of an inactive unit must not stay as an active vehicle",
+  );
+  assert.deepEqual(
+    unionActiveSamsaraVehicles(
+      [{ id: "sam-old-38", name: "old 38", vin: "", year: "", make: "", model: "", licensePlate: "", active: false }],
+      [
+        { id: "stats-38", name: "38", vin: "", year: "", make: "", model: "", licensePlate: "" },
+        { id: "sam-28", name: "28 in use", vin: "", year: "", make: "", model: "", licensePlate: "" },
+      ],
+    ).map((vehicle) => vehicle.id),
+    ["sam-28"],
+  );
+  const mergedByIdOnly = mergeSamsaraGpsOntoVehicles(
+    [{ id: "sam-28", name: "28 in use", vin: "", year: "", make: "", model: "", licensePlate: "", city: "" }],
+    [{ id: "stats-38", name: "28 in use", gps: { latitude: 29.76, longitude: -95.36, reverseGeo: { formattedLocation: "Houston, TX" } } }],
+  );
+  assert.equal(mergedByIdOnly[0]?.city, "", "GPS must follow Samsara vehicle id, not a similar name");
   const inactivePreview = buildSamsaraTruckPreview(
     [
       { id: "sam-28", name: "28", vin: "", year: "", make: "", model: "", licensePlate: "" },
@@ -3459,6 +3500,25 @@ Continuous reefer. Two load locks.
     undefined,
     "do not guess another active vehicle onto a truck whose stored Samsara id is inactive",
   );
+  const echoGps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "stats-38",
+        name: "38",
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 29.76, longitude: -95.36, reverseGeo: { formattedLocation: "Houston, TX" } },
+      },
+    ],
+    trucks: [
+      { id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "", plate: "" },
+      { id: 38, unit_number: "38", samsara_vehicle_id: "stats-38", vin: "", plate: "" },
+    ],
+    loads: [],
+    activeVehicleIds: new Set([canonicalFleetKey("sam-28")]),
+    inactiveVehicleIds: new Set([canonicalFleetKey("sam-old-38")]),
+    inactiveUnits: new Set(["38"]),
+  });
+  assert.equal(echoGps.find((row) => row.unitNumber === "28"), undefined);
+  assert.equal(echoGps.find((row) => row.unitNumber === "38"), undefined, "inactive unit GPS must not land on a TMS truck");
 
   const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
   delete process.env.SAMSARA_API_TOKEN;
