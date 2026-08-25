@@ -49,6 +49,7 @@ import {
   type TruckWithDriver,
   DEFAULT_FLEET_TYPE,
 } from "./types";
+import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
@@ -984,6 +985,9 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   if (filters.status === "active" || !filters.status) {
     clauses.push(`loads.status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})`);
     params.push(...ACTIVE_LOAD_STATUSES);
+  } else if (filters.status === "planning") {
+    clauses.push(`loads.status IN (${PLANNING_LOAD_STATUSES.map(() => "?").join(", ")})`);
+    params.push(...PLANNING_LOAD_STATUSES);
   } else if (filters.status !== "all") {
     clauses.push("loads.status = ?");
     params.push(filters.status);
@@ -997,9 +1001,9 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   if (filters.q?.trim()) {
     const term = `%${filters.q.trim()}%`;
     clauses.push(
-      `(loads.load_number LIKE ? OR customers.name LIKE ? OR loads.origin LIKE ? OR loads.destination LIKE ? OR loads.commodity LIKE ?)`,
+      `(loads.load_number LIKE ? OR customers.name LIKE ? OR loads.origin LIKE ? OR loads.destination LIKE ? OR loads.commodity LIKE ? OR loads.reference_number LIKE ? OR loads.po_number LIKE ? OR loads.customer_reference LIKE ?)`,
     );
-    params.push(term, term, term, term, term);
+    params.push(term, term, term, term, term, term, term, term);
   }
 
   if (!showsSampleData()) {

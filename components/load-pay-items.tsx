@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
+import { ViewInvoiceButton } from "@/components/view-invoice-button";
 import { formatMoney } from "@/lib/format";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
+
+function sumItems(items: LoadPayItem[]): number {
+  return items.reduce((sum, item) => sum + (item.total ?? 0), 0);
+}
 
 export function LoadPayItems({
   loadId,
@@ -13,6 +18,9 @@ export function LoadPayItems({
   driverName,
   driverType,
   ownerOperators = [],
+  status = "",
+  invoiceAttachmentId = null,
+  rateFallback = null,
 }: {
   loadId: number;
   items: LoadPayItem[];
@@ -20,36 +28,76 @@ export function LoadPayItems({
   driverName: string | null;
   driverType?: string | null;
   ownerOperators?: string[];
+  status?: string;
+  invoiceAttachmentId?: number | null;
+  rateFallback?: number | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
+  const incomeTotal = income.length ? sumItems(income) : rateFallback ?? 0;
+  const expenseTotal = sumItems(expenses);
+  const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
   const ownerOperator = driverType === "owner_operator";
   const ooNames = ownerOperators.filter(Boolean);
   return (
     <section data-load-tab="financials" className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3" data-financials-totals="">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Total income</div>
+          <div className="mt-1 text-lg font-semibold text-emerald-950">{formatMoney(incomeTotal)}</div>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Total expenses</div>
+          <div className="mt-1 text-lg font-semibold text-amber-950">{formatMoney(expenseTotal)}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
+          <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(profit)}</div>
+        </div>
+      </div>
       <PayItemGroup
         loadId={loadId}
         side="income"
         title="Income / Budget"
         items={income}
+        total={incomeTotal}
         defaultPayee={customerName}
         defaultBillTo="customer"
         defaultCategory="flat_rate"
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
+        actions={
+          <>
+            <a className="btn btn-secondary" href={`/api/loads/${loadId}/confirmation`} target="_blank" rel="noreferrer">
+              View Customer Confirmation
+            </a>
+            <ViewInvoiceButton loadId={loadId} status={status} attachmentId={invoiceAttachmentId} />
+          </>
+        }
       />
       <PayItemGroup
         loadId={loadId}
         side="expense"
         title="Expenses"
         items={expenses}
+        total={expenseTotal}
         defaultPayee={ownerOperator ? driverName ?? "" : ""}
         defaultBillTo={ownerOperator ? "driver" : "customer"}
         defaultCategory={ownerOperator ? "flat_rate" : "lumper"}
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
+        actions={
+          <a
+            className="btn btn-secondary"
+            href={`/api/loads/${loadId}/confirmation?packet=internal`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View Carrier Confirmation
+          </a>
+        }
       />
     </section>
   );
@@ -60,56 +108,88 @@ function PayItemGroup({
   side,
   title,
   items,
+  total,
   defaultPayee,
   defaultBillTo,
   defaultCategory,
   customerName,
   ownerOperatorName,
   ownerOperators,
+  actions,
 }: {
   loadId: number;
   side: PayItemSide;
   title: string;
   items: LoadPayItem[];
+  total: number;
   defaultPayee: string;
   defaultBillTo: "customer" | "driver";
   defaultCategory: string;
   customerName: string;
   ownerOperatorName: string | null;
   ownerOperators: string[];
+  actions?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const tone = side === "income" ? "border-emerald-200" : "border-amber-200";
   return (
-    <section className="card p-5">
+    <section className={`card p-5 ${tone}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
-        <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
-          + Add Line Item
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
+            + Add Line Item
+          </button>
+        </div>
       </div>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">No line items. Click + Add Line Item.</p>
       ) : (
-        <ul className="mt-3 divide-y divide-slate-100">
-          {items.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-              <div>
-                <span className="font-medium">{labelForPayCategory(item.category)}</span>
-                {item.payee ? <span className="text-slate-500"> · {item.payee}</span> : null}
-                {item.notes ? <div className="text-xs text-slate-500">{item.notes}</div> : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <span>{formatMoney(item.total)}</span>
-                <form action={async (formData) => { await deletePayItemAction(formData); }}>
-                  <input type="hidden" name="pay_item_id" value={item.id} />
-                  <button className="btn btn-ghost text-rose-700" type="submit">
-                    Remove
-                  </button>
-                </form>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 overflow-x-auto">
+          <table className="table-grid text-sm">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Description</th>
+                <th>Notes</th>
+                <th>Rate</th>
+                <th>Qty</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.payee || "—"}</td>
+                  <td>{labelForPayCategory(item.category)}</td>
+                  <td className="text-slate-500">{item.notes || "—"}</td>
+                  <td>{formatMoney(item.rate)}</td>
+                  <td>{item.qty ?? "—"}</td>
+                  <td className="font-semibold">{formatMoney(item.total)}</td>
+                  <td>
+                    <form action={async (formData) => { await deletePayItemAction(formData); }}>
+                      <input type="hidden" name="pay_item_id" value={item.id} />
+                      <button className="btn btn-ghost text-rose-700" type="submit">
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={5} className="text-right font-semibold">
+                  {side === "income" ? "Total Income" : "Total Expenses"}
+                </td>
+                <td className="font-semibold">{formatMoney(total)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       )}
       {open ? (
         <PayItemDialog

@@ -33,10 +33,9 @@ export default async function BoardPage({
   const params = await searchParams;
   const status = params.status ?? "active";
   const date = params.date ?? "";
-  const q = params.q ?? "";
   const openId = parseOpenLoadId(params.open);
-  const current = { status, date, q };
-  const loads = listLoads({ status, date, q });
+  const current = { status, date };
+  const loads = listLoads({ status, date });
   const relayLabels = extraRelayLabelsByLoad(loads);
   const reefers = await getReeferSnapshots();
   const fleet = await getSamsaraFleet();
@@ -66,7 +65,7 @@ export default async function BoardPage({
           {reefers.error}
         </p>
       ) : null}
-      <BoardToolbar status={status} date={date} q={q} />
+      <BoardToolbar status={status} date={date} />
       <div className="card overflow-hidden">
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
@@ -94,7 +93,22 @@ export default async function BoardPage({
                   const tractorLocation = locationForLoad(fleet, load);
                   const driverHos = hosForLoad(fleet, load);
                   return (
-                  <tr key={load.id} className={loadStatusRowClass(load.status)}>
+                  <tr
+                    key={load.id}
+                    className={loadStatusRowClass(load.status)}
+                    data-load-search={[
+                      load.load_number,
+                      load.customer_name,
+                      load.origin,
+                      load.destination,
+                      load.reference_number,
+                      load.po_number,
+                      load.customer_reference,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .toLowerCase()}
+                  >
                     <td>
                       <Link
                         href={overlayHref("/board", load.id, current)}

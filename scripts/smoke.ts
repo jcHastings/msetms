@@ -53,6 +53,36 @@ async function main() {
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
   const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const { loadMatchesListQuery, parseLoadListTab } = await import("../lib/load-list-shared");
+  assert.equal(parseLoadListTab(""), "active");
+  assert.equal(parseLoadListTab("planning"), "planning");
+  assert.equal(
+    loadMatchesListQuery(
+      {
+        load_number: "52309",
+        customer_name: "NOAH'S ARK PROCESSORS",
+        origin: "Hastings, NE",
+        destination: "Bronx, NY",
+        reference_number: "0817-19E SAMPLE",
+      },
+      "sample",
+    ),
+    true,
+  );
+  assert.equal(
+    loadMatchesListQuery(
+      { load_number: "1006149", customer_name: "M & S Loads", origin: "Avenel, NJ", destination: "Hastings, NE" },
+      "bronx",
+    ),
+    false,
+  );
+  assert.match(boardUi, /data-load-search/);
+  assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
+  assert.doesNotMatch(boardUi, /Find New Shippers|EDI \/ Tenders|Post\/Search Load Boards/);
+  const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
+  assert.match(boardToolbar, /Search loads on this tab/);
+  assert.match(boardToolbar, /LOAD_LIST_TABS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8"), /Planning/);
   assert.match(boardUi, /loadStatusRowClass\(load\.status\)/);
   assert.match(dashUiStatus, /loadStatusRowClass\(load\.status\)/);
   const tabSource = fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8");
@@ -200,12 +230,23 @@ async function main() {
   assert.match(paySource, />Lumper</);
   assert.match(paySource, /ownerOperators/);
   assert.match(paySource, /Other payee/);
+  assert.match(paySource, /Total income/);
+  assert.match(paySource, /Gross profit/);
+  assert.match(paySource, /ViewInvoiceButton/);
+  assert.match(paySource, /View Customer Confirmation/);
+  assert.match(paySource, /View Carrier Confirmation/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /View Invoice/);
+  assert.match(paySource, /data-financials-totals/);
   assert.doesNotMatch(paySource, /defaultPayee=\{driverName/);
   assert.doesNotMatch(paySource, /waiting row|blank row/);
   const stopsSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
   assert.match(stopsSource, /\+ Add Pickup/);
   assert.match(stopsSource, /\+ Add Delivery/);
-  assert.doesNotMatch(stopsSource, /stopoff|bobtail|container/);
+  assert.match(stopsSource, /data-stops-grid/);
+  assert.match(stopsSource, /data-leg-miles/);
+  assert.match(stopsSource, /milesForStopGap/);
+  assert.match(stopsSource, /applyLocationToStop/);
+  assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com/);
   const routingUi = fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8");
   assert.match(routingUi, /Refresh route/);
   assert.match(routingUi, /IFTA estimate/);
@@ -1069,6 +1110,18 @@ async function main() {
     queries.listLoads({ status: "active" }).some((load) => load.id === cancelBoardId),
     false,
     "cancel removes the load from the board list",
+  );
+  const planningIds = queries.listLoads({ status: "planning" }).map((load) => load.id);
+  const planningStatuses = new Set(queries.listLoads({ status: "planning" }).map((load) => load.status));
+  assert.ok(planningIds.length >= 1);
+  assert.ok([...planningStatuses].every((status) => status === "available" || status === "hold"));
+  assert.equal(planningIds.includes(cancelBoardId), false);
+  const sampleRefLoad = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1042");
+  assert.ok(sampleRefLoad);
+  assert.ok(
+    queries.listLoads({ status: "all", q: sampleRefLoad.customer_name.split(" ")[0] ?? "Heartland" }).some(
+      (load) => load.id === sampleRefLoad.id,
+    ),
   );
 
   const { addPayItem, listPayItems } = await import("../lib/pay-items");
@@ -3920,6 +3973,11 @@ Continuous reefer. Two load locks.
   assert.equal(storedRoute?.route_miles, 800);
   assert.equal(storedRoute?.route_source, "google");
   assert.match(storedRoute?.route_state_miles ?? "", /NY|PA|OH|IN|IL/);
+  assert.match(storedRoute?.route_leg_miles ?? "", /800/);
+  const { milesForStopGap } = await import("../lib/routing-shared");
+  assert.equal(milesForStopGap(0, 2, { totalMiles: 12.3, legMiles: [] }), 12.3);
+  assert.equal(milesForStopGap(0, 3, { totalMiles: 12.3, legMiles: [] }), null);
+  assert.equal(milesForStopGap(1, 3, { totalMiles: 12.3, legMiles: [8, 4.3] }), 4.3);
   const officialIfta = queries.getIftaReport(reeferLoad.id);
   assert.ok(officialIfta);
   assert.notEqual(officialIfta.source, "google");

@@ -635,6 +635,7 @@ export function migrate(db: Database): void {
   `);
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "route_miles", "REAL");
+  ensureColumn(db, "loads", "route_leg_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_state_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_calculated_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_source", "TEXT NOT NULL DEFAULT ''");

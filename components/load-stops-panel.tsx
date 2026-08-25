@@ -4,6 +4,7 @@ import { useState } from "react";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
 import { applyLocationToStop, formatLocationLabel, matchLocationForStop } from "@/lib/locations";
 import { toInputDateTime } from "@/lib/format";
+import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import type { LoadStop } from "@/lib/stops";
 import type { Location } from "@/lib/types";
 
@@ -11,17 +12,21 @@ export function LoadStopsPanel({
   loadId,
   stops,
   locations = [],
+  routeGuide,
 }: {
   loadId: number;
   stops: LoadStop[];
   locations?: Location[];
+  routeGuide?: LoadRouteGuide;
 }) {
   return (
     <section data-load-tab="stops" className="card space-y-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Edit Stops</h2>
-          <p className="mt-1 text-sm text-slate-500">Pickup and delivery only. Add as many as the load needs.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            One grid for every pickup and delivery. Miles show between legs when a route exists.
+          </p>
         </div>
         <div className="flex gap-2">
           <AddStopButton loadId={loadId} kind="pickup" />
@@ -31,13 +36,39 @@ export function LoadStopsPanel({
       {stops.length === 0 ? (
         <p className="text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
       ) : (
-        <ol className="space-y-4">
-          {stops.map((stop, index) => (
-            <li key={stop.id}>
-              <StopCard stop={stop} index={index + 1} locations={locations} />
-            </li>
-          ))}
-        </ol>
+        <div className="overflow-x-auto">
+          <table className="table-grid text-sm" data-stops-grid="">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Street</th>
+                <th>City / ST / Zip</th>
+                <th>Phone</th>
+                <th>Window</th>
+                <th>Reference</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {stops.map((stop, index) => (
+                <StopGridBlock
+                  key={stop.id}
+                  stop={stop}
+                  index={index + 1}
+                  locations={locations}
+                  gapMiles={
+                    index < stops.length - 1
+                      ? milesForStopGap(index, stops.length, routeGuide ?? { totalMiles: null, legMiles: [] })
+                      : null
+                  }
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -73,14 +104,16 @@ function initialStopDraft(stop: LoadStop, locations: Location[]) {
   };
 }
 
-function StopCard({
+function StopGridBlock({
   stop,
   index,
   locations,
+  gapMiles,
 }: {
   stop: LoadStop;
   index: number;
   locations: Location[];
+  gapMiles: number | null;
 }) {
   const [kind, setKind] = useState(stop.kind);
   const [draft, setDraft] = useState(() => initialStopDraft(stop, locations));
@@ -120,30 +153,32 @@ function StopCard({
     });
   }
 
+  const pickup = kind === "pickup";
   return (
-    <form action={updateStopAction} className="rounded-lg border border-slate-200 p-4">
-      <input type="hidden" name="stop_id" value={stop.id} />
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">
-          Stop {index} · {kind === "pickup" ? "Pickup" : "Delivery"}
-        </h3>
-        <button className="btn btn-ghost text-rose-700" type="submit" formAction={deleteStopAction}>
-          Remove
-        </button>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="field">
-          <label>Type</label>
-          <select name="kind" value={kind} onChange={(event) => setKind(event.target.value as "pickup" | "delivery")}>
-            <option value="pickup">Pickup</option>
-            <option value="delivery">Delivery</option>
-          </select>
-        </div>
-        <div className="field">
-          <label>Saved location</label>
+    <>
+      <tr className={pickup ? "bg-sky-50/80" : "bg-rose-50/70"}>
+        <td className="align-top font-semibold">{index}</td>
+        <td className="align-top">
+          <form action={updateStopAction} id={`stop-form-${stop.id}`} className="contents">
+            <input type="hidden" name="stop_id" value={stop.id} />
+            <select
+              name="kind"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as "pickup" | "delivery")}
+              className={pickup ? "font-semibold text-sky-800" : "font-semibold text-rose-800"}
+            >
+              <option value="pickup">Pickup</option>
+              <option value="delivery">Delivery</option>
+            </select>
+          </form>
+        </td>
+        <td className="align-top min-w-40">
+          <input form={`stop-form-${stop.id}`} name="name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} required />
           <select
+            form={`stop-form-${stop.id}`}
             name="location_id"
             value={draft.locationId}
+            className="mt-1"
             onChange={(event) => pickLocation(event.target.value)}
           >
             <option value="">One-off address</option>
@@ -153,83 +188,47 @@ function StopCard({
               </option>
             ))}
           </select>
-        </div>
-        <div className="field">
-          <label>Location name</label>
-          <input
-            name="name"
-            value={draft.name}
-            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-            required
-          />
-        </div>
-        <div className="field">
-          <label>Street</label>
-          <input
-            name="street"
-            value={draft.street}
-            onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))}
-          />
-        </div>
-        <div className="field">
-          <label>City</label>
-          <input
-            name="city"
-            value={draft.city}
-            onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))}
-          />
-        </div>
-        <div className="field">
-          <label>State</label>
-          <input
-            name="state"
-            value={draft.state}
-            onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))}
-            maxLength={2}
-          />
-        </div>
-        <div className="field">
-          <label>Zip</label>
-          <input
-            name="zip"
-            value={draft.zip}
-            onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))}
-          />
-        </div>
-        <div className="field">
-          <label>Phone</label>
-          <input
-            name="phone"
-            value={draft.phone}
-            onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
-          />
-        </div>
-        <div className="field">
-          <label>Window start</label>
-          <input name="window_start" type="datetime-local" defaultValue={toInputDateTime(stop.window_start)} />
-        </div>
-        <div className="field">
-          <label>Window end</label>
-          <input name="window_end" type="datetime-local" defaultValue={toInputDateTime(stop.window_end)} />
-        </div>
-        <div className="field">
-          <label>Cargo</label>
-          <input name="cargo" defaultValue={stop.cargo} />
-        </div>
-        <div className="field">
-          <label>Reference</label>
-          <input name="reference" defaultValue={stop.reference || stop.confirmation} />
-        </div>
-        <div className="field md:col-span-2">
-          <label>Driver instructions</label>
-          <textarea name="instructions" rows={2} defaultValue={stop.instructions || stop.notes} />
-        </div>
-      </div>
-      <div className="mt-3 flex justify-end">
-        <button className="btn btn-secondary" type="submit">
-          Save stop
-        </button>
-      </div>
-    </form>
+        </td>
+        <td className="align-top min-w-36">
+          <input form={`stop-form-${stop.id}`} name="street" value={draft.street} onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))} />
+        </td>
+        <td className="align-top min-w-40">
+          <div className="grid grid-cols-[1fr_3rem_5rem] gap-1">
+            <input form={`stop-form-${stop.id}`} name="city" value={draft.city} onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))} />
+            <input form={`stop-form-${stop.id}`} name="state" value={draft.state} maxLength={2} onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))} />
+            <input form={`stop-form-${stop.id}`} name="zip" value={draft.zip} onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))} />
+          </div>
+        </td>
+        <td className="align-top min-w-28">
+          <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} />
+        </td>
+        <td className="align-top min-w-40">
+          <input form={`stop-form-${stop.id}`} name="window_start" type="datetime-local" defaultValue={toInputDateTime(stop.window_start)} />
+          <input form={`stop-form-${stop.id}`} name="window_end" type="datetime-local" className="mt-1" defaultValue={toInputDateTime(stop.window_end)} />
+          <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
+        </td>
+        <td className="align-top min-w-28">
+          <input form={`stop-form-${stop.id}`} name="reference" defaultValue={stop.reference || stop.confirmation} />
+        </td>
+        <td className="align-top min-w-40">
+          <textarea form={`stop-form-${stop.id}`} name="instructions" rows={2} defaultValue={stop.instructions || stop.notes} />
+        </td>
+        <td className="align-top whitespace-nowrap">
+          <button className="btn btn-secondary" type="submit" form={`stop-form-${stop.id}`}>
+            Save
+          </button>
+          <button className="btn btn-ghost text-rose-700" type="submit" form={`stop-form-${stop.id}`} formAction={deleteStopAction}>
+            Remove
+          </button>
+        </td>
+      </tr>
+      {gapMiles != null ? (
+        <tr className="bg-slate-100 text-xs font-semibold text-slate-600">
+          <td colSpan={10} data-leg-miles="">
+            {formatRouteMiles(gapMiles)} to next stop
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }

@@ -148,7 +148,12 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
-          <LoadStopsPanel loadId={load.id} stops={stops} locations={locations} />
+          <LoadStopsPanel
+            loadId={load.id}
+            stops={stops}
+            locations={locations}
+            routeGuide={routeGuideFromLoad(load)}
+          />
           <LoadRoutingGuide
             loadId={load.id}
             guide={routeGuideFromLoad(load)}
@@ -178,6 +183,9 @@ export async function LoadEditor({
                 customerName={load.customer_name}
                 driverName={load.driver_name}
                 driverType={load.driver_type}
+                status={load.status}
+                invoiceAttachmentId={attachments.find((file) => file.kind === "invoice")?.id ?? null}
+                rateFallback={load.rate}
                 ownerOperators={drivers
                   .filter((driver) => driver.driver_type === "owner_operator")
                   .map((driver) => driver.name)}

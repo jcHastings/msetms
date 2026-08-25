@@ -5,6 +5,7 @@ import { getLoad } from "./queries";
 import {
   metersToRouteMiles,
   routeGuideFromLoad,
+  serializeRouteLegMiles,
   serializeRouteStateMiles,
   type LoadRouteGuide,
   type RouteStateMile,
@@ -140,18 +141,21 @@ function persistRoute(
   loadId: number,
   input: {
     totalMiles: number | null;
+    legMiles?: number[];
     states: RouteStateMile[];
     source: LoadRouteGuide["source"];
   },
 ): LoadRouteGuide {
   const timestamp = new Date().toISOString();
+  const legMiles = input.legMiles ?? [];
   getDb()
     .prepare(
-      `UPDATE loads SET route_miles = ?, route_state_miles = ?, route_calculated_at = ?, route_source = ?, updated_at = ?
+      `UPDATE loads SET route_miles = ?, route_leg_miles = ?, route_state_miles = ?, route_calculated_at = ?, route_source = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
       input.totalMiles,
+      serializeRouteLegMiles(legMiles),
       input.states.length ? serializeRouteStateMiles(input.states) : "",
       timestamp,
       input.source,
@@ -160,6 +164,7 @@ function persistRoute(
     );
   return {
     totalMiles: input.totalMiles,
+    legMiles,
     states: input.states,
     calculatedAt: timestamp,
     source: input.source,
@@ -194,7 +199,9 @@ type DirectionsPayload = {
   }>;
 };
 
-async function fetchGoogleDirections(stops: LoadStop[]): Promise<{ totalMiles: number; points: LatLng[] }> {
+async function fetchGoogleDirections(
+  stops: LoadStop[],
+): Promise<{ totalMiles: number; legMiles: number[]; points: LatLng[] }> {
   const key = getGoogleMapsApiKey();
   if (!key) throw new Error("missing-key");
   const origin = stopRouteLabel(stops[0]);
@@ -215,10 +222,12 @@ async function fetchGoogleDirections(stops: LoadStop[]): Promise<{ totalMiles: n
     throw new Error(payload.status === "ZERO_RESULTS" ? "Google could not find a driving route." : "Route could not be calculated.");
   }
   const route = payload.routes[0];
-  const meters = (route.legs ?? []).reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0);
+  const legs = route.legs ?? [];
+  const meters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0);
   const totalMiles = metersToRouteMiles(meters);
+  const legMiles = legs.map((leg) => metersToRouteMiles(leg.distance?.value ?? 0));
   const points = decodePolyline(route.overview_polyline?.points ?? "");
-  return { totalMiles, points };
+  return { totalMiles, legMiles, points };
 }
 
 export async function refreshLoadRoute(
@@ -250,9 +259,9 @@ export async function refreshLoadRoute(
     };
   }
   try {
-    const { totalMiles, points } = await fetchGoogleDirections(usable);
+    const { totalMiles, legMiles, points } = await fetchGoogleDirections(usable);
     const states = estimateStateMiles(points, totalMiles);
-    persistRoute(loadId, { totalMiles, states, source: "google" });
+    persistRoute(loadId, { totalMiles, legMiles, states, source: "google" });
     recordLoadAudit({
       loadId,
       action: "route",
