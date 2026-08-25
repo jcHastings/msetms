@@ -30,7 +30,13 @@ export function LoadCustomerScreen({
   );
 
   return (
-    <section data-load-tab="customer" className={card ? "card grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+    <section data-load-tab="customer" className={card ? "card overflow-hidden" : undefined}>
+      {card ? (
+        <div className="section-head px-6 py-3">
+          <h2 className="text-sm font-semibold">Customer</h2>
+        </div>
+      ) : null}
+      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <input type="hidden" name="customer_name" value={customerId ? "" : createName} />
       <div className="field md:col-span-2">
         <label htmlFor="customer_search">Customer</label>
@@ -112,6 +118,7 @@ export function LoadCustomerScreen({
           name="customer_reference"
           defaultValue={load?.customer_reference || load?.po_number || defaults.po_number || ""}
         />
+      </div>
       </div>
     </section>
   );

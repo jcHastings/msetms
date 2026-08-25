@@ -40,7 +40,7 @@ export function LoadPayItems({
   const ownerOperator = driverType === "owner_operator";
   const ooNames = ownerOperators.filter(Boolean);
   return (
-    <section data-load-tab="financials" className="space-y-4">
+    <section data-load-tab="financials" className="space-y-6">
       <div className="grid gap-3 md:grid-cols-3" data-financials-totals="">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Total income</div>

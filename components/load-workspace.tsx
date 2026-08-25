@@ -185,8 +185,9 @@ export function LoadWorkspace({
       </div>
 
       {loadId ? (
-      <div className="load-actions mb-4 flex flex-wrap items-center gap-2 px-3 py-2">
-        <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">Load Actions</span>
+      <div className="load-actions mb-4 px-4 py-3">
+        <div className="load-actions-label mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]">Load Actions</div>
+        <div className="flex flex-wrap items-center gap-2">
         {canSendSms(role) ? (
           <button
             type="button"
@@ -340,6 +341,7 @@ export function LoadWorkspace({
             disabled={status === "cancelled"}
           />
         </ActionMenu>
+        </div>
       </div>
       ) : null}
 

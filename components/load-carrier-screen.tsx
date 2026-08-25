@@ -56,7 +56,13 @@ export function LoadCarrierScreen({
   }
 
   return (
-    <section data-load-tab="assets" className={card ? "card grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+    <section data-load-tab="assets" className={card ? "card overflow-hidden" : undefined}>
+      {card ? (
+        <div className="section-head px-6 py-3">
+          <h2 className="text-sm font-semibold">Truck / driver / trailer</h2>
+        </div>
+      ) : null}
+      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <div className="md:col-span-2 flex flex-wrap gap-2">
         <button
           type="button"
@@ -123,6 +129,7 @@ export function LoadCarrierScreen({
           value={String(load?.oo_percent ?? selectedDriver.pay_percent ?? defaultOoPercent)}
         />
       ) : null}
+      </div>
     </section>
   );
 }

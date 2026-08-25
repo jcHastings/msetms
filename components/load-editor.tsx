@@ -258,11 +258,11 @@ export async function LoadEditor({
 
         <LoadTabPanel when="docs">
           <div data-load-tab="docs" className="space-y-4">
-          <div className="load-docs-actions mb-2 flex flex-wrap items-center gap-2 px-3 py-2">
-            <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">
+          <div className="load-docs-actions mb-3 px-4 py-3">
+            <div className="load-actions-label mb-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
               Document actions
-            </span>
-            <span className="text-sm text-slate-700">Upload, checklist, and generated PDFs for this load.</span>
+            </div>
+            <p className="text-sm text-slate-700">Upload, checklist, and generated PDFs for this load.</p>
           </div>
           <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
           <RateConApply
@@ -274,9 +274,11 @@ export async function LoadEditor({
             drivers={drivers}
             formSettings={formSettings}
           />
-          <section className="card mb-4 p-5">
-            <h2 className="text-sm font-semibold">Document checklist</h2>
-            <ul className="mt-3 space-y-1 text-sm">
+          <section className="card mb-4 overflow-hidden">
+            <div className="section-head px-5 py-3">
+              <h2 className="text-sm font-semibold">Document checklist</h2>
+            </div>
+            <ul className="space-y-1 p-5 text-sm">
               {checklist.map((doc) => {
                 const have = attachments.some((file) => file.kind === doc.kind);
                 return (
