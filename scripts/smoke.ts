@@ -5713,8 +5713,11 @@ Continuous reefer. Two load locks.
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(invoicePanel, /downloadAndOpenPdf/);
   assert.match(invoicePanel, /about:blank/);
+  assert.match(invoicePanel, /X-Attachment-Id/);
+  assert.match(invoicePanel, /\/api\/attachments\/\$\{attachmentId\}\?download=1/);
   assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /Content-Disposition.*attachment/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8"), /createObjectURL/);
   assert.match(renderInvoicesCsv([
     {
