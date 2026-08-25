@@ -2872,6 +2872,7 @@ Continuous reefer. Two load locks.
     keepActiveSamsaraVehicles,
     samsaraRecordIsActive,
     samsaraVehicleIsActive,
+    canonicalFleetKey,
   } = await import("../lib/fleet-import-shared");
   assert.equal(unitNumberFromSamsaraName("Unit 777", "veh-x"), "777");
   assert.equal(unitNumberFromSamsaraName("Truck 112", "veh-x"), "112");
@@ -3346,7 +3347,7 @@ Continuous reefer. Two load locks.
     ],
     trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-old-38", vin: "", plate: "" }],
     loads: [],
-    activeVehicleIds: new Set(["sam-28"]),
+    activeVehicleIds: new Set([canonicalFleetKey("sam-28")]),
   });
   assert.equal(inactiveGps.find((row) => row.unitNumber === "28")?.address, "Tulsa, OK");
   assert.equal(inactiveGps.find((row) => row.unitNumber === "28")?.vehicleId, "sam-28");
