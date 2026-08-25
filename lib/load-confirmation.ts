@@ -11,6 +11,7 @@ import {
 } from "./locations";
 import { getLoad, getLocation, getTrailer, listLocations } from "./queries";
 import { listStops, type LoadStop } from "./stops";
+import { locationRuleLabels } from "./location-rules-shared";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
@@ -165,6 +166,7 @@ function confirmationParty(
     phone: (merged?.phone || matched?.phone || "").trim(),
     hours: matched?.hours ?? "",
     extra: [
+      ...locationRuleLabels(matched),
       matched?.scheduling_notes ?? "",
       stop?.instructions,
       stop?.notes,
@@ -185,11 +187,11 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
   const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination, load.customer_name);
   const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
   const notes = [
+    load.public_notes,
     load.special_instructions,
     load.appointment_notes,
     shipper.location ? `Pickup: ${formatSchedulingSummary(shipper.location)}` : "",
     consignee.location ? `Delivery: ${formatSchedulingSummary(consignee.location)}` : "",
-    load.notes,
   ]
     .filter(Boolean)
     .join("\n");

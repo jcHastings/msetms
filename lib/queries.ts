@@ -172,8 +172,8 @@ export function createLocation(input: LocationInput): number {
     .prepare(
       `INSERT INTO locations (
         name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes,
-        latitude, longitude, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        call_before, latitude, longitude, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -187,6 +187,7 @@ export function createLocation(input: LocationInput): number {
       input.scheduling_type,
       input.hours,
       input.scheduling_notes,
+      input.call_before ? 1 : 0,
       input.latitude ?? null,
       input.longitude ?? null,
       timestamp,
@@ -202,7 +203,7 @@ export function updateLocation(id: number, input: LocationInput): void {
       `UPDATE locations
        SET name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?, notes = ?,
            role = ?, scheduling_type = ?, hours = ?, scheduling_notes = ?,
-           latitude = ?, longitude = ?, updated_at = ?
+           call_before = ?, latitude = ?, longitude = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -217,6 +218,7 @@ export function updateLocation(id: number, input: LocationInput): void {
       input.scheduling_type,
       input.hours,
       input.scheduling_notes,
+      input.call_before ? 1 : 0,
       input.latitude ?? null,
       input.longitude ?? null,
       now(),

@@ -141,10 +141,10 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      {load.notes ? (
+      {load.public_notes ? (
         <section className="mt-3 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</div>
-          <p className="mt-1 whitespace-pre-wrap">{load.notes}</p>
+          <p className="mt-1 whitespace-pre-wrap">{load.public_notes}</p>
         </section>
       ) : null}
 

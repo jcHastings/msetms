@@ -54,6 +54,22 @@ export default async function AlertsSettingsPage() {
               defaultValue={settings.alert_dot_days}
             />
           </div>
+          <div className="field">
+            <label htmlFor="alert_gps_quiet_hours">GPS quiet window (hours)</label>
+            <input
+              id="alert_gps_quiet_hours"
+              name="alert_gps_quiet_hours"
+              type="number"
+              min={1}
+              max={48}
+              step="0.5"
+              defaultValue={settings.alert_gps_quiet_hours}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Alert when an assigned truck has a stored Samsara ping older than this. Default 2 hours. No alert if
+              GPS was never received.
+            </p>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

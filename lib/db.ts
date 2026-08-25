@@ -613,6 +613,7 @@ export function migrate(db: Database): void {
     ["load_number_next", "INTEGER NOT NULL DEFAULT 1001"],
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
     ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 0"],
+    ["alert_gps_quiet_hours", "REAL NOT NULL DEFAULT 2"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
@@ -635,6 +636,27 @@ export function migrate(db: Database): void {
   `);
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "route_miles", "REAL");
+  ensureColumn(db, "locations", "call_before", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "load_pay_items", "paid_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_templates", "reefer_mode", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_templates", "public_notes", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_template_stops (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL REFERENCES load_templates(id) ON DELETE CASCADE,
+      sequence INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      location_id INTEGER,
+      name TEXT NOT NULL DEFAULT '',
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      reference TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT ''
+    );
+  `);
   ensureColumn(db, "loads", "route_leg_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_state_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_calculated_at", "TEXT NOT NULL DEFAULT ''");

@@ -39,6 +39,7 @@ export type CompanySettings = CompanyProfile & {
   alert_registration_days: number;
   alert_dot_days: number;
   alert_emails_enabled: number;
+  alert_gps_quiet_hours: number;
   default_routing_notes: string;
   default_oo_percent: number;
   default_gross_margin_percent: number;
@@ -93,6 +94,7 @@ const SETTINGS_DEFAULTS: CompanySettings = {
   alert_registration_days: 60,
   alert_dot_days: 30,
   alert_emails_enabled: 0,
+  alert_gps_quiet_hours: 2,
   default_routing_notes: "",
   default_oo_percent: 75,
   default_gross_margin_percent: 18,
@@ -130,6 +132,7 @@ const SETTINGS_COLUMNS = [
   "alert_registration_days",
   "alert_dot_days",
   "alert_emails_enabled",
+  "alert_gps_quiet_hours",
   "default_routing_notes",
   "default_oo_percent",
   "default_gross_margin_percent",
@@ -163,6 +166,7 @@ function normalizeSettings(row?: Partial<CompanySettings> | null): CompanySettin
     alert_driver_days: Number(merged.alert_driver_days) || 30,
     alert_registration_days: Number(merged.alert_registration_days) || 60,
     alert_dot_days: Number(merged.alert_dot_days) || 30,
+    alert_gps_quiet_hours: Number(merged.alert_gps_quiet_hours) || 2,
     default_oo_percent: Number(merged.default_oo_percent) || 75,
     default_gross_margin_percent: Number(merged.default_gross_margin_percent) || 0,
     load_number_next: Number(merged.load_number_next) || 1001,
@@ -182,6 +186,7 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
          logo_stored_name = ?, logo_original_name = ?, logo_mime_type = ?,
          currency = ?, weight_unit = ?, tax_enabled = ?, tax_kind = ?, tax_rate = ?,
          alert_driver_days = ?, alert_registration_days = ?, alert_dot_days = ?, alert_emails_enabled = ?,
+         alert_gps_quiet_hours = ?,
          default_routing_notes = ?, default_oo_percent = ?, default_gross_margin_percent = ?,
          carrier_pay_method = ?, carrier_pay_notes = ?,
          load_number_prefix = ?, load_number_next = ?, show_sample_data = ?,
@@ -214,6 +219,7 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
       next.alert_registration_days,
       next.alert_dot_days,
       next.alert_emails_enabled,
+      next.alert_gps_quiet_hours,
       next.default_routing_notes,
       next.default_oo_percent,
       next.default_gross_margin_percent,
@@ -288,6 +294,7 @@ export function updateAlertSettings(input: {
   alert_registration_days: number;
   alert_dot_days: number;
   alert_emails_enabled: boolean;
+  alert_gps_quiet_hours?: number;
 }): CompanySettings {
   for (const [label, value] of [
     ["License / medical window", input.alert_driver_days],
@@ -298,11 +305,16 @@ export function updateAlertSettings(input: {
       throw new Error(`${label} must be between 1 and 365 days.`);
     }
   }
+  const quietHours = input.alert_gps_quiet_hours ?? getCompanySettings().alert_gps_quiet_hours ?? 2;
+  if (!Number.isFinite(quietHours) || quietHours < 1 || quietHours > 48) {
+    throw new Error("GPS quiet window must be between 1 and 48 hours.");
+  }
   return patchSettings({
     alert_driver_days: input.alert_driver_days,
     alert_registration_days: input.alert_registration_days,
     alert_dot_days: input.alert_dot_days,
     alert_emails_enabled: input.alert_emails_enabled ? 1 : 0,
+    alert_gps_quiet_hours: quietHours,
   });
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
 import { applyLocationToStop, formatLocationLabel, matchLocationForStop } from "@/lib/locations";
+import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import type { LoadStop } from "@/lib/stops";
@@ -156,7 +157,7 @@ function StopGridBlock({
   const pickup = kind === "pickup";
   return (
     <>
-      <tr className={pickup ? "bg-sky-50/80" : "bg-rose-50/70"}>
+      <tr className={pickup ? "stop-row-pickup" : "stop-row-delivery"}>
         <td className="align-top font-semibold">{index}</td>
         <td className="align-top">
           <form action={updateStopAction} id={`stop-form-${stop.id}`} className="contents">
@@ -165,7 +166,7 @@ function StopGridBlock({
               name="kind"
               value={kind}
               onChange={(event) => setKind(event.target.value as "pickup" | "delivery")}
-              className={pickup ? "font-semibold text-sky-800" : "font-semibold text-rose-800"}
+              className={pickup ? "stop-kind-pickup" : "stop-kind-delivery"}
             >
               <option value="pickup">Pickup</option>
               <option value="delivery">Delivery</option>
@@ -188,6 +189,13 @@ function StopGridBlock({
               </option>
             ))}
           </select>
+          {draft.locationId
+            ? locationRuleLabels(locations.find((location) => String(location.id) === draft.locationId)).map((rule) => (
+                <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
+                  {rule}
+                </p>
+              ))
+            : null}
         </td>
         <td className="align-top min-w-36">
           <input form={`stop-form-${stop.id}`} name="street" value={draft.street} onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))} />

@@ -22,6 +22,7 @@ export type LocationInput = {
   scheduling_type: SchedulingType;
   hours: string;
   scheduling_notes: string;
+  call_before?: number;
   latitude?: number | null;
   longitude?: number | null;
 };
@@ -44,6 +45,7 @@ export function formatLocationLabel(location: Location): string {
 
 export function formatSchedulingSummary(location: Location): string {
   const parts = [labelForSchedulingType(location.scheduling_type)];
+  if (location.call_before) parts.push("Call before pickup/delivery");
   if (location.hours.trim()) parts.push(`Hours: ${location.hours.trim()}`);
   if (location.scheduling_notes.trim()) parts.push(location.scheduling_notes.trim());
   return parts.join(" · ");

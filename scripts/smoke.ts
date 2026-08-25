@@ -154,6 +154,12 @@ async function main() {
   assert.match(cssSource, /\.desk-nav-link-active/);
   assert.match(cssSource, /#0b1f3a/);
   assert.match(cssSource, /#d4a017/);
+  assert.match(cssSource, /\[data-load-list-chrome\]/);
+  assert.match(cssSource, /\.stop-row-pickup/);
+  assert.match(cssSource, /\.stop-row-delivery/);
+  assert.match(cssSource, /\.note-public/);
+  assert.match(cssSource, /\.note-private/);
+  assert.match(cssSource, /\.load-docs-actions/);
   assert.match(navSource, /desk-nav-section/);
   assert.match(navSource, /desk-nav-link-active/);
   const shellSource = fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8");
@@ -246,7 +252,14 @@ async function main() {
   assert.match(stopsSource, /data-leg-miles/);
   assert.match(stopsSource, /milesForStopGap/);
   assert.match(stopsSource, /applyLocationToStop/);
-  assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com/);
+  assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com|liftgate|inside pickup/i);
+  assert.match(stopsSource, /locationRuleLabels/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.googleapis\.com\/maps\/api\/js/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.google\.com\/maps\?/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8"), /Close period/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8"), /GPS quiet window/);
   const routingUi = fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8");
   assert.match(routingUi, /Refresh route/);
   assert.match(routingUi, /IFTA estimate/);
@@ -1400,7 +1413,8 @@ async function main() {
     reefer_mode: "continuous",
     special_instructions: "Call receiver.",
     appointment_notes: "",
-    notes: "Scale ticket in the door.",
+    public_notes: "Scale ticket in the door.",
+    notes: "INTERNAL do not print",
     driver_name: "Denise Ortega",
     driver_phone: "555-0100",
     driver_type: "company_driver",
@@ -1416,6 +1430,7 @@ async function main() {
   assert.match(dispatchSummary, /Continuous/);
   assert.match(dispatchSummary, /Your leg: Nashville, TN → Memphis, TN/);
   assert.match(dispatchSummary, /Scale ticket/);
+  assert.doesNotMatch(dispatchSummary, /INTERNAL/);
   assert.doesNotMatch(dispatchSummary, /3100|\$3/);
   const { listDispatcherUsers } = await import("../lib/settings");
   const dispatcher = listDispatcherUsers(false)[0];
@@ -4716,8 +4731,101 @@ Continuous reefer. Two load locks.
   const templates = await import("../lib/templates");
   const listedTemplates = templates.listTemplates();
   assert.ok(listedTemplates.some((row) => /Heartland/i.test(row.name)));
-  const bookedFromTemplate = templates.createLoadFromTemplate(listedTemplates[0].id);
-  assert.ok(queries.getLoad(bookedFromTemplate));
+  const bookable = listedTemplates.find((row) => row.customer_id);
+  assert.ok(bookable);
+  const bookedFromTemplate = templates.createLoadFromTemplate(bookable.id);
+  const bookedLoad = queries.getLoad(bookedFromTemplate);
+  assert.ok(bookedLoad);
+  assert.notEqual(bookedLoad.load_number, load1042.load_number);
+
+  const templateId = templates.saveTemplateFromLoad(clonedId, "Smoke Westside lane");
+  const fromTemplate = templates.listTemplates().find((row) => row.id === templateId);
+  assert.ok(fromTemplate);
+  assert.ok(fromTemplate.pick_count + fromTemplate.drop_count >= 2);
+  assert.match(fromTemplate.customer_name, /\S/);
+  const bookedLane = templates.createLoadFromTemplate(templateId);
+  const bookedLaneLoad = queries.getLoad(bookedLane);
+  assert.ok(bookedLaneLoad);
+  assert.equal(bookedLaneLoad.rate, null);
+  assert.notEqual(bookedLaneLoad.load_number, queries.getLoad(clonedId)?.load_number);
+  assert.ok(loadStops.listStops(bookedLane).length >= 2);
+  assert.equal((await import("../lib/pay-items")).listPayItems(bookedLane).length, 0);
+
+  const rules = await import("../lib/location-rules-shared");
+  assert.deepEqual(rules.locationRuleLabels({ scheduling_type: "appointment", call_before: 1 }), [
+    "Appointment required",
+    "Call before pickup/delivery",
+  ]);
+  assert.doesNotMatch(rules.locationRuleLabels({ scheduling_type: "fcfs", call_before: 0 }).join(" "), /liftgate|inside/i);
+
+  const secretLocation = queries.createLocation({
+    name: "Notes Leak Yard",
+    street: "9 Quiet St",
+    city: "Omaha",
+    state: "NE",
+    zip: "68102",
+    phone: "402-555-0100",
+    notes: "PRIVATE LOCATION NOTE",
+    role: "both",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "Public dock hours",
+    call_before: 1,
+  });
+  const notesLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 10000,
+    commodity: "Notes smoke",
+    rate: 500,
+    notes: "PRIVATE LOAD NOTE",
+    public_notes: "PUBLIC LOAD NOTE",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    shipper_location_id: secretLocation,
+    consignee_location_id: secretLocation,
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  const notesConfirm = (await import("../lib/load-confirmation")).buildConfirmationModel(queries.getLoad(notesLoadId)!);
+  assert.match(notesConfirm.dispatchNotes, /PUBLIC LOAD NOTE/);
+  assert.doesNotMatch(notesConfirm.dispatchNotes, /PRIVATE LOAD NOTE/);
+  assert.doesNotMatch(notesConfirm.shipper.extra, /PRIVATE LOCATION NOTE/);
+  assert.match(notesConfirm.shipper.extra, /Call before pickup\/delivery|Appointment required/);
+  const notesInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(notesLoadId)!);
+  assert.match(notesInvoice.publicNotes ?? "", /PUBLIC LOAD NOTE/);
+  assert.doesNotMatch(notesInvoice.publicNotes ?? "", /PRIVATE/);
+
+  const truckWithGps = queries.listTrucks().find((truck) => truck.active);
+  const driverForGps = queries.listDrivers().find((driver) => driver.status !== "off_duty");
+  if (truckWithGps && driverForGps) {
+    queries.saveTruckGps(truckWithGps.id, {
+      latitude: 41.25,
+      longitude: -95.93,
+      address: "Omaha, NE",
+      recordedAt: new Date(Date.now() - 5 * 3600_000).toISOString(),
+      source: "samsara",
+    });
+    queries.assignLoad(bookedFromTemplate, truckWithGps.id, driverForGps.id);
+    queries.updateLoadStatus(bookedFromTemplate, "in_transit");
+    const quietInbox = (await import("../lib/exceptions")).listExceptionInbox();
+    assert.ok(quietInbox.items.some((item) => item.kind === "gps_quiet"));
+  }
+
+  const driverPayRows = (await import("../lib/accounting")).listDriverPay();
+  assert.ok(Array.isArray(driverPayRows));
+  const mapShared = await import("../lib/load-map-shared");
+  assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
 
   const session = await import("../lib/dispatcher-session");
   const msTest = session.listDispatchers().find((row) => row.name === "MS Test");

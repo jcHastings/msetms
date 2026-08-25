@@ -70,3 +70,24 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
     longitude: payload.result.geometry?.location?.lng ?? null,
   };
 }
+
+/** Fail-soft geocode. Never invents a point when Google has no result. */
+export async function geocodeAddress(address: string): Promise<{ latitude: number; longitude: number } | null> {
+  const key = getGoogleMapsApiKey();
+  const trimmed = address.trim();
+  if (!key || trimmed.length < 5) return null;
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("address", trimmed);
+  url.searchParams.set("key", key);
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    status: string;
+    results?: Array<{ geometry?: { location?: { lat: number; lng: number } } }>;
+  };
+  const loc = payload.results?.[0]?.geometry?.location;
+  if (payload.status !== "OK" || loc == null || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+    return null;
+  }
+  return { latitude: loc.lat, longitude: loc.lng };
+}

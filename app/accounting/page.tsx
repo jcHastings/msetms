@@ -14,7 +14,7 @@ export default async function AccountingHomePage() {
   const bills = listBills();
   const openBills = bills.filter((bill) => bill.status === "open");
   const pay = listDriverPay();
-  const openPay = pay.filter((row) => row.settlement?.status !== "paid");
+  const openPay = pay.filter((row) => row.status !== "paid");
   const commissions = listCommissions();
   const commissionTotal = commissions.reduce((sum, row) => sum + row.amount, 0);
 

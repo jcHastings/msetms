@@ -25,6 +25,7 @@ export type TmsInvoiceModel = {
   lines: TmsInvoiceLine[];
   total: number;
   companyName: string;
+  publicNotes?: string;
 };
 
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
@@ -63,6 +64,7 @@ export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
     lines,
     total: lines.reduce((sum, line) => sum + line.amount, 0),
     companyName: getCompanyProfile().company_name,
+    publicNotes: (load.public_notes ?? "").trim(),
   };
 }
 
@@ -125,6 +127,11 @@ async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffer> {
   doc.text(`Date ${model.date}`);
   if (model.customerReference) doc.text(`PO / ref ${model.customerReference}`);
   doc.text(model.lane);
+  if (model.publicNotes?.trim()) {
+    doc.moveDown(0.4);
+    doc.font("Helvetica-Bold").text("Notes");
+    doc.font("Helvetica").text(model.publicNotes);
+  }
   doc.moveDown();
   model.lines.forEach((line) => {
     doc.text(`${line.name}  ${formatMoney(line.amount, settings.currency)}`);

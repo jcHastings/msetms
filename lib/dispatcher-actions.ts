@@ -30,7 +30,8 @@ import {
   setLoadWatched,
   updateLoadDetails,
 } from "./queries";
-import { createBill, markBillPaid, markSettlementPaid } from "./accounting";
+import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
+import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
 import { addRelay, deleteRelay, moveRelay, updateRelay } from "./relay-store";
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
@@ -433,9 +434,21 @@ export async function payBillAction(formData: FormData): Promise<void> {
 
 export async function paySettlementAction(formData: FormData): Promise<void> {
   await requireCapability(canAccessAccounting, "Driver pay is for Administrator and Accounting.");
+  const payItemId = parseOptionalInt(formData.get("pay_item_id"));
+  if (payItemId) {
+    markPayItemPaid(payItemId);
+    refresh();
+    return;
+  }
   const id = parseOptionalInt(formData.get("load_id"));
   if (!id) throw new Error("Load is missing.");
   markSettlementPaid(id);
+  refresh();
+}
+
+export async function closeDriverPayPeriodAction(formData: FormData): Promise<void> {
+  await requireCapability(canAccessAccounting, "Driver pay is for Administrator and Accounting.");
+  closeDriverPayPeriod(String(formData.get("from") ?? ""), String(formData.get("to") ?? ""));
   refresh();
 }
 

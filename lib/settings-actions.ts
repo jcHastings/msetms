@@ -131,6 +131,7 @@ export async function saveAlertsAction(
       alert_registration_days: parseOptionalInt(formData.get("alert_registration_days")) ?? 60,
       alert_dot_days: parseOptionalInt(formData.get("alert_dot_days")) ?? 30,
       alert_emails_enabled: String(formData.get("alert_emails_enabled") ?? "") === "1",
+      alert_gps_quiet_hours: parseOptionalFloat(formData.get("alert_gps_quiet_hours")) ?? 2,
     });
     refresh();
     return { ok: true };

@@ -108,7 +108,17 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
           />
         </div>
         <div className="field md:col-span-2">
-          <label htmlFor="scheduling_notes">Scheduling notes</label>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="call_before" value="1" defaultChecked={Boolean(location?.call_before)} />
+            Call before pickup/delivery
+          </label>
+          <p className="mt-1 text-xs text-slate-500">
+            Warns the dispatcher and prints on the driver confirmation. Appointment required is the Scheduling
+            dropdown. No liftgate or inside pickup/delivery.
+          </p>
+        </div>
+        <div className="field md:col-span-2 note-public">
+          <label htmlFor="scheduling_notes">Public scheduling notes</label>
           <textarea
             id="scheduling_notes"
             name="scheduling_notes"
@@ -116,10 +126,12 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
             defaultValue={location?.scheduling_notes}
             placeholder="Appointment window, dock numbers, gate instructions"
           />
+          <p className="mt-1 text-xs text-emerald-800">Prints on confirmation when this location is used.</p>
         </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="notes">Notes</label>
+        <div className="field md:col-span-2 note-private">
+          <label htmlFor="notes">Private notes</label>
           <textarea id="notes" name="notes" rows={3} defaultValue={location?.notes} />
+          <p className="mt-1 text-xs text-slate-600">Internal only. Never printed on confirmation or invoice.</p>
         </div>
       </div>
       <div className="flex justify-end">

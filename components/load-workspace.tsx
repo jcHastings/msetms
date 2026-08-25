@@ -214,6 +214,9 @@ export function LoadWorkspace({
           </button>
         </ActionMenu>
         <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+          <button type="button" className="menu-item" onClick={() => setTab("log", "load-map")}>
+            Load map
+          </button>
           <button type="button" className="menu-item" onClick={() => setTab("log")}>
             Tracking and status
           </button>

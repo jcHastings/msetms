@@ -30,7 +30,7 @@ export function BoardToolbar({ status, date }: Props) {
 
   return (
     <div className="card mb-4 px-4 py-3" data-load-list-chrome="">
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
+      <div className="load-tabs flex flex-wrap gap-1 px-2 pt-2">
         {LOAD_LIST_TABS.map((tab) => (
           <Link
             key={tab.value}

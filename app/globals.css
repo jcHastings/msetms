@@ -227,27 +227,108 @@ button {
   border-radius: 0.75rem 0.75rem 0 0;
 }
 
-button.load-tab {
+.load-tabs .load-tab,
+[data-load-list-chrome] .load-tab {
   color: #d5deea;
   background: transparent;
   border: 1px solid transparent;
 }
 
-button.load-tab:hover {
+.load-tabs .load-tab:hover,
+[data-load-list-chrome] .load-tab:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
 }
 
-button.load-tab-active,
-button.load-tab.load-tab-active {
+.load-tabs .load-tab-active,
+.load-tabs .load-tab.load-tab-active,
+[data-load-list-chrome] .load-tab-active,
+[data-load-list-chrome] .load-tab.load-tab-active {
   background: #d4a017;
   color: #0b1f3a;
 }
 
-button.load-tab-active:hover,
-button.load-tab.load-tab-active:hover {
+.load-tabs .load-tab-active:hover,
+.load-tabs .load-tab.load-tab-active:hover,
+[data-load-list-chrome] .load-tab-active:hover,
+[data-load-list-chrome] .load-tab.load-tab-active:hover {
   background: #b8860b;
   color: #0b1f3a;
+}
+
+[data-load-list-chrome] {
+  background: #eef3f8;
+  border-color: #0b1f3a;
+}
+
+[data-load-list-chrome] .load-tabs {
+  border-radius: 0.6rem 0.6rem 0 0;
+}
+
+[data-load-tab="basics"] {
+  border-left: 4px solid #64748b;
+}
+
+[data-load-tab="customer"] {
+  border-left: 4px solid #0284c7;
+}
+
+[data-load-tab="assets"] {
+  border-left: 4px solid #7c3aed;
+}
+
+[data-load-tab="stops"] {
+  border-left: 4px solid #0891b2;
+}
+
+[data-load-tab="financials"] {
+  border-left: 4px solid #059669;
+}
+
+[data-load-tab="docs"] {
+  border-left: 4px solid #b45309;
+}
+
+[data-load-tab="log"] {
+  border-left: 4px solid #0b1f3a;
+}
+
+.stop-row-pickup {
+  background: rgb(240 249 255 / 0.85);
+}
+
+.stop-row-delivery {
+  background: rgb(255 241 242 / 0.8);
+}
+
+.stop-kind-pickup {
+  font-weight: 600;
+  color: #075985;
+}
+
+.stop-kind-delivery {
+  font-weight: 600;
+  color: #9f1239;
+}
+
+.note-public {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+}
+
+.note-private {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+}
+
+.load-docs-actions {
+  background: #e4e6d4;
+  border: 1px solid #b7c08a;
+  border-radius: 0.75rem;
 }
 
 .load-tab-back {

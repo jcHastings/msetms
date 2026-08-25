@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { getLoad, listDrivers, listLoads } from "./queries";
+import { listPayItems, markPayItemPaid, type LoadPayItem } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
 import type { LoadView } from "./types";
 
@@ -60,23 +61,140 @@ export function markBillPaid(id: number): void {
   getDb().prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(id);
 }
 
-export function listDriverPay(): Array<{
+export type DriverPayLine = {
+  key: string;
   load: LoadView;
   driverName: string;
+  description: string;
   amount: number;
+  status: "open" | "paid";
   settlement: Settlement | null;
-}> {
+  payItem: LoadPayItem | null;
+};
+
+export type DriverPayGroup = {
+  driverName: string;
+  lines: DriverPayLine[];
+  openTotal: number;
+  paidTotal: number;
+};
+
+function inPayPeriod(iso: string, from: string, to: string): boolean {
+  if (!from && !to) return true;
+  const day = (iso || "").slice(0, 10);
+  if (!day) return !from && !to;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+
+export function defaultPayPeriod(now = new Date()): { from: string; to: string } {
+  const day = new Date(now);
+  const weekday = day.getDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  const start = new Date(day);
+  start.setDate(day.getDate() + mondayOffset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const iso = (value: Date) => value.toISOString().slice(0, 10);
+  return { from: iso(start), to: iso(end) };
+}
+
+export function listDriverPay(from = "", to = ""): DriverPayLine[] {
   const settlements = getDb().prepare("SELECT * FROM settlements").all() as Settlement[];
   const byLoad = new Map(settlements.map((row) => [row.load_id, row]));
-  return listLoads({ status: "all" })
-    .filter((load) => load.driver_type === "owner_operator" && (load.status === "delivered" || load.status === "completed"))
-    .map((load) => ({
-      load,
-      driverName: load.driver_name ?? "—",
-      amount: load.oo_pay ?? computeOwnerOperatorPay(load.rate, load.oo_percent) ?? 0,
-      settlement: byLoad.get(load.id) ?? null,
-    }));
+  const lines: DriverPayLine[] = [];
+
+  for (const load of listLoads({ status: "all" })) {
+    if (load.status !== "delivered" && load.status !== "completed") continue;
+    const periodDate = load.delivery_end || load.delivery_start || load.updated_at;
+    if (!inPayPeriod(periodDate, from, to)) continue;
+
+    if (load.driver_type === "owner_operator") {
+      const amount = load.oo_pay ?? computeOwnerOperatorPay(load.rate, load.oo_percent) ?? 0;
+      const settlement = byLoad.get(load.id) ?? null;
+      lines.push({
+        key: `oo-${load.id}`,
+        load,
+        driverName: load.driver_name ?? "—",
+        description: "Owner-operator settlement",
+        amount,
+        status: settlement?.status === "paid" ? "paid" : "open",
+        settlement,
+        payItem: null,
+      });
+    }
+
+    for (const item of listPayItems(load.id).filter((row) => row.bill_to === "driver")) {
+      lines.push({
+        key: `item-${item.id}`,
+        load,
+        driverName: item.payee || load.driver_name || "—",
+        description: item.category.replaceAll("_", " "),
+        amount: item.total ?? 0,
+        status: item.paid_at ? "paid" : "open",
+        settlement: null,
+        payItem: item,
+      });
+    }
+  }
+
+  return lines;
 }
+
+export function groupDriverPay(lines: DriverPayLine[]): DriverPayGroup[] {
+  const groups = new Map<string, DriverPayGroup>();
+  for (const line of lines) {
+    const current = groups.get(line.driverName) ?? {
+      driverName: line.driverName,
+      lines: [],
+      openTotal: 0,
+      paidTotal: 0,
+    };
+    current.lines.push(line);
+    if (line.status === "paid") current.paidTotal += line.amount;
+    else current.openTotal += line.amount;
+    groups.set(line.driverName, current);
+  }
+  return [...groups.values()].sort((a, b) => a.driverName.localeCompare(b.driverName));
+}
+
+export function closeDriverPayPeriod(from: string, to: string): number {
+  let count = 0;
+  for (const line of listDriverPay(from, to)) {
+    if (line.status === "paid") continue;
+    if (line.payItem) {
+      markPayItemPaid(line.payItem.id);
+      count += 1;
+    } else {
+      markSettlementPaid(line.load.id);
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function renderDriverPayCsv(lines: DriverPayLine[]): string {
+  const header = ["Driver", "Load #", "Description", "Amount", "Status", "Delivery", "Customer"];
+  const rows = lines.map((line) =>
+    [
+      line.driverName,
+      line.load.load_number,
+      line.description,
+      line.amount.toFixed(2),
+      line.status,
+      (line.load.delivery_end || line.load.delivery_start || "").slice(0, 10),
+      line.load.customer_name,
+    ]
+      .map((value) => {
+        const raw = String(value ?? "");
+        return /[",\n]/.test(raw) ? `"${raw.replaceAll('"', '""')}"` : raw;
+      })
+      .join(","),
+  );
+  return [header.join(","), ...rows].join("\n");
+}
+
 
 export function markSettlementPaid(loadId: number): void {
   const load = getLoad(loadId);

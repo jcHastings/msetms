@@ -16,6 +16,7 @@ export type LoadSummaryInput = {
   special_instructions: string;
   appointment_notes: string;
   notes?: string | null;
+  public_notes?: string | null;
   driver_name: string | null;
   driver_phone: string | null;
   driver_type: string | null;
@@ -52,7 +53,7 @@ export function formatLoadSummary(load: LoadSummaryInput): string {
   if (load.your_leg?.trim()) lines.push(`Your leg: ${load.your_leg.trim()}`);
   if (load.appointment_notes) lines.push(`Appointment: ${load.appointment_notes}`);
   if (load.special_instructions) lines.push(`Special instructions: ${load.special_instructions}`);
-  if (load.notes?.trim()) lines.push(`Notes: ${load.notes.trim()}`);
+  if (load.public_notes?.trim()) lines.push(`Notes: ${load.public_notes.trim()}`);
   if (load.driver_type === "owner_operator" && (load.oo_pay != null || load.rate != null)) {
     lines.push(`Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`);
   }

@@ -13,6 +13,7 @@ export type LoadPayItem = {
   total: number | null;
   notes: string;
   created_at: string;
+  paid_at?: string;
 };
 
 export function listPayItems(loadId: number, side?: PayItemSide): LoadPayItem[] {
@@ -67,6 +68,15 @@ export function addPayItem(
     );
   syncCustomerRateFromPayItems(loadId);
   return Number(result.lastInsertRowid);
+}
+
+export function markPayItemPaid(id: number): void {
+  const row = getDb().prepare("SELECT id, bill_to FROM load_pay_items WHERE id = ?").get(id) as
+    | { id: number; bill_to: string }
+    | undefined;
+  if (!row) throw new Error("Pay item not found.");
+  if (row.bill_to !== "driver") throw new Error("Only driver / OO pay items can be marked paid here.");
+  getDb().prepare("UPDATE load_pay_items SET paid_at = ? WHERE id = ?").run(new Date().toISOString(), id);
 }
 
 export function deletePayItem(id: number): void {

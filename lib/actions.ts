@@ -1005,6 +1005,7 @@ function parseLocationInput(formData: FormData) {
     scheduling_type: parseSchedulingType(formData.get("scheduling_type")),
     hours: String(formData.get("hours") ?? "").trim(),
     scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
+    call_before: String(formData.get("call_before") ?? "") === "1" ? 1 : 0,
     latitude: parseOptionalFloat(formData.get("latitude")),
     longitude: parseOptionalFloat(formData.get("longitude")),
   };

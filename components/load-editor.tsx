@@ -4,7 +4,7 @@ import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/flee
 import { IftaPanel } from "@/components/ifta-panel";
 import { LoadExtraDetails } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
-import { LoadLogSection } from "@/components/load-log-section";
+import { LoadTrackingPanel } from "@/components/load-tracking-panel";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
 import { LoadPayItems } from "@/components/load-pay-items";
@@ -252,11 +252,18 @@ export async function LoadEditor({
             />
           ) : null}
           <LoadExtraDetails load={load} claims={claims} />
-          <LoadLogSection loadId={load.id} />
+          <LoadTrackingPanel loadId={load.id} />
           <LoadAuditSection loadId={load.id} />
         </LoadTabPanel>
 
         <LoadTabPanel when="docs">
+          <div data-load-tab="docs" className="space-y-4">
+          <div className="load-docs-actions mb-2 flex flex-wrap items-center gap-2 px-3 py-2">
+            <span className="load-actions-label text-[10px] font-semibold uppercase tracking-[0.16em]">
+              Document actions
+            </span>
+            <span className="text-sm text-slate-700">Upload, checklist, and generated PDFs for this load.</span>
+          </div>
           <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
           <RateConApply
             load={load}
@@ -294,6 +301,7 @@ export async function LoadEditor({
           ) : null}
           <MakeBolPanel loadId={load.id} attachments={attachments} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
+          </div>
         </LoadTabPanel>
       </LoadWorkspace>
     </div>

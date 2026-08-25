@@ -1,6 +1,6 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
-import { complianceWindows } from "./settings";
+import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
@@ -8,7 +8,7 @@ import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, t
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
 
-export const EXCEPTION_KINDS = ["reefer", "late", "missing_pod", "compliance", "unassigned"] as const;
+export const EXCEPTION_KINDS = ["reefer", "late", "gps_quiet", "missing_pod", "compliance", "unassigned"] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export type InboxException = {
@@ -41,9 +41,10 @@ const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
 const KIND_RANK: Record<ExceptionKind, number> = {
   reefer: 0,
   late: 1,
-  missing_pod: 2,
-  compliance: 3,
-  unassigned: 4,
+  gps_quiet: 2,
+  missing_pod: 3,
+  compliance: 4,
+  unassigned: 5,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -243,6 +244,29 @@ function complianceExceptions(load: LoadView): InboxException[] {
   ];
 }
 
+function gpsQuietExceptions(load: LoadView, now: Date, quietHours: number): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  if (!load.truck_id) return [];
+  const truck = getTruck(load.truck_id);
+  const recordedAt = truck?.gps_recorded_at?.trim() ?? "";
+  if (!recordedAt || !truck?.gps_latitude || !truck?.gps_longitude) return [];
+  const ping = new Date(recordedAt);
+  if (Number.isNaN(ping.getTime())) return [];
+  const silentHours = (now.getTime() - ping.getTime()) / 3_600_000;
+  if (silentHours < quietHours) return [];
+  const hours = Math.round(silentHours * 10) / 10;
+  return [
+    withLoad(
+      load,
+      "gps_quiet",
+      hours >= quietHours * 2 ? "HIGH" : "MEDIUM",
+      "GPS gone quiet",
+      `Last Samsara ping ${formatDateTime(recordedAt)} (${hours}h ago). Window ${quietHours}h.`,
+      truck.gps_source !== "samsara",
+    ),
+  ];
+}
+
 function unassignedExceptions(load: LoadView, now: Date): InboxException[] {
   if (load.status !== "available") return [];
   const pickupStart = new Date(load.pickup_start).getTime();
@@ -280,12 +304,14 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const delivered = listLoads({ status: "all" }).filter((load) => isBillableStatus(load.status));
   const pods = loadIdsWithPod();
   const readings = latestReadingByLoad();
+  const quietHours = getCompanySettings().alert_gps_quiet_hours || 2;
   const items: InboxException[] = [];
 
   for (const load of active) {
     const reading = readings.get(load.id) ?? null;
     items.push(...reeferExceptions(load, reading));
     items.push(...lateExceptions(load, now));
+    items.push(...gpsQuietExceptions(load, now, quietHours));
     items.push(...complianceExceptions(load));
     items.push(...unassignedExceptions(load, now));
   }
@@ -325,6 +351,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Reefer";
     case "late":
       return "Late";
+    case "gps_quiet":
+      return "GPS quiet";
     case "missing_pod":
       return "POD";
     case "compliance":
