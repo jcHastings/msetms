@@ -132,28 +132,14 @@ function StopGridBlock({
       setDraft((current) => ({ ...current, locationId }));
       return;
     }
-    setDraft((current) => {
-      const filled = applyLocationToStop(
-        {
-          name: current.name,
-          street: current.street,
-          city: current.city,
-          state: current.state,
-          zip: current.zip,
-          phone: current.phone,
-          location_id: Number(locationId),
-        },
-        location,
-      );
-      return {
-        locationId,
-        name: filled.name,
-        street: filled.street ?? "",
-        city: filled.city ?? "",
-        state: filled.state ?? "",
-        zip: filled.zip ?? "",
-        phone: filled.phone ?? "",
-      };
+    setDraft({
+      locationId,
+      name: location.name,
+      street: location.street ?? "",
+      city: location.city ?? "",
+      state: location.state ?? "",
+      zip: location.zip ?? "",
+      phone: location.phone ?? "",
     });
   }
 
