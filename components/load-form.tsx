@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
 import { LoadBasicsScreen, type LoadFormDefaults } from "@/components/load-basics-screen";
 import { LoadCarrierScreen } from "@/components/load-carrier-screen";
@@ -60,6 +61,7 @@ export function LoadForm({
   screen,
   includeLane = false,
 }: Props) {
+  const router = useRouter();
   const edit = useLoadEdit();
   const workspace = standalone ? null : edit;
   const resolvedScreen = resolveScreen(screen, workspace?.tab, standalone);
@@ -78,14 +80,18 @@ export function LoadForm({
   }, [workspace?.setSubmitState, canSubmit, pending]);
 
   useEffect(() => {
-    if (state && "ok" in state && state.ok) workspace?.clearDirty();
-  }, [workspace?.clearDirty, state]);
+    if (state && "ok" in state && state.ok) {
+      workspace?.clearDirty();
+      router.refresh();
+    }
+  }, [workspace?.clearDirty, state, router]);
 
   return (
     <form id={formId} action={formAction} className={workspace ? "space-y-6" : "card space-y-6 p-6"}>
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
       <input type="hidden" name="return_to" value={returnTo} />
+      {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
 
       {resolvedScreen === "basics" || resolvedScreen === "all" ? (
         <LoadBasicsScreen

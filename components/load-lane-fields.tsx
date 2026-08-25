@@ -74,7 +74,7 @@ export function LoadLaneFields({
           locations={locations}
           defaultValue={String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "")}
           emptyLabel="No saved location"
-          placeholder="Type a name or address"
+          placeholder="Type any name or address"
         />
       </div>
       <div className="field">
@@ -85,7 +85,7 @@ export function LoadLaneFields({
           locations={locations}
           defaultValue={String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "")}
           emptyLabel="No saved location"
-          placeholder="Type a name or address"
+          placeholder="Type any name or address"
         />
       </div>
       <div className="field md:col-span-2">

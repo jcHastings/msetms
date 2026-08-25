@@ -19,10 +19,10 @@ export function LocationPicker({
   defaultValue = "",
   onChange,
   emptyLabel = "One-off address",
-  placeholder = "Type a name or address",
+  placeholder = "Type any name or address",
 }: {
   id?: string;
-  name: string;
+  name?: string;
   form?: string;
   locations: LocationPickerRow[];
   value?: string;
@@ -32,7 +32,7 @@ export function LocationPicker({
   placeholder?: string;
 }) {
   const listId = useId().replace(/:/g, "") + "-location-list";
-  const inputId = id ?? `${name}-search`;
+  const inputId = id ?? (name ? `${name}-search` : listId.replace(/-location-list$/, "-search"));
   const [uncontrolled, setUncontrolled] = useState(defaultValue);
   const selectedId = value ?? uncontrolled;
   const selected = locations.find((location) => String(location.id) === selectedId) ?? null;
@@ -126,8 +126,8 @@ export function LocationPicker({
   const display = open ? query : selected ? selected.name : "";
 
   return (
-    <div ref={rootRef} className="relative min-w-56" data-location-picker="">
-      <input type="hidden" name={name} form={form} value={selectedId} />
+    <div ref={rootRef} className="relative min-w-56" data-location-picker="" data-ignore-dirty="">
+      {name ? <input type="hidden" name={name} form={form} value={selectedId} /> : null}
       <input
         ref={inputRef}
         id={inputId}
@@ -147,11 +147,13 @@ export function LocationPicker({
           updateMenuRect();
         }}
         onChange={(event) => {
+          event.stopPropagation();
           setQuery(event.target.value);
           setOpen(true);
           setHighlight(0);
           updateMenuRect();
         }}
+        onInput={(event) => event.stopPropagation()}
         onKeyDown={onKeyDown}
       />
       {selected && !open ? (
@@ -205,7 +207,7 @@ export function LocationPicker({
                   )
                 ) : (
                   <li className="px-3 py-2 text-xs text-slate-500">
-                    Type a name or address to filter {locations.length.toLocaleString()} saved locations.
+                    Type any name or address to filter {locations.length.toLocaleString()} saved locations.
                   </li>
                 )}
               </ul>

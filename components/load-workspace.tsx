@@ -385,7 +385,17 @@ export function LoadWorkspace({
         </div>
       ) : null}
 
-      <div onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
+      <div
+        onInput={(event) => {
+          if ((event.target as HTMLElement | null)?.closest?.("[data-ignore-dirty]")) return;
+          setDirty(true);
+        }}
+        onChange={(event) => {
+          if ((event.target as HTMLElement | null)?.closest?.("[data-ignore-dirty]")) return;
+          if ((event.target as HTMLElement | null)?.closest?.("[data-first-assign]")) return;
+          setDirty(true);
+        }}
+      >
         {children}
       </div>
     </LoadEditProvider>

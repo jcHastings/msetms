@@ -194,6 +194,7 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Customer Portal/);
   assert.match(workspaceSource, /form=\{formId\}/);
   assert.match(workspaceSource, /beforeunload/);
+  assert.match(workspaceSource, /data-ignore-dirty/);
   assert.match(workspaceSource, /onMouseEnter/);
   assert.match(workspaceSource, /onMouseLeave/);
   assert.match(workspaceSource, /openMenu === label/);
@@ -208,7 +209,10 @@ async function main() {
   assert.match(loadFormSource, /LoadBasicsScreen/);
   assert.match(loadFormSource, /LoadCustomerScreen/);
   assert.match(loadFormSource, /LoadCarrierScreen/);
-  assert.doesNotMatch(loadFormSource, /name="truck_id"|name="origin"|name="destination"|name="pickup_start"|hidden leftover/);
+  assert.match(loadFormSource, /stay_on_load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /stay_on_load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /redirect\(`\/loads\/\$\{id\}`\)/);
+  assert.doesNotMatch(loadFormSource, /name="origin"|name="destination"|name="pickup_start"|hidden leftover/);
   assert.match(basicsChunk, /data-load-tab="basics"/);
   assert.match(basicsChunk, /Reefer setpoint/);
   assert.match(basicsChunk, /Reefer mode/);
@@ -226,7 +230,11 @@ async function main() {
   assert.match(assetsChunk, /Company driver/);
   assert.match(assetsChunk, /Owner-operator/);
   assert.match(assetsChunk, /name="driver_id"/);
-  assert.doesNotMatch(assetsChunk, /name="truck_id"|Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
+  assert.match(assetsChunk, /name="truck_id"/);
+  assert.match(assetsChunk, /name="trailer_id"/);
+  assert.match(assetsChunk, /isFirstAssign/);
+  assert.match(assetsChunk, /stay_on_load/);
+  assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible\) return null/);
   const paySource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
@@ -264,6 +272,9 @@ async function main() {
   assert.doesNotMatch(stopsSource, /stopoff|bobtail|container|maps\.google\.com|liftgate|inside pickup/i);
   assert.match(stopsSource, /locationRuleLabels/);
   assert.match(stopsSource, /LocationPicker/);
+  assert.match(stopsSource, /data-stop-window/);
+  assert.match(stopsSource, /formatStopWindow/);
+  assert.match(stopsSource, /isFirstAssign/);
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
   assert.match(laneSource, /LocationPicker/);
@@ -272,7 +283,15 @@ async function main() {
   assert.match(pickerSource, /data-location-picker/);
   assert.match(pickerSource, /filterLocationsForPicker/);
   assert.match(pickerSource, /formatLocationAddress/);
+  assert.match(pickerSource, /Type any name or address/);
   assert.doesNotMatch(pickerSource, /locations\.map\(\(location\) =>/);
+  assert.doesNotMatch(pickerSource, /Tyson|Nebraska Cold|Heartland|Westside/);
+  const locLibSource = fs.readFileSync(path.join(process.cwd(), "lib/locations.ts"), "utf8");
+  assert.doesNotMatch(locLibSource, /Tyson|Nebraska Cold|Heartland|Westside/);
+  const rateConReviewSource = fs.readFileSync(path.join(process.cwd(), "components/rate-con-location-review.tsx"), "utf8");
+  assert.match(rateConReviewSource, /LocationPicker/);
+  assert.match(rateConReviewSource, /Type any name or address/);
+  assert.doesNotMatch(rateConReviewSource, /Change the dropdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Not a fleet map/);
   const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
@@ -1069,6 +1088,11 @@ async function main() {
   assert.equal(mergedBasics.customer_id, persistAfter.customer_id, "basics save keeps customer");
   assert.equal(mergedBasics.driver_id, persistAfter.driver_id, "basics save keeps assigned driver");
   assert.equal(mergedBasics.origin, persistAfter.origin, "basics save keeps origin");
+  const firstDriverOnly = new FormData();
+  firstDriverOnly.set("driver_id", String(jamesId));
+  const firstDriverMerged = parseLoadInput(firstDriverOnly, true, { ...persistAfter, driver_id: null });
+  assert.equal(firstDriverMerged.driver_id, jamesId, "first driver pick parses onto the existing load");
+  assert.equal(firstDriverMerged.customer_id, persistAfter.customer_id);
   assert.equal(mergedBasics.commodity, "Berries");
   assert.equal(mergedBasics.status, "dispatched");
   const customerOnly = new FormData();
@@ -4809,21 +4833,21 @@ Continuous reefer. Two load locks.
   ]);
   assert.doesNotMatch(rules.locationRuleLabels({ scheduling_type: "fcfs", call_before: 0 }).join(" "), /liftgate|inside/i);
 
-  const tysonDakota = {
+  const nebraskaCold = {
     id: 1,
-    name: "Tyson Fresh Meats",
-    street: "800 39th Ave",
-    city: "Dakota City",
-    state: "NE",
-    zip: "68731",
-  };
-  const tysonHastings = {
-    id: 2,
-    name: "Tyson Foods",
-    street: "1200 W 2nd St",
+    name: "Nebraska Cold Storage",
+    street: "4100 Industrial Rd",
     city: "Hastings",
     state: "NE",
     zip: "68901",
+  };
+  const heartland = {
+    id: 2,
+    name: "Heartland Logistics",
+    street: "3900 Westside Ave",
+    city: "Chicago",
+    state: "IL",
+    zip: "60632",
   };
   const westside = {
     id: 3,
@@ -4833,26 +4857,33 @@ Continuous reefer. Two load locks.
     state: "NE",
     zip: "68102",
   };
+  const tysonDakota = {
+    id: 4,
+    name: "Tyson Fresh Meats",
+    street: "800 39th Ave",
+    city: "Dakota City",
+    state: "NE",
+    zip: "68731",
+  };
+  const book = [nebraskaCold, heartland, westside, tysonDakota];
   const locSearch = await import("../lib/locations");
-  assert.deepEqual(
-    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "tyso").map((row) => row.id),
-    [1, 2],
-  );
-  assert.deepEqual(
-    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "t y s o").map((row) => row.id),
-    [1, 2],
-  );
-  assert.deepEqual(
-    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "Hastings").map((row) => row.id),
-    [2],
-  );
-  assert.deepEqual(
-    locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], "39th").map((row) => row.id),
-    [1],
-  );
-  assert.deepEqual(locSearch.filterLocationsForPicker([tysonDakota, tysonHastings, westside], ""), []);
-  assert.match(locSearch.formatLocationAddress(tysonHastings), /1200 W 2nd St/);
-  assert.match(locSearch.formatLocationAddress(tysonHastings), /Hastings, NE 68901/);
+  const firstAssign = await import("../lib/first-assign");
+  assert.equal(firstAssign.isFirstAssign(null, "12"), true);
+  assert.equal(firstAssign.isFirstAssign("", "12"), true);
+  assert.equal(firstAssign.isFirstAssign(12, "15"), false);
+  assert.equal(firstAssign.isFirstAssign(12, ""), false);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "cold").map((row) => row.id), [1]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "heart").map((row) => row.id), [2]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "westside").map((row) => row.id), [2, 3]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "Hastings").map((row) => row.id), [1]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "39th").map((row) => row.id), [4]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "tyso").map((row) => row.id), [4]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "t y s o").map((row) => row.id), [4]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, "Nebraska"), [nebraskaCold]);
+  assert.deepEqual(locSearch.filterLocationsForPicker(book, ""), []);
+  assert.match(locSearch.formatLocationAddress(nebraskaCold), /4100 Industrial Rd/);
+  assert.match(locSearch.formatLocationAddress(nebraskaCold), /Hastings, NE 68901/);
+  assert.match(locSearch.formatLocationAddress(heartland), /3900 Westside Ave/);
 
   const secretLocation = queries.createLocation({
     name: "Notes Leak Yard",
@@ -6117,7 +6148,11 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /CSA|hazmat|passport/);
 
   const payItemsMod = await import("../lib/pay-items");
-  const { createTmsInvoice, tmsCustomerInvoiceLines, renderInvoicesCsv } = await import("../lib/invoice");
+  const { createTmsInvoice, tmsCustomerInvoiceLines, renderInvoicesCsv, paperworkCompanyName, buildTmsInvoice } =
+    await import("../lib/invoice");
+  assert.equal(paperworkCompanyName("M&S Loads"), "M&S Loads LLC");
+  assert.equal(paperworkCompanyName("M&S Loads LLC"), "M&S Loads LLC");
+  assert.equal(paperworkCompanyName("Other Carrier"), "Other Carrier");
   const invoiceLoadId = queries.findLoadIdByNumber("1005911");
   assert.ok(invoiceLoadId);
   payItemsMod.addPayItem(invoiceLoadId, {
@@ -6155,15 +6190,23 @@ Continuous reefer. Two load locks.
   assert.equal(invoiceLines[0]?.amount, 1500);
   assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
   assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
+  const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
+  assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");
+  assert.match(tmsInvoiceModel.companyLegalName, /LLC/);
+  assert.ok(tmsInvoiceModel.stops.length >= 1);
+  assert.ok(tmsInvoiceModel.lines.every((line) => line.qty != null || line.rate != null || line.amount));
+  assert.doesNotMatch(tmsInvoiceModel.lines.map((line) => line.name).join(" "), /owner-operator|relay|lumper/i);
   const made = await createTmsInvoice(invoiceLoadId);
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
+  assert.match(made.buffer.toString("latin1"), /INVOICE|Invoice/);
   assert.equal(queries.getLoad(invoiceLoadId)?.tms_invoice_number, "INV-1005911");
   const invoiceFiles = (await import("../lib/files")).listAttachments(invoiceLoadId).filter((file) => file.kind === "invoice");
   assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));
   const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
   assert.match(invoicePanel, /Create invoice/);
+  assert.match(invoicePanel, /companyLegalName/);
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(invoicePanel, /method="POST"/);
   assert.match(invoicePanel, /target="_blank"/);
@@ -6188,6 +6231,17 @@ Continuous reefer. Two load locks.
       lines: invoiceLines,
       total: 1500,
       companyName: "M&S Loads",
+      companyLegalName: "M&S Loads LLC",
+      companyAddress: "",
+      companyPhone: "",
+      companyEmail: "",
+      weight: "",
+      miles: "",
+      customerStreet: "",
+      customerCityStateZip: "",
+      customerPhone: "",
+      customerContact: "",
+      stops: [],
     },
   ]), /INV-1005911/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8"), /Create invoice/);

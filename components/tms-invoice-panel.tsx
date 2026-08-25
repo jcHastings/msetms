@@ -88,6 +88,10 @@ export function TmsInvoicePanel({
             <dd className="font-semibold">{invoice.customerName}</dd>
           </div>
           <div>
+            <dt className="text-slate-500">From</dt>
+            <dd className="font-semibold">{invoice.companyLegalName}</dd>
+          </div>
+          <div>
             <dt className="text-slate-500">Load</dt>
             <dd className="font-semibold">{invoice.loadNumber}</dd>
           </div>

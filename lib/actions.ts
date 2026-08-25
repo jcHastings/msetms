@@ -420,7 +420,7 @@ export async function createLoadAction(
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
       refresh();
-      redirect(safeReturnTo(formData.get("return_to"), "/board"));
+      redirect(`/loads/${id}`);
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);
@@ -466,7 +466,10 @@ export async function updateLoadAction(
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
       refresh();
-      redirect(safeReturnTo(formData.get("return_to"), "/board"));
+      if (String(formData.get("stay_on_load") ?? "") === "1") {
+        return { ok: true, id };
+      }
+      redirect(safeReturnTo(formData.get("return_to"), `/loads/${id}`));
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);

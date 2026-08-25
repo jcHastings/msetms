@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { LocationPicker } from "@/components/location-picker";
 import { saveRateConLocationAction } from "@/lib/actions";
-import { US_STATES } from "@/lib/locations";
+import { formatLocationAddress, US_STATES } from "@/lib/locations";
 import {
   formatParsedStop,
   parsedStopHasDetails,
@@ -25,6 +26,11 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
     else setConsigneeId(String(location.id));
   };
 
+  const pickExisting = (locationId: string, role: "shipper" | "receiver") => {
+    if (role === "shipper") setShipperId(locationId);
+    else setConsigneeId(locationId);
+  };
+
   return {
     book,
     shipperId,
@@ -42,6 +48,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
         shipperId={shipperId}
         consigneeId={consigneeId}
         onSaved={remember}
+        onPick={pickExisting}
       />
     ),
   };
@@ -53,12 +60,14 @@ function RateConLocationReview({
   shipperId,
   consigneeId,
   onSaved,
+  onPick,
 }: {
   parsed: ParsedRateCon;
   book: Location[];
   shipperId: string;
   consigneeId: string;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
+  onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
   const showShipper = parsedStopHasDetails(parsed.shipper);
   const showConsignee = parsedStopHasDetails(parsed.consignee);
@@ -71,8 +80,11 @@ function RateConLocationReview({
           title="Pickup location"
           role="shipper"
           stop={parsed.shipper}
+          book={book}
+          selectedId={shipperId}
           matched={book.find((location) => String(location.id) === shipperId) ?? null}
           onSaved={onSaved}
+          onPick={onPick}
         />
       ) : null}
       {showConsignee ? (
@@ -80,8 +92,11 @@ function RateConLocationReview({
           title="Delivery location"
           role="receiver"
           stop={parsed.consignee}
+          book={book}
+          selectedId={consigneeId}
           matched={book.find((location) => String(location.id) === consigneeId) ?? null}
           onSaved={onSaved}
+          onPick={onPick}
         />
       ) : null}
     </div>
@@ -92,38 +107,70 @@ function StopReviewCard({
   title,
   role,
   stop,
+  book,
+  selectedId,
   matched,
   onSaved,
+  onPick,
 }: {
   title: string;
   role: "shipper" | "receiver";
   stop: ParsedStop;
+  book: Location[];
+  selectedId: string;
   matched: Location | null;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
+  onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
-  if (matched) {
-    return (
-      <section className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-        <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">{title}</div>
-        <p className="mt-1 font-medium">Matched existing location — {matched.name}</p>
-        <p className="mt-1 text-emerald-900">{formatParsedStop(stop)}</p>
-        <p className="mt-2 text-xs text-emerald-800">Selected on the load. Change the dropdown if this is the wrong row.</p>
-      </section>
-    );
-  }
-
   return (
-    <SaveNewLocationCard title={title} role={role} stop={stop} onSaved={onSaved} />
+    <section
+      className={`rounded-lg border px-4 py-3 text-sm ${
+        matched
+          ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+          : "border-amber-200 bg-amber-50 text-amber-950"
+      }`}
+    >
+      <div
+        className={`text-xs font-semibold uppercase tracking-wide ${
+          matched ? "text-emerald-800" : "text-amber-800"
+        }`}
+      >
+        {title}
+      </div>
+      {matched ? (
+        <>
+          <p className="mt-1 font-medium">Matched existing location — {matched.name}</p>
+          <p className="mt-1">{formatLocationAddress(matched) || formatParsedStop(stop)}</p>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 font-medium">No matching Locations row</p>
+          <p className="mt-1">{formatParsedStop(stop)}</p>
+        </>
+      )}
+      <p className={`mt-2 text-xs ${matched ? "text-emerald-800" : "text-amber-800"}`}>
+        Type any name or address to pick a saved location. The same search covers the whole book — it is not limited to
+        one customer or facility.
+      </p>
+      <div className="mt-2">
+        <LocationPicker
+          locations={book}
+          value={selectedId}
+          onChange={(locationId) => onPick(locationId, role)}
+          emptyLabel="No saved location"
+          placeholder="Type any name or address"
+        />
+      </div>
+      {!matched ? <SaveNewLocationCard role={role} stop={stop} onSaved={onSaved} /> : null}
+    </section>
   );
 }
 
 function SaveNewLocationCard({
-  title,
   role,
   stop,
   onSaved,
 }: {
-  title: string;
   role: "shipper" | "receiver";
   stop: ParsedStop;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
@@ -137,13 +184,16 @@ function SaveNewLocationCard({
   }, [savedId]);
 
   return (
-    <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-      <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">{title}</div>
-      <p className="mt-1 font-medium">Save as new location?</p>
+    <div className="mt-3 border-t border-amber-200 pt-3">
+      <p className="font-medium">Save as new location?</p>
       <p className="mt-1 text-amber-900">
-        No matching Locations row. Confirm to add this to the book — we will not create it automatically.
+        Confirm to add this to the book — we will not create it automatically from the typed search.
       </p>
-      {state && !state.ok ? <div className="mt-2"><FormBanner result={state} /></div> : null}
+      {state && !state.ok ? (
+        <div className="mt-2">
+          <FormBanner result={state} />
+        </div>
+      ) : null}
       <form action={formAction} className="mt-3 grid gap-2 md:grid-cols-2">
         <input type="hidden" name="role" value={role} />
         <input type="hidden" name="scheduling_type" value="appointment" />
@@ -185,6 +235,6 @@ function SaveNewLocationCard({
           </button>
         </div>
       </form>
-    </section>
+    </div>
   );
 }

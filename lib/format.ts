@@ -24,6 +24,25 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+export function formatStopWindow(start: string, end: string): string {
+  const from = start.trim() ? formatDateTime(start) : "";
+  const to = end.trim() ? formatDateTime(end) : "";
+  if (from && to && from !== "—" && to !== "—") return `${from} – ${to}`;
+  if (from && from !== "—") return from;
+  if (to && to !== "—") return to;
+  return "";
+}
+
+export function formatInvoiceMoney(value: number | null | undefined, currency = "USD"): string {
+  if (value == null || Number.isNaN(value)) return "";
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";

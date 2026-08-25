@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ComplianceList } from "@/components/compliance-badge";
+import { updateLoadAction } from "@/lib/actions";
 import { collectAssignmentAlerts, driverComplianceAlerts } from "@/lib/compliance";
+import { isFirstAssign } from "@/lib/first-assign";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import type { DriverWithTruck, Load, Trailer, Truck } from "@/lib/types";
 
@@ -25,15 +28,18 @@ export function LoadCarrierScreen({
   card?: boolean;
   onExpiredChange?: (expired: boolean, confirmed: boolean) => void;
 }) {
+  const router = useRouter();
   const initialDriver = load?.driver_id ? drivers.find((item) => item.id === load.driver_id) : null;
   const [driverKind, setDriverKind] = useState<"company" | "owner_operator">(
     initialDriver?.driver_type === "owner_operator" ? "owner_operator" : "company",
   );
   const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
+  const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
+  const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
   const [confirmed, setConfirmed] = useState(false);
   const selectedDriver = drivers.find((item) => String(item.id) === driverId);
-  const selectedTruck = trucks.find((item) => item.id === load?.truck_id);
-  const selectedTrailer = trailers.find((item) => item.id === load?.trailer_id);
+  const selectedTruck = trucks.find((item) => String(item.id) === truckId);
+  const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
   const filteredDrivers = drivers.filter((driver) =>
     driverKind === "owner_operator" ? driver.driver_type === "owner_operator" : driver.driver_type !== "owner_operator",
   );
@@ -53,6 +59,20 @@ export function LoadCarrierScreen({
 
   function syncConfirm(nextConfirmed: boolean) {
     setConfirmed(nextConfirmed);
+  }
+
+  async function persistFirst(fields: Record<string, string>) {
+    if (!load?.id) return;
+    const formData = new FormData();
+    formData.set("stay_on_load", "1");
+    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+    if (confirmed) formData.set("confirm_expired", "1");
+    const result = await updateLoadAction(load.id, null, formData);
+    if (result && "error" in result && result.error) {
+      window.alert(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   return (
@@ -91,9 +111,15 @@ export function LoadCarrierScreen({
           id="driver_id"
           name="driver_id"
           value={driverId}
+          data-first-assign={load?.driver_id ? undefined : ""}
           onChange={(event) => {
-            setDriverId(event.target.value);
+            const next = event.target.value;
+            setDriverId(next);
             syncConfirm(false);
+            if (load && isFirstAssign(load.driver_id, next)) {
+              event.stopPropagation();
+              void persistFirst({ driver_id: next });
+            }
           }}
         >
           <option value="">Unassigned</option>
@@ -101,6 +127,54 @@ export function LoadCarrierScreen({
             <option key={driver.id} value={driver.id}>
               {driver.name}
               {driverNote(driver, alertWindows)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="truck_id">Truck</label>
+        <select
+          id="truck_id"
+          name="truck_id"
+          value={truckId}
+          data-first-assign={load?.truck_id ? undefined : ""}
+          onChange={(event) => {
+            const next = event.target.value;
+            setTruckId(next);
+            if (load && isFirstAssign(load.truck_id, next)) {
+              event.stopPropagation();
+              void persistFirst({ truck_id: next });
+            }
+          }}
+        >
+          <option value="">Unassigned</option>
+          {trucks.map((truck) => (
+            <option key={truck.id} value={truck.id}>
+              {truck.unit_number}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="trailer_id">Trailer</label>
+        <select
+          id="trailer_id"
+          name="trailer_id"
+          value={trailerId}
+          data-first-assign={load?.trailer_id ? undefined : ""}
+          onChange={(event) => {
+            const next = event.target.value;
+            setTrailerId(next);
+            if (load && isFirstAssign(load.trailer_id, next)) {
+              event.stopPropagation();
+              void persistFirst({ trailer_id: next });
+            }
+          }}
+        >
+          <option value="">Unassigned</option>
+          {trailers.map((trailer) => (
+            <option key={trailer.id} value={trailer.id}>
+              {trailer.unit_number}
             </option>
           ))}
         </select>

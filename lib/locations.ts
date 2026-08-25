@@ -58,7 +58,11 @@ export function locationMatchesQuery(location: LocationPickerRow, query: string)
   return tokens.every((token) => haystack.includes(token));
 }
 
-/** Typeahead matches only. Empty query returns nothing so a 3300-row book is never dumped. */
+/**
+ * Typeahead over the whole Locations book. Any name or address fragment matches
+ * (no customer or facility is special-cased). Empty query returns nothing so
+ * thousands of rows are never dumped into the menu.
+ */
 export function filterLocationsForPicker<T extends LocationPickerRow>(
   locations: T[],
   query: string,
