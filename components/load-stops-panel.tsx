@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { addStopAction, deleteStopAction, updateStopAction } from "@/lib/dispatcher-actions";
 import { LocationPicker } from "@/components/location-picker";
 import { useLoadEdit } from "@/components/load-edit-context";
-import { applyLocationToStop, matchLocationForStop } from "@/lib/locations";
+import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
@@ -41,37 +41,20 @@ export function LoadStopsPanel({
       {stops.length === 0 ? (
         <p className="text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="table-grid text-sm" data-stops-grid="">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Type</th>
-                <th>Location · time</th>
-                <th>Street</th>
-                <th>City / ST / Zip</th>
-                <th>Phone</th>
-                <th>Reference</th>
-                <th>Notes</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {stops.map((stop, index) => (
-                <StopGridBlock
-                  key={stop.id}
-                  stop={stop}
-                  index={index + 1}
-                  locations={locations}
-                  gapMiles={
-                    index < stops.length - 1
-                      ? milesForStopGap(index, stops.length, routeGuide ?? { totalMiles: null, legMiles: [] })
-                      : null
-                  }
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3" data-stops-grid="">
+          {stops.map((stop, index) => (
+            <StopGridBlock
+              key={stop.id}
+              stop={stop}
+              index={index + 1}
+              locations={locations}
+              gapMiles={
+                index < stops.length - 1
+                  ? milesForStopGap(index, stops.length, routeGuide ?? { totalMiles: null, legMiles: [] })
+                  : null
+              }
+            />
+          ))}
         </div>
       )}
       </div>
@@ -200,6 +183,7 @@ function StopGridBlock({
 
   const pickup = kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end);
+  const address = formatLocationAddress(draft);
   const rules = locationRuleLabels(
     locations.find((location) => String(location.id) === draft.locationId) ??
       matchLocationForStop(locations, {
@@ -211,15 +195,21 @@ function StopGridBlock({
   );
   return (
     <>
-      <tr className={pickup ? "stop-row-pickup" : "stop-row-delivery"}>
-        <td className="align-top font-semibold">{index}</td>
-        <td className="align-top">
-          <form action={updateStopAction} id={`stop-form-${stop.id}`} className="contents">
-            <input type="hidden" name="stop_id" value={stop.id} />
-            <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
+      <article
+        className={`rounded-lg border border-slate-200 p-3 ${pickup ? "stop-row-pickup" : "stop-row-delivery"}`}
+        data-stop-front=""
+      >
+        <form action={updateStopAction} id={`stop-form-${stop.id}`} className="hidden">
+          <input type="hidden" name="stop_id" value={stop.id} />
+        </form>
+        <div className="stop-front">
+          <div>
+            <div className="text-xs font-semibold text-slate-500">#{index}</div>
+            <span className={`stop-chip mt-1 ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
               {pickup ? "Pickup" : "Delivery"}
             </span>
             <select
+              form={`stop-form-${stop.id}`}
               name="kind"
               value={kind}
               onChange={(event) => {
@@ -232,99 +222,102 @@ function StopGridBlock({
               <option value="pickup">Pickup</option>
               <option value="delivery">Delivery</option>
             </select>
-          </form>
-        </td>
-        <td className="align-top min-w-56">
-          <input form={`stop-form-${stop.id}`} name="name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} required />
-          <LocationPicker
-            form={`stop-form-${stop.id}`}
-            name="location_id"
-            locations={locations}
-            value={draft.locationId}
-            onChange={pickLocation}
-            emptyLabel="One-off address"
-            placeholder="Type any name or address"
-          />
-          <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
-            {saving ? "Saving location…" : saved || stop.location_id ? "Location is saved on this stop." : "Pick a saved location — it stays without Save."}
-          </p>
-          {windowLabel ? (
-            <p className="mt-1 text-xs font-semibold text-slate-800" data-stop-window="">
-              {windowLabel}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-slate-500" data-stop-window="">
-              No {pickup ? "pickup" : "delivery"} time yet
-            </p>
-          )}
-          <input
-            form={`stop-form-${stop.id}`}
-            name="window_start"
-            type="datetime-local"
-            className="mt-1"
-            value={draft.windowStart}
-            onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))}
-          />
-          <input
-            form={`stop-form-${stop.id}`}
-            name="window_end"
-            type="datetime-local"
-            className="mt-1"
-            value={draft.windowEnd}
-            onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
-          />
-          <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
-          {rules.map((rule) => (
-            <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
-              {rule}
-            </p>
-          ))}
-        </td>
-        <td className="align-top min-w-36">
-          <input form={`stop-form-${stop.id}`} name="street" value={draft.street} onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))} />
-        </td>
-        <td className="align-top min-w-40">
-          <div className="grid grid-cols-[1fr_3rem_5rem] gap-1">
-            <input form={`stop-form-${stop.id}`} name="city" value={draft.city} onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))} />
-            <input form={`stop-form-${stop.id}`} name="state" value={draft.state} maxLength={2} onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))} />
-            <input form={`stop-form-${stop.id}`} name="zip" value={draft.zip} onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))} />
           </div>
-        </td>
-        <td className="align-top min-w-28">
-          <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} />
-        </td>
-        <td className="align-top min-w-28">
+          <div className="min-w-0">
+            <input
+              form={`stop-form-${stop.id}`}
+              name="name"
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              required
+            />
+            <LocationPicker
+              form={`stop-form-${stop.id}`}
+              name="location_id"
+              locations={locations}
+              value={draft.locationId}
+              onChange={pickLocation}
+              emptyLabel="One-off address"
+              placeholder="Type any name or address"
+            />
+            {address ? <p className="stop-front-address mt-1">{address}</p> : null}
+            <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
+              {saving
+                ? "Saving location…"
+                : saved || stop.location_id
+                  ? "Location is saved on this stop."
+                  : "Pick a saved location — it stays without Save."}
+            </p>
+            {rules.map((rule) => (
+              <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
+                {rule}
+              </p>
+            ))}
+          </div>
+          <div className="stop-front-window" data-stop-window="">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {pickup ? "Pickup window" : "Delivery window"}
+            </div>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {windowLabel || `No ${pickup ? "pickup" : "delivery"} time yet`}
+            </p>
+            <input
+              form={`stop-form-${stop.id}`}
+              name="window_start"
+              type="datetime-local"
+              className="mt-2 w-full"
+              value={draft.windowStart}
+              onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))}
+            />
+            <input
+              form={`stop-form-${stop.id}`}
+              name="window_end"
+              type="datetime-local"
+              className="mt-1 w-full"
+              value={draft.windowEnd}
+              onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
+            />
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+          <input form={`stop-form-${stop.id}`} name="street" value={draft.street} onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))} placeholder="Street" />
+          <div className="grid grid-cols-[1fr_3rem_5rem] gap-1">
+            <input form={`stop-form-${stop.id}`} name="city" value={draft.city} onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))} placeholder="City" />
+            <input form={`stop-form-${stop.id}`} name="state" value={draft.state} maxLength={2} onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))} placeholder="ST" />
+            <input form={`stop-form-${stop.id}`} name="zip" value={draft.zip} onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))} placeholder="ZIP" />
+          </div>
+          <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" />
           <input
             form={`stop-form-${stop.id}`}
             name="reference"
             value={draft.reference}
             onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
+            placeholder="Reference"
           />
-        </td>
-        <td className="align-top min-w-40">
           <textarea
             form={`stop-form-${stop.id}`}
             name="instructions"
             rows={2}
+            className="md:col-span-2"
             value={draft.instructions}
             onChange={(event) => setDraft((current) => ({ ...current, instructions: event.target.value }))}
+            placeholder="Notes"
           />
-        </td>
-        <td className="align-top whitespace-nowrap">
-          <button className="btn btn-secondary" type="submit" form={`stop-form-${stop.id}`}>
-            Save
-          </button>
-          <button className="btn btn-ghost text-rose-700" type="submit" form={`stop-form-${stop.id}`} formAction={deleteStopAction}>
-            Remove
-          </button>
-        </td>
-      </tr>
+          <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
+          <div className="flex flex-wrap items-start gap-2">
+            <button className="btn btn-secondary" type="submit" form={`stop-form-${stop.id}`}>
+              Save
+            </button>
+            <button className="btn btn-ghost text-rose-700" type="submit" form={`stop-form-${stop.id}`} formAction={deleteStopAction}>
+              Remove
+            </button>
+          </div>
+        </div>
+      </article>
       {gapMiles != null ? (
-        <tr className="bg-slate-100 text-xs font-semibold text-slate-600">
-          <td colSpan={9} data-leg-miles="">
-            {formatRouteMiles(gapMiles)} to next stop
-          </td>
-        </tr>
+        <p className="px-1 text-xs font-semibold text-slate-600" data-leg-miles="">
+          {formatRouteMiles(gapMiles)} to next stop
+        </p>
       ) : null}
     </>
   );

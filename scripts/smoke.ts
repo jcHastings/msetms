@@ -274,7 +274,11 @@ async function main() {
   assert.match(stopsSource, /locationRuleLabels/);
   assert.match(stopsSource, /LocationPicker/);
   assert.match(stopsSource, /data-stop-window/);
+  assert.match(stopsSource, /data-stop-front/);
+  assert.match(stopsSource, /stop-front-window/);
   assert.match(stopsSource, /formatStopWindow/);
+  assert.match(stopsSource, /formatLocationAddress/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /stop-front/);
   assert.match(stopsSource, /data-stop-autosave/);
   assert.match(stopsSource, /persistStop/);
   assert.match(stopsSource, /clearDirty/);
