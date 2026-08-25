@@ -28,8 +28,9 @@ export function SamsaraTruckImport() {
           historical units are skipped and never write GPS onto a live TMS truck. Unassigned, in-use, or
           differently labeled active names stay in the list. Preview each pairing (TMS unit ← Samsara name
           / VIN / plate / city) before anything is written. Every active unit, name, or id is matched the
-          same way: stored Samsara id, then VIN (only if the unit number agrees), then exact unit number,
-          then license plate. No match creates a new truck. A TMS stub with the same unit number is
+          same way: VIN (only if the unit number agrees), then exact unit number, then license plate. A
+          stored Samsara id is last and is ignored when it contradicts the unit. No match creates a new
+          truck. A TMS stub with the same unit number is
           updated, not duplicated. Confirm is required. Re-import re-pairs the same way.
         </p>
       </div>
