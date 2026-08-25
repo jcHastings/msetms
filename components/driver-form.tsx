@@ -129,10 +129,10 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
           minLength={4}
           maxLength={8}
           pattern="\d{4,8}"
-          placeholder={driver?.has_pin ? "Leave blank to keep current" : "4–8 digits"}
+          placeholder={driver?.has_app_login ? "Leave blank to keep current" : "4–8 digits"}
         />
         <p className="mt-1 text-xs text-slate-500">
-          {driver?.has_pin
+          {driver?.has_app_login
             ? "4–8 digits. Same PIN the driver uses on /driver. Leave blank to keep the current PIN."
             : "4–8 digits. The driver cannot sign in until a PIN is set. Do not invent one unless you are assigning it now."}
         </p>

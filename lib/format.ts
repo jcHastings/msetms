@@ -1,3 +1,13 @@
+export function parseDriverPin(value: unknown, required = false): string {
+  const pin = String(value ?? "").trim();
+  if (!pin) {
+    if (required) throw new Error("Enter a 4 to 8 digit PIN.");
+    return "";
+  }
+  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4 to 8 digits.");
+  return pin;
+}
+
 export function toInputDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

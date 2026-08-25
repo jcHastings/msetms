@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
-import { cleanDateInput, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { cleanDateInput, parseDriverPin, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import { parseLoadInput } from "./load-input";
 import { safeReturnTo } from "./load-page-shared";
 import { addPayItem, deletePayItem } from "./pay-items";
@@ -55,7 +55,7 @@ import {
   type SchedulingType,
   type TruckStatus,
 } from "./types";
-import { parseDriverPin, parseTrailerType, parseTruckType } from "./fleet-form-shared";
+import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";

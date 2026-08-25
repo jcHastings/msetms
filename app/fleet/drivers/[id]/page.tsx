@@ -36,7 +36,7 @@ export default async function EditDriverPage({
       <DriverForm
         driver={driverFormValues({
           ...driverWithoutPin,
-          has_pin: String(pin ?? "").trim() ? 1 : 0,
+          has_app_login: String(pin ?? "").trim() ? 1 : 0,
         })}
         filesHref="#driver-files"
         submitLabel="Save"
