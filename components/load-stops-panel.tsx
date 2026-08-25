@@ -129,6 +129,9 @@ function StopGridBlock({
   const [draft, setDraft] = useState(() => initialStopDraft(stop, locations));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [persistedLocationId, setPersistedLocationId] = useState(
+    stop.location_id ? String(stop.location_id) : "",
+  );
 
   async function persistStop(next: StopDraft, nextKind = kind) {
     const formData = new FormData();
@@ -149,6 +152,7 @@ function StopGridBlock({
     setSaving(true);
     try {
       await updateStopAction(formData);
+      setPersistedLocationId(next.locationId);
       edit?.clearDirty();
       setSaved(true);
       router.refresh();
@@ -163,7 +167,7 @@ function StopGridBlock({
     if (!locationId) {
       const next = { ...draft, locationId: "" };
       setDraft(next);
-      if (isAssignEdit(stop.location_id, "")) edit?.markDirty();
+      if (isAssignEdit(persistedLocationId, "")) edit?.markDirty();
       return;
     }
     const location = locations.find((row) => String(row.id) === locationId);
@@ -179,11 +183,11 @@ function StopGridBlock({
       phone: location.phone ?? "",
     };
     setDraft(next);
-    if (isFirstAssign(stop.location_id, locationId)) {
+    if (isFirstAssign(persistedLocationId, locationId)) {
       void persistStop(next);
       return;
     }
-    if (isAssignEdit(stop.location_id, locationId)) {
+    if (isAssignEdit(persistedLocationId, locationId)) {
       edit?.markDirty();
     }
   }
@@ -251,9 +255,9 @@ function StopGridBlock({
             <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
               {saving
                 ? "Saving location…"
-                : isAssignEdit(stop.location_id, draft.locationId)
+                : isAssignEdit(persistedLocationId, draft.locationId)
                   ? "Save to keep this location change."
-                  : saved || stop.location_id
+                  : saved || persistedLocationId
                     ? "Location is saved on this stop."
                     : "Pick a saved location — the first pick stays without Save."}
             </p>
@@ -314,8 +318,13 @@ function StopGridBlock({
           />
           <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
           <div className="flex flex-wrap items-start gap-2">
-            <button className="btn btn-secondary" type="submit" form={`stop-form-${stop.id}`}>
-              Save
+            <button
+              className="btn btn-secondary"
+              type="button"
+              disabled={saving}
+              onClick={() => void persistStop(draft)}
+            >
+              {saving ? "Saving…" : "Save"}
             </button>
             <button className="btn btn-ghost text-rose-700" type="submit" form={`stop-form-${stop.id}`} formAction={deleteStopAction}>
               Remove
