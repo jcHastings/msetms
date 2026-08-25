@@ -127,7 +127,15 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Require 2-step for all dispatchers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Authenticator code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8"), /totp|authenticator/i);
+  const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
+  assert.doesNotMatch(driverLoginPage, /totp|authenticator/i);
+  assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
+  assert.match(driverLoginPage, /listDriversForLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /parseDriverPin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /listDriversForLogin/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /backfillDemoPins/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/seed.ts"), "utf8"), /driverCount > 0/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
@@ -2123,6 +2131,29 @@ Continuous reefer. Two load locks.
   const denise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
   assert.ok(denise);
   queries.authenticateDriver(denise.id, "1125");
+  assert.equal(
+    queries.listDriversForLogin().every((driver) => driver.active !== 0 && !String(driver.termination_date ?? "").trim()),
+    true,
+  );
+  const noPinDriverId = queries.createDriver({
+    name: "No Pin Login",
+    phone: "555-0199",
+    license: "XX-NONE",
+    pin: "",
+    truck_id: null,
+    status: "available",
+  });
+  assert.throws(() => queries.authenticateDriver(noPinDriverId, "1234"));
+  queries.updateDriver(noPinDriverId, {
+    name: "No Pin Login",
+    phone: "555-0199",
+    license: "XX-NONE",
+    pin: "4567",
+    truck_id: null,
+    status: "available",
+  });
+  queries.authenticateDriver(noPinDriverId, "4567");
+  assert.throws(() => queries.authenticateDriver(noPinDriverId, "1125"));
   const deniseLoads = queries.listLoadsForDriver(denise.id);
   assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
   const orbcomm = await import("../lib/integrations/orbcomm");

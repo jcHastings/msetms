@@ -91,7 +91,18 @@ export type DriverFormValues = {
   drug_test_last: string;
   drug_test_next: string;
   termination_date: string;
+  has_pin: boolean;
 };
+
+export function parseDriverPin(value: unknown, required = false): string {
+  const pin = String(value ?? "").trim();
+  if (!pin) {
+    if (required) throw new Error("Enter a 4 to 8 digit PIN.");
+    return "";
+  }
+  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4 to 8 digits.");
+  return pin;
+}
 
 function num(value: unknown): number {
   if (typeof value === "bigint") return Number(value);
@@ -187,5 +198,6 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     drug_test_last: text(driver.drug_test_last),
     drug_test_next: text(driver.drug_test_next),
     termination_date: text(driver.termination_date),
+    has_pin: Boolean(text(driver.pin).trim()) || num(driver.has_pin) !== 0,
   };
 }

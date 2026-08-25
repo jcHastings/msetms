@@ -38,10 +38,12 @@ export function getDb(): Database {
   const customerCount = db.prepare("SELECT COUNT(*) as count FROM customers").get() as {
     count: number;
   };
-  if (customerCount.count === 0 && process.env.TMS_SKIP_SEED !== "1") {
+  const driverCount = db.prepare("SELECT COUNT(*) as count FROM drivers").get() as {
+    count: number;
+  };
+  if (customerCount.count === 0 && driverCount.count === 0 && process.env.TMS_SKIP_SEED !== "1") {
     seedDatabase(db);
   } else {
-    backfillDemoPins(db);
     backfillDemoDriverCompliance(db);
     backfillDemoRegistration(db);
     backfillDemoTruckDetails(db);
@@ -996,23 +998,6 @@ function backfillDemoLocations(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM locations").get() as { count: number }).count;
   if (count > 0) return;
   seedDemoLocations(db);
-}
-
-function backfillDemoPins(db: Database): void {
-  const pins: Record<string, string> = {
-    "Marcus Hale": "1024",
-    "Denise Ortega": "1125",
-    "James Whitaker": "1186",
-    "Cole Brennan": "2051",
-    "Priya Shah": "1010",
-    "Angela Ruiz": "1080",
-    "Tyrell Brooks": "3000",
-    "Sam Keene": "2100",
-  };
-  const update = db.prepare("UPDATE drivers SET pin = ? WHERE name = ? AND (pin IS NULL OR pin = '')");
-  for (const [name, pin] of Object.entries(pins)) {
-    update.run(pin, name);
-  }
 }
 
 function ensureColumn(

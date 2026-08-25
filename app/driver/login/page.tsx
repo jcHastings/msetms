@@ -1,7 +1,7 @@
 import { BrandMark } from "@/components/brand-mark";
 import { driverLoginAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
-import { listDrivers } from "@/lib/queries";
+import { listDriversForLogin } from "@/lib/queries";
 import { redirect } from "next/navigation";
 import { DriverLoginForm } from "@/components/driver-login-form";
 
@@ -20,14 +20,10 @@ export default async function DriverLoginPage() {
           Sign in with your name and PIN. Local v1 — no password reset.
         </p>
       </div>
-      <DriverLoginForm drivers={listDrivers()} action={driverLoginAction} />
-      <div className="mt-6 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
-        <div className="font-semibold text-slate-800">Demo PINs</div>
-        <p className="mt-1">Denise Ortega · 1125 (in-transit reefer)</p>
-        <p>Marcus Hale · 1024</p>
-        <p>James Whitaker · 1186</p>
-        <p>Cole Brennan · 2051</p>
-      </div>
+      <DriverLoginForm
+        drivers={listDriversForLogin().map((driver) => ({ id: driver.id, name: driver.name }))}
+        action={driverLoginAction}
+      />
     </div>
   );
 }

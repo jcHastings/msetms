@@ -740,6 +740,14 @@ export function listDrivers(): DriverWithTruck[] {
     .all() as DriverWithTruck[];
 }
 
+export function isDriverLoginEligible(driver: { active: number; termination_date?: string | null }): boolean {
+  return driver.active !== 0 && !String(driver.termination_date ?? "").trim();
+}
+
+export function listDriversForLogin(): DriverWithTruck[] {
+  return listDrivers().filter(isDriverLoginEligible);
+}
+
 export function getDriver(id: number): DriverWithTruck | null {
   return (
     (getDb()
@@ -928,7 +936,7 @@ export function updateDriver(
 
 export function authenticateDriver(driverId: number, pin: string): DriverWithTruck {
   const driver = getDriver(driverId);
-  if (!driver || !driver.pin || driver.pin !== pin.trim()) {
+  if (!driver || !isDriverLoginEligible(driver) || !driver.pin || driver.pin !== pin.trim()) {
     throw new Error("Driver or PIN is not recognized.");
   }
   return driver;

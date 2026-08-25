@@ -55,7 +55,7 @@ import {
   type SchedulingType,
   type TruckStatus,
 } from "./types";
-import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
+import { parseDriverPin, parseTrailerType, parseTruckType } from "./fleet-form-shared";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
@@ -343,6 +343,7 @@ export async function createDriverAction(
       drug_test_last: parseDateField(formData.get("drug_test_last")),
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
+      pin: parseDriverPin(formData.get("pin")),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -370,7 +371,7 @@ export async function updateDriverAction(
       notes: String(formData.get("notes") ?? "").trim(),
       active: parseActive(formData),
       license: String(formData.get("license_number") ?? "").trim() || current.license,
-      pin: "",
+      pin: parseDriverPin(formData.get("pin")),
       samsara_driver_id: current.samsara_driver_id,
       license_number: String(formData.get("license_number") ?? "").trim(),
       license_state: current.license_state,

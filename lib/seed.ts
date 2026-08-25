@@ -18,6 +18,8 @@ function isoDate(offsetDays: number): string {
 }
 
 export function seedDatabase(db: Database): void {
+  const driverCount = (db.prepare("SELECT COUNT(*) as count FROM drivers").get() as { count: number }).count;
+  if (driverCount > 0) return;
   const created = now();
 
   const insertCustomer = db.prepare(

@@ -34,7 +34,10 @@ export default async function EditDriverPage({
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
       <DriverFuelCard driverId={Number(driver.id)} />
       <DriverForm
-        driver={driverFormValues(driverWithoutPin)}
+        driver={driverFormValues({
+          ...driverWithoutPin,
+          has_pin: String(pin ?? "").trim() ? 1 : 0,
+        })}
         filesHref="#driver-files"
         submitLabel="Save"
       />

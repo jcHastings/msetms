@@ -119,6 +119,24 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
           <option value="0">Inactive</option>
         </select>
       </div>
+      <div className="field">
+        <label htmlFor="pin">Driver app PIN</label>
+        <input
+          id="pin"
+          name="pin"
+          inputMode="numeric"
+          autoComplete="off"
+          minLength={4}
+          maxLength={8}
+          pattern="\d{4,8}"
+          placeholder={driver?.has_pin ? "Leave blank to keep current" : "4–8 digits"}
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          {driver?.has_pin
+            ? "4–8 digits. Same PIN the driver uses on /driver. Leave blank to keep the current PIN."
+            : "4–8 digits. The driver cannot sign in until a PIN is set. Do not invent one unless you are assigning it now."}
+        </p>
+      </div>
       <div className="field md:col-span-2">
         <label htmlFor="notes">Internal Notes</label>
         <textarea id="notes" name="notes" rows={4} defaultValue={driver?.notes} />
