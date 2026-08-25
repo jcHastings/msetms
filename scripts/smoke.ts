@@ -647,6 +647,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /unionSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /keepActiveSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /samsaraRecordIsActive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchTruckForSamsaraLive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /matchTruckForSamsaraLive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /active fleet vehicles|Deactivated/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
@@ -2863,6 +2865,7 @@ Continuous reefer. Two load locks.
     SAMSARA_TOKEN_MISSING_MESSAGE,
     SAMSARA_ID_MISSING_MESSAGE,
     matchTruckForSamsara,
+    matchTruckForSamsaraLive,
     samsaraReturnedNames,
     samsaraUnmatchedUnitsWarning,
     unitNumberFromSamsaraName,
@@ -3048,6 +3051,57 @@ Continuous reefer. Two load locks.
   assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.address, "Oklahoma City, OK");
   assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.address, "Bronx, NY");
   assert.notEqual(swappedGps.find((row) => row.unitNumber === "32")?.address, "Oklahoma City, OK");
+  assert.equal(
+    matchTruckForSamsaraLive(
+      [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "VIN28AAA" }],
+      { samsaraVehicleId: "sam-28", name: "28", vin: "VIN28AAA" },
+    )?.matchBy,
+    "vin",
+  );
+  assert.equal(
+    matchTruckForSamsaraLive(
+      [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "" }],
+      { samsaraVehicleId: "other-id", name: "Pete" },
+    ),
+    null,
+    "a loose name must not attach live GPS to a TMS unit",
+  );
+  const orderedGps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "sam-38",
+        name: "38",
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 29.76, longitude: -95.36, reverseGeo: { formattedLocation: "Houston, TX" } },
+      },
+      {
+        id: "sam-28",
+        name: "28",
+        vin: "VIN28AAA",
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 36.15, longitude: -95.99, reverseGeo: { formattedLocation: "Tulsa, OK" } },
+      },
+    ],
+    trucks: [
+      { id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "VIN28AAA", plate: "" },
+      { id: 36, unit_number: "36", samsara_vehicle_id: "sam-36", vin: "", plate: "" },
+    ],
+    loads: [],
+  });
+  assert.equal(orderedGps.find((row) => row.unitNumber === "28")?.address, "Tulsa, OK");
+  assert.equal(orderedGps.find((row) => row.unitNumber === "28")?.vehicleId, "sam-28");
+  assert.notEqual(orderedGps.find((row) => row.unitNumber === "28")?.address, "Houston, TX");
+  assert.notEqual(orderedGps.find((row) => row.unitNumber === "36")?.address, "Houston, TX");
+  const noLooseGps = samsara.mapVehicleLocations({
+    vehicles: [
+      {
+        id: "unrelated",
+        name: "Pete",
+        gps: { time: "2026-08-24T16:00:00Z", latitude: 29.76, longitude: -95.36, reverseGeo: { formattedLocation: "Houston, TX" } },
+      },
+    ],
+    trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "", plate: "" }],
+    loads: [],
+  });
+  assert.equal(noLooseGps.find((row) => row.unitNumber === "28"), undefined);
 
   const { closestTrucksToCity, extractCityFromQuestion, findCityCenter } = await import("../lib/city-coords-shared");
   assert.ok(findCityCenter("Oklahoma City"));

@@ -2,7 +2,7 @@ import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import {
   canonicalFleetKey,
   keepActiveSamsaraVehicles,
-  matchTruckForSamsara,
+  matchTruckForSamsaraLive,
   mergeSamsaraGpsOntoVehicles,
   parseSamsaraVehicleRecords,
   SAMSARA_ID_MISSING_MESSAGE,
@@ -462,7 +462,7 @@ export function mapVehicleLocations(input: {
     const vehicleId = String(vehicle.id ?? nested.id ?? "");
     const activeKey = canonicalFleetKey(vehicleId);
     if (input.activeVehicleIds?.size && activeKey && !input.activeVehicleIds.has(activeKey)) continue;
-    const match = matchTruckForSamsara(
+    const match = matchTruckForSamsaraLive(
       input.trucks,
       {
         samsaraVehicleId: vehicleId,
@@ -611,13 +611,12 @@ export function mapTruckDrivers(input: {
   const out: SamsaraTruckDriver[] = [];
   for (const vehicle of input.vehicles) {
     if (!vehicle.driverName && !vehicle.driverId) continue;
-    const match = matchTruckForSamsara(input.trucks, {
+    const match = matchTruckForSamsaraLive(input.trucks, {
       samsaraVehicleId: vehicle.id,
       unitNumber: vehicle.name,
       name: vehicle.name,
       vin: vehicle.vin,
       licensePlate: vehicle.licensePlate,
-      extraKeys: vehicle.extraKeys,
     }, claimed);
     if (!match) continue;
     claimed.add(match.id);
@@ -642,12 +641,13 @@ export function mapHosCurrentVehicleDrivers(input: {
     const driverName = String(driver.name ?? "");
     if (!driverId && !driverName) continue;
     if (!vehicle.id && !vehicle.name) continue;
-    const match = matchTruckForSamsara(
+    const match = matchTruckForSamsaraLive(
       input.trucks,
       {
         samsaraVehicleId: String(vehicle.id ?? ""),
         unitNumber: String(vehicle.name ?? ""),
         name: String(vehicle.name ?? ""),
+        vin: String(vehicle.vin ?? ""),
       },
       claimed,
     );
