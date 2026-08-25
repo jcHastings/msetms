@@ -625,7 +625,7 @@ export function mapTruckDrivers(input: {
   return out;
 }
 
-/** Pair the HOS clock's currentVehicle to a TMS truck with the same rematch keys. */
+/** Pair the HOS clock's currentVehicle to the TMS truck with that Samsara vehicle id. */
 export function mapHosCurrentVehicleDrivers(input: {
   clocks: Array<Record<string, unknown>>;
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;

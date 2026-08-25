@@ -2057,11 +2057,12 @@ Continuous reefer. Two load locks.
         },
       },
     ],
-    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "36" }],
+    trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "uuid-samsara-36" }],
     loads: [{ id: 99, truck_id: 36 }],
   });
   assert.equal(unit36Gps[0]?.address, "Amarillo, TX");
   assert.equal(unit36Gps[0]?.unitNumber, "36");
+  assert.equal(unit36Gps[0]?.vehicleId, "uuid-samsara-36");
   const named36Gps = samsara.mapVehicleLocations({
     vehicles: [
       {
@@ -2073,7 +2074,7 @@ Continuous reefer. Two load locks.
     trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
     loads: [],
   });
-  assert.equal(named36Gps[0]?.unitNumber, "36", "Samsara name digits must match the TMS unit number");
+  assert.equal(named36Gps[0], undefined, "live GPS does not rematch by Samsara name when no vehicle id is stored");
   const padded36Gps = samsara.mapVehicleLocations({
     vehicles: [
       {
@@ -2085,7 +2086,7 @@ Continuous reefer. Two load locks.
     trucks: [{ id: 36, unit_number: "36", samsara_vehicle_id: "" }],
     loads: [],
   });
-  assert.equal(padded36Gps[0]?.unitNumber, "36", "Leading zeros do not change a numeric unit");
+  assert.equal(padded36Gps[0], undefined, "live GPS does not rematch by padded unit name");
   assert.equal(samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "", location: null }), samsara.SAMSARA_ID_MISSING_MESSAGE);
   assert.equal(
     samsara.samsaraGpsEmptyState({ truckAssigned: true, samsaraVehicleId: "36", location: null }),
@@ -3048,15 +3049,33 @@ Continuous reefer. Two load locks.
     trucks: swappedTrucks,
     loads: [],
   });
-  assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.address, "Oklahoma City, OK");
-  assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.address, "Bronx, NY");
-  assert.notEqual(swappedGps.find((row) => row.unitNumber === "32")?.address, "Oklahoma City, OK");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.address, "Bronx, NY");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.address, "Oklahoma City, OK");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "36")?.vehicleId, "sam-32");
+  assert.equal(swappedGps.find((row) => row.unitNumber === "32")?.vehicleId, "sam-36");
   assert.equal(
     matchTruckForSamsaraLive(
       [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28", vin: "VIN28AAA" }],
-      { samsaraVehicleId: "sam-28", name: "28", vin: "VIN28AAA" },
+      { samsaraVehicleId: "sam-28", name: "38 in use", vin: "VIN28AAA" },
+    )?.matchBy,
+    "samsara_vehicle_id",
+    "stored Samsara id wins even when the payload name looks like another unit",
+  );
+  assert.equal(
+    matchTruckForSamsaraLive(
+      [{ id: 99, unit_number: "99", samsara_vehicle_id: "", vin: "VIN28AAA" }],
+      { samsaraVehicleId: "sam-28", name: "Kenworth 28", vin: "VIN28AAA" },
     )?.matchBy,
     "vin",
+    "VIN can attach live GPS only when the TMS truck has no stored Samsara id",
+  );
+  assert.equal(
+    matchTruckForSamsaraLive(
+      [{ id: 32, unit_number: "32", samsara_vehicle_id: "sam-32" }],
+      { samsaraVehicleId: "sam-36", name: "32" },
+    ),
+    null,
+    "live GPS must not rematch a different Samsara id by unit name",
   );
   assert.equal(
     matchTruckForSamsaraLive(
@@ -3403,9 +3422,11 @@ Continuous reefer. Two load locks.
     loads: [],
     activeVehicleIds: new Set([canonicalFleetKey("sam-28")]),
   });
-  assert.equal(inactiveGps.find((row) => row.unitNumber === "28")?.address, "Tulsa, OK");
-  assert.equal(inactiveGps.find((row) => row.unitNumber === "28")?.vehicleId, "sam-28");
-  assert.notEqual(inactiveGps.find((row) => row.unitNumber === "28")?.address, "Houston, TX");
+  assert.equal(
+    inactiveGps.find((row) => row.unitNumber === "28"),
+    undefined,
+    "do not guess another active vehicle onto a truck whose stored Samsara id is inactive",
+  );
 
   const savedTokenForImport = process.env.SAMSARA_API_TOKEN;
   delete process.env.SAMSARA_API_TOKEN;

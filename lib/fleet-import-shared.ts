@@ -282,53 +282,34 @@ export function matchTruckForSamsara(
   return null;
 }
 
-function exactLiveUnit(vehicle: SamsaraMatchVehicle): string {
-  const fromUnit = String(vehicle.unitNumber ?? "").trim();
-  if (fromUnit) {
-    const tokens = fleetUnitTokens(fromUnit);
-    if (tokens.length === 1) return tokens[0];
-    const digits = unitDigits(fromUnit);
-    if (digits && digits.length < 8 && tokens.length === 0) return digits;
-  }
-  const parsed = unitNumberFromSamsaraName(vehicle.name ?? "", "");
-  const tokens = fleetUnitTokens(parsed);
-  if (tokens.length === 1) return tokens[0];
-  const digits = unitDigits(parsed);
-  if (digits && digits.length < 8 && parsed === digits) return digits;
-  return "";
-}
-
-/** Live GPS / HOS / driver: VIN, exact unit, then stored id. No list order, extra keys, or loose name tokens. */
+/**
+ * Live GPS / HOS / driver follow the stored Samsara vehicle id. If that id's
+ * payload is wrong in Samsara, the TMS still shows it — do not rematch by unit
+ * or name. VIN is a fallback only when the TMS row has no stored id yet.
+ */
 export function matchTruckForSamsaraLive(
   trucks: SamsaraMatchTruck[],
   vehicle: SamsaraMatchVehicle,
   claimedTruckIds?: Set<number>,
 ): { id: number; matchBy: SamsaraMatchBy } | null {
-  const liveVehicle = { ...vehicle, extraKeys: [] };
-  const vin = normalizeVin(vehicle.vin ?? "");
-  if (vin) {
-    const byVin = uniqueUnclaimedTruck(
-      trucks,
-      claimedTruckIds,
-      (truck) => normalizeVin(truck.vin ?? "") === vin && unitAgrees(truck, liveVehicle),
-    );
-    if (byVin) return { id: byVin.id, matchBy: "vin" };
-  }
-
-  const unit = exactLiveUnit(vehicle);
-  if (unit) {
-    const byUnit = uniqueUnclaimedTruck(trucks, claimedTruckIds, (truck) => unitDigits(truck.unit_number) === unit);
-    if (byUnit) return { id: byUnit.id, matchBy: "unit_number" };
-  }
-
   const vehicleId = canonicalFleetKey(vehicle.samsaraVehicleId);
   if (vehicleId) {
     const byId = uniqueUnclaimedTruck(
       trucks,
       claimedTruckIds,
-      (truck) => canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId && unitAgrees(truck, liveVehicle),
+      (truck) => Boolean(truck.samsara_vehicle_id?.trim()) && canonicalFleetKey(truck.samsara_vehicle_id) === vehicleId,
     );
     if (byId) return { id: byId.id, matchBy: "samsara_vehicle_id" };
+  }
+
+  const vin = normalizeVin(vehicle.vin ?? "");
+  if (vin) {
+    const byVin = uniqueUnclaimedTruck(
+      trucks,
+      claimedTruckIds,
+      (truck) => !truck.samsara_vehicle_id?.trim() && normalizeVin(truck.vin ?? "") === vin,
+    );
+    if (byVin) return { id: byVin.id, matchBy: "vin" };
   }
 
   return null;
