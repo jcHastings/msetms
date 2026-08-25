@@ -2916,7 +2916,7 @@ Continuous reefer. Two load locks.
     po_number: "",
     reefer_setpoint_f: null,
     trailer_number: "",
-    status: "assigned",
+    status: "delivered",
     truck_id: relayTruckA,
     driver_id: relayDriverA,
   });
