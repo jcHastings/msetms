@@ -43,7 +43,18 @@ export function TmsInvoicePanel({
         response.headers.get("content-disposition"),
         "invoice.pdf",
       );
-      downloadAndOpenPdf(blob, filename, preview);
+      const attachmentId = response.headers.get("X-Attachment-Id");
+      downloadAndOpenPdf(
+        blob,
+        filename,
+        preview,
+        attachmentId
+          ? {
+              openUrl: `/api/attachments/${attachmentId}`,
+              downloadUrl: `/api/attachments/${attachmentId}?download=1`,
+            }
+          : undefined,
+      );
       router.refresh();
     } catch (cause) {
       preview?.close();

@@ -7,15 +7,25 @@ export function filenameFromContentDisposition(header: string | null, fallback: 
   return bare?.[1]?.trim() || fallback;
 }
 
-export function downloadAndOpenPdf(blob: Blob, filename: string, preview: Window | null): void {
-  const url = URL.createObjectURL(blob);
+export function pdfBlob(blob: Blob): Blob {
+  return blob.type === "application/pdf" ? blob : new Blob([blob], { type: "application/pdf" });
+}
+
+export function downloadAndOpenPdf(
+  blob: Blob,
+  filename: string,
+  preview: Window | null,
+  persisted?: { openUrl: string; downloadUrl: string },
+): void {
+  const url = URL.createObjectURL(pdfBlob(blob));
+  const openUrl = persisted?.openUrl || url;
   if (preview && !preview.closed) {
-    preview.location.href = url;
+    preview.location.href = openUrl;
   } else {
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(openUrl, "_blank", "noopener,noreferrer");
   }
   const link = document.createElement("a");
-  link.href = url;
+  link.href = persisted?.downloadUrl || url;
   link.download = filename;
   link.rel = "noopener";
   document.body.appendChild(link);

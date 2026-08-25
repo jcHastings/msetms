@@ -25,6 +25,7 @@ export async function POST(
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "X-Attachment-Id": String(result.attachmentId),
+        "Access-Control-Expose-Headers": "Content-Disposition, X-Attachment-Id",
       },
     });
   } catch (error) {
