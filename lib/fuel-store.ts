@@ -130,6 +130,16 @@ export function assignFuelTransactionDriver(id: number, driverId: number): void 
     .run(driverId, truckId, id);
 }
 
+export function deleteFuelTransaction(id: number): void {
+  const row = getFuelTransaction(id);
+  if (!row) throw new Error("Fuel row is missing.");
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("UPDATE fuel_receipts SET fuel_transaction_id = NULL WHERE fuel_transaction_id = ?").run(id);
+    db.prepare("DELETE FROM fuel_transactions WHERE id = ?").run(id);
+  })();
+}
+
 export function assignFuelTransactionLoad(id: number, loadId: number): void {
   const row = getFuelTransaction(id);
   if (!row) throw new Error("Fuel row is missing.");

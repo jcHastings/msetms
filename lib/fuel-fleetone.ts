@@ -19,21 +19,15 @@ const COMPANY_JUNK =
 
 const PRODUCT_RE = /\b(diesel|reefer|def|ulsd)\b/i;
 const MONEY_CODE_RE = /\bmoney\s*codes?\b/i;
-const EFS_MARKERS = /nname\s*:/i;
-const EFS_REPORT_ID = /\/[A-Za-z]{2}\d{4,}/;
-
-export function hasEfsMarkers(text: string): boolean {
-  return EFS_MARKERS.test(text) || EFS_REPORT_ID.test(text);
-}
-
 export function looksLikeFleetOneReport(text: string, sourceFile = ""): boolean {
-  if (hasEfsMarkers(text)) return false;
+  if (/fleetone/i.test(sourceFile)) return true;
+  if (/nname\s*:/i.test(text)) return false;
   const blob = `${text}\n${sourceFile}`;
-  if (/funded\s*fuel/i.test(blob) || /fleet\s*one/i.test(blob) || MONEY_CODE_RE.test(blob)) return true;
+  if (/funded\s*(fuel|activity)/i.test(blob) || /fleet\s*one/i.test(blob) || MONEY_CODE_RE.test(blob)) return true;
   if (/transaction\s*activity\s*report/i.test(blob) && /m\s*&\s*s\s*loads|nanuet|3770001903818|dispatch@msloads/i.test(blob)) {
     return true;
   }
-  if (/fleetone|transaction.?activity.?report/i.test(sourceFile)) return true;
+  if (/transaction.?activity.?report/i.test(sourceFile)) return true;
   return /transaction\s*activity\s*report/i.test(text) && PRODUCT_RE.test(text);
 }
 

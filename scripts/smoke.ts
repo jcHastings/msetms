@@ -4713,6 +4713,8 @@ Continuous reefer. Two load locks.
     classifyFuelCategory,
     parseEfsFuelText,
     looksLikeEfsReport,
+    isFuelBucket,
+    labelForFuelBucket,
     parseFuelCsv,
     parseFuelReport,
     parseFuelWhen,
@@ -7232,6 +7234,17 @@ Continuous reefer. Two load locks.
   assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 137.25)?.category, "money_code");
   assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 203)?.category, "money_code");
   assert.equal(parseFuelReport(efsReport).rows[0]?.invoice, "900111");
+  const fleetOneWithZipPaths = `${fleetOneText}\nStation path /NJ1234 /NE6890`;
+  assert.equal(looksLikeEfsReport(fleetOneWithZipPaths), false);
+  assert.equal(looksLikeFleetOneReport(fleetOneWithZipPaths, "FleetOne_TransactionActivityReport_.pdf"), true);
+  const fleetOneZipParsed = parseFuelReport(fleetOneWithZipPaths, "FleetOne_TransactionActivityReport_.pdf");
+  assert.ok(fleetOneZipParsed.rows.some((row) => row.amount === 505.62));
+  assert.equal(fleetOneZipParsed.rows.some((row) => row.invoice === "900111"), false);
+  assert.equal(looksLikeFleetOneReport("only a slash zip /NJ1234", "FleetOne_TransactionActivityReport_.pdf"), true);
+  assert.doesNotMatch(
+    JSON.stringify(parseFuelReport(fleetOneWithZipPaths, "FleetOne_TransactionActivityReport_.pdf").rows),
+    /No activity lines found/,
+  );
 
   const { extractFuelPdfText } = await import("../lib/fuel-pdf");
   const fleetOnePdf = await PDFDocument.create();
@@ -7264,6 +7277,37 @@ Continuous reefer. Two load locks.
   const fleetFromPdf = parseFuelReport(fleetPdfText, "FleetOne_TransactionActivityReport_.pdf");
   assert.ok(fleetFromPdf.rows.some((row) => row.amount === 505.62 && row.category === "truck_diesel"));
   assert.ok(fleetFromPdf.rows.some((row) => row.amount === 137.25 && row.category === "money_code"));
+
+  const doomedFuel = fuelStore.listFuelTransactions().find((row) => row.amount === 137.25 && row.category === "money_code");
+  assert.ok(doomedFuel);
+  const { addFuelReceipt, linkFuelReceipt, listFuelReceipts } = await import("../lib/fuel-receipts");
+  const receiptId = addFuelReceipt({
+    loadId,
+    driverId: null,
+    attachmentId: null,
+    station: "Test unlink",
+  });
+  linkFuelReceipt(receiptId, doomedFuel.id);
+  assert.equal(listFuelReceipts().find((row) => row.id === receiptId)?.fuel_transaction_id, doomedFuel.id);
+  fuelStore.deleteFuelTransaction(doomedFuel.id);
+  assert.equal(fuelStore.getFuelTransaction(doomedFuel.id), null);
+  assert.equal(listFuelReceipts().find((row) => row.id === receiptId)?.fuel_transaction_id, null);
+  assert.ok(queries.getLoad(loadId), "delete fuel must not cascade-delete the load");
+
+  const { assignFuelDriverAction } = await import("../lib/actions");
+  const emptyAssign = new FormData();
+  emptyAssign.set("fuel_id", String(fuelStore.listFuelTransactions()[0]?.id ?? 1));
+  const assignResult = await assignFuelDriverAction(null, emptyAssign);
+  assert.equal(assignResult.ok, false);
+  assert.ok(assignResult.error);
+
+  assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
+  assert.equal(labelForFuelBucket("DATE DB CATEGORY"), "DATE DB CATEGORY");
+  assert.equal(isFuelBucket("money_code"), false);
+  fuelStore.listFuelRollups();
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /if \(fleetOne\) return toFuelCsvResult/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /\/\[A-Za-z\]\{2\}\\d\{4,\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /FuelDeleteButton/);
 
   const { buildSearchExportGrid } = await import("../lib/search-export");
   const searchGrid = buildSearchExportGrid(

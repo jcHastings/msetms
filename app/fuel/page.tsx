@@ -4,7 +4,8 @@ import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { PageHeader } from "@/components/page-header";
 import { FuelAssignForm } from "@/components/fuel-assign-form";
-import { linkFuelReceiptAction } from "@/lib/actions";
+import { FuelDeleteButton } from "@/components/fuel-delete-button";
+import { linkFuelReceiptFormAction } from "@/lib/actions";
 import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
@@ -88,6 +89,7 @@ export default async function FuelPage({
                   <th>Qty</th>
                   <th>Amount</th>
                   <th>Assign</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -102,6 +104,9 @@ export default async function FuelPage({
                     <td>{formatFuelMoney(row.amount)}</td>
                     <td>
                       <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
+                    </td>
+                    <td>
+                      <FuelDeleteButton fuelId={row.id} />
                     </td>
                   </tr>
                 ))}
@@ -142,6 +147,7 @@ export default async function FuelPage({
                   <th>Card</th>
                   <th>Load</th>
                   <th>Assign</th>
+                  <th></th>
                   <th>Source</th>
                 </tr>
               </thead>
@@ -191,6 +197,9 @@ export default async function FuelPage({
                     </td>
                     <td>
                       <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
+                    </td>
+                    <td>
+                      <FuelDeleteButton fuelId={row.id} />
                     </td>
                     <td className="text-xs text-slate-500">{row.source_file || "—"}</td>
                   </tr>
@@ -250,6 +259,7 @@ function FuelMatchQueue() {
               <th>Station</th>
               <th>Load</th>
               <th>Fix</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -276,7 +286,7 @@ function FuelMatchQueue() {
                   {row.status === "matched" ? (
                     <span className="text-xs text-slate-500">matched</span>
                   ) : row.receipt ? (
-                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
+                    <form action={linkFuelReceiptFormAction} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="receipt_id" value={row.receipt.id} />
                       <input type="hidden" name="fuel_id" value={row.transaction.id} />
                       <button className="btn btn-ghost" type="submit">
@@ -284,7 +294,7 @@ function FuelMatchQueue() {
                       </button>
                     </form>
                   ) : looseReceipts.length ? (
-                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
+                    <form action={linkFuelReceiptFormAction} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="fuel_id" value={row.transaction.id} />
                       <select name="receipt_id" className="rounded-md border border-slate-300 px-2 py-1 text-sm" required>
                         <option value="">Photo…</option>
@@ -302,6 +312,9 @@ function FuelMatchQueue() {
                   ) : (
                     <span className="text-xs text-slate-500">no photo</span>
                   )}
+                </td>
+                <td>
+                  <FuelDeleteButton fuelId={row.transaction.id} />
                 </td>
               </tr>
             ))}
@@ -322,7 +335,7 @@ function FuelMatchQueue() {
                 </td>
                 <td>
                   {unmatchedCards.length ? (
-                    <form action={linkFuelReceiptAction} className="flex flex-wrap items-center gap-2">
+                    <form action={linkFuelReceiptFormAction} className="flex flex-wrap items-center gap-2">
                       <input type="hidden" name="receipt_id" value={receipt.id} />
                       <select name="fuel_id" className="rounded-md border border-slate-300 px-2 py-1 text-sm" required>
                         <option value="">Card row…</option>

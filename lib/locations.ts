@@ -199,7 +199,7 @@ export function formatStopPartyAddress(parts: { street?: string; city?: string; 
 }
 
 export function extractStateCode(place: string): string {
-  const trimmed = place.trim();
+  const trimmed = String(place ?? "").trim();
   const zip = trimmed.match(/,\s*([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/);
   if (zip) return zip[1].toUpperCase();
   const tail = trimmed.match(/\b([A-Za-z]{2})$/);

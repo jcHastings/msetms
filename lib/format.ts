@@ -59,16 +59,39 @@ export function formatMdYDisplay(iso: string): string {
 }
 
 export function formatDateTime(iso: string): string {
-  if (dateOnlyParts(iso)) return formatMdYDisplay(iso);
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  const datePart = formatMdYDisplay(iso);
-  const timePart = date.toLocaleTimeString("en-US", {
-    timeZone: DISPLAY_TIME_ZONE,
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${datePart} ${timePart}`;
+  try {
+    const raw = String(iso ?? "").trim();
+    if (!raw) return "—";
+    if (dateOnlyParts(raw)) return formatMdYDisplay(raw);
+    const date = parseDisplayDate(raw);
+    if (!date) return "—";
+    const datePart = formatMdYDisplay(date.toISOString());
+    const timePart = date.toLocaleTimeString("en-US", {
+      timeZone: DISPLAY_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${datePart} ${timePart}`;
+  } catch {
+    return "—";
+  }
+}
+
+function parseDisplayDate(raw: string): Date | null {
+  const native = new Date(raw);
+  if (!Number.isNaN(native.getTime())) return native;
+  const match = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?$/i,
+  );
+  if (!match) return null;
+  let year = Number(match[3]);
+  if (year < 100) year += year >= 70 ? 1900 : 2000;
+  let hours = match[4] ? Number(match[4]) : 0;
+  const meridiem = (match[7] ?? "").toLowerCase();
+  if (meridiem === "pm" && hours < 12) hours += 12;
+  if (meridiem === "am" && hours === 12) hours = 0;
+  const date = new Date(year, Number(match[1]) - 1, Number(match[2]), hours, match[5] ? Number(match[5]) : 0, match[6] ? Number(match[6]) : 0);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function ymdInTimeZone(value: Date | string, timeZone = DISPLAY_TIME_ZONE): string {
@@ -141,7 +164,7 @@ export function formatMoney(value: number | null | undefined, currency = "USD"):
 }
 
 export function formatFuelMoney(value: number | null | undefined): string {
-  if (value == null) return "—";
+  if (value == null || Number.isNaN(value)) return "—";
   return value.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
@@ -151,7 +174,7 @@ export function formatFuelMoney(value: number | null | undefined): string {
 }
 
 export function formatGallons(value: number | null | undefined): string {
-  if (value == null) return "—";
+  if (value == null || Number.isNaN(value)) return "—";
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 3 })} gal`;
 }
 

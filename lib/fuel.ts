@@ -194,9 +194,10 @@ export function classifyFuelCategory(raw: string): FuelBucket | "" {
 }
 
 export function labelForFuelBucket(value: string): string {
-  if (!value || value === "other") return "—";
-  if (value === "money_code") return "Money Code";
-  return FUEL_BUCKETS.find((item) => item.value === value)?.label ?? value;
+  const key = String(value ?? "");
+  if (!key || key === "other") return "—";
+  if (key === "money_code") return "Money Code";
+  return FUEL_BUCKETS.find((item) => item.value === key)?.label ?? key;
 }
 
 export function isFuelBucket(value: string): value is FuelBucket {
@@ -208,12 +209,11 @@ export function parseFuelReport(text: string, sourceFile = ""): FuelCsvParseResu
   if (!trimmed) {
     throw new Error("The file is empty. Upload a fuel CSV or a Transaction Activity Report PDF.");
   }
-  const efs = looksLikeEfsReport(trimmed);
   const fleetOne = looksLikeFleetOneReport(trimmed, sourceFile);
+  const efs = looksLikeEfsReport(trimmed);
   if (looksLikeCsvFuel(trimmed) && !efs && !fleetOne) return parseFuelCsv(trimmed);
-  if (fleetOne && !efs) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
-  if (efs) return parseEfsFuelText(trimmed);
   if (fleetOne) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
+  if (efs) return parseEfsFuelText(trimmed);
   return parseFuelCsv(trimmed);
 }
 
@@ -248,7 +248,7 @@ function toFuelCsvResult(parsed: ReturnType<typeof parseFleetOneFuelText>): Fuel
 }
 
 export function looksLikeEfsReport(text: string): boolean {
-  return /nname\s*:/i.test(text) || /\/[A-Za-z]{2}\d{4,}/.test(text);
+  return /nname\s*:/i.test(text);
 }
 
 function looksLikeCsvFuel(text: string): boolean {

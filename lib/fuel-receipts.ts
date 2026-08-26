@@ -95,7 +95,7 @@ export function listFuelMatchQueue(): FuelMatchRow[] {
         return false;
       }) ?? null;
     if (receipt) usedReceipts.add(receipt.id);
-    const efsState = extractStateCode(transaction.location);
+    const efsState = extractStateCode(transaction.location || "");
     const receiptState = receipt?.state || "";
     let status: FuelMatchStatus = "no_photo";
     if (receipt) {

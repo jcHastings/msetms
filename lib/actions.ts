@@ -62,7 +62,12 @@ import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
-import { assignFuelTransactionDriver, assignFuelTransactionLoad, importFuelFromText } from "./fuel-store";
+import {
+  assignFuelTransactionDriver,
+  assignFuelTransactionLoad,
+  deleteFuelTransaction,
+  importFuelFromText,
+} from "./fuel-store";
 import {
   requireCapability,
   requireLoadAssigner,
@@ -1144,26 +1149,63 @@ export async function importFuelCsvAction(
   }
 }
 
-export async function linkFuelReceiptAction(formData: FormData): Promise<void> {
-  await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
-  const receiptId = parseOptionalInt(formData.get("receipt_id"));
-  const fuelId = parseOptionalInt(formData.get("fuel_id"));
-  if (!receiptId || !fuelId) throw new Error("Pick a receipt and a fuel row.");
-  const { linkFuelReceipt } = await import("./fuel-receipts");
-  linkFuelReceipt(receiptId, fuelId);
-  refresh();
+export async function linkFuelReceiptAction(formData: FormData): Promise<ActionResult> {
+  try {
+    await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
+    const receiptId = parseOptionalInt(formData.get("receipt_id"));
+    const fuelId = parseOptionalInt(formData.get("fuel_id"));
+    if (!receiptId || !fuelId) throw new Error("Pick a receipt and a fuel row.");
+    const { linkFuelReceipt } = await import("./fuel-receipts");
+    linkFuelReceipt(receiptId, fuelId);
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
 }
 
-export async function assignFuelDriverAction(formData: FormData): Promise<void> {
-  await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
-  const id = parseOptionalInt(formData.get("fuel_id"));
-  const driverId = parseOptionalInt(formData.get("driver_id"));
-  const loadId = parseOptionalInt(formData.get("load_id"));
-  if (!id) throw new Error("Fuel row is missing.");
-  if (driverId) assignFuelTransactionDriver(id, driverId);
-  if (loadId) assignFuelTransactionLoad(id, loadId);
-  if (!driverId && !loadId) throw new Error("Pick a driver or a load.");
-  refresh();
+export async function assignFuelDriverAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("fuel_id"));
+    const driverId = parseOptionalInt(formData.get("driver_id"));
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!id) throw new Error("Fuel row is missing.");
+    if (driverId) assignFuelTransactionDriver(id, driverId);
+    if (loadId) assignFuelTransactionLoad(id, loadId);
+    if (!driverId && !loadId) throw new Error("Pick a driver or a load.");
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function deleteFuelTransactionFormAction(formData: FormData): Promise<void> {
+  await deleteFuelTransactionAction(formData);
+}
+
+export async function linkFuelReceiptFormAction(formData: FormData): Promise<void> {
+  await linkFuelReceiptAction(formData);
+}
+
+export async function deleteFuelTransactionAction(formData: FormData): Promise<ActionResult> {
+  try {
+    await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("fuel_id"));
+    if (!id) throw new Error("Fuel row is missing.");
+    deleteFuelTransaction(id);
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
 }
 
 export async function deleteLocationAction(formData: FormData): Promise<ActionResult> {
