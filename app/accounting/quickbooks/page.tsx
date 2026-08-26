@@ -19,7 +19,7 @@ export default async function QuickbooksAccountingPage() {
     <>
       <PageHeader
         title="QuickBooks"
-        subtitle="QuickBooks Online customer invoices. Owner-operator pay and relays are never invoiced. Credentials stay in .env."
+        subtitle="Customer invoices in QuickBooks."
       />
       <section className="card mb-4 p-5">
         <div className="text-sm font-semibold">Connection</div>

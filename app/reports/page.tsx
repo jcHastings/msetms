@@ -38,7 +38,7 @@ export default async function ReportsPage() {
     <>
       <PageHeader
         title="Reports"
-        subtitle="On-time, revenue by customer, daily recap, Manage Reports export, and 13-month Statistics. Relay revenue split is reporting-only."
+        subtitle="On-time, revenue, and export reports."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/reports/manage" className="btn btn-secondary">

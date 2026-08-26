@@ -17,7 +17,7 @@ export default async function AlertsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Alerts"
-        subtitle="These windows drive the compliance inbox and assign-time warnings. Email delivery is a later stub — nothing is sent."
+        subtitle="Warning windows for license and registration dates."
       />
       <section className="card p-6">
         <SettingsForm action={saveAlertsAction} submitLabel="Save alert windows" canEdit={canEdit}>

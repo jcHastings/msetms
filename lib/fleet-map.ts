@@ -140,8 +140,8 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
       isPlottableCoord(location.latitude, location.longitude),
   ).length;
   const sourceNote = liveCount
-    ? "Live Samsara GPS for active trucks. Units without a position are listed, not plotted."
-    : "Last stored Samsara GPS for active trucks. Live pull is unavailable or returned no positions. No invented pins.";
+    ? "Live Samsara GPS for active trucks."
+    : "Last stored Samsara GPS for active trucks.";
 
   return {
     title: "Samsara",
@@ -240,9 +240,9 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   ).length;
   const sourceNote = configured
     ? liveCount
-      ? "Live Orbcomm GPS for reefer trailers. Units without a position are listed, not plotted."
-      : "Live Orbcomm returned no positions. Showing last stored trailer GPS from import only."
-    : "Live Orbcomm is not connected yet. Showing last stored trailer GPS from import only. Empty units are listed, not plotted.";
+      ? "Live Orbcomm GPS for reefer trailers."
+      : "Last stored trailer GPS."
+    : "Last stored trailer GPS. Orbcomm is not connected.";
 
   const statusRows: FleetStatusRow[] = trailers.map((trailer) => {
     const snapshot =

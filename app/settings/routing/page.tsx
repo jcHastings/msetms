@@ -17,7 +17,7 @@ export default async function RoutingSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Default routing notes"
-        subtitle="Prefills special instructions when a dispatcher books a new load. Existing loads are not changed."
+        subtitle="Default special instructions on new loads."
       />
       <section className="card p-6">
         <SettingsForm action={saveRoutingAction} submitLabel="Save routing notes" canEdit={canEdit}>

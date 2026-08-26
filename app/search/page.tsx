@@ -19,7 +19,7 @@ export default async function SearchPage({
     <>
       <PageHeader
         title="Search"
-        subtitle="Search criteria for live, archived, and cancelled loads. Save a named report to reopen the same filters and columns."
+        subtitle="Find live, archived, and cancelled loads."
       />
       <LoadSearch
         customers={listCustomers()}

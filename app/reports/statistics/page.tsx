@@ -78,7 +78,7 @@ export default async function StatisticsPage({
     <>
       <PageHeader
         title="Advanced Statistics"
-        subtitle="13-month matrix. Driver revenue splits by that driver's miles on relay loads. The customer invoice stays one amount."
+        subtitle="Thirteen-month load and revenue totals."
       />
       <StatsFilters
         category={category}

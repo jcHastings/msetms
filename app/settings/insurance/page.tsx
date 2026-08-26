@@ -17,7 +17,7 @@ export default async function InsuranceSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Insurance coverage"
-        subtitle="Policy and expiry for the company. This is local coverage info, not a Business Center insurance store."
+        subtitle="Company insurance policy and expiry."
       />
       <section className="card p-6">
         <SettingsForm action={saveInsuranceAction} submitLabel="Save insurance" canEdit={canEdit}>

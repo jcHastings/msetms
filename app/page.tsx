@@ -74,7 +74,7 @@ export default async function DashboardPage({
     <>
       <PageHeader
         title="Dispatch desk"
-        subtitle="Today in America/New_York — pickup or delivery today only. Not every open load."
+        subtitle="Loads picking up or delivering today."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load

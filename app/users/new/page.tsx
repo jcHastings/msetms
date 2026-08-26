@@ -14,7 +14,7 @@ export default async function NewUserPage() {
       <UsersBack />
       <PageHeader
         title="Add user"
-        subtitle="PIN login only. The PIN is stored locally and is never shown again after you save."
+        subtitle="Add a dispatcher with a PIN."
       />
       <section className="card p-6">
         <DispatcherUserForm

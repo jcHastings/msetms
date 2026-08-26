@@ -28,7 +28,7 @@ export default async function AuditPage({
     <>
       <PageHeader
         title="Audit"
-        subtitle="Append-only accountability log for load changes. Read-only. PINs and API keys are never stored."
+        subtitle="Load change history."
       />
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="field">

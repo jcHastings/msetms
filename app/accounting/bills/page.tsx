@@ -13,7 +13,7 @@ export default function BillsPage() {
     <>
       <PageHeader
         title="Bills (AP)"
-        subtitle="Vendor / lumper bills stored locally. Not a live fuel-card or QBO bill feed."
+        subtitle="Vendor and lumper bills."
       />
       <form action={createBillAction} className="card mb-4 grid gap-3 p-5 md:grid-cols-4">
         <div className="field">

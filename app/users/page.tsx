@@ -15,7 +15,7 @@ export default async function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        subtitle="Add dispatchers and office accounting staff. Administrator manages users and 2-step reset. Standard is the board. Accounting can use Accounting, QuickBooks invoices, and audit read. Same records as Settings → Users."
+        subtitle="Dispatchers and office staff."
         actions={
           canManage ? (
             <Link href="/users/new" className="btn btn-primary">

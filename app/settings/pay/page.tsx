@@ -17,7 +17,7 @@ export default async function PaySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Pay and margin"
-        subtitle="Owner-operator default percent, carrier/OO payment method, and target gross margin. Not a live payroll or Ascend pay API."
+        subtitle="Owner-operator percent and payment method."
       />
       <section className="card p-6">
         <SettingsForm action={savePayAction} submitLabel="Save pay defaults" canEdit={canEdit}>

@@ -22,7 +22,7 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
       <UsersBack />
       <PageHeader
         title={user.name}
-        subtitle="Change name, email, PIN, role, or active status. Keep at least one Administrator."
+        subtitle="Name, PIN, role, and active status."
       />
       <section className="card p-6">
         <DispatcherUserForm

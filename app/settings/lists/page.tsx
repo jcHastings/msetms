@@ -21,7 +21,7 @@ export default async function ListsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Dropdown lists"
-        subtitle="Commodities and equipment appear on the load. Custom load statuses join the built-in list. Built-in statuses stay."
+        subtitle="Commodities, equipment, and load statuses."
       />
       {DROPDOWN_KINDS.map((kind) => {
         const rows = options.filter((item) => item.kind === kind.value);

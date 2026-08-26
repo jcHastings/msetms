@@ -54,7 +54,7 @@ export default async function FuelPage({
     <>
       <PageHeader
         title="Fuel"
-        subtitle="EFS/card file plus driver receipt photos. Official IFTA stays Samsara. Match queue: photo, state vs GPS/card, and gallons."
+        subtitle="Fuel card file and driver receipt photos."
         actions={
           <>
             {canExportCsv(dispatcher.role) ? (
@@ -75,7 +75,7 @@ export default async function FuelPage({
         <section className="card mb-6 overflow-hidden">
           <header className="border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Unassigned ({unmatched.length})</h2>
-            <p className="mt-1 text-xs text-slate-500">No driver matched. Pick one so the row counts in rollups.</p>
+            <p className="mt-1 text-xs text-slate-500">No driver matched. Pick one so the row counts in totals.</p>
           </header>
           <div className="overflow-x-auto">
             <table className="table-grid">
@@ -242,10 +242,7 @@ function FuelMatchQueue() {
     <section className="card mb-6 overflow-hidden" data-fuel-match-queue="">
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">Receipt match</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Verification icons per row. One-click Match ties a driver photo to the EFS/card row. Official IFTA stays
-          Samsara. Receipts come from the driver app, not a manual quarterly key-in.
-        </p>
+        <p className="mt-1 text-xs text-slate-500">Match a driver photo to the card-file stop.</p>
       </header>
       <div className="overflow-x-auto">
         <table className="table-grid">

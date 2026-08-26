@@ -35,7 +35,7 @@ export default async function IntegrationsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Integrations"
-        subtitle="Samsara, Orbcomm, QuickBooks, and load tracking status. Credentials stay in local .env and are never shown. No fake Ascend APIs."
+        subtitle="Samsara, Orbcomm, and QuickBooks status."
       />
 
       <section className="card mb-6 p-6">

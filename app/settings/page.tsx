@@ -11,7 +11,7 @@ export default async function SettingsHubPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="Company, documents, load numbers, users, and integration status. Changes save to the local database. Credentials stay in .env — nothing is sent to a fake Ascend API."
+        subtitle="Company, documents, users, and integrations."
       />
       {dispatcher ? (
         <p className="mb-6 text-sm text-slate-600">

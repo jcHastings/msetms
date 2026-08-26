@@ -17,7 +17,7 @@ export default async function UnitsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Currency and units"
-        subtitle="USD is the working currency. Weight labels follow lb or kg. Existing load weights are not converted."
+        subtitle="Working currency and weight units."
       />
       <section className="card p-6">
         <SettingsForm action={saveUnitsAction} submitLabel="Save units" canEdit={canEdit}>

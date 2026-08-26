@@ -17,7 +17,7 @@ export default async function TaxSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Tax"
-        subtitle="Simple sales tax or GST. When enabled, invoices show the calculated tax on the customer rate."
+        subtitle="Sales tax or GST on customer invoices."
       />
       <section className="card p-6">
         <SettingsForm action={saveTaxAction} submitLabel="Save tax" canEdit={canEdit}>

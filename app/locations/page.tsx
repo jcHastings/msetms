@@ -20,7 +20,7 @@ export default async function LocationsPage() {
     <>
       <PageHeader
         title="Locations"
-        subtitle="Shippers and receivers. Pick one on a load, type a one-off address, or upload the Ascend location CSV."
+        subtitle="Shippers and receivers for booking loads."
         actions={
           <>
             {canExport ? (

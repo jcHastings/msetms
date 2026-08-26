@@ -17,7 +17,7 @@ export default async function CompanySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Company contact"
-        subtitle="Used on load confirmations and as the company header. The default MS Express logo is used until you upload a replacement."
+        subtitle="Company name and logo on confirmations."
       />
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Contact</h2>

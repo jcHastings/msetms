@@ -18,7 +18,7 @@ export default async function CompliancePage() {
     <>
       <PageHeader
         title="Compliance"
-        subtitle="Driver license / medical card (30 days), truck and trailer registration (60 days), DOT inspection (30 days). Same windows as assign-time alerts."
+        subtitle="License, medical card, and registration dates."
         actions={
           <Link href="/fleet" className="btn btn-secondary">
             Open fleet

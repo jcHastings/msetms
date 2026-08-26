@@ -7449,8 +7449,21 @@ Continuous reefer. Two load locks.
 
   const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
   assert.match(dashToday, /loadTouchesToday/);
-  assert.match(dashToday, /America\/New_York/);
+  assert.match(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /America\/New_York/);
+  const pageCopy = [
+    ...fs.readdirSync(path.join(process.cwd(), "app"), { recursive: true, encoding: "utf8" }),
+  ]
+    .filter((file) => file.endsWith(".tsx"))
+    .map((file) => fs.readFileSync(path.join(process.cwd(), "app", file), "utf8"))
+    .join("\n");
+  const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
+  assert.match(pageSubtitles, /Fuel card file and driver receipt photos/);
+  assert.doesNotMatch(
+    pageSubtitles,
+    /Official IFTA|Credentials stay|\.env|Ascend API|fake Ascend|Not QuickBooks|Demo-safe|later stub|Windows extra|Business Center|Not a live|append-only|sample data off/i,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);

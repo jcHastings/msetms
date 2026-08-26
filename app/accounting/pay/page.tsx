@@ -23,7 +23,7 @@ export default async function DriverPayPage({
     <>
       <PageHeader
         title="Driver pay"
-        subtitle="Pay period settlement for owner-operator items from loads. Customer invoices stay customer-only. Not QuickBooks."
+        subtitle="Owner-operator settlements."
       />
       <div className="card mb-4 flex flex-wrap items-end gap-3 px-4 py-3">
         <form className="flex flex-wrap items-end gap-3" method="get">

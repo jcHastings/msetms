@@ -11,7 +11,7 @@ export default function TemplatesPage() {
     <>
       <PageHeader
         title="Load templates"
-        subtitle="Save a repeat lane from a load (customer, equipment, reefer, stops). Booking clones the structure — not the old load number or financials."
+        subtitle="Save a repeat lane for the next booking."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load

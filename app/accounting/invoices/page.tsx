@@ -15,7 +15,7 @@ export default function InvoicesPage() {
     <>
       <PageHeader
         title="Invoices (AR)"
-        subtitle="Delivered and completed loads. Create the customer invoice on the load (Income / Budget only). Download the Excel/CSV for QuickBooks. QBO connect is optional."
+        subtitle="Customer invoices for delivered loads."
         actions={
           <div className="flex gap-2">
             <a href="/api/accounting/invoices/export" className="btn btn-secondary">

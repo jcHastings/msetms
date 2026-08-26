@@ -12,7 +12,7 @@ export default function CommissionsPage() {
     <>
       <PageHeader
         title="Commissions"
-        subtitle="Worksheet: 3% of the customer rate on delivered/completed loads. Not payroll and not a QBO bill."
+        subtitle="Dispatcher commission on delivered loads."
       />
       <p className="mb-3 text-sm text-slate-600">
         Total this book: <span className="font-semibold">{formatMoney(total)}</span>

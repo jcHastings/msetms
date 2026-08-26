@@ -17,7 +17,7 @@ export default async function LoadManagementPage() {
       <SettingsBack />
       <PageHeader
         title="Load numbers and sample data"
-        subtitle="Next booked load uses the prefix and starting number. Turning sample data off hides the seeded demo loads on the board, search, and home — it does not delete them."
+        subtitle="Prefix and next number for new loads."
       />
       <section className="card p-6">
         <p className="mb-4 text-sm text-slate-600">

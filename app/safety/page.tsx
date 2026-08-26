@@ -38,7 +38,7 @@ export default async function SafetyPage() {
     <>
       <PageHeader
         title="Safety"
-        subtitle="Ranked exception list: CDL, medical card, drug test, company insurance, and Samsara HOS. Does not replace Samsara clocks on the load or fleet pages."
+        subtitle="Open CDL, medical, insurance, and HOS exceptions."
         actions={
           <Link href="/fleet/drivers" className="btn btn-secondary">
             Open drivers

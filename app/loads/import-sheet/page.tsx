@@ -15,7 +15,7 @@ export default async function ImportLoadsPage() {
     <>
       <PageHeader
         title="Import loads"
-        subtitle="Ascend/legacy sheet: preview the count and first load numbers, then import. Match by Load # to update."
+        subtitle="Import loads from a spreadsheet."
         actions={
           <div className="flex gap-2">
             <Link href="/loads/new" className="btn btn-secondary">

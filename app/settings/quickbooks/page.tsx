@@ -20,7 +20,7 @@ export default async function QuickbooksSettingsPage({
       <SettingsBack />
       <PageHeader
         title="QuickBooks Online"
-        subtitle="Connect QuickBooks Online (not Desktop). Tokens stay on the server. Customer invoices only — never owner-operator or relay pay."
+        subtitle="Connect QuickBooks for customer invoices."
       />
 
       {params.connected ? (

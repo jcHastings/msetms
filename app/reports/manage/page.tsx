@@ -14,7 +14,7 @@ export default async function ManageReportsPage() {
     <>
       <PageHeader
         title="Manage reports"
-        subtitle="Choose a category, date basis, range, and columns. Download CSV or Excel. Driver rows split relay revenue by that driver's miles."
+        subtitle="Build and download a custom report."
       />
       <ManageReportForm
         customers={listCustomers().map((item) => ({ id: item.id, label: item.name }))}
