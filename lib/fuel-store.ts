@@ -61,7 +61,7 @@ export function importFuelFromText(
   text: string,
   sourceFile: string,
 ): { created: number; skipped: number; unmatched: number; errors: FuelCsvRowError[] } {
-  const parsed = parseFuelReport(text);
+  const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
   const trucks = listTrucks();
   const db = getDb();

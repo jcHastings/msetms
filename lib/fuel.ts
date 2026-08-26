@@ -203,14 +203,17 @@ export function isFuelBucket(value: string): value is FuelBucket {
   return FUEL_BUCKETS.some((item) => item.value === value);
 }
 
-export function parseFuelReport(text: string): FuelCsvParseResult {
+export function parseFuelReport(text: string, sourceFile = ""): FuelCsvParseResult {
   const trimmed = text.replace(/^\uFEFF/, "").trim();
   if (!trimmed) {
     throw new Error("The file is empty. Upload a fuel CSV or a Transaction Activity Report PDF.");
   }
-  if (looksLikeCsvFuel(trimmed)) return parseFuelCsv(trimmed);
-  if (looksLikeFleetOneReport(trimmed)) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
-  if (looksLikeEfsReport(trimmed)) return parseEfsFuelText(trimmed);
+  const efs = looksLikeEfsReport(trimmed);
+  const fleetOne = looksLikeFleetOneReport(trimmed, sourceFile);
+  if (looksLikeCsvFuel(trimmed) && !efs && !fleetOne) return parseFuelCsv(trimmed);
+  if (fleetOne && !efs) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
+  if (efs) return parseEfsFuelText(trimmed);
+  if (fleetOne) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
   return parseFuelCsv(trimmed);
 }
 
@@ -245,13 +248,15 @@ function toFuelCsvResult(parsed: ReturnType<typeof parseFleetOneFuelText>): Fuel
 }
 
 export function looksLikeEfsReport(text: string): boolean {
-  return /\/[A-Za-z]{2}\d{4,}/.test(text) || /nname\s*:/i.test(text) || /transaction activity report/i.test(text);
+  return /nname\s*:/i.test(text) || /\/[A-Za-z]{2}\d{4,}/.test(text);
 }
 
 function looksLikeCsvFuel(text: string): boolean {
   const first = text.split(/\r?\n/).find((line) => line.trim());
   if (!first || !first.includes(",")) return false;
-  return mapFuelHeaders(parseCsvRecords(first)[0] ?? []).date != null;
+  const headerMap = mapFuelHeaders(parseCsvRecords(first)[0] ?? []);
+  if (headerMap.date == null) return false;
+  return headerMap.gallons != null || headerMap.total != null || headerMap.driverName != null;
 }
 
 export function parseFuelCsv(text: string): FuelCsvParseResult {

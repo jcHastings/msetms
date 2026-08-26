@@ -4712,6 +4712,7 @@ Continuous reefer. Two load locks.
     matchFuelDriver,
     classifyFuelCategory,
     parseEfsFuelText,
+    looksLikeEfsReport,
     parseFuelCsv,
     parseFuelReport,
     parseFuelWhen,
@@ -4820,6 +4821,9 @@ Continuous reefer. Two load locks.
     "08/21/26 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45",
   ].join("\n");
   const efsParsed = parseEfsFuelText(efsReport);
+  assert.equal(looksLikeEfsReport(efsReport), true);
+  const { looksLikeFleetOneReport } = await import("../lib/fuel-fleetone");
+  assert.equal(looksLikeFleetOneReport(efsReport), false, "EFS nname / report id must stay on the EFS path");
   assert.equal(efsParsed.rows.length, 5);
   assert.equal(efsParsed.rows[0]?.driverName, "Christopher Howell");
   assert.equal(efsParsed.rows[0]?.category, "truck_diesel");
@@ -7154,6 +7158,8 @@ Continuous reefer. Two load locks.
     "Funded Total $3,262.28",
     "Report Total 45.082",
   ].join("\n");
+  assert.equal(looksLikeEfsReport(fleetOneText), false, "FleetOne TAR must not be classified as EFS");
+  assert.equal(looksLikeFleetOneReport(fleetOneText), true);
   const fleetOne = parseFuelReport(fleetOneText);
   assert.equal(fleetOne.rows.filter((row) => row.category !== "money_code").length, 8);
   assert.equal(fleetOne.rows.filter((row) => row.category === "money_code").length, 2);
@@ -7189,6 +7195,75 @@ Continuous reefer. Two load locks.
     .find((row) => row.amount === 558.47 && row.source_file.includes("FleetOne"));
   assert.equal(avilaRow?.driver_id, avila);
   assert.ok(!fuelStore.listFuelTransactions().some((row) => row.amount === 3262.28));
+
+  const fleetOneGarbled = [
+    "TransactionActivityReport Report Date: 08/25/2026 Customer Number: 3770001903818",
+    "M&SLoads LLC 228 E ROUTE 59 #190 NANUET NY 10954 dispatch@msloads.com FundedFuel",
+    "DATE DB CATEGORY SUNOCO EAST BRUNSWICK LOVES OMAHA",
+    "08/25/202600260Christopher Howell32LOVES #730 TRAVELOMAHANEDiesel88.8005.6490505.62",
+    "08/25/202600369Steve Eller26ONE9 496ATALISSAIADiesel121.3105.3590650.10",
+    "08/25/202600369Steve Eller26ONE9 496ATALISSAIAReefer31.1805.3590167.58",
+    "08/25/202600450Ceferino Oquendo Garcia42ONVO TRAVEL PLAZAWHITEHAVENPADiesel71.2705.8590417.36",
+    "08/25/202600468Kelvin Whaley28PILOT SIOUX CITY 5SIOUXCITYIADiesel100.4505.7590538.81",
+    "08/25/202600500German Avilla36SUNOCO #7012EASTBRUNSWICKNJDiesel98.0005.9990558.47",
+    "08/25/202600500German Avilla36SUNOCO #7012EASTBRUNSWICKNJReefer10.9505.999062.90",
+    "08/25/202600500German Avilla36SUNOCO #7012EASTBRUNSWICKNJDEF4.1605.099021.19",
+    "MoneyCode137.25 fees 3.00 total 137.25",
+    "MoneyCode203.00 fees 3.00 total 203.00",
+    "FundedTotal $3,262.28 ReportTotal45.082",
+    "Customer Number Voice Number Fax Email dispatch@msloads.com Funded Activity",
+  ].join("");
+  assert.equal(looksLikeEfsReport(fleetOneGarbled), false);
+  assert.equal(
+    looksLikeFleetOneReport(fleetOneGarbled, "FleetOne_TransactionActivityReport_.pdf"),
+    true,
+  );
+  const fleetOneFromGarbled = parseFuelReport(fleetOneGarbled, "FleetOne_TransactionActivityReport_.pdf");
+  assert.equal(fleetOneFromGarbled.rows.filter((row) => row.category === "truck_diesel").length, 5);
+  assert.equal(fleetOneFromGarbled.rows.filter((row) => row.category === "reefer_diesel").length, 2);
+  assert.equal(fleetOneFromGarbled.rows.filter((row) => row.category === "def").length, 1);
+  assert.equal(fleetOneFromGarbled.rows.filter((row) => row.category === "money_code").length, 2);
+  assert.ok(fleetOneFromGarbled.rows.every((row) => !/nanuet/i.test(row.location)));
+  assert.ok(fleetOneFromGarbled.rows.every((row) => row.unitNumber !== "228"));
+  assert.ok(fleetOneFromGarbled.rows.every((row) => row.amount !== 3262.28 && row.gallons !== 45.082));
+  assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 505.62)?.category, "truck_diesel");
+  assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 167.58)?.category, "reefer_diesel");
+  assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 21.19)?.category, "def");
+  assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 137.25)?.category, "money_code");
+  assert.equal(fleetOneFromGarbled.rows.find((row) => row.amount === 203)?.category, "money_code");
+  assert.equal(parseFuelReport(efsReport).rows[0]?.invoice, "900111");
+
+  const { extractFuelPdfText } = await import("../lib/fuel-pdf");
+  const fleetOnePdf = await PDFDocument.create();
+  const fleetOnePage = fleetOnePdf.addPage([792, 612]);
+  const fleetFont = await fleetOnePdf.embedFont(StandardFonts.Helvetica);
+  fleetOnePage.drawText("Transaction Activity Report  M & S Loads LLC  Funded Fuel", {
+    x: 24,
+    y: 580,
+    size: 9,
+    font: fleetFont,
+  });
+  const fleetCells = [
+    "08/25/2026",
+    "00260",
+    "Christopher Howell",
+    "32",
+    "LOVES #730 TRAVEL",
+    "OMAHA",
+    "NE",
+    "Diesel",
+    "88.800",
+    "5.6490",
+    "505.62",
+  ];
+  fleetCells.forEach((cell, index) => {
+    fleetOnePage.drawText(cell, { x: 20 + index * 68, y: 540, size: 8, font: fleetFont });
+  });
+  fleetOnePage.drawText("Money Code 137.25 fees 3.00 total 137.25", { x: 24, y: 500, size: 8, font: fleetFont });
+  const fleetPdfText = await extractFuelPdfText(Buffer.from(await fleetOnePdf.save()));
+  const fleetFromPdf = parseFuelReport(fleetPdfText, "FleetOne_TransactionActivityReport_.pdf");
+  assert.ok(fleetFromPdf.rows.some((row) => row.amount === 505.62 && row.category === "truck_diesel"));
+  assert.ok(fleetFromPdf.rows.some((row) => row.amount === 137.25 && row.category === "money_code"));
 
   const { buildSearchExportGrid } = await import("../lib/search-export");
   const searchGrid = buildSearchExportGrid(

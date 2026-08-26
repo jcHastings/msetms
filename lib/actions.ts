@@ -1117,8 +1117,8 @@ export async function importFuelCsvAction(
     const buffer = await fileToBuffer(file);
     let text = "";
     if (isPdf) {
-      const { extractDocumentText } = await import("./rate-con");
-      text = await extractDocumentText(buffer, mime || "application/pdf", file.name);
+      const { extractFuelPdfText } = await import("./fuel-pdf");
+      text = await extractFuelPdfText(buffer);
       if (!text.trim()) {
         return { ok: false, error: "Couldn't read text from this PDF. Save the report as CSV and upload that." };
       }
