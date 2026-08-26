@@ -7227,6 +7227,7 @@ Continuous reefer. Two load locks.
   const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
   assert.match(dashToday, /loadTouchesToday/);
   assert.match(dashToday, /America\/New_York/);
+  assert.match(dashToday, /inboxItems/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);

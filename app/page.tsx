@@ -16,8 +16,10 @@ import { dailyRecap, getHandoffNote, listLiveExceptionInbox } from "@/lib/desk";
 import { saveHandoffAction } from "@/lib/dispatcher-actions";
 import {
   getDashboardStats,
+  getLoad,
   listAttentionLoads,
   listDrivers,
+  listLoads,
   listMovingLoads,
   listTrucks,
   listUpcomingCompliance,
@@ -51,7 +53,19 @@ export default async function DashboardPage({
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
   const onDuty = drivers.filter((driver) => driver.status === "on_duty");
   const expirations = listUpcomingCompliance();
-  const inbox = listLiveExceptionInbox({ kind: params.kind, q: params.q });
+  const inboxRaw = listLiveExceptionInbox({ kind: params.kind, q: params.q });
+  const inboxItems = inboxRaw.items.filter((item) => {
+    const load = getLoad(item.loadId);
+    return Boolean(load && loadTouchesToday(load));
+  });
+  const attentionIds = new Set(inboxItems.map((item) => item.loadId));
+  const todayActive = listLoads({ status: "active" }).filter((load) => loadTouchesToday(load));
+  const inbox = {
+    ...inboxRaw,
+    items: inboxItems,
+    attentionCount: attentionIds.size,
+    fineCount: todayActive.filter((load) => !attentionIds.has(load.id)).length,
+  };
   const recap = dailyRecap();
   const watched = listWatchedLoads().filter((load) => loadTouchesToday(load));
   const handoff = getHandoffNote();
