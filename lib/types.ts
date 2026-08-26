@@ -255,12 +255,20 @@ export const TRAILER_TYPES = [
 export type TrailerType = (typeof TRAILER_TYPES)[number]["value"];
 
 export const DRIVER_TYPES = [
-  { value: "single", label: "Single" },
   { value: "company_driver", label: "Company driver" },
   { value: "owner_operator", label: "Owner-operator" },
 ] as const;
 
-export type DriverKind = (typeof DRIVER_TYPES)[number]["value"];
+/** Older roster rows used "single"; treat those as company drivers. */
+export type DriverKind = (typeof DRIVER_TYPES)[number]["value"] | "single";
+
+export function isOwnerOperator(type: string | null | undefined): boolean {
+  return type === "owner_operator";
+}
+
+export function normalizeDriverKind(type: string | null | undefined): Exclude<DriverKind, "single"> {
+  return isOwnerOperator(type) ? "owner_operator" : "company_driver";
+}
 
 /** Orbcomm reefer snapshot shown on the board, load, and driver screens. */
 export type ReeferStatus = {
@@ -279,7 +287,7 @@ export function labelForTrailerType(type: string): string {
 }
 
 export function labelForDriverKind(type: string): string {
-  return DRIVER_TYPES.find((item) => item.value === type)?.label ?? type;
+  return isOwnerOperator(type) ? "Owner-operator" : "Company driver";
 }
 
 export function labelForFleetDocKind(value: string): string {

@@ -43,7 +43,7 @@ import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
-import { EQUIPMENT_REQUIRED, labelForAttachmentKind } from "@/lib/types";
+import { EQUIPMENT_REQUIRED, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
 
 export async function LoadEditor({
   loadId,
@@ -196,7 +196,7 @@ export async function LoadEditor({
                 invoiceAttachmentId={attachments.find((file) => file.kind === "invoice")?.id ?? null}
                 rateFallback={load.rate}
                 ownerOperators={drivers
-                  .filter((driver) => driver.driver_type === "owner_operator")
+                  .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => driver.name)}
               />
             </>

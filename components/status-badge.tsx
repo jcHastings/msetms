@@ -1,5 +1,6 @@
 import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import {
+  isOwnerOperator,
   labelForDriverKind,
   labelForDriverStatus,
   labelForLoadStatus,
@@ -45,18 +46,16 @@ export function DriverStatusBadge({ status }: { status: DriverStatus }) {
 }
 
 export function DriverKindBadge({ type }: { type: DriverKind | string }) {
-  const kind = type === "owner_operator" || type === "single" ? type : "company_driver";
+  const ownerOperator = isOwnerOperator(type);
   return (
     <Pill
       className={
-        kind === "owner_operator"
+        ownerOperator
           ? "bg-violet-50 text-violet-800 ring-violet-200"
-          : kind === "single"
-            ? "bg-sky-50 text-sky-800 ring-sky-200"
-            : "bg-slate-100 text-slate-600 ring-slate-200"
+          : "bg-slate-100 text-slate-600 ring-slate-200"
       }
     >
-      {labelForDriverKind(kind)}
+      {labelForDriverKind(type)}
     </Pill>
   );
 }

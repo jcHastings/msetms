@@ -11,7 +11,7 @@ import {
   truckComplianceAlerts,
 } from "@/lib/compliance";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
-import type { DriverWithTruck, Trailer, Truck } from "@/lib/types";
+import { isOwnerOperator, type DriverWithTruck, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
   loadId: number;
@@ -56,7 +56,7 @@ export function AssignDialog({
     setDriverId(value);
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
-    if (next?.driver_type === "owner_operator") {
+    if (isOwnerOperator(next?.driver_type)) {
       setOoPercent(String(next.pay_percent ?? defaultOoPercent));
     }
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
@@ -108,7 +108,7 @@ export function AssignDialog({
                   {drivers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
-                      {item.driver_type === "owner_operator" ? " · OO" : ""}
+                      {isOwnerOperator(item.driver_type) ? " · OO" : ""}
                       {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
                       {driverOptionNote(item, alertWindows)}
                     </option>
@@ -156,7 +156,7 @@ export function AssignDialog({
                   ))}
                 </select>
               </div>
-              {driver?.driver_type === "owner_operator" ? (
+              {isOwnerOperator(driver?.driver_type) ? (
                 <div className="field">
                   <label htmlFor={`oo-${loadId}`}>Owner-operator %</label>
                   <input

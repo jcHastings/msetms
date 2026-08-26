@@ -162,10 +162,8 @@ export function mapDriverRecord(record: Record<string, unknown>): DriverImportVa
 
 export function parseImportedDriverType(value: string): DriverKind {
   const key = normalizeHeader(value);
-  if (!key || key === "single") return "single";
   if (/(owner|oo)/.test(key)) return "owner_operator";
-  if (/company/.test(key)) return "company_driver";
-  return "single";
+  return "company_driver";
 }
 
 export function parseImportedActive(value: string): number {

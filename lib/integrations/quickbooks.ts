@@ -20,7 +20,7 @@ import {
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
 import { customerInvoicePayItems } from "../pay-items";
-import type { LoadView } from "../types";
+import { isOwnerOperator, type LoadView } from "../types";
 
 const MINOR_VERSION = "75";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -124,7 +124,7 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     txnDate: invoiceDate(load.delivery_end || load.delivery_start),
     memo: buildMemo(load),
     ownerOperatorNote:
-      load.driver_type === "owner_operator"
+      isOwnerOperator(load.driver_type)
         ? "Owner-operator pay is settled outside QuickBooks. This invoice bills the customer rate only."
         : "",
     alreadySent: Boolean(load.qbo_invoice_id),
@@ -258,7 +258,7 @@ function buildMemo(load: LoadView): string {
   if (load.special_instructions) parts.push(load.special_instructions);
   if (load.appointment_notes) parts.push(`Appointment: ${load.appointment_notes}`);
   if (load.notes) parts.push(load.notes);
-  if (load.driver_type === "owner_operator") {
+  if (isOwnerOperator(load.driver_type)) {
     parts.push(
       "Owner-operator pay is settled outside QuickBooks. This invoice bills the customer rate only.",
     );

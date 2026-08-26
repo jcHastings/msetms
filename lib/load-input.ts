@@ -2,7 +2,7 @@ import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt
 import { placeholderLane } from "./load-page-shared";
 import { findOrCreateCustomer, getDriver, type LoadInput } from "./queries";
 import { isReeferMode } from "./reefer-shared";
-import { DEFAULT_LOAD_EQUIPMENT } from "./types";
+import { DEFAULT_LOAD_EQUIPMENT, isOwnerOperator } from "./types";
 import { computeOwnerOperatorPay } from "./settlement";
 import { defaultOoPercent, isKnownLoadStatus } from "./settings";
 
@@ -231,7 +231,7 @@ export function parseLoadInput(
       : existing?.non_revenue ?? 0,
   };
   const driver = driverId ? getDriver(driverId) : null;
-  if (driver?.driver_type === "owner_operator") {
+  if (isOwnerOperator(driver?.driver_type)) {
     const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
     parsed.oo_percent = percent;
     parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);

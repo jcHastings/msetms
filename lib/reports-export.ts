@@ -8,7 +8,7 @@ import {
   type ReportExportColumn,
 } from "./reports-shared";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
-import type { LoadView } from "./types";
+import { isOwnerOperator, type LoadView } from "./types";
 
 export type ReportExportFilters = {
   category: ReportCategory;
@@ -42,7 +42,7 @@ function matchesCategory(load: LoadView, category: ReportCategory, entityId: num
 }
 
 function driverPay(load: LoadView): number {
-  if (load.driver_type === "owner_operator") {
+  if (isOwnerOperator(load.driver_type)) {
     return load.oo_pay ?? computeOwnerOperatorPay(load.rate, load.oo_percent) ?? 0;
   }
   return 0;

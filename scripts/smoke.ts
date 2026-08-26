@@ -700,7 +700,13 @@ async function main() {
   const driverFormSrc = fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8");
   assert.match(driverFormSrc, /Driver Type/);
   assert.match(driverFormSrc, /DRIVER_TYPES/);
-  assert.match(driverFormSrc, /driver_type \?\? "single"/);
+  assert.match(driverFormSrc, /normalizeDriverKind/);
+  assert.match(driverFormSrc, /type="radio"/);
+  assert.match(driverFormSrc, /name="driver_type"/);
+  assert.match(driverFormSrc, /Company driver/);
+  assert.match(driverFormSrc, /Owner-operator/);
+  assert.doesNotMatch(driverFormSrc, /driver_type \?\? "single"/);
+  assert.doesNotMatch(driverFormSrc, />Single</);
   assert.match(driverFormSrc, /Name \*/);
   assert.match(driverFormSrc, /Telephone \*/);
   assert.match(driverFormSrc, /Alt - Tel#/);
@@ -731,7 +737,16 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /Hazmat \(H\)/);
   assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
   assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "single"/);
+  const driverTypesSrc = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
+  assert.match(driverTypesSrc, /value: "company_driver"/);
+  assert.match(driverTypesSrc, /value: "owner_operator"/);
+  assert.match(driverTypesSrc, /function isOwnerOperator/);
+  assert.match(driverTypesSrc, /function normalizeDriverKind/);
+  assert.doesNotMatch(driverTypesSrc, /label: "Single"/);
+  const driversListSrc = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
+  assert.match(driversListSrc, /Driver type/);
+  assert.match(driversListSrc, /DriverKindBadge/);
+  assert.match(driversListSrc, /isOwnerOperator/);
   for (const file of [
     "components/samsara-truck-import.tsx",
     "components/orbcomm-trailer-import.tsx",
@@ -6094,7 +6109,7 @@ Continuous reefer. Two load locks.
     state: "OK",
     country: "USA",
   });
-  assert.equal(queries.getDriver(singleId)?.driver_type, "single");
+  assert.equal(queries.getDriver(singleId)?.driver_type, "company_driver");
 
   const {
     ASCEND_DRIVER_FIXTURE_NAMES,
@@ -6102,10 +6117,15 @@ Continuous reefer. Two load locks.
     buildDriverImportPreview,
     cleanImportedDate,
     licenseNumberText,
+    parseImportedDriverType,
   } = await import("../lib/driver-import-shared");
   const { applyDriverImport, previewDriversFromXlsx } = await import("../lib/driver-import");
   const { buildXlsxFromGrid, buildXlsxFromSheets, recordsFromFirstSheet, recordsFromLoadWorkbook } =
     await import("../lib/xlsx-first-sheet");
+  assert.equal(parseImportedDriverType("single"), "company_driver");
+  assert.equal(parseImportedDriverType(""), "company_driver");
+  assert.equal(parseImportedDriverType("owner-operator"), "owner_operator");
+  assert.equal(parseImportedDriverType("OO"), "owner_operator");
   assert.equal(ASCEND_DRIVER_FIXTURE_NAMES.length, 8);
   assert.equal(cleanImportedDate("0000-00-00"), "");
   assert.equal(cleanImportedDate("-"), "");
@@ -6130,7 +6150,7 @@ Continuous reefer. Two load locks.
   );
   assert.equal(parsedRoster.some((row) => row.name === "Ghost Driver"), false);
   const howellRow = parsedRoster.find((row) => row.name === "Christopher Howell");
-  assert.equal(howellRow?.driver_type, "single");
+  assert.equal(howellRow?.driver_type, "company_driver");
   assert.equal(howellRow?.alt_phone, "555-2001");
   assert.equal(howellRow?.cell_phone, "555-3001");
   assert.equal(howellRow?.license_number, "123456789");
@@ -6155,7 +6175,7 @@ Continuous reefer. Two load locks.
   assert.equal(queries.listDrivers().filter((driver) => driver.name === "Ghost Driver").length, 0);
   const howellAfter = queries.getDriver(howellId);
   assert.equal(howellAfter?.phone, "555-1001");
-  assert.equal(howellAfter?.driver_type, "single");
+  assert.equal(howellAfter?.driver_type, "company_driver");
   assert.equal(howellAfter?.license_number, "123456789");
   assert.equal(howellAfter?.truck_id, howellBefore?.truck_id);
   assert.equal(howellAfter?.pay_percent ?? null, howellBefore?.pay_percent ?? null);
@@ -7066,13 +7086,23 @@ Continuous reefer. Two load locks.
 
   const { driverFacingPay } = await import("../lib/settlement");
   assert.equal(driverFacingPay({ driver_type: "company_driver", rate: 5000, oo_percent: 75 }), null);
+  assert.equal(driverFacingPay({ driver_type: "single", rate: 5000, oo_percent: 75 }), null);
   assert.equal(driverFacingPay({ driver_type: "owner_operator", rate: 5000, oo_percent: 75 }), 3750);
 
-  const { normalizeCabType, parseCdlEndorsements, formatCdlEndorsements } = await import("../lib/types");
+  const { normalizeCabType, parseCdlEndorsements, formatCdlEndorsements, isOwnerOperator, normalizeDriverKind, labelForDriverKind } = await import("../lib/types");
   assert.equal(normalizeCabType("reefer"), "sleeper");
   assert.equal(normalizeCabType("day cab"), "day_cab");
   assert.deepEqual(parseCdlEndorsements("H,T"), ["H", "T"]);
   assert.match(formatCdlEndorsements("H"), /Hazmat/);
+  assert.equal(isOwnerOperator("owner_operator"), true);
+  assert.equal(isOwnerOperator("company_driver"), false);
+  assert.equal(isOwnerOperator("single"), false);
+  assert.equal(normalizeDriverKind("single"), "company_driver");
+  assert.equal(normalizeDriverKind(""), "company_driver");
+  assert.equal(normalizeDriverKind("owner_operator"), "owner_operator");
+  assert.equal(labelForDriverKind("single"), "Company driver");
+  assert.equal(labelForDriverKind("company_driver"), "Company driver");
+  assert.equal(labelForDriverKind("owner_operator"), "Owner-operator");
 
   const { motionFromSpeedMph } = await import("../lib/fleet-map-shared");
   assert.equal(motionFromSpeedMph(0), "Parked");

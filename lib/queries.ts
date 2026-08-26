@@ -49,7 +49,9 @@ import {
   type TruckWithDriver,
   DEFAULT_CAB_TYPE,
   DEFAULT_FLEET_TYPE,
+  isOwnerOperator,
   normalizeCabType,
+  normalizeDriverKind,
 } from "./types";
 import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode } from "./locations";
@@ -836,7 +838,7 @@ export function createDriver(input: {
       cleanDateInput(input.license_expires),
       cleanDateInput(input.medical_issued),
       cleanDateInput(input.medical_expires),
-      input.driver_type ?? "company_driver",
+      normalizeDriverKind(input.driver_type),
       input.pay_percent ?? null,
       input.pin ?? "",
       input.samsara_driver_id ?? "",
@@ -929,7 +931,7 @@ export function updateDriver(
       cleanDateInput(input.license_expires ?? current.license_expires),
       cleanDateInput(input.medical_issued ?? current.medical_issued),
       cleanDateInput(input.medical_expires ?? current.medical_expires),
-      input.driver_type ?? "company_driver",
+      normalizeDriverKind(input.driver_type ?? current.driver_type),
       input.pay_percent === undefined ? current.pay_percent : input.pay_percent,
       pin,
       input.samsara_driver_id ?? current.samsara_driver_id,
@@ -1445,7 +1447,7 @@ export function assignLoad(
   assertAssetFree(truckId, driverId, loadId, resolvedTrailerId ?? null);
 
   const ooPercent =
-    driver.driver_type === "owner_operator"
+    isOwnerOperator(driver.driver_type)
       ? settlement?.oo_percent ?? driver.pay_percent ?? defaultOoPercent()
       : null;
   const ooPay = computeOwnerOperatorPay(load.rate, ooPercent);

@@ -17,7 +17,7 @@ import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
-import type { CompanyProfile, LoadView } from "./types";
+import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 
 export type ConfirmationStop = {
   title: string;
@@ -85,7 +85,7 @@ export function equipmentLabel(load: LoadView): string {
 }
 
 export function agreedAmountForLoad(load: LoadView): number | null {
-  if (load.driver_type !== "owner_operator") return null;
+  if (!isOwnerOperator(load.driver_type)) return null;
   if (load.oo_pay != null) return load.oo_pay;
   return computeOwnerOperatorPay(load.rate, load.oo_percent);
 }
@@ -186,7 +186,7 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
   const delivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
   const shipper = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
   const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination, load.customer_name);
-  const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
+  const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
     load.public_notes,
     load.special_instructions,

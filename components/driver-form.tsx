@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createDriverAction, updateDriverAction } from "@/lib/actions";
 import type { DriverFormValues } from "@/lib/fleet-form-shared";
-import { CDL_ENDORSEMENTS, DRIVER_TYPES, parseCdlEndorsements } from "@/lib/types";
+import { CDL_ENDORSEMENTS, DRIVER_TYPES, normalizeDriverKind, parseCdlEndorsements } from "@/lib/types";
 
 type Props = {
   driver?: DriverFormValues;
@@ -22,16 +22,26 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
         <FormBanner result={state} />
         <p className="text-sm font-semibold text-slate-900">Driver 1</p>
       </div>
-      <div className="field">
-        <label htmlFor="driver_type">Driver Type</label>
-        <select id="driver_type" name="driver_type" defaultValue={driver?.driver_type ?? "single"}>
+      <fieldset className="field md:col-span-2">
+        <legend className="text-sm font-semibold text-slate-900">Driver Type *</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {DRIVER_TYPES.map((type) => (
-            <option key={type.value} value={type.value}>
-              {type.label}
-            </option>
+            <label
+              key={type.value}
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm has-[:checked]:border-slate-900 has-[:checked]:ring-1 has-[:checked]:ring-slate-900"
+            >
+              <input
+                type="radio"
+                name="driver_type"
+                value={type.value}
+                required
+                defaultChecked={driver ? normalizeDriverKind(driver.driver_type) === type.value : false}
+              />
+              <span className="font-semibold text-slate-900">{type.label}</span>
+            </label>
           ))}
-        </select>
-      </div>
+        </div>
+      </fieldset>
       <div className="field">
         <label htmlFor="name">Name *</label>
         <input id="name" name="name" required defaultValue={driver?.name} />

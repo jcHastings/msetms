@@ -2,7 +2,7 @@ import { getDb } from "./db";
 import { getLoad, listDrivers, listLoads } from "./queries";
 import { listPayItems, markPayItemPaid, type LoadPayItem } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
-import type { LoadView } from "./types";
+import { isOwnerOperator, type LoadView } from "./types";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
 
 export type Bill = {
@@ -111,7 +111,7 @@ export function listDriverPay(from = "", to = ""): DriverPayLine[] {
     const periodDate = load.delivery_end || load.delivery_start || load.updated_at;
     if (!inPayPeriod(periodDate, from, to)) continue;
 
-    if (load.driver_type === "owner_operator") {
+    if (isOwnerOperator(load.driver_type)) {
       const amount = load.oo_pay ?? computeOwnerOperatorPay(load.rate, load.oo_percent) ?? 0;
       const settlement = byLoad.get(load.id) ?? null;
       lines.push({
@@ -261,7 +261,7 @@ export function seedDemoAccounting(): void {
     loadId: load?.id ?? null,
   });
   const drivers = listDrivers();
-  const oo = drivers.find((driver) => driver.driver_type === "owner_operator");
+  const oo = drivers.find((driver) => isOwnerOperator(driver.driver_type));
   const ooLoad = listLoads({ status: "all" }).find((load) => load.driver_id === oo?.id);
   if (ooLoad) {
     getDb()

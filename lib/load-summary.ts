@@ -1,4 +1,5 @@
 import { formatDateTime, formatMoney } from "./format";
+import { isOwnerOperator } from "./types";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 
 export type LoadSummaryInput = {
@@ -54,7 +55,7 @@ export function formatLoadSummary(load: LoadSummaryInput): string {
   if (load.appointment_notes) lines.push(`Appointment: ${load.appointment_notes}`);
   if (load.special_instructions) lines.push(`Special instructions: ${load.special_instructions}`);
   if (load.public_notes?.trim()) lines.push(`Notes: ${load.public_notes.trim()}`);
-  if (load.driver_type === "owner_operator" && (load.oo_pay != null || load.rate != null)) {
+  if (isOwnerOperator(load.driver_type) && (load.oo_pay != null || load.rate != null)) {
     lines.push(`Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`);
   }
   // Company driver pay stays off this text. Relay cities stay internal except "your leg".

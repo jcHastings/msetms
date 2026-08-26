@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { addRelayAction, deleteRelayAction } from "@/lib/dispatcher-actions";
 import { formatRelayHandoff, type LoadRelayView } from "@/lib/relays";
+import { isOwnerOperator } from "@/lib/types";
 
 type RelayDriverOption = {
   id: number;
@@ -80,13 +81,12 @@ export function LoadRelaysPanel({
 }
 
 function driverKindLabel(type: string | null | undefined): string {
-  if (type === "owner_operator") return "OO";
-  if (type) return "Company";
-  return "Unassigned";
+  if (!type) return "Unassigned";
+  return isOwnerOperator(type) ? "OO" : "Company";
 }
 
 function driverOptionLabel(driver: RelayDriverOption): string {
-  return `${driver.name}${driver.driver_type === "owner_operator" ? " · OO" : " · Company"}`;
+  return `${driver.name}${isOwnerOperator(driver.driver_type) ? " · OO" : " · Company"}`;
 }
 
 function RelayDialog({

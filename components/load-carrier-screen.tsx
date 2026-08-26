@@ -5,7 +5,7 @@ import { ComplianceList } from "@/components/compliance-badge";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { collectAssignmentAlerts, driverComplianceAlerts } from "@/lib/compliance";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
-import type { DriverWithTruck, Load, Trailer, Truck } from "@/lib/types";
+import { isOwnerOperator, type DriverWithTruck, type Load, type Trailer, type Truck } from "@/lib/types";
 
 export function LoadCarrierScreen({
   drivers,
@@ -29,7 +29,7 @@ export function LoadCarrierScreen({
   const { handleAssign } = useLoadAssignPersist(load?.id);
   const initialDriver = load?.driver_id ? drivers.find((item) => item.id === load.driver_id) : null;
   const [driverKind, setDriverKind] = useState<"company" | "owner_operator">(
-    initialDriver?.driver_type === "owner_operator" ? "owner_operator" : "company",
+    isOwnerOperator(initialDriver?.driver_type) ? "owner_operator" : "company",
   );
   const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
   const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
@@ -39,7 +39,7 @@ export function LoadCarrierScreen({
   const selectedTruck = trucks.find((item) => String(item.id) === truckId);
   const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
   const filteredDrivers = drivers.filter((driver) =>
-    driverKind === "owner_operator" ? driver.driver_type === "owner_operator" : driver.driver_type !== "owner_operator",
+    driverKind === "owner_operator" ? isOwnerOperator(driver.driver_type) : !isOwnerOperator(driver.driver_type),
   );
   const alerts = useMemo(
     () =>
@@ -73,7 +73,7 @@ export function LoadCarrierScreen({
           className={`btn ${driverKind === "company" ? "btn-primary" : "btn-secondary"}`}
           onClick={() => {
             setDriverKind("company");
-            if (selectedDriver?.driver_type === "owner_operator") setDriverId("");
+            if (isOwnerOperator(selectedDriver?.driver_type)) setDriverId("");
           }}
         >
           Company driver
@@ -83,7 +83,7 @@ export function LoadCarrierScreen({
           className={`btn ${driverKind === "owner_operator" ? "btn-primary" : "btn-secondary"}`}
           onClick={() => {
             setDriverKind("owner_operator");
-            if (selectedDriver && selectedDriver.driver_type !== "owner_operator") setDriverId("");
+            if (selectedDriver && !isOwnerOperator(selectedDriver.driver_type)) setDriverId("");
           }}
         >
           Owner-operator
@@ -179,7 +179,7 @@ export function LoadCarrierScreen({
           I confirm saving this assignment with expired documents.
         </label>
       ) : null}
-      {selectedDriver?.driver_type === "owner_operator" ? (
+      {isOwnerOperator(selectedDriver?.driver_type) ? (
         <input
           type="hidden"
           name="oo_percent"

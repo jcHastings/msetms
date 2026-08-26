@@ -8,6 +8,7 @@ import { listDrivers } from "@/lib/queries";
 import { buildSafetyBoard } from "@/lib/safety";
 import { formatSafetyDatePair } from "@/lib/safety-shared";
 import { complianceWindows, getCompanySettings } from "@/lib/settings";
+import { labelForDriverKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export default async function SafetyPage() {
                     <td>
                       <div className="font-semibold">{row.subject}</div>
                       <div className="text-xs text-slate-500">
-                        {row.driverType === "owner_operator" ? "Owner-operator" : "Company driver"}
+                        {labelForDriverKind(row.driverType)}
                       </div>
                     </td>
                     <td>{row.licenseExpires}</td>

@@ -6,7 +6,7 @@ import { driverComplianceAlerts, trailerComplianceAlerts, truckComplianceAlerts 
 import { formatWeight } from "@/lib/format";
 import { listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
-import { labelForTrailerType, labelForTruckType } from "@/lib/types";
+import { isOwnerOperator, labelForTrailerType, labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,8 @@ export default async function FleetPage({
   const trucks = listTrucks();
   const trailers = listTrailers();
   const drivers = listDrivers().filter((driver) => {
-    if (type === "company_driver" || type === "owner_operator") return driver.driver_type === type;
+    if (type === "owner_operator") return isOwnerOperator(driver.driver_type);
+    if (type === "company_driver") return !isOwnerOperator(driver.driver_type);
     return true;
   });
 

@@ -6,6 +6,7 @@ import { ViewInvoiceButton } from "@/components/view-invoice-button";
 import { formatMoney } from "@/lib/format";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
+import { isOwnerOperator } from "@/lib/types";
 
 function sumItems(items: LoadPayItem[]): number {
   return items.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -37,7 +38,7 @@ export function LoadPayItems({
   const incomeTotal = income.length ? sumItems(income) : rateFallback ?? 0;
   const expenseTotal = sumItems(expenses);
   const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
-  const ownerOperator = driverType === "owner_operator";
+  const ownerOperator = isOwnerOperator(driverType);
   const ooNames = ownerOperators.filter(Boolean);
   return (
     <section data-load-tab="financials" className="space-y-6">

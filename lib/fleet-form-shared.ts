@@ -5,6 +5,7 @@ import {
   DEFAULT_FLEET_TYPE,
   TRAILER_TYPES,
   normalizeCabType,
+  normalizeDriverKind,
   type TrailerType,
   type TruckType,
 } from "./types";
@@ -175,7 +176,7 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     cdl_endorsements: text(driver.cdl_endorsements),
     medical_issued: text(driver.medical_issued),
     medical_expires: text(driver.medical_expires),
-    driver_type: text(driver.driver_type) || "company_driver",
+    driver_type: normalizeDriverKind(text(driver.driver_type)),
     alt_phone: text(driver.alt_phone),
     cell_phone: text(driver.cell_phone),
     pager: text(driver.pager),

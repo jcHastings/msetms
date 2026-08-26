@@ -153,7 +153,9 @@ function parseContacts(formData: FormData) {
 
 
 function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
-  const type = String(value ?? "company_driver");
+  const type = String(value ?? "").trim();
+  if (!type) throw new Error("Pick a driver type.");
+  if (type === "single") return "company_driver";
   if (!DRIVER_TYPES.some((item) => item.value === type)) {
     throw new Error("Pick a driver type.");
   }

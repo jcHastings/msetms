@@ -8,7 +8,7 @@ import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { assignedFleetAssetIds, listDrivers } from "@/lib/queries";
-import { formatCdlEndorsements } from "@/lib/types";
+import { formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ export default async function DriversPage() {
             <tr>
               <th>Name</th>
               <th>Phone</th>
-              <th>Type</th>
+              <th>Driver type</th>
               <th>CDL</th>
               <th>Truck</th>
               <th>CDL exp</th>
@@ -78,7 +78,7 @@ export default async function DriversPage() {
                     <td>{driver.phone || "—"}</td>
                     <td>
                       <DriverKindBadge type={driver.driver_type} />
-                      {driver.driver_type === "owner_operator" && driver.pay_percent != null ? (
+                      {isOwnerOperator(driver.driver_type) && driver.pay_percent != null ? (
                         <div className="text-xs text-slate-500">{driver.pay_percent}% settlement</div>
                       ) : null}
                     </td>
