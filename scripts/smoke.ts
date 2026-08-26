@@ -703,8 +703,7 @@ async function main() {
   assert.match(driverFormSrc, /normalizeDriverKind/);
   assert.match(driverFormSrc, /type="radio"/);
   assert.match(driverFormSrc, /name="driver_type"/);
-  assert.match(driverFormSrc, /Company driver/);
-  assert.match(driverFormSrc, /Owner-operator/);
+  assert.match(driverFormSrc, /type\.label/);
   assert.doesNotMatch(driverFormSrc, /driver_type \?\? "single"/);
   assert.doesNotMatch(driverFormSrc, />Single</);
   assert.match(driverFormSrc, /Name \*/);
@@ -739,7 +738,9 @@ async function main() {
   assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
   const driverTypesSrc = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
   assert.match(driverTypesSrc, /value: "company_driver"/);
+  assert.match(driverTypesSrc, /label: "Company driver"/);
   assert.match(driverTypesSrc, /value: "owner_operator"/);
+  assert.match(driverTypesSrc, /label: "Owner-operator"/);
   assert.match(driverTypesSrc, /function isOwnerOperator/);
   assert.match(driverTypesSrc, /function normalizeDriverKind/);
   assert.doesNotMatch(driverTypesSrc, /label: "Single"/);
