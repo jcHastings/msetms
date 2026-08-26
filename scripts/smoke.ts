@@ -7181,15 +7181,19 @@ Continuous reefer. Two load locks.
   assert.equal(fleetOne.rows.find((row) => row.amount === 21.19)?.category, "def");
   assert.equal(fleetOne.rows.find((row) => row.amount === 137.25)?.category, "money_code");
   assert.equal(fleetOne.rows.find((row) => row.amount === 203)?.category, "money_code");
+  const truck36 =
+    queries.listTrucks().find((truck) => truck.unit_number === "36")?.id ??
+    queries.createTruck({ unit_number: "36", type: "reefer", capacity_lbs: 44000, status: "available" });
   const avila =
     queries.listDrivers().find((driver) => driver.name === "German Avila")?.id ??
     queries.createDriver({
       name: "German Avila",
       phone: "555-0500",
       license: "NJ-CDL-AVILA",
-      truck_id: null,
+      truck_id: truck36,
       status: "available",
     });
+  queries.assignDriverToTruck(truck36, avila);
   const fleetOneImport = fuelStore.importFuelFromText(fleetOneText, "FleetOne_TransactionActivityReport_.pdf");
   assert.equal(fleetOneImport.created + fleetOneImport.unmatched, 10);
   const avilaRow = fuelStore
@@ -7274,11 +7278,15 @@ Continuous reefer. Two load locks.
     "/ Ds201902 / Dm201902",
   ].join("\n");
   assert.equal(looksLikeEfsReport(fleetOneOfficeExtract), false);
+  assert.equal(looksLikeEfsReport("/ Dm201902\np/Ds201902 / Dm201902"), false);
+  assert.equal(looksLikeFleetOneReport(fleetOneOfficeExtract), true);
   assert.equal(
-    looksLikeFleetOneReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport_pdf"),
+    looksLikeFleetOneReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport.pdf.pdf"),
     true,
   );
-  const officeParsed = parseFuelReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport_pdf");
+  assert.doesNotThrow(() => parseFuelReport(fleetOneOfficeExtract));
+  assert.doesNotThrow(() => parseFuelReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport.pdf.pdf"));
+  const officeParsed = parseFuelReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport.pdf.pdf");
   assert.equal(officeParsed.rows.filter((row) => row.category === "truck_diesel").length, 5);
   assert.equal(officeParsed.rows.filter((row) => row.category === "reefer_diesel").length, 2);
   assert.equal(officeParsed.rows.filter((row) => row.category === "def").length, 1);
@@ -7315,11 +7323,13 @@ Continuous reefer. Two load locks.
   assert.equal(officeRows.find((row) => row.amount === 505.62)?.driver_id, howellId);
   assert.equal(officeRows.find((row) => row.amount === 650.1)?.driver_id, ellerId);
   assert.equal(officeRows.find((row) => row.amount === 538.81)?.driver_id, whaleyId);
+  assert.equal(officeRows.find((row) => row.amount === 558.47)?.driver_id, avila);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
   assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
 
   const { isFuelPdfUpload, readFuelUploadText } = await import("../lib/fuel-pdf");
   assert.equal(isFuelPdfUpload("FleetOne_TransactionActivityReport_pdf", "application/octet-stream"), true);
+  assert.equal(isFuelPdfUpload("FleetOne_TransactionActivityReport.pdf.pdf", ""), true);
   assert.equal(isFuelPdfUpload("report.PDF", ""), true);
   assert.equal(isFuelPdfUpload("report.pdf.pdf", ""), true);
   assert.equal(isFuelPdfUpload("plain.csv", "text/csv", Buffer.from("Date,Category\n")), false);

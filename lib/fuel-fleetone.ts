@@ -23,10 +23,10 @@ const MONEY_CODE_RE = /\bmoney\s*codes?\b/i;
 const SUMMARY_AMOUNTS = new Set([3262.28, 2670.36, 340.25]);
 
 export function looksLikeFleetOneReport(text: string, sourceFile = ""): boolean {
-  if (/fleetone/i.test(sourceFile)) return true;
-  if (/transactionactivityreport/i.test(sourceFile)) return true;
+  if (/fleetone|transactionactivityreport/i.test(sourceFile)) return true;
   if (/nname\s*:/i.test(text)) return false;
   const blob = `${text}\n${sourceFile}`;
+  if (/\bN\s+(Diesel|Reefer|DEF|Money\s*Code)\b/i.test(text) && /\d{1,2}\/\d{1,2}/.test(text)) return true;
   if (/funded\s*(fuel|activity)/i.test(blob) || /fleet\s*one/i.test(blob) || MONEY_CODE_RE.test(blob)) return true;
   if (/transaction\s*activity\s*report/i.test(blob) && /m\s*&\s*s\s*loads|nanuet|3770001903818|dispatch@msloads/i.test(blob)) {
     return true;
