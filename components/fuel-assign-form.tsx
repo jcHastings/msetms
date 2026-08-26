@@ -50,7 +50,12 @@ export function FuelAssignForm({
             </option>
           ))}
         </select>
-        <button className="btn btn-secondary" type="submit" disabled={pending || !canAssign}>
+        <button
+          className="btn btn-secondary"
+          type="submit"
+          disabled={pending || !canAssign}
+          title={canAssign ? undefined : "Pick a driver or a load."}
+        >
           {pending ? "Saving…" : "Assign"}
         </button>
       </div>

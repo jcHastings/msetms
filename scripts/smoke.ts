@@ -7306,10 +7306,12 @@ Continuous reefer. Two load locks.
     fleetOneOfficeExtract,
     "FleetOne_TransactionActivityReport_pdf",
   );
-  assert.equal(officeImport.created + officeImport.unmatched, 10);
+  assert.equal(officeParsed.rows.length, 10);
+  assert.equal(officeImport.created + officeImport.unmatched, 8);
   const officeRows = fuelStore
     .listFuelTransactions()
     .filter((row) => row.source_file === "FleetOne_TransactionActivityReport_pdf");
+  assert.equal(officeRows.filter((row) => row.category !== "money_code").length, 8);
   assert.equal(officeRows.find((row) => row.amount === 505.62)?.driver_id, howellId);
   assert.equal(officeRows.find((row) => row.amount === 650.1)?.driver_id, ellerId);
   assert.equal(officeRows.find((row) => row.amount === 538.81)?.driver_id, whaleyId);
