@@ -368,7 +368,7 @@ async function main() {
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
   assert.match(payPageSource, /Close period/);
   assert.match(payPageSource, /Download Excel/);
-  assert.match(payPageSource, /Customer invoices stay customer-only/);
+  assert.match(payPageSource, /Owner-operator settlements/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
