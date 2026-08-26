@@ -3,7 +3,7 @@ import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, loadTouchesToday } from "@/lib/format";
 import {
   getSamsaraFleet,
   hosForLoad,
@@ -42,8 +42,8 @@ export default async function DashboardPage({
   const dispatcher = await getSignedInDispatcher();
   const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
   const stats = getDashboardStats();
-  const unassigned = listAttentionLoads();
-  const moving = listMovingLoads();
+  const unassigned = listAttentionLoads().filter((load) => loadTouchesToday(load));
+  const moving = listMovingLoads().filter((load) => loadTouchesToday(load));
   const movingRelayLabels = extraRelayLabelsByLoad(moving);
   const fleet = await getSamsaraFleet();
   const trucks = listTrucks();
@@ -53,14 +53,14 @@ export default async function DashboardPage({
   const expirations = listUpcomingCompliance();
   const inbox = listLiveExceptionInbox({ kind: params.kind, q: params.q });
   const recap = dailyRecap();
-  const watched = listWatchedLoads();
+  const watched = listWatchedLoads().filter((load) => loadTouchesToday(load));
   const handoff = getHandoffNote();
 
   return (
     <>
       <PageHeader
         title="Dispatch desk"
-        subtitle="Exception inbox first — ranked work, then trucks on the road and loads that still need a unit."
+        subtitle="Today in America/New_York — pickup or delivery today only. Not every open load."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load

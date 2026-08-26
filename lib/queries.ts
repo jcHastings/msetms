@@ -47,7 +47,9 @@ import {
   type TruckStatus,
   type TruckType,
   type TruckWithDriver,
+  DEFAULT_CAB_TYPE,
   DEFAULT_FLEET_TYPE,
+  normalizeCabType,
 } from "./types";
 import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode } from "./locations";
@@ -486,7 +488,7 @@ export function updateTrailer(
 
 export function createTruck(input: {
   unit_number: string;
-  type: TruckType;
+  type: TruckType | string;
   capacity_lbs: number;
   status: TruckStatus;
   samsara_vehicle_id?: string;
@@ -499,6 +501,7 @@ export function createTruck(input: {
   dot_expires?: string;
   vin?: string;
   plate?: string;
+  plate_state?: string;
   year?: string;
   make?: string;
   model?: string;
@@ -511,12 +514,12 @@ export function createTruck(input: {
     const result = getDb()
       .prepare(
         `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number,
-            registration_issued, registration_expires, dot_inspected_on, dot_expires, vin, plate, year, make, model, notes, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            registration_issued, registration_expires, dot_inspected_on, dot_expires, vin, plate, plate_state, year, make, model, notes, active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
-        input.type || DEFAULT_FLEET_TYPE,
+        normalizeCabType(input.type || DEFAULT_CAB_TYPE),
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
@@ -529,6 +532,7 @@ export function createTruck(input: {
         input.dot_expires ?? "",
         input.vin ?? "",
         input.plate ?? "",
+        String(input.plate_state ?? "").trim().toUpperCase(),
         input.year ?? "",
         input.make ?? "",
         input.model ?? "",
@@ -552,7 +556,7 @@ export function updateTruck(
   id: number,
   input: {
     unit_number: string;
-    type: TruckType;
+    type: TruckType | string;
     capacity_lbs: number;
     status: TruckStatus;
     samsara_vehicle_id?: string;
@@ -565,6 +569,7 @@ export function updateTruck(
     dot_expires?: string;
     vin?: string;
     plate?: string;
+    plate_state?: string;
     year?: string;
     make?: string;
     model?: string;
@@ -581,12 +586,12 @@ export function updateTruck(
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
              samsara_vehicle_id = ?, samsara_trailer_id = ?, orbcomm_asset_id = ?, trailer_number = ?,
              registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ?,
-             vin = ?, plate = ?, year = ?, make = ?, model = ?, notes = ?, active = ?, updated_at = ?
+             vin = ?, plate = ?, plate_state = ?, year = ?, make = ?, model = ?, notes = ?, active = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
         input.unit_number,
-        input.type || DEFAULT_FLEET_TYPE,
+        normalizeCabType(input.type || DEFAULT_CAB_TYPE),
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
@@ -599,6 +604,7 @@ export function updateTruck(
         input.dot_expires ?? "",
         input.vin ?? "",
         input.plate ?? "",
+        String(input.plate_state ?? "").trim().toUpperCase(),
         input.year ?? "",
         input.make ?? "",
         input.model ?? "",
@@ -801,6 +807,7 @@ export function createDriver(input: {
   drug_test_last?: string;
   drug_test_next?: string;
   termination_date?: string;
+  cdl_endorsements?: string;
 }): number {
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
@@ -813,9 +820,9 @@ export function createDriver(input: {
         medical_issued, medical_expires, driver_type, pay_percent,
         pin, samsara_driver_id, truck_id, status,
         alt_phone, cell_phone, pager, address, country, city, state, postal_zip,
-        date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date,
+        date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date, cdl_endorsements,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -848,6 +855,7 @@ export function createDriver(input: {
       cleanDateInput(input.drug_test_last),
       cleanDateInput(input.drug_test_next),
       cleanDateInput(input.termination_date),
+      String(input.cdl_endorsements ?? "").trim(),
       timestamp,
       timestamp,
     );
@@ -888,6 +896,7 @@ export function updateDriver(
     drug_test_last?: string;
     drug_test_next?: string;
     termination_date?: string;
+    cdl_endorsements?: string;
   },
 ): void {
   const current = getDriver(id);
@@ -904,6 +913,7 @@ export function updateDriver(
            pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?,
            alt_phone = ?, cell_phone = ?, pager = ?, address = ?, country = ?, city = ?, state = ?, postal_zip = ?,
            date_of_birth = ?, date_of_hire = ?, drug_test_last = ?, drug_test_next = ?, termination_date = ?,
+           cdl_endorsements = ?,
            updated_at = ?
        WHERE id = ?`,
     )
@@ -938,6 +948,7 @@ export function updateDriver(
       cleanDateInput(input.drug_test_last ?? current.drug_test_last),
       cleanDateInput(input.drug_test_next ?? current.drug_test_next),
       cleanDateInput(input.termination_date ?? current.termination_date),
+      input.cdl_endorsements === undefined ? current.cdl_endorsements : String(input.cdl_endorsements ?? "").trim(),
       now(),
       id,
     );

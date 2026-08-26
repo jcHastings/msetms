@@ -37,7 +37,7 @@ async function main() {
   assert.match(navSource, /href: "\/fleet\/samsara"/);
   assert.match(navSource, /label: "Samsara"/);
   assert.match(navSource, /href: "\/fleet\/orbcomm"/);
-  assert.match(navSource, /label: "ORBCOMM"/);
+  assert.match(navSource, /label: "Orbcomm"/);
   assert.match(navSource, /href: "\/reports\/manage"/);
   assert.match(navSource, /href: "\/reports\/statistics"/);
   const { loadStatusBand, loadStatusBadgeClass, loadStatusRowClass } = await import("../lib/load-status-style");
@@ -645,7 +645,7 @@ async function main() {
   assert.match(readme, /styles must load on standalone/);
   assert.match(readme, /unstyled raw HTML/);
   assert.match(readme, /Import from Samsara/);
-  assert.match(readme, /Import from ORBCOMM/);
+  assert.match(readme, /Import from Orbcomm/);
   assert.match(readme, /never logged/);
   const shipped = fs.readFileSync(path.join(process.cwd(), "SHIPPED.md"), "utf8");
   assert.match(shipped, /npm start/);
@@ -653,7 +653,7 @@ async function main() {
   assert.match(shipped, /styles must load on standalone/);
   assert.match(shipped, /unstyled raw HTML/);
   assert.match(shipped, /Import from Samsara/);
-  assert.match(shipped, /Import from ORBCOMM/);
+  assert.match(shipped, /Import from Orbcomm/);
   assert.match(shipped, /every dispatcher page/);
 
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
@@ -721,7 +721,10 @@ async function main() {
   assert.match(driverFormSrc, />\s*Files\s*</);
   assert.match(driverFormSrc, /submitLabel = "Save"/);
   assert.match(driverFormSrc, /pending \? "Saving…" : submitLabel/);
-  assert.doesNotMatch(driverFormSrc, /Passport Expiry|Fast Card|Hazmat/);
+  assert.match(driverFormSrc, /data-cdl-endorsements/);
+  assert.match(driverFormSrc, /CDL_ENDORSEMENTS/);
+  assert.doesNotMatch(driverFormSrc, /Passport Expiry|Fast Card|passport_expiry|fast_card|hazmat_expiry/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /Hazmat \(H\)/);
   assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
   assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "single"/);
@@ -836,7 +839,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /matchTruckForSamsaraLive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /active fleet vehicles|Deactivated/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from ORBCOMM/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from Orbcomm/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /console\.log/);
@@ -846,6 +849,13 @@ async function main() {
   assert.match(orbcommAuth, /orgKey/);
   assert.match(orbcommAuth, /data\?\.accessToken|data\.accessToken/);
   assert.doesNotMatch(orbcommAuth, /accountId:/);
+  assert.match(orbcommAuth, /getAssetStatus/);
+  assert.match(orbcommAuth, /assetNames/);
+  assert.match(orbcommAuth, /snapshotsFromLiveAssets/);
+  assert.match(orbcommAuth, /returnTemp/);
+  assert.match(orbcommAuth, /setpointTemp/);
+  assert.match(orbcommAuth, /Authorization: token/);
+  assert.doesNotMatch(orbcommAuth, /Bearer \$\{token\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
@@ -3574,7 +3584,7 @@ Continuous reefer. Two load locks.
   assert.ok(created777, "created truck uses Samsara unit #");
   assert.equal(created777?.samsara_vehicle_id, "veh-777");
   assert.equal(created777?.vin, "VIN777AAA");
-  assert.equal(created777?.type, "reefer", "new Samsara trucks default to Reefer");
+  assert.equal(created777?.type, "sleeper", "new Samsara trucks default to Sleeper cab");
   const updated112 = trucksAfter.find((truck) => truck.samsara_vehicle_id === "samsara-veh-112");
   assert.ok(updated112);
   assert.equal(
@@ -5601,11 +5611,11 @@ Continuous reefer. Two load locks.
     notes: "Shop next week",
     active: 1,
   });
-  assert.equal(queries.getTruck(truckId)?.type, "reefer", "saving Reefer stays Reefer");
+  assert.equal(queries.getTruck(truckId)?.type, "sleeper", "tractor type is cab, not trailer equipment");
   const { parseTrailerType, parseTruckType } = await import("../lib/fleet-form-shared");
-  assert.equal(parseTruckType(""), "reefer");
+  assert.equal(parseTruckType(""), "sleeper");
   assert.equal(parseTrailerType(""), "reefer");
-  assert.equal(parseTruckType("reefer"), "reefer");
+  assert.equal(parseTruckType("reefer"), "sleeper");
   const persistTypeId = queries.createTruck({
     unit_number: "TYPE-SAVE",
     type: "dry_van",
@@ -5633,7 +5643,7 @@ Continuous reefer. Two load locks.
     notes: persistTypeTruck.notes,
     active: persistTypeTruck.active,
   });
-  assert.equal(queries.getTruck(persistTypeId)?.type, "reefer", "saving Reefer stays Reefer");
+  assert.equal(queries.getTruck(persistTypeId)?.type, "sleeper", "saving a tractor type stores cab, not Reefer");
   const typeTrailerId = queries.createTrailer({
     unit_number: "REEF-SAVE",
     type: "dry_van",
@@ -5666,7 +5676,7 @@ Continuous reefer. Two load locks.
   const trailerFormSrc = fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8");
   assert.match(truckFormSrc, /formData\.set\("type"/);
   assert.match(trailerFormSrc, /formData\.set\("type"/);
-  assert.match(truckFormSrc, /DEFAULT_FLEET_TYPE/);
+  assert.match(truckFormSrc, /DEFAULT_CAB_TYPE/);
   assert.match(trailerFormSrc, /DEFAULT_FLEET_TYPE/);
   assert.match(basicsChunk, /DEFAULT_LOAD_EQUIPMENT/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /DEFAULT_LOAD_EQUIPMENT = "reefer_53"/);
@@ -7024,6 +7034,204 @@ Continuous reefer. Two load locks.
   assert.equal(linkedGps[0]?.unitNumber, "40", "linked Samsara id must win even when the name has other digits");
   assert.equal(linkedGps[0]?.address, "Oklahoma City, OK");
   assert.equal(samsara.extractSamsaraGps({ gps: [{ latitude: 35.4, longitude: -97.5, reverseGeo: { formattedLocation: "OKC" } }] }).address, "OKC");
+
+  const { formatDate, formatDateTime, loadTouchesToday } = await import("../lib/format");
+  assert.equal(formatDate("2026-08-25"), "08/25/26");
+  assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
+  assert.ok(
+    loadTouchesToday(
+      { pickup_start: "2026-08-25T12:00:00-04:00", pickup_end: "", delivery_start: "", delivery_end: "" },
+      new Date("2026-08-25T15:00:00-04:00"),
+    ),
+  );
+  assert.equal(
+    loadTouchesToday(
+      { pickup_start: "2026-08-24T12:00:00-04:00", pickup_end: "", delivery_start: "", delivery_end: "" },
+      new Date("2026-08-25T15:00:00-04:00"),
+    ),
+    false,
+  );
+
+  const { driverFacingPay } = await import("../lib/settlement");
+  assert.equal(driverFacingPay({ driver_type: "company_driver", rate: 5000, oo_percent: 75 }), null);
+  assert.equal(driverFacingPay({ driver_type: "owner_operator", rate: 5000, oo_percent: 75 }), 3750);
+
+  const { normalizeCabType, parseCdlEndorsements, formatCdlEndorsements } = await import("../lib/types");
+  assert.equal(normalizeCabType("reefer"), "sleeper");
+  assert.equal(normalizeCabType("day cab"), "day_cab");
+  assert.deepEqual(parseCdlEndorsements("H,T"), ["H", "T"]);
+  assert.match(formatCdlEndorsements("H"), /Hazmat/);
+
+  const { motionFromSpeedMph } = await import("../lib/fleet-map-shared");
+  assert.equal(motionFromSpeedMph(0), "Parked");
+  assert.equal(motionFromSpeedMph(0.4), "Parked");
+  assert.equal(motionFromSpeedMph(12), "Moving");
+
+  const driverHome = fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8");
+  assert.match(driverHome, /data-driver-destinations|DriverDestinations/);
+  assert.match(driverHome, /Dispatch/);
+  assert.match(driverHome, /Fuel/);
+  assert.match(driverHome, /Upload/);
+  assert.match(driverHome, /BOL/);
+  assert.match(driverHome, /Confirmation/);
+  const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
+  assert.match(driverLoadPage, /driverFacingPay/);
+  assert.doesNotMatch(driverLoadPage, /formatMoney\(load\.rate\)/);
+
+  const cabTruckId = queries.createTruck({
+    unit_number: "CAB-1",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+    plate: "ABC123",
+    plate_state: "TN",
+  });
+  assert.equal(queries.getTruck(cabTruckId)?.type, "sleeper");
+  assert.equal(queries.getTruck(cabTruckId)?.plate_state, "TN");
+
+  const endorseId = queries.createDriver({
+    name: "Endorsed Driver",
+    phone: "555-0199",
+    license: "TN-CDL-END",
+    truck_id: null,
+    status: "available",
+    cdl_endorsements: "H,X",
+  });
+  assert.equal(queries.getDriver(endorseId)?.cdl_endorsements, "H,X");
+
+  const liveSnapshots = orbcomm.snapshotsFromLiveAssets({
+    loads: [],
+    trucks: [],
+    trailers: [{ id: 1, unit_number: "MS1514", orbcomm_asset_id: "" }],
+    assets: [
+      {
+        assetId: "MS1514",
+        trailerId: "MS1514",
+        name: "MS1514",
+        temperatureF: 36.5,
+        setpointF: 34,
+        powerOn: true,
+        alarm: "High temp",
+        address: "Omaha, NE",
+      },
+    ],
+  });
+  assert.equal(liveSnapshots.some((row) => row.loadId == null && row.trailerId === "MS1514"), true);
+  const liveNested = orbcomm.normalizeOrbcommPayload({
+    code: 1000,
+    data: [
+      {
+        assetName: "MS1514",
+        reeferStatus: { returnTemp: 2, setpointTemp: 1, reeferPowerDesc: "Power On", activeAlarms: ["Passed"] },
+        positionStatus: { city: "Omaha", state: "NE" },
+      },
+    ],
+  });
+  assert.equal(liveNested[0]?.temperatureF, 35.6);
+  assert.equal(liveNested[0]?.setpointF, 33.8);
+  assert.equal(liveNested[0]?.powerOn, true);
+  assert.equal(liveNested[0]?.alarm, "");
+
+  const fleetOneText = [
+    "Transaction Activity Report",
+    "Report Date: 08/25/2026",
+    "Customer Number: 3770001903818",
+    "M & S Loads LLC",
+    "228 E ROUTE 59 #190",
+    "NANUET NY 10954",
+    "dispatch@msloads.com",
+    "Funded Fuel",
+    "08/25/2026 00260 Christopher Howell 32 LOVES #730 TRAVEL OMAHA NE Diesel 88.800 5.6490 505.62",
+    "08/25/2026 00369 Steve Eller 26 ONE9 496 ATALISSA IA Diesel 121.310 5.3590 650.10",
+    "08/25/2026 00369 Steve Eller 26 ONE9 496 ATALISSA IA Reefer 31.180 5.3590 167.58",
+    "08/25/2026 00450 Ceferino Oquendo Garcia 42 ONVO TRAVEL PLAZA WHITE HAVEN PA Diesel 71.270 5.8590 417.36",
+    "08/25/2026 00468 Kelvin Whaley 28 PILOT SIOUX CITY 5 SIOUX CITY IA Diesel 100.450 5.7590 538.81",
+    "08/25/2026 00500 German Avilla 36 SUNOCO #7012 EAST BRUNSWICK NJ Diesel 98.000 5.9990 558.47",
+    "08/25/2026 00500 German Avilla 36 SUNOCO #7012 EAST BRUNSWICK NJ Reefer 10.950 5.9990 62.90",
+    "08/25/2026 00500 German Avilla 36 SUNOCO #7012 EAST BRUNSWICK NJ DEF 4.160 5.0990 21.19",
+    "Money Code 137.25 fees 3.00 total 137.25",
+    "Money Code 203.00 fees 3.00 total 203.00",
+    "Funded Total $3,262.28",
+    "Report Total 45.082",
+  ].join("\n");
+  const fleetOne = parseFuelReport(fleetOneText);
+  assert.equal(fleetOne.rows.filter((row) => row.category !== "money_code").length, 8);
+  assert.equal(fleetOne.rows.filter((row) => row.category === "money_code").length, 2);
+  assert.ok(fleetOne.rows.every((row) => !/nanuet/i.test(row.location)));
+  assert.ok(fleetOne.rows.every((row) => row.amount !== 3262.28));
+  assert.ok(fleetOne.rows.every((row) => row.gallons !== 45.082));
+  const dieselLoves = fleetOne.rows.find((row) => row.amount === 505.62);
+  assert.equal(dieselLoves?.category, "truck_diesel");
+  assert.equal(dieselLoves?.gallons, 88.8);
+  assert.equal(dieselLoves?.pricePerGallon, 5.649);
+  assert.equal(dieselLoves?.unitNumber, "32");
+  assert.match(dieselLoves?.location ?? "", /LOVES #730 TRAVEL/i);
+  assert.match(dieselLoves?.location ?? "", /OMAHA/i);
+  assert.equal(dieselLoves?.driverName, "Christopher Howell");
+  assert.equal(dieselLoves?.cardLast4, "0260");
+  assert.equal(fleetOne.rows.find((row) => row.amount === 167.58)?.category, "reefer_diesel");
+  assert.equal(fleetOne.rows.find((row) => row.amount === 21.19)?.category, "def");
+  assert.equal(fleetOne.rows.find((row) => row.amount === 137.25)?.category, "money_code");
+  assert.equal(fleetOne.rows.find((row) => row.amount === 203)?.category, "money_code");
+  const avila =
+    queries.listDrivers().find((driver) => driver.name === "German Avila")?.id ??
+    queries.createDriver({
+      name: "German Avila",
+      phone: "555-0500",
+      license: "NJ-CDL-AVILA",
+      truck_id: null,
+      status: "available",
+    });
+  const fleetOneImport = fuelStore.importFuelFromText(fleetOneText, "FleetOne_TransactionActivityReport_.pdf");
+  assert.equal(fleetOneImport.created + fleetOneImport.unmatched, 10);
+  const avilaRow = fuelStore
+    .listFuelTransactions()
+    .find((row) => row.amount === 558.47 && row.source_file.includes("FleetOne"));
+  assert.equal(avilaRow?.driver_id, avila);
+  assert.ok(!fuelStore.listFuelTransactions().some((row) => row.amount === 3262.28));
+
+  const { buildSearchExportGrid } = await import("../lib/search-export");
+  const searchGrid = buildSearchExportGrid(
+    [
+      {
+        load_number: "SRCH-1",
+        customer_name: "Shown Only",
+        status: "assigned",
+        origin: "Omaha, NE",
+        destination: "Newark, NJ",
+        pickup_start: "2026-08-25",
+        pickup_end: "2026-08-25",
+        delivery_start: "2026-08-26",
+        delivery_end: "2026-08-26",
+        driver_name: "Steve Eller",
+        truck_unit: "26",
+        trailer_unit: "MS1514",
+        trailer_number: "",
+        rate: 2400,
+        reference_number: "PO-1",
+        po_number: "",
+        notes: "Keep cold",
+        special_instructions: "",
+        appointment_notes: "",
+      } as import("../lib/types").LoadView,
+    ],
+    ["load_id", "customer", "status", "driver"],
+  );
+  assert.equal(searchGrid[0]?.includes("Load #"), true);
+  assert.equal(searchGrid[0]?.includes("Rate"), true);
+  assert.equal(searchGrid.length, 2);
+  assert.equal(searchGrid[1]?.[0], "SRCH-1");
+  assert.ok(!searchGrid.flat().includes("Not In Results"));
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /Download spreadsheet/);
+
+  const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(dashToday, /loadTouchesToday/);
+  assert.match(dashToday, /America\/New_York/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
 
   closeDb();
   const reopened = getDb();

@@ -44,7 +44,7 @@ export default async function FleetPage({
               Samsara
             </Link>
             <Link href="/fleet/orbcomm" className="btn btn-secondary">
-              ORBCOMM
+              Orbcomm
             </Link>
           </div>
         }
@@ -98,7 +98,7 @@ export default async function FleetPage({
               <tr>
                 <th>Unit</th>
                 <th>Type</th>
-                <th>ORBCOMM</th>
+                <th>Orbcomm</th>
                 <th>Compliance</th>
                 <th></th>
               </tr>

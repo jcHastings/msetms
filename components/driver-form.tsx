@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createDriverAction, updateDriverAction } from "@/lib/actions";
 import type { DriverFormValues } from "@/lib/fleet-form-shared";
-import { DRIVER_TYPES } from "@/lib/types";
+import { CDL_ENDORSEMENTS, DRIVER_TYPES, parseCdlEndorsements } from "@/lib/types";
 
 type Props = {
   driver?: DriverFormValues;
@@ -92,6 +92,23 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
         <label htmlFor="license_expires">Exp. Date</label>
         <input id="license_expires" name="license_expires" type="date" defaultValue={driver?.license_expires} />
       </div>
+      <fieldset className="field md:col-span-2" data-cdl-endorsements="">
+        <legend className="text-sm font-semibold text-slate-900">CDL endorsements</legend>
+        <p className="mb-2 text-xs text-slate-500">CDL endorsements only (H, N, X, T).</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {CDL_ENDORSEMENTS.map((item) => (
+            <label key={item.value} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="cdl_endorsements"
+                value={item.value}
+                defaultChecked={parseCdlEndorsements(driver?.cdl_endorsements).includes(item.value)}
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div className="field">
         <label htmlFor="medical_issued">Last Medical</label>
         <input id="medical_issued" name="medical_issued" type="date" defaultValue={driver?.medical_issued} />

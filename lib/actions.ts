@@ -47,6 +47,7 @@ import {
   TRUCK_STATUSES,
   isLocationRole,
   isSchedulingType,
+  parseCdlEndorsements,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
@@ -61,7 +62,7 @@ import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
-import { assignFuelTransactionDriver, importFuelFromText } from "./fuel-store";
+import { assignFuelTransactionDriver, assignFuelTransactionLoad, importFuelFromText } from "./fuel-store";
 import {
   requireCapability,
   requireLoadAssigner,
@@ -253,6 +254,7 @@ export async function createTruckAction(
       dot_expires: parseDateField(formData.get("dot_expires")),
       vin: String(formData.get("vin") ?? "").trim(),
       plate: String(formData.get("plate") ?? "").trim(),
+      plate_state: String(formData.get("plate_state") ?? "").trim().toUpperCase(),
       year: String(formData.get("year") ?? "").trim(),
       make: String(formData.get("make") ?? "").trim(),
       model: String(formData.get("model") ?? "").trim(),
@@ -294,6 +296,7 @@ export async function updateTruckAction(
       dot_expires: parseDateField(formData.get("dot_expires")),
       vin: String(formData.get("vin") ?? "").trim(),
       plate: String(formData.get("plate") ?? "").trim(),
+      plate_state: String(formData.get("plate_state") ?? "").trim().toUpperCase(),
       year: String(formData.get("year") ?? "").trim(),
       make: String(formData.get("make") ?? "").trim(),
       model: String(formData.get("model") ?? "").trim(),
@@ -344,6 +347,7 @@ export async function createDriverAction(
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
       pin: parseDriverPin(formData.get("pin")),
+      cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -395,6 +399,7 @@ export async function updateDriverAction(
       drug_test_last: parseDateField(formData.get("drug_test_last")),
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
+      cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -767,7 +772,7 @@ export async function importOrbcommReportAction(
     if (!text && file instanceof File && file.size > 0) {
       text = await file.text();
     }
-    if (!text) throw new Error("Paste JSON/CSV from the ORBCOMM Reefer Status Report, or choose a file.");
+    if (!text) throw new Error("Paste JSON/CSV from the Orbcomm Reefer Status Report, or choose a file.");
     const { importOrbcommReadings, parseOrbcommReport } = await import("./integrations/orbcomm");
     const rows = parseOrbcommReport(text);
     if (rows.length === 0) {
@@ -777,7 +782,7 @@ export async function importOrbcommReportAction(
     refresh();
     if (count === 0) {
       throw new Error(
-        "Rows parsed, but none mapped to a truck/load trailer ID. Set ORBCOMM asset ID or trailer # on the unit.",
+        "Rows parsed, but none mapped to a truck/load trailer ID. Set Orbcomm asset ID or trailer # on the unit.",
       );
     }
     return { ok: true };
@@ -1153,8 +1158,11 @@ export async function assignFuelDriverAction(formData: FormData): Promise<void> 
   await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
   const id = parseOptionalInt(formData.get("fuel_id"));
   const driverId = parseOptionalInt(formData.get("driver_id"));
-  if (!id || !driverId) throw new Error("Pick a driver.");
-  assignFuelTransactionDriver(id, driverId);
+  const loadId = parseOptionalInt(formData.get("load_id"));
+  if (!id) throw new Error("Fuel row is missing.");
+  if (driverId) assignFuelTransactionDriver(id, driverId);
+  if (loadId) assignFuelTransactionLoad(id, loadId);
+  if (!driverId && !loadId) throw new Error("Pick a driver or a load.");
   refresh();
 }
 
@@ -1355,12 +1363,12 @@ export async function previewOrbcommTrailersAction(
     if (rows.length === 0) {
       return {
         ok: false,
-        error: "ORBCOMM API did not return a trailer list. Upload a CSV/export (do not scrape the portal).",
+        error: "Orbcomm API did not return a trailer list. Upload a CSV/export (do not scrape the portal).",
       };
     }
     return { ok: true, source: "orbcomm_api", rows };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "ORBCOMM preview failed." };
+    return { ok: false, error: error instanceof Error ? error.message : "Orbcomm preview failed." };
   }
 }
 
@@ -1384,7 +1392,7 @@ export async function confirmOrbcommTrailersImportAction(
       message: `Imported trailers: created ${result.created}, updated ${result.updated}${result.skipped ? `, skipped ${result.skipped}` : ""}.`,
     };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "ORBCOMM import failed." };
+    return { ok: false, error: error instanceof Error ? error.message : "Orbcomm import failed." };
   }
 }
 

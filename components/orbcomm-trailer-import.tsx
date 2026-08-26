@@ -21,18 +21,18 @@ export function OrbcommTrailerImport() {
   return (
     <section className="card mb-6 space-y-4 p-6">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">Import from ORBCOMM</h2>
+        <h2 className="text-base font-semibold text-slate-900">Import from Orbcomm</h2>
         <p className="mt-1 text-sm text-slate-600">
           Uses <code>ORBCOMM_*</code> from <code>.env</code> when the B2B API returns assets. If there is
-          no API list yet, upload an ORBCOMM CSV/export (Location Tracking Report or Reefer Status Report),
+          no API list yet, upload an Orbcomm CSV/export (Location Tracking Report or Reefer Status Report),
           preview, then import. Title and date banner rows are skipped. Asset ID is the trailer unit;
-          Device Serial Number is the ORBCOMM device. Preview can show last city so you can see the
+          Device Serial Number is the Orbcomm device. Preview can show last city so you can see the
           file parsed; import saves identity only, not GPS. Do not scrape the logged-in portal.
         </p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="orbcomm-fleet-file">ORBCOMM CSV or JSON export</label>
+          <label htmlFor="orbcomm-fleet-file">Orbcomm CSV or JSON export</label>
           <input
             id="orbcomm-fleet-file"
             name="file"
@@ -45,7 +45,7 @@ export function OrbcommTrailerImport() {
             {previewPending ? "Reading…" : "Preview file"}
           </button>
           <button className="btn btn-secondary" type="submit" name="mode" value="api" disabled={previewPending}>
-            {previewPending ? "Loading…" : "Fetch from ORBCOMM"}
+            {previewPending ? "Loading…" : "Fetch from Orbcomm"}
           </button>
         </div>
       </form>

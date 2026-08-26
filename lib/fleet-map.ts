@@ -2,10 +2,12 @@ import { isOrbcommConfigured } from "./env";
 import { canonicalFleetKey } from "./fleet-import-shared";
 import {
   isPlottableCoord,
+  motionFromSpeedMph,
   plottableCoord,
   type FleetMapMissing,
   type FleetMapModel,
   type FleetMapPin,
+  type FleetStatusRow,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getSamsaraFleet } from "./integrations/samsara";
@@ -95,6 +97,8 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: truckHref(truck, loads),
+        motion: motionFromSpeedMph(location.speedMph),
+        speedMph: location.speedMph,
       },
       truck.id,
     );
@@ -236,14 +240,60 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   ).length;
   const sourceNote = configured
     ? liveCount
-      ? "Live ORBCOMM GPS for reefer trailers. Units without a position are listed, not plotted."
-      : "Live ORBCOMM returned no positions. Showing last stored trailer GPS from import only."
-    : "Live ORBCOMM is not connected yet. Showing last stored trailer GPS from import only. Empty units are listed, not plotted.";
+      ? "Live Orbcomm GPS for reefer trailers. Units without a position are listed, not plotted."
+      : "Live Orbcomm returned no positions. Showing last stored trailer GPS from import only."
+    : "Live Orbcomm is not connected yet. Showing last stored trailer GPS from import only. Empty units are listed, not plotted.";
+
+  const statusRows: FleetStatusRow[] = trailers.map((trailer) => {
+    const snapshot =
+      snapshots.readings.find(
+        (reading) =>
+          canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.unit_number) ||
+          canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.orbcomm_asset_id),
+      ) ?? latestReeferForTrailer(trailer);
+    const power =
+      snapshot && "powerOn" in snapshot
+        ? snapshot.powerOn === true
+          ? "On"
+          : snapshot.powerOn === false
+            ? "Off"
+            : "—"
+        : "—";
+    const temperatureF =
+      snapshot && "temperatureF" in snapshot
+        ? snapshot.temperatureF
+        : snapshot && "temperature_f" in snapshot
+          ? snapshot.temperature_f
+          : null;
+    const setpointF =
+      snapshot && "setpointF" in snapshot
+        ? snapshot.setpointF
+        : snapshot && "setpoint_f" in snapshot
+          ? snapshot.setpoint_f
+          : null;
+    const alarm =
+      snapshot && "alarm" in snapshot ? String(snapshot.alarm ?? "") : "";
+    const location =
+      snapshot && "address" in snapshot
+        ? String(snapshot.address ?? "")
+        : persistedTrailerLocation(trailer)?.address ?? "";
+    return {
+      id: `status-${trailer.id}`,
+      trailer: trailer.unit_number,
+      href: trailerHref(trailer, loads),
+      power,
+      setpointF: setpointF ?? null,
+      temperatureF: temperatureF ?? null,
+      alarm,
+      location,
+    };
+  });
 
   return {
-    title: "ORBCOMM",
+    title: "Orbcomm",
     sourceNote,
     pins,
     missing,
+    statusRows,
   };
 }

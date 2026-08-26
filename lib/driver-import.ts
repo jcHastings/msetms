@@ -114,6 +114,7 @@ function writeDriverUpdate(id: number, row: DriverImportValues): void {
     medical_expires: row.medical_expires,
     driver_type: row.driver_type,
     pay_percent: current.pay_percent,
+    cdl_endorsements: current.cdl_endorsements,
     truck_id: current.truck_id,
     status: current.status,
     alt_phone: row.alt_phone,

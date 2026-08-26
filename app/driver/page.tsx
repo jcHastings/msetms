@@ -8,6 +8,7 @@ import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
+import { DriverDestinations } from "@/components/driver-destinations";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
 import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -47,6 +48,27 @@ export default async function DriverHomePage() {
         </form>
       </header>
 
+      {(() => {
+        const current = loads[0];
+        const loadHref = current ? `/driver/loads/${current.id}` : "";
+        return (
+          <DriverDestinations
+            items={[
+              { href: "#dispatch", label: "Dispatch" },
+              { href: current ? `${loadHref}#fuel` : "#dispatch", label: "Fuel", disabled: !current },
+              { href: current ? `${loadHref}#upload` : "#dispatch", label: "Upload", disabled: !current },
+              { href: current ? `${loadHref}#bol` : "#dispatch", label: "BOL", disabled: !current },
+              {
+                href: current ? `/api/loads/${current.id}/confirmation` : "#dispatch",
+                label: "Confirmation",
+                disabled: !current,
+              },
+            ]}
+          />
+        );
+      })()}
+
+      <div id="dispatch">
       {loads.length === 0 ? (
         <div className="rounded-2xl bg-white p-6 text-base text-slate-600 shadow-sm">
           Nothing assigned to you right now.
@@ -99,7 +121,7 @@ export default async function DriverHomePage() {
                     <div className="mt-2 text-sm font-medium text-sky-900">
                       {formatReeferHeader(spec) || "Reefer"}
                       {reefer?.temperature_f != null ? ` · live ${reefer.temperature_f}°F` : ""}
-                      {reefer?.source === "demo" ? " · demo" : reefer?.source === "orbcomm" ? " · ORBCOMM" : ""}
+                      {reefer?.source === "demo" ? " · demo" : reefer?.source === "orbcomm" ? " · Orbcomm" : ""}
                     </div>
                   ) : null}
                 </Link>
@@ -108,6 +130,7 @@ export default async function DriverHomePage() {
           })}
         </ul>
       )}
+      </div>
 
       {done.length > 0 ? (
         <section className="mt-8">

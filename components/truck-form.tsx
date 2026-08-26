@@ -4,7 +4,8 @@ import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createTruckAction, updateTruckAction } from "@/lib/actions";
 import type { FleetDriverOption, TruckFormValues } from "@/lib/fleet-form-shared";
-import { DEFAULT_FLEET_TYPE, TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
+import { US_STATES } from "@/lib/locations";
+import { DEFAULT_CAB_TYPE, TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
 
 type Props = {
   truck?: TruckFormValues;
@@ -14,12 +15,12 @@ type Props = {
 
 export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(truck ? updateTruckAction : createTruckAction, null);
-  const [type, setType] = useState(truck?.type || DEFAULT_FLEET_TYPE);
+  const [type, setType] = useState(truck?.type || DEFAULT_CAB_TYPE);
 
   return (
     <form
       action={(formData) => {
-        formData.set("type", type || DEFAULT_FLEET_TYPE);
+        formData.set("type", type || DEFAULT_CAB_TYPE);
         formAction(formData);
       }}
       className="card grid max-w-xl gap-4 p-6"
@@ -31,11 +32,11 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
         <input id="unit_number" name="unit_number" required defaultValue={truck?.unit_number} />
       </div>
       <div className="field">
-        <label htmlFor="type">Type</label>
+        <label htmlFor="type">Cab type</label>
         <select id="type" name="type" value={type} onChange={(event) => setType(event.target.value)}>
-          {TRUCK_TYPES.map((type) => (
-            <option key={type.value} value={type.value}>
-              {type.label}
+          {TRUCK_TYPES.map((cab) => (
+            <option key={cab.value} value={cab.value}>
+              {cab.label}
             </option>
           ))}
         </select>
@@ -55,9 +56,22 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
         <label htmlFor="vin">VIN</label>
         <input id="vin" name="vin" defaultValue={truck?.vin} />
       </div>
-      <div className="field">
-        <label htmlFor="plate">Plate</label>
-        <input id="plate" name="plate" defaultValue={truck?.plate} />
+      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+        <div className="field">
+          <label htmlFor="plate">Plate</label>
+          <input id="plate" name="plate" defaultValue={truck?.plate} />
+        </div>
+        <div className="field">
+          <label htmlFor="plate_state">Plate state</label>
+          <select id="plate_state" name="plate_state" defaultValue={truck?.plate_state || ""}>
+            <option value="">—</option>
+            {US_STATES.map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="field">
         <label htmlFor="year">Year</label>

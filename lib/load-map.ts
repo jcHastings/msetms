@@ -174,7 +174,7 @@ export async function listLoadTrackingEvents(loadId: number): Promise<LoadTracki
     events.push({
       id: "orbcomm-latest",
       at: trailer.recordedAt,
-      who: "ORBCOMM",
+      who: "Orbcomm",
       note: trailer.address || "Trailer GPS",
       gps: `${trailer.latitude}, ${trailer.longitude}`,
       source: "orbcomm",

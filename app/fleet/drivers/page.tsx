@@ -8,6 +8,7 @@ import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { assignedFleetAssetIds, listDrivers } from "@/lib/queries";
+import { formatCdlEndorsements } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function DriversPage() {
               <th>Name</th>
               <th>Phone</th>
               <th>Type</th>
+              <th>CDL</th>
               <th>Truck</th>
               <th>CDL exp</th>
               <th>Med card exp</th>
@@ -57,7 +59,7 @@ export default async function DriversPage() {
           <tbody>
             {drivers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={10} className="px-5 py-8 text-sm text-slate-500">
                   No drivers yet.
                 </td>
               </tr>
@@ -80,6 +82,7 @@ export default async function DriversPage() {
                         <div className="text-xs text-slate-500">{driver.pay_percent}% settlement</div>
                       ) : null}
                     </td>
+                    <td>{formatCdlEndorsements(driver.cdl_endorsements)}</td>
                     <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>
                     <ExpiryCell value={driver.license_expires} alert={alerts.find((item) => item.kind === "license")} />
                     <ExpiryCell value={driver.medical_expires} alert={alerts.find((item) => item.kind === "medical")} />

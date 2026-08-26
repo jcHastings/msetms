@@ -10,6 +10,8 @@ import { formatDateTime } from "@/lib/format";
 import { US_STATES } from "@/lib/locations";
 import { searchLoadsAction } from "@/lib/search-actions";
 import { overlayHref } from "@/lib/load-page-shared";
+import { buildSearchExportGrid } from "@/lib/search-export";
+import { buildXlsxFromGrid } from "@/lib/xlsx-first-sheet";
 import {
   SEARCH_COLUMNS,
   defaultSearchColumns,
@@ -410,9 +412,19 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
       </form>
 
       <div className="card overflow-x-auto">
-        <div className="border-b border-slate-100 px-4 py-3 text-sm text-slate-500">
-          {results.length} load{results.length === 1 ? "" : "s"}
-          {searched ? "" : " (live, default)"}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-sm text-slate-500">
+          <span>
+            {results.length} load{results.length === 1 ? "" : "s"}
+            {searched ? "" : " (live, default)"}
+          </span>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={results.length === 0}
+            onClick={() => downloadSearchSpreadsheet(results, columns)}
+          >
+            Download spreadsheet
+          </button>
         </div>
         {results.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">No loads match these criteria.</p>
@@ -482,4 +494,20 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
 
 async function runSearch(criteria: LoadSearchCriteria): Promise<LoadView[]> {
   return searchLoadsAction(criteria);
+}
+
+function downloadSearchSpreadsheet(loads: LoadView[], columns: SearchColumnKey[]): void {
+  const bytes = buildXlsxFromGrid(buildSearchExportGrid(loads, columns));
+  const copy = Uint8Array.from(bytes);
+  const blob = new Blob([copy], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ms-express-search.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

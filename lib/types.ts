@@ -77,17 +77,49 @@ export function statusNeedsAssets(status: string): boolean {
 }
 
 export const TRUCK_TYPES = [
-  { value: "reefer", label: "Reefer" },
-  { value: "dry_van", label: "Dry Van" },
-  { value: "flatbed", label: "Flatbed" },
-  { value: "box", label: "Box Truck" },
-  { value: "power_only", label: "Power Only" },
+  { value: "sleeper", label: "Sleeper" },
+  { value: "day_cab", label: "Day cab" },
 ] as const;
 
+export const DEFAULT_CAB_TYPE = "sleeper";
 export const DEFAULT_FLEET_TYPE = "reefer";
 export const DEFAULT_LOAD_EQUIPMENT = "reefer_53";
 
 export type TruckType = (typeof TRUCK_TYPES)[number]["value"];
+
+export function normalizeCabType(value: unknown): TruckType {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (raw === "day_cab" || raw === "daycab" || raw === "day") return "day_cab";
+  return DEFAULT_CAB_TYPE;
+}
+
+export const CDL_ENDORSEMENTS = [
+  { value: "H", label: "Hazmat (H)" },
+  { value: "N", label: "Tanker (N)" },
+  { value: "X", label: "Tanker+Hazmat (X)" },
+  { value: "T", label: "Doubles/Triples (T)" },
+] as const;
+
+export type CdlEndorsement = (typeof CDL_ENDORSEMENTS)[number]["value"];
+
+export function parseCdlEndorsements(value: unknown): CdlEndorsement[] {
+  const raw = String(value ?? "")
+    .toUpperCase()
+    .split(/[^A-Z]+/)
+    .filter(Boolean);
+  return CDL_ENDORSEMENTS.map((item) => item.value).filter((code) => raw.includes(code));
+}
+
+export function formatCdlEndorsements(value: unknown): string {
+  const codes = parseCdlEndorsements(value);
+  if (codes.length === 0) return "—";
+  return codes
+    .map((code) => CDL_ENDORSEMENTS.find((item) => item.value === code)?.label ?? code)
+    .join(", ");
+}
 
 export const TRUCK_STATUSES = [
   { value: "available", label: "Available" },
@@ -230,7 +262,7 @@ export const DRIVER_TYPES = [
 
 export type DriverKind = (typeof DRIVER_TYPES)[number]["value"];
 
-/** ORBCOMM reefer snapshot shown on the board, load, and driver screens. */
+/** Orbcomm reefer snapshot shown on the board, load, and driver screens. */
 export type ReeferStatus = {
   trailerId: string;
   temperatureF: number | null;
@@ -270,6 +302,7 @@ export type Truck = {
   dot_expires: string;
   vin: string;
   plate: string;
+  plate_state: string;
   year: string;
   make: string;
   model: string;
@@ -329,6 +362,7 @@ export type Driver = {
   license_number: string;
   license_state: string;
   license_expires: string;
+  cdl_endorsements: string;
   medical_issued: string;
   medical_expires: string;
   driver_type: DriverKind;

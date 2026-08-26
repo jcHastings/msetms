@@ -60,7 +60,7 @@ export function TrailerForm({ trailer, trucks = [], submitLabel }: Props) {
         </select>
       </div>
       <div className="field">
-        <label htmlFor="orbcomm_asset_id">ORBCOMM asset ID</label>
+        <label htmlFor="orbcomm_asset_id">Orbcomm asset ID</label>
         <input
           id="orbcomm_asset_id"
           name="orbcomm_asset_id"

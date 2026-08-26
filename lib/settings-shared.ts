@@ -89,7 +89,7 @@ export const SETTINGS_SECTIONS = [
       },
       {
         href: "/settings/integrations",
-        label: "Samsara, ORBCOMM, QuickBooks, tracking",
+        label: "Samsara, Orbcomm, QuickBooks, tracking",
         hint: "Connect status only. Credentials stay in .env.",
       },
     ],

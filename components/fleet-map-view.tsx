@@ -28,6 +28,12 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                   <Link href={pin.href} className="font-semibold underline">
                     {pin.label}
                   </Link>
+                  {pin.motion ? (
+                    <span className="ml-2 text-xs font-medium text-slate-600" data-fleet-motion={pin.motion}>
+                      {pin.motion}
+                      {pin.speedMph != null ? ` · ${Math.round(pin.speedMph)} mph` : ""}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -48,6 +54,40 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
           )}
         </aside>
       </div>
+      {model.statusRows?.length ? (
+        <section className="card mt-4 overflow-x-auto" data-orbcomm-status-table="">
+          <table className="table-grid">
+            <thead>
+              <tr>
+                <th>Trailer</th>
+                <th>Power</th>
+                <th>Setpoint °F</th>
+                <th>Temp °F</th>
+                <th>Alarm</th>
+                <th>Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.statusRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <Link href={row.href} className="font-semibold underline">
+                      {row.trailer}
+                    </Link>
+                  </td>
+                  <td>{row.power}</td>
+                  <td>{row.setpointF == null ? "—" : `${row.setpointF}`}</td>
+                  <td>{row.temperatureF == null ? "—" : `${row.temperatureF}`}</td>
+                  <td className={row.alarm ? "font-semibold text-rose-700" : undefined}>
+                    {row.alarm || "—"}
+                  </td>
+                  <td>{row.location || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
     </>
   );
 }

@@ -39,7 +39,7 @@ export default async function TrailersPage() {
     <>
       <PageHeader
         title="Trailers"
-        subtitle="53' reefers and dry vans. Import from ORBCOMM or set an asset ID by hand."
+        subtitle="53' reefers and dry vans. Import from Orbcomm or set an asset ID by hand."
         actions={
           <>
             <a href="/api/fleet/trailers/export" className="btn btn-secondary">
@@ -61,7 +61,7 @@ export default async function TrailersPage() {
               <th>Truck</th>
               <th>Registration exp</th>
               <th>DOT inspection</th>
-              <th>Reefer / ORBCOMM</th>
+              <th>Reefer / Orbcomm</th>
               <th>Last GPS</th>
               <th>Status</th>
               <th></th>

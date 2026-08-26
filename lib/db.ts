@@ -354,6 +354,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "customers", "qbo_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trucks", "plate_state", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "year", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "make", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "model", "TEXT NOT NULL DEFAULT ''");
@@ -375,6 +376,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "drivers", "drug_test_last", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "drug_test_next", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "termination_date", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "cdl_endorsements", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trailers", "vin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trailers", "plate", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trailers", "truck_id", "INTEGER");
@@ -685,6 +687,10 @@ export function migrate(db: Database): void {
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
+  db.prepare(
+    `UPDATE trucks SET type = 'sleeper' WHERE type NOT IN ('sleeper', 'day_cab')`,
+  ).run();
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

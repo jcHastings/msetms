@@ -2,7 +2,7 @@ import { ComplianceList } from "@/components/compliance-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
 import { formatDate } from "@/lib/format";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
-import type { Driver } from "@/lib/types";
+import { formatCdlEndorsements, type Driver } from "@/lib/types";
 
 function formatDay(value: string): string {
   return value ? formatDate(`${value}T12:00:00`) : "—";
@@ -26,6 +26,7 @@ export function DriverComplianceCard({
           <dt className="text-slate-500">Driver license</dt>
           <dd className="font-semibold">{license}</dd>
           <dd className="text-slate-600">Expires {formatDay(driver.license_expires)}</dd>
+          <dd className="mt-1 text-slate-600">Endorsements {formatCdlEndorsements(driver.cdl_endorsements)}</dd>
         </div>
         <div>
           <dt className="text-slate-500">Medical card</dt>

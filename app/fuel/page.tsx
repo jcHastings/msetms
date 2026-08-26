@@ -3,13 +3,14 @@ import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { PageHeader } from "@/components/page-header";
-import { assignFuelDriverAction, linkFuelReceiptAction } from "@/lib/actions";
+import { FuelAssignForm } from "@/components/fuel-assign-form";
+import { linkFuelReceiptAction } from "@/lib/actions";
 import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { labelForFuelBucket } from "@/lib/fuel";
 import { listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
-import { listDrivers, listTrucks } from "@/lib/queries";
+import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,11 @@ export default async function FuelPage({
   const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
   const drivers = listDrivers();
   const trucks = listTrucks();
+  const loadOptions = listLoads({ status: "all" })
+    .filter((load) => load.status !== "cancelled")
+    .slice(0, 80)
+    .map((load) => ({ id: load.id, label: `${load.load_number} · ${load.destination}` }));
+  const driverOptions = drivers.map((driver) => ({ id: driver.id, label: driver.name }));
   const selectedDriver = selectedDriverId ? drivers.find((driver) => driver.id === selectedDriverId) : null;
   const selectedTruck = selectedTruckId ? trucks.find((truck) => truck.id === selectedTruckId) : null;
   const transactions = listFuelTransactions(
@@ -95,20 +101,7 @@ export default async function FuelPage({
                     <td>{row.category === "scale" ? row.gallons ?? "—" : formatGallons(row.gallons)}</td>
                     <td>{formatFuelMoney(row.amount)}</td>
                     <td>
-                      <form action={assignFuelDriverAction} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="fuel_id" value={row.id} />
-                        <select name="driver_id" className="rounded-md border border-slate-300 px-2 py-1 text-sm" required>
-                          <option value="">Driver…</option>
-                          {drivers.map((driver) => (
-                            <option key={driver.id} value={driver.id}>
-                              {driver.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="btn btn-secondary" type="submit">
-                          Assign
-                        </button>
-                      </form>
+                      <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
                     </td>
                   </tr>
                 ))}
@@ -147,6 +140,8 @@ export default async function FuelPage({
                   <th>Amount</th>
                   <th>Invoice</th>
                   <th>Card</th>
+                  <th>Load</th>
+                  <th>Assign</th>
                   <th>Source</th>
                 </tr>
               </thead>
@@ -174,11 +169,29 @@ export default async function FuelPage({
                     </td>
                     <td>{labelForFuelBucket(row.category)}</td>
                     <td>{row.location || "—"}</td>
-                    <td>{row.category === "scale" ? row.gallons ?? "—" : formatGallons(row.gallons)}</td>
+                    <td>
+                      {row.category === "money_code"
+                        ? "—"
+                        : row.category === "scale"
+                          ? row.gallons ?? "—"
+                          : formatGallons(row.gallons)}
+                    </td>
                     <td>{row.price_per_gallon == null ? "—" : formatFuelMoney(row.price_per_gallon)}</td>
                     <td>{formatFuelMoney(row.amount)}</td>
                     <td className="text-xs">{row.invoice_number || "—"}</td>
                     <td>{row.card_last4 ? `••••${row.card_last4}` : "—"}</td>
+                    <td>
+                      {row.load_id ? (
+                        <Link href={`/loads/${row.load_id}`} className="underline">
+                          {row.load_number || row.load_id}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
+                    </td>
                     <td className="text-xs text-slate-500">{row.source_file || "—"}</td>
                   </tr>
                 ))}

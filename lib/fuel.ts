@@ -1,5 +1,6 @@
 import { parseCsvRecords } from "./location-csv";
 import { renderUtf8Csv } from "./csv";
+import { looksLikeFleetOneReport, parseFleetOneFuelText } from "./fuel-fleetone";
 import type { DriverWithTruck, TruckWithDriver } from "./types";
 
 export const FUEL_BUCKETS = [
@@ -50,6 +51,7 @@ export type FuelTransaction = {
   occurred_at: string;
   driver_id: number | null;
   truck_id: number | null;
+  load_id: number | null;
   location: string;
   gallons: number | null;
   price_per_gallon: number | null;
@@ -68,6 +70,7 @@ export type FuelTransaction = {
 export type FuelTransactionView = FuelTransaction & {
   driver_name: string | null;
   truck_unit: string | null;
+  load_number: string | null;
 };
 
 export type FuelCsvRowError = { row: number; error: string };
@@ -192,6 +195,7 @@ export function classifyFuelCategory(raw: string): FuelBucket | "" {
 
 export function labelForFuelBucket(value: string): string {
   if (!value || value === "other") return "—";
+  if (value === "money_code") return "Money Code";
   return FUEL_BUCKETS.find((item) => item.value === value)?.label ?? value;
 }
 
@@ -205,8 +209,39 @@ export function parseFuelReport(text: string): FuelCsvParseResult {
     throw new Error("The file is empty. Upload a fuel CSV or a Transaction Activity Report PDF.");
   }
   if (looksLikeCsvFuel(trimmed)) return parseFuelCsv(trimmed);
+  if (looksLikeFleetOneReport(trimmed)) return toFuelCsvResult(parseFleetOneFuelText(trimmed));
   if (looksLikeEfsReport(trimmed)) return parseEfsFuelText(trimmed);
   return parseFuelCsv(trimmed);
+}
+
+function toFuelCsvResult(parsed: ReturnType<typeof parseFleetOneFuelText>): FuelCsvParseResult {
+  return {
+    skipped: parsed.skipped,
+    errors: parsed.errors,
+    rows: parsed.rows.map((row) => ({
+      row: row.row,
+      occurredAt: row.occurredAt,
+      driverName: row.driverName,
+      driverIdRaw: "",
+      unitNumber: row.unitNumber,
+      location: row.location,
+      gallons: row.gallons,
+      pricePerGallon: row.pricePerGallon,
+      amount: row.amount,
+      cardLast4: row.cardLast4,
+      category: row.category,
+      invoice: row.invoice,
+      prompt: row.unitNumber,
+      dedupKey: fuelRowDedupKey({
+        invoice: row.invoice,
+        category: row.category,
+        gallons: row.gallons,
+        occurred: new Date(row.occurredAt),
+        amount: row.amount,
+        cardLast4: row.cardLast4,
+      }),
+    })),
+  };
 }
 
 export function looksLikeEfsReport(text: string): boolean {
@@ -362,6 +397,10 @@ export function parseEfsFuelText(text: string): FuelCsvParseResult {
     }
     if (!/^\s*\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(line)) return;
     if (!/-?\d[\d,]*\.\d{2,4}/.test(line)) return;
+    if (/nanuet|228\s*e\s*route|funded total|report total|m\s*&\s*s\s*loads/i.test(line)) {
+      skipped += 1;
+      return;
+    }
     const parsed = parseEfsDetailLine(line, driverName);
     if (!parsed) {
       errors.push({ row: excelRow, error: "Could not read that activity line." });
@@ -592,10 +631,20 @@ function findDriverByName(raw: string, drivers: DriverWithTruck[]): DriverWithTr
   const exact = drivers.filter((driver) => nameKeys(driver.name).some((key) => keys.includes(key) && key.includes(" ")));
   if (exact.length === 1) return exact[0];
   if (exact.length > 1) return undefined;
+  const folded = keys.map(foldNameKey);
+  const fuzzy = drivers.filter((driver) => nameKeys(driver.name).some((key) => folded.includes(foldNameKey(key)) && key.includes(" ")));
+  if (fuzzy.length === 1) return fuzzy[0];
   const last = keys.find((key) => !key.includes(" ") && !key.includes(","));
   if (!last) return undefined;
   const lastHits = drivers.filter((driver) => nameKeys(driver.name).includes(last));
-  return lastHits.length === 1 ? lastHits[0] : undefined;
+  if (lastHits.length === 1) return lastHits[0];
+  const lastFolded = foldNameKey(last);
+  const lastFuzzy = drivers.filter((driver) => nameKeys(driver.name).some((key) => !key.includes(" ") && foldNameKey(key) === lastFolded));
+  return lastFuzzy.length === 1 ? lastFuzzy[0] : undefined;
+}
+
+function foldNameKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z]/g, "").replace(/(.)\1+/g, "$1");
 }
 
 function nameKeys(value: string): string[] {

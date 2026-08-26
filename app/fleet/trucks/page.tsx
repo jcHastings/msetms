@@ -103,7 +103,7 @@ export default async function TrucksPage() {
                       <span className="font-mono font-semibold hover:underline">{truck.unit_number}</span>
                     </td>
                     <td>{vehicleLabel(truck)}</td>
-                    <td>{truck.plate || "—"}</td>
+                    <td>{[truck.plate, truck.plate_state].filter(Boolean).join(" ") || "—"}</td>
                     <td>
                       {samsaraDriver?.tmsDriverId ? (
                         <Link href={`/fleet/drivers/${samsaraDriver.tmsDriverId}`} className="font-semibold underline">

@@ -1,10 +1,11 @@
 import { ComplianceBadge } from "@/components/compliance-badge";
 import type { ComplianceAlert } from "@/lib/compliance";
+import { formatDate } from "@/lib/format";
 
 export function ExpiryCell({ value, alert }: { value: string; alert?: ComplianceAlert }) {
   return (
     <td className="whitespace-nowrap">
-      <div>{value || "—"}</div>
+      <div>{value ? formatDate(value) : "—"}</div>
       {alert ? <ComplianceBadge alerts={[alert]} /> : null}
     </td>
   );

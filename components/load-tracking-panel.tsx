@@ -33,7 +33,7 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
         </div>
         <div>
           <h3 className="text-sm font-semibold">Recent events</h3>
-          <p className="text-xs text-slate-500">Check calls plus stored Samsara / ORBCOMM pings. Nothing invented.</p>
+          <p className="text-xs text-slate-500">Check calls plus stored Samsara / Orbcomm pings. Nothing invented.</p>
           {events.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">No check calls or GPS pings on this load yet.</p>
           ) : (

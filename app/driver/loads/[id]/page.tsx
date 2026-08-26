@@ -5,6 +5,7 @@ import { DriverLoadActions } from "@/components/driver-load-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
+import { driverFacingPay } from "@/lib/settlement";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
@@ -60,17 +61,18 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div id="confirmation" className="mt-4 flex flex-wrap gap-2">
         <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation`}>
           Download load confirmation
         </a>
         {attachments
           .filter((file) => file.kind === "bol")
           .map((file) => (
-            <a key={file.id} className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
+            <a key={file.id} id="bol" className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
               Print / view BOL
             </a>
           ))}
+        {attachments.every((file) => file.kind !== "bol") ? <span id="bol" className="sr-only">BOL</span> : null}
       </div>
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
@@ -78,7 +80,9 @@ export default async function DriverLoadPage({
         <Row label="Delivery" value={`${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`} />
         <Row label="Commodity" value={load.commodity || "—"} />
         <Row label="Weight" value={formatWeight(load.weight)} />
-        <Row label="Rate" value={formatMoney(load.rate)} />
+        {driverFacingPay(load) != null ? (
+          <Row label="Your pay" value={formatMoney(driverFacingPay(load))} />
+        ) : null}
         <Row label="Ref / PO" value={[load.reference_number, load.po_number].filter(Boolean).join(" · ") || "—"} />
         <Row label="Trailer" value={load.trailer_number || load.trailer_unit || "—"} />
         {reeferSpec.isReefer ? (
@@ -114,7 +118,7 @@ export default async function DriverLoadPage({
           {reefer ? (
             <div className="mt-1 text-sm text-sky-900">
               Live {reefer.temperature_f ?? "—"}°F
-              {reefer.source === "demo" ? " · demo reading" : reefer.source === "orbcomm" ? " · ORBCOMM" : ""}
+              {reefer.source === "demo" ? " · demo reading" : reefer.source === "orbcomm" ? " · Orbcomm" : ""}
               {reefer.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
             </div>
           ) : null}
@@ -149,13 +153,17 @@ export default async function DriverLoadPage({
         </section>
       ) : null}
 
-      <DriverLoadActions
-        loadId={load.id}
-        loadNumber={load.load_number}
-        current={load.driver_progress}
-        closed={isClosedStatus(load.status)}
-      />
-      <DriverFuelReceipt loadId={load.id} />
+      <div id="upload">
+        <DriverLoadActions
+          loadId={load.id}
+          loadNumber={load.load_number}
+          current={load.driver_progress}
+          closed={isClosedStatus(load.status)}
+        />
+      </div>
+      <div id="fuel">
+        <DriverFuelReceipt loadId={load.id} />
+      </div>
 
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold">Files on this load</h2>

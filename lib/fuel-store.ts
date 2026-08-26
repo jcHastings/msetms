@@ -19,10 +19,12 @@ function nowIso(): string {
 
 const FUEL_SELECT = `SELECT fuel_transactions.*,
   drivers.name AS driver_name,
-  trucks.unit_number AS truck_unit
+  trucks.unit_number AS truck_unit,
+  loads.load_number AS load_number
   FROM fuel_transactions
   LEFT JOIN drivers ON drivers.id = fuel_transactions.driver_id
-  LEFT JOIN trucks ON trucks.id = fuel_transactions.truck_id`;
+  LEFT JOIN trucks ON trucks.id = fuel_transactions.truck_id
+  LEFT JOIN loads ON loads.id = fuel_transactions.load_id`;
 
 export function listFuelTransactions(filters?: {
   driverId?: number;
@@ -70,10 +72,10 @@ export function importFuelFromText(
   );
   const insert = db.prepare(
     `INSERT INTO fuel_transactions (
-      occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
+      occurred_at, driver_id, truck_id, load_id, location, gallons, price_per_gallon, amount,
       card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
       prompt_data, dedup_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let created = 0;
   let skipped = parsed.skipped;
@@ -90,6 +92,7 @@ export function importFuelFromText(
         row.occurredAt,
         match.driverId,
         match.truckId,
+        null,
         row.location,
         row.gallons,
         row.pricePerGallon,
@@ -125,6 +128,14 @@ export function assignFuelTransactionDriver(id: number, driverId: number): void 
   getDb()
     .prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?")
     .run(driverId, truckId, id);
+}
+
+export function assignFuelTransactionLoad(id: number, loadId: number): void {
+  const row = getFuelTransaction(id);
+  if (!row) throw new Error("Fuel row is missing.");
+  const load = getDb().prepare("SELECT id FROM loads WHERE id = ?").get(loadId) as { id: number } | undefined;
+  if (!load) throw new Error("Pick a load.");
+  getDb().prepare("UPDATE fuel_transactions SET load_id = ? WHERE id = ?").run(loadId, id);
 }
 
 function addToPeriod(period: FuelPeriodTotals, row: FuelTransactionView): void {

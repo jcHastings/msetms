@@ -1,5 +1,6 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
+import { formatMdYDisplay } from "./format";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   applyLocationToStop,
@@ -72,12 +73,14 @@ export function confirmationStatus(load: LoadView): string {
 
 export function equipmentLabel(load: LoadView): string {
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
-  const type = trailer?.type || load.truck_type;
+  const type = trailer?.type || load.trailer_type || "";
   if (type === "reefer") return "53' Reefer";
   if (type === "dry_van") return "53' Dry Van";
   if (type === "flatbed") return "53' Flatbed";
   if (type === "box") return "Box Truck";
   if (type === "power_only") return "Power Only";
+  if (load.equipment === "reefer_53") return "53' Reefer";
+  if (load.equipment === "dry_van_53") return "53' Dry Van";
   return type ? type.replaceAll("_", " ") : "";
 }
 
@@ -97,10 +100,8 @@ export function formatUsd(value: number | null | undefined): string {
 }
 
 export function formatMdY(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${date.getFullYear()}`;
+  const value = formatMdYDisplay(iso);
+  return value === "—" ? "" : value;
 }
 
 function formatClock(iso: string): string {

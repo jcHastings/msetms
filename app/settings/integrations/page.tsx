@@ -35,14 +35,14 @@ export default async function IntegrationsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Integrations"
-        subtitle="Samsara, ORBCOMM, QuickBooks, and load tracking status. Credentials stay in local .env and are never shown. No fake Ascend APIs."
+        subtitle="Samsara, Orbcomm, QuickBooks, and load tracking status. Credentials stay in local .env and are never shown. No fake Ascend APIs."
       />
 
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Load tracking</h2>
         <p className="mt-2 text-sm text-slate-600">
           Trucks and HOS come from <strong>Samsara</strong>. Trailers and reefer come from{" "}
-          <strong>ORBCOMM</strong>. There is no separate tracking product and no DAT load-board hookup.
+          <strong>Orbcomm</strong>. There is no separate tracking product and no DAT load-board hookup.
         </p>
         <p className="mt-2 text-sm text-slate-600">
           Carrier / owner-operator payment defaults live on{" "}
@@ -100,7 +100,7 @@ export default async function IntegrationsSettingsPage() {
       </section>
 
       <section className="card mt-6 p-6">
-        <h2 className="text-sm font-semibold">ORBCOMM — trailer tracking & reefer</h2>
+        <h2 className="text-sm font-semibold">Orbcomm — trailer tracking & reefer</h2>
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
             <dt className="text-slate-500">Username</dt>
@@ -129,15 +129,16 @@ export default async function IntegrationsSettingsPage() {
             target="_blank"
             rel="noreferrer"
           >
-            ORBCOMM Reefer Status Report
+            Orbcomm Reefer Status Report
           </a>
           . Set <code>ORBCOMM_USERNAME</code> and <code>ORBCOMM_PASSWORD</code> (optional{" "}
           <code>ORBCOMM_ACCOUNT_ID</code> sent as <code>orgKey</code>) in <code>.env</code>. The app requests a
           Transportation Platform token at{" "}
           <code>POST /SynB2BGatewayService/api/generateToken</code> as <code>userName</code>, <code>password</code>,{" "}
-          <code>orgKey</code>. There is no scrape of the logged-in portal. If
-          B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the ORBCOMM
-          asset ID on the trailer. ORBCOMM is not used for driver HOS.
+          <code>orgKey</code>. Live status uses <code>POST /getAssetStatus</code> with trailer unit numbers
+          (Authorization is the raw access token). There is no scrape of the logged-in portal. If
+          B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the Orbcomm
+          asset ID on the trailer. Orbcomm is not used for driver HOS.
         </p>
         {reefers.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -226,7 +227,7 @@ export default async function IntegrationsSettingsPage() {
       <section className="card mt-6 overflow-hidden">
         <header className="border-b border-slate-200 px-5 py-3">
           <h2 className="text-sm font-semibold">
-            Reefer snapshots {reefers.mode === "demo" ? "(demo data)" : "(ORBCOMM)"}
+            Reefer snapshots {reefers.mode === "demo" ? "(demo data)" : "(Orbcomm)"}
           </h2>
         </header>
         <table className="table-grid">

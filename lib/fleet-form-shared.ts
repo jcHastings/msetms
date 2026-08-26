@@ -1,19 +1,16 @@
 /** Client-safe fleet form values. No PIN, no sqlite row objects. */
 
 import {
+  DEFAULT_CAB_TYPE,
   DEFAULT_FLEET_TYPE,
   TRAILER_TYPES,
-  TRUCK_TYPES,
+  normalizeCabType,
   type TrailerType,
   type TruckType,
 } from "./types";
 
 export function parseTruckType(value: unknown): TruckType {
-  const type = String(value ?? "").trim() || DEFAULT_FLEET_TYPE;
-  if (!TRUCK_TYPES.some((item) => item.value === type)) {
-    throw new Error("Pick a truck type.");
-  }
-  return type as TruckType;
+  return normalizeCabType(value || DEFAULT_CAB_TYPE);
 }
 
 export function parseTrailerType(value: unknown): TrailerType {
@@ -36,6 +33,7 @@ export type TruckFormValues = {
   samsara_vehicle_id: string;
   vin: string;
   plate: string;
+  plate_state: string;
   year: string;
   make: string;
   model: string;
@@ -75,6 +73,7 @@ export type DriverFormValues = {
   active: number;
   license_number: string;
   license_expires: string;
+  cdl_endorsements: string;
   medical_issued: string;
   medical_expires: string;
   driver_type: string;
@@ -123,12 +122,13 @@ export function truckFormValues(truck: Record<string, unknown>): TruckFormValues
   return {
     id: num(truck.id),
     unit_number: text(truck.unit_number),
-    type: text(truck.type) || DEFAULT_FLEET_TYPE,
+    type: normalizeCabType(truck.type || DEFAULT_CAB_TYPE),
     capacity_lbs: num(truck.capacity_lbs) || 45000,
     status: text(truck.status) || "available",
     samsara_vehicle_id: text(truck.samsara_vehicle_id),
     vin: text(truck.vin),
     plate: text(truck.plate),
+    plate_state: text(truck.plate_state).toUpperCase(),
     year: text(truck.year),
     make: text(truck.make),
     model: text(truck.model),
@@ -172,6 +172,7 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     active: num(driver.active),
     license_number: text(driver.license_number),
     license_expires: text(driver.license_expires),
+    cdl_endorsements: text(driver.cdl_endorsements),
     medical_issued: text(driver.medical_issued),
     medical_expires: text(driver.medical_expires),
     driver_type: text(driver.driver_type) || "company_driver",

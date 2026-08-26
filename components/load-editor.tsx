@@ -219,13 +219,13 @@ export async function LoadEditor({
               </div>
             </div>
             <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trailer (ORBCOMM)</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trailer (Orbcomm)</div>
               <div className="mt-1">
                 <TrailerLocationBadge location={await getTrailerLocationForLoad(load.id)} />
               </div>
             </div>
             <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (ORBCOMM)</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (Orbcomm)</div>
               <div className="mt-1">
                 <ReeferBadge
                   setpoint={load.reefer_setpoint_f}

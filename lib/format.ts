@@ -23,15 +23,89 @@ export function fromInputDateTime(value: string): string {
   return date.toISOString();
 }
 
-export function formatDateTime(iso: string): string {
+export const DISPLAY_TIME_ZONE = "America/New_York";
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function dateOnlyParts(iso: string): { year: number; month: number; day: number } | null {
+  const match = String(iso ?? "")
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+function formatMdYParts(year: number, month: number, day: number): string {
+  return `${pad2(month)}/${pad2(day)}/${String(year).slice(-2)}`;
+}
+
+export function formatMdYDisplay(iso: string): string {
+  const parts = dateOnlyParts(iso);
+  if (parts) return formatMdYParts(parts.year, parts.month, parts.day);
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+    year: "2-digit",
+  }).formatToParts(date);
+  const month = bits.find((part) => part.type === "month")?.value ?? "01";
+  const day = bits.find((part) => part.type === "day")?.value ?? "01";
+  const year = bits.find((part) => part.type === "year")?.value ?? "00";
+  return `${month}/${day}/${year}`;
+}
+
+export function formatDateTime(iso: string): string {
+  if (dateOnlyParts(iso)) return formatMdYDisplay(iso);
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const datePart = formatMdYDisplay(iso);
+  const timePart = date.toLocaleTimeString("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
     hour: "numeric",
     minute: "2-digit",
   });
+  return `${datePart} ${timePart}`;
+}
+
+export function ymdInTimeZone(value: Date | string, timeZone = DISPLAY_TIME_ZONE): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  const bits = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = bits.find((part) => part.type === "year")?.value ?? "";
+  const month = bits.find((part) => part.type === "month")?.value ?? "";
+  const day = bits.find((part) => part.type === "day")?.value ?? "";
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+export function todayYmd(timeZone = DISPLAY_TIME_ZONE, now = new Date()): string {
+  return ymdInTimeZone(now, timeZone);
+}
+
+export function isoTouchesYmd(iso: string, ymd: string, timeZone = DISPLAY_TIME_ZONE): boolean {
+  const parts = dateOnlyParts(iso);
+  if (parts) return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}` === ymd;
+  const key = ymdInTimeZone(iso, timeZone);
+  return Boolean(key) && key === ymd;
+}
+
+export function loadTouchesToday(
+  load: { pickup_start?: string; pickup_end?: string; delivery_start?: string; delivery_end?: string },
+  now = new Date(),
+  timeZone = DISPLAY_TIME_ZONE,
+): boolean {
+  const today = todayYmd(timeZone, now);
+  return [load.pickup_start, load.pickup_end, load.delivery_start, load.delivery_end].some(
+    (value) => value && isoTouchesYmd(value, today, timeZone),
+  );
 }
 
 export function formatStopWindow(start: string, end: string): string {
@@ -54,13 +128,7 @@ export function formatInvoiceMoney(value: number | null | undefined, currency = 
 }
 
 export function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  return formatMdYDisplay(iso);
 }
 
 export function formatMoney(value: number | null | undefined, currency = "USD"): string {
