@@ -7246,7 +7246,82 @@ Continuous reefer. Two load locks.
     /No activity lines found/,
   );
 
-  const { extractFuelPdfText } = await import("../lib/fuel-pdf");
+  const fleetOneOfficeExtract = [
+    "Transaction Activity Report",
+    "Report Date: 08/25/2026",
+    "Customer Number: 3770001903818",
+    "M & S Loads LLC",
+    "228 E ROUTE 59 #190",
+    "NANUET NY 10954",
+    "dispatch@msloads.com",
+    "Funded Fuel",
+    "Diesel 2,670.36",
+    "Funded Total 3,262.28",
+    "Diesel 5 479.83",
+    "Reefer 2 42.13",
+    "Report Total 528.120 45.0820 3,262.28",
+    "Money Code 340.25",
+    "08/25 N Diesel ULTRA LOW SULFUR DIESEL 32 D84 157166699 542161 NE 88.800 5.6490 505.62 LOVES #730 TRAVEL OMAHA",
+    "08/25 N Diesel ULTRA LOW SULFUR DIESEL 26 D033 157149183 516319 IA 121.310 5.3590 650.10 ONE9 496 ATALISSA",
+    "08/25 N Reefer REEFER ULTRA LOW SULFUR 26 D033 157149183 516319 ONE9 496 ATALISSA IA 31.180 5.3590 167.58",
+    "08/25 N Diesel ULTRA LOW SULFUR DIESEL 42 D42 157166120 526745 ONVO TRAVEL PLAZA WHITE HAVEN PA 71.270 5.8590 417.36",
+    "08/25 N Diesel ULTRA LOW SULFUR DIESEL 28 D075 157146929 518177 PILOT SIOUX CITY 5 SIOUX CITY IA 100.450 5.7590 538.81",
+    "08/25 NANUET NY 10954 N Diesel ULTRA LOW SULFUR DIESEL 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 98.000 5.9990 558.47",
+    "08/25 N Reefer REEFER ULTRA LOW SULFUR 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 10.950 5.9990 62.90",
+    "08/25 N DEF DIESEL EXHAUST FLUID UREA 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 4.160 5.0990 21.19",
+    "08/25 N Money Code MONEY CODE 137.25",
+    "08/25 N Money Code MONEY CODE 203.00",
+    "/ Ds201902 / Dm201902",
+  ].join("\n");
+  assert.equal(looksLikeEfsReport(fleetOneOfficeExtract), false);
+  assert.equal(
+    looksLikeFleetOneReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport_pdf"),
+    true,
+  );
+  const officeParsed = parseFuelReport(fleetOneOfficeExtract, "FleetOne_TransactionActivityReport_pdf");
+  assert.equal(officeParsed.rows.filter((row) => row.category === "truck_diesel").length, 5);
+  assert.equal(officeParsed.rows.filter((row) => row.category === "reefer_diesel").length, 2);
+  assert.equal(officeParsed.rows.filter((row) => row.category === "def").length, 1);
+  assert.equal(officeParsed.rows.filter((row) => row.category === "money_code").length, 2);
+  assert.ok(officeParsed.rows.every((row) => !/nanuet/i.test(row.location)));
+  assert.ok(officeParsed.rows.every((row) => row.amount !== 3262.28 && row.amount !== 340.25));
+  assert.ok(officeParsed.rows.every((row) => row.gallons !== 45.082));
+  const officeLoves = officeParsed.rows.find((row) => row.amount === 505.62);
+  assert.equal(officeLoves?.category, "truck_diesel");
+  assert.equal(officeLoves?.unitNumber, "32");
+  assert.equal(officeLoves?.gallons, 88.8);
+  assert.match(officeLoves?.location ?? "", /LOVES/i);
+  assert.equal(new Date(officeLoves?.occurredAt ?? "").getFullYear(), 2026);
+  assert.equal(new Date(officeLoves?.occurredAt ?? "").getMonth(), 7);
+  assert.equal(new Date(officeLoves?.occurredAt ?? "").getDate(), 25);
+  const officeSunoco = officeParsed.rows.find((row) => row.amount === 558.47);
+  assert.equal(officeSunoco?.unitNumber, "36");
+  assert.match(officeSunoco?.location ?? "", /SUNOCO/i);
+  assert.match(officeSunoco?.location ?? "", /EAST BRUNSWICK/i);
+  assert.equal(officeParsed.rows.find((row) => row.amount === 167.58)?.unitNumber, "26");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 21.19)?.category, "def");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 137.25)?.category, "money_code");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 203)?.category, "money_code");
+  const officeImport = fuelStore.importFuelFromText(
+    fleetOneOfficeExtract,
+    "FleetOne_TransactionActivityReport_pdf",
+  );
+  assert.equal(officeImport.created + officeImport.unmatched, 10);
+  const officeRows = fuelStore
+    .listFuelTransactions()
+    .filter((row) => row.source_file === "FleetOne_TransactionActivityReport_pdf");
+  assert.equal(officeRows.find((row) => row.amount === 505.62)?.driver_id, howellId);
+  assert.equal(officeRows.find((row) => row.amount === 650.1)?.driver_id, ellerId);
+  assert.equal(officeRows.find((row) => row.amount === 538.81)?.driver_id, whaleyId);
+  assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
+  assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
+
+  const { isFuelPdfUpload, readFuelUploadText } = await import("../lib/fuel-pdf");
+  assert.equal(isFuelPdfUpload("FleetOne_TransactionActivityReport_pdf", "application/octet-stream"), true);
+  assert.equal(isFuelPdfUpload("report.PDF", ""), true);
+  assert.equal(isFuelPdfUpload("report.pdf.pdf", ""), true);
+  assert.equal(isFuelPdfUpload("plain.csv", "text/csv", Buffer.from("Date,Category\n")), false);
+  assert.equal(isFuelPdfUpload("plain.csv", "", Buffer.from("%PDF-1.4 rest")), true);
   const fleetOnePdf = await PDFDocument.create();
   const fleetOnePage = fleetOnePdf.addPage([792, 612]);
   const fleetFont = await fleetOnePdf.embedFont(StandardFonts.Helvetica);
@@ -7273,10 +7348,23 @@ Continuous reefer. Two load locks.
     fleetOnePage.drawText(cell, { x: 20 + index * 68, y: 540, size: 8, font: fleetFont });
   });
   fleetOnePage.drawText("Money Code 137.25 fees 3.00 total 137.25", { x: 24, y: 500, size: 8, font: fleetFont });
-  const fleetPdfText = await extractFuelPdfText(Buffer.from(await fleetOnePdf.save()));
-  const fleetFromPdf = parseFuelReport(fleetPdfText, "FleetOne_TransactionActivityReport_.pdf");
+  const fleetPdfBytes = Buffer.from(await fleetOnePdf.save());
+  assert.equal(
+    isFuelPdfUpload("FleetOne_TransactionActivityReport_pdf", "application/octet-stream", fleetPdfBytes),
+    true,
+  );
+  const underscoreUpload = await readFuelUploadText(
+    fleetPdfBytes,
+    "FleetOne_TransactionActivityReport_pdf",
+    "application/octet-stream",
+  );
+  assert.equal(underscoreUpload.kind, "pdf");
+  assert.ok(underscoreUpload.text.trim().length > 0);
+  assert.doesNotMatch(underscoreUpload.text, /^Date,/);
+  const fleetFromPdf = parseFuelReport(underscoreUpload.text, "FleetOne_TransactionActivityReport_pdf");
   assert.ok(fleetFromPdf.rows.some((row) => row.amount === 505.62 && row.category === "truck_diesel"));
   assert.ok(fleetFromPdf.rows.some((row) => row.amount === 137.25 && row.category === "money_code"));
+  assert.doesNotMatch(JSON.stringify(fleetFromPdf.rows), /No activity lines found/);
 
   const doomedFuel = fuelStore.listFuelTransactions().find((row) => row.amount === 137.25 && row.category === "money_code");
   assert.ok(doomedFuel);
@@ -7308,6 +7396,10 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /if \(fleetOne\) return toFuelCsvResult/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /\/\[A-Za-z\]\{2\}\\d\{4,\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /FuelDeleteButton/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8"),
+    /disabled=\{pending \|\| !canAssign\}/,
+  );
 
   const { buildSearchExportGrid } = await import("../lib/search-export");
   const searchGrid = buildSearchExportGrid(

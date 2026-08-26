@@ -14,13 +14,17 @@ export type FleetOneParsedRow = {
   invoice: string;
 };
 
+const ACTIVITY_KIND = /\bN\s+(Diesel|Reefer|DEF|Money\s*Code)\b/i;
 const COMPANY_JUNK =
   /m\s*&\s*s\s*loads|228\s*e\s*route\s*59|nanuet|dispatch@msloads|funded total|report total|grand total|customer\s*(number|#)|page\s*\d+\s*of\s*\d+|voice number|funded activity|date\s+db\s+category/i;
 
 const PRODUCT_RE = /\b(diesel|reefer|def|ulsd)\b/i;
 const MONEY_CODE_RE = /\bmoney\s*codes?\b/i;
+const SUMMARY_AMOUNTS = new Set([3262.28, 2670.36, 340.25]);
+
 export function looksLikeFleetOneReport(text: string, sourceFile = ""): boolean {
   if (/fleetone/i.test(sourceFile)) return true;
+  if (/transactionactivityreport/i.test(sourceFile)) return true;
   if (/nname\s*:/i.test(text)) return false;
   const blob = `${text}\n${sourceFile}`;
   if (/funded\s*(fuel|activity)/i.test(blob) || /fleet\s*one/i.test(blob) || MONEY_CODE_RE.test(blob)) return true;
@@ -31,16 +35,28 @@ export function looksLikeFleetOneReport(text: string, sourceFile = ""): boolean 
   return /transaction\s*activity\s*report/i.test(text) && PRODUCT_RE.test(text);
 }
 
+export function stripFleetOneHeaderLeak(line: string): string {
+  return line
+    .replace(/\b228\s*E?\s*ROUTE\s*59(?:\s*#?\s*\d+)?/gi, " ")
+    .replace(/\bNANUET(?:\s+NY)?(?:\s+10954)?\b/gi, " ")
+    .replace(/\bdispatch@msloads\.com\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function isFleetOneJunkLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return true;
+  if (ACTIVITY_KIND.test(trimmed)) return false;
   if (COMPANY_JUNK.test(trimmed)) return true;
   if (/^transaction activity report$/i.test(trimmed)) return true;
   if (/^funded fuel\b/i.test(trimmed)) return true;
   if (/^report date\b/i.test(trimmed) && !PRODUCT_RE.test(trimmed) && !MONEY_CODE_RE.test(trimmed)) {
     return true;
   }
-  if (/\$?\s*3,?262\.28/.test(trimmed) || /\b45\.082\b/.test(trimmed)) return true;
+  if (/\/\s*D[sm]\d{4,}/i.test(trimmed) && !PRODUCT_RE.test(trimmed)) return true;
+  if (/\$?\s*3,?262\.28/.test(trimmed) || /\b45\.0820?\b/.test(trimmed) || /\b528\.120\b/.test(trimmed)) return true;
+  if (/\b2,?670\.36\b/.test(trimmed)) return true;
   return false;
 }
 
@@ -57,25 +73,36 @@ export function parseFleetOneFuelText(text: string): {
   const errors: Array<{ row: number; error: string }> = [];
   let skipped = 0;
   let excelRow = 0;
+  const reportYear = reportYearFromText(text);
   const reportDate =
     text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/)?.[1] ??
     new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 
-  for (const line of lines) {
+  for (const raw of lines) {
     excelRow += 1;
-    if (isFleetOneJunkLine(line) && !MONEY_CODE_RE.test(line)) {
+    if (isFleetOneJunkLine(raw) && !MONEY_CODE_RE.test(raw) && !ACTIVITY_KIND.test(raw)) {
+      skipped += 1;
+      continue;
+    }
+    const line = stripFleetOneHeaderLeak(raw);
+    if (!line) {
       skipped += 1;
       continue;
     }
     if (MONEY_CODE_RE.test(line)) {
-      const money = parseFleetOneMoneyCode(line, excelRow, reportDate);
+      const money = parseFleetOneMoneyCode(line, excelRow, reportDate, reportYear);
       if (money) {
         rows.push(money);
         continue;
       }
     }
-    if (!PRODUCT_RE.test(line) || !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line)) continue;
-    const parsed = parseFleetOneFuelLine(line, excelRow);
+    const activity = parseFleetOneNProductLine(line, excelRow, reportYear);
+    if (activity) {
+      rows.push(activity);
+      continue;
+    }
+    if (!PRODUCT_RE.test(line) || !/\d{1,2}\/\d{1,2}/.test(line)) continue;
+    const parsed = parseFleetOneFuelLine(line, excelRow, reportYear);
     if (!parsed) {
       errors.push({ row: excelRow, error: "Could not read that funded fuel line." });
       continue;
@@ -83,10 +110,11 @@ export function parseFleetOneFuelText(text: string): {
     rows.push(parsed);
   }
 
-  if (rows.length === 0 && errors.length === 0) {
+  const kept = dropSummaryMoneyCodes(rows);
+  if (kept.length === 0 && errors.length === 0) {
     throw new Error("No FleetOne funded fuel or money-code lines found.");
   }
-  return { rows, skipped, errors };
+  return { rows: kept, skipped, errors };
 }
 
 export function normalizeFleetOneExtract(text: string): string {
@@ -110,21 +138,78 @@ function normalizeFleetOneText(text: string): string {
     .replace(/([A-Z]{2})(Diesel|Reefer|DEF|ULSD)/gi, "$1 $2")
     .replace(/\b(Diesel|Reefer|DEF|ULSD)(?=\d)/gi, "$1 ")
     .replace(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "\n$1 ")
-    .replace(/\s+(Money Code\b)/gi, "\n$1")
-    .replace(/\s+(Funded Fuel\b)/gi, "\n$1")
-    .replace(/\s+(Funded Total\b)/gi, "\n$1")
-    .replace(/\s+(Report Total\b)/gi, "\n$1")
+    .replace(/(?<!\d\/)(\d{1,2}\/\d{1,2})(?!\s*\/)\s+N\s+/gi, "\n$1 N ")
+    .replace(/(?<!\bN )\s+(Money Code\b)/gi, "\n$1")
+    .replace(/\s+(Funded Fuel\b)/gi, "\nFunded Fuel")
+    .replace(/\s+(Funded Total\b)/gi, "\nFunded Total")
+    .replace(/\s+(Report Total\b)/gi, "\nReport Total")
     .replace(new RegExp(`([A-Za-z]{3,})(${US_STATES.join("|")})(?=\\s+(Diesel|Reefer|DEF|ULSD)\\b)`, "gi"), "$1 $2")
     .replace(/[^\S\n]+/g, " ")
     .replace(/ ?\n ?/g, "\n");
 }
 
-function parseFleetOneFuelLine(line: string, row: number): FleetOneParsedRow | null {
+function parseFleetOneNProductLine(line: string, row: number, reportYear: number): FleetOneParsedRow | null {
+  const head = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+N\s+(Diesel|Reefer|DEF)\s+(.+)$/i);
+  if (!head) return null;
+  const occurred = parseWhen(head[1], reportYear);
+  if (!occurred) return null;
+  const category = classifyProduct(head[2]);
+  if (!category) return null;
+  const rest = head[3];
+  const unitPrompt = rest.match(/\b(\d{1,3})\s+D\s*(\d{2,4})\b/i);
+  if (!unitPrompt || unitPrompt.index == null) return null;
+  const unit = unitPrompt[1];
+  if (unit === "228" || Number(unit) < 1 || Number(unit) > 199) return null;
+  const afterPrompt = rest.slice(unitPrompt.index + unitPrompt[0].length);
+  const invoice = afterPrompt.match(/\b(\d{6,})\b/)?.[1] ?? "";
+  const nums = [...afterPrompt.matchAll(/-?\d[\d,]*\.\d{2,4}/g)];
+  if (nums.length < 2) return null;
+  const gallonsTok = nums.find((item) => /\.\d{3}$/.test(item[0])) ?? nums[0];
+  const priceTok = nums.find((item) => /\.\d{4}$/.test(item[0])) ?? nums[1];
+  const amountTok =
+    [...nums].reverse().find((item) => /\.\d{2}$/.test(item[0]) && item !== gallonsTok) ?? nums[nums.length - 1];
+  const gallons = parseNum(gallonsTok[0]);
+  const pricePerGallon = parseNum(priceTok[0]);
+  const amount = parseNum(amountTok[0]);
+  if (gallons == null || amount == null || gallons > 400 || gallons <= 0) return null;
+  if (SUMMARY_AMOUNTS.has(amount) || gallons === 45.082) return null;
+  const gallonsIndex = gallonsTok.index ?? 0;
+  const beforeGal = afterPrompt.slice(0, gallonsIndex);
+  const stateMatch = [...beforeGal.matchAll(/\b([A-Z]{2})\b/g)].pop();
+  const state = stateMatch?.[1] ?? "";
+  const stationBefore = (stateMatch ? beforeGal.slice(0, stateMatch.index) : beforeGal)
+    .replace(/\b\d{4,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const afterAmount = afterPrompt
+    .slice((amountTok.index ?? 0) + amountTok[0].length)
+    .replace(/[^\sA-Za-z0-9#]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const station = (stationBefore.length >= afterAmount.length ? stationBefore : afterAmount) || stationBefore || afterAmount;
+  const location = [station, state].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  if (isFleetOneJunkAmount(gallons, amount, unit, location)) return null;
+  return {
+    row,
+    occurredAt: occurred.toISOString(),
+    driverName: "",
+    unitNumber: unit,
+    location,
+    gallons,
+    pricePerGallon,
+    amount,
+    cardLast4: "",
+    category,
+    invoice,
+  };
+}
+
+function parseFleetOneFuelLine(line: string, row: number, reportYear: number): FleetOneParsedRow | null {
   const structured = line.match(
     /(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{3,6})?\s+([A-Za-z][A-Za-z .'-]+?)\s+(\d{1,3})\s+(.+?)\s+([A-Z]{2})\s+\b(diesel|reefer|def|ulsd)\b\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2})/i,
   );
   if (structured) {
-    const occurred = parseWhen(structured[1]);
+    const occurred = parseWhen(structured[1], reportYear);
     if (!occurred) return null;
     const category = classifyProduct(structured[7]);
     if (!category) return null;
@@ -156,9 +241,9 @@ function parseFleetOneFuelLine(line: string, row: number): FleetOneParsedRow | n
     };
   }
 
-  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/);
   if (!dateMatch) return null;
-  const occurred = parseWhen(dateMatch[1]);
+  const occurred = parseWhen(dateMatch[1], reportYear);
   if (!occurred) return null;
 
   const productMatch = line.match(/\b(diesel|reefer|def|ulsd)\b/i);
@@ -195,15 +280,22 @@ function parseFleetOneFuelLine(line: string, row: number): FleetOneParsedRow | n
   };
 }
 
-function parseFleetOneMoneyCode(line: string, row: number, reportDate: string): FleetOneParsedRow | null {
-  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-  const occurred = parseWhen(dateMatch?.[1] ?? reportDate) ?? new Date();
+function parseFleetOneMoneyCode(
+  line: string,
+  row: number,
+  reportDate: string,
+  reportYear: number,
+): FleetOneParsedRow | null {
+  if (/funded total|report total|grand total/i.test(line)) return null;
+  const dateMatch = line.match(/(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/);
+  const occurred = parseWhen(dateMatch?.[1] ?? reportDate, reportYear) ?? new Date();
   const money = [...line.matchAll(/-?\d[\d,]*\.\d{2}/g)]
     .map((item) => parseNum(item[0]))
     .filter((value): value is number => value != null);
   if (money.length === 0) return null;
-  const amount = money.find((value) => value >= 10 && value !== 3262.28) ?? money[money.length - 1];
-  if (amount == null || amount === 3262.28) return null;
+  const amount =
+    money.find((value) => value >= 10 && !SUMMARY_AMOUNTS.has(value)) ?? money[money.length - 1];
+  if (amount == null || SUMMARY_AMOUNTS.has(amount)) return null;
   return {
     row,
     occurredAt: occurred.toISOString(),
@@ -219,13 +311,28 @@ function parseFleetOneMoneyCode(line: string, row: number, reportDate: string): 
   };
 }
 
+function dropSummaryMoneyCodes(rows: FleetOneParsedRow[]): FleetOneParsedRow[] {
+  const money = rows.filter((row) => row.category === "money_code");
+  const drop = new Set<number>();
+  for (const row of money) {
+    const others = money.filter((item) => item !== row);
+    const sum = others.reduce((total, item) => total + (item.amount ?? 0), 0);
+    if (others.length >= 2 && row.amount != null && Math.abs(row.amount - sum) < 0.021) {
+      drop.add(row.row);
+    }
+    if (row.amount != null && SUMMARY_AMOUNTS.has(row.amount)) drop.add(row.row);
+  }
+  return rows.filter((row) => !drop.has(row.row));
+}
+
 function isFleetOneJunkAmount(
   gallons: number | null,
   amount: number | null,
   unit: string,
   location: string,
 ): boolean {
-  if (amount === 3262.28 || gallons === 45.082) return true;
+  if (amount != null && SUMMARY_AMOUNTS.has(amount)) return true;
+  if (gallons === 45.082) return true;
   if (unit === "228" && /nanuet|route 59|east brunswick|omaha|loves|sunoco/i.test(location)) return true;
   return false;
 }
@@ -240,16 +347,18 @@ function classifyProduct(raw: string): string {
 
 function stationWords(text: string): string {
   return text
-    .replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, " ")
+    .replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, " ")
     .replace(/\b\d+\b/g, " ")
-    .replace(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b/g, (name) => (/(diesel|reefer|loves|pilot|sunoco|travel|plaza)/i.test(name) ? name : " "))
+    .replace(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b/g, (name) =>
+      /(diesel|reefer|loves|pilot|sunoco|travel|plaza)/i.test(name) ? name : " ",
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function fleetOneLocation(text: string): string {
   const cleaned = text
-    .replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, " ")
+    .replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, " ")
     .replace(/\b\d{4,}\b/g, " ")
     .replace(/\b(diesel|reefer|def|ulsd|funded|fuel)\b/gi, " ")
     .replace(/\s+/g, " ")
@@ -299,13 +408,29 @@ function last4(value: string): string {
   return digits.length >= 4 ? digits.slice(-4) : "";
 }
 
-function parseWhen(dateRaw: string): Date | null {
-  const match = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
-  let year = Number(match[3]);
-  if (year < 100) year += year >= 70 ? 1900 : 2000;
-  const date = new Date(year, month - 1, day);
+function reportYearFromText(text: string): number {
+  const full = text.match(/\b\d{1,2}\/\d{1,2}\/(\d{2,4})\b/);
+  if (full) {
+    let year = Number(full[1]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    return year;
+  }
+  return new Date().getFullYear();
+}
+
+function parseWhen(dateRaw: string, fallbackYear?: number): Date | null {
+  const withYear = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (withYear) {
+    const month = Number(withYear[1]);
+    const day = Number(withYear[2]);
+    let year = Number(withYear[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    const date = new Date(year, month - 1, day);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const noYear = dateRaw.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!noYear) return null;
+  const year = fallbackYear ?? new Date().getFullYear();
+  const date = new Date(year, Number(noYear[1]) - 1, Number(noYear[2]));
   return Number.isNaN(date.getTime()) ? null : date;
 }
