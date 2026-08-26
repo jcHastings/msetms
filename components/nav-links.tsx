@@ -28,6 +28,7 @@ const SECTIONS: Array<{ title: string; items: Array<{ href: string; label: strin
       { href: "/fleet/samsara", label: "Samsara" },
       { href: "/fleet/orbcomm", label: "Orbcomm" },
       { href: "/fuel", label: "Fuel" },
+      { href: "/ifta", label: "IFTA" },
       { href: "/compliance", label: "Compliance" },
       { href: "/safety", label: "Safety" },
     ],

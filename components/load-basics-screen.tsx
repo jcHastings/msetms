@@ -184,11 +184,11 @@ export function LoadBasicsScreen({
         <input id="equipment_length" name="equipment_length" defaultValue={load?.equipment_length ?? ""} />
       </div>
       <div className="field">
-        <label htmlFor="temperature_f">Temperature °F</label>
+        <label htmlFor="temperature_f">Required temp °F</label>
         <input id="temperature_f" name="temperature_f" type="number" step="0.1" defaultValue={load?.temperature_f ?? ""} />
       </div>
       <div className="field">
-        <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
+        <label htmlFor="reefer_setpoint_f">Setpoint °F</label>
         <input
           id="reefer_setpoint_f"
           name="reefer_setpoint_f"
@@ -196,6 +196,29 @@ export function LoadBasicsScreen({
           step="0.1"
           defaultValue={load?.reefer_setpoint_f ?? defaults.reefer_setpoint_f ?? ""}
         />
+      </div>
+      <div className="field">
+        <label htmlFor="temp_low_f">Required low °F</label>
+        <input id="temp_low_f" name="temp_low_f" type="number" step="0.1" defaultValue={load?.temp_low_f ?? ""} />
+      </div>
+      <div className="field">
+        <label htmlFor="temp_high_f">Required high °F</label>
+        <input id="temp_high_f" name="temp_high_f" type="number" step="0.1" defaultValue={load?.temp_high_f ?? ""} />
+      </div>
+      <div className="field">
+        <label htmlFor="unload_type">Live vs Drop</label>
+        <select id="unload_type" name="unload_type" defaultValue={load?.unload_type ?? ""}>
+          <option value="">—</option>
+          <option value="live">Live</option>
+          <option value="drop">Drop</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="non_revenue">Empty move</label>
+        <select id="non_revenue" name="non_revenue" defaultValue={load?.non_revenue ? "1" : "0"}>
+          <option value="0">Revenue load</option>
+          <option value="1">Non-revenue — pay and miles, no customer invoice</option>
+        </select>
       </div>
       <div className="field">
         <label htmlFor="reefer_mode">Reefer mode</label>

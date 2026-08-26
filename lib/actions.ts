@@ -500,6 +500,7 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
       enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
       assignLoad(loadId, truckId, driverId, trailerId, {
         oo_percent: parseOptionalFloat(formData.get("oo_percent")),
+        dispatch: String(formData.get("dispatch") ?? "") === "1",
       });
       refresh();
       return { ok: true, id: loadId };

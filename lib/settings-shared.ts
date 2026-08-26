@@ -347,6 +347,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
     return canEditFleet(role);
   }
   if (href === "/fuel") return canUploadFuel(role);
+  if (href === "/ifta") return canUploadFuel(role) || canViewIfta(role);
   if (href === "/customers") return canWriteDesk(role) || accessRole(role) === "read_only";
   if (href === "/accounting" || href.startsWith("/accounting/")) return canAccessAccounting(role);
   if (href === "/users") return canManageUsers(role);

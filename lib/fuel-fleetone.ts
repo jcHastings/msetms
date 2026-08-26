@@ -192,7 +192,7 @@ function parseFleetOneNProductLine(line: string, row: number, reportYear: number
   return {
     row,
     occurredAt: occurred.toISOString(),
-    driverName: "",
+    driverName: extractNProductDriverName(rest.slice(0, unitPrompt.index)),
     unitNumber: unit,
     location,
     gallons,
@@ -390,6 +390,24 @@ function fleetOneCard(head: string, full: string): string {
 
 function fleetOneInvoice(text: string): string {
   return text.match(/\b(\d{6,})\b/)?.[1] ?? "";
+}
+
+function extractNProductDriverName(beforeUnit: string): string {
+  const cleaned = beforeUnit.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const titled = cleaned.match(
+    /^([A-Z][a-z]+(?:[.'-][A-Za-z]+)?(?:\s+[A-Z][a-z]+(?:[.'-][A-Za-z]+)?){0,2})$/,
+  );
+  if (titled) return titled[1];
+  const capped = cleaned.match(/^([A-Z]{2,}(?:\s+[A-Z]{2,}){0,2})$/);
+  if (capped && !/(DIESEL|REEFER|DEF|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA)/.test(capped[1])) {
+    return capped[1]
+      .toLowerCase()
+      .split(" ")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  return "";
 }
 
 function fleetOneDriver(text: string): string {

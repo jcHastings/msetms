@@ -2,6 +2,7 @@ import Link from "next/link";
 import { exceptionAction } from "@/lib/dispatcher-actions";
 import {
   EXCEPTION_KINDS,
+  attentionLabel,
   labelForExceptionKind,
   type ExceptionInbox,
   type ExceptionSeverity,
@@ -34,7 +35,7 @@ export function ExceptionInboxCard({
       <header className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200 px-5 py-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Exception inbox
+            Requires Attention
           </p>
           <h2 className="text-sm font-semibold text-slate-900">{summary}</h2>
         </div>
@@ -72,7 +73,7 @@ export function ExceptionInboxCard({
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_CLASS[item.severity]}`}
                     >
-                      {item.severity}
+                      {attentionLabel(item)}
                     </span>
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                       {labelForExceptionKind(item.kind)}

@@ -4,18 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { driverUploadAction } from "@/lib/driver-actions";
 import { imagesToPdf, pdfFileName } from "@/lib/image-pdf";
-import { ATTACHMENT_KINDS } from "@/lib/types";
+import { DRIVER_UPLOAD_KINDS } from "@/lib/driver-docs";
 
 type Draft = { previewUrl: string; blob: Blob };
 type Page = Draft & { id: string };
 
-const DRIVER_KINDS = ATTACHMENT_KINDS.filter(
-  (kind) =>
-    kind.value !== "rate_con" &&
-    kind.value !== "ifta" &&
-    kind.value !== "invoice" &&
-    kind.value !== "carrier_invoice",
-);
+const DRIVER_KINDS = DRIVER_UPLOAD_KINDS;
 
 export function DriverCameraPdf({
   loadId,
@@ -116,6 +110,42 @@ export function DriverCameraPdf({
     });
   }
 
+function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  const source = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = source;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 4;
+      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      data[i] = gray;
+      data[i + 1] = gray;
+      data[i + 2] = gray;
+      if (gray < 236) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  ctx.putImageData(source, 0, 0);
+  const pad = 8;
+  if (maxX > minX + 20 && maxY > minY + 20) {
+    const sx = Math.max(0, minX - pad);
+    const sy = Math.max(0, minY - pad);
+    const sw = Math.min(width - sx, maxX - minX + pad * 2);
+    const sh = Math.min(height - sy, maxY - minY + pad * 2);
+    const cropped = ctx.getImageData(sx, sy, sw, sh);
+    canvas.width = sw;
+    canvas.height = sh;
+    ctx.putImageData(cropped, 0, 0);
+  }
+}
+
   async function blobToJpeg(blob: Blob): Promise<Uint8Array> {
     const bitmap = await createImageBitmap(blob);
     const maxEdge = 1600;
@@ -127,6 +157,7 @@ export function DriverCameraPdf({
     if (!ctx) throw new Error("Could not prepare the photo.");
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
+    autoCropAndGrayscale(ctx, canvas);
     const jpeg = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", 0.82),
     );
@@ -176,7 +207,7 @@ export function DriverCameraPdf({
     <section className="rounded-2xl bg-white p-4 shadow-sm">
       <h2 className="text-base font-semibold">Take a document photo</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Camera first. Preview, then make a PDF (BOL / POD / lumper / other) on this phone.
+        Camera first. Preview, then make a PDF (Receipt / Scale Ticket / BOL / POD) on this phone.
       </p>
 
       <div className="mt-3 field">

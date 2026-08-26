@@ -262,6 +262,13 @@ function parseStopInput(formData: FormData) {
     instructions: String(formData.get("instructions") ?? "").trim(),
     notes: String(formData.get("notes") ?? "").trim(),
     location_id: parseOptionalInt(formData.get("location_id")),
+    arrived_at: String(formData.get("arrived_at") ?? "").trim()
+      ? fromInputDateTime(String(formData.get("arrived_at")))
+      : "",
+    departed_at: String(formData.get("departed_at") ?? "").trim()
+      ? fromInputDateTime(String(formData.get("departed_at")))
+      : "",
+    schedule_type: String(formData.get("schedule_type") ?? "").trim(),
   };
 }
 
@@ -541,26 +548,44 @@ export async function assignLoadDispatcherAction(formData: FormData): Promise<vo
   });
 }
 
+export async function requestPodAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      setLoadDocsRequested(loadId, true);
+      refresh();
+      return { ok: true, id: loadId, message: "POD requested from the driver." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function sendToAccountingAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      await requireCapability(canAccessAccounting, "Send to Accounting is for Administrator and Accounting.");
+      const actor = await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);
       if (!load) throw new Error("Load not found.");
+      if (load.non_revenue) {
+        throw new Error("Empty move — no customer invoice.");
+      }
       setLoadReadyToInvoice(loadId, true);
-      if (isBillableStatus(load.status) && load.rate != null) {
+      if (canAccessAccounting(actor.role) && isBillableStatus(load.status) && load.rate != null) {
         const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
         try {
           await sendLoadToQuickbooks(loadId, { confirmResend: String(formData.get("confirm_resend") ?? "") === "1" });
           refresh();
-          return { ok: true, id: loadId, message: "Sent to accounting (QuickBooks) and marked ready to invoice." };
+          return { ok: true, id: loadId, message: "Released to invoicing and sent to QuickBooks." };
         } catch (error) {
           const text = error instanceof Error ? error.message : "QuickBooks send failed.";
           if (/already sent/i.test(text)) {
             refresh();
-            return { ok: true, id: loadId, message: "Already invoiced. Marked ready to invoice." };
+            return { ok: true, id: loadId, message: "Already invoiced. Released to invoicing." };
           }
           refresh();
           return { ok: false, error: text };
@@ -570,7 +595,7 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
       return {
         ok: true,
         id: loadId,
-        message: "Marked ready to invoice. Send the QuickBooks invoice from Financials after the load is delivered with a rate.",
+        message: "Released to invoicing.",
       };
     } catch (error) {
       return fail(error);

@@ -384,6 +384,7 @@ export type Driver = {
   drug_test_last: string;
   drug_test_next: string;
   termination_date: string;
+  last_trailer_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -476,6 +477,7 @@ export type Load = {
   route_source: string;
   tms_invoice_number: string;
   tms_invoice_at: string;
+  non_revenue: number;
   created_at: string;
   updated_at: string;
 };

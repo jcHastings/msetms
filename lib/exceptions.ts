@@ -116,12 +116,30 @@ function withLoad(
   };
 }
 
+function requiredTempTarget(load: LoadView): { value: number; label: string } | null {
+  if (load.temp_low_f != null && load.temp_high_f != null) {
+    return { value: (load.temp_low_f + load.temp_high_f) / 2, label: `${load.temp_low_f}–${load.temp_high_f}°F` };
+  }
+  if (load.temperature_f != null) return { value: load.temperature_f, label: `req ${load.temperature_f}°F` };
+  if (load.temp_low_f != null) return { value: load.temp_low_f, label: `req ${load.temp_low_f}°F` };
+  if (load.temp_high_f != null) return { value: load.temp_high_f, label: `req ${load.temp_high_f}°F` };
+  return null;
+}
+
+function outsideRequiredRange(load: LoadView, temp: number): boolean {
+  if (load.temp_low_f != null && temp < load.temp_low_f - 0.5) return true;
+  if (load.temp_high_f != null && temp > load.temp_high_f + 0.5) return true;
+  if (load.temperature_f != null && Math.abs(temp - load.temperature_f) >= 2) return true;
+  return false;
+}
+
 function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxException[] {
   if (isClosedStatus(load.status)) return [];
   const setpoint = load.reefer_setpoint_f ?? reading?.setpoint_f ?? null;
+  const required = requiredTempTarget(load);
   const temp = reading?.temperature_f ?? null;
   const alarm = reading?.alarm?.trim() ?? "";
-  if (setpoint == null || temp == null) {
+  if (temp == null) {
     if (alarm) {
       return [
         withLoad(
@@ -137,21 +155,39 @@ function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxE
     return [];
   }
 
-  const delta = Math.abs(temp - setpoint);
+  const vsSetpoint = setpoint != null ? Math.abs(temp - setpoint) : 0;
+  const vsRequired = required ? Math.abs(temp - required.value) : 0;
+  const requiredMiss = outsideRequiredRange(load, temp);
+  const delta = Math.max(vsSetpoint, requiredMiss ? vsRequired : 0);
   let severity: ExceptionSeverity | null = null;
   if (delta >= 8 || (alarm && delta >= 5)) severity = "CRITICAL";
-  else if (delta >= 3 || alarm) severity = "HIGH";
+  else if (delta >= 3 || alarm || requiredMiss) severity = "HIGH";
   else if (delta >= 2) severity = "MEDIUM";
   if (!severity) return [];
 
-  const title = alarm && delta >= 3 ? "Reefer alarm / off setpoint" : "Reefer off setpoint";
+  const title =
+    requiredMiss && (setpoint == null || vsRequired >= vsSetpoint)
+      ? "Temperature discrepancy"
+      : alarm && delta >= 3
+        ? "Reefer alarm / off setpoint"
+        : "Reefer off setpoint";
   const detail = [
-    `${temp}°F vs set ${setpoint}°F (${delta.toFixed(1)}° off)`,
+    `${temp}°F`,
+    setpoint != null ? `set ${setpoint}°F` : null,
+    required ? required.label : null,
+    ` (${delta.toFixed(1)}° off)`,
     alarm ? alarm : null,
   ]
     .filter(Boolean)
     .join(" · ");
   return [withLoad(load, "reefer", severity, title, detail, reading?.source !== "orbcomm")];
+}
+
+export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {
+  if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
+  if (item.severity === "CRITICAL") return "Critical";
+  if (item.severity === "HIGH") return "Important";
+  return "Caution";
 }
 
 function lateExceptions(load: LoadView, now: Date): InboxException[] {

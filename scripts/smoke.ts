@@ -28,6 +28,8 @@ async function main() {
   assert.match(navSource, /href: "\/compliance"/);
   assert.match(navSource, /href: "\/fuel"/);
   assert.match(navSource, /label: "Fuel"/);
+  assert.match(navSource, /href: "\/ifta"/);
+  assert.match(navSource, /label: "IFTA"/);
   assert.match(navSource, /href: "\/loads\/templates"/);
   assert.match(navSource, /href: "\/settings"/);
   assert.match(navSource, /href: "\/users"/);
@@ -4717,6 +4719,7 @@ Continuous reefer. Two load locks.
     labelForFuelBucket,
     parseFuelCsv,
     parseFuelReport,
+    matchFuelDriver,
     parseFuelWhen,
     renderFuelExportCsv,
     renderFuelTemplate,
@@ -5865,6 +5868,8 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canViewReports("dispatcher"), false);
   assert.equal(settings.canDeleteDocuments("dispatcher"), false);
   assert.equal(settings.canConnectQuickbooks("accounting"), false);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/ifta"), true);
+  assert.equal(settings.canSeeNavHref("accounting", "/ifta"), true);
   assert.equal(settings.canSeeNavHref("dispatcher", "/accounting"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/settings"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/users"), false);
@@ -7326,6 +7331,24 @@ Continuous reefer. Two load locks.
   assert.equal(officeRows.find((row) => row.amount === 558.47)?.driver_id, avila);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
   assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
+  const namedNProduct = parseFuelReport(
+    "08/25 N Diesel Christoph Howell 32 D 1902 SUNOCO PA 50.123 3.4567 172.00",
+    "FleetOne_TransactionActivityReport.pdf",
+  );
+  assert.equal(namedNProduct.rows[0]?.driverName, "Christoph Howell");
+  assert.equal(namedNProduct.rows[0]?.unitNumber, "32");
+  const namedMatch = matchFuelDriver(
+    { driverName: "Christoph Howell", driverIdRaw: "", unitNumber: "", prompt: "" },
+    [queries.getDriver(howellId)!],
+    [],
+  );
+  assert.equal(namedMatch.driverId, howellId);
+  const moneyUnmatched = matchFuelDriver(
+    { driverName: "", driverIdRaw: "", unitNumber: "", prompt: "" },
+    [queries.getDriver(howellId)!],
+    [],
+  );
+  assert.equal(moneyUnmatched.driverId, null);
 
   const { isFuelPdfUpload, readFuelUploadText } = await import("../lib/fuel-pdf");
   assert.equal(isFuelPdfUpload("FleetOne_TransactionActivityReport_pdf", "application/octet-stream"), true);
@@ -7469,6 +7492,221 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
+
+  const { attentionLabel } = await import("../lib/exceptions");
+  assert.equal(attentionLabel({ kind: "late", severity: "HIGH", title: "Late to pickup" }), "Running late");
+  assert.equal(attentionLabel({ kind: "reefer", severity: "CRITICAL", title: "Temperature discrepancy" }), "Critical");
+  assert.equal(attentionLabel({ kind: "unassigned", severity: "LOW", title: "Unassigned" }), "Caution");
+  assert.equal(attentionLabel({ kind: "missing_pod", severity: "HIGH", title: "Missing POD" }), "Important");
+
+  const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
+  assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
+  assert.equal(isDriverUploadKind("other"), false);
+  assert.equal(isDriverUploadKind("pod"), true);
+  assert.equal(isDriverUploadKind("fuel_receipt"), true);
+  const driverActionsSource = fs.readFileSync(path.join(process.cwd(), "components/driver-load-actions.tsx"), "utf8");
+  assert.match(driverActionsSource, /Check In/);
+  assert.match(driverActionsSource, /Check Out/);
+  assert.doesNotMatch(driverActionsSource, /Unclassified|ATTACHMENT_KINDS/);
+
+  const { driverStopButtons } = await import("../lib/driver-stops");
+  const checkButtons = driverStopButtons([
+    {
+      id: 1,
+      load_id: 1,
+      sequence: 1,
+      kind: "pickup",
+      location_id: null,
+      name: "A",
+      street: "",
+      city: "A",
+      state: "NE",
+      zip: "",
+      phone: "",
+      window_start: "",
+      window_end: "",
+      confirmation: "",
+      cargo: "",
+      reference: "",
+      instructions: "",
+      notes: "",
+      arrived_at: "",
+      departed_at: "",
+      schedule_type: "",
+    },
+    {
+      id: 2,
+      load_id: 1,
+      sequence: 2,
+      kind: "delivery",
+      location_id: null,
+      name: "B",
+      street: "",
+      city: "B",
+      state: "IA",
+      zip: "",
+      phone: "",
+      window_start: "",
+      window_end: "",
+      confirmation: "",
+      cargo: "",
+      reference: "",
+      instructions: "",
+      notes: "",
+      arrived_at: "",
+      departed_at: "",
+      schedule_type: "",
+    },
+  ]);
+  assert.equal(checkButtons.find((item) => item.stopLabel === "Delivery" && item.kind === "arrive")?.enabled, false);
+  assert.equal(checkButtons.find((item) => item.stopLabel === "Pickup" && item.kind === "arrive")?.enabled, true);
+
+  const { serializeRouteStateMiles } = await import("../lib/routing-shared");
+  const { buildIftaQuarterEstimate, parseIftaQuarter } = await import("../lib/ifta-quarter");
+  const iftaQ = parseIftaQuarter("2026-1");
+  assert.equal(iftaQ.year, 2026);
+  assert.equal(iftaQ.quarter, 1);
+  const iftaLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Omaha, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-01-10T12:00:00.000Z",
+    pickup_end: "2026-01-10T18:00:00.000Z",
+    delivery_start: "2026-01-11T12:00:00.000Z",
+    delivery_end: "2026-01-11T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Produce",
+    rate: 1200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb()
+    .prepare("UPDATE loads SET route_state_miles = ?, pickup_start = ?, delivery_end = ? WHERE id = ?")
+    .run(
+      serializeRouteStateMiles([
+        { state: "NE", name: "Nebraska", miles: 40 },
+        { state: "IA", name: "Iowa", miles: 80 },
+      ]),
+      "2026-01-10T12:00:00.000Z",
+      "2026-01-11T20:00:00.000Z",
+      iftaLoadId,
+    );
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_transactions (
+        occurred_at, driver_id, truck_id, load_id, location, gallons, price_per_gallon, amount,
+        card_last4, source_file, category, unit_number, driver_name_raw, invoice_number, prompt_data, dedup_key, created_at
+      ) VALUES (?, NULL, NULL, NULL, ?, 20, 4, 80, '', 'ifta-smoke', 'truck_diesel', '', '', '', '', 'ifta-smoke', ?)`,
+    )
+    .run("2026-01-12T12:00:00.000Z", "Pilot Omaha NE", new Date().toISOString());
+  const iftaEstimate = buildIftaQuarterEstimate(iftaQ);
+  assert.equal(iftaEstimate.milesByState.find((row) => row.state === "IA")?.miles, 80);
+  assert.equal(iftaEstimate.fuelByState.find((row) => row.state === "NE")?.gallons, 20);
+  assert.equal(iftaEstimate.waypoints.some((row) => row.loadId === iftaLoadId), true);
+  const emptyMilesLoad = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Des Moines, IA",
+    pickup_start: "2026-01-15T12:00:00.000Z",
+    pickup_end: "2026-01-15T18:00:00.000Z",
+    delivery_start: "2026-01-16T12:00:00.000Z",
+    delivery_end: "2026-01-16T20:00:00.000Z",
+    weight: 1,
+    commodity: "Empty",
+    rate: 0,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET non_revenue = 1 WHERE id = ?").run(emptyMilesLoad);
+  const invoiceMod = await import("../lib/invoice");
+  const emptyView = queries.getLoad(emptyMilesLoad);
+  assert.ok(emptyView);
+  assert.throws(() => invoiceMod.buildTmsInvoice(emptyView), /Empty move/);
+  const afterEmpty = buildIftaQuarterEstimate(iftaQ);
+  assert.equal(afterEmpty.waypoints.some((row) => row.loadId === emptyMilesLoad), false);
+
+  const dispatchLoad = queries.createLoad({
+    customer_id: customerId,
+    origin: "Omaha, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-26T12:00:00.000Z",
+    pickup_end: "2026-08-26T18:00:00.000Z",
+    delivery_start: "2026-08-27T12:00:00.000Z",
+    delivery_end: "2026-08-27T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Produce",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const trailerForLast = queries.createTrailer({
+    unit_number: "MS-LAST-1",
+    type: "reefer",
+    status: "available",
+  });
+  queries.assignLoad(dispatchLoad, truckId, otherDriverId, trailerForLast, { dispatch: true });
+  assert.equal(queries.getLoad(dispatchLoad)?.status, "dispatched");
+  assert.equal(queries.getDriver(otherDriverId)?.last_trailer_id, trailerForLast);
+  const followLoad = queries.createLoad({
+    customer_id: customerId,
+    origin: "Omaha, NE",
+    destination: "St Louis, MO",
+    pickup_start: "2026-08-28T12:00:00.000Z",
+    pickup_end: "2026-08-28T18:00:00.000Z",
+    delivery_start: "2026-08-29T12:00:00.000Z",
+    delivery_end: "2026-08-29T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Produce",
+    rate: 800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.updateLoadStatus(followLoad, "available");
+  queries.assignLoad(followLoad, truckId, otherDriverId);
+  assert.equal(queries.getLoad(followLoad)?.trailer_id, trailerForLast);
+
+  const { milesBetween, applyGeofenceArrivals } = await import("../lib/geofence");
+  assert.ok(milesBetween({ latitude: 41.2565, longitude: -95.9345 }, { latitude: 41.2565, longitude: -95.9345 }) < 0.01);
+  assert.equal(applyGeofenceArrivals(followLoad), 0);
+
+  const newLoadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
+  assert.match(newLoadPage, /RateConImport/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /Assign & Dispatch/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Official filing stays Samsara/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
 
   closeDb();
   const reopened = getDb();

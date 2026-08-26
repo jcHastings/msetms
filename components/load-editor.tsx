@@ -13,6 +13,8 @@ import { LoadRoutingGuide } from "@/components/load-routing-guide";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
+import { CopyTripNumber } from "@/components/copy-trip-number";
+import { LoadMoneyBox } from "@/components/load-money-box";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
@@ -90,6 +92,7 @@ export async function LoadEditor({
         subtitle={`${load.origin} → ${load.destination}`}
         actions={
           <div className="flex items-center gap-3">
+            <CopyTripNumber value={load.load_number} />
             <LoadStatusBadge status={load.status} />
             <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
             {load.qbo_invoice_number || load.qbo_invoice_id ? (
@@ -117,8 +120,14 @@ export async function LoadEditor({
         role={role}
         returnTo={returnTo}
         watched={Boolean(load.watched)}
+        loadNumber={load.load_number}
+        customerName={load.customer_name}
+        contactEmail={load.contact_email}
+        readyToInvoice={Boolean(load.ready_to_invoice)}
+        nonRevenue={Boolean(load.non_revenue)}
       >
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
+          <LoadMoneyBox load={load} />
           <LoadForm
             customers={customers}
             trucks={trucks}

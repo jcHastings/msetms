@@ -53,6 +53,8 @@ export type ExistingLoadFields = {
   contact_phone?: string;
   contact_ext?: string;
   customer_reference?: string;
+  unload_type?: string;
+  non_revenue?: number;
 };
 
 function keptString(formData: FormData, key: string, existing: string | undefined, fallback = ""): string {
@@ -221,6 +223,12 @@ export function parseLoadInput(
     contact_phone: keptString(formData, "contact_phone", existing?.contact_phone),
     contact_ext: keptString(formData, "contact_ext", existing?.contact_ext),
     customer_reference: refs.customer_reference,
+    unload_type: keptString(formData, "unload_type", existing?.unload_type),
+    non_revenue: formData.has("non_revenue")
+      ? String(formData.get("non_revenue") ?? "") === "1"
+        ? 1
+        : 0
+      : existing?.non_revenue ?? 0,
   };
   const driver = driverId ? getDriver(driverId) : null;
   if (driver?.driver_type === "owner_operator") {

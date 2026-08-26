@@ -7,6 +7,7 @@ import {
   assignLoadDispatcherAction,
   cloneLoadAction,
   requestDriverDocumentsAction,
+  requestPodAction,
   saveTemplateAction,
   sendLoadSmsAction,
   sendToAccountingAction,
@@ -38,6 +39,11 @@ export function LoadWorkspace({
   returnTo = "/board",
   watched = false,
   create = false,
+  loadNumber = "",
+  customerName = "",
+  contactEmail = "",
+  readyToInvoice = false,
+  nonRevenue = false,
   children,
 }: {
   loadId: number | null;
@@ -54,6 +60,11 @@ export function LoadWorkspace({
   returnTo?: string;
   watched?: boolean;
   create?: boolean;
+  loadNumber?: string;
+  customerName?: string;
+  contactEmail?: string;
+  readyToInvoice?: boolean;
+  nonRevenue?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -255,12 +266,32 @@ export function LoadWorkspace({
               return requestDriverDocumentsAction(formData);
             }}
           />
+          <MenuAction
+            label="Request POD"
+            disabled={!driverAssigned}
+            run={async () => {
+              const formData = new FormData();
+              formData.set("load_id", String(loadId));
+              return requestPodAction(formData);
+            }}
+          />
+          {contactEmail.trim() ? (
+            <a
+              className="menu-item"
+              href={`mailto:${encodeURIComponent(contactEmail.trim())}?subject=${encodeURIComponent(`Detention request — ${loadNumber}`)}&body=${encodeURIComponent(`Please confirm detention on ${loadNumber} for ${customerName}.\n\n`)}`}
+            >
+              Request Detention email
+            </a>
+          ) : (
+            <span className="menu-item text-slate-400">Request Detention email (add customer email)</span>
+          )}
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          {canViewLoadFinancials(role) ? (
+          {canAssignLoads(role) || canViewLoadFinancials(role) ? (
             <MenuAction
-              label="Send to Accounting"
+              label={readyToInvoice ? "Released to invoicing" : "Release to invoicing"}
+              disabled={readyToInvoice || nonRevenue}
               run={async () => {
                 const formData = new FormData();
                 formData.set("load_id", String(loadId));

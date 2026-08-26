@@ -148,6 +148,9 @@ type StopDraft = {
   windowEnd: string;
   reference: string;
   instructions: string;
+  arrivedAt: string;
+  departedAt: string;
+  scheduleType: string;
 };
 
 function initialStopDraft(stop: LoadStop, locations: Location[]): StopDraft {
@@ -166,6 +169,9 @@ function initialStopDraft(stop: LoadStop, locations: Location[]): StopDraft {
     windowEnd: toInputDateTime(stop.window_end),
     reference: stop.reference || stop.confirmation || "",
     instructions: stop.instructions || stop.notes || "",
+    arrivedAt: toInputDateTime(stop.arrived_at),
+    departedAt: toInputDateTime(stop.departed_at),
+    scheduleType: stop.schedule_type || (matched?.scheduling_type === "fcfs" ? "fcfs" : matched?.scheduling_type === "appointment" ? "appointment" : ""),
   };
 }
 
@@ -182,6 +188,9 @@ function emptyDraft(kind: "pickup" | "delivery"): StopDraft {
     windowEnd: "",
     reference: "",
     instructions: "",
+    arrivedAt: "",
+    departedAt: "",
+    scheduleType: "",
   };
 }
 
@@ -195,6 +204,7 @@ function applyLocationToDraft(draft: StopDraft, location: Location): StopDraft {
     state: location.state ?? "",
     zip: location.zip ?? "",
     phone: location.phone ?? "",
+    scheduleType: location.scheduling_type === "fcfs" ? "fcfs" : location.scheduling_type === "appointment" ? "appointment" : draft.scheduleType,
   };
 }
 
@@ -300,6 +310,24 @@ function StopDialog({
           </div>
         </div>
         <div className="field">
+          <label>APPT / FCFS</label>
+          <select name="schedule_type" value={draft.scheduleType} onChange={(event) => setDraft((current) => ({ ...current, scheduleType: event.target.value }))}>
+            <option value="">From location</option>
+            <option value="appointment">APPT</option>
+            <option value="fcfs">FCFS</option>
+          </select>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="field">
+            <label>Arrived</label>
+            <input name="arrived_at" type="datetime-local" value={draft.arrivedAt} onChange={(event) => setDraft((current) => ({ ...current, arrivedAt: event.target.value }))} />
+          </div>
+          <div className="field">
+            <label>Departed</label>
+            <input name="departed_at" type="datetime-local" value={draft.departedAt} onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))} />
+          </div>
+        </div>
+        <div className="field">
           <label>PO / reference</label>
           <input name="reference" value={draft.reference} onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))} />
         </div>
@@ -375,6 +403,9 @@ function StopGridBlock({
     formData.set("cargo", stop.cargo);
     formData.set("reference", next.reference);
     formData.set("instructions", next.instructions);
+    formData.set("arrived_at", next.arrivedAt);
+    formData.set("departed_at", next.departedAt);
+    formData.set("schedule_type", next.scheduleType);
     setSaving(true);
     try {
       await updateStopAction(formData);
@@ -479,6 +510,47 @@ function StopGridBlock({
                 const next = { ...draft, windowEnd: event.target.value };
                 setDraft(next);
                 if (next.windowEnd !== toInputDateTime(stop.window_end)) void persistStop(next);
+              }}
+            />
+            <select
+              className="mt-2 w-full"
+              value={draft.scheduleType}
+              onChange={(event) => {
+                const next = { ...draft, scheduleType: event.target.value };
+                setDraft(next);
+                void persistStop(next);
+              }}
+            >
+              <option value="">From location</option>
+              <option value="appointment">APPT</option>
+              <option value="fcfs">FCFS</option>
+            </select>
+            <label className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Arrived
+            </label>
+            <input
+              type="datetime-local"
+              className="mt-1 w-full"
+              value={draft.arrivedAt}
+              onChange={(event) => setDraft((current) => ({ ...current, arrivedAt: event.target.value }))}
+              onBlur={(event) => {
+                const next = { ...draft, arrivedAt: event.target.value };
+                setDraft(next);
+                if (next.arrivedAt !== toInputDateTime(stop.arrived_at)) void persistStop(next);
+              }}
+            />
+            <label className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Departed
+            </label>
+            <input
+              type="datetime-local"
+              className="mt-1 w-full"
+              value={draft.departedAt}
+              onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))}
+              onBlur={(event) => {
+                const next = { ...draft, departedAt: event.target.value };
+                setDraft(next);
+                if (next.departedAt !== toInputDateTime(stop.departed_at)) void persistStop(next);
               }}
             />
           </div>

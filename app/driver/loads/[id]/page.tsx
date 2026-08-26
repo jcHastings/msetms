@@ -6,10 +6,11 @@ import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
 import { driverFacingPay } from "@/lib/settlement";
-import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
 import { getLoad, locationsForLoad } from "@/lib/queries";
+import { ensureDefaultStops } from "@/lib/stops";
 import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -29,10 +30,21 @@ export default async function DriverLoadPage({
   if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) notFound();
   const yourLeg = relayForDriver(load.id, driver.id);
   const reefer = await getLatestReeferForLoad(load.id);
+  const reeferSnap = (await getReeferSnapshots()).readings.find((row) => row.loadId === load.id);
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id);
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
+  const stops = ensureDefaultStops(load.id);
+  const requiredTemp =
+    load.temp_low_f != null && load.temp_high_f != null
+      ? `${load.temp_low_f}–${load.temp_high_f}°F`
+      : load.temperature_f != null
+        ? `${load.temperature_f}°F`
+        : "—";
+  const probe = reefer?.return_air_f ?? reefer?.temperature_f;
+  const trailerStatus = reeferSnap?.powerOn === true ? "On" : reeferSnap?.powerOn === false ? "Off" : "—";
+  const fuelPercent = null;
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-20 pt-5">
@@ -87,7 +99,8 @@ export default async function DriverLoadPage({
         <Row label="Trailer" value={load.trailer_number || load.trailer_unit || "—"} />
         {reeferSpec.isReefer ? (
           <>
-            <Row label="Reefer setpoint" value={formatReeferSetpoint(reeferSpec.setpointF) || "—"} />
+            <Row label="Setpoint" value={formatReeferSetpoint(reeferSpec.setpointF) || "—"} />
+            <Row label="Required" value={requiredTemp} />
             <Row label="Reefer mode" value={labelForReeferMode(reeferSpec.mode) || "Continuous"} />
           </>
         ) : null}
@@ -111,6 +124,13 @@ export default async function DriverLoadPage({
           <div className="text-xs font-semibold uppercase tracking-wide text-sky-800">Reefer</div>
           <div className="mt-1 text-2xl font-semibold tabular-nums text-sky-950">
             {formatReeferSetpoint(reeferSpec.setpointF ?? reefer?.setpoint_f) || "—"}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-sky-950">
+            <div>Setpoint · {formatReeferSetpoint(reeferSpec.setpointF ?? reefer?.setpoint_f) || "—"}</div>
+            <div>Probe · {probe != null ? `${probe}°F` : "—"}</div>
+            <div>Required · {requiredTemp}</div>
+            <div>Trailer · {trailerStatus}</div>
+            <div>Fuel · {fuelPercent != null ? `${fuelPercent}%` : "—"}</div>
           </div>
           <div className="text-base font-medium text-sky-950">
             Mode: {labelForReeferMode(reeferSpec.mode) || "Continuous"}
@@ -159,6 +179,7 @@ export default async function DriverLoadPage({
           loadNumber={load.load_number}
           current={load.driver_progress}
           closed={isClosedStatus(load.status)}
+          stops={stops}
         />
       </div>
       <div id="fuel">

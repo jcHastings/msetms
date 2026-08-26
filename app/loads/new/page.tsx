@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LoadForm } from "@/components/load-form";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { PageHeader } from "@/components/page-header";
+import { RateConImport } from "@/components/rate-con-import";
 import { createLoadAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
@@ -50,6 +51,17 @@ export default async function NewLoadPage() {
           .
         </div>
       ) : (
+        <>
+        <div className="mb-4">
+          <RateConImport
+            customers={customers}
+            trucks={trucks}
+            trailers={listTrailers()}
+            locations={listLocations()}
+            drivers={drivers}
+            formSettings={loadFormSettings()}
+          />
+        </div>
         <LoadWorkspace
           loadId={null}
           status="available"
@@ -80,6 +92,7 @@ export default async function NewLoadPage() {
             submitLabel="Create load"
           />
         </LoadWorkspace>
+        </>
       )}
     </>
   );

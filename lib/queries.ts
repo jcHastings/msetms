@@ -1239,6 +1239,8 @@ export type LoadInput = {
   contact_phone?: string;
   contact_ext?: string;
   customer_reference?: string;
+  unload_type?: string;
+  non_revenue?: number;
 };
 
 function validateLoadInput(input: LoadInput): void {
@@ -1420,7 +1422,7 @@ export function assignLoad(
   truckId: number,
   driverId: number,
   trailerId?: number | null,
-  settlement?: { oo_percent?: number | null },
+  settlement?: { oo_percent?: number | null; dispatch?: boolean },
 ): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
@@ -1429,28 +1431,30 @@ export function assignLoad(
   }
   const truck = getTruck(truckId);
   const driver = getDriver(driverId);
-  const trailer = trailerId ? getTrailer(trailerId) : null;
+  const resolvedTrailerId = trailerId ?? driver?.last_trailer_id ?? null;
+  const trailer = resolvedTrailerId ? getTrailer(resolvedTrailerId) : null;
   if (!truck) throw new Error("Truck not found.");
   if (!driver) throw new Error("Driver not found.");
-  if (trailerId && !trailer) throw new Error("Trailer not found.");
+  if (resolvedTrailerId && !trailer) throw new Error("Trailer not found.");
   if (truck.status === "maintenance" || truck.status === "out_of_service") {
     throw new Error(`Truck ${truck.unit_number} is ${truck.status.replaceAll("_", " ")}.`);
   }
   if (driver.status === "off_duty") {
     throw new Error(`${driver.name} is off duty.`);
   }
-  assertAssetFree(truckId, driverId, loadId, trailerId ?? null);
+  assertAssetFree(truckId, driverId, loadId, resolvedTrailerId ?? null);
 
   const ooPercent =
     driver.driver_type === "owner_operator"
       ? settlement?.oo_percent ?? driver.pay_percent ?? defaultOoPercent()
       : null;
   const ooPay = computeOwnerOperatorPay(load.rate, ooPercent);
+  const assignedStatus = settlement?.dispatch ? "dispatched" : "assigned";
 
   const db = getDb();
   db.transaction(() => {
     releaseAssetsIfNeeded(load);
-    const nextStatus = isRollingStatus(load.status) ? load.status : "assigned";
+    const nextStatus = isRollingStatus(load.status) ? load.status : assignedStatus;
     db.prepare(
       `UPDATE loads SET truck_id = ?, driver_id = ?, trailer_id = ?, trailer_number = ?,
          oo_percent = ?, oo_pay = ?, status = ?, driver_progress = ?, updated_at = ?
@@ -1458,7 +1462,7 @@ export function assignLoad(
     ).run(
       truckId,
       driverId,
-      trailerId ?? null,
+      resolvedTrailerId ?? null,
       trailer?.unit_number ?? load.trailer_number,
       ooPercent,
       ooPay,
@@ -1467,6 +1471,9 @@ export function assignLoad(
       now(),
       loadId,
     );
+    if (resolvedTrailerId) {
+      db.prepare("UPDATE drivers SET last_trailer_id = ? WHERE id = ?").run(resolvedTrailerId, driverId);
+    }
     markAssetsOnDuty(truckId, driverId);
   })();
   recordLoadChanges(loadId, "assign", [
@@ -1477,7 +1484,7 @@ export function assignLoad(
       oldValue: trailerUnit(load.trailer_id),
       newValue: trailer?.unit_number ?? load.trailer_number,
     },
-    { field: "status", oldValue: load.status, newValue: isRollingStatus(load.status) ? load.status : "assigned" },
+    { field: "status", oldValue: load.status, newValue: isRollingStatus(load.status) ? load.status : assignedStatus },
     { field: "oo_percent", oldValue: load.oo_percent, newValue: ooPercent },
     { field: "oo_pay", oldValue: load.oo_pay, newValue: ooPay },
   ]);
@@ -1901,7 +1908,7 @@ function persistLoadPageFields(id: number, input: LoadInput, existing: Load | nu
         temp_time_tolerance = ?, container_number = ?, last_free_day = ?,
         public_notes = ?, posting_notes = ?,
         contact_name = ?, contact_email = ?, contact_phone = ?, contact_ext = ?,
-        customer_reference = ?
+        customer_reference = ?, unload_type = ?, non_revenue = ?
        WHERE id = ?`,
     )
     .run(
@@ -1925,6 +1932,8 @@ function persistLoadPageFields(id: number, input: LoadInput, existing: Load | nu
       input.contact_phone ?? current.contact_phone ?? "",
       input.contact_ext ?? current.contact_ext ?? "",
       input.customer_reference ?? current.customer_reference ?? "",
+      input.unload_type ?? current.unload_type ?? "",
+      input.non_revenue !== undefined ? input.non_revenue : current.non_revenue ?? 0,
       id,
     );
 }

@@ -119,6 +119,9 @@ function customerBlock(load: LoadView): {
 }
 
 export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
+  if (load.non_revenue) {
+    throw new Error("Empty move — no customer invoice.");
+  }
   if (load.status !== "delivered" && load.status !== "completed") {
     throw new Error("Mark the load Delivered before invoicing.");
   }

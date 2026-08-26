@@ -62,6 +62,9 @@ export function AssignDialog({
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
       setTruckId(String(next.truck_id));
     }
+    if (next?.last_trailer_id && trailers.some((item) => item.id === next.last_trailer_id)) {
+      setTrailerId(String(next.last_trailer_id));
+    }
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -185,12 +188,15 @@ export function AssignDialog({
               ) : null}
               {error ? <p className="text-sm text-rose-700">{error}</p> : null}
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" type="submit" disabled={pending || (expired && !confirmed)}>
-                {pending ? "Assigning…" : "Assign unit"}
+              <button className="btn btn-secondary" name="dispatch" value="" type="submit" disabled={pending || (expired && !confirmed)}>
+                {pending ? "Assigning…" : "Assign"}
+              </button>
+              <button className="btn btn-primary" name="dispatch" value="1" type="submit" disabled={pending || (expired && !confirmed)}>
+                {pending ? "Dispatching…" : "Assign & Dispatch"}
               </button>
             </div>
           </form>

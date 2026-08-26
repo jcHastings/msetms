@@ -648,12 +648,52 @@ function findDriverByName(raw: string, drivers: DriverWithTruck[]): DriverWithTr
   return lastFuzzy.length === 1 ? lastFuzzy[0] : undefined;
 }
 
-function foldNameKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z]/g, "").replace(/(.)\1+/g, "$1");
+const NAME_ALIASES: Record<string, string> = {
+  christoph: "christopher",
+  chrisopher: "christopher",
+  avilla: "avila",
+  howel: "howell",
+  jospeh: "joseph",
+  jonathon: "jonathan",
+  jonatan: "jonathan",
+  mike: "michael",
+  bob: "robert",
+  rob: "robert",
+  bill: "william",
+  will: "william",
+  jim: "james",
+  jimmy: "james",
+  joe: "joseph",
+  tony: "anthony",
+  tom: "thomas",
+  dave: "david",
+  steve: "steven",
+};
+
+function aliasToken(token: string): string {
+  return NAME_ALIASES[token] ?? token;
 }
 
-function nameKeys(value: string): string[] {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export function foldNameKey(value: string): string {
+  const tokens = value
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(aliasToken);
+  return tokens.join("").replace(/(.)\1+/g, "$1");
+}
+
+export function nameKeys(value: string): string[] {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(aliasToken)
+    .join(" ");
   if (!normalized) return [];
   const keys = [normalized];
   if (normalized.includes(" ")) {

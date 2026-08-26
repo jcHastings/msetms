@@ -6,6 +6,9 @@ import { withRequestAuditActor } from "./audit";
 import { parseOptionalInt } from "./format";
 import { authenticateDriver, updateDriverProgress } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
+import { isDriverUploadKind } from "./driver-docs";
+import { progressForStopEvent } from "./driver-stops";
+import { getStop, listStops, stampStopTime } from "./stops";
 import { ATTACHMENT_KINDS, isDriverProgress, type ActionResult, type AttachmentKind } from "./types";
 
 function refresh(): void {
@@ -38,6 +41,41 @@ export async function driverLogoutAction(): Promise<void> {
   await clearDriverSession();
   refresh();
   redirect("/driver/login");
+}
+
+export async function driverStopCheckAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const stopId = parseOptionalInt(formData.get("stop_id"));
+      const kind = String(formData.get("kind") ?? "");
+      if (!loadId || !stopId) throw new Error("Stop is missing.");
+      if (kind !== "arrive" && kind !== "depart") throw new Error("Pick Check In or Check Out.");
+      const { getLoad, updateDriverProgress } = await import("./queries");
+      const { driverAssignedToLoad } = await import("./relay-store");
+      const load = getLoad(loadId);
+      if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
+        throw new Error("This load is not on your dispatch.");
+      }
+      const stop = getStop(stopId);
+      if (!stop || stop.load_id !== loadId) throw new Error("Stop is missing.");
+      const stops = listStops(loadId);
+      const pickup = stops.find((item) => item.kind === "pickup");
+      if (stop.kind === "delivery" && kind === "arrive" && pickup && !pickup.departed_at.trim()) {
+        throw new Error("Check out of pickup first.");
+      }
+      if (kind === "depart" && !stop.arrived_at.trim()) {
+        throw new Error("Check in first.");
+      }
+      stampStopTime(stopId, kind === "arrive" ? "arrived_at" : "departed_at", new Date().toISOString());
+      updateDriverProgress(loadId, driver.id, progressForStopEvent(kind, stop.kind));
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
 }
 
 export async function driverProgressAction(formData: FormData): Promise<ActionResult> {
@@ -73,7 +111,10 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
     if (!(file instanceof File) || file.size === 0) {
       throw new Error("Choose a photo or PDF.");
     }
-    const kind = String(formData.get("kind") ?? "other");
+    const kind = String(formData.get("kind") ?? "pod");
+    if (!isDriverUploadKind(kind)) {
+      throw new Error("Classify as Receipt, Scale Ticket, Bill of Lading, or Proof of Delivery.");
+    }
     if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
       throw new Error("Pick a document type.");
     }
