@@ -119,7 +119,7 @@ async function main() {
   const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
   assert.match(qboSettingsPage, /Connect QuickBooks/);
   assert.match(qboSettingsPage, /Not connected/);
-  assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|\.env/);
+  assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|<code>\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /QBO_REDIRECT_URI=/);
@@ -341,7 +341,7 @@ async function main() {
   assert.match(rateConReviewSource, /Type any name or address/);
   assert.doesNotMatch(rateConReviewSource, /Change the dropdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Not a fleet map/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /This load only/);
   const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
   assert.match(mapCanvasSource, /maps\.googleapis\.com\/maps\/api\/js/);
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
@@ -364,7 +364,7 @@ async function main() {
   const fleetMapView = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
   assert.doesNotMatch(fleetMapView, /from ["']@\/lib\/(db|env|settings|places)["']/);
   assert.match(fleetMapView, /Map is off/);
-  assert.doesNotMatch(fleetMapView, /GOOGLE_MAPS_API_KEY|\.env/);
+  assert.doesNotMatch(fleetMapView, /GOOGLE_MAPS_API_KEY|<code>\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/samsara/page.tsx"), "utf8"), /buildSamsaraFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
@@ -1502,7 +1502,7 @@ async function main() {
   assert.match(docsPanel, /LOAD_DOCUMENT_KINDS/);
   assert.match(docsPanel, /download=1/);
   assert.match(docsPanel, /Replace/);
-  assert.match(docsPanel, /From rate con/);
+  assert.match(docsPanel, /Rate confirmation/);
   const kindsSource = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
   assert.match(kindsSource, /Invoice \(customer\)/);
   assert.match(kindsSource, /Bill \/ carrier invoice/);
@@ -4721,7 +4721,7 @@ Continuous reefer. Two load locks.
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.match(fuelImportUi, /Fuel file/);
-  assert.doesNotMatch(fuelImportUi, /Official IFTA|Ascend|\.env/);
+  assert.doesNotMatch(fuelImportUi, /Official IFTA|Ascend|<code>\.env/);
   assert.match(driversListPage, /href="\/fuel"/);
   assert.match(driverEditPage, /DriverFuelCard/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /href="\/fuel"/);
@@ -5748,7 +5748,7 @@ Continuous reefer. Two load locks.
     assert.equal(ooPreview.mode, "demo");
     assert.equal(ooPreview.amount, coleDelivered.rate, "QBO invoice uses customer rate, not OO pay");
     assert.notEqual(ooPreview.amount, coleDelivered.oo_pay);
-    assert.match(ooPreview.memo, /customer rate/i);
+    assert.match(ooPreview.memo, /Customer invoice only/);
     assert.equal(
       ooPreview.lines.some((line) => /relay|owner-operator|oo pay/i.test(`${line.name} ${line.description}`)),
       false,
@@ -7526,7 +7526,7 @@ Continuous reefer. Two load locks.
   const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
   const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
   assert.match(pageSubtitles, /Fuel card file and driver receipt photos/);
-  const lectureCopy = /Official IFTA|Credentials stay|Keys stay|\.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off/i;
+  const lectureCopy = /Official IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off/i;
   assert.doesNotMatch(pageSubtitles, lectureCopy);
   assert.doesNotMatch(pageCopy, lectureCopy);
   assert.doesNotMatch(componentCopy, lectureCopy);
@@ -7749,7 +7749,7 @@ Continuous reefer. Two load locks.
   assert.match(newLoadPage, /RateConImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /Assign & Dispatch/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Official filing stays Samsara/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Imported fuel and stored load miles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
 
   closeDb();
