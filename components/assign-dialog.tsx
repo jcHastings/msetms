@@ -56,7 +56,7 @@ export function AssignDialog({
     setDriverId(value);
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
-    if (isOwnerOperator(next?.driver_type)) {
+    if (next && isOwnerOperator(next.driver_type)) {
       setOoPercent(String(next.pay_percent ?? defaultOoPercent));
     }
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {

@@ -179,7 +179,7 @@ export function LoadCarrierScreen({
           I confirm saving this assignment with expired documents.
         </label>
       ) : null}
-      {isOwnerOperator(selectedDriver?.driver_type) ? (
+      {selectedDriver && isOwnerOperator(selectedDriver.driver_type) ? (
         <input
           type="hidden"
           name="oo_percent"

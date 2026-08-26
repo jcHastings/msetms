@@ -231,7 +231,7 @@ export function parseLoadInput(
       : existing?.non_revenue ?? 0,
   };
   const driver = driverId ? getDriver(driverId) : null;
-  if (isOwnerOperator(driver?.driver_type)) {
+  if (driver && isOwnerOperator(driver.driver_type)) {
     const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
     parsed.oo_percent = percent;
     parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);
