@@ -100,34 +100,9 @@ export default async function QuickbooksSettingsPage({
       </section>
 
       {!qbo.oauthReady ? (
-        <section className="card p-6">
-          <h2 className="text-sm font-semibold">Setup steps</h2>
-          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
-            <li>Create a QuickBooks Online app at developer.intuit.com (not Desktop).</li>
-            <li>
-              Add redirect URI <code>{qbo.redirectUri}</code> on the app.
-            </li>
-            <li>
-              Put these in gitignored <code>.env</code> (never commit them):
-              <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 text-xs">
-                {`QBO_CLIENT_ID=
-QBO_CLIENT_SECRET=
-QBO_REDIRECT_URI=${qbo.redirectUri}
-QBO_SANDBOX=true`}
-              </pre>
-            </li>
-            <li>Restart the app, then click Connect QuickBooks on this page.</li>
-          </ol>
-          <p className="mt-3 text-sm text-slate-600">
-            Missing keys do not crash the app. Delivered loads can still record a labeled demo invoice until you
-            connect.
-          </p>
-        </section>
+        <p className="text-sm text-slate-600">Not connected.</p>
       ) : (
-        <p className="text-sm text-slate-600">
-          Invoices bill the customer rate and lumper only. Relays and owner-operator settlement stay off the
-          QuickBooks invoice. One invoice per load unless you confirm a resend.
-        </p>
+        <p className="text-sm text-slate-600">Customer invoices only.</p>
       )}
     </SettingsAdminGate>
   );

@@ -112,10 +112,7 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
             <input type="checkbox" name="call_before" value="1" defaultChecked={Boolean(location?.call_before)} />
             Call before pickup/delivery
           </label>
-          <p className="mt-1 text-xs text-slate-500">
-            Warns the dispatcher and prints on the driver confirmation. Appointment required is the Scheduling
-            dropdown.
-          </p>
+          <p className="mt-1 text-xs text-slate-500">Prints on the driver confirmation.</p>
         </div>
         <div className="field md:col-span-2 note-public">
           <label htmlFor="scheduling_notes">Public scheduling notes</label>

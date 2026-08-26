@@ -55,10 +55,7 @@ export function LoadRoutingGuide({
       </dl>
 
       {!mapsConfigured ? (
-        <p className="text-sm text-slate-600">
-          Maps key is not set. Enter miles manually or add <code>GOOGLE_MAPS_API_KEY</code> and click Refresh
-          route. The load still saves without a route.
-        </p>
+        <p className="text-sm text-slate-600">Enter miles manually.</p>
       ) : null}
 
       <form action={manualAction} className="flex flex-wrap items-end gap-2">

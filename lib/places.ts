@@ -34,7 +34,7 @@ export async function searchPlaces(query: string): Promise<PlaceSuggestion[]> {
 
 export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
   const key = getGoogleMapsApiKey();
-  if (!key) throw new Error("Add GOOGLE_MAPS_API_KEY to enable search.");
+  if (!key) throw new Error("Search is off.");
   const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
   url.searchParams.set("place_id", placeId);
   url.searchParams.set("fields", "name,formatted_address,address_component,geometry");

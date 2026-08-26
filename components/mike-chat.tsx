@@ -37,7 +37,7 @@ export function MikeChat({
     <aside className="card flex h-full min-h-[24rem] w-full flex-col">
       <header className="border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-semibold">Mike</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant. TMS data only. gpt-4o-mini.</p>
+        <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant.</p>
       </header>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
         {!ready ? (

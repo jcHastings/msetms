@@ -40,17 +40,7 @@ export default async function IntegrationsSettingsPage() {
 
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Load tracking</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Trucks and HOS come from <strong>Samsara</strong>. Trailers and reefer come from{" "}
-          <strong>Orbcomm</strong>. There is no separate tracking product and no DAT load-board hookup.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Carrier / owner-operator payment defaults live on{" "}
-          <Link href="/settings/pay" className="underline">
-            Pay and margin
-          </Link>
-          .
-        </p>
+        <p className="mt-2 text-sm text-slate-600">Trucks from Samsara. Trailers from Orbcomm.</p>
       </section>
 
       <section className="card p-6">
@@ -74,13 +64,7 @@ export default async function IntegrationsSettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Set <code>SAMSARA_API_TOKEN</code> in <code>.env</code> and restart. The app calls{" "}
-          <code>GET https://api.samsara.com/fleet/vehicles/stats?types=gps</code> and{" "}
-          <code>GET https://api.samsara.com/fleet/hos/clocks</code>. Map the Samsara vehicle ID on the
-          truck and the Samsara driver ID on the driver. IFTA on a load uses{" "}
-          <code>GET /fleet/reports/ifta/vehicle</code> (Read IFTA) and, when available,{" "}
-          <code>POST /ifta-detail/csv</code> for the load window (Write IFTA). Samsara is not used for
-          reefer temperature.
+          {samsaraTokenSet ? "Connected" : "Not connected"}.
         </p>
         {fleet.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -122,23 +106,7 @@ export default async function IntegrationsSettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Source of record:{" "}
-          <a
-            className="underline"
-            href="https://platform.orbcomm.com/#/portal/remote/ReeferStatusReport"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Orbcomm Reefer Status Report
-          </a>
-          . Set <code>ORBCOMM_USERNAME</code> and <code>ORBCOMM_PASSWORD</code> (optional{" "}
-          <code>ORBCOMM_ACCOUNT_ID</code> sent as <code>orgKey</code>) in <code>.env</code>. The app requests a
-          Transportation Platform token at{" "}
-          <code>POST /SynB2BGatewayService/api/generateToken</code> as <code>userName</code>, <code>password</code>,{" "}
-          <code>orgKey</code>. Live status uses <code>POST /getAssetStatus</code> with trailer unit numbers
-          (Authorization is the raw access token). There is no scrape of the logged-in portal. If
-          B2B asset snapshot access is not enabled, export the report as CSV/JSON and import it below. Map the Orbcomm
-          asset ID on the trailer. Orbcomm is not used for driver HOS.
+          {orbcommSet ? "Connected" : "Not connected"}.
         </p>
         {reefers.error ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -192,15 +160,7 @@ export default async function IntegrationsSettingsPage() {
           </div>
         </dl>
         <p className="mt-4 text-sm text-slate-600">
-          Connect from{" "}
-          <Link href="/settings/quickbooks" className="underline">
-            Settings → QuickBooks
-          </Link>
-          . Set <code>QBO_CLIENT_ID</code>, <code>QBO_CLIENT_SECRET</code>, and{" "}
-          <code>QBO_REDIRECT_URI</code> (localhost is fine) in <code>.env</code>. Optional{" "}
-          <code>QBO_SANDBOX=true</code>. Realm and refresh tokens are stored on the server after Connect — never
-          shown in the browser. Delivered loads invoice the <strong>customer</strong>, not owner-operator pay or
-          relays.
+          {qboSet ? "Connected" : "Not connected"}.
         </p>
         <div className="mt-3">
           <Link href="/settings/quickbooks" className="btn btn-secondary">
@@ -219,7 +179,7 @@ export default async function IntegrationsSettingsPage() {
         ) : null}
         {!qboSet ? (
           <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            No credentials — delivered loads show a labeled demo invoice you can record locally.
+            Not connected.
           </p>
         ) : null}
       </section>

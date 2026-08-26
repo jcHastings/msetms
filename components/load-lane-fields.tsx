@@ -19,9 +19,7 @@ export function LoadLaneFields({
   return (
     <section data-load-tab="lane" className="card grid gap-4 p-6 md:grid-cols-2">
       <h2 className="md:col-span-2 text-sm font-semibold">Lane from rate con</h2>
-      <p className="md:col-span-2 text-sm text-slate-500">
-        Review extracted origin, destination, windows, and rate before saving. Stops stay on Edit Stops after the load exists.
-      </p>
+      <p className="md:col-span-2 text-sm text-slate-500">Review before saving.</p>
       <div className="field">
         <label htmlFor="origin">Origin</label>
         <input id="origin" name="origin" defaultValue={load?.origin ?? defaults.origin ?? ""} />

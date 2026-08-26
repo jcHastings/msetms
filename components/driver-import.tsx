@@ -21,14 +21,12 @@ export function DriverImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import drivers</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Upload an Ascend driver Excel/CSV (.xlsx or .csv), preview, then import. Matches existing
-          drivers by exact name. Imports Driver 1 fields only — not pay, team-2, passport, FAST, or
-          hazmat columns.
+          Upload a spreadsheet, preview, then import. Matches by name.
         </p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="driver-roster-file">Ascend driver Excel or CSV</label>
+          <label htmlFor="driver-roster-file">Driver spreadsheet</label>
           <input
             id="driver-roster-file"
             name="file"

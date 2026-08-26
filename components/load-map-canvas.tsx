@@ -128,16 +128,14 @@ export function LoadMapCanvas({
   if (!apiKey) {
     return (
       <p className="px-4 py-8 text-sm text-slate-600">
-        {missingKeyMessage ??
-          "Add GOOGLE_MAPS_API_KEY with Maps JavaScript API enabled to show the load map. Stops and addresses still save without it."}
+        {missingKeyMessage ?? "Map is off."}
       </p>
     );
   }
   if (points.length === 0) {
     return (
       <p className="px-4 py-8 text-sm text-slate-600">
-        {emptyMessage ??
-          "No mappable points yet. Save a stop with a full address or a Locations row that has coordinates, or assign a truck that already has Samsara GPS."}
+        {emptyMessage ?? "No GPS pins."}
       </p>
     );
   }

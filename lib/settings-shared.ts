@@ -30,7 +30,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/alerts",
         label: "Alerts",
-        hint: "30/60 day compliance windows. Emails later.",
+        hint: "30/60 day compliance windows",
       },
       {
         href: "/settings/routing",
@@ -50,7 +50,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/documents",
         label: "Document defaults",
-        hint: "Header, footer, terms, and font size — not a full designer",
+        hint: "Header, footer, terms, and font size",
       },
     ],
   },
@@ -85,12 +85,12 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/quickbooks",
         label: "QuickBooks Online",
-        hint: "Connect OAuth. Customer invoices only. Keys stay in .env.",
+        hint: "Connect for customer invoices",
       },
       {
         href: "/settings/integrations",
         label: "Samsara, Orbcomm, QuickBooks, tracking",
-        hint: "Connect status only. Credentials stay in .env.",
+        hint: "Samsara, Orbcomm, and QuickBooks status",
       },
     ],
   },

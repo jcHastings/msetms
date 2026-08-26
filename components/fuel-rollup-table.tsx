@@ -21,9 +21,6 @@ export function FuelRollupTable({
     <section className="card mb-6 overflow-hidden">
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Four first-class buckets: Truck diesel, Reefer diesel, DEF, Scale. Never lumped into Other.
-        </p>
       </header>
       {rows.length === 0 ? (
         <p className="p-5 text-sm text-slate-600">No matched fuel yet. Import a report or assign unmatched rows.</p>

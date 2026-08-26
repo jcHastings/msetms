@@ -110,7 +110,7 @@ async function main() {
   assert.match(editorSource, /LoadRelaysPanel/);
   const relayPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8");
   assert.match(relayPanelSource, /\+ Add Relay/);
-  assert.match(relayPanelSource, /not a billed customer stop/);
+  assert.match(relayPanelSource, /Internal handoff/);
   assert.match(relayPanelSource, /Driver A/);
   assert.match(relayPanelSource, /Driver B/);
   assert.match(relayPanelSource, /Relay point/);
@@ -118,9 +118,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
   const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
   assert.match(qboSettingsPage, /Connect QuickBooks/);
-  assert.match(qboSettingsPage, /Setup steps/);
-  assert.match(qboSettingsPage, /QBO_CLIENT_ID/);
-  assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_SECRET=\w+/);
+  assert.match(qboSettingsPage, /Not connected/);
+  assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /QBO_REDIRECT_URI=/);
@@ -364,7 +363,8 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /buildSamsaraFleetMap|buildOrbcommFleetMap|FleetMapView/);
   const fleetMapView = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
   assert.doesNotMatch(fleetMapView, /from ["']@\/lib\/(db|env|settings|places)["']/);
-  assert.match(fleetMapView, /GOOGLE_MAPS_API_KEY/);
+  assert.match(fleetMapView, /Map is off/);
+  assert.doesNotMatch(fleetMapView, /GOOGLE_MAPS_API_KEY|\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/samsara/page.tsx"), "utf8"), /buildSamsaraFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
@@ -787,7 +787,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /DriverImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Import drivers/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Show Pay|Passport Expiry/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Driver spreadsheet/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Show Pay|Passport Expiry|Ascend|FAST|hazmat|team-2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /Christopher Howell/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /passport|fast card|hazmat|show pay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /Last GPS/);
@@ -804,7 +805,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /TMS unit/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"),
-    /active fleet vehicles|Every active unit, name, or id/,
+    /Preview vehicles/,
   );
   const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
   const unit28Copy = /unit 28|including 28|Unit 28|JC.?s unit \*\*28/i;
@@ -857,10 +858,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /samsaraRecordIsActive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchTruckForSamsaraLive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /matchTruckForSamsaraLive/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /active fleet vehicles|Deactivated/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Preview vehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from Orbcomm/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Do not scrape/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Upload a spreadsheet or fetch/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /console\.log/);
   const orbcommAuth = fs.readFileSync(path.join(process.cwd(), "lib/integrations/orbcomm.ts"), "utf8");
@@ -937,7 +938,7 @@ async function main() {
   assert.match(envExample, /GOOGLE_PLACES_API_KEY/);
   assert.match(envExample, /HTTP referrer/);
   const placeSearchSource = fs.readFileSync(path.join(process.cwd(), "components/place-search.tsx"), "utf8");
-  assert.match(placeSearchSource, /Add a key to enable search/);
+  assert.match(placeSearchSource, /Search is off/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/places["']/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/env["']/);
   for (const file of [
@@ -1641,7 +1642,7 @@ async function main() {
   smsForm.set("kind", "load_info");
   const missingKeys = await sendLoadSmsAction(smsForm);
   assert.equal(missingKeys.ok, false);
-  if (!missingKeys.ok) assert.match(missingKeys.error, /Add Twilio keys in \.env/);
+  if (!missingKeys.ok) assert.match(missingKeys.error, /Twilio is not connected/);
   process.env.TWILIO_ACCOUNT_SID = "ACtestnotreal";
   process.env.TWILIO_AUTH_TOKEN = "twilio-secret-token-do-not-log";
   process.env.TWILIO_FROM_NUMBER = "+15555550100";
@@ -4384,6 +4385,7 @@ Continuous reefer. Two load locks.
   const importUi = fs.readFileSync(path.join(process.cwd(), "components/location-csv-import.tsx"), "utf8");
   assert.match(importUi, /Download template/);
   assert.match(importUi, /Download all locations/);
+  assert.match(importUi, /Location spreadsheet/);
   assert.match(importUi, /Upload CSV/);
   assert.match(importUi, /\/api\/locations\/template/);
   assert.match(importUi, /\/api\/locations\/export/);
@@ -4718,7 +4720,8 @@ Continuous reefer. Two load locks.
   assert.match(fuelRollupUi, /FUEL_BUCKETS/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
-  assert.match(fuelImportUi, /NName|Transaction Activity/);
+  assert.match(fuelImportUi, /Fuel file/);
+  assert.doesNotMatch(fuelImportUi, /Official IFTA|Ascend|\.env/);
   assert.match(driversListPage, /href="\/fuel"/);
   assert.match(driverEditPage, /DriverFuelCard/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /href="\/fuel"/);
@@ -6340,6 +6343,7 @@ Continuous reefer. Two load locks.
   assert.equal(queries.getLoad(queries.findLoadIdByNumber("1005912")!)?.truck_unit, "301");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8"), /Import/);
   const loadImportUi = fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8");
+  assert.match(loadImportUi, /Load spreadsheet/);
   assert.match(loadImportUi, /Preview/);
   assert.match(loadImportUi, /will import in this one/);
   assert.match(loadImportUi, /JSON\.stringify\(rows\)/);
@@ -7513,12 +7517,20 @@ Continuous reefer. Two load locks.
     .filter((file) => file.endsWith(".tsx"))
     .map((file) => fs.readFileSync(path.join(process.cwd(), "app", file), "utf8"))
     .join("\n");
+  const componentCopy = [
+    ...fs.readdirSync(path.join(process.cwd(), "components"), { recursive: true, encoding: "utf8" }),
+  ]
+    .filter((file) => file.endsWith(".tsx"))
+    .map((file) => fs.readFileSync(path.join(process.cwd(), "components", file), "utf8"))
+    .join("\n");
+  const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
   const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
   assert.match(pageSubtitles, /Fuel card file and driver receipt photos/);
-  assert.doesNotMatch(
-    pageSubtitles,
-    /Official IFTA|Credentials stay|\.env|Ascend API|fake Ascend|Not QuickBooks|Demo-safe|later stub|Windows extra|Business Center|Not a live|append-only|sample data off/i,
-  );
+  const lectureCopy = /Official IFTA|Credentials stay|Keys stay|\.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off/i;
+  assert.doesNotMatch(pageSubtitles, lectureCopy);
+  assert.doesNotMatch(pageCopy, lectureCopy);
+  assert.doesNotMatch(componentCopy, lectureCopy);
+  assert.doesNotMatch(settingsHints, lectureCopy);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);

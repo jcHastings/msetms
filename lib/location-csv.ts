@@ -121,7 +121,7 @@ export function parseAscendLocationCsv(text: string): LocationCsvParseResult {
   }
   const headerMap = mapHeaders(records[0]);
   if (headerMap["location name"] == null) {
-    throw new Error("Use the Ascend location CSV headers (download the template).");
+    throw new Error("Need a Location Name column.");
   }
 
   const rows: ParsedLocationCsvRow[] = [];

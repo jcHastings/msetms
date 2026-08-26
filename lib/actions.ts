@@ -1464,7 +1464,7 @@ export async function previewDriversImportAction(
         const { fileToBuffer } = await import("./files");
         const rows = previewDriversFromXlsx(new Uint8Array(await fileToBuffer(file)));
         if (rows.length === 0) {
-          return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+          return { ok: false, error: "Need a Name column." };
         }
         return { ok: true, rows };
       }
@@ -1472,18 +1472,18 @@ export async function previewDriversImportAction(
       const { fileToBuffer } = await import("./files");
       const rows = previewDriversFromText(decodeCsvBuffer(await fileToBuffer(file)));
       if (rows.length === 0) {
-        return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+        return { ok: false, error: "Need a Name column." };
       }
       return { ok: true, rows };
     }
     if (pasted) {
       const rows = previewDriversFromText(pasted);
       if (rows.length === 0) {
-        return { ok: false, error: "No driver rows found. Use an Ascend driver export with a Name column." };
+        return { ok: false, error: "Need a Name column." };
       }
       return { ok: true, rows };
     }
-    return { ok: false, error: "Choose an .xlsx or .csv, or paste Ascend driver rows." };
+    return { ok: false, error: "Choose a spreadsheet or paste rows." };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Driver preview failed." };
   }
@@ -1608,12 +1608,12 @@ export async function previewLoadsImportAction(
     } else if (pasted) {
       rows = previewLoadsFromText(pasted);
     } else {
-      return { ok: false, error: "Choose an .xlsx or .csv, or paste the Ascend load header row plus data." };
+      return { ok: false, error: "Choose a spreadsheet or paste rows." };
     }
     if (rows.length === 0) {
       return {
         ok: false,
-        error: "No load rows found. Use the Ascend header row starting with Load #.",
+        error: "Need a Load # column.",
       };
     }
     return {

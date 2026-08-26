@@ -16,9 +16,7 @@ export function LocationCsvImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Mass upload</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Import shippers and receivers from JC’s Ascend blank location CSV. Location Type is
-          shipper, receiver, or both (blank defaults to both). Matching name + address updates the
-          existing row. Google is not required.
+          Upload a spreadsheet, preview, then import. Matches by name.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -31,7 +29,7 @@ export function LocationCsvImport() {
       </div>
       <form action={formAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="location-csv">Upload CSV</label>
+          <label htmlFor="location-csv">Location spreadsheet</label>
           <input id="location-csv" name="csv" type="file" />
         </div>
         <button className="btn btn-primary" type="submit" disabled={pending}>

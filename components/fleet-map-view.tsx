@@ -13,14 +13,14 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
             apiKey={apiKey}
             points={model.pins}
             className="h-[36rem] w-full bg-slate-100"
-            missingKeyMessage="Add GOOGLE_MAPS_API_KEY with Maps JavaScript API enabled to show this map."
-            emptyMessage="No units with a stored or live GPS position. Empty units are listed — no invented pins."
+            missingKeyMessage="Map is off."
+            emptyMessage="No GPS pins."
           />
         </section>
         <aside className="card p-4">
           <h2 className="text-sm font-semibold">On the map</h2>
           {model.pins.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">No GPS pins. Nothing was invented.</p>
+            <p className="mt-2 text-sm text-slate-500">No GPS pins.</p>
           ) : (
             <ul className="mt-2 divide-y divide-slate-100 text-sm">
               {model.pins.map((pin) => (

@@ -22,17 +22,7 @@ export function SamsaraTruckImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import from Samsara</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Fetches active fleet vehicles with <code>SAMSARA_API_TOKEN</code> from <code>.env</code>, including
-          vehicles that only appear on the GPS stats feed. Deactivated, retired, archived, or “old”
-          historical units are skipped and never write GPS onto a live TMS truck. Unassigned, in-use, or
-          differently labeled active names stay in the list. Preview each pairing (TMS unit ← Samsara name
-          / VIN / plate / city) before anything is written. Every active unit, name, or id is matched the
-          same way: VIN (only if the unit number agrees), then exact unit number, then license plate. A
-          stored Samsara id is last and is ignored when it contradicts the unit. No match creates a new
-          truck. A TMS stub with the same unit number is
-          updated, not duplicated. Confirm is required. Re-import re-pairs the same way.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Preview vehicles, then import.</p>
       </div>
       <form action={previewAction} className="flex flex-wrap gap-2">
         <button className="btn btn-secondary" type="submit" disabled={previewPending}>

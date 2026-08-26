@@ -125,7 +125,7 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     memo: buildMemo(load),
     ownerOperatorNote:
       isOwnerOperator(load.driver_type)
-        ? "Owner-operator pay is settled outside QuickBooks. This invoice bills the customer rate only."
+        ? "Customer invoice only."
         : "",
     alreadySent: Boolean(load.qbo_invoice_id),
     existingInvoiceId: load.qbo_invoice_id,
@@ -259,9 +259,7 @@ function buildMemo(load: LoadView): string {
   if (load.appointment_notes) parts.push(`Appointment: ${load.appointment_notes}`);
   if (load.notes) parts.push(load.notes);
   if (isOwnerOperator(load.driver_type)) {
-    parts.push(
-      "Owner-operator pay is settled outside QuickBooks. This invoice bills the customer rate only.",
-    );
+    parts.push("Customer invoice only.");
   }
   return parts.join("\n");
 }
@@ -564,7 +562,7 @@ export function oauthStatesMatch(expected: string | undefined, actual: string | 
 
 export function buildQuickbooksAuthorizeUrl(state: string): string {
   const clientId = getQuickbooksClientId();
-  if (!clientId) throw new Error("Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env first.");
+  if (!clientId) throw new Error("QuickBooks is not connected.");
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: getQuickbooksRedirectUri(),
@@ -582,7 +580,7 @@ export async function completeQuickbooksOAuth(input: {
   const clientId = getQuickbooksClientId();
   const clientSecret = getQuickbooksClientSecret();
   if (!clientId || !clientSecret) {
-    throw new Error("Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env first.");
+    throw new Error("QuickBooks is not connected.");
   }
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const response = await fetch(TOKEN_URL, {

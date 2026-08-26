@@ -47,9 +47,7 @@ export default async function IftaPage({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Estimate</p>
             <h2 className="text-sm font-semibold text-slate-900">{estimate.label}</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              TMS helper from imported fuel and stored load route miles. Official filing stays Samsara.
-            </p>
+            <p className="mt-1 text-sm text-slate-600">Imported fuel and stored load miles.</p>
           </div>
           <form className="flex flex-wrap items-end gap-2" method="get">
             <div className="field">
@@ -112,13 +110,11 @@ export default async function IftaPage({
       <section className="card overflow-hidden">
         <header className="border-b border-slate-200 px-5 py-3">
           <h2 className="text-sm font-semibold">Waypoint review</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Miles come only from stored Google Directions estimates on each load. Loads without stored miles are
-            not invented.
-            {estimate.loadsWithoutMiles > 0
-              ? ` ${estimate.loadsWithoutMiles} load${estimate.loadsWithoutMiles === 1 ? "" : "s"} in the quarter have no stored miles.`
-              : ""}
-          </p>
+          {estimate.loadsWithoutMiles > 0 ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {estimate.loadsWithoutMiles} load{estimate.loadsWithoutMiles === 1 ? "" : "s"} in the quarter have no stored miles.
+            </p>
+          ) : null}
         </header>
         {estimate.waypoints.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">No loads with stored state miles this quarter.</p>

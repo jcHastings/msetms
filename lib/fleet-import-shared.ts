@@ -1,13 +1,11 @@
 /** Client-safe fleet bulk-import types and matching. No env, db, or secrets. */
 
-export const SAMSARA_TOKEN_MISSING_MESSAGE =
-  "Add SAMSARA_API_TOKEN to .env and restart.";
+export const SAMSARA_TOKEN_MISSING_MESSAGE = "Samsara is not connected.";
 
 export const SAMSARA_ID_MISSING_MESSAGE =
   "No Samsara ID on this truck — Import from Samsara or paste the vehicle id.";
 
-export const ORBCOMM_CREDS_OR_CSV_MESSAGE =
-  "Add ORBCOMM_USERNAME and ORBCOMM_PASSWORD to .env and restart, or upload an ORBCOMM CSV/export.";
+export const ORBCOMM_CREDS_OR_CSV_MESSAGE = "Orbcomm is not connected. Upload a spreadsheet or connect Orbcomm.";
 
 export type SamsaraMatchBy = "vin" | "samsara_vehicle_id" | "unit_number" | "plate";
 

@@ -20,13 +20,12 @@ export function LoadSheetImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import loads</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Upload an Ascend/legacy Excel or CSV (.xlsx or .csv), preview the count, then import. Matches
-          existing loads by Load #. Truck and driver are optional. GPS is not imported.
+          Upload a spreadsheet, preview, then import. Matches by load number.
         </p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="load-sheet-file">Ascend load Excel or CSV</label>
+          <label htmlFor="load-sheet-file">Load spreadsheet</label>
           <input
             id="load-sheet-file"
             name="file"

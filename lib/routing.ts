@@ -244,7 +244,7 @@ export async function refreshLoadRoute(
       totalMiles: existing.totalMiles,
       states: existing.states,
       source: existing.source,
-      message: "Add GOOGLE_MAPS_API_KEY to calculate route miles. You can enter miles manually.",
+      message: "Enter miles manually.",
     };
   }
   const usable = usableRouteStops(listStops(loadId));

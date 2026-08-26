@@ -855,7 +855,7 @@ function backfillDemoAccounting(db: Database): void {
        VALUES (?, ?, ?, ?, 'open', ?)`,
     ).run(
       "Atlanta DC Lumper",
-      "Demo lumper bill — not a live AP feed",
+      "Demo lumper bill",
       150,
       delivered?.id ?? null,
       new Date().toISOString(),

@@ -256,7 +256,7 @@ export function seedDemoAccounting(): void {
   const load = listLoads({ status: "delivered" })[0];
   createBill({
     vendor: "Atlanta DC Lumper",
-    memo: "Demo lumper — labeled demo, not a live AP feed",
+    memo: "Demo lumper",
     amount: 150,
     loadId: load?.id ?? null,
   });

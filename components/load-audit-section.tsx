@@ -8,7 +8,7 @@ export function LoadAuditSection({ loadId }: { loadId: number }) {
       <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
         <div>
           <h2 className="text-sm font-semibold">History</h2>
-          <p className="text-xs text-slate-500">Newest first. Append-only — nothing here is edited or deleted.</p>
+          <p className="text-xs text-slate-500">Newest first.</p>
         </div>
         <a href="/audit" className="text-sm font-medium text-navy hover:underline">
           Company audit

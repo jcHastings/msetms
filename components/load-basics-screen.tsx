@@ -238,7 +238,6 @@ export function LoadBasicsScreen({
             </option>
           ))}
         </select>
-        <p className="text-xs text-slate-500">Reefers default to Continuous.</p>
       </div>
       <div className="field md:col-span-2 note-public">
         <label htmlFor="public_notes">Public notes</label>

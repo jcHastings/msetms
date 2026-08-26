@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       return unauthorizedResponse();
     }
     if (!isQuickbooksOAuthReady()) {
-      settings.searchParams.set("error", "Set QBO_CLIENT_ID and QBO_CLIENT_SECRET in .env, then restart.");
+      settings.searchParams.set("error", "QuickBooks is not connected.");
       return NextResponse.redirect(settings);
     }
     const state = createQuickbooksOAuthState();

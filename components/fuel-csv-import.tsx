@@ -12,11 +12,7 @@ export function FuelCsvImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Daily fuel-card import</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Upload a CSV, Excel (.xlsx), or Transaction Activity Report PDF. Official IFTA stays Samsara.
-          This file is card spend only. Driver receipt photos land on the assigned load and in the match
-          queue below.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Upload a fuel file, then import.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <a href="/api/fuel/template" className="btn btn-secondary">
@@ -28,7 +24,7 @@ export function FuelCsvImport() {
       </div>
       <form action={formAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="fuel-csv">Upload CSV, Excel, or PDF</label>
+          <label htmlFor="fuel-csv">Fuel file</label>
           <input id="fuel-csv" name="csv" type="file" accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
         </div>
         <button className="btn btn-primary" type="submit" disabled={pending}>

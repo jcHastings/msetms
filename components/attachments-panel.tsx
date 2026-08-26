@@ -28,11 +28,7 @@ export function AttachmentsPanel({
   return (
     <section id="load-documents" className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Load documents</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Rate confirmation, customer invoice, carrier bill, BOL/POD, and other PDFs or images.
-        Multiple files per type are kept. A file from <strong>From rate con</strong> shows as Rate
-        confirmation. Stored in <code>data/uploads</code>.
-      </p>
+      <p className="mt-1 text-sm text-slate-500">Rate confirmation, invoice, BOL, and POD.</p>
       <form action={attachFileFormAction} className="mt-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="load_id" value={loadId} />
         <div className="field min-w-44">

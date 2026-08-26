@@ -31,9 +31,6 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
         <MoneyStat label="Accessorials" value={formatMoney(accessorials)} />
         <MoneyStat label="Driver pay" value={driverPay != null ? formatMoney(driverPay) : "—"} />
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        Customer invoice stays the full customer amount. Owner-operator settlement is separate.
-      </p>
     </section>
   );
 }

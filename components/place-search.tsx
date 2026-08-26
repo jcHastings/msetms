@@ -39,7 +39,7 @@ export function PlaceSearch({
   }, [enabled, query]);
 
   if (!enabled) {
-    return <p className="text-xs text-slate-500">Add a key to enable search.</p>;
+    return <p className="text-xs text-slate-500">Search is off.</p>;
   }
 
   async function onSelect(placeId: string) {

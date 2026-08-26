@@ -1,2 +1,1 @@
-export const SMS_MISSING_KEYS =
-  "Add Twilio keys in .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER).";
+export const SMS_MISSING_KEYS = "Twilio is not connected.";

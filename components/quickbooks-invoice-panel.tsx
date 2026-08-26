@@ -30,14 +30,7 @@ export function QuickbooksInvoicePanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Bills the <strong>customer</strong> (line haul
-            {preview.lines.some((line) => line.name === "Lumper") ? " + lumper" : ""})
-            {preview.mode === "demo"
-              ? " — demo preview (no QuickBooks credentials)."
-              : ` — live ${preview.environment} company.`}{" "}
-            Relays and owner-operator pay are not invoiced.
-          </p>
+          <p className="mt-1 text-sm text-slate-600">Customer invoice.</p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
           {preview.mode === "demo" ? "Demo" : "QuickBooks"}

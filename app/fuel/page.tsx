@@ -75,7 +75,6 @@ export default async function FuelPage({
         <section className="card mb-6 overflow-hidden">
           <header className="border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Unassigned ({unmatched.length})</h2>
-            <p className="mt-1 text-xs text-slate-500">No driver matched. Pick one so the row counts in totals.</p>
           </header>
           <div className="overflow-x-auto">
             <table className="table-grid">
