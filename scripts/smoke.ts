@@ -200,7 +200,9 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
-  assert.match(workspaceSource, /Send to Accounting/);
+  assert.match(workspaceSource, /Release to invoicing/);
+  assert.match(workspaceSource, /Request POD/);
+  assert.match(workspaceSource, /Request Detention email/);
   assert.match(workspaceSource, /View Accountability Log/);
   assert.match(workspaceSource, /Copy This Load/);
   assert.match(workspaceSource, /Archive This Load/);
@@ -4719,7 +4721,6 @@ Continuous reefer. Two load locks.
     labelForFuelBucket,
     parseFuelCsv,
     parseFuelReport,
-    matchFuelDriver,
     parseFuelWhen,
     renderFuelExportCsv,
     renderFuelTemplate,

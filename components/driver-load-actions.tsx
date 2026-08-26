@@ -51,7 +51,7 @@ export function DriverLoadActions({
             button.enabled && !closed ? "bg-navy text-white" : "bg-slate-200 text-slate-500"
           }`}
         >
-          {button.stopLabel} {button.label}
+          {button.stopLabel} {button.kind === "arrive" ? "Check In" : "Check Out"}
           {!button.enabled && button.stopLabel === "Delivery" && button.kind === "arrive"
             ? " · after pickup check out"
             : ""}

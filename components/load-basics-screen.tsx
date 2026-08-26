@@ -188,7 +188,7 @@ export function LoadBasicsScreen({
         <input id="temperature_f" name="temperature_f" type="number" step="0.1" defaultValue={load?.temperature_f ?? ""} />
       </div>
       <div className="field">
-        <label htmlFor="reefer_setpoint_f">Setpoint °F</label>
+        <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
         <input
           id="reefer_setpoint_f"
           name="reefer_setpoint_f"
