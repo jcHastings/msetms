@@ -5,6 +5,7 @@ import {
   isFuelBucket,
   isMoneyCodeCategory,
   matchFuelDriver,
+  normalizeUnit,
   parseFuelReport,
   startOfLocalMonth,
   startOfLocalWeek,
@@ -95,15 +96,101 @@ function storeFuelImportSource(sourceFile: string, text: string): void {
     .run(sourceFile, text, nowIso());
 }
 
-function applyStoredFuelImportNames(): void {
+function applyParsedFuelDriverNames(
+  parsedRows: Array<{
+    driverName: string;
+    unitNumber: string;
+    invoice: string;
+    amount: number | null;
+    category: string;
+    driverIdRaw?: string;
+    prompt?: string;
+    dedupKey?: string;
+  }>,
+): number {
+  const drivers = listDrivers();
+  const trucks = listTrucks();
   const db = getDb();
-  const sources = db.prepare("SELECT source_file, text FROM fuel_import_sources").all() as Array<{
+  const existing = db
+    .prepare(
+      `SELECT id, driver_id, truck_id, amount, unit_number, invoice_number, driver_name_raw, category, dedup_key
+       FROM fuel_transactions`,
+    )
+    .all() as Array<{
+    id: number;
+    driver_id: number | null;
+    truck_id: number | null;
+    amount: number | null;
+    unit_number: string;
+    invoice_number: string;
+    driver_name_raw: string;
+    category: string;
+    dedup_key: string;
+  }>;
+  const update = db.prepare(
+    `UPDATE fuel_transactions
+     SET driver_name_raw = ?, invoice_number = ?, driver_id = ?, truck_id = ?
+     WHERE id = ?`,
+  );
+  let updated = 0;
+  for (const row of parsedRows) {
+    if (isMoneyCodeCategory(row.category)) continue;
+    const match = matchFuelDriver(
+      {
+        driverName: row.driverName,
+        driverIdRaw: row.driverIdRaw ?? "",
+        unitNumber: row.unitNumber,
+        prompt: row.prompt ?? "",
+      },
+      drivers,
+      trucks,
+    );
+    for (const hit of existing) {
+      if (isMoneyCodeCategory(hit.category)) continue;
+      if (!parsedFuelRowMatchesExisting(row, hit)) continue;
+      const nextName = row.driverName.trim() || hit.driver_name_raw;
+      const nextInvoice = row.invoice.trim() || hit.invoice_number;
+      const nextDriverId = match.driverId;
+      const nextTruckId = match.truckId ?? hit.truck_id;
+      if (
+        nextName === hit.driver_name_raw &&
+        nextInvoice === hit.invoice_number &&
+        (hit.driver_id ?? null) === nextDriverId &&
+        (hit.truck_id ?? null) === nextTruckId
+      ) {
+        continue;
+      }
+      update.run(nextName, nextInvoice, nextDriverId, nextTruckId, hit.id);
+      hit.driver_name_raw = nextName;
+      hit.invoice_number = nextInvoice;
+      hit.driver_id = nextDriverId;
+      hit.truck_id = nextTruckId;
+      updated += 1;
+    }
+  }
+  return updated;
+}
+
+function parsedFuelRowMatchesExisting(
+  parsed: { unitNumber: string; invoice: string; amount: number | null; dedupKey?: string },
+  existing: { amount: number | null; unit_number: string; invoice_number: string; dedup_key: string },
+): boolean {
+  if (parsed.dedupKey && parsed.dedupKey === existing.dedup_key) return true;
+  if (parsed.amount == null || existing.amount == null) return false;
+  if (Math.abs(existing.amount - parsed.amount) >= 0.021) return false;
+  const invoiceHit = Boolean(parsed.invoice && existing.invoice_number && parsed.invoice === existing.invoice_number);
+  const unitHit = Boolean(
+    parsed.unitNumber && existing.unit_number && normalizeUnit(parsed.unitNumber) === normalizeUnit(existing.unit_number),
+  );
+  return invoiceHit || unitHit;
+}
+
+function applyStoredFuelImportNames(): number {
+  const sources = getDb().prepare("SELECT source_file, text FROM fuel_import_sources").all() as Array<{
     source_file: string;
     text: string;
   }>;
-  const updateName = db.prepare(
-    `UPDATE fuel_transactions SET driver_name_raw = ? WHERE dedup_key = ? AND category != 'money_code'`,
-  );
+  let updated = 0;
   for (const source of sources) {
     let parsed;
     try {
@@ -111,11 +198,9 @@ function applyStoredFuelImportNames(): void {
     } catch {
       continue;
     }
-    for (const row of parsed.rows) {
-      if (isMoneyCodeCategory(row.category) || !row.driverName.trim()) continue;
-      updateName.run(row.driverName, row.dedupKey);
-    }
+    updated += applyParsedFuelDriverNames(parsed.rows);
   }
+  return updated;
 }
 
 function looksLikeTruckOrLoadAssign(
@@ -138,7 +223,7 @@ function looksLikeTruckOrLoadAssign(
 }
 
 export function rematchFuelTransactionDrivers(): number {
-  applyStoredFuelImportNames();
+  let updated = applyStoredFuelImportNames();
   const drivers = listDrivers();
   const trucks = listTrucks();
   const loads = listFuelMatchLoads();
@@ -158,7 +243,6 @@ export function rematchFuelTransactionDrivers(): number {
     prompt_data: string;
   }>;
   const update = db.prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?");
-  let updated = 0;
   db.transaction(() => {
     for (const row of rows) {
       if (isMoneyCodeCategory(row.category)) continue;
@@ -195,6 +279,7 @@ export function importFuelFromText(
   text: string,
   sourceFile: string,
 ): { created: number; skipped: number; unmatched: number; errors: FuelCsvRowError[] } {
+  storeFuelImportSource(sourceFile, text);
   const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
   const trucks = listTrucks();
@@ -215,17 +300,10 @@ export function importFuelFromText(
   let skipped = parsed.skipped;
   let unmatched = 0;
   const seen = new Set<string>();
-  storeFuelImportSource(sourceFile, text);
-  const updateName = db.prepare(
-    `UPDATE fuel_transactions SET driver_name_raw = ? WHERE dedup_key = ? AND category != 'money_code'`,
-  );
   db.transaction(() => {
     for (const row of parsed.rows) {
       if (existing.has(row.dedupKey) || seen.has(row.dedupKey)) {
         skipped += 1;
-        if (row.driverName.trim() && !isMoneyCodeCategory(row.category)) {
-          updateName.run(row.driverName, row.dedupKey);
-        }
         continue;
       }
       const match = matchFuelDriver(row, drivers, trucks);
@@ -253,6 +331,7 @@ export function importFuelFromText(
       else unmatched += 1;
     }
   })();
+  applyParsedFuelDriverNames(parsed.rows);
   rematchUnmatchedFuelTransactions();
   return { created, skipped, unmatched, errors: parsed.errors };
 }

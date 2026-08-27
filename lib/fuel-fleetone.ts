@@ -77,16 +77,17 @@ export function parseFleetOneFuelText(text: string): {
   const reportDate =
     text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/)?.[1] ??
     new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
-  let pending: FleetOneParsedRow | null = null;
+  let open: FleetOneStopBlock | null = null;
 
-  const flushPending = () => {
-    if (pending) rows.push(pending);
-    pending = null;
+  const flushOpen = () => {
+    const row = finalizeFleetOneStop(open);
+    if (row) rows.push(row);
+    open = null;
   };
 
   for (const raw of lines) {
     excelRow += 1;
-    if (isFleetOneJunkLine(raw) && !MONEY_CODE_RE.test(raw) && !ACTIVITY_KIND.test(raw) && !isFleetOneNNameLine(raw)) {
+    if (isFleetOneJunkLine(raw) && !MONEY_CODE_RE.test(raw) && !ACTIVITY_KIND.test(raw) && !isFleetOneNNameLine(raw) && !isFleetOneAmountLine(raw)) {
       skipped += 1;
       continue;
     }
@@ -98,21 +99,38 @@ export function parseFleetOneFuelText(text: string): {
     if (MONEY_CODE_RE.test(line)) {
       const money = parseFleetOneMoneyCode(line, excelRow, reportDate, reportYear);
       if (money) {
-        flushPending();
+        flushOpen();
         rows.push(money);
         continue;
       }
     }
-    const activity = parseFleetOneNProductLine(line, excelRow, reportYear);
-    if (activity) {
-      flushPending();
-      pending = activity;
+    const started = parseNActivityStart(line, excelRow, reportYear);
+    if (started) {
+      flushOpen();
+      open = started;
       continue;
     }
-    if (pending && !MONEY_CODE_RE.test(line)) {
+    if (open && !open.hasAmounts) {
+      const amounts = parseFleetOneAmountLine(line);
+      if (amounts) {
+        open.hasAmounts = true;
+        open.gallons = amounts.gallons;
+        open.pricePerGallon = amounts.pricePerGallon;
+        open.amount = amounts.amount;
+        open.location = amounts.location || open.location;
+        if (amounts.driverName) open.driverName = stitchFleetOneNName(open.driverName, amounts.driverName);
+        continue;
+      }
+      if (/^\d{1,3}$/.test(line)) continue;
+    }
+    if (isFleetOneNameTerminator(line)) {
+      flushOpen();
+      continue;
+    }
+    if (open) {
       const fragment = parseFleetOneNNameFragment(line);
       if (fragment != null) {
-        pending.driverName = stitchFleetOneNName(pending.driverName, fragment);
+        open.driverName = stitchFleetOneNName(open.driverName, fragment);
         continue;
       }
     }
@@ -122,10 +140,10 @@ export function parseFleetOneFuelText(text: string): {
       errors.push({ row: excelRow, error: "Could not read that funded fuel line." });
       continue;
     }
-    flushPending();
-    pending = parsed;
+    flushOpen();
+    open = stopFromParsedRow(parsed);
   }
-  flushPending();
+  flushOpen();
 
   const kept = dropSummaryMoneyCodes(rows);
   if (kept.length === 0 && errors.length === 0) {
@@ -163,6 +181,176 @@ function normalizeFleetOneText(text: string): string {
     .replace(new RegExp(`([A-Za-z]{3,})(${US_STATES.join("|")})(?=\\s+(Diesel|Reefer|DEF|ULSD)\\b)`, "gi"), "$1 $2")
     .replace(/[^\S\n]+/g, " ")
     .replace(/ ?\n ?/g, "\n");
+}
+
+type FleetOneStopBlock = {
+  row: number;
+  occurredAt: string;
+  category: string;
+  unitNumber: string;
+  invoice: string;
+  location: string;
+  driverName: string;
+  gallons: number | null;
+  pricePerGallon: number | null;
+  amount: number | null;
+  cardLast4: string;
+  hasAmounts: boolean;
+};
+
+function stopFromParsedRow(row: FleetOneParsedRow): FleetOneStopBlock {
+  return {
+    row: row.row,
+    occurredAt: row.occurredAt,
+    category: row.category,
+    unitNumber: row.unitNumber,
+    invoice: row.invoice,
+    location: row.location,
+    driverName: row.driverName,
+    gallons: row.gallons,
+    pricePerGallon: row.pricePerGallon,
+    amount: row.amount,
+    cardLast4: row.cardLast4,
+    hasAmounts: row.gallons != null && row.amount != null,
+  };
+}
+
+function finalizeFleetOneStop(open: FleetOneStopBlock | null): FleetOneParsedRow | null {
+  if (!open || !open.hasAmounts || open.amount == null || open.gallons == null) return null;
+  if (open.gallons <= 0 || open.gallons > 400) return null;
+  if (SUMMARY_AMOUNTS.has(open.amount) || open.gallons === 45.082) return null;
+  if (isFleetOneJunkAmount(open.gallons, open.amount, open.unitNumber, open.location)) return null;
+  return {
+    row: open.row,
+    occurredAt: open.occurredAt,
+    driverName: open.driverName,
+    unitNumber: open.unitNumber,
+    location: open.location,
+    gallons: open.gallons,
+    pricePerGallon: open.pricePerGallon,
+    amount: open.amount,
+    cardLast4: open.cardLast4,
+    category: open.category,
+    invoice: open.invoice,
+  };
+}
+
+function parseNActivityStart(line: string, row: number, reportYear: number): FleetOneStopBlock | null {
+  const sameLine = parseFleetOneNProductLine(line, row, reportYear);
+  if (sameLine) return stopFromParsedRow(sameLine);
+  const head = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+N\s+(Diesel|Reefer|DEF)\s+(.+)$/i);
+  if (!head) return null;
+  const occurred = parseWhen(head[1], reportYear);
+  if (!occurred) return null;
+  const category = classifyProduct(head[2]);
+  if (!category) return null;
+  const rest = head[3];
+  const unitPrompt = rest.match(/\b(\d{1,3})\s+D\s*(\d{1,4})\b/i);
+  if (!unitPrompt || unitPrompt.index == null) return null;
+  const unit = unitPrompt[1];
+  if (unit === "228" || Number(unit) < 1 || Number(unit) > 199) return null;
+  const afterPrompt = rest.slice(unitPrompt.index + unitPrompt[0].length);
+  const invoice = afterPrompt.match(/\b(\d{6,})\b/)?.[1] ?? "";
+  const beforeUnit = extractNProductDriverName(rest.slice(0, unitPrompt.index));
+  const amounts = parseFleetOneAmounts(afterPrompt);
+  const location = amounts?.location || locationFromFuelText(afterPrompt);
+  return {
+    row,
+    occurredAt: occurred.toISOString(),
+    category,
+    unitNumber: unit,
+    invoice,
+    location,
+    driverName: amounts?.driverName || beforeUnit,
+    gallons: amounts?.gallons ?? null,
+    pricePerGallon: amounts?.pricePerGallon ?? null,
+    amount: amounts?.amount ?? null,
+    cardLast4: "",
+    hasAmounts: Boolean(amounts),
+  };
+}
+
+function isFleetOneAmountLine(line: string): boolean {
+  return parseFleetOneAmountLine(stripFleetOneHeaderLeak(line)) != null;
+}
+
+function isFleetOneNameTerminator(line: string): boolean {
+  const trimmed = line.trim();
+  if (/^CARD\b/i.test(trimmed)) return true;
+  if (MONEY_CODE_RE.test(trimmed)) return true;
+  if (/^O\s*\d+\b/i.test(trimmed)) return true;
+  if (/^#\d+\b/.test(trimmed)) return true;
+  return false;
+}
+
+function parseFleetOneAmountLine(line: string): {
+  gallons: number;
+  pricePerGallon: number | null;
+  amount: number;
+  location: string;
+  driverName: string;
+} | null {
+  if (ACTIVITY_KIND.test(line) || MONEY_CODE_RE.test(line)) return null;
+  if (/^\d{1,2}\/\d{1,2}/.test(line)) return null;
+  return parseFleetOneAmounts(line);
+}
+
+function parseFleetOneAmounts(text: string): {
+  gallons: number;
+  pricePerGallon: number | null;
+  amount: number;
+  location: string;
+  driverName: string;
+} | null {
+  const nums = [...text.matchAll(/-?\d[\d,]*\.\d{2,4}/g)];
+  if (nums.length < 2) return null;
+  const gallonsTok =
+    nums.find((item) => /\.\d{3}$/.test(item[0]) && (parseNum(item[0]) ?? 999) <= 400) ??
+    nums.find((item) => {
+      const value = parseNum(item[0]);
+      return value != null && value > 0 && value <= 400 && !/\.\d{4}$/.test(item[0]) && !/\.\d{2}$/.test(item[0]);
+    });
+  const priceTok = nums.find((item) => /\.\d{4}$/.test(item[0]));
+  const twoDec = nums.filter((item) => /\.\d{2}$/.test(item[0]) && item !== gallonsTok);
+  if (!gallonsTok || twoDec.length === 0) return null;
+  const gallons = parseNum(gallonsTok[0]);
+  const pricePerGallon = priceTok ? parseNum(priceTok[0]) : null;
+  const twoVals = twoDec
+    .map((item) => parseNum(item[0]))
+    .filter((value): value is number => value != null && value !== 0);
+  const notTax = twoVals.filter((value) => value >= 10);
+  const amount = (notTax.length ? notTax : twoVals).at(-1);
+  if (gallons == null || amount == null || gallons <= 0 || gallons > 400) return null;
+  if (SUMMARY_AMOUNTS.has(amount) || gallons === 45.082) return null;
+  const gallonsIndex = gallonsTok.index ?? 0;
+  const beforeGal = text.slice(0, gallonsIndex);
+  const afterAmountSplit = takeTrailingNName(
+    text
+      .slice((twoDec[twoDec.length - 1]?.index ?? gallonsIndex) + (twoDec[twoDec.length - 1]?.[0].length ?? 0))
+      .replace(/[^\sA-Za-z0-9#]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+  return {
+    gallons,
+    pricePerGallon,
+    amount,
+    location: locationFromFuelText(beforeGal) || afterAmountSplit.text,
+    driverName: afterAmountSplit.name,
+  };
+}
+
+function locationFromFuelText(text: string): string {
+  const cleaned = text
+    .replace(/\b\d{4,}\b/g, " ")
+    .replace(/-?\d[\d,]*\.\d{2,4}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const stateMatch = [...cleaned.matchAll(/\b([A-Z]{2})\b/g)].pop();
+  if (!stateMatch || stateMatch.index == null) return cleaned.replace(/\s+/g, " ").trim();
+  const station = cleaned.slice(0, stateMatch.index).replace(/\s+/g, " ").trim();
+  if (/nanuet/i.test(station) || /route 59/i.test(station)) return "";
+  return [station, stateMatch[1]].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function parseFleetOneNProductLine(line: string, row: number, reportYear: number): FleetOneParsedRow | null {

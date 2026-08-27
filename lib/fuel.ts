@@ -813,6 +813,16 @@ function findDriverById(raw: string, drivers: DriverWithTruck[]): DriverWithTruc
 }
 
 function findDriverByName(raw: string, drivers: DriverWithTruck[]): DriverWithTruck | undefined {
+  const foldedRaw = raw
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+  if (foldedRaw) {
+    const direct = drivers.filter(
+      (driver) => driver.name.toLowerCase().replace(/[^a-z]+/g, " ").trim() === foldedRaw,
+    );
+    if (direct.length === 1) return direct[0];
+  }
   const keys = nameKeys(raw);
   if (keys.length === 0) return undefined;
   const exact = drivers.filter((driver) => nameKeys(driver.name).some((key) => keys.includes(key) && key.includes(" ")));
@@ -852,7 +862,6 @@ const NAME_ALIASES: Record<string, string> = {
   tony: "anthony",
   tom: "thomas",
   dave: "david",
-  steve: "steven",
 };
 
 function aliasToken(token: string): string {
