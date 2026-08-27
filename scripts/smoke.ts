@@ -6733,8 +6733,15 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /CSA|hazmat|passport/);
 
   const payItemsMod = await import("../lib/pay-items");
-  const { createTmsInvoice, tmsCustomerInvoiceLines, renderInvoicesCsv, paperworkCompanyName, buildTmsInvoice } =
-    await import("../lib/invoice");
+  const {
+    createTmsInvoice,
+    tmsCustomerInvoiceLines,
+    renderInvoicesCsv,
+    paperworkCompanyName,
+    buildTmsInvoice,
+    renderTmsInvoicePdf,
+    isCompanyCustomerName,
+  } = await import("../lib/invoice");
   assert.equal(paperworkCompanyName("M&S Loads"), "M&S Loads LLC");
   assert.equal(paperworkCompanyName("M&S Loads LLC"), "M&S Loads LLC");
   assert.equal(paperworkCompanyName("Other Carrier"), "Other Carrier");
@@ -6778,6 +6785,15 @@ Continuous reefer. Two load locks.
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
   assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");
   assert.match(tmsInvoiceModel.companyLegalName, /LLC/);
+  assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
+  assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
+  assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
+  assert.equal(tmsInvoiceModel.customerStreet, settings.getCompanySettings().street);
+  assert.match(tmsInvoiceModel.customerCityStateZip, /NE/);
+  assert.match(tmsInvoiceModel.customerPhone, /402-302-0097/);
+  assert.match(tmsInvoiceModel.companyAddress, /100 Fleet Way|600 E 39th/);
+  assert.equal(settings.withOfficeAddress({ street: "", city: "", state: "", zip: "" }).street, "600 E 39th St");
+  assert.equal(settings.withOfficeAddress({ street: "100 Fleet Way", city: "Omaha", state: "NE", zip: "68102" }).street, "100 Fleet Way");
   assert.ok(tmsInvoiceModel.stops.length >= 1);
   assert.ok(tmsInvoiceModel.lines.every((line) => line.qty != null || line.rate != null || line.amount));
   assert.doesNotMatch(tmsInvoiceModel.lines.map((line) => line.name).join(" "), /owner-operator|relay|lumper/i);
@@ -6785,11 +6801,15 @@ Continuous reefer. Two load locks.
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
-  const invoicePdfText = made.buffer.toString("latin1");
+  const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
   assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
   assert.doesNotMatch(invoicePdfText, /Notes/);
+  assert.doesNotMatch(invoicePdfText, /Stops \/ Actions/);
+  assert.match(invoicePdfText, /Pickup \/ Delivery/);
+  assert.match(invoicePdfText, /Subtotal/);
+  assert.match(invoicePdfText, /100 Fleet Way|600 E 39th/);
   const invoiceLibSource = fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8");
   assert.match(invoiceLibSource, /showNotes/);
   assert.doesNotMatch(invoiceLibSource, /Linehaul is the customer rate|Payment due per customer terms/);
@@ -6802,11 +6822,67 @@ Continuous reefer. Two load locks.
   );
   assert.match(invoiceLibSource, /INVOICE/);
   assert.match(invoiceLibSource, /Customer Information/);
-  assert.match(invoiceLibSource, /Stops \/ Actions/);
-  assert.match(invoiceLibSource, /Primary Contact/);
+  assert.match(invoiceLibSource, /Pickup \/ Delivery/);
+  assert.doesNotMatch(invoiceLibSource, /Stops \/ Actions/);
   assert.match(invoiceLibSource, /Date\/Time/);
   assert.match(invoiceLibSource, /Quantity/);
   assert.match(invoiceLibSource, /paperworkCompanyName/);
+  assert.match(invoiceLibSource, /drawTotalsBox/);
+  const freightPdf = await renderTmsInvoicePdf({
+    ...tmsInvoiceModel,
+    invoiceNumber: "INV-1005921",
+    date: "05/29/26",
+    customerName: "M & S Loads LLC.",
+    customerStreet: "600 E 39th St",
+    customerCityStateZip: "Hastings, NE 68901",
+    customerPhone: "402-302-0097",
+    companyLegalName: "M&S Loads LLC",
+    companyPhone: "402-302-0097",
+    lines: [{ name: "Flat Rate", description: "", amount: 3500, qty: 1, rate: 3500 }],
+    total: 3500,
+    publicNotes: "",
+    stops: [
+      {
+        sequence: 1,
+        kind: "Pickup",
+        window: "05/28/26 8:00 AM – 05/28/26 5:00 PM",
+        name: "Tyson-Amarillo",
+        street: "5000 FM1912",
+        city: "Amarillo",
+        state: "TX",
+        zip: "79120",
+        phone: "806-335-1531",
+        reference: "",
+        cargo: "",
+      },
+      {
+        sequence: 2,
+        kind: "Delivery",
+        window: "05/29/26 8:00 AM – 05/29/26 5:00 PM",
+        name: "Nebraska Cold Storage Inc",
+        street: "600 E 39th St",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        phone: "402-461-4442",
+        reference: "",
+        cargo: "",
+      },
+    ],
+  });
+  const freightText = await extractDocumentText(freightPdf, "application/pdf", "INV-1005921.pdf");
+  assert.match(freightText, /05\/29\/26/);
+  assert.doesNotMatch(freightText, /2026-05-29/);
+  assert.match(freightText, /600 E 39th/);
+  assert.match(freightText, /402-302-0097/);
+  assert.match(freightText, /5000 FM1912/);
+  assert.match(freightText, /79120/);
+  assert.match(freightText, /402-461-4442/);
+  assert.match(freightText, /Pickup \/ Delivery/);
+  assert.match(freightText, /Subtotal/);
+  assert.doesNotMatch(freightText, /Stops \/ Actions/);
+  assert.doesNotMatch(freightText, /Notes/);
+  assert.doesNotMatch(freightText, /Linehaul is the customer rate/);
   assert.equal(tmsInvoiceModel.lines[0]?.name, "Flat Rate");
   assert.ok(tmsInvoiceModel.stops[0]?.name);
   assert.ok("window" in tmsInvoiceModel.stops[0]!);

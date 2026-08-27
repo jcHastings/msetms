@@ -1,14 +1,14 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { addAttachment } from "./files";
-import { formatInvoiceMoney, formatStopWindow, formatWeight } from "./format";
+import { formatInvoiceMoney, formatMdYDisplay, formatStopWindow, formatWeight } from "./format";
 import { labelForPayCategory } from "./load-page-shared";
-import { formatLocationAddress } from "./locations";
+import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } from "./locations";
 import { customerInvoicePayItems } from "./pay-items";
-import { getCustomer, getLoad, markTmsInvoice } from "./queries";
+import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
-import { listStops } from "./stops";
-import type { LoadView } from "./types";
+import { listStops, type LoadStop } from "./stops";
+import type { LoadView, Location } from "./types";
 
 export type TmsInvoiceLine = {
   name: string;
@@ -65,6 +65,18 @@ export function paperworkCompanyName(name: string): string {
   return trimmed;
 }
 
+export function isCompanyCustomerName(customerName: string, companyName: string): boolean {
+  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const customer = norm(customerName);
+  if (!customer) return false;
+  if (customer.includes("msloads") || customer.includes("mandsloads") || customer.includes("msexpress")) {
+    return true;
+  }
+  const company = norm(companyName).replace(/llc$/, "");
+  const customerCore = customer.replace(/llc$/, "");
+  return Boolean(company) && (customerCore === company || customerCore.includes(company) || company.includes(customerCore));
+}
+
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
   if (payItems.length) {
@@ -82,24 +94,55 @@ export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
   return [];
 }
 
-function invoiceStops(load: LoadView): TmsInvoiceStop[] {
-  return listStops(load.id).map((stop, index) => ({
-    sequence: stop.sequence || index + 1,
-    kind: stop.kind === "delivery" ? "Delivery" : "Pickup",
-    window: formatStopWindow(stop.window_start, stop.window_end),
-    name: stop.name,
-    street: stop.street,
-    city: stop.city,
-    state: stop.state,
-    zip: stop.zip,
-    phone: stop.phone,
-    reference: stop.reference || stop.confirmation,
-    cargo: stop.cargo,
-  }));
+function fillStopFromLocationBook(stop: LoadStop, locations: Location[]): LoadStop {
+  const match = matchLocationForStop(locations, stop);
+  if (!match) return stop;
+  const filled = applyLocationToStop(stop, match);
+  return {
+    ...stop,
+    location_id: filled.location_id ?? stop.location_id,
+    name: filled.name,
+    street: filled.street ?? "",
+    city: filled.city ?? "",
+    state: filled.state ?? "",
+    zip: filled.zip ?? "",
+    phone: filled.phone ?? "",
+  };
 }
 
-function companyAddressLines(street: string, cityStateZip: string): string[] {
+function invoiceStops(load: LoadView): TmsInvoiceStop[] {
+  const locations = listLocations();
+  return listStops(load.id).map((stop, index) => {
+    const filled = fillStopFromLocationBook(stop, locations);
+    return {
+      sequence: filled.sequence || index + 1,
+      kind: filled.kind === "delivery" ? "Delivery" : "Pickup",
+      window: formatStopWindow(filled.window_start, filled.window_end),
+      name: filled.name,
+      street: filled.street,
+      city: filled.city,
+      state: filled.state,
+      zip: filled.zip,
+      phone: filled.phone,
+      reference: filled.reference || filled.confirmation,
+      cargo: filled.cargo,
+    };
+  });
+}
+
+function cityStateZipLine(city: string, state: string, zip: string): string {
+  return [[city, state].map((part) => part.trim()).filter(Boolean).join(", "), zip.trim()]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function addressLines(street: string, cityStateZip: string): string[] {
   return [street, cityStateZip].map((line) => line.trim()).filter(Boolean);
+}
+
+function stopLocationBlock(stop: TmsInvoiceStop): string {
+  const address = formatStopPartyAddress(stop);
+  return [stop.name, address].map((line) => line.trim()).filter(Boolean).join("\n");
 }
 
 function customerBlock(load: LoadView): {
@@ -108,14 +151,32 @@ function customerBlock(load: LoadView): {
   phone: string;
   contact: string;
 } {
+  const settings = getCompanySettings();
+  const company = getCompanyProfile();
   const customer = getCustomer(load.customer_id);
   const contact = customer?.contacts[0];
+  const phone = (load.contact_phone || contact?.phone || "").trim();
+  const contactName = (load.contact_name || contact?.name || "").trim();
+  if (isCompanyCustomerName(load.customer_name, company.company_name)) {
+    return {
+      street: settings.street.trim(),
+      cityStateZip: cityStateZipLine(settings.city, settings.state, settings.zip),
+      phone: phone || settings.dispatcher_phone.trim(),
+      contact: contactName,
+    };
+  }
   return {
     street: "",
     cityStateZip: "",
-    phone: (load.contact_phone || contact?.phone || "").trim(),
-    contact: (load.contact_name || contact?.name || "").trim(),
+    phone,
+    contact: contactName,
   };
+}
+
+function invoiceDate(load: LoadView): string {
+  const raw = (load.delivery_end || load.delivery_start || load.tms_invoice_at || new Date().toISOString()).trim();
+  const printed = formatMdYDisplay(raw);
+  return printed === "—" ? formatMdYDisplay(new Date().toISOString()) : printed;
 }
 
 export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
@@ -137,7 +198,7 @@ export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
     invoiceNumber,
     loadNumber: load.load_number,
     customerName: load.customer_name,
-    date: (load.delivery_end || load.delivery_start || new Date().toISOString()).slice(0, 10),
+    date: invoiceDate(load),
     poNumber: load.po_number || load.customer_reference || "",
     customerReference: load.customer_reference || load.po_number || "",
     lane: `${load.origin} → ${load.destination}`,
@@ -204,79 +265,78 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   const defaults = getDocumentDefaults("invoice");
   const settings = getCompanySettings();
   const currency = settings.currency;
-  const doc = new PDFDocument({ size: "LETTER", margin: 36 });
+  const doc = new PDFDocument({ size: "LETTER", margin: 40 });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
   const done = new Promise<Buffer>((resolve) => {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
   });
 
-  const left = 36;
-  const width = 540;
-  const navy = "#111111";
-  let y = 36;
+  const left = 40;
+  const width = 532;
+  const ink = "#111111";
+  const rule = "#1f2937";
+  let y = 40;
 
   const logo = companyLogoPath();
   if (logo) {
     try {
-      doc.image(logo, left, y, { fit: [72, 48] });
+      doc.image(logo, left, y, { fit: [64, 36] });
     } catch {
       // Skip a bad logo rather than failing the invoice.
     }
   }
 
-  const companyX = logo ? left + 84 : left;
-  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111").text(model.companyLegalName, companyX, y, {
-    width: 240,
+  const companyX = logo ? left + 76 : left;
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(ink).text(model.companyLegalName, companyX, y, {
+    width: 250,
   });
-  let companyY = y + 16;
-  for (const line of companyAddressLines(
+  let companyY = y + 15;
+  for (const line of addressLines(
     settings.street,
-    [[settings.city, settings.state].filter(Boolean).join(", "), settings.zip].filter(Boolean).join(" "),
+    cityStateZipLine(settings.city, settings.state, settings.zip),
   )) {
-    doc.font("Helvetica").fontSize(8).fillColor("#111111").text(line, companyX, companyY, { width: 240 });
-    companyY += 11;
+    doc.font("Helvetica").fontSize(8).fillColor(ink).text(line, companyX, companyY, { width: 250 });
+    companyY += 10;
   }
   if (model.companyPhone) {
-    doc.font("Helvetica").fontSize(8).text(`Phone: ${model.companyPhone}`, companyX, companyY, { width: 240 });
-    companyY += 11;
+    doc.font("Helvetica").fontSize(8).text(model.companyPhone, companyX, companyY, { width: 250 });
+    companyY += 10;
   }
 
-  doc.font("Helvetica-Bold").fontSize(22).fillColor("#111111");
+  doc.font("Helvetica-Bold").fontSize(20).fillColor(ink);
   doc.text("INVOICE", left, y, { width, align: "right" });
   const meta = [
     ["Invoice #", model.invoiceNumber],
     ["Date", model.date],
     ["Reference", model.customerReference || model.poNumber],
     ["Weight", model.weight],
-    ["Distance", model.miles ? `${model.miles} miles` : ""],
+    ["Distance", model.miles ? `${model.miles} mi` : ""],
   ].filter(([, value]) => value);
-  let metaY = y + 26;
+  let metaY = y + 24;
   for (const [label, value] of meta) {
-    doc.font("Helvetica-Bold").fontSize(8).text(`${label}:`, left + 330, metaY, { width: 70, lineBreak: false });
-    doc.font("Helvetica").text(value, left + 400, metaY, { width: 140, lineBreak: false });
-    metaY += 12;
+    doc.font("Helvetica-Bold").fontSize(8).text(`${label}:`, left + 318, metaY, { width: 68, lineBreak: false });
+    doc.font("Helvetica").text(value, left + 388, metaY, { width: 144, lineBreak: false });
+    metaY += 11;
   }
-  y = Math.max(companyY, metaY) + 12;
+  y = Math.max(companyY, metaY) + 8;
 
-  doc.moveTo(left, y).lineTo(left + width, y).strokeColor("#111111").lineWidth(0.8).stroke();
-  y += 10;
-  doc.font("Helvetica-Bold").fontSize(10).text("Customer Information", left, y);
-  y += 6;
-  doc.moveTo(left, y + 8).lineTo(left + width, y + 8).strokeColor("#111111").lineWidth(0.4).stroke();
-  y += 16;
-  doc.font("Helvetica-Bold").fontSize(10).text(model.customerName, left, y, { width: 280 });
-  if (model.customerContact) {
-    doc.font("Helvetica").fontSize(9).text(`Primary Contact: ${model.customerContact}`, left + 300, y, { width: 240 });
-  }
+  doc.moveTo(left, y).lineTo(left + width, y).strokeColor(rule).lineWidth(1).stroke();
+  y += 8;
+  doc.font("Helvetica-Bold").fontSize(9).fillColor(ink).text("Customer Information", left, y);
   y += 13;
-  for (const line of companyAddressLines(model.customerStreet, model.customerCityStateZip)) {
-    doc.font("Helvetica").fontSize(9).text(line, left, y, { width: 280 });
-    y += 12;
+  doc.font("Helvetica-Bold").fontSize(10).text(model.customerName, left, y, { width: 300 });
+  if (model.customerContact) {
+    doc.font("Helvetica").fontSize(8).text(model.customerContact, left + 310, y, { width: 222 });
+  }
+  y += 12;
+  for (const line of addressLines(model.customerStreet, model.customerCityStateZip)) {
+    doc.font("Helvetica").fontSize(9).text(line, left, y, { width: 300 });
+    y += 11;
   }
   if (model.customerPhone) {
-    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.customerPhone}`, left, y, { width: 280 });
-    y += 12;
+    doc.font("Helvetica").fontSize(9).text(model.customerPhone, left, y, { width: 300 });
+    y += 11;
   }
   y += 10;
 
@@ -289,7 +349,7 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     showNotes
       ? ["Description", "Notes", "Quantity", "Rate", "Amount"]
       : ["Description", "Quantity", "Rate", "Amount"],
-    showNotes ? [140, 160, 70, 80, 90] : [220, 90, 110, 120],
+    showNotes ? [140, 156, 68, 80, 88] : [236, 88, 104, 104],
     model.lines.map((line) =>
       showNotes
         ? [
@@ -306,77 +366,95 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
             formatInvoiceMoney(line.amount, currency),
           ],
     ),
-    navy,
   );
-  y += 8;
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#111111");
-  doc.text(`Total ${formatInvoiceMoney(model.total, currency)}`, left, y, { width, align: "right" });
-  y += 18;
+  y = drawTotalsBox(doc, left, y + 6, width, model.total, currency);
+  y += 14;
 
   if (model.stops.length) {
-    if (y > 680) {
+    if (y > 620) {
       doc.addPage();
-      y = 36;
+      y = 40;
     }
-    doc.font("Helvetica-Bold").fontSize(10).text("Stops / Actions", left, y);
-    y += 6;
-    doc.moveTo(left, y + 8).lineTo(left + width, y + 8).strokeColor("#111111").lineWidth(0.4).stroke();
-    y += 16;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(ink).text("Pickup / Delivery", left, y);
+    y += 12;
     y = drawTable(
       doc,
       left,
       y,
       width,
-      ["#", "Action", "Date/Time", "Location", "Contact"],
-      [28, 70, 90, 230, 122],
+      ["#", "Stop", "Date/Time", "Location", "Contact"],
+      [24, 62, 118, 220, 108],
       model.stops.map((stop) => [
         String(stop.sequence),
         stop.kind,
         stop.window,
-        [stop.name, formatLocationAddress(stop)].filter(Boolean).join("\n"),
+        stopLocationBlock(stop),
         stop.phone,
       ]),
-      navy,
     );
     y += 8;
     for (const stop of model.stops) {
       if (!stop.reference && !stop.cargo) continue;
       if (y > 720) {
         doc.addPage();
-        y = 36;
+        y = 40;
       }
       doc.font("Helvetica-Bold").fontSize(8).text(`Stop ${stop.sequence}`, left, y);
-      y += 11;
+      y += 10;
       if (stop.reference) {
         doc.font("Helvetica").fontSize(8).text(`References: ${stop.reference}`, left + 12, y, { width });
-        y += 11;
+        y += 10;
       }
       if (stop.cargo) {
         doc.font("Helvetica").fontSize(8).text(`Cargo: ${stop.cargo}`, left + 12, y, { width });
-        y += 11;
+        y += 10;
       }
     }
   }
 
   if (model.publicNotes?.trim()) {
-    y += 8;
-    doc.font("Helvetica-Bold").fontSize(9).text("Notes", left, y);
+    y += 6;
+    doc.font("Helvetica").fontSize(8).fillColor(ink).text(model.publicNotes, left, y, { width });
     y += 12;
-    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(model.publicNotes, left, y, { width });
-    y += 16;
   }
 
   const terms = defaults.terms_text.trim();
   const footer = defaults.footer_text.trim();
   if (terms) {
-    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(terms, left, y, { width });
+    y += 6;
+    doc.font("Helvetica").fontSize(8).fillColor(ink).text(terms, left, y, { width });
+    y += 10;
   }
   if (footer) {
-    doc.font("Helvetica").fontSize(8).fillColor("#6b7280").text(footer, left, 740, { width, align: "center" });
+    doc.font("Helvetica").fontSize(8).fillColor("#4b5563").text(footer, left, y, { width });
   }
 
   doc.end();
   return done;
+}
+
+function drawTotalsBox(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  total: number,
+  currency: string,
+): number {
+  const boxW = 176;
+  const boxX = x + width - boxW;
+  const rowH = 16;
+  const boxH = rowH * 2;
+  const money = formatInvoiceMoney(total, currency);
+  doc.rect(boxX, y, boxW, boxH).strokeColor("#111111").lineWidth(0.8).stroke();
+  doc.font("Helvetica").fontSize(8).fillColor("#111111");
+  doc.text("Subtotal", boxX + 8, y + 4, { width: 70, lineBreak: false });
+  doc.text(money, boxX + 78, y + 4, { width: 90, align: "right", lineBreak: false });
+  doc.rect(boxX, y + rowH, boxW, rowH).fill("#111111");
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#ffffff");
+  doc.text("Total", boxX + 8, y + rowH + 4, { width: 70, lineBreak: false });
+  doc.text(money, boxX + 78, y + rowH + 4, { width: 90, align: "right", lineBreak: false });
+  return y + boxH;
 }
 
 function drawTable(
@@ -387,31 +465,28 @@ function drawTable(
   headers: string[],
   widths: number[],
   rows: string[][],
-  navy: string,
 ): number {
-  const headerH = 16;
-  doc.rect(x, y, width, headerH).fill(navy);
+  const headerH = 15;
+  doc.rect(x, y, width, headerH).fill("#111111");
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
   let cx = x + 4;
   headers.forEach((header, index) => {
-    doc.text(header, cx, y + 4, { width: widths[index] - 8, lineBreak: false });
+    doc.text(header, cx, y + 3, { width: widths[index] - 8, lineBreak: false });
     cx += widths[index];
   });
   y += headerH;
   const startY = y;
   doc.font("Helvetica").fontSize(8).fillColor("#111111");
   rows.forEach((row, rowIndex) => {
-    const heights = row.map((cell, index) =>
-      doc.heightOfString(cell || " ", { width: widths[index] - 8 }),
-    );
-    const rowH = Math.max(16, ...heights) + 6;
+    const heights = row.map((cell, index) => doc.heightOfString(cell || " ", { width: widths[index] - 8 }));
+    const rowH = Math.max(15, ...heights) + 5;
     if (rowIndex % 2 === 1) {
       doc.rect(x, y, width, rowH).fill("#f3f4f6");
       doc.fillColor("#111111");
     }
     cx = x + 4;
     row.forEach((cell, index) => {
-      doc.fillColor("#111111").text(cell || "", cx, y + 4, { width: widths[index] - 8 });
+      doc.fillColor("#111111").text(cell || "", cx, y + 3, { width: widths[index] - 8 });
       cx += widths[index];
     });
     y += rowH;

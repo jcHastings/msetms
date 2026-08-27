@@ -635,6 +635,14 @@ export function migrate(db: Database): void {
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
+  db.prepare(
+    `UPDATE company_profile
+     SET street = '600 E 39th St',
+         city = 'Hastings',
+         state = CASE WHEN trim(state) = '' THEN 'NE' ELSE state END,
+         zip = CASE WHEN trim(zip) = '' THEN '68901' ELSE zip END
+     WHERE id = 1 AND trim(street) = '' AND trim(city) = ''`,
+  ).run();
 
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");

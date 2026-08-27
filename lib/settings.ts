@@ -69,6 +69,27 @@ export type DocumentDefaults = {
   font_size: number;
 };
 
+export const HASTINGS_OFFICE = {
+  street: "600 E 39th St",
+  city: "Hastings",
+  state: "NE",
+  zip: "68901",
+} as const;
+
+/** Hastings office when Settings street and city are both blank. Never overwrites a saved address. */
+export function withOfficeAddress<T extends { street: string; city: string; state: string; zip: string }>(
+  profile: T,
+): T {
+  if (profile.street.trim() || profile.city.trim()) return profile;
+  return {
+    ...profile,
+    street: HASTINGS_OFFICE.street,
+    city: HASTINGS_OFFICE.city,
+    state: profile.state.trim() || HASTINGS_OFFICE.state,
+    zip: profile.zip.trim() || HASTINGS_OFFICE.zip,
+  };
+}
+
 const SETTINGS_DEFAULTS: CompanySettings = {
   company_name: "M&S Loads",
   dispatcher_name: "MS Test",
@@ -153,7 +174,7 @@ export function getCompanySettings(): CompanySettings {
 }
 
 function normalizeSettings(row?: Partial<CompanySettings> | null): CompanySettings {
-  const merged = { ...SETTINGS_DEFAULTS, ...(row ?? {}) };
+  const merged = withOfficeAddress({ ...SETTINGS_DEFAULTS, ...(row ?? {}) });
   return {
     ...merged,
     currency: CURRENCIES.includes(merged.currency as (typeof CURRENCIES)[number]) ? merged.currency : "USD",
