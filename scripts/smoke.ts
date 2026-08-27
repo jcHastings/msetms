@@ -4694,6 +4694,14 @@ Continuous reefer. Two load locks.
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /FuelWeekStrip/);
+  assert.match(fuelPage, /FuelMpgTable/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /data-fuel-mpg/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /Drivers MPG/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8") +
+      fs.readFileSync(path.join(process.cwd(), "lib/fuel-mpg.ts"), "utf8"),
+    /maps\.google|pin-to-pin|Official IFTA|first-class|haversine/i,
+  );
   assert.match(fuelPage, /data-fuel-match-queue/);
   assert.match(fuelPage, /Receipt match/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
@@ -4741,6 +4749,7 @@ Continuous reefer. Two load locks.
     matchFuelDriver,
     classifyFuelCategory,
     fuelWeekPaidStats,
+    isTruckDieselCategory,
     parseEfsFuelText,
     looksLikeEfsReport,
     isFuelBucket,
@@ -4791,6 +4800,10 @@ Continuous reefer. Two load locks.
   assert.equal(weekPaid.minPpg, 3);
   assert.equal(weekPaid.maxPpg, 4);
   assert.equal(weekPaid.avgPpg, 3.5);
+  assert.equal(isTruckDieselCategory("truck_diesel"), true);
+  assert.equal(isTruckDieselCategory("Truck diesel"), true);
+  assert.equal(isTruckDieselCategory("reefer_diesel"), false);
+  assert.equal(isTruckDieselCategory("money_code"), false);
   const fuelWhen = new Date();
   const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
@@ -4837,6 +4850,57 @@ Continuous reefer. Two load locks.
   assert.equal(deniseFuel.week.reefer_diesel.gallons, 0);
   assert.equal(deniseFuel.week.def.gallons, 0);
   assert.equal(deniseFuel.week.scale.amount, 0);
+  const { listDriverMpg, odometerDeltaMiles } = await import("../lib/fuel-mpg");
+  const mpgNow = new Date();
+  const mpgBoard = listDriverMpg("week", mpgNow);
+  const activeRoster = queries.listDrivers().filter((driver) => queries.isDriverLoginEligible(driver));
+  assert.equal(mpgBoard.rows.length, activeRoster.length);
+  assert.ok(mpgBoard.rows.every((row) => activeRoster.some((driver) => driver.id === row.driverId)));
+  const deniseMpg = mpgBoard.rows.find((row) => row.driverName === "Denise Ortega");
+  assert.ok(deniseMpg);
+  assert.equal(deniseMpg.gallons, 100);
+  assert.equal(deniseMpg.miles, null);
+  assert.equal(deniseMpg.mpg, null);
+  const deniseTruck = queries.listTrucks().find((truck) => truck.unit_number === "112");
+  assert.ok(deniseTruck);
+  queries.saveTruckOdometer(deniseTruck.id, {
+    miles: 1000,
+    recordedAt: startOfLocalWeek(mpgNow).toISOString(),
+    source: "samsara",
+  });
+  queries.saveTruckOdometer(deniseTruck.id, {
+    miles: 1600,
+    recordedAt: mpgNow.toISOString(),
+    source: "samsara",
+  });
+  const deniseMpgLive = listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "Denise Ortega");
+  assert.ok(deniseMpgLive);
+  assert.equal(deniseMpgLive.miles, 600);
+  assert.equal(deniseMpgLive.mpg, 6);
+  assert.equal(listDriverMpg("week", mpgNow).rows[0]?.driverName, "Denise Ortega");
+  fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total",
+      `${fuelDate},17:00,Denise Ortega,112,REEFER ULTRA LOW SULFUR,20,3.40,68.00`,
+    ].join("\n"),
+    "reefer-mpg.csv",
+  );
+  assert.equal(listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "Denise Ortega")?.gallons, 100);
+  const reeferMpgRow = fuelStore
+    .listFuelTransactions()
+    .find((row) => row.category === "reefer_diesel" && row.driver_id === fuelDenise.id);
+  if (reeferMpgRow) fuelStore.deleteFuelTransaction(reeferMpgRow.id);
+  assert.equal(
+    odometerDeltaMiles(
+      [
+        { id: 1, truck_id: 1, recorded_at: "2026-08-24T04:00:00.000Z", miles: 10, source: "samsara" },
+        { id: 2, truck_id: 1, recorded_at: "2026-08-26T15:00:00.000Z", miles: 110, source: "samsara" },
+      ],
+      "2026-08-24T04:00:00.000Z",
+      "2026-08-26T15:00:00.000Z",
+    ),
+    100,
+  );
   const exportedFuel = renderFuelExportCsv(fuelStore.listFuelTransactions());
   assert.match(exportedFuel, /Denise Ortega/);
   assert.match(exportedFuel, /4321/);
@@ -7105,6 +7169,12 @@ Continuous reefer. Two load locks.
   assert.equal(linkedGps[0]?.unitNumber, "40", "linked Samsara id must win even when the name has other digits");
   assert.equal(linkedGps[0]?.address, "Oklahoma City, OK");
   assert.equal(samsara.extractSamsaraGps({ gps: [{ latitude: 35.4, longitude: -97.5, reverseGeo: { formattedLocation: "OKC" } }] }).address, "OKC");
+  const odometerMiles = samsara.extractSamsaraOdometerMiles({
+    obdOdometerMeters: { time: "2026-08-26T12:00:00.000Z", value: 160934.4 },
+  }).miles;
+  assert.ok(odometerMiles != null && Math.abs(odometerMiles - 100) < 0.01);
+  assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
   const { formatDate, formatDateTime, loadTouchesToday } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");

@@ -14,7 +14,7 @@ import {
   unionActiveSamsaraVehicles,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
-import { listDrivers, listLoads, listTrucks, persistedTruckLocation, saveTruckGps } from "../queries";
+import { listDrivers, listLoads, listTrucks, persistedTruckLocation, saveTruckGps, saveTruckOdometer } from "../queries";
 
 export { SAMSARA_ID_MISSING_MESSAGE };
 
@@ -250,7 +250,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
   if (!isSamsaraTokenSet()) return demo;
 
   const [stats, clocks, identities] = await Promise.all([
-    fetchFleetPages("/fleet/vehicles/stats", "gps"),
+    fetchVehicleStats(),
     fetchFleetPages("/fleet/hos/clocks"),
     fetchFleetPages("/fleet/vehicles"),
   ]);
@@ -267,6 +267,7 @@ async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
   );
   const inactiveVehicleIds = inactiveSamsaraVehicleIds(inactiveSource);
   const inactiveUnits = inactiveSamsaraUnits(inactiveSource);
+  persistLiveOdometer(stats.items, trucks);
   const locations = persistLiveGps(
     mapVehicleLocations({
       vehicles: stats.items,
@@ -468,6 +469,31 @@ export function extractSamsaraGps(vehicle: Record<string, unknown>): {
   };
 }
 
+const METERS_PER_MILE = 1609.344;
+
+export function extractSamsaraOdometerMiles(vehicle: Record<string, unknown>): {
+  miles: number | null;
+  recordedAt: string;
+} {
+  const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+  const raw =
+    vehicle.obdOdometerMeters ??
+    nested.obdOdometerMeters ??
+    vehicle.gpsOdometerMeters ??
+    nested.gpsOdometerMeters;
+  const rec = (Array.isArray(raw) ? raw[0] : raw) as Record<string, unknown> | number | undefined;
+  let meters: number | null = null;
+  let recordedAt = "";
+  if (typeof rec === "number") {
+    meters = rec;
+  } else if (rec && typeof rec === "object") {
+    meters = asNumber(rec.value ?? rec.meters);
+    recordedAt = typeof rec.time === "string" ? rec.time : "";
+  }
+  if (meters == null || meters < 0) return { miles: null, recordedAt };
+  return { miles: meters / METERS_PER_MILE, recordedAt };
+}
+
 export function mapVehicleLocations(input: {
   vehicles: Array<Record<string, unknown>>;
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
@@ -536,6 +562,38 @@ function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
     });
   }
   return locations;
+}
+
+function persistLiveOdometer(
+  vehicles: Array<Record<string, unknown>>,
+  trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>,
+): void {
+  const claimedTruckIds = new Set<number>();
+  for (const vehicle of vehicles) {
+    if (!samsaraRecordIsActive(vehicle)) continue;
+    const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+    const vehicleId = String(vehicle.id ?? nested.id ?? "");
+    const match = matchTruckForSamsaraLive(
+      trucks,
+      {
+        samsaraVehicleId: vehicleId,
+        name: String(vehicle.name ?? nested.name ?? ""),
+        unitNumber: String(vehicle.unitNumber ?? nested.unitNumber ?? ""),
+        vin: String(vehicle.vin ?? nested.vin ?? ""),
+        licensePlate: String(vehicle.licensePlate ?? nested.licensePlate ?? ""),
+      },
+      claimedTruckIds,
+    );
+    if (!match) continue;
+    claimedTruckIds.add(match.id);
+    const odometer = extractSamsaraOdometerMiles(vehicle);
+    if (odometer.miles == null) continue;
+    saveTruckOdometer(match.id, {
+      miles: odometer.miles,
+      recordedAt: odometer.recordedAt || new Date().toISOString(),
+      source: "samsara",
+    });
+  }
 }
 
 function mergePersistedGps(
@@ -718,6 +776,15 @@ function truckDriverRow(
     samsaraDriverName: samsaraDriverName || tms?.name || "",
     tmsDriverId: tms?.id ?? null,
   };
+}
+
+async function fetchVehicleStats(): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {
+  const withOdometer = await fetchFleetPages(
+    "/fleet/vehicles/stats",
+    "gps,obdOdometerMeters,gpsOdometerMeters",
+  );
+  if (withOdometer.items.length || !withOdometer.error) return withOdometer;
+  return fetchFleetPages("/fleet/vehicles/stats", "gps");
 }
 
 async function fetchFleetPages(

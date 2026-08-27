@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
+import { FuelMpgTable } from "@/components/fuel-mpg-table";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
@@ -11,7 +12,9 @@ import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { labelForFuelBucket } from "@/lib/fuel";
+import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { getFuelWeekPaidStats, listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
+import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default async function FuelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ driver?: string; truck?: string }>;
+  searchParams: Promise<{ driver?: string; truck?: string; mpg?: string }>;
 }) {
   const dispatcher = await getPageAccess(canUploadFuel);
   if (!dispatcher) {
@@ -28,6 +31,7 @@ export default async function FuelPage({
   const params = await searchParams;
   const driverId = Number.parseInt(params.driver ?? "", 10);
   const truckId = Number.parseInt(params.truck ?? "", 10);
+  const mpgPeriod = parseDriverMpgPeriod(params.mpg);
   const selectedDriverId = Number.isFinite(driverId) ? driverId : null;
   const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
   const drivers = listDrivers();
@@ -46,6 +50,8 @@ export default async function FuelPage({
   const driverRollups = listFuelRollups();
   const truckRollups = listTruckFuelRollups();
   const weekStats = getFuelWeekPaidStats();
+  await getSamsaraFleet();
+  const mpgBoard = listDriverMpg(mpgPeriod);
   const filterLabel = selectedDriver
     ? `Transactions — ${selectedDriver.name}`
     : selectedTruck
@@ -71,6 +77,11 @@ export default async function FuelPage({
         }
       />
       <FuelWeekStrip stats={weekStats} />
+      <FuelMpgTable
+        board={mpgBoard}
+        selectedDriverId={selectedDriverId}
+        selectedTruckId={selectedTruckId}
+      />
       <FuelCsvImport />
       <FuelMatchQueue />
 

@@ -623,6 +623,11 @@ export function isDieselPaidCategory(category: string): boolean {
   return classified === "truck_diesel" || classified === "reefer_diesel";
 }
 
+export function isTruckDieselCategory(category: string): boolean {
+  if (category === "truck_diesel") return true;
+  return classifyFuelCategory(category) === "truck_diesel";
+}
+
 function mean(values: number[]): number | null {
   if (values.length === 0) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;

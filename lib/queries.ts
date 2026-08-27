@@ -698,6 +698,54 @@ export function saveTruckGps(
     .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
 }
 
+export type TruckOdometerReading = {
+  id: number;
+  truck_id: number;
+  recorded_at: string;
+  miles: number;
+  source: string;
+};
+
+export function saveTruckOdometer(
+  id: number,
+  input: { miles: number; recordedAt: string; source: "samsara" },
+): void {
+  if (!getTruck(id)) return;
+  if (input.source !== "samsara") return;
+  if (!Number.isFinite(input.miles) || input.miles < 0) return;
+  const recordedAt = input.recordedAt.trim() || now();
+  const last = getDb()
+    .prepare(
+      `SELECT miles, recorded_at FROM truck_odometer_readings
+       WHERE truck_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    )
+    .get(id) as { miles: number; recorded_at: string } | undefined;
+  if (last && last.recorded_at === recordedAt && Math.abs(last.miles - input.miles) < 0.05) return;
+  getDb()
+    .prepare(
+      `INSERT INTO truck_odometer_readings (truck_id, recorded_at, miles, source, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(id, recordedAt, input.miles, input.source, now());
+}
+
+export function listTruckOdometerReadings(truckId?: number): TruckOdometerReading[] {
+  if (truckId != null) {
+    return getDb()
+      .prepare(
+        `SELECT id, truck_id, recorded_at, miles, source FROM truck_odometer_readings
+         WHERE truck_id = ? ORDER BY recorded_at ASC, id ASC`,
+      )
+      .all(truckId) as TruckOdometerReading[];
+  }
+  return getDb()
+    .prepare(
+      `SELECT id, truck_id, recorded_at, miles, source FROM truck_odometer_readings
+       ORDER BY recorded_at ASC, id ASC`,
+    )
+    .all() as TruckOdometerReading[];
+}
+
 export function persistedTruckLocation(truck: {
   id: number;
   unit_number: string;

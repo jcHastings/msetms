@@ -696,6 +696,18 @@ export function migrate(db: Database): void {
   db.prepare(
     `UPDATE trucks SET type = 'sleeper' WHERE type NOT IN ('sleeper', 'day_cab')`,
   ).run();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS truck_odometer_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      truck_id INTEGER NOT NULL REFERENCES trucks(id) ON DELETE CASCADE,
+      recorded_at TEXT NOT NULL,
+      miles REAL NOT NULL,
+      source TEXT NOT NULL DEFAULT 'samsara',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_truck_odometer_truck_time
+      ON truck_odometer_readings(truck_id, recorded_at);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
