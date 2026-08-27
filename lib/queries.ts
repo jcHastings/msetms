@@ -696,6 +696,8 @@ export function saveTruckGps(
        WHERE id = ?`,
     )
     .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
+  const { applyGeofenceArrivalsForTruck } = require("./geofence") as typeof import("./geofence");
+  applyGeofenceArrivalsForTruck(id);
 }
 
 export type TruckOdometerReading = {

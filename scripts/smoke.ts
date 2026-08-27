@@ -368,6 +368,20 @@ async function main() {
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
   assert.match(mapCanvasSource, /point\.href/);
+  assert.match(mapCanvasSource, /Polyline/);
+  const stopsMapUi = fs.readFileSync(path.join(process.cwd(), "components/load-stops-map.tsx"), "utf8");
+  assert.match(stopsMapUi, /data-stops-map/);
+  assert.match(stopsMapUi, /Map is off/);
+  assert.match(stopsMapUi, /No map yet/);
+  assert.doesNotMatch(stopsMapUi, /maps\.google\.com|GOOGLE_MAPS_API_KEY|geofence|Official IFTA|\.env/);
+  const stopsPanelUi = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
+  assert.match(stopsPanelUi, /draggable/);
+  assert.match(stopsPanelUi, /APPT/);
+  assert.match(stopsPanelUi, /FCFS/);
+  assert.match(stopsPanelUi, /Add Pickup/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /applyGeofenceArrivals\(loadId\)/);
   const mapLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8");
   assert.match(mapLibSource, /persistedTruckLocation/);
   assert.match(mapLibSource, /geocodeAddress/);
@@ -428,6 +442,7 @@ async function main() {
   assert.match(docsPage, /when="log"/);
   assert.match(docsPage, /LoadRoutingGuide/);
   assert.match(docsPage, /when="stops"/);
+  assert.match(docsPage, /LoadStopsMap/);
 
   const { closeDb, getDb, migrate } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -4283,6 +4298,7 @@ Continuous reefer. Two load locks.
   assert.equal(storedRoute?.route_source, "google");
   assert.match(storedRoute?.route_state_miles ?? "", /NY|PA|OH|IN|IL/);
   assert.match(storedRoute?.route_leg_miles ?? "", /800/);
+  assert.ok(String(storedRoute?.route_polyline ?? "").trim(), "Google Directions should store the route polyline");
   const { milesForStopGap } = await import("../lib/routing-shared");
   assert.equal(milesForStopGap(0, 2, { totalMiles: 12.3, legMiles: [] }), 12.3);
   assert.equal(milesForStopGap(0, 3, { totalMiles: 12.3, legMiles: [] }), null);
@@ -8392,9 +8408,153 @@ Continuous reefer. Two load locks.
   queries.assignLoad(followLoad, truckId, otherDriverId);
   assert.equal(queries.getLoad(followLoad)?.trailer_id, trailerForLast);
 
-  const { milesBetween, applyGeofenceArrivals } = await import("../lib/geofence");
+  const { milesBetween, applyGeofenceArrivals, GEOFENCE_MILES } = await import("../lib/geofence");
+  assert.equal(GEOFENCE_MILES, 2);
   assert.ok(milesBetween({ latitude: 41.2565, longitude: -95.9345 }, { latitude: 41.2565, longitude: -95.9345 }) < 0.01);
   assert.equal(applyGeofenceArrivals(followLoad), 0);
+  const fenceDock = queries.createLocation({
+    name: "Fence Dock",
+    street: "600 E 39th St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    phone: "",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 40.586,
+    longitude: -98.39,
+  });
+  const fenceTruckId = queries.createTruck({
+    unit_number: "FENCE-2",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const fenceDriverId = queries.createDriver({
+    name: "Fence Smoke",
+    phone: "555-0288",
+    license: "NE-CDL-FENCE",
+    pin: "2882",
+    truck_id: fenceTruckId,
+    status: "available",
+  });
+  const fenceLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Hastings, NE",
+    pickup_start: "2026-08-27T12:00:00.000Z",
+    pickup_end: "2026-08-27T18:00:00.000Z",
+    delivery_start: "2026-08-27T20:00:00.000Z",
+    delivery_end: "2026-08-27T22:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 700,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  loadStops.addStop(fenceLoadId, {
+    kind: "pickup",
+    name: "Fence Yard",
+    city: "Hastings",
+    state: "NE",
+    location_id: fenceDock,
+  });
+  const fenceStopId = loadStops.addStop(fenceLoadId, {
+    kind: "delivery",
+    name: "Fence Dock",
+    city: "Hastings",
+    state: "NE",
+    location_id: fenceDock,
+  });
+  queries.assignLoad(fenceLoadId, fenceTruckId, fenceDriverId);
+  queries.saveTruckGps(fenceTruckId, {
+    latitude: 40.6,
+    longitude: -98.39,
+    address: "Hastings, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  assert.ok(milesBetween({ latitude: 40.586, longitude: -98.39 }, { latitude: 40.6, longitude: -98.39 }) < 2);
+  assert.ok(milesBetween({ latitude: 40.586, longitude: -98.39 }, { latitude: 40.63, longitude: -98.39 }) > 2);
+  const stampedFence = loadStops.getStop(fenceStopId);
+  assert.ok(stampedFence?.arrived_at, "Samsara GPS inside 2 miles should stamp Arrived");
+  const keptArrival = stampedFence.arrived_at;
+  queries.saveTruckGps(fenceTruckId, {
+    latitude: 40.587,
+    longitude: -98.39,
+    address: "Hastings, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  assert.equal(loadStops.getStop(fenceStopId)?.arrived_at, keptArrival);
+  const farLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Hastings, NE",
+    pickup_start: "2026-08-28T12:00:00.000Z",
+    pickup_end: "2026-08-28T18:00:00.000Z",
+    delivery_start: "2026-08-28T20:00:00.000Z",
+    delivery_end: "2026-08-28T22:00:00.000Z",
+    weight: 1,
+    commodity: "Beef",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  const farStopId = loadStops.addStop(farLoadId, {
+    kind: "delivery",
+    name: "Fence Dock",
+    city: "Hastings",
+    state: "NE",
+    location_id: fenceDock,
+  });
+  const farTruckId = queries.createTruck({
+    unit_number: "FENCE-FAR",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const farDriverId = queries.createDriver({
+    name: "Fence Far Smoke",
+    phone: "555-0289",
+    license: "NE-CDL-FENCE-F",
+    pin: "2892",
+    truck_id: farTruckId,
+    status: "available",
+  });
+  queries.assignLoad(farLoadId, farTruckId, farDriverId);
+  queries.saveTruckGps(farTruckId, {
+    latitude: 40.63,
+    longitude: -98.39,
+    address: "Away, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  assert.equal(loadStops.getStop(farStopId)?.arrived_at, "");
+  const { buildStopsMapModel } = await import("../lib/load-map");
+  const fenceMap = await buildStopsMapModel(fenceLoadId);
+  assert.ok(fenceMap.points.some((point) => point.kind === "delivery"));
+  assert.ok(fenceMap.points.some((point) => point.kind === "truck"));
+  assert.ok(fenceMap.path.length >= 2);
 
   const newLoadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
   assert.match(newLoadPage, /RateConImport/);

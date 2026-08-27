@@ -687,6 +687,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "route_state_miles", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_calculated_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "route_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "route_polyline", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "tms_invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "tms_invoice_at", "TEXT NOT NULL DEFAULT ''");
   db.prepare("UPDATE dispatchers SET name = 'MS Test' WHERE name = 'Ana G' AND pin = '4020'").run();

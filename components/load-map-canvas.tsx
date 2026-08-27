@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { LoadMapPoint } from "@/lib/load-map-shared";
+import type { LoadMapPathPoint, LoadMapPoint } from "@/lib/load-map-shared";
 
 type GoogleMaps = {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => {
@@ -10,6 +10,7 @@ type GoogleMaps = {
   Marker: new (opts: Record<string, unknown>) => {
     addListener: (event: string, handler: () => void) => void;
   };
+  Polyline: new (opts: Record<string, unknown>) => unknown;
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
   SymbolPath: { CIRCLE: unknown };
 };
@@ -58,33 +59,48 @@ function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
 export function LoadMapCanvas({
   apiKey,
   points,
+  path,
   className,
   missingKeyMessage,
   emptyMessage,
 }: {
   apiKey: string;
   points: LoadMapPoint[];
+  path?: LoadMapPathPoint[];
   className?: string;
   missingKeyMessage?: string;
   emptyMessage?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const route = path ?? [];
+  const hasMap = points.length > 0 || route.length > 0;
 
   useEffect(() => {
     const el = host.current;
-    if (!el || !apiKey || points.length === 0) return;
+    if (!el || !apiKey || !hasMap) return;
     let cancelled = false;
     void loadMapsScript(apiKey)
       .then((maps) => {
         if (cancelled || !host.current) return;
+        const start = points[0] ?? route[0];
         const map = new maps.Map(host.current, {
-          center: { lat: points[0].lat, lng: points[0].lng },
-          zoom: points.length === 1 ? 8 : 5,
+          center: { lat: start.lat, lng: start.lng },
+          zoom: points.length + route.length === 1 ? 8 : 5,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
         });
         const bounds = new maps.LatLngBounds();
+        if (route.length >= 2) {
+          new maps.Polyline({
+            map,
+            path: route,
+            strokeColor: "#0b1f3a",
+            strokeOpacity: 0.85,
+            strokeWeight: 4,
+          });
+          for (const point of route) bounds.extend(point);
+        }
         for (const point of points) {
           const position = { lat: point.lat, lng: point.lng };
           const marker = new maps.Marker({
@@ -117,13 +133,13 @@ export function LoadMapCanvas({
           }
           bounds.extend(position);
         }
-        if (points.length > 1) map.fitBounds(bounds);
+        if (points.length + route.length > 1) map.fitBounds(bounds);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [apiKey, points]);
+  }, [apiKey, hasMap, points, route]);
 
   if (!apiKey) {
     return (
@@ -132,7 +148,7 @@ export function LoadMapCanvas({
       </p>
     );
   }
-  if (points.length === 0) {
+  if (!hasMap) {
     return (
       <p className="px-4 py-8 text-sm text-slate-600">
         {emptyMessage ?? "No GPS pins."}

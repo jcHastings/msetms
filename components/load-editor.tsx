@@ -10,6 +10,7 @@ import { LoadForm } from "@/components/load-form";
 import { LoadPayItems } from "@/components/load-pay-items";
 import { LoadRelaysPanel } from "@/components/load-relays-panel";
 import { LoadRoutingGuide } from "@/components/load-routing-guide";
+import { LoadStopsMap } from "@/components/load-stops-map";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
@@ -160,6 +161,7 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
+          <LoadStopsMap loadId={load.id} />
           <LoadStopsPanel
             loadId={load.id}
             stops={stops}

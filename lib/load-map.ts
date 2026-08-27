@@ -4,10 +4,14 @@ import { getGoogleMapsApiKey } from "./env";
 import { getTrailerLocationForLoad } from "./integrations/orbcomm";
 import { getLocationForLoad } from "./integrations/samsara";
 import {
+  pathThroughStops,
   stopAddressLine,
+  stopsRoutePoints,
+  type LoadMapPathPoint,
   type LoadMapPoint,
   type LoadTrackingEvent,
 } from "./load-map-shared";
+import { decodePolyline } from "./routing";
 import {
   getLoad,
   getLocation,
@@ -52,6 +56,25 @@ async function trailerGpsForLoad(loadId: number, trailerId: number | null) {
   const trailer = getTrailer(trailerId);
   if (!trailer) return null;
   return storedGps(persistedTrailerLocation(trailer), "orbcomm");
+}
+
+export function storedRoutePath(loadId: number): LoadMapPathPoint[] {
+  const load = getLoad(loadId);
+  const encoded = String(load?.route_polyline ?? "").trim();
+  if (!encoded) return [];
+  return decodePolyline(encoded);
+}
+
+export async function buildStopsMapModel(loadId: number): Promise<{
+  points: LoadMapPoint[];
+  path: LoadMapPathPoint[];
+}> {
+  const points = stopsRoutePoints(await buildLoadMapPoints(loadId));
+  const stored = storedRoutePath(loadId);
+  return {
+    points,
+    path: stored.length >= 2 ? stored : pathThroughStops(points),
+  };
 }
 
 export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]> {

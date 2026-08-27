@@ -21,6 +21,18 @@ export type LoadTrackingEvent = {
   source: "check_call" | "samsara" | "orbcomm" | "status" | "sms";
 };
 
+export type LoadMapPathPoint = { lat: number; lng: number };
+
+export function stopsRoutePoints(points: LoadMapPoint[]): LoadMapPoint[] {
+  return points.filter((point) => point.kind === "pickup" || point.kind === "delivery" || point.kind === "truck");
+}
+
+export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
+  return points
+    .filter((point) => point.kind === "pickup" || point.kind === "delivery")
+    .map((point) => ({ lat: point.lat, lng: point.lng }));
+}
+
 export function stopAddressLine(stop: {
   street?: string;
   city?: string;

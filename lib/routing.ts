@@ -144,13 +144,16 @@ function persistRoute(
     legMiles?: number[];
     states: RouteStateMile[];
     source: LoadRouteGuide["source"];
+    polyline?: string;
   },
 ): LoadRouteGuide {
   const timestamp = new Date().toISOString();
   const legMiles = input.legMiles ?? [];
+  const existing = getLoad(loadId);
+  const polyline = input.polyline !== undefined ? input.polyline : String(existing?.route_polyline ?? "");
   getDb()
     .prepare(
-      `UPDATE loads SET route_miles = ?, route_leg_miles = ?, route_state_miles = ?, route_calculated_at = ?, route_source = ?, updated_at = ?
+      `UPDATE loads SET route_miles = ?, route_leg_miles = ?, route_state_miles = ?, route_calculated_at = ?, route_source = ?, route_polyline = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -159,6 +162,7 @@ function persistRoute(
       input.states.length ? serializeRouteStateMiles(input.states) : "",
       timestamp,
       input.source,
+      polyline,
       timestamp,
       loadId,
     );
@@ -261,7 +265,7 @@ export async function refreshLoadRoute(
   try {
     const { totalMiles, legMiles, points } = await fetchGoogleDirections(usable);
     const states = estimateStateMiles(points, totalMiles);
-    persistRoute(loadId, { totalMiles, legMiles, states, source: "google" });
+    persistRoute(loadId, { totalMiles, legMiles, states, source: "google", polyline: encodePolyline(points) });
     recordLoadAudit({
       loadId,
       action: "route",
