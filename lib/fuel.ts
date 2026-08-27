@@ -1,5 +1,6 @@
 import { parseCsvRecords } from "./location-csv";
 import { renderUtf8Csv } from "./csv";
+import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
 import { looksLikeFleetOneReport, parseFleetOneFuelText } from "./fuel-fleetone";
 import type { DriverWithTruck, TruckWithDriver } from "./types";
 
@@ -535,15 +536,127 @@ function efsLocationFromHead(head: string): string {
   return [city, stateMatch[1], after].filter(Boolean).join(" ");
 }
 
+const WEEKDAY_SUN0: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function padYmdPart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+export function addYmdDays(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + days));
+  return `${utc.getUTCFullYear()}-${padYmdPart(utc.getUTCMonth() + 1)}-${padYmdPart(utc.getUTCDate())}`;
+}
+
+function timeZoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const num = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const asUtc = Date.UTC(num("year"), num("month") - 1, num("day"), num("hour"), num("minute"), num("second"));
+  return asUtc - instant.getTime();
+}
+
+export function zonedWallToUtc(
+  ymd: string,
+  hours: number,
+  minutes: number,
+  seconds: number,
+  timeZone = DISPLAY_TIME_ZONE,
+): Date {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day, hours, minutes, seconds);
+  const offset1 = timeZoneOffsetMs(new Date(utcGuess), timeZone);
+  const instant = utcGuess - offset1;
+  const offset2 = timeZoneOffsetMs(new Date(instant), timeZone);
+  return new Date(utcGuess - offset2);
+}
+
+function weekdaySun0InTimeZone(date: Date, timeZone = DISPLAY_TIME_ZONE): number {
+  const label = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(date);
+  return WEEKDAY_SUN0[label] ?? 0;
+}
+
 export function startOfLocalWeek(now = new Date()): Date {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
-  return start;
+  const ymd = ymdInTimeZone(now, DISPLAY_TIME_ZONE);
+  const daysFromMonday = (weekdaySun0InTimeZone(now) + 6) % 7;
+  return zonedWallToUtc(addYmdDays(ymd, -daysFromMonday), 0, 0, 0);
 }
 
 export function startOfLocalMonth(now = new Date()): Date {
-  return new Date(now.getFullYear(), now.getMonth(), 1);
+  const ymd = ymdInTimeZone(now, DISPLAY_TIME_ZONE);
+  return zonedWallToUtc(`${ymd.slice(0, 8)}01`, 0, 0, 0);
+}
+
+export type FuelWeekPaidStats = {
+  weekStartYmd: string;
+  weekEndYmd: string;
+  count: number;
+  minAmount: number | null;
+  maxAmount: number | null;
+  avgAmount: number | null;
+  ppgCount: number;
+  minPpg: number | null;
+  maxPpg: number | null;
+  avgPpg: number | null;
+};
+
+export function isDieselPaidCategory(category: string): boolean {
+  return category === "truck_diesel" || category === "reefer_diesel";
+}
+
+function mean(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function fuelWeekPaidStats(
+  rows: Array<Pick<FuelTransaction, "occurred_at" | "category" | "amount" | "price_per_gallon">>,
+  now = new Date(),
+): FuelWeekPaidStats {
+  const weekStart = startOfLocalWeek(now);
+  const weekStartYmd = ymdInTimeZone(weekStart, DISPLAY_TIME_ZONE);
+  const weekEndYmd = addYmdDays(weekStartYmd, 6);
+  const weekEnd = zonedWallToUtc(addYmdDays(weekStartYmd, 7), 0, 0, 0);
+  const startMs = weekStart.getTime();
+  const endMs = weekEnd.getTime();
+  const amounts: number[] = [];
+  const ppgs: number[] = [];
+  for (const row of rows) {
+    if (!isDieselPaidCategory(row.category)) continue;
+    const at = Date.parse(row.occurred_at);
+    if (!Number.isFinite(at) || at < startMs || at >= endMs) continue;
+    if (row.amount != null && Number.isFinite(row.amount)) amounts.push(row.amount);
+    if (row.price_per_gallon != null && Number.isFinite(row.price_per_gallon)) ppgs.push(row.price_per_gallon);
+  }
+  return {
+    weekStartYmd,
+    weekEndYmd,
+    count: amounts.length,
+    minAmount: amounts.length ? Math.min(...amounts) : null,
+    maxAmount: amounts.length ? Math.max(...amounts) : null,
+    avgAmount: mean(amounts),
+    ppgCount: ppgs.length,
+    minPpg: ppgs.length ? Math.min(...ppgs) : null,
+    maxPpg: ppgs.length ? Math.max(...ppgs) : null,
+    avgPpg: mean(ppgs),
+  };
 }
 
 export function parseFuelNumber(value: string): number | null {

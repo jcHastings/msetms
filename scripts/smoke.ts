@@ -4693,8 +4693,14 @@ Continuous reefer. Two load locks.
   const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
+  assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /data-fuel-match-queue/);
   assert.match(fuelPage, /Receipt match/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Highest paid/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Average paid/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekPaidStats/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /fuel_receipt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-fuel-receipt.tsx"), "utf8"), /fuel_receipt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /REPORT_EXPORT_COLUMNS/);
@@ -4734,6 +4740,7 @@ Continuous reefer. Two load locks.
     cardLast4From,
     matchFuelDriver,
     classifyFuelCategory,
+    fuelWeekPaidStats,
     parseEfsFuelText,
     looksLikeEfsReport,
     isFuelBucket,
@@ -4743,9 +4750,11 @@ Continuous reefer. Two load locks.
     parseFuelWhen,
     renderFuelExportCsv,
     renderFuelTemplate,
+    startOfLocalWeek,
     FUEL_CSV_HEADERS,
     FUEL_BUCKETS,
   } = await import("../lib/fuel");
+  const { DISPLAY_TIME_ZONE, ymdInTimeZone } = await import("../lib/format");
   const fuelStore = await import("../lib/fuel-store");
   assert.deepEqual(
     FUEL_BUCKETS.map((bucket) => bucket.value),
@@ -4758,8 +4767,32 @@ Continuous reefer. Two load locks.
   assert.equal(noon.getDate(), 21);
   assert.equal(noon.getHours(), 14);
   assert.equal(cardLast4From("************4321"), "4321");
+  const wedNy = new Date("2026-08-26T15:00:00.000Z");
+  assert.equal(ymdInTimeZone(startOfLocalWeek(wedNy), DISPLAY_TIME_ZONE), "2026-08-24");
+  assert.equal(ymdInTimeZone(startOfLocalWeek(new Date("2026-08-30T22:00:00.000Z")), DISPLAY_TIME_ZONE), "2026-08-24");
+  assert.equal(ymdInTimeZone(startOfLocalWeek(new Date("2026-08-31T08:00:00.000Z")), DISPLAY_TIME_ZONE), "2026-08-31");
+  const weekPaid = fuelWeekPaidStats(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100, price_per_gallon: 3 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "reefer_diesel", amount: 300, price_per_gallon: 4 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "money_code", amount: 500, price_per_gallon: null },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "def", amount: 20, price_per_gallon: null },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "scale", amount: 18, price_per_gallon: null },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "", amount: 999, price_per_gallon: null },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50, price_per_gallon: 2 },
+    ],
+    wedNy,
+  );
+  assert.equal(weekPaid.count, 2);
+  assert.equal(weekPaid.minAmount, 100);
+  assert.equal(weekPaid.maxAmount, 300);
+  assert.equal(weekPaid.avgAmount, 200);
+  assert.equal(weekPaid.minPpg, 3);
+  assert.equal(weekPaid.maxPpg, 4);
+  assert.equal(weekPaid.avgPpg, 3.5);
   const fuelWhen = new Date();
-  const fuelDate = `${fuelWhen.getMonth() + 1}/${fuelWhen.getDate()}/${fuelWhen.getFullYear()}`;
+  const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
+  const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
     `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,

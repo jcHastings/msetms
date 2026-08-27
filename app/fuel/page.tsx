@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
+import { FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelAssignForm } from "@/components/fuel-assign-form";
 import { FuelDeleteButton } from "@/components/fuel-delete-button";
@@ -10,7 +11,7 @@ import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { labelForFuelBucket } from "@/lib/fuel";
-import { listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
+import { getFuelWeekPaidStats, listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export default async function FuelPage({
   const unmatched = listFuelTransactions({ unmatchedOnly: true });
   const driverRollups = listFuelRollups();
   const truckRollups = listTruckFuelRollups();
+  const weekStats = getFuelWeekPaidStats();
   const filterLabel = selectedDriver
     ? `Transactions — ${selectedDriver.name}`
     : selectedTruck
@@ -68,6 +70,7 @@ export default async function FuelPage({
           </>
         }
       />
+      <FuelWeekStrip stats={weekStats} />
       <FuelCsvImport />
       <FuelMatchQueue />
 

@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import {
   emptyPeriodTotals,
+  fuelWeekPaidStats,
   isFuelBucket,
   matchFuelDriver,
   parseFuelReport,
@@ -10,6 +11,7 @@ import {
   type FuelPeriodTotals,
   type FuelRollup,
   type FuelTransactionView,
+  type FuelWeekPaidStats,
 } from "./fuel";
 import { listDrivers, listTrucks } from "./queries";
 
@@ -216,4 +218,8 @@ export function getDriverFuelRollup(driverId: number, now = new Date()): FuelRol
       ...toRollup(driverId, ""),
     }
   );
+}
+
+export function getFuelWeekPaidStats(now = new Date()): FuelWeekPaidStats {
+  return fuelWeekPaidStats(listFuelTransactions(), now);
 }
