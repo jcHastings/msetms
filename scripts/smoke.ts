@@ -241,7 +241,7 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
-  assert.match(workspaceSource, /Send to Accounting Management/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/send-to-accounting.tsx"), "utf8"), /Send to Accounting Management/);
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
