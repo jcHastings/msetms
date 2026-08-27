@@ -131,6 +131,21 @@ export function loadTouchesToday(
   );
 }
 
+export function shortPlaceLabel(place: string): string {
+  const text = String(place ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const matches = [...text.matchAll(/([A-Za-z][A-Za-z .'-]*?),\s*([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?/g)];
+  const last = matches.at(-1);
+  if (last) return `${last[1].replace(/\s+/g, " ").trim()}, ${last[2]}`;
+  return text;
+}
+
+export function gpsMotionLabel(speedMph: number | null | undefined): string {
+  if (speedMph == null || !Number.isFinite(speedMph)) return "";
+  if (speedMph < 3) return "Parked";
+  return `${Math.round(speedMph)} mph`;
+}
+
 export function formatStopWindow(start: string, end: string): string {
   const from = start.trim() ? formatDateTime(start) : "";
   const to = end.trim() ? formatDateTime(end) : "";

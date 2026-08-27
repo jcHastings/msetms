@@ -13,7 +13,7 @@ import { useLoadEdit } from "@/components/load-edit-context";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
-import { formatStopWindow, toInputDateTime } from "@/lib/format";
+import { formatDateTime, formatStopWindow, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import type { LoadStop } from "@/lib/stops";
 import type { Location } from "@/lib/types";
@@ -57,13 +57,9 @@ export function LoadStopsPanel({
 
   return (
     <section data-load-tab="stops" className="card overflow-hidden">
-      <div className="section-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+      <div className="section-head flex flex-wrap items-center justify-between gap-2 px-4 py-2">
         <div>
           <h2 className="text-sm font-semibold">Stops</h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Add Stop opens a popup for location, appointment, PO, and notes. Appointment time stays on the
-            list and saves in place. Drag a row to reorder — miles follow the new order.
-          </p>
         </div>
         <div className="flex gap-2">
           <button type="button" className="btn btn-secondary" onClick={() => setDialog({ mode: "add", kind: "pickup" })}>
@@ -78,11 +74,11 @@ export function LoadStopsPanel({
           </button>
         </div>
       </div>
-      <div className="space-y-4 p-5">
+      <div className="space-y-1 p-2">
         {orderedStops.length === 0 ? (
-          <p className="text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
+          <p className="px-3 py-4 text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
         ) : (
-          <div className="space-y-3" data-stops-grid="">
+          <div className="space-y-1" data-stops-grid="">
             {orderedStops.map((stop, index) => (
               <StopGridBlock
                 key={stop.id}
@@ -290,7 +286,9 @@ function StopDialog({
             <p className="stop-front-address mt-1">{formatLocationAddress(draft)}</p>
           ) : null}
           {mode === "edit" && isAssignEdit(persistedLocationId, draft.locationId) ? (
-            <p className="mt-1 text-[11px] text-slate-500">Save to keep this location change.</p>
+            <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
+              Save to keep this location change.
+            </p>
           ) : null}
         </div>
         <input type="hidden" name="name" value={draft.name} />
@@ -443,6 +441,7 @@ function StopGridBlock({
   const pickup = kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end);
   const address = formatLocationAddress(draft);
+  const city = [draft.city, draft.state].filter(Boolean).join(", ") || address;
   const rules = locationRuleLabels(
     locations.find((location) => String(location.id) === draft.locationId) ??
       matchLocationForStop(locations, {
@@ -452,13 +451,16 @@ function StopGridBlock({
         state: draft.state,
       }),
   );
+  const arrivedLabel = stop.arrived_at ? formatDateTime(stop.arrived_at) : "—";
+  const departedLabel = stop.departed_at ? formatDateTime(stop.departed_at) : "—";
   return (
     <>
       <article
-        className={`rounded-lg border border-slate-200 p-3 ${pickup ? "stop-row-pickup" : "stop-row-delivery"} ${
+        className={`rounded-md border border-slate-200 px-2 py-1 ${pickup ? "stop-row-pickup" : "stop-row-delivery"} ${
           dragging ? "opacity-70" : ""
         }`}
         data-stop-front=""
+        title={rules.join(" · ")}
         draggable
         onDragStart={onDragStart}
         onDragOver={(event) => {
@@ -475,151 +477,39 @@ function StopGridBlock({
           <input type="hidden" name="stop_id" value={stop.id} />
         </form>
         <div className="stop-front">
+          <span className="cursor-grab text-xs font-semibold text-slate-400" aria-hidden>
+            ⋮⋮
+          </span>
+          <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
+            #{index} {pickup ? "Pickup" : "Delivery"}
+          </span>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm font-semibold">{draft.name}</div>
+            <div className="stop-front-address truncate">{city || "—"}</div>
+          </div>
           <div className="stop-front-window" data-stop-window="">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              {pickup ? "Pickup window" : "Delivery window"}
-            </div>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {windowLabel || `No ${pickup ? "pickup" : "delivery"} time yet`}
-            </p>
-            <input
-              form={`stop-form-${stop.id}`}
-              name="window_start"
-              type="datetime-local"
-              className="mt-2 w-full"
-              value={draft.windowStart}
-              onChange={(event) => {
-                setDraft((current) => ({ ...current, windowStart: event.target.value }));
-              }}
-              onBlur={(event) => {
-                const next = { ...draft, windowStart: event.target.value };
-                setDraft(next);
-                if (next.windowStart !== toInputDateTime(stop.window_start)) void persistStop(next);
-              }}
-            />
-            <input
-              form={`stop-form-${stop.id}`}
-              name="window_end"
-              type="datetime-local"
-              className="mt-1 w-full"
-              value={draft.windowEnd}
-              onChange={(event) => {
-                setDraft((current) => ({ ...current, windowEnd: event.target.value }));
-              }}
-              onBlur={(event) => {
-                const next = { ...draft, windowEnd: event.target.value };
-                setDraft(next);
-                if (next.windowEnd !== toInputDateTime(stop.window_end)) void persistStop(next);
-              }}
-            />
-            <select
-              className="mt-2 w-full"
-              value={draft.scheduleType}
-              onChange={(event) => {
-                const next = { ...draft, scheduleType: event.target.value };
-                setDraft(next);
-                void persistStop(next);
-              }}
-            >
-              <option value="">From location</option>
-              <option value="appointment">APPT</option>
-              <option value="fcfs">FCFS</option>
-            </select>
-            <label className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Arrived
-            </label>
-            <input
-              type="datetime-local"
-              className="mt-1 w-full"
-              value={draft.arrivedAt}
-              onChange={(event) => setDraft((current) => ({ ...current, arrivedAt: event.target.value }))}
-              onBlur={(event) => {
-                const next = { ...draft, arrivedAt: event.target.value };
-                setDraft(next);
-                if (next.arrivedAt !== toInputDateTime(stop.arrived_at)) void persistStop(next);
-              }}
-            />
-            <label className="mt-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Departed
-            </label>
-            <input
-              type="datetime-local"
-              className="mt-1 w-full"
-              value={draft.departedAt}
-              onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))}
-              onBlur={(event) => {
-                const next = { ...draft, departedAt: event.target.value };
-                setDraft(next);
-                if (next.departedAt !== toInputDateTime(stop.departed_at)) void persistStop(next);
-              }}
-            />
+            {windowLabel || "No window"}
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="cursor-grab text-xs font-semibold text-slate-400" aria-hidden>
-                ⋮⋮
-              </span>
-              <div className="text-xs font-semibold text-slate-500">#{index}</div>
-              <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
-                {pickup ? "Pickup" : "Delivery"}
-              </span>
-              <select
-                form={`stop-form-${stop.id}`}
-                name="kind"
-                value={kind}
-                onChange={(event) => {
-                  const next = event.target.value as "pickup" | "delivery";
-                  setKind(next);
-                  if (next !== stop.kind) void persistStop(draft, next);
-                }}
-                className={pickup ? "stop-kind-pickup" : "stop-kind-delivery"}
-              >
-                <option value="pickup">Pickup</option>
-                <option value="delivery">Delivery</option>
-              </select>
-            </div>
-            <input
-              form={`stop-form-${stop.id}`}
-              name="name"
-              value={draft.name}
-              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-              required
-            />
-            <LocationPicker
-              form={`stop-form-${stop.id}`}
-              name="location_id"
-              locations={locations}
-              value={draft.locationId}
-              onChange={pickLocation}
-              emptyLabel="One-off address"
-              placeholder="Type any name or address"
-            />
-            {address ? <p className="stop-front-address mt-1">{address}</p> : null}
-            <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
-              {saving
-                ? "Saving location…"
-                : isAssignEdit(persistedLocationId, draft.locationId)
-                  ? "Save to keep this location change."
-                  : saved || persistedLocationId
-                    ? "Location is saved on this stop."
-                    : "Pick a saved location — the first pick stays without Save."}
-            </p>
-            {rules.map((rule) => (
-              <p key={rule} className="mt-1 text-xs font-semibold text-amber-800" data-location-rule="">
-                {rule}
-              </p>
-            ))}
+          <div className="whitespace-nowrap text-[11px] leading-tight text-slate-600">
+            <div>Arr {arrivedLabel}</div>
+            <div>Dep {departedLabel}</div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <button type="button" className="btn btn-secondary" onClick={onEdit}>
-              Edit notes
-            </button>
-            <button className="btn btn-ghost text-rose-700" type="submit" form={`stop-form-${stop.id}`} formAction={deleteStopAction}>
-              Remove
-            </button>
-          </div>
+          <button type="button" className="btn btn-ghost px-2 py-1 text-xs" onClick={onEdit}>
+            Edit notes
+          </button>
+          <button
+            className="btn btn-ghost px-2 py-1 text-xs text-rose-700"
+            type="submit"
+            form={`stop-form-${stop.id}`}
+            formAction={deleteStopAction}
+          >
+            Remove
+          </button>
         </div>
         <div className="hidden">
+          <input form={`stop-form-${stop.id}`} name="kind" value={kind} readOnly />
+          <input form={`stop-form-${stop.id}`} name="name" value={draft.name} readOnly />
+          <input form={`stop-form-${stop.id}`} name="location_id" value={draft.locationId} readOnly />
           <input form={`stop-form-${stop.id}`} name="street" value={draft.street} readOnly />
           <input form={`stop-form-${stop.id}`} name="city" value={draft.city} readOnly />
           <input form={`stop-form-${stop.id}`} name="state" value={draft.state} readOnly />

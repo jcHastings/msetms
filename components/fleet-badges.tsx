@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, gpsMotionLabel, shortPlaceLabel } from "@/lib/format";
 import type { TrailerLocation } from "@/lib/integrations/orbcomm";
 import {
   formatDutyStatus,
@@ -9,6 +9,11 @@ import {
   type VehicleLocation,
 } from "@/lib/integrations/samsara";
 
+function coordsLabel(lat: number | null | undefined, lng: number | null | undefined): string {
+  if (lat == null || lng == null) return "";
+  return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+}
+
 export function LocationBadge({
   location,
   empty = "—",
@@ -17,36 +22,28 @@ export function LocationBadge({
   empty?: string;
 }) {
   if (!isLiveSamsaraGps(location)) {
-    return <span className="text-sm text-slate-600">{empty}</span>;
+    return <span className="text-xs text-slate-600">{empty}</span>;
   }
-  const label =
-    location.address ||
-    (location.latitude != null && location.longitude != null
-      ? `${location.latitude.toFixed(3)}, ${location.longitude.toFixed(3)}`
-      : empty);
+  const city =
+    shortPlaceLabel(location.address) || coordsLabel(location.latitude, location.longitude) || empty;
+  const motion = gpsMotionLabel(location.speedMph);
+  const title = [location.address, motion, formatDateTime(location.recordedAt)].filter(Boolean).join(" · ");
   return (
-    <div className="text-sm">
-      <div>{label}</div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">
-        {location.source} {location.speedMph != null ? `· ${Math.round(location.speedMph)} mph` : ""}
-      </div>
-      <div className="text-[11px] text-slate-400">{formatDateTime(location.recordedAt)}</div>
+    <div className="leading-tight text-xs" title={title}>
+      <div>{city}</div>
+      {motion ? <div className="text-slate-500">{motion}</div> : null}
     </div>
   );
 }
 
 export function TrailerLocationBadge({ location }: { location: TrailerLocation | null }) {
-  if (!location) return <span className="text-slate-400">—</span>;
-  const label =
-    location.address ||
-    (location.latitude != null && location.longitude != null
-      ? `${location.latitude.toFixed(3)}, ${location.longitude.toFixed(3)}`
-      : "—");
+  if (!location) return <span className="text-xs text-slate-400">—</span>;
+  const city =
+    shortPlaceLabel(location.address) || coordsLabel(location.latitude, location.longitude) || "—";
+  const title = [location.address, formatDateTime(location.recordedAt)].filter(Boolean).join(" · ");
   return (
-    <div className="text-sm">
-      <div>{label}</div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{location.source}</div>
-      <div className="text-[11px] text-slate-400">{formatDateTime(location.recordedAt)}</div>
+    <div className="leading-tight text-xs" title={title}>
+      {city}
     </div>
   );
 }
@@ -59,17 +56,20 @@ export function HosBadge({
   empty?: string;
 }) {
   if (!isLiveSamsaraHos(hos)) {
-    return <span className="text-sm text-slate-600">{empty}</span>;
+    return <span className="text-xs text-slate-600">{empty}</span>;
   }
+  const drive = formatDurationMs(hos.driveRemainingMs);
+  const title = [
+    formatDutyStatus(hos.dutyStatus),
+    drive !== "—" ? `${drive} drive` : "",
+    hos.shiftRemainingMs != null ? `${formatDurationMs(hos.shiftRemainingMs)} on-duty` : "",
+    hos.cycleRemainingMs != null ? `${formatDurationMs(hos.cycleRemainingMs)} cycle` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <div className="text-sm">
-      <div className="font-semibold">{formatDutyStatus(hos.dutyStatus) || "HOS"}</div>
-      <div className="tabular-nums text-[11px] text-slate-600">
-        {formatDurationMs(hos.driveRemainingMs)} drive
-        {hos.shiftRemainingMs != null ? ` · ${formatDurationMs(hos.shiftRemainingMs)} on-duty` : ""}
-        {hos.cycleRemainingMs != null ? ` · ${formatDurationMs(hos.cycleRemainingMs)} cycle` : ""}
-      </div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{hos.source}</div>
+    <div className="leading-tight text-xs tabular-nums" title={title}>
+      {drive !== "—" ? drive : formatDutyStatus(hos.dutyStatus) || "HOS"}
     </div>
   );
 }

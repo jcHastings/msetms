@@ -86,6 +86,13 @@ async function main() {
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
   assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
+  assert.match(boardUi, /data-dispatch-board/);
+  assert.match(boardUi, /table-grid-board/);
+  assert.match(boardUi, />Tractor</);
+  assert.match(boardUi, />Trailer</);
+  assert.match(boardUi, />HOS</);
+  assert.match(boardUi, />Reefer</);
+  assert.match(boardUi, /Change unit|Assign/);
   assert.doesNotMatch(boardUi, /Find New Shippers|EDI \/ Tenders|Post\/Search Load Boards/);
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
@@ -342,6 +349,7 @@ async function main() {
   assert.match(stopsSource, /data-add-stop-dialog/);
   assert.match(stopsSource, /reorderStopsAction/);
   assert.match(stopsSource, /draggable/);
+  assert.doesNotMatch(stopsSource, /Add Stop opens a popup|Appointment time stays on the list/);
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /export function reorderStops/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
@@ -820,6 +828,10 @@ async function main() {
   );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /No Samsara ID on this truck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /isLiveSamsaraGps/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /shortPlaceLabel|gpsMotionLabel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-board/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /export function shortPlaceLabel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /export function gpsMotionLabel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /OrbcommTrailerImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /DriverImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Import drivers/);
@@ -7413,7 +7425,7 @@ Continuous reefer. Two load locks.
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatDate, formatDateTime, loadTouchesToday } = await import("../lib/format");
+  const { formatDate, formatDateTime, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
   assert.ok(
@@ -7921,6 +7933,9 @@ Continuous reefer. Two load locks.
   assert.ok(assignResult.error);
 
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
+  assert.equal(shortPlaceLabel("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
+  assert.equal(gpsMotionLabel(0), "Parked");
+  assert.equal(gpsMotionLabel(58), "58 mph");
   assert.equal(labelForFuelBucket("DATE DB CATEGORY"), "DATE DB CATEGORY");
   assert.equal(isFuelBucket("money_code"), false);
   fuelStore.listFuelRollups();

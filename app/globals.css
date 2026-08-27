@@ -72,6 +72,17 @@ button {
   font-size: 0.9rem;
 }
 
+.table-grid-board th {
+  padding: 0.3rem 0.5rem;
+}
+
+.table-grid-board td {
+  padding: 0.28rem 0.5rem;
+  vertical-align: middle;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
 .table-grid tbody tr:hover td {
   background: #f4f8fc;
 }
@@ -359,19 +370,22 @@ button {
 
 .stop-front {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.75rem 1rem;
-  align-items: start;
+  grid-template-columns: auto auto minmax(6rem, 1fr) minmax(7rem, 1.2fr) auto auto auto;
+  gap: 0.25rem 0.65rem;
+  align-items: center;
 }
 
 @media (max-width: 720px) {
   .stop-front {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 }
 
 .stop-front-window {
-  min-width: 11rem;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: #334155;
 }
 
 .stop-front-address {

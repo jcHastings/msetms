@@ -72,7 +72,7 @@ export default async function BoardPage({
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table-grid">
+            <table className="table-grid table-grid-board" data-dispatch-board="">
               <thead>
                 <tr>
                   <th>Load</th>
@@ -110,15 +110,15 @@ export default async function BoardPage({
                       .join(" ")
                       .toLowerCase()}
                   >
-                    <td>
+                    <td className="leading-tight">
                       <Link
                         href={overlayHref("/board", load.id, current)}
-                        className={`font-mono text-sm font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                        className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                        title={load.customer_name}
                       >
                         {load.load_number}
                       </Link>
-                      <div className="text-xs text-slate-500">{load.customer_name}</div>
-                      <div className="mt-1 text-sm">
+                      <div className="text-xs">
                         {load.origin}
                         <span className="mx-1 text-slate-400">→</span>
                         {load.destination}
@@ -127,32 +127,28 @@ export default async function BoardPage({
                     <td>
                       <LoadStatusBadge status={load.status} />
                     </td>
-                    <td className="whitespace-nowrap">
-                      <div>{formatDateTime(load.pickup_start)}</div>
-                      <div className="text-xs text-slate-500">to {formatDateTime(load.pickup_end)}</div>
+                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.pickup_end)}`}>
+                      {formatDateTime(load.pickup_start)}
                     </td>
-                    <td className="whitespace-nowrap">
-                      <div>{formatDateTime(load.delivery_start)}</div>
-                      <div className="text-xs text-slate-500">to {formatDateTime(load.delivery_end)}</div>
+                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.delivery_end)}`}>
+                      {formatDateTime(load.delivery_start)}
                     </td>
-                    <td>
+                    <td
+                      className="leading-tight text-xs"
+                      title={[
+                        load.trailer_unit || load.trailer_number ? `Trailer ${load.trailer_unit || load.trailer_number}` : "",
+                        load.driver_progress ? labelForDriverProgress(load.driver_progress) : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    >
                       {load.truck_unit ? (
                         <>
                           <div>Unit {load.truck_unit}</div>
-                          {load.trailer_unit || load.trailer_number ? (
-                            <div className="text-xs text-slate-500">
-                              Trailer {load.trailer_unit || load.trailer_number}
-                            </div>
-                          ) : null}
-                          <div className="text-xs text-slate-500">
+                          <div className="text-slate-500">
                             {load.driver_name}
                             {relayLabels.get(load.id) ? ` ${relayLabels.get(load.id)}` : ""}
                           </div>
-                          {load.driver_progress ? (
-                            <div className="text-xs text-indigo-700">
-                              {labelForDriverProgress(load.driver_progress)}
-                            </div>
-                          ) : null}
                         </>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
