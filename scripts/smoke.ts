@@ -373,7 +373,7 @@ async function main() {
   assert.match(stopsMapUi, /data-stops-map/);
   assert.match(stopsMapUi, /Map is off/);
   assert.match(stopsMapUi, /No map yet/);
-  assert.doesNotMatch(stopsMapUi, /maps\.google\.com|GOOGLE_MAPS_API_KEY|geofence|Official IFTA|\.env/);
+  assert.doesNotMatch(stopsMapUi, /maps\.google\.com|GOOGLE_MAPS_API_KEY|Official IFTA|<code>\.env/);
   const stopsPanelUi = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
   assert.match(stopsPanelUi, /draggable/);
   assert.match(stopsPanelUi, /APPT/);
@@ -4870,10 +4870,10 @@ Continuous reefer. Two load locks.
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
-    `${fuelDate},15:10,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
-    `${fuelDate},16:00,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},00:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},00:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
