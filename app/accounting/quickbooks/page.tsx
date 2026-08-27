@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { QBO_MAP_TABS, parseQboMapTab } from "@/lib/accounting-desk-shared";
+import { QBO_MAP_TABS, hubTabClass, parseQboMapTab } from "@/lib/accounting-desk-shared";
 import { listQboItemMaps, listQboVendorMaps } from "@/lib/accounting-desk";
 import {
   saveQboCustomerMapFormAction,
@@ -48,9 +48,7 @@ export default async function QuickbooksAccountingPage({
           <Link
             key={item.value}
             href={`/accounting/quickbooks?tab=${item.value}`}
-            className={`rounded-md px-3 py-1.5 text-sm font-semibold ${
-              tab === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-            }`}
+            className={hubTabClass(tab === item.value)}
           >
             {item.label}
           </Link>

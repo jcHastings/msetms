@@ -134,7 +134,9 @@ async function main() {
   assert.match(qboAccountingPage, /Map Pay Items/);
   assert.match(qboAccountingPage, /Map Customers/);
   assert.match(qboAccountingPage, /Map Vendors/);
+  assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Reconcile and Archive/);
@@ -464,6 +466,7 @@ async function main() {
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
   assert.match(payPageSource, /tab=pay/);
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(hubSource, /hubTabClass/);
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /overflow-x-auto/);
@@ -4996,6 +4999,15 @@ Continuous reefer. Two load locks.
 
   const fuelPage = fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8");
   const fuelImportUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-csv-import.tsx"), "utf8");
+  assert.match(fuelImportUi, /Already on file/);
+  assert.match(fuelImportUi, /Nothing new to add/);
+  assert.match(fuelImportUi, /fuelImportOkMessage/);
+  const { fuelImportOkMessage } = await import("../components/fuel-csv-import");
+  assert.equal(
+    fuelImportOkMessage({ ok: true, created: 0, skipped: 28, unmatched: 0 }),
+    "Already on file: 28 lines. Nothing new to add.",
+  );
+  assert.match(fuelImportOkMessage({ ok: true, created: 2, skipped: 3, unmatched: 1 }), /Created 2, already on file 3, unmatched 1/);
   const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);

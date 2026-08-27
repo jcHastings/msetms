@@ -20,6 +20,10 @@ export const QBO_MAP_TABS = [
 
 export type QboMapTab = (typeof QBO_MAP_TABS)[number]["value"];
 
+export function hubTabClass(active: boolean): string {
+  return active ? "hub-tab hub-tab-active" : "hub-tab";
+}
+
 export function parseAccountingHubTab(value: string | null | undefined): AccountingHubTab {
   const match = ACCOUNTING_HUB_TABS.find((tab) => tab.value === value);
   return match?.value ?? "invoices";

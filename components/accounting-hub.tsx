@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ACCOUNTING_HUB_TABS, parseAccountingHubTab } from "@/lib/accounting-desk-shared";
+import { ACCOUNTING_HUB_TABS, hubTabClass, parseAccountingHubTab } from "@/lib/accounting-desk-shared";
 import {
   archiveAccountingLoadFormAction,
   closeDriverPayPeriodAction,
@@ -89,9 +89,7 @@ export function AccountingHub({
           <Link
             key={item.value}
             href={`/accounting/invoices?tab=${item.value}`}
-            className={`rounded-md px-3 py-1.5 text-sm font-semibold ${
-              current === item.value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-            }`}
+            className={hubTabClass(current === item.value)}
           >
             {item.label}
           </Link>

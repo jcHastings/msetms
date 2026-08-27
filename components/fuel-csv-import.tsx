@@ -4,6 +4,18 @@ import { useActionState } from "react";
 import { importFuelCsvAction } from "@/lib/actions";
 import type { FuelImportResult } from "@/lib/fuel";
 
+export function fuelImportOkMessage(state: FuelImportResult): string {
+  const created = state.created ?? 0;
+  const skipped = state.skipped ?? 0;
+  const unmatched = state.unmatched ?? 0;
+  const errorCount = state.errors?.length ?? 0;
+  const errors = errorCount ? ` · ${errorCount} row ${errorCount === 1 ? "error" : "errors"}` : ".";
+  if (skipped > 0 && created === 0 && unmatched === 0) {
+    return `Already on file: ${skipped} ${skipped === 1 ? "line" : "lines"}. Nothing new to add.`;
+  }
+  return `Created ${created}, already on file ${skipped}, unmatched ${unmatched}${errors}`;
+}
+
 export function FuelCsvImport() {
   const [state, formAction, pending] = useActionState(importFuelCsvAction, null as FuelImportResult | null);
   const errors = state?.errors ?? [];
@@ -32,8 +44,7 @@ export function FuelCsvImport() {
       </form>
       {state?.ok ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Created {state.created ?? 0}, skipped {state.skipped ?? 0}, unmatched {state.unmatched ?? 0}
-          {errors.length ? ` · ${errors.length} row ${errors.length === 1 ? "error" : "errors"}` : "."}
+          {fuelImportOkMessage(state)}
         </div>
       ) : null}
       {state && !state.ok && state.error ? (
