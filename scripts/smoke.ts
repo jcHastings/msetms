@@ -4697,7 +4697,7 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-tx-tabs/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /Money code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /label: "Money code"/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"),
     /EFS vs FleetOne|FleetOne|first-class/i,
