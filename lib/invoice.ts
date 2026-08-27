@@ -280,20 +280,32 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   }
   y += 10;
 
+  const showNotes = model.lines.some((line) => line.description.trim());
   y = drawTable(
     doc,
     left,
     y,
     width,
-    ["Description", "Notes", "Quantity", "Rate", "Amount"],
-    [140, 160, 70, 80, 90],
-    model.lines.map((line) => [
-      line.name,
-      line.description,
-      line.qty != null ? String(line.qty) : "",
-      formatInvoiceMoney(line.rate, currency),
-      formatInvoiceMoney(line.amount, currency),
-    ]),
+    showNotes
+      ? ["Description", "Notes", "Quantity", "Rate", "Amount"]
+      : ["Description", "Quantity", "Rate", "Amount"],
+    showNotes ? [140, 160, 70, 80, 90] : [220, 90, 110, 120],
+    model.lines.map((line) =>
+      showNotes
+        ? [
+            line.name,
+            line.description,
+            line.qty != null ? String(line.qty) : "",
+            formatInvoiceMoney(line.rate, currency),
+            formatInvoiceMoney(line.amount, currency),
+          ]
+        : [
+            line.name,
+            line.qty != null ? String(line.qty) : "",
+            formatInvoiceMoney(line.rate, currency),
+            formatInvoiceMoney(line.amount, currency),
+          ],
+    ),
     navy,
   );
   y += 8;
@@ -354,11 +366,13 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     y += 16;
   }
 
-  if (defaults.terms_text) {
-    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(defaults.terms_text, left, y, { width });
+  const terms = defaults.terms_text.trim();
+  const footer = defaults.footer_text.trim();
+  if (terms) {
+    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(terms, left, y, { width });
   }
-  if (defaults.footer_text) {
-    doc.font("Helvetica").fontSize(8).fillColor("#6b7280").text(defaults.footer_text, left, 740, { width, align: "center" });
+  if (footer) {
+    doc.font("Helvetica").fontSize(8).fillColor("#6b7280").text(footer, left, 740, { width, align: "center" });
   }
 
   doc.end();

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getDataDir, getDb } from "./db";
 import { isGooglePlacesConfigured } from "./env";
 import { sanitizeName } from "./files";
+import { printablePaperworkCopy } from "./paperwork-copy";
 import {
   CURRENCIES,
   DISPATCHER_ROLES,
@@ -520,24 +521,32 @@ export function equipmentOptions(): Array<{ value: string; label: string }> {
   return extras.map((item) => ({ value: item.value, label: item.label }));
 }
 
+function scrubDocumentLecture(row: DocumentDefaults): DocumentDefaults {
+  return {
+    ...row,
+    footer_text: printablePaperworkCopy(row.footer_text),
+    terms_text: printablePaperworkCopy(row.terms_text),
+  };
+}
+
 export function listDocumentDefaults(): DocumentDefaults[] {
-  return getDb()
-    .prepare("SELECT * FROM document_defaults ORDER BY doc_type")
-    .all() as DocumentDefaults[];
+  return (getDb().prepare("SELECT * FROM document_defaults ORDER BY doc_type").all() as DocumentDefaults[]).map(
+    scrubDocumentLecture,
+  );
 }
 
 export function getDocumentDefaults(docType: DocumentType): DocumentDefaults {
   const row = getDb()
     .prepare("SELECT * FROM document_defaults WHERE doc_type = ?")
     .get(docType) as DocumentDefaults | undefined;
-  return (
+  return scrubDocumentLecture(
     row ?? {
       doc_type: docType,
       header_text: "",
       footer_text: "",
       terms_text: "",
       font_size: 10,
-    }
+    },
   );
 }
 
@@ -559,7 +568,13 @@ export function updateDocumentDefaults(input: DocumentDefaults): void {
          terms_text = excluded.terms_text,
          font_size = excluded.font_size`,
     )
-    .run(input.doc_type, input.header_text.trim(), input.footer_text.trim(), input.terms_text.trim(), font);
+    .run(
+      input.doc_type,
+      input.header_text.trim(),
+      printablePaperworkCopy(input.footer_text),
+      printablePaperworkCopy(input.terms_text),
+      font,
+    );
 }
 
 export const DEFAULT_COMPANY_LOGO_FILE = "ms-express-logo.png";

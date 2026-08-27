@@ -6776,7 +6776,21 @@ Continuous reefer. Two load locks.
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
+  const invoicePdfText = made.buffer.toString("latin1");
+  assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
+  assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
+  assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
+  assert.doesNotMatch(invoicePdfText, /Notes/);
   const invoiceLibSource = fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8");
+  assert.match(invoiceLibSource, /showNotes/);
+  assert.doesNotMatch(invoiceLibSource, /Linehaul is the customer rate|Payment due per customer terms/);
+  const invoiceDefaults = settings.getDocumentDefaults("invoice");
+  assert.equal(invoiceDefaults.footer_text, "");
+  assert.equal(invoiceDefaults.terms_text, "");
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"),
+    /Linehaul is the customer rate|Payment due per customer terms/,
+  );
   assert.match(invoiceLibSource, /INVOICE/);
   assert.match(invoiceLibSource, /Customer Information/);
   assert.match(invoiceLibSource, /Stops \/ Actions/);

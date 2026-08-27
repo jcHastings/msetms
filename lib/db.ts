@@ -831,13 +831,7 @@ function backfillDocumentDefaults(db: Database): void {
       "This confirmation is not a QuickBooks bill. Settlements stay in Driver pay.",
       10,
     ],
-    [
-      "invoice",
-      "Invoice",
-      "Payment due per customer terms.",
-      "Linehaul is the customer rate. Accessorials are billed separately when recorded.",
-      10,
-    ],
+    ["invoice", "Invoice", "", "", 10],
     [
       "customer_confirmation",
       "Customer Confirmation",
@@ -854,6 +848,23 @@ function backfillDocumentDefaults(db: Database): void {
     ],
   ];
   for (const row of rows) insert.run(...row);
+  db.prepare(
+    `UPDATE document_defaults
+     SET footer_text = CASE
+       WHEN lower(footer_text) LIKE '%linehaul is the customer rate%'
+         OR lower(footer_text) LIKE '%accessorials are billed separately%'
+         OR lower(footer_text) = 'payment due per customer terms.'
+       THEN ''
+       ELSE footer_text
+     END,
+     terms_text = CASE
+       WHEN lower(terms_text) LIKE '%linehaul is the customer rate%'
+         OR lower(terms_text) LIKE '%accessorials are billed separately%'
+         OR lower(terms_text) = 'payment due per customer terms.'
+       THEN ''
+       ELSE terms_text
+     END`,
+  ).run();
 }
 
 function backfillDemoAccounting(db: Database): void {
