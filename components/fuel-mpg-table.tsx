@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { fuelPageHref } from "@/components/fuel-transaction-lists";
 import { formatGallons, formatMdYDisplay } from "@/lib/format";
-import type { FuelTxListKind } from "@/lib/fuel";
+import type { FuelPageView, FuelTxListKind } from "@/lib/fuel";
 import type { DriverMpgBoard, DriverMpgPeriod } from "@/lib/fuel-mpg";
 
 function formatMiles(value: number | null): string {
@@ -19,11 +19,13 @@ export function FuelMpgTable({
   selectedDriverId,
   selectedTruckId,
   txList,
+  view,
 }: {
   board: DriverMpgBoard;
   selectedDriverId: number | null;
   selectedTruckId: number | null;
   txList?: FuelTxListKind;
+  view?: FuelPageView;
 }) {
   const range = `${formatMdYDisplay(board.startYmd)} – ${formatMdYDisplay(board.endYmd)}`;
   return (
@@ -35,13 +37,13 @@ export function FuelMpgTable({
         </div>
         <div className="flex gap-3 text-sm">
           <Link
-            href={fuelPageHref({ tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId })}
+            href={fuelPageHref({ view, tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId })}
             className={board.period === "week" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This week
           </Link>
           <Link
-            href={fuelPageHref({ tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId })}
+            href={fuelPageHref({ view, tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId })}
             className={board.period === "month" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This month

@@ -4696,7 +4696,12 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
+  assert.match(fuelPage, /FuelViewTabs/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-view-tabs/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-tx-tabs/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/diesel")), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/money")), false);
+  assert.doesNotMatch(navSource, /\/fuel\/(diesel|reefer|scale|money)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /label: "Money code"/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"),

@@ -6,12 +6,12 @@ import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelDeleteButton } from "@/components/fuel-delete-button";
-import { FuelTransactionLists, FuelUnassignedLists } from "@/components/fuel-transaction-lists";
+import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs } from "@/components/fuel-transaction-lists";
 import { linkFuelReceiptFormAction } from "@/lib/actions";
 import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
-import { parseFuelTxList } from "@/lib/fuel";
+import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { getFuelWeekPaidStats, listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default async function FuelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ driver?: string; truck?: string; mpg?: string; tx?: string }>;
+  searchParams: Promise<{ driver?: string; truck?: string; mpg?: string; tx?: string; view?: string }>;
 }) {
   const dispatcher = await getPageAccess(canUploadFuel);
   if (!dispatcher) {
@@ -33,6 +33,7 @@ export default async function FuelPage({
   const truckId = Number.parseInt(params.truck ?? "", 10);
   const mpgPeriod = parseDriverMpgPeriod(params.mpg);
   const txList = parseFuelTxList(params.tx);
+  const view = parseFuelPageView(params.view);
   const selectedDriverId = Number.isFinite(driverId) ? driverId : null;
   const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
   const drivers = listDrivers();
@@ -83,26 +84,38 @@ export default async function FuelPage({
         selectedDriverId={selectedDriverId}
         selectedTruckId={selectedTruckId}
         txList={txList}
+        view={view}
       />
       <FuelCsvImport />
       <FuelMatchQueue />
-
-      <FuelUnassignedLists rows={unmatched} drivers={driverOptions} loads={loadOptions} />
-
       <FuelRollupTable title="Per-driver totals" rows={driverRollups} hrefFor={(row) => `/fuel?driver=${row.id}`} />
-      <FuelRollupTable title="Per-truck totals" rows={truckRollups} hrefFor={(row) => `/fuel?truck=${row.id}`} />
 
-      <FuelTransactionLists
-        rows={transactions}
-        active={txList}
-        title={filterLabel}
-        showAllLink={Boolean(selectedDriver || selectedTruck)}
+      <FuelViewTabs
+        view={view}
         mpgPeriod={mpgPeriod}
         selectedDriverId={selectedDriverId}
         selectedTruckId={selectedTruckId}
-        drivers={driverOptions}
-        loads={loadOptions}
+        txList={txList}
       />
+
+      {view === "trucks" ? (
+        <FuelRollupTable title="Per-truck totals" rows={truckRollups} hrefFor={(row) => `/fuel?truck=${row.id}`} />
+      ) : (
+        <>
+          <FuelUnassignedLists rows={unmatched} drivers={driverOptions} loads={loadOptions} />
+          <FuelTransactionLists
+            rows={transactions}
+            active={txList}
+            title={filterLabel}
+            showAllLink={Boolean(selectedDriver || selectedTruck)}
+            mpgPeriod={mpgPeriod}
+            selectedDriverId={selectedDriverId}
+            selectedTruckId={selectedTruckId}
+            drivers={driverOptions}
+            loads={loadOptions}
+          />
+        </>
+      )}
     </>
   );
 }

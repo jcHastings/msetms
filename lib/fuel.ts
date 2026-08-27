@@ -659,6 +659,13 @@ export function parseFuelTxList(value: string | undefined): FuelTxListKind {
   return "truck_diesel";
 }
 
+export type FuelPageView = "tx" | "trucks" | "drivers";
+
+export function parseFuelPageView(value: string | undefined): FuelPageView {
+  if (value === "trucks" || value === "drivers") return value;
+  return "tx";
+}
+
 export function groupFuelTxByList<T extends { category: string }>(rows: T[]): Record<FuelTxListKind, T[]> {
   const groups: Record<FuelTxListKind, T[]> = {
     truck_diesel: [],

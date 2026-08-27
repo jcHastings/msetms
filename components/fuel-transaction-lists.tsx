@@ -6,6 +6,7 @@ import {
   FUEL_TX_LISTS,
   fuelTxListKind,
   groupFuelTxByList,
+  type FuelPageView,
   type FuelTransactionView,
   type FuelTxListKind,
 } from "@/lib/fuel";
@@ -105,18 +106,58 @@ function FuelRowsTable({
 }
 
 export function fuelPageHref(input: {
+  view?: FuelPageView;
   tx?: FuelTxListKind;
   mpg?: "week" | "month";
   driverId?: number | null;
   truckId?: number | null;
 }): string {
   const query = new URLSearchParams();
+  if (input.view && input.view !== "tx") query.set("view", input.view);
   if (input.tx && input.tx !== "truck_diesel") query.set("tx", input.tx);
   if (input.mpg === "month") query.set("mpg", "month");
   if (input.driverId) query.set("driver", String(input.driverId));
   if (input.truckId) query.set("truck", String(input.truckId));
   const text = query.toString();
   return text ? `/fuel?${text}` : "/fuel";
+}
+
+export function FuelViewTabs({
+  view,
+  mpgPeriod,
+  selectedDriverId,
+  selectedTruckId,
+  txList,
+}: {
+  view: FuelPageView;
+  mpgPeriod: "week" | "month";
+  selectedDriverId: number | null;
+  selectedTruckId: number | null;
+  txList?: FuelTxListKind;
+}) {
+  const items: Array<{ value: FuelPageView; label: string }> = [
+    { value: "trucks", label: "Per-truck totals" },
+    { value: "tx", label: "Transactions" },
+  ];
+  return (
+    <nav className="mb-4 flex flex-wrap gap-4 text-sm" data-fuel-view-tabs="">
+      {items.map((item) => (
+        <Link
+          key={item.value}
+          href={fuelPageHref({
+            view: item.value,
+            tx: item.value === "tx" ? txList : undefined,
+            mpg: mpgPeriod,
+            driverId: selectedDriverId,
+            truckId: selectedTruckId,
+          })}
+          className={view === item.value ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
 }
 
 export function FuelUnassignedLists({
