@@ -648,3 +648,49 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
     }
   });
 }
+
+export async function sendLoadWhatsAppAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const { sendWhatsAppMessage, whatsappConfigured } = await import("./integrations/whatsapp");
+      const { WHATSAPP_MISSING } = await import("./whatsapp-shared");
+      if (!whatsappConfigured()) throw new Error(WHATSAPP_MISSING);
+      await requireCapability(canSendSms, "WhatsApp is for Administrator and Standard.");
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      if (!load.driver_id) throw new Error("Assign a driver first.");
+      const phone = String(load.driver_phone ?? "").trim();
+      if (!phone) throw new Error("The assigned driver needs a mobile number.");
+      const kind = String(formData.get("kind") ?? "message");
+      const { formatLoadSummary } = await import("./load-summary");
+      const { formatRelayLane } = await import("./relays");
+      const { relayForDriver } = await import("./relay-store");
+      const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
+      const body =
+        kind === "load_info"
+          ? formatLoadSummary({
+              ...load,
+              your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
+            })
+          : requiredString(formData.get("body"), "Message");
+      await sendWhatsAppMessage({ to: phone, body });
+      recordLoadAudit({
+        loadId,
+        action: "whatsapp",
+        field: "to",
+        oldValue: kind === "load_info" ? "load information" : "message",
+        newValue: phone,
+      });
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message: kind === "load_info" ? `Load sent on WhatsApp to ${phone}.` : `WhatsApp sent to ${phone}.`,
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}

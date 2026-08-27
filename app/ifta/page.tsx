@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FuelMatchQueue, LoadTiedFuelReceipts } from "@/components/fuel-match-queue";
 import { PageHeader } from "@/components/page-header";
 import { formatMoney } from "@/lib/format";
 import {
@@ -105,6 +106,9 @@ export default async function IftaPage({
           </table>
         )}
       </section>
+
+      <LoadTiedFuelReceipts />
+      <FuelMatchQueue />
 
       <section className="card overflow-hidden">
         <header className="border-b border-slate-200 px-5 py-3">

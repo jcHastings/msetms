@@ -85,12 +85,13 @@ export function RateConPicker({
         if (file) assignFile(file);
       }}
     >
-      <p className="text-sm font-semibold">Rate con file</p>
+      <p className="text-sm font-semibold">Rate con or load email</p>
       <input
         id={inputId}
         ref={inputRef}
         name="rate_con"
         type="file"
+        accept=".pdf,image/*,.eml,.txt,.msg"
         className="sr-only"
         onChange={(event) => takeInputFiles(event.target.files)}
         onInput={(event) => takeInputFiles(event.currentTarget.files)}

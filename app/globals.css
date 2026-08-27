@@ -209,6 +209,18 @@ button {
   color: #e8eef6;
 }
 
+.desk-sidebar-brand .text-sm {
+  display: none;
+}
+
+.desk-sidebar-brand img {
+  height: 1.65rem;
+}
+
+.desk-nav-icons {
+  scrollbar-width: thin;
+}
+
 .desk-sidebar .btn-ghost {
   color: #d5deea;
 }

@@ -8201,6 +8201,60 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Imported fuel and stored load miles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /LoadTiedFuelReceipts/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /FuelMatchQueue/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
+  assert.match(workspaceSource, /WhatsApp load/);
+  assert.match(workspaceSource, /Send WhatsApp/);
+  assert.match(workspaceSource, /Send text/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /Texting/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /WhatsApp/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /TWILIO_|OPENAI_API_KEY|WHATSAPP_ACCESS_TOKEN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /CriticalTag/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="active"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="delivered"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-doc-classify.tsx"), "utf8"), /Needs type/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-load-actions.tsx"), "utf8"), /Unclassified|ATTACHMENT_KINDS/);
+
+  const { foldNameKey } = await import("../lib/fuel");
+  assert.equal(foldNameKey("Steve Eller"), "steveeller");
+  assert.notEqual(foldNameKey("Steve Eller"), foldNameKey("Steven Eller"));
+
+  const { extractEmailBody, looksLikeEmailUpload } = await import("../lib/rate-con");
+  assert.equal(looksLikeEmailUpload("forwarded.eml", "message/rfc822"), true);
+  assert.match(
+    extractEmailBody("From: broker@example.com\nSubject: Rate\n\nPickup Hastings, NE to Bronx, NY rate 2400"),
+    /Hastings/,
+  );
+
+  const { loadNeedsCriticalTag } = await import("../lib/exceptions");
+  assert.equal(loadNeedsCriticalTag(999999, [{ loadId: 1, kind: "late", severity: "HIGH" }]), false);
+  assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "late", severity: "HIGH" }]), true);
+  assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "reefer", severity: "CRITICAL" }]), true);
+
+  const { proposeMikeWork } = await import("../lib/mike-work");
+  const detentionWork = proposeMikeWork(`Draft detention email for ${created.load_number}`);
+  assert.ok(detentionWork.proposals.some((item) => item.kind === "detention_email"));
+
+  const previousWhatsApp = process.env.TWILIO_WHATSAPP_FROM;
+  delete process.env.TWILIO_WHATSAPP_FROM;
+  delete process.env.WHATSAPP_ACCESS_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+  delete process.env.META_WHATSAPP_TOKEN;
+  delete process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+  const whatsapp = await import("../lib/integrations/whatsapp");
+  const { WHATSAPP_MISSING } = await import("../lib/whatsapp-shared");
+  assert.equal(whatsapp.whatsappConfigured(), false);
+  await assert.rejects(
+    () => whatsapp.sendWhatsAppMessage({ to: "(312) 555-0148", body: "Load" }),
+    (error: unknown) => {
+      assert.equal(error instanceof Error && error.message, WHATSAPP_MISSING);
+      return true;
+    },
+  );
+  if (previousWhatsApp == null) delete process.env.TWILIO_WHATSAPP_FROM;
+  else process.env.TWILIO_WHATSAPP_FROM = previousWhatsApp;
 
   closeDb();
   const reopened = getDb();

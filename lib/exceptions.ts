@@ -190,6 +190,16 @@ export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | 
   return "Caution";
 }
 
+export function loadNeedsCriticalTag(
+  loadId: number,
+  items?: Array<Pick<InboxException, "loadId" | "kind" | "severity">>,
+): boolean {
+  const rows = items ?? listExceptionInbox().items;
+  return rows.some(
+    (item) => item.loadId === loadId && (item.severity === "CRITICAL" || item.kind === "late"),
+  );
+}
+
 function lateExceptions(load: LoadView, now: Date): InboxException[] {
   if (isClosedStatus(load.status)) return [];
 

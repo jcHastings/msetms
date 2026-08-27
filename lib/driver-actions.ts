@@ -111,10 +111,8 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
     if (!(file instanceof File) || file.size === 0) {
       throw new Error("Choose a photo or PDF.");
     }
-    const kind = String(formData.get("kind") ?? "pod");
-    if (!isDriverUploadKind(kind)) {
-      throw new Error("Classify as Receipt, Scale Ticket, Bill of Lading, or Proof of Delivery.");
-    }
+    const kindRaw = String(formData.get("kind") ?? "").trim();
+    const kind = isDriverUploadKind(kindRaw) ? kindRaw : "unclassified";
     if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
       throw new Error("Pick a document type.");
     }
@@ -143,5 +141,44 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
   } catch (error) {
     return fail(error);
   }
+  });
+}
+
+export async function driverClassifyAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const attachmentId = parseOptionalInt(formData.get("attachment_id"));
+      if (!attachmentId) throw new Error("File is missing.");
+      const kind = String(formData.get("kind") ?? "");
+      if (!isDriverUploadKind(kind)) {
+        throw new Error("Classify as Receipt, Scale Ticket, Bill of Lading, or Proof of Delivery.");
+      }
+      const { getAttachment, updateAttachmentKind } = await import("./files");
+      const file = getAttachment(attachmentId);
+      if (!file) throw new Error("File is missing.");
+      const { getLoad } = await import("./queries");
+      const load = getLoad(file.load_id);
+      const { driverAssignedToLoad } = await import("./relay-store");
+      if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
+        throw new Error("This load is not on your dispatch.");
+      }
+      updateAttachmentKind(attachmentId, kind);
+      if (kind === "fuel_receipt") {
+        const { addFuelReceipt, listFuelReceipts } = await import("./fuel-receipts");
+        const already = listFuelReceipts(load.id).some((row) => row.attachment_id === attachmentId);
+        if (!already) {
+          addFuelReceipt({
+            loadId: load.id,
+            driverId: driver.id,
+            attachmentId,
+          });
+        }
+      }
+      refresh();
+      return { ok: true, id: load.id };
+    } catch (error) {
+      return fail(error);
+    }
   });
 }

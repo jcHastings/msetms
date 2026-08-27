@@ -603,8 +603,13 @@ export async function parseRateConAction(
     const looksPdf = mime.includes("pdf") || lowerName.endsWith(".pdf");
     const looksImage =
       mime.startsWith("image/") || /\.(png|jpe?g|webp|heic)$/.test(lowerName);
-    if (!looksPdf && !looksImage) {
-      throw new Error("Upload a PDF or an image (PNG, JPG, WebP).");
+    const looksEmail =
+      mime.includes("message") ||
+      mime.includes("rfc822") ||
+      mime.includes("text/plain") ||
+      /\.(eml|msg|txt)$/.test(lowerName);
+    if (!looksPdf && !looksImage && !looksEmail) {
+      throw new Error("Upload a PDF, image, or forwarded load email.");
     }
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
     const { extractDocumentText, parseRateConText, emptyParsedRateCon, textLooksLikeFilenameOnly } = await import("./rate-con");

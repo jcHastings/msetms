@@ -4,7 +4,8 @@ import { canonicalFleetKey, unitDigits } from "./fleet-import-shared";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
 import { getSamsaraFleet, isLiveSamsaraGps, resetSamsaraCache } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
-import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "./mike-shared";
+import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
+import { mikeWorkReply, proposeMikeWork } from "./mike-work";
 
 export type { MikeMessage };
 
@@ -326,13 +327,27 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
   });
 }
 
-export async function askMike(question: string, history: MikeMessage[]): Promise<{ configured: boolean; reply: string }> {
+export async function askMike(
+  question: string,
+  history: MikeMessage[],
+): Promise<{ configured: boolean; reply: string; proposals: MikeProposal[] }> {
   await loadRuntimeEnv();
+  const work = proposeMikeWork(question);
   if (!isOpenAiConfigured()) {
-    return { configured: false, reply: MISSING_KEY };
+    return {
+      configured: false,
+      reply: mikeWorkReply(false, MISSING_KEY, work.reply),
+      proposals: work.proposals,
+    };
   }
   const key = getOpenAiApiKey();
-  if (!key) return { configured: false, reply: MISSING_KEY };
+  if (!key) {
+    return {
+      configured: false,
+      reply: mikeWorkReply(false, MISSING_KEY, work.reply),
+      proposals: work.proposals,
+    };
+  }
 
   const snapshot = await buildOpsSnapshot(question);
   const body = {
@@ -342,7 +357,7 @@ export async function askMike(question: string, history: MikeMessage[]): Promise
       {
         role: "system",
         content:
-          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
+          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),
@@ -361,14 +376,23 @@ export async function askMike(question: string, history: MikeMessage[]): Promise
   if (!response.ok) {
     return {
       configured: true,
-      reply: "Mike could not reach the model. Check OPENAI_API_KEY and try again. The key is never logged.",
+      reply: mikeWorkReply(
+        true,
+        "Mike could not reach the model. Try again.",
+        work.reply,
+      ),
+      proposals: work.proposals,
     };
   }
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   const text = payload.choices?.[0]?.message?.content?.trim() || "I do not have an answer from the TMS data.";
-  return { configured: true, reply: redactSecrets(text) };
+  return {
+    configured: true,
+    reply: mikeWorkReply(true, redactSecrets(text), work.reply),
+    proposals: work.proposals,
+  };
 }
 
 export function mikeMissingKeyMessage(): string {

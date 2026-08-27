@@ -65,8 +65,8 @@ export function RateConImport({
         }}
       >
         <div>
-          <h2 className="text-sm font-semibold">Upload rate confirmation</h2>
-          <p className="mt-1 text-sm text-slate-500">Upload a rate confirmation, then review the fields.</p>
+          <h2 className="text-sm font-semibold">Drop a rate con or load email</h2>
+          <p className="mt-1 text-sm text-slate-500">PDF, photo, or forwarded load email. Review, then save.</p>
         </div>
         {localError ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">

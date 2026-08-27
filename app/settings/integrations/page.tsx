@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { formatDateTime } from "@/lib/format";
-import { isOrbcommConfigured, isQuickbooksConfigured } from "@/lib/env";
+import { isOrbcommConfigured, isQuickbooksConfigured, isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
+import { SMS_STATUS_CONNECTED, SMS_STATUS_MISSING } from "@/lib/whatsapp-shared";
 import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
 import { formatDurationMs, getSamsaraFleet, isSamsaraConfigured } from "@/lib/integrations/samsara";
@@ -25,6 +26,16 @@ export default async function IntegrationsSettingsPage() {
       <PageHeader title="Integrations" />
 
       <section className="card p-6">
+        <h2 className="text-sm font-semibold">Texting</h2>
+        <p className="mt-4 text-sm font-semibold">{isTwilioConfigured() ? SMS_STATUS_CONNECTED : SMS_STATUS_MISSING}</p>
+      </section>
+
+      <section className="card mt-6 p-6">
+        <h2 className="text-sm font-semibold">WhatsApp</h2>
+        <p className="mt-4 text-sm font-semibold">{isWhatsAppConfigured() ? SMS_STATUS_CONNECTED : SMS_STATUS_MISSING}</p>
+      </section>
+
+      <section className="card mt-6 p-6">
         <h2 className="text-sm font-semibold">Samsara</h2>
         <p className="mt-4 text-sm font-semibold">{samsaraTokenSet ? "Connected" : "Not connected"}</p>
         {fleet.error ? (

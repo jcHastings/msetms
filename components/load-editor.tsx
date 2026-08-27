@@ -21,7 +21,7 @@ import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { RateConApply } from "@/components/rate-con-apply";
 import { ReeferBadge } from "@/components/reefer-badge";
-import { LoadStatusBadge } from "@/components/status-badge";
+import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
@@ -32,7 +32,8 @@ import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmpt
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
-import { isTwilioConfigured } from "@/lib/env";
+import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
+import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { routeGuideFromLoad } from "@/lib/routing-shared";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatRelayLane } from "@/lib/relays";
@@ -94,6 +95,7 @@ export async function LoadEditor({
           <div className="flex items-center gap-3">
             <CopyTripNumber value={load.load_number} />
             <LoadStatusBadge status={load.status} />
+            {loadNeedsCriticalTag(load.id) ? <CriticalTag /> : null}
             <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
             {load.qbo_invoice_number || load.qbo_invoice_id ? (
               <span className="text-sm text-slate-600">
@@ -117,6 +119,7 @@ export async function LoadEditor({
         dispatchers={dispatchers}
         docsRequested={Boolean(load.docs_requested)}
         smsConfigured={isTwilioConfigured()}
+        whatsappConfigured={isWhatsAppConfigured()}
         role={role}
         returnTo={returnTo}
         watched={Boolean(load.watched)}

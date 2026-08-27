@@ -220,6 +220,7 @@ export const ATTACHMENT_KINDS = [
   { value: "scale_ticket", label: "Scale ticket" },
   { value: "fuel_receipt", label: "Fuel receipt" },
   { value: "claim", label: "Claim evidence" },
+  { value: "unclassified", label: "Needs type" },
   { value: "other", label: "Other" },
 ] as const;
 

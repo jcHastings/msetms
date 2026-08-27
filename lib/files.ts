@@ -166,6 +166,20 @@ export function deleteAttachment(id: number): void {
   });
 }
 
+export function updateAttachmentKind(id: number, kind: AttachmentKind): Attachment {
+  const existing = getAttachment(id);
+  if (!existing) throw new Error("Attachment not found.");
+  getDb().prepare("UPDATE attachments SET kind = ? WHERE id = ?").run(kind, id);
+  recordLoadAudit({
+    loadId: existing.load_id,
+    action: "attachment",
+    field: "kind",
+    oldValue: existing.kind,
+    newValue: kind,
+  });
+  return { ...existing, kind };
+}
+
 export function listAttachments(loadId: number): Attachment[] {
   return getDb()
     .prepare("SELECT * FROM attachments WHERE load_id = ? ORDER BY created_at DESC, id DESC")

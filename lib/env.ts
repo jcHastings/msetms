@@ -351,6 +351,31 @@ export function isTwilioConfigured(): boolean {
   return Boolean(getTwilioAccountSid() && getTwilioAuthToken() && getTwilioFromNumber());
 }
 
+export function getTwilioWhatsAppFrom(): string | undefined {
+  return readSecret("TWILIO_WHATSAPP_FROM");
+}
+
+export function getWhatsAppAccessToken(): string | undefined {
+  return (
+    readSecret("WHATSAPP_ACCESS_TOKEN") ??
+    readSecret("META_WHATSAPP_TOKEN") ??
+    readSecret("WHATSAPP_TOKEN")
+  );
+}
+
+export function getWhatsAppPhoneNumberId(): string | undefined {
+  return (
+    readSecret("WHATSAPP_PHONE_NUMBER_ID") ??
+    readSecret("META_WHATSAPP_PHONE_NUMBER_ID")
+  );
+}
+
+export function isWhatsAppConfigured(): boolean {
+  const twilioReady = Boolean(getTwilioAccountSid() && getTwilioAuthToken() && getTwilioWhatsAppFrom());
+  const metaReady = Boolean(getWhatsAppAccessToken() && getWhatsAppPhoneNumberId());
+  return twilioReady || metaReady;
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&

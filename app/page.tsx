@@ -23,9 +23,14 @@ import {
   listMovingLoads,
   listTrucks,
   listUpcomingCompliance,
+  listCustomers,
+  listLocations,
+  listTrailers,
   listWatchedLoads,
 } from "@/lib/queries";
+import { loadFormSettings } from "@/lib/settings";
 import { LoadOverlay } from "@/components/load-overlay";
+import { RateConImport } from "@/components/rate-con-import";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
@@ -82,6 +87,17 @@ export default async function DashboardPage({
       />
 
       <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} />
+
+      <div className="mb-6" data-email-ingest="">
+        <RateConImport
+          customers={listCustomers()}
+          trucks={trucks}
+          trailers={listTrailers()}
+          locations={listLocations()}
+          drivers={drivers}
+          formSettings={loadFormSettings()}
+        />
+      </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Open loads" value={stats.openLoads} href="/board" />

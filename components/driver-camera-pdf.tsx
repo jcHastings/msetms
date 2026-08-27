@@ -4,12 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { driverUploadAction } from "@/lib/driver-actions";
 import { imagesToPdf, pdfFileName } from "@/lib/image-pdf";
-import { DRIVER_UPLOAD_KINDS } from "@/lib/driver-docs";
-
 type Draft = { previewUrl: string; blob: Blob };
 type Page = Draft & { id: string };
-
-const DRIVER_KINDS = DRIVER_UPLOAD_KINDS;
 
 export function DriverCameraPdf({
   loadId,
@@ -22,7 +18,7 @@ export function DriverCameraPdf({
   const captureRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [kind, setKind] = useState("pod");
+  const kind = "doc";
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [live, setLive] = useState<MediaStream | null>(null);
@@ -185,7 +181,6 @@ function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasE
       const file = new File([copy], pdfFileName(kind, loadNumber), { type: "application/pdf" });
       const form = new FormData();
       form.set("load_id", String(loadId));
-      form.set("kind", kind);
       form.set("file", file);
       const result = await driverUploadAction(form);
       if (!result.ok) {
@@ -194,7 +189,7 @@ function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasE
       }
       for (const page of pages) URL.revokeObjectURL(page.previewUrl);
       setPages([]);
-      setSaved("PDF saved on this load. Dispatch can open it now.");
+      setSaved("Saved. Pick Receipt, Scale Ticket, BOL, or Proof of Delivery on the files list.");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not make the PDF.");
@@ -204,24 +199,9 @@ function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasE
   }
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 className="text-base font-semibold">Take a document photo</h2>
-
-      <div className="mt-3 field">
-        <label htmlFor="camera-kind">Type</label>
-        <select
-          id="camera-kind"
-          className="min-h-12"
-          value={kind}
-          onChange={(event) => setKind(event.target.value)}
-        >
-          {DRIVER_KINDS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <section className="rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10">
+      <h2 className="text-base font-semibold text-white">Take a document photo</h2>
+      <p className="mt-1 text-sm text-slate-400">Upload first. Type it on the files list after it saves.</p>
 
       <input
         ref={captureRef}

@@ -15,8 +15,8 @@ export default async function DriverLoginPage() {
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <div className="mb-6">
         <BrandMark size="lg" />
-        <h1 className="mt-4 text-3xl font-semibold">Driver dispatch</h1>
-        <p className="mt-2 text-base text-slate-600">
+        <h1 className="mt-4 text-3xl font-semibold text-white">Driver dispatch</h1>
+        <p className="mt-2 text-base text-slate-300">
           Sign in with your name and the PIN dispatch set on your driver record. No PIN yet — ask dispatch to set
           one on the Drivers page.
         </p>

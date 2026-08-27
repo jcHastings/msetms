@@ -15,7 +15,8 @@ import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/lib/reefer-shared";
-import { isClosedStatus, labelForAttachmentKind } from "@/lib/types";
+import { DriverDocClassify } from "@/components/driver-doc-classify";
+import { isClosedStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,14 @@ export default async function DriverLoadPage({
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-20 pt-5">
-      <Link href="/driver" className="text-sm font-medium text-slate-600">
+      <Link href="/driver" className="text-sm font-medium text-slate-300">
         ← My dispatch
       </Link>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <h1 className="font-mono text-2xl font-semibold">{load.load_number}</h1>
+        <h1 className="font-mono text-2xl font-semibold text-white">{load.load_number}</h1>
         <LoadStatusBadge status={load.status} />
       </div>
-      <p className="mt-1 text-lg font-medium">
+      <p className="mt-1 text-lg font-medium text-white">
         {load.origin} → {load.destination}
       </p>
       {yourLeg ? (
@@ -186,31 +187,16 @@ export default async function DriverLoadPage({
         <DriverFuelReceipt loadId={load.id} />
       </div>
 
-      <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold">Files on this load</h2>
-        {attachments.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">None yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {attachments.map((file) => (
-              <li key={file.id}>
-                <a href={`/api/attachments/${file.id}`} className="text-base font-medium underline">
-                  {labelForAttachmentKind(file.kind)} · {file.original_name}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <DriverDocClassify files={attachments} />
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-b border-slate-100 py-2 last:border-0">
+    <div className="border-b border-white/10 py-2 last:border-0">
       <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-base">{value}</div>
+      <div className="text-base text-white">{value}</div>
     </div>
   );
 }

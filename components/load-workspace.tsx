@@ -10,11 +10,13 @@ import {
   requestPodAction,
   saveTemplateAction,
   sendLoadSmsAction,
+  sendLoadWhatsAppAction,
   sendToAccountingAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
+import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
 import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
@@ -35,6 +37,7 @@ export function LoadWorkspace({
   dispatchers,
   docsRequested,
   smsConfigured,
+  whatsappConfigured = false,
   role,
   returnTo = "/board",
   watched = false,
@@ -56,6 +59,7 @@ export function LoadWorkspace({
   dispatchers: Array<{ id: number; name: string }>;
   docsRequested: boolean;
   smsConfigured: boolean;
+  whatsappConfigured?: boolean;
   role: string;
   returnTo?: string;
   watched?: boolean;
@@ -127,15 +131,16 @@ export function LoadWorkspace({
     router.push(href);
   }
 
-  function driverPhoneError(): string | null {
-    if (!smsConfigured) return SMS_MISSING_KEYS;
+  function driverPhoneError(channel: "sms" | "whatsapp" = "sms"): string | null {
+    if (channel === "sms" && !smsConfigured) return SMS_MISSING_KEYS;
+    if (channel === "whatsapp" && !whatsappConfigured) return WHATSAPP_MISSING;
     if (!driverAssigned) return "Assign a driver first.";
     if (!driverPhone.trim()) return "The assigned driver needs a mobile number.";
     return null;
   }
 
-  function requireDriverPhone(): boolean {
-    const error = driverPhoneError();
+  function requireDriverPhone(channel: "sms" | "whatsapp" = "sms"): boolean {
+    const error = driverPhoneError(channel);
     if (!error) return true;
     setSmsNotice({ tone: "error", text: error });
     return false;
@@ -156,6 +161,24 @@ export function LoadWorkspace({
     }
     setDispatchOpen(false);
     setSmsNotice({ tone: "ok", text: result.message ?? "Text sent." });
+    router.refresh();
+  }
+
+  async function sendWhatsApp(kind: "message" | "load_info", body?: string) {
+    if (!loadId) return;
+    setSmsPending(true);
+    const formData = new FormData();
+    formData.set("load_id", String(loadId));
+    formData.set("kind", kind);
+    if (body) formData.set("body", body);
+    const result = await sendLoadWhatsAppAction(formData);
+    setSmsPending(false);
+    if (!result.ok) {
+      setSmsNotice({ tone: "error", text: result.error });
+      return;
+    }
+    setDispatchOpen(false);
+    setSmsNotice({ tone: "ok", text: result.message ?? "WhatsApp sent." });
     router.refresh();
   }
 
@@ -212,6 +235,19 @@ export function LoadWorkspace({
             Text dispatch to driver
           </button>
         ) : null}
+        {canSendSms(role) ? (
+          <button
+            type="button"
+            className="btn load-action-btn"
+            onClick={() => {
+              if (!requireDriverPhone("whatsapp")) return;
+              setSmsNotice(null);
+              setDispatchOpen(true);
+            }}
+          >
+            WhatsApp load
+          </button>
+        ) : null}
         <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
@@ -246,6 +282,22 @@ export function LoadWorkspace({
                 }}
               >
                 Send Text Message
+              </button>
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  if (!requireDriverPhone("whatsapp")) return;
+                  const body = window.prompt("Short WhatsApp to the assigned driver:");
+                  if (body == null) return;
+                  if (!body.trim()) {
+                    window.alert("Type a short message.");
+                    return;
+                  }
+                  void sendWhatsApp("message", body);
+                }}
+              >
+                Send WhatsApp
               </button>
             </>
           ) : null}
@@ -410,6 +462,17 @@ export function LoadWorkspace({
                 onClick={() => void sendSms("load_info")}
               >
                 {smsPending ? "Sending…" : "Send text"}
+              </button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={smsPending}
+                onClick={() => {
+                  if (!requireDriverPhone("whatsapp")) return;
+                  void sendWhatsApp("load_info");
+                }}
+              >
+                {smsPending ? "Sending…" : "Send WhatsApp"}
               </button>
             </div>
           </div>

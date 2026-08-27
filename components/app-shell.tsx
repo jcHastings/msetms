@@ -26,18 +26,20 @@ export function AppShell({
   const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col">
-        <div className="border-b border-white/10 px-5 py-5">
+      <aside className="desk-sidebar sticky top-0 flex h-screen w-[4.75rem] shrink-0 flex-col">
+        <div className="desk-sidebar-brand border-b border-white/10 px-1 py-3">
           <Link href="/" className="block">
             <BrandMark variant="dark" size="sm" />
           </Link>
         </div>
         <NavLinks role={dispatcher.role} />
-        <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-400">
-          <div className="font-medium text-slate-200">{dispatcher.name}</div>
-          <div>{roleLabel(dispatcher.role)}</div>
+        <div className="border-t border-white/10 px-1 py-3 text-center text-[10px] text-slate-400">
+          <div className="truncate font-medium text-slate-200" title={dispatcher.name}>
+            {dispatcher.name.split(" ")[0]}
+          </div>
+          <div className="truncate">{roleLabel(dispatcher.role)}</div>
           <form action={dispatcherLogoutAction} className="mt-2">
-            <button className="btn btn-ghost px-0 text-slate-300" type="submit">
+            <button className="btn btn-ghost px-1 text-[10px] text-slate-300" type="submit">
               Sign out
             </button>
           </form>

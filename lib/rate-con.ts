@@ -21,11 +21,37 @@ export {
   type ParsedStop,
 } from "./rate-con-shared";
 
+export function looksLikeEmailUpload(filename: string, mimeType = ""): boolean {
+  const name = filename.toLowerCase();
+  const mime = mimeType.toLowerCase();
+  return (
+    mime.includes("message") ||
+    mime.includes("rfc822") ||
+    mime.includes("text/plain") ||
+    /\.(eml|msg|txt)$/i.test(name)
+  );
+}
+
+export function extractEmailBody(raw: string): string {
+  let text = raw.replace(/\r\n/g, "\n");
+  if (/^(from|to|subject|date|mime-version):/im.test(text)) {
+    const split = text.search(/\n\n/);
+    if (split > 0) text = text.slice(split + 2);
+  }
+  text = text.replace(/=\n/g, "");
+  text = text.replace(/<[^>]+>/g, " ");
+  return text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export async function extractDocumentText(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
   const isPdf = mimeType.includes("pdf") || filename.toLowerCase().endsWith(".pdf");
   if (isPdf) {
     const result = await extractText(new Uint8Array(buffer), { mergePages: true });
     return String(result.text ?? "").trim();
+  }
+
+  if (looksLikeEmailUpload(filename, mimeType)) {
+    return extractEmailBody(buffer.toString("utf8"));
   }
 
   const isImage = mimeType.startsWith("image/") || /\.(png|jpe?g|webp|heic)$/i.test(filename);
@@ -43,7 +69,7 @@ export async function extractDocumentText(buffer: Buffer, mimeType: string, file
     }
   }
 
-  throw new Error("Upload a PDF or an image of the rate confirmation.");
+  throw new Error("Upload a PDF, image, or forwarded load email.");
 }
 
 export function textLooksLikeFilenameOnly(text: string, filename = ""): boolean {

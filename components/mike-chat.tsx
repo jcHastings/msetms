@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { askMikeAction } from "@/lib/mike-actions";
-import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage } from "@/lib/mike-shared";
+import { askMikeAction, confirmMikeProposalAction } from "@/lib/mike-actions";
+import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "@/lib/mike-shared";
 
 export function MikeChat({
   configured,
@@ -13,7 +13,9 @@ export function MikeChat({
 }) {
   const [state, formAction, pending] = useActionState(askMikeAction, null);
   const [liveConfigured, setLiveConfigured] = useState<boolean | null>(null);
+  const [confirmNotice, setConfirmNotice] = useState<string | null>(null);
   const messages = state?.messages ?? initialMessages;
+  const proposals = state?.proposals ?? [];
   const ready = state?.configured ?? liveConfigured ?? configured;
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function MikeChat({
         ) : null}
         {messages.length === 0 && ready ? (
           <p className="text-slate-500">
-            Ask who is empty, who is closest to a city, or what a truck is doing. Mike will not invent GPS.
+            Ask who is empty, draft a detention email, or start a load from a rate-con. Confirm before anything sends.
           </p>
         ) : null}
         {messages.map((message, index) => (
@@ -61,6 +63,18 @@ export function MikeChat({
             <p className="mt-0.5 whitespace-pre-wrap">{message.content}</p>
           </div>
         ))}
+        {proposals.length > 0 ? (
+          <div className="space-y-2">
+            {proposals.map((proposal) => (
+              <ProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                onDone={(text) => setConfirmNotice(text)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {confirmNotice ? <p className="text-sm text-emerald-800">{confirmNotice}</p> : null}
         {state && !state.ok && state.error ? (
           <p className="text-sm text-rose-700">{state.error}</p>
         ) : null}
@@ -74,7 +88,7 @@ export function MikeChat({
           name="question"
           rows={2}
           required
-          placeholder="Closest driver to Amarillo TX?"
+          placeholder="Draft detention on 1005921"
           className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <button className="btn btn-primary mt-2 w-full" type="submit" disabled={pending}>
@@ -82,5 +96,47 @@ export function MikeChat({
         </button>
       </form>
     </aside>
+  );
+}
+
+function ProposalCard({
+  proposal,
+  onDone,
+}: {
+  proposal: MikeProposal;
+  onDone: (text: string) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  return (
+    <form
+      className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+      action={async (formData) => {
+        setPending(true);
+        const result = await confirmMikeProposalAction(formData);
+        setPending(false);
+        if (!result.ok) {
+          onDone(result.error);
+          return;
+        }
+        onDone(result.message ?? "Done.");
+        if (proposal.kind === "detention_email" && proposal.payload.to) {
+          const mailto = `mailto:${encodeURIComponent(proposal.payload.to)}?subject=${encodeURIComponent(proposal.payload.subject || "")}&body=${encodeURIComponent(proposal.payload.body || "")}`;
+          window.location.href = mailto;
+        }
+        if (proposal.payload.href) {
+          window.location.href = proposal.payload.href;
+        }
+      }}
+    >
+      <input type="hidden" name="kind" value={proposal.kind} />
+      {Object.entries(proposal.payload).map(([key, value]) => (
+        <input key={key} type="hidden" name={key} value={value} />
+      ))}
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{proposal.title}</div>
+      <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{proposal.preview}</p>
+      <button className="btn btn-primary mt-2" type="submit" disabled={pending}>
+        {pending ? "Working…" : "Confirm"}
+      </button>
+    </form>
   );
 }

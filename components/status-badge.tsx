@@ -37,6 +37,10 @@ export function LoadStatusBadge({ status }: { status: string }) {
   return <Pill className={loadStatusBadgeClass(status)}>{labelForLoadStatus(status)}</Pill>;
 }
 
+export function CriticalTag() {
+  return <Pill className="bg-rose-600 text-white ring-rose-700">Critical</Pill>;
+}
+
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {
   return <Pill className={TRUCK_STYLES[status]}>{labelForTruckStatus(status)}</Pill>;
 }

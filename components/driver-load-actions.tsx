@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { DriverCameraPdf } from "@/components/driver-camera-pdf";
-import { DRIVER_UPLOAD_KINDS } from "@/lib/driver-docs";
 import { driverStopButtons, type DriverStopButton } from "@/lib/driver-stops";
 import { driverStopCheckAction, driverUploadAction } from "@/lib/driver-actions";
 import { labelForDriverProgress } from "@/lib/types";
@@ -40,7 +39,7 @@ export function DriverLoadActions({
 
   return (
     <section className="mt-5 space-y-3">
-      <h2 className="text-base font-semibold">Check in / check out</h2>
+      <h2 className="text-base font-semibold text-white">Check in / check out</h2>
       {buttons.map((button) => (
         <button
           key={`${button.stopId}-${button.kind}`}
@@ -61,28 +60,19 @@ export function DriverLoadActions({
       <DriverCameraPdf loadId={loadId} loadNumber={loadNumber} />
 
       <form
-        className="rounded-2xl bg-white p-4 shadow-sm"
+        className="rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10"
         action={async (formData) => {
           setError(null);
           const result = await driverUploadAction(formData);
           if (!result.ok) setError(result.error);
         }}
       >
-        <h2 className="text-base font-semibold">Or upload a file you already have</h2>
+        <h2 className="text-base font-semibold text-white">Or upload a file you already have</h2>
+        <p className="mt-1 text-sm text-slate-400">Upload first. Pick Receipt, Scale Ticket, BOL, or Proof of Delivery after.</p>
         <input type="hidden" name="load_id" value={loadId} />
         <div className="mt-3 field">
-          <label htmlFor="kind">Type</label>
-          <select id="kind" name="kind" className="min-h-12" defaultValue="pod">
-            {DRIVER_UPLOAD_KINDS.map((kind) => (
-              <option key={kind.value} value={kind.value}>
-                {kind.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="mt-3 field">
-          <label htmlFor="file">File</label>
-          <input id="file" name="file" type="file" required accept="image/*,.pdf" className="min-h-12" />
+          <label htmlFor="file" className="text-slate-300">File</label>
+          <input id="file" name="file" type="file" required accept="image/*,.pdf" className="min-h-12 text-white" />
         </div>
         <button className="btn btn-primary mt-4 min-h-12 w-full text-base" type="submit">
           Save to this load
