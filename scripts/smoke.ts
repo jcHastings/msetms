@@ -340,6 +340,8 @@ async function main() {
   assert.match(stopsSource, /formatLocationAddress/);
   assert.match(stopsSource, /stopTypeNumber/);
   assert.match(stopsSource, /stopTypeLabel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /export function stopTypeNumber/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /Delivery" : "Pickup"/);
   assert.match(stopsSource, /datetime-local/);
   assert.match(stopsSource, /onBlur/);
   assert.match(stopsSource, /commitTime/);

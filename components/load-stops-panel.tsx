@@ -15,7 +15,7 @@ import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
-import { stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops";
+import { stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
 import type { Location } from "@/lib/types";
 
 export function LoadStopsPanel({
@@ -527,8 +527,8 @@ function StopGridBlock({
             <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
           </div>
         </td>
-        <td>
-          <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`} data-stop-type="">
+        <td className="whitespace-nowrap">
+          <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`} data-stop-type={typeLabel}>
             {typeLabel}
           </span>
         </td>
