@@ -5,6 +5,26 @@ import { getLoad, getLocation, listLocations } from "./queries";
 
 export type LoadStopKind = "pickup" | "delivery";
 
+export function stopTypeNumber(
+  stops: Array<{ id: number; kind: string }>,
+  stopId: number,
+): number {
+  const match = stops.find((stop) => stop.id === stopId);
+  if (!match) return 0;
+  let count = 0;
+  for (const stop of stops) {
+    if (stop.kind !== match.kind) continue;
+    count += 1;
+    if (stop.id === stopId) return count;
+  }
+  return 0;
+}
+
+export function stopTypeLabel(kind: string, typeNumber: number): string {
+  const name = kind === "delivery" ? "Delivery" : "Pickup";
+  return typeNumber > 0 ? `${name} ${typeNumber}` : name;
+}
+
 export type LoadStop = {
   id: number;
   load_id: number;

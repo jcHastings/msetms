@@ -338,7 +338,16 @@ async function main() {
   assert.match(stopsSource, /stop-front-window/);
   assert.match(stopsSource, /formatStopWindow/);
   assert.match(stopsSource, /formatLocationAddress/);
+  assert.match(stopsSource, /stopTypeNumber/);
+  assert.match(stopsSource, /stopTypeLabel/);
+  assert.match(stopsSource, /datetime-local/);
+  assert.match(stopsSource, /onBlur/);
+  assert.match(stopsSource, /commitTime/);
+  assert.match(stopsSource, /stopPrivateNotes/);
+  assert.doesNotMatch(stopsSource, /#\{index\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /stop-front/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-stops/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /stop-time-input/);
   assert.match(stopsSource, /data-stop-autosave/);
   assert.match(stopsSource, /persistStop/);
   assert.match(stopsSource, /isFirstAssign/);
@@ -5196,6 +5205,18 @@ Continuous reefer. Two load locks.
   assert.equal(detailed?.seal_numbers, "S-SMOKE");
 
   const loadStops = await import("../lib/stops");
+  const typeOrder = [
+    { id: 1, kind: "delivery" },
+    { id: 2, kind: "pickup" },
+    { id: 3, kind: "delivery" },
+    { id: 4, kind: "delivery" },
+  ];
+  assert.equal(loadStops.stopTypeNumber(typeOrder, 1), 1);
+  assert.equal(loadStops.stopTypeNumber(typeOrder, 2), 1);
+  assert.equal(loadStops.stopTypeNumber(typeOrder, 3), 2);
+  assert.equal(loadStops.stopTypeNumber(typeOrder, 4), 3);
+  assert.equal(loadStops.stopTypeLabel("delivery", 1), "Delivery 1");
+  assert.equal(loadStops.stopTypeLabel("pickup", 2), "Pickup 2");
   const defaultStops = loadStops.ensureDefaultStops(clonedId);
   assert.ok(defaultStops.length >= 2);
   loadStops.addStop(clonedId, {

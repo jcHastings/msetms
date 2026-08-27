@@ -13,9 +13,9 @@ import { useLoadEdit } from "@/components/load-edit-context";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
-import { formatDateTime, formatStopWindow, toInputDateTime } from "@/lib/format";
+import { formatStopWindow, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
-import type { LoadStop } from "@/lib/stops";
+import { stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops";
 import type { Location } from "@/lib/types";
 
 export function LoadStopsPanel({
@@ -74,48 +74,65 @@ export function LoadStopsPanel({
           </button>
         </div>
       </div>
-      <div className="space-y-1 p-2">
+      <div className="overflow-x-auto">
         {orderedStops.length === 0 ? (
           <p className="px-3 py-4 text-sm text-slate-500">No stops yet. Add a pickup or delivery.</p>
         ) : (
-          <div className="space-y-1" data-stops-grid="">
-            {orderedStops.map((stop, index) => (
-              <StopGridBlock
-                key={stop.id}
-                stop={stop}
-                index={index + 1}
-                locations={locations}
-                dragging={draggingId === stop.id}
-                gapMiles={
-                  index < orderedStops.length - 1
-                    ? milesForStopGap(index, orderedStops.length, routeGuide ?? { totalMiles: null, legMiles: [] })
-                    : null
-                }
-                onEdit={() => setDialog({ mode: "edit", kind: stop.kind, stop })}
-                onDragStart={() => setDraggingId(stop.id)}
-                onDragOver={(overId) => {
-                  if (draggingId == null || draggingId === overId) return;
-                  setOrder((current) => {
-                    const from = current.indexOf(draggingId);
-                    const to = current.indexOf(overId);
-                    if (from < 0 || to < 0) return current;
-                    const next = current.slice();
-                    next.splice(from, 1);
-                    next.splice(to, 0, draggingId);
-                    orderRef.current = next;
-                    return next;
-                  });
-                }}
-                onDrop={() => {
-                  setDraggingId(null);
-                  const nextIds = orderRef.current;
-                  if (nextIds.join(",") !== stops.map((item) => item.id).join(",")) {
-                    void persistOrder(nextIds);
+          <table className="table-grid table-grid-stops" data-stops-grid="">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Stop</th>
+                <th>Location</th>
+                <th>Address</th>
+                <th>Window</th>
+                <th>Arrived</th>
+                <th>Departed</th>
+                <th>Notes</th>
+                <th>Cargo</th>
+                <th>Ref</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderedStops.map((stop, index) => (
+                <StopGridBlock
+                  key={stop.id}
+                  stop={stop}
+                  typeNumber={stopTypeNumber(orderedStops, stop.id)}
+                  locations={locations}
+                  dragging={draggingId === stop.id}
+                  gapMiles={
+                    index < orderedStops.length - 1
+                      ? milesForStopGap(index, orderedStops.length, routeGuide ?? { totalMiles: null, legMiles: [] })
+                      : null
                   }
-                }}
-              />
-            ))}
-          </div>
+                  onEdit={() => setDialog({ mode: "edit", kind: stop.kind, stop })}
+                  onDragStart={() => setDraggingId(stop.id)}
+                  onDragOver={(overId) => {
+                    if (draggingId == null || draggingId === overId) return;
+                    setOrder((current) => {
+                      const from = current.indexOf(draggingId);
+                      const to = current.indexOf(overId);
+                      if (from < 0 || to < 0) return current;
+                      const next = current.slice();
+                      next.splice(from, 1);
+                      next.splice(to, 0, draggingId);
+                      orderRef.current = next;
+                      return next;
+                    });
+                  }}
+                  onDrop={() => {
+                    setDraggingId(null);
+                    const nextIds = orderRef.current;
+                    if (nextIds.join(",") !== stops.map((item) => item.id).join(",")) {
+                      void persistOrder(nextIds);
+                    }
+                  }}
+                />
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
       {dialog ? (
@@ -188,6 +205,13 @@ function emptyDraft(kind: "pickup" | "delivery"): StopDraft {
     departedAt: "",
     scheduleType: "",
   };
+}
+
+function stopPrivateNotes(draft: StopDraft, location: Location | null | undefined): string {
+  const schedule = draft.scheduleType === "fcfs" ? "FCFS" : draft.scheduleType === "appointment" ? "APPT" : "";
+  return [schedule, location?.hours?.trim(), location?.scheduling_notes?.trim(), draft.instructions.trim()]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function applyLocationToDraft(draft: StopDraft, location: Location): StopDraft {
@@ -350,7 +374,7 @@ function StopDialog({
 
 function StopGridBlock({
   stop,
-  index,
+  typeNumber,
   locations,
   gapMiles,
   dragging,
@@ -360,7 +384,7 @@ function StopGridBlock({
   onDrop,
 }: {
   stop: LoadStop;
-  index: number;
+  typeNumber: number;
   locations: Location[];
   gapMiles: number | null;
   dragging: boolean;
@@ -441,28 +465,32 @@ function StopGridBlock({
   const pickup = kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end);
   const address = formatLocationAddress(draft);
-  const city = [draft.city, draft.state].filter(Boolean).join(", ") || address;
-  const rules = locationRuleLabels(
-    locations.find((location) => String(location.id) === draft.locationId) ??
-      matchLocationForStop(locations, {
-        name: draft.name,
-        street: draft.street,
-        city: draft.city,
-        state: draft.state,
-      }),
-  );
-  const arrivedLabel = stop.arrived_at ? formatDateTime(stop.arrived_at) : "—";
-  const departedLabel = stop.departed_at ? formatDateTime(stop.departed_at) : "—";
+  const location =
+    locations.find((item) => String(item.id) === draft.locationId) ??
+    matchLocationForStop(locations, {
+      name: draft.name,
+      street: draft.street,
+      city: draft.city,
+      state: draft.state,
+    });
+  const rules = locationRuleLabels(location);
+  const notes = stopPrivateNotes(draft, location);
+  const typeLabel = stopTypeLabel(kind, typeNumber);
+
+  function commitTime(field: "windowStart" | "windowEnd" | "arrivedAt" | "departedAt", value: string) {
+    const next = { ...draft, [field]: value };
+    setDraft(next);
+    const original = initialStopDraft(stop, locations);
+    if (next[field] === original[field]) return;
+    void persistStop(next);
+  }
+
   return (
     <>
-      <article
-        className={`rounded-md border border-slate-200 px-2 py-1 ${pickup ? "stop-row-pickup" : "stop-row-delivery"} ${
-          dragging ? "opacity-70" : ""
-        }`}
+      <tr
+        className={`${pickup ? "stop-row-pickup" : "stop-row-delivery"} ${dragging ? "opacity-70" : ""}`}
         data-stop-front=""
         title={rules.join(" · ")}
-        draggable
-        onDragStart={onDragStart}
         onDragOver={(event) => {
           event.preventDefault();
           onDragOver(stop.id);
@@ -471,31 +499,89 @@ function StopGridBlock({
           event.preventDefault();
           onDrop();
         }}
-        onDragEnd={onDrop}
       >
-        <form action={updateStopAction} id={`stop-form-${stop.id}`} className="hidden">
-          <input type="hidden" name="stop_id" value={stop.id} />
-        </form>
-        <div className="stop-front">
-          <span className="cursor-grab text-xs font-semibold text-slate-400" aria-hidden>
+        <td className="stop-front">
+          <form action={updateStopAction} id={`stop-form-${stop.id}`} className="hidden">
+            <input type="hidden" name="stop_id" value={stop.id} />
+          </form>
+          <span
+            className="cursor-grab text-xs font-semibold text-slate-400"
+            aria-hidden
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDrop}
+          >
             ⋮⋮
           </span>
-          <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`}>
-            #{index} {pickup ? "Pickup" : "Delivery"}
+          <div className="hidden">
+            <input form={`stop-form-${stop.id}`} name="kind" value={kind} readOnly />
+            <input form={`stop-form-${stop.id}`} name="name" value={draft.name} readOnly />
+            <input form={`stop-form-${stop.id}`} name="location_id" value={draft.locationId} readOnly />
+            <input form={`stop-form-${stop.id}`} name="street" value={draft.street} readOnly />
+            <input form={`stop-form-${stop.id}`} name="city" value={draft.city} readOnly />
+            <input form={`stop-form-${stop.id}`} name="state" value={draft.state} readOnly />
+            <input form={`stop-form-${stop.id}`} name="zip" value={draft.zip} readOnly />
+            <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} readOnly />
+            <input form={`stop-form-${stop.id}`} name="reference" value={draft.reference} readOnly />
+            <input form={`stop-form-${stop.id}`} name="instructions" value={draft.instructions} readOnly />
+            <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
+          </div>
+        </td>
+        <td>
+          <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`} data-stop-type="">
+            {typeLabel}
           </span>
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold">{draft.name}</div>
-            <div className="stop-front-address truncate">{city || "—"}</div>
+        </td>
+        <td className="font-semibold">{draft.name}</td>
+        <td className="stop-front-address">{address || "—"}</td>
+        <td>
+          <div className="stop-front-window" data-stop-window="" title={windowLabel || undefined}>
+            <input
+              className="stop-time-input"
+              type="datetime-local"
+              aria-label="Window start"
+              value={draft.windowStart}
+              onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))}
+              onBlur={(event) => commitTime("windowStart", event.target.value)}
+            />
+            <input
+              className="stop-time-input"
+              type="datetime-local"
+              aria-label="Window end"
+              value={draft.windowEnd}
+              onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
+              onBlur={(event) => commitTime("windowEnd", event.target.value)}
+            />
           </div>
-          <div className="stop-front-window" data-stop-window="">
-            {windowLabel || "No window"}
-          </div>
-          <div className="whitespace-nowrap text-[11px] leading-tight text-slate-600">
-            <div>Arr {arrivedLabel}</div>
-            <div>Dep {departedLabel}</div>
-          </div>
+        </td>
+        <td>
+          <input
+            className="stop-time-input"
+            type="datetime-local"
+            aria-label="Arrived"
+            value={draft.arrivedAt}
+            onChange={(event) => setDraft((current) => ({ ...current, arrivedAt: event.target.value }))}
+            onBlur={(event) => commitTime("arrivedAt", event.target.value)}
+          />
+        </td>
+        <td>
+          <input
+            className="stop-time-input"
+            type="datetime-local"
+            aria-label="Departed"
+            value={draft.departedAt}
+            onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))}
+            onBlur={(event) => commitTime("departedAt", event.target.value)}
+          />
+        </td>
+        <td className="stop-front-notes" title={notes || undefined}>
+          {notes || "—"}
+        </td>
+        <td className="stop-front-cargo">{stop.cargo || "—"}</td>
+        <td className="stop-front-ref">{draft.reference || "—"}</td>
+        <td className="whitespace-nowrap">
           <button type="button" className="btn btn-ghost px-2 py-1 text-xs" onClick={onEdit}>
-            Edit notes
+            Edit
           </button>
           <button
             className="btn btn-ghost px-2 py-1 text-xs text-rose-700"
@@ -505,25 +591,16 @@ function StopGridBlock({
           >
             Remove
           </button>
-        </div>
-        <div className="hidden">
-          <input form={`stop-form-${stop.id}`} name="kind" value={kind} readOnly />
-          <input form={`stop-form-${stop.id}`} name="name" value={draft.name} readOnly />
-          <input form={`stop-form-${stop.id}`} name="location_id" value={draft.locationId} readOnly />
-          <input form={`stop-form-${stop.id}`} name="street" value={draft.street} readOnly />
-          <input form={`stop-form-${stop.id}`} name="city" value={draft.city} readOnly />
-          <input form={`stop-form-${stop.id}`} name="state" value={draft.state} readOnly />
-          <input form={`stop-form-${stop.id}`} name="zip" value={draft.zip} readOnly />
-          <input form={`stop-form-${stop.id}`} name="phone" value={draft.phone} readOnly />
-          <input form={`stop-form-${stop.id}`} name="reference" value={draft.reference} readOnly />
-          <input form={`stop-form-${stop.id}`} name="instructions" value={draft.instructions} readOnly />
-          <input form={`stop-form-${stop.id}`} type="hidden" name="cargo" defaultValue={stop.cargo} />
-        </div>
-      </article>
+        </td>
+      </tr>
       {gapMiles != null ? (
-        <p className="px-1 text-xs font-semibold text-slate-600" data-leg-miles="">
-          {formatRouteMiles(gapMiles)} to next stop
-        </p>
+        <tr className="stop-leg-miles">
+          <td colSpan={11}>
+            <p className="px-1 text-xs font-semibold text-slate-600" data-leg-miles="">
+              {formatRouteMiles(gapMiles)} to next stop
+            </p>
+          </td>
+        </tr>
       ) : null}
     </>
   );
