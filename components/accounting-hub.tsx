@@ -124,7 +124,7 @@ function HubTableCard({
 
 function HubActions({ children }: { children: ReactNode }) {
   return (
-    <td className="min-w-[12rem]">
+    <td className="sticky right-0 z-10 min-w-[12rem] bg-white shadow-[-8px_0_12px_-8px_rgba(15,23,42,0.18)]">
       <div className="flex min-w-[12rem] flex-col items-stretch gap-1">{children}</div>
     </td>
   );
@@ -183,7 +183,7 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
             <th>Invoice Total</th>
             <th>Balance</th>
             <th>QB Export</th>
-            <th className="min-w-[12rem]">Actions</th>
+            <th className="sticky right-0 z-10 min-w-[12rem] bg-slate-50">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -335,7 +335,7 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
               <th>Balance to Pay</th>
               <th>Remit To</th>
               <th>QBO Export</th>
-              <th className="min-w-[12rem]">Actions</th>
+              <th className="sticky right-0 z-10 min-w-[12rem] bg-slate-50">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -422,7 +422,7 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
             <th>Invoice(s) Total</th>
             <th>Bill(s) Total</th>
             <th>Gross P/L</th>
-            <th className="min-w-[12rem]">Actions</th>
+            <th className="sticky right-0 z-10 min-w-[12rem] bg-slate-50">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -490,7 +490,7 @@ function ArchivedTab({ q, branch, branches }: { q: string; branch: string; branc
           <tr>
             <th>Load #</th>
             <th>Company Name</th>
-            <th className="min-w-[12rem]">Actions</th>
+            <th className="sticky right-0 z-10 min-w-[12rem] bg-slate-50">Actions</th>
           </tr>
         </thead>
         <tbody>
