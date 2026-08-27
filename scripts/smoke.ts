@@ -6116,6 +6116,15 @@ Continuous reefer. Two load locks.
     font_size: 11,
   });
   assert.equal(settings.getDocumentDefaults("load_confirmation").header_text, "Smoke confirmation");
+  settings.updateDocumentDefaults({
+    doc_type: "invoice",
+    header_text: "Invoice",
+    footer_text: "Payment due per customer terms.",
+    terms_text: "Linehaul is the customer rate. Accessorials are billed separately when recorded.",
+    font_size: 10,
+  });
+  assert.equal(settings.getDocumentDefaults("invoice").footer_text, "");
+  assert.equal(settings.getDocumentDefaults("invoice").terms_text, "");
   const commodityId = settings.addDropdownOption({ kind: "commodity", value: "", label: "Smoke commodity" });
   assert.ok(settings.commoditySuggestions().includes("Smoke commodity"));
   settings.setDropdownOptionActive(commodityId, false);
