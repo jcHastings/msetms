@@ -624,8 +624,54 @@ export function isDieselPaidCategory(category: string): boolean {
 }
 
 export function isTruckDieselCategory(category: string): boolean {
+  if (isMoneyCodeCategory(category)) return false;
   if (category === "truck_diesel") return true;
   return classifyFuelCategory(category) === "truck_diesel";
+}
+
+export const FUEL_TX_LISTS = [
+  { value: "truck_diesel", label: "Truck diesel" },
+  { value: "reefer", label: "Reefer" },
+  { value: "scale", label: "Scale" },
+  { value: "money_code", label: "Money code" },
+  { value: "def", label: "DEF" },
+] as const;
+
+export type FuelTxListKind = (typeof FUEL_TX_LISTS)[number]["value"];
+
+export function isMoneyCodeCategory(category: string): boolean {
+  const key = String(category ?? "").trim().toLowerCase();
+  if (key === "money_code") return true;
+  return /money\s*code|cash\s*advance/.test(key);
+}
+
+export function fuelTxListKind(category: string): FuelTxListKind | null {
+  if (isMoneyCodeCategory(category)) return "money_code";
+  if (category === "reefer_diesel" || classifyFuelCategory(category) === "reefer_diesel") return "reefer";
+  if (category === "scale" || classifyFuelCategory(category) === "scale") return "scale";
+  if (category === "def" || classifyFuelCategory(category) === "def") return "def";
+  if (isTruckDieselCategory(category)) return "truck_diesel";
+  return null;
+}
+
+export function parseFuelTxList(value: string | undefined): FuelTxListKind {
+  if (value === "reefer" || value === "scale" || value === "money_code" || value === "def") return value;
+  return "truck_diesel";
+}
+
+export function groupFuelTxByList<T extends { category: string }>(rows: T[]): Record<FuelTxListKind, T[]> {
+  const groups: Record<FuelTxListKind, T[]> = {
+    truck_diesel: [],
+    reefer: [],
+    scale: [],
+    money_code: [],
+    def: [],
+  };
+  for (const row of rows) {
+    const kind = fuelTxListKind(row.category);
+    if (kind) groups[kind].push(row);
+  }
+  return groups;
 }
 
 function mean(values: number[]): number | null {
@@ -646,7 +692,7 @@ export function fuelWeekPaidStats(
   const amounts: number[] = [];
   const ppgs: number[] = [];
   for (const row of rows) {
-    if (!isDieselPaidCategory(row.category)) continue;
+    if (!isTruckDieselCategory(row.category)) continue;
     const at = Date.parse(row.occurred_at);
     if (!Number.isFinite(at) || at < startMs || at >= endMs) continue;
     if (row.amount != null && Number.isFinite(row.amount)) amounts.push(row.amount);

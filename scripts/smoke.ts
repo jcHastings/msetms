@@ -4695,6 +4695,13 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
+  assert.match(fuelPage, /FuelTransactionLists/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-tx-tabs/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /Money code/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"),
+    /EFS vs FleetOne|FleetOne|first-class/i,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /data-fuel-mpg/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /Drivers MPG/);
   assert.doesNotMatch(
@@ -4750,6 +4757,7 @@ Continuous reefer. Two load locks.
     classifyFuelCategory,
     fuelWeekPaidStats,
     isTruckDieselCategory,
+    fuelTxListKind,
     parseEfsFuelText,
     looksLikeEfsReport,
     isFuelBucket,
@@ -4793,17 +4801,24 @@ Continuous reefer. Two load locks.
     ],
     wedNy,
   );
-  assert.equal(weekPaid.count, 3);
+  assert.equal(weekPaid.count, 2);
   assert.equal(weekPaid.minAmount, 100);
-  assert.equal(weekPaid.maxAmount, 300);
-  assert.equal(weekPaid.avgAmount, 200);
+  assert.equal(weekPaid.maxAmount, 200);
+  assert.equal(weekPaid.avgAmount, 150);
   assert.equal(weekPaid.minPpg, 3);
-  assert.equal(weekPaid.maxPpg, 4);
-  assert.equal(weekPaid.avgPpg, 3.5);
+  assert.equal(weekPaid.maxPpg, 3.5);
+  assert.equal(weekPaid.avgPpg, 3.25);
   assert.equal(isTruckDieselCategory("truck_diesel"), true);
   assert.equal(isTruckDieselCategory("Truck diesel"), true);
   assert.equal(isTruckDieselCategory("reefer_diesel"), false);
   assert.equal(isTruckDieselCategory("money_code"), false);
+  assert.equal(fuelTxListKind("truck_diesel"), "truck_diesel");
+  assert.equal(fuelTxListKind("reefer_diesel"), "reefer");
+  assert.equal(fuelTxListKind("scale"), "scale");
+  assert.equal(fuelTxListKind("money_code"), "money_code");
+  assert.equal(fuelTxListKind("cash advance"), "money_code");
+  assert.equal(fuelTxListKind("def"), "def");
+  assert.equal(fuelTxListKind("DATE DB CATEGORY"), null);
   const fuelWhen = new Date();
   const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;

@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 import { extractStateCode } from "./locations";
-import type { FuelTransactionView } from "./fuel";
+import { isMoneyCodeCategory, type FuelTransactionView } from "./fuel";
 import { listFuelTransactions } from "./fuel-store";
 import { listLoads } from "./queries";
 import type { Attachment } from "./types";
@@ -77,7 +77,7 @@ function gallonsOff(left: number | null, right: number | null): boolean {
 }
 
 export function listFuelMatchQueue(): FuelMatchRow[] {
-  const transactions = listFuelTransactions();
+  const transactions = listFuelTransactions().filter((row) => !isMoneyCodeCategory(row.category));
   const receipts = listFuelReceipts();
   const loads = listLoads({ status: "all" });
   const usedReceipts = new Set<number>();

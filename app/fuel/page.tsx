@@ -5,13 +5,13 @@ import { FuelMpgTable } from "@/components/fuel-mpg-table";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
-import { FuelAssignForm } from "@/components/fuel-assign-form";
 import { FuelDeleteButton } from "@/components/fuel-delete-button";
+import { FuelTransactionLists, FuelUnassignedLists } from "@/components/fuel-transaction-lists";
 import { linkFuelReceiptFormAction } from "@/lib/actions";
 import { listFuelMatchQueue, listFuelReceipts } from "@/lib/fuel-receipts";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
-import { labelForFuelBucket } from "@/lib/fuel";
+import { parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { getFuelWeekPaidStats, listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export default async function FuelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ driver?: string; truck?: string; mpg?: string }>;
+  searchParams: Promise<{ driver?: string; truck?: string; mpg?: string; tx?: string }>;
 }) {
   const dispatcher = await getPageAccess(canUploadFuel);
   if (!dispatcher) {
@@ -32,6 +32,7 @@ export default async function FuelPage({
   const driverId = Number.parseInt(params.driver ?? "", 10);
   const truckId = Number.parseInt(params.truck ?? "", 10);
   const mpgPeriod = parseDriverMpgPeriod(params.mpg);
+  const txList = parseFuelTxList(params.tx);
   const selectedDriverId = Number.isFinite(driverId) ? driverId : null;
   const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
   const drivers = listDrivers();
@@ -81,147 +82,27 @@ export default async function FuelPage({
         board={mpgBoard}
         selectedDriverId={selectedDriverId}
         selectedTruckId={selectedTruckId}
+        txList={txList}
       />
       <FuelCsvImport />
       <FuelMatchQueue />
 
-      {unmatched.length > 0 ? (
-        <section className="card mb-6 overflow-hidden">
-          <header className="border-b border-slate-200 px-5 py-3">
-            <h2 className="text-sm font-semibold">Unassigned ({unmatched.length})</h2>
-          </header>
-          <div className="overflow-x-auto">
-            <table className="table-grid">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Name on file</th>
-                  <th>Unit</th>
-                  <th>Category</th>
-                  <th>Location</th>
-                  <th>Qty</th>
-                  <th>Amount</th>
-                  <th>Assign</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {unmatched.map((row) => (
-                  <tr key={row.id}>
-                    <td>{formatDateTime(row.occurred_at)}</td>
-                    <td>{row.driver_name_raw || "—"}</td>
-                    <td>{row.truck_unit || row.unit_number || "—"}</td>
-                    <td>{labelForFuelBucket(row.category)}</td>
-                    <td>{row.location || "—"}</td>
-                    <td>{row.category === "scale" ? row.gallons ?? "—" : formatGallons(row.gallons)}</td>
-                    <td>{formatFuelMoney(row.amount)}</td>
-                    <td>
-                      <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
-                    </td>
-                    <td>
-                      <FuelDeleteButton fuelId={row.id} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+      <FuelUnassignedLists rows={unmatched} drivers={driverOptions} loads={loadOptions} />
 
       <FuelRollupTable title="Per-driver totals" rows={driverRollups} hrefFor={(row) => `/fuel?driver=${row.id}`} />
       <FuelRollupTable title="Per-truck totals" rows={truckRollups} hrefFor={(row) => `/fuel?truck=${row.id}`} />
 
-      <section className="card overflow-hidden">
-        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-          <h2 className="text-sm font-semibold">{filterLabel}</h2>
-          {selectedDriver || selectedTruck ? (
-            <Link href="/fuel" className="text-sm font-medium text-navy hover:underline">
-              All fuel
-            </Link>
-          ) : null}
-        </header>
-        {transactions.length === 0 ? (
-          <p className="p-5 text-sm text-slate-600">No fuel rows yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table-grid">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Driver</th>
-                  <th>Truck</th>
-                  <th>Category</th>
-                  <th>Location</th>
-                  <th>Qty</th>
-                  <th>PPG</th>
-                  <th>Amount</th>
-                  <th>Invoice</th>
-                  <th>Card</th>
-                  <th>Load</th>
-                  <th>Assign</th>
-                  <th></th>
-                  <th>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((row) => (
-                  <tr key={row.id}>
-                    <td>{formatDateTime(row.occurred_at)}</td>
-                    <td>
-                      {row.driver_name ? (
-                        <Link href={`/fuel?driver=${row.driver_id}`} className="hover:underline">
-                          {row.driver_name}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      {row.truck_id ? (
-                        <Link href={`/fuel?truck=${row.truck_id}`} className="hover:underline">
-                          {row.truck_unit || row.unit_number}
-                        </Link>
-                      ) : (
-                        row.unit_number || "—"
-                      )}
-                    </td>
-                    <td>{labelForFuelBucket(row.category)}</td>
-                    <td>{row.location || "—"}</td>
-                    <td>
-                      {row.category === "money_code"
-                        ? "—"
-                        : row.category === "scale"
-                          ? row.gallons ?? "—"
-                          : formatGallons(row.gallons)}
-                    </td>
-                    <td>{row.price_per_gallon == null ? "—" : formatFuelMoney(row.price_per_gallon)}</td>
-                    <td>{formatFuelMoney(row.amount)}</td>
-                    <td className="text-xs">{row.invoice_number || "—"}</td>
-                    <td>{row.card_last4 ? `••••${row.card_last4}` : "—"}</td>
-                    <td>
-                      {row.load_id ? (
-                        <Link href={`/loads/${row.load_id}`} className="underline">
-                          {row.load_number || row.load_id}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td>
-                      <FuelAssignForm fuelId={row.id} drivers={driverOptions} loads={loadOptions} />
-                    </td>
-                    <td>
-                      <FuelDeleteButton fuelId={row.id} />
-                    </td>
-                    <td className="text-xs text-slate-500">{row.source_file || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <FuelTransactionLists
+        rows={transactions}
+        active={txList}
+        title={filterLabel}
+        showAllLink={Boolean(selectedDriver || selectedTruck)}
+        mpgPeriod={mpgPeriod}
+        selectedDriverId={selectedDriverId}
+        selectedTruckId={selectedTruckId}
+        drivers={driverOptions}
+        loads={loadOptions}
+      />
     </>
   );
 }

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { fuelPageHref } from "@/components/fuel-transaction-lists";
 import { formatGallons, formatMdYDisplay } from "@/lib/format";
+import type { FuelTxListKind } from "@/lib/fuel";
 import type { DriverMpgBoard, DriverMpgPeriod } from "@/lib/fuel-mpg";
 
 function formatMiles(value: number | null): string {
@@ -12,27 +14,16 @@ function formatMpg(value: number | null): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-function mpgHref(
-  period: DriverMpgPeriod,
-  selectedDriverId: number | null,
-  selectedTruckId: number | null,
-): string {
-  const query = new URLSearchParams();
-  if (period === "month") query.set("mpg", "month");
-  if (selectedDriverId) query.set("driver", String(selectedDriverId));
-  if (selectedTruckId) query.set("truck", String(selectedTruckId));
-  const text = query.toString();
-  return text ? `/fuel?${text}` : "/fuel";
-}
-
 export function FuelMpgTable({
   board,
   selectedDriverId,
   selectedTruckId,
+  txList,
 }: {
   board: DriverMpgBoard;
   selectedDriverId: number | null;
   selectedTruckId: number | null;
+  txList?: FuelTxListKind;
 }) {
   const range = `${formatMdYDisplay(board.startYmd)} – ${formatMdYDisplay(board.endYmd)}`;
   return (
@@ -44,13 +35,13 @@ export function FuelMpgTable({
         </div>
         <div className="flex gap-3 text-sm">
           <Link
-            href={mpgHref("week", selectedDriverId, selectedTruckId)}
+            href={fuelPageHref({ tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId })}
             className={board.period === "week" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This week
           </Link>
           <Link
-            href={mpgHref("month", selectedDriverId, selectedTruckId)}
+            href={fuelPageHref({ tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId })}
             className={board.period === "month" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This month
