@@ -122,7 +122,28 @@ async function main() {
   assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|<code>\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /browserUrl/);
+  const qboCallback = fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/callback/route.ts"), "utf8");
+  assert.match(qboCallback, /browserUrl/);
+  assert.doesNotMatch(qboCallback, /incoming\.origin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /QBO_REDIRECT_URI=/);
+  const { browserOrigin, browserUrl } = await import("../lib/http-origin");
+  const listenRequest = new Request("http://0.0.0.0:3000/api/integrations/quickbooks/callback?connected=1");
+  assert.equal(browserOrigin(listenRequest), "http://localhost:3000");
+  assert.equal(browserUrl("/settings/quickbooks", listenRequest).href, "http://localhost:3000/settings/quickbooks");
+  assert.doesNotMatch(browserUrl("/settings/quickbooks?connected=1", listenRequest).href, /0\.0\.0\.0/);
+  const hostRequest = new Request("http://0.0.0.0:3000/api/integrations/quickbooks/callback", {
+    headers: { host: "localhost:3000" },
+  });
+  assert.equal(browserOrigin(hostRequest), "http://localhost:3000");
+  const forwarded = new Request("http://0.0.0.0:3000/api/integrations/quickbooks/callback", {
+    headers: { "x-forwarded-host": "desk.local:3000", "x-forwarded-proto": "https" },
+  });
+  assert.equal(browserOrigin(forwarded), "https://desk.local:3000");
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"),
+    /http:\/\/localhost:3000\/api\/integrations\/quickbooks\/callback/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /2-step verification/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Set up 2-step/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Require 2-step for all dispatchers/);

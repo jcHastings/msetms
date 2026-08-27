@@ -1,20 +1,20 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
-import { canConnectQuickbooks } from "@/lib/settings-shared";
 import { isQuickbooksOAuthReady } from "@/lib/env";
+import { browserUrl } from "@/lib/http-origin";
+import { canConnectQuickbooks } from "@/lib/settings-shared";
 import { buildQuickbooksAuthorizeUrl, createQuickbooksOAuthState } from "@/lib/integrations/quickbooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
-  const settings = new URL("/settings/quickbooks", origin);
+  const settings = browserUrl("/settings/quickbooks", request);
   try {
     const dispatcher = await getSignedInDispatcher();
     if (!dispatcher) {
-      return NextResponse.redirect(new URL("/login", origin));
+      return NextResponse.redirect(browserUrl("/login", request));
     }
     if (!canConnectQuickbooks(dispatcher.role)) {
       return unauthorizedResponse();

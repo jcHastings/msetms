@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { browserUrl } from "@/lib/http-origin";
 import { canConnectQuickbooks } from "@/lib/settings-shared";
 import { completeQuickbooksOAuth, oauthStatesMatch } from "@/lib/integrations/quickbooks";
 
@@ -9,11 +10,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const incoming = new URL(request.url);
-  const settings = new URL("/settings/quickbooks", incoming.origin);
+  const settings = browserUrl("/settings/quickbooks", request);
   try {
     const dispatcher = await getSignedInDispatcher();
     if (!dispatcher) {
-      return NextResponse.redirect(new URL("/login", incoming.origin));
+      return NextResponse.redirect(browserUrl("/login", request));
     }
     if (!canConnectQuickbooks(dispatcher.role)) {
       return unauthorizedResponse();
