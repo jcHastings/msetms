@@ -7957,6 +7957,205 @@ Continuous reefer. Two load locks.
   assert.match(dashToday, /loadTouchesToday/);
   assert.doesNotMatch(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
+  assert.match(dashToday, /Need cover/);
+  assert.match(dashToday, /data-need-cover/);
+  assert.match(dashToday, /listNeedCover/);
+  assert.doesNotMatch(dashToday, /maps\.google\.com/);
+
+  const { cityStateFromPlace, deliveringSoon, listNeedCover, listNeedCoverRows } = await import("../lib/need-cover");
+  assert.equal(cityStateFromPlace("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
+  assert.equal(cityStateFromPlace("Chicago, IL"), "Chicago, IL");
+  const coverNow = new Date("2026-08-27T18:00:00.000Z");
+  assert.equal(deliveringSoon({ status: "at_delivery", delivery_start: "", delivery_end: "" }, coverNow), true);
+  assert.equal(
+    deliveringSoon(
+      { status: "in_transit", delivery_start: "2026-08-27T20:00:00.000Z", delivery_end: "2026-08-27T22:00:00.000Z" },
+      coverNow,
+    ),
+    true,
+  );
+  assert.equal(
+    deliveringSoon(
+      { status: "in_transit", delivery_start: "2026-08-30T12:00:00.000Z", delivery_end: "2026-08-30T20:00:00.000Z" },
+      coverNow,
+    ),
+    false,
+  );
+  const coverDriver = (
+    id: number,
+    name: string,
+    extra: { active?: number; termination_date?: string; truck_id?: number | null } = {},
+  ) => ({
+    id,
+    name,
+    active: extra.active ?? 1,
+    termination_date: extra.termination_date ?? "",
+    truck_id: extra.truck_id ?? id,
+  });
+  const coverLoad = (partial: Record<string, unknown>) =>
+    ({
+      id: 1,
+      status: "in_transit",
+      pickup_start: "2026-08-26T12:00:00.000Z",
+      delivery_start: "2026-08-27T12:00:00.000Z",
+      delivery_end: "2026-08-27T20:00:00.000Z",
+      destination: "Dallas, TX",
+      updated_at: "2026-08-27T12:00:00.000Z",
+      truck_id: 1,
+      ...partial,
+    }) as import("../lib/types").LoadView;
+  const emptyCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(1, "Empty Ned")],
+      loadsByDriver: new Map([[1, [coverLoad({ status: "delivered", destination: "Omaha, NE" })]]]),
+      locations: [],
+    },
+    coverNow,
+  );
+  assert.equal(emptyCover.length, 1);
+  assert.equal(emptyCover[0]?.reason, "empty");
+  assert.equal(emptyCover[0]?.place, "Omaha, NE");
+  const followCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(2, "Followed Fay")],
+      loadsByDriver: new Map([
+        [
+          2,
+          [
+            coverLoad({ id: 10, status: "in_transit", delivery_end: "2026-08-27T20:00:00.000Z" }),
+            coverLoad({
+              id: 11,
+              status: "assigned",
+              pickup_start: "2026-08-28T12:00:00.000Z",
+              delivery_end: "2026-08-29T20:00:00.000Z",
+            }),
+          ],
+        ],
+      ]),
+      locations: [],
+    },
+    coverNow,
+  );
+  assert.equal(followCover.some((row) => row.driverId === 2), false);
+  const midCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(3, "Mid Miles")],
+      loadsByDriver: new Map([
+        [3, [coverLoad({ status: "in_transit", delivery_end: "2026-08-30T20:00:00.000Z" })]],
+      ]),
+      locations: [],
+    },
+    coverNow,
+  );
+  assert.equal(midCover.some((row) => row.driverId === 3), false);
+  const soonCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(4, "Soon Sam")],
+      loadsByDriver: new Map([
+        [
+          4,
+          [
+            coverLoad({
+              status: "in_transit",
+              destination: "Kansas City, MO",
+              delivery_end: "2026-08-27T22:00:00.000Z",
+            }),
+          ],
+        ],
+      ]),
+      locations: [],
+    },
+    coverNow,
+  );
+  assert.equal(soonCover[0]?.reason, "soon");
+  assert.equal(soonCover[0]?.place, "Kansas City, MO");
+  const liveGpsCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(5, "Gps Gail", { truck_id: 55 })],
+      loadsByDriver: new Map([[5, [coverLoad({ status: "delivered", destination: "Dallas, TX", truck_id: 55 })]]]),
+      locations: [
+        {
+          truckId: 55,
+          address: "400 N Burlington Ave, Hastings, NE 68901",
+          source: "samsara",
+          latitude: 40.58,
+          longitude: -98.38,
+        },
+      ],
+      truckIdByDriver: new Map([[5, 55]]),
+    },
+    coverNow,
+  );
+  assert.equal(liveGpsCover[0]?.place, "Hastings, NE");
+  const demoGpsCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(6, "Demo Dan", { truck_id: 66 })],
+      loadsByDriver: new Map([[6, [coverLoad({ status: "delivered", destination: "Lincoln, NE", truck_id: 66 })]]]),
+      locations: [
+        {
+          truckId: 66,
+          address: "Chicago, IL",
+          source: "demo",
+          latitude: 41.8,
+          longitude: -87.6,
+        },
+      ],
+      truckIdByDriver: new Map([[6, 66]]),
+    },
+    coverNow,
+  );
+  assert.equal(demoGpsCover[0]?.place, "Lincoln, NE");
+  const coordsOnlyCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(7, "Coords Cal", { truck_id: 77 })],
+      loadsByDriver: new Map([[7, [coverLoad({ status: "delivered", destination: "Des Moines, IA", truck_id: 77 })]]]),
+      locations: [
+        {
+          truckId: 77,
+          address: "",
+          source: "samsara",
+          latitude: 41.58,
+          longitude: -93.6,
+        },
+      ],
+      truckIdByDriver: new Map([[7, 77]]),
+    },
+    coverNow,
+  );
+  assert.equal(coordsOnlyCover[0]?.place, "Des Moines, IA");
+  const rankedCover = listNeedCoverRows(
+    {
+      drivers: [coverDriver(8, "Zed Empty"), coverDriver(9, "Ann Soon")],
+      loadsByDriver: new Map([
+        [8, []],
+        [9, [coverLoad({ status: "unloading", destination: "Omaha, NE" })]],
+      ]),
+      locations: [],
+    },
+    coverNow,
+  );
+  assert.equal(rankedCover[0]?.driverName, "Zed Empty");
+  assert.equal(rankedCover[1]?.driverName, "Ann Soon");
+  assert.equal(
+    listNeedCoverRows(
+      {
+        drivers: [coverDriver(10, "Gone Gus", { active: 0 })],
+        loadsByDriver: new Map([[10, []]]),
+        locations: [],
+      },
+      coverNow,
+    ).length,
+    0,
+  );
+  const coverEmptyId = queries.createDriver({
+    name: "Cover Empty Smoke",
+    phone: "555-0190",
+    license: "NE-CDL-COVER-E",
+    pin: "1919",
+    truck_id: null,
+    status: "available",
+  });
+  assert.ok(listNeedCover([], coverNow).some((row) => row.driverId === coverEmptyId && row.reason === "empty"));
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /America\/New_York/);
   const pageCopy = [
     ...fs.readdirSync(path.join(process.cwd(), "app"), { recursive: true, encoding: "utf8" }),

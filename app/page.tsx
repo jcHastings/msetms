@@ -3,7 +3,8 @@ import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
-import { formatDateTime, loadTouchesToday } from "@/lib/format";
+import { formatDateTime, formatMdYDisplay, loadTouchesToday } from "@/lib/format";
+import { listNeedCover } from "@/lib/need-cover";
 import {
   getSamsaraFleet,
   hosForLoad,
@@ -74,6 +75,7 @@ export default async function DashboardPage({
   const recap = dailyRecap();
   const watched = listWatchedLoads().filter((load) => loadTouchesToday(load));
   const handoff = getHandoffNote();
+  const needCover = listNeedCover(fleet.locations);
 
   return (
     <>
@@ -105,6 +107,42 @@ export default async function DashboardPage({
         <Kpi label="Available trucks" value={stats.availableTrucks} href="/fleet" />
         <Kpi label="Unassigned loads" value={stats.unassignedLoads} href="/board?status=available" />
       </div>
+
+      <section className="card mb-6 overflow-hidden" data-need-cover="">
+        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <h2 className="text-sm font-semibold">Need cover</h2>
+          <span className="font-mono text-sm tabular-nums text-slate-500">{needCover.length}</span>
+        </header>
+        {needCover.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-slate-500">Everyone has a next load.</p>
+        ) : (
+          <ol className="list-decimal divide-y divide-slate-100 py-1 pl-10 pr-2 marker:text-slate-400">
+            {needCover.map((row) => {
+              const whenLabel =
+                row.reason === "empty"
+                  ? "Empty"
+                  : formatMdYDisplay(row.when) !== "—"
+                    ? `Delivers ${formatMdYDisplay(row.when)}`
+                    : "Delivers soon";
+              return (
+                <li
+                  key={row.driverId}
+                  className="flex items-baseline justify-between gap-4 py-3 pr-3 text-sm"
+                  data-need-cover-row={row.driverName}
+                >
+                  <div className="min-w-0">
+                    <Link href={`/fleet/drivers/${row.driverId}`} className="font-semibold hover:underline">
+                      {row.driverName}
+                    </Link>
+                    <div className="text-slate-500">{whenLabel}</div>
+                  </div>
+                  <div className="shrink-0 font-medium text-slate-700">{row.place}</div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
 
       <div className="mb-6 grid gap-4 xl:grid-cols-3">
         <section className="card p-5">
