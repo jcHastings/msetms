@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
+import { isBillableStatus } from "@/lib/types";
 
 export function ViewInvoiceButton({
   loadId,
@@ -14,7 +15,7 @@ export function ViewInvoiceButton({
 }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const canInvoice = status === "delivered" || status === "completed";
+  const canInvoice = isBillableStatus(status);
 
   async function onClick() {
     setError("");

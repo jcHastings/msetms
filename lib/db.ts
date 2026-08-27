@@ -312,6 +312,21 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "docs_requested", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "docs_requested_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "ready_to_invoice", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "accounting_desk", "TEXT NOT NULL DEFAULT 'operations'");
+  ensureColumn(db, "loads", "accounting_return_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "accounting_sent_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS qbo_item_maps (
+      category TEXT PRIMARY KEY,
+      qbo_item_id TEXT NOT NULL DEFAULT '',
+      qbo_item_name TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS qbo_vendor_maps (
+      payee TEXT PRIMARY KEY,
+      qbo_vendor_id TEXT NOT NULL DEFAULT '',
+      qbo_vendor_name TEXT NOT NULL DEFAULT ''
+    );
+  `);
   ensureColumn(db, "loads", "truck_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "branch", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "declared_value", "REAL");

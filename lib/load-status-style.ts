@@ -3,7 +3,7 @@
 export type LoadStatusBand = "needs_work" | "pipeline" | "done";
 
 const NEEDS_WORK = new Set(["available", "open", "unassigned", "hold", "needs_cover", "cover"]);
-const DONE = new Set(["delivered", "completed", "cancelled", "canceled", "tonu"]);
+const DONE = new Set(["delivered", "completed", "accounting", "cancelled", "canceled", "tonu"]);
 
 const BADGE: Record<string, string> = {
   available: "bg-amber-100 text-amber-950 ring-amber-400",
@@ -18,6 +18,7 @@ const BADGE: Record<string, string> = {
   unloading: "bg-cyan-100 text-cyan-950 ring-cyan-400",
   delivered: "bg-slate-100 text-slate-600 ring-slate-300",
   completed: "bg-slate-200 text-slate-700 ring-slate-400",
+  accounting: "bg-emerald-100 text-emerald-950 ring-emerald-400",
   cancelled: "bg-stone-200 text-stone-600 ring-stone-400",
   tonu: "bg-stone-200 text-stone-600 ring-stone-400",
 };
@@ -35,6 +36,7 @@ const ROW: Record<string, string> = {
   unloading: "shadow-[inset_4px_0_0_#0e7490]",
   delivered: "opacity-80 shadow-[inset_4px_0_0_#94a3b8]",
   completed: "opacity-75 shadow-[inset_4px_0_0_#64748b]",
+  accounting: "opacity-80 shadow-[inset_4px_0_0_#059669]",
   cancelled: "opacity-70 shadow-[inset_4px_0_0_#a8a29e]",
   tonu: "opacity-70 shadow-[inset_4px_0_0_#a8a29e]",
 };

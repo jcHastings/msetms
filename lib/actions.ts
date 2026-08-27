@@ -450,6 +450,10 @@ export async function updateLoadAction(
     try {
       const actor = await requireLoadEditor();
       const existing = getLoad(id);
+      if (existing) {
+        const { assertCanEditLoadRecord } = await import("./accounting-desk");
+        assertCanEditLoadRecord(existing, actor.role);
+      }
       const input = applyLoadPermissions(parseLoadInput(formData, true, existing), actor.role, existing ?? undefined);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
@@ -491,13 +495,18 @@ export async function updateLoadAction(
 export async function assignLoadAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      await requireLoadAssigner();
+      const actor = await requireLoadAssigner();
       const loadId = parseOptionalInt(formData.get("load_id"));
       const truckId = parseOptionalInt(formData.get("truck_id"));
       const driverId = parseOptionalInt(formData.get("driver_id"));
       const trailerId = parseOptionalInt(formData.get("trailer_id"));
       if (!loadId || !truckId || !driverId) {
         throw new Error("Pick a truck and a driver.");
+      }
+      const existing = getLoad(loadId);
+      if (existing) {
+        const { assertCanEditLoadRecord } = await import("./accounting-desk");
+        assertCanEditLoadRecord(existing, actor.role);
       }
       enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
       assignLoad(loadId, truckId, driverId, trailerId, {
@@ -536,6 +545,11 @@ export async function disconnectQuickbooksAction(): Promise<void> {
   refresh();
 }
 
+export async function sendToQuickbooksFormAction(formData: FormData): Promise<void> {
+  const result = await sendToQuickbooksAction(null, formData);
+  if (!result.ok) throw new Error(result.error);
+}
+
 export async function sendToQuickbooksAction(
   _prev: ActionResult | null,
   formData: FormData,
@@ -557,12 +571,17 @@ export async function sendToQuickbooksAction(
 export async function updateLoadStatusAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      await requireLoadEditor();
+      const actor = await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       const status = String(formData.get("status") ?? "");
       if (!loadId) throw new Error("Load is missing.");
       if (!isKnownLoadStatus(status)) {
         throw new Error("Invalid status.");
+      }
+      const existing = getLoad(loadId);
+      if (existing) {
+        const { assertCanEditLoadRecord } = await import("./accounting-desk");
+        assertCanEditLoadRecord(existing, actor.role);
       }
       updateLoadStatus(loadId, status);
       refresh();

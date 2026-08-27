@@ -24,7 +24,7 @@ export default async function AccountingHomePage() {
         title="Accounting"
       />
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card href="/accounting/invoices" label="Open AR" value={formatMoney(unpaid.reduce((sum, row) => sum + (row.rate ?? 0), 0))} hint={`${unpaid.length} delivered unbilled or unpaid`} />
+        <Card href="/accounting/invoices" label="Open AR" value={formatMoney(unpaid.reduce((sum, row) => sum + (row.rate ?? 0), 0))} hint={`${unpaid.length} in Accounting`} />
         <Card href="/accounting/bills" label="Open AP" value={formatMoney(openBills.reduce((sum, bill) => sum + bill.amount, 0))} hint={`${openBills.length} vendor bills`} />
         <Card href="/accounting/pay" label="OO pay due" value={formatMoney(openPay.reduce((sum, row) => sum + row.amount, 0))} hint={`${openPay.length} settlements`} />
         <Card href="/accounting/commissions" label="Commissions" value={formatMoney(commissionTotal)} />

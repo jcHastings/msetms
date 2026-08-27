@@ -8,7 +8,7 @@ import { customerInvoicePayItems } from "./pay-items";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import { listStops, type LoadStop } from "./stops";
-import type { LoadView, Location } from "./types";
+import { isBillableStatus, type LoadView, type Location } from "./types";
 
 export type TmsInvoiceLine = {
   name: string;
@@ -213,7 +213,7 @@ export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
   if (load.non_revenue) {
     throw new Error("Empty move — no customer invoice.");
   }
-  if (load.status !== "delivered" && load.status !== "completed") {
+  if (!isBillableStatus(load.status)) {
     throw new Error("Mark the load Delivered before invoicing.");
   }
   const lines = tmsCustomerInvoiceLines(load);

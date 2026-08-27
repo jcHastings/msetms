@@ -9,12 +9,16 @@ export const LOAD_STATUSES = [
   "in_transit",
   "at_delivery",
   "unloading",
-  "delivered",
+    "delivered",
   "completed",
+  "accounting",
   "cancelled",
 ] as const;
 
 export type LoadStatus = (typeof LOAD_STATUSES)[number];
+
+export const ACCOUNTING_DESKS = ["operations", "accounting", "archived"] as const;
+export type AccountingDesk = (typeof ACCOUNTING_DESKS)[number];
 
 export const ACTIVE_LOAD_STATUSES: LoadStatus[] = [
   "available",
@@ -49,11 +53,11 @@ export const EQUIPMENT_REQUIRED = [
 ] as const;
 
 export function isClosedStatus(status: string): boolean {
-  return status === "delivered" || status === "completed" || status === "cancelled";
+  return status === "delivered" || status === "completed" || status === "accounting" || status === "cancelled";
 }
 
 export function isBillableStatus(status: string): boolean {
-  return status === "delivered" || status === "completed";
+  return status === "delivered" || status === "completed" || status === "accounting";
 }
 
 export function isIftaEligibleStatus(status: string): boolean {
@@ -460,6 +464,9 @@ export type Load = {
   docs_requested: number;
   docs_requested_at: string;
   ready_to_invoice: number;
+  accounting_desk: AccountingDesk;
+  accounting_return_status: string;
+  accounting_sent_at: string;
   truck_status: string;
   branch: string;
   declared_value: number | null;
@@ -618,6 +625,8 @@ export function labelForLoadStatus(status: string): string {
       return "Delivered";
     case "completed":
       return "Completed";
+    case "accounting":
+      return "Accounting";
     case "cancelled":
       return "Cancelled";
     default:

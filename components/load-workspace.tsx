@@ -11,9 +11,9 @@ import {
   saveTemplateAction,
   sendLoadSmsAction,
   sendLoadWhatsAppAction,
-  sendToAccountingAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
+import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
 import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
@@ -47,6 +47,9 @@ export function LoadWorkspace({
   contactEmail = "",
   readyToInvoice = false,
   nonRevenue = false,
+  accountingDesk = "operations",
+  canSendToAccounting = false,
+  canReturnFromAccounting = false,
   children,
 }: {
   loadId: number | null;
@@ -69,6 +72,9 @@ export function LoadWorkspace({
   contactEmail?: string;
   readyToInvoice?: boolean;
   nonRevenue?: boolean;
+  accountingDesk?: string;
+  canSendToAccounting?: boolean;
+  canReturnFromAccounting?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -340,15 +346,15 @@ export function LoadWorkspace({
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          {canAssignLoads(role) || canViewLoadFinancials(role) ? (
-            <MenuAction
-              label={readyToInvoice ? "Released to invoicing" : "Release to invoicing"}
-              disabled={readyToInvoice || nonRevenue}
-              run={async () => {
-                const formData = new FormData();
-                formData.set("load_id", String(loadId));
-                return sendToAccountingAction(formData);
-              }}
+          {loadId && (canSendToAccounting || canReturnFromAccounting) ? (
+            <SendToAccountingControls
+              loadId={loadId}
+              loadNumber={loadNumber}
+              status={status}
+              desk={accountingDesk}
+              canSend={canSendToAccounting && !nonRevenue}
+              canReturn={canReturnFromAccounting}
+              variant="menu"
             />
           ) : null}
           {canViewAudit(role) ? (

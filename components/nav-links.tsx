@@ -44,8 +44,8 @@ const SECTIONS: Array<{
     title: "Accounting",
     items: [
       { href: "/accounting", label: "Overview", short: "Books", icon: "books" },
-      { href: "/accounting/invoices", label: "Invoices (AR)", short: "AR", icon: "ar" },
-      { href: "/accounting/bills", label: "Bills (AP)", short: "AP", icon: "ap" },
+      { href: "/accounting/invoices", label: "Invoices", short: "Invoices", icon: "ar" },
+      { href: "/accounting/bills", label: "Bills", short: "Bills", icon: "ap" },
       { href: "/accounting/pay", label: "Driver pay", short: "Pay", icon: "pay" },
       { href: "/accounting/commissions", label: "Commissions", short: "Comm", icon: "comm" },
       { href: "/accounting/quickbooks", label: "QuickBooks", short: "QBO", icon: "qbo" },

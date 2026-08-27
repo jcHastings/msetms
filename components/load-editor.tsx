@@ -32,7 +32,9 @@ import { buildTmsInvoice } from "@/lib/invoice";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
-import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
+import { SendToAccountingControls } from "@/components/send-to-accounting";
+import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
+import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { routeGuideFromLoad } from "@/lib/routing-shared";
@@ -45,7 +47,7 @@ import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
-import { EQUIPMENT_REQUIRED, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
+import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
 
 export async function LoadEditor({
   loadId,
@@ -103,6 +105,17 @@ export async function LoadEditor({
                 QBO {load.qbo_invoice_number || load.qbo_invoice_id}
               </span>
             ) : null}
+            {canEditLoads(role) || canAccessAccounting(role) ? (
+              <SendToAccountingControls
+                loadId={load.id}
+                loadNumber={load.load_number}
+                status={load.status}
+                desk={load.accounting_desk}
+                canSend={canEditLoads(role) && !load.non_revenue}
+                canReturn={canAccessAccounting(role)}
+                variant="header"
+              />
+            ) : null}
           </div>
         }
       />
@@ -129,8 +142,16 @@ export async function LoadEditor({
         contactEmail={load.contact_email}
         readyToInvoice={Boolean(load.ready_to_invoice)}
         nonRevenue={Boolean(load.non_revenue)}
+        accountingDesk={load.accounting_desk}
+        canSendToAccounting={canEditLoads(role) && !load.non_revenue}
+        canReturnFromAccounting={canAccessAccounting(role)}
       >
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
+          {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              This load is in Accounting. Ask Accounting to send it back before changing it.
+            </p>
+          ) : null}
           <LoadMoneyBox load={load} />
           <LoadForm
             customers={customers}
@@ -200,6 +221,16 @@ export async function LoadEditor({
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => driver.name)}
               />
+              <div className="mt-4">
+                <SendToAccountingControls
+                  loadId={load.id}
+                  loadNumber={load.load_number}
+                  status={load.status}
+                  desk={load.accounting_desk}
+                  canSend={canEditLoads(role) && !load.non_revenue}
+                  canReturn={canAccessAccounting(role)}
+                />
+              </div>
             </>
           ) : null}
         </LoadTabPanel>
@@ -300,9 +331,7 @@ export async function LoadEditor({
               })}
             </ul>
           </section>
-          {showFinancials &&
-          (load.status === "delivered" || load.status === "completed") &&
-          load.rate != null ? (
+          {showFinancials && isBillableStatus(load.status) && load.rate != null ? (
             <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
           ) : null}
           <MakeBolPanel loadId={load.id} attachments={attachments} />

@@ -1124,8 +1124,8 @@ function searchStatuses(criteria: LoadSearchCriteria): string[] {
     return [criteria.status];
   }
   const statuses: string[] = [];
-  if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES);
-  if (criteria.includeArchived) statuses.push(...ARCHIVED_LOAD_STATUSES);
+  if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES, "accounting");
+  if (criteria.includeArchived) statuses.push(...ARCHIVED_LOAD_STATUSES, "accounting");
   if (criteria.includeCancelled) statuses.push("cancelled");
   return statuses;
 }

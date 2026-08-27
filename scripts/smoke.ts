@@ -20,8 +20,9 @@ async function main() {
   assert.match(navSource, /label: "Search"/);
   assert.match(navSource, /title: "Accounting"/);
   assert.match(navSource, /href: "\/accounting"/);
-  assert.match(navSource, /Invoices \(AR\)/);
-  assert.match(navSource, /Bills \(AP\)/);
+  assert.match(navSource, /label: "Invoices"/);
+  assert.match(navSource, /label: "Bills"/);
+  assert.doesNotMatch(navSource, /Invoices \(AR\)|Bills \(AP\)/);
   assert.match(navSource, /Driver pay/);
   assert.match(navSource, /Commissions/);
   assert.match(navSource, /QuickBooks/);
@@ -127,7 +128,17 @@ async function main() {
   assert.match(qboSettingsPage, /Connect QuickBooks/);
   assert.match(qboSettingsPage, /Not connected/);
   assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|<code>\.env/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8"), /Needs QBO customer/);
+  const qboAccountingPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
+  assert.match(qboAccountingPage, /Needs QBO customer/);
+  assert.match(qboAccountingPage, /Map Pay Items/);
+  assert.match(qboAccountingPage, /Map Customers/);
+  assert.match(qboAccountingPage, /Map Vendors/);
+  assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
+  const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
+  assert.match(invoicesHub, /AccountingHub/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8"), /Reconcile and Archive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/bills/page.tsx"), "utf8"), /tab=bills/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk.ts"), "utf8"), /sendLoadToAccounting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /browserUrl/);
   const qboCallback = fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/callback/route.ts"), "utf8");
@@ -227,7 +238,8 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
-  assert.match(workspaceSource, /Release to invoicing/);
+  assert.match(workspaceSource, /Send to Accounting Management/);
+  assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
   assert.match(workspaceSource, /View Accountability Log/);
@@ -445,9 +457,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Book from template/);
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
-  assert.match(payPageSource, /Close period/);
-  assert.match(payPageSource, /Download Excel/);
-  assert.match(payPageSource, /Driver pay/);
+  assert.match(payPageSource, /tab=pay/);
+  const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(hubSource, /Close period/);
+  assert.match(hubSource, /Download Excel/);
+  assert.match(hubSource, /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
@@ -5344,7 +5358,12 @@ Continuous reefer. Two load locks.
   assert.ok(LOAD_STATUSES.includes("at_pickup"));
   assert.ok(LOAD_STATUSES.includes("completed"));
   const liveOnly = queries.searchLoads({ includeLive: true, includeArchived: false, includeCancelled: false });
-  assert.ok(liveOnly.every((load) => (ACTIVE_LOAD_STATUSES as readonly string[]).includes(load.status)));
+  assert.ok(
+    liveOnly.every(
+      (load) =>
+        (ACTIVE_LOAD_STATUSES as readonly string[]).includes(load.status) || load.status === "accounting",
+    ),
+  );
   assert.ok(liveOnly.some((load) => load.load_number === "MSE-1045"));
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), false, "delivered is archived");
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1049"), false, "cancelled excluded by default");
@@ -5958,6 +5977,8 @@ Continuous reefer. Two load locks.
   const settlementPayItems = await import("../lib/pay-items");
   const invoiceGuard = await import("../lib/invoice");
   queries.updateLoadStatus(mapLoadId, "delivered");
+  const { sendLoadToAccounting } = await import("../lib/accounting-desk");
+  sendLoadToAccounting(mapLoadId);
   const driverPayItemId = settlementPayItems.addPayItem(mapLoadId, {
     side: "expense",
     bill_to: "driver",
@@ -6007,7 +6028,28 @@ Continuous reefer. Two load locks.
 
   const accounting = await import("../lib/accounting");
   assert.ok(accounting.listBills().some((bill) => /Lumper/i.test(bill.vendor)));
-  assert.ok(accounting.listReceivables().length >= 1);
+  const deliveredForBooks = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1047");
+  assert.ok(deliveredForBooks);
+  assert.equal(deliveredForBooks.status, "delivered");
+  assert.equal(accounting.listReceivables().some((row) => row.id === deliveredForBooks.id), false);
+  const deskMod = await import("../lib/accounting-desk");
+  const sentBooks = deskMod.sendLoadToAccounting(deliveredForBooks.id);
+  assert.equal(sentBooks.status, "accounting");
+  assert.equal(sentBooks.accounting_desk, "accounting");
+  assert.equal(queries.listLoads({ status: "active" }).some((load) => load.id === deliveredForBooks.id), false);
+  assert.ok(accounting.listReceivables().some((row) => row.id === deliveredForBooks.id));
+  assert.ok(
+    queries.searchLoads({ includeLive: true, includeArchived: false, q: "MSE-1047" }).some(
+      (load) => load.id === deliveredForBooks.id,
+    ),
+  );
+  const archivedBooks = deskMod.archiveAccountingLoad(deliveredForBooks.id);
+  assert.equal(archivedBooks.accounting_desk, "archived");
+  assert.equal(accounting.listReceivables().some((row) => row.id === deliveredForBooks.id), false);
+  deskMod.unarchiveAccountingLoad(deliveredForBooks.id);
+  const backToOps = deskMod.returnLoadToOperations(deliveredForBooks.id);
+  assert.equal(backToOps.status, "delivered");
+  assert.equal(backToOps.accounting_desk, "operations");
   assert.ok(accounting.listCommissions().length >= 1);
 
   const desk = await import("../lib/desk");

@@ -20,7 +20,7 @@ import {
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
 import { customerInvoicePayItems } from "../pay-items";
-import { isOwnerOperator, type LoadView } from "../types";
+import { isBillableStatus, isOwnerOperator, type LoadView } from "../types";
 
 const MINOR_VERSION = "75";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -165,7 +165,7 @@ export async function sendLoadToQuickbooks(
 ): Promise<QboSendResult> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (load.status !== "delivered" && load.status !== "completed") {
+  if (!isBillableStatus(load.status)) {
     throw new Error("Mark the load Delivered before sending an invoice.");
   }
   if (load.qbo_invoice_id && !options.confirmResend) {
@@ -396,6 +396,39 @@ async function findOrCreateServiceItem(name: string): Promise<string> {
 
 function escapeQboString(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+export type QboNamedRef = { id: string; name: string };
+
+export async function listQboCustomers(): Promise<QboNamedRef[]> {
+  return listQboNamed("Customer", "DisplayName", "customer list");
+}
+
+export async function listQboItems(): Promise<QboNamedRef[]> {
+  return listQboNamed("Item", "Name", "item list");
+}
+
+export async function listQboVendors(): Promise<QboNamedRef[]> {
+  return listQboNamed("Vendor", "DisplayName", "vendor list");
+}
+
+async function listQboNamed(entity: "Customer" | "Item" | "Vendor", nameField: string, context: string): Promise<QboNamedRef[]> {
+  if (!hasQuickbooksSession()) return [];
+  try {
+    const result = await qboQuery<Record<string, Array<{ Id?: string; DisplayName?: string; Name?: string }>>>(
+      `select * from ${entity} maxresults 1000`,
+      context,
+    );
+    const rows = result.QueryResponse?.[entity] ?? [];
+    return rows
+      .map((row) => ({
+        id: String(row.Id ?? "").trim(),
+        name: String(nameField === "Name" ? row.Name : row.DisplayName ?? "").trim(),
+      }))
+      .filter((row) => row.id);
+  } catch {
+    return [];
+  }
 }
 
 function apiBase(): string {

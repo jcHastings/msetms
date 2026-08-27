@@ -33,7 +33,7 @@ export function listReceivables(): Array<
   LoadView & { billed: boolean; paid: boolean; invoiceLabel: string }
 > {
   return listLoads({ status: "all" })
-    .filter((load) => load.status === "delivered" || load.status === "completed")
+    .filter((load) => load.accounting_desk === "accounting")
     .map((load) => ({
       ...load,
       billed: Boolean(load.tms_invoice_number || load.qbo_invoice_id),
@@ -107,7 +107,7 @@ export function listDriverPay(from = "", to = ""): DriverPayLine[] {
   const lines: DriverPayLine[] = [];
 
   for (const load of listLoads({ status: "all" })) {
-    if (load.status !== "delivered" && load.status !== "completed") continue;
+    if (load.accounting_desk !== "accounting") continue;
     const periodDate = load.delivery_end || load.delivery_start || load.updated_at;
     if (!inPayPeriod(periodDate, from, to)) continue;
 

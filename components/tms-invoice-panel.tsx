@@ -6,7 +6,7 @@ import { useLoadEdit } from "@/components/load-edit-context";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
-import { labelForUploader, type Attachment } from "@/lib/types";
+import { isBillableStatus, labelForUploader, type Attachment } from "@/lib/types";
 
 export function TmsInvoicePanel({
   loadId,
@@ -25,7 +25,7 @@ export function TmsInvoicePanel({
   const edit = useLoadEdit();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const canInvoice = status === "delivered" || status === "completed";
+  const canInvoice = isBillableStatus(status);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

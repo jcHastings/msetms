@@ -26,7 +26,6 @@ import {
   getLoad,
   markInvoicePaid,
   setLoadDocsRequested,
-  setLoadReadyToInvoice,
   setLoadWatched,
   updateLoadDetails,
 } from "./queries";
@@ -38,7 +37,7 @@ import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay } from "./relay
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
 import { addStop, deleteStop, moveStop, reorderStops, updateStop, type LoadStopKind } from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
-import { isBillableStatus, type ActionResult } from "./types";
+import type { ActionResult } from "./types";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -566,37 +565,138 @@ export async function requestPodAction(formData: FormData): Promise<ActionResult
 export async function sendToAccountingAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      const actor = await requireLoadEditor();
+      await requireLoadEditor();
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
-      const load = getLoad(loadId);
-      if (!load) throw new Error("Load not found.");
-      if (load.non_revenue) {
-        throw new Error("Empty move — no customer invoice.");
-      }
-      setLoadReadyToInvoice(loadId, true);
-      if (canAccessAccounting(actor.role) && isBillableStatus(load.status) && load.rate != null) {
-        const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
-        try {
-          await sendLoadToQuickbooks(loadId, { confirmResend: String(formData.get("confirm_resend") ?? "") === "1" });
-          refresh();
-          return { ok: true, id: loadId, message: "Released to invoicing and sent to QuickBooks." };
-        } catch (error) {
-          const text = error instanceof Error ? error.message : "QuickBooks send failed.";
-          if (/already sent/i.test(text)) {
-            refresh();
-            return { ok: true, id: loadId, message: "Already invoiced. Released to invoicing." };
-          }
-          refresh();
-          return { ok: false, error: text };
-        }
-      }
+      const { sendLoadToAccounting } = await import("./accounting-desk");
+      const load = sendLoadToAccounting(loadId);
       refresh();
       return {
         ok: true,
-        id: loadId,
-        message: "Released to invoicing.",
+        id: load.id,
+        message: `Load has been Sent to Accounting Management`,
       };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function returnLoadToOperationsAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "Accounting can send a load back to Load Management.");
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const { returnLoadToOperations } = await import("./accounting-desk");
+      const load = returnLoadToOperations(loadId);
+      refresh();
+      return { ok: true, id: load.id, message: "Sent back to Load Management." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function archiveAccountingLoadAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "Archiving is for Administrator and Accounting.");
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const { archiveAccountingLoad } = await import("./accounting-desk");
+      const load = archiveAccountingLoad(loadId);
+      refresh();
+      return { ok: true, id: load.id, message: "Archived." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function unarchiveAccountingLoadAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "Unarchive is for Administrator and Accounting.");
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const { unarchiveAccountingLoad } = await import("./accounting-desk");
+      const load = unarchiveAccountingLoad(loadId);
+      refresh();
+      return { ok: true, id: load.id, message: "Back in Accounting." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function payAllOpenBillsAction(): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "Bills are for Administrator and Accounting.");
+      const { listBills, markBillPaid } = await import("./accounting");
+      let count = 0;
+      for (const bill of listBills()) {
+        if (bill.status !== "open") continue;
+        markBillPaid(bill.id);
+        count += 1;
+      }
+      refresh();
+      return { ok: true, message: count ? `Paid ${count} bills.` : "No open bills." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function saveQboItemMapAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
+      const category = String(formData.get("category") ?? "").trim();
+      const qboItemId = String(formData.get("qbo_item_id") ?? "").trim();
+      const qboItemName = String(formData.get("qbo_item_name") ?? "").trim();
+      if (!category) throw new Error("Pick a pay item.");
+      const { upsertQboItemMap } = await import("./accounting-desk");
+      upsertQboItemMap(category, qboItemId, qboItemName);
+      refresh();
+      return { ok: true, message: "Pay item mapped." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function saveQboVendorMapAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
+      const payee = String(formData.get("payee") ?? "").trim();
+      const qboVendorId = String(formData.get("qbo_vendor_id") ?? "").trim();
+      const qboVendorName = String(formData.get("qbo_vendor_name") ?? "").trim();
+      if (!payee) throw new Error("Pick a vendor.");
+      const { upsertQboVendorMap } = await import("./accounting-desk");
+      upsertQboVendorMap(payee, qboVendorId, qboVendorName);
+      refresh();
+      return { ok: true, message: "Vendor mapped." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function saveQboCustomerMapAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
+      const customerId = parseOptionalInt(formData.get("customer_id"));
+      const qboCustomerId = String(formData.get("qbo_customer_id") ?? "").trim();
+      if (!customerId) throw new Error("Pick a customer.");
+      const { markCustomerQboMapped } = await import("./queries");
+      if (!qboCustomerId) throw new Error("Pick a QuickBooks customer.");
+      markCustomerQboMapped(customerId, qboCustomerId);
+      refresh();
+      return { ok: true, message: "Customer mapped." };
     } catch (error) {
       return fail(error);
     }
@@ -693,4 +793,36 @@ export async function sendLoadWhatsAppAction(formData: FormData): Promise<Action
       return fail(error);
     }
   });
+}
+
+async function throwIfFailed(result: ActionResult): Promise<void> {
+  if (!result.ok) throw new Error(result.error);
+}
+
+export async function returnLoadToOperationsFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await returnLoadToOperationsAction(formData));
+}
+
+export async function archiveAccountingLoadFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await archiveAccountingLoadAction(formData));
+}
+
+export async function unarchiveAccountingLoadFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await unarchiveAccountingLoadAction(formData));
+}
+
+export async function payAllOpenBillsFormAction(): Promise<void> {
+  await throwIfFailed(await payAllOpenBillsAction());
+}
+
+export async function saveQboItemMapFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await saveQboItemMapAction(formData));
+}
+
+export async function saveQboVendorMapFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await saveQboVendorMapAction(formData));
+}
+
+export async function saveQboCustomerMapFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await saveQboCustomerMapAction(formData));
 }

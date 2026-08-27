@@ -20,9 +20,9 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
             {load.non_revenue ? "Empty move — pay and miles only" : "Customer rate, accessorials, driver pay"}
           </h2>
         </div>
-        {load.ready_to_invoice ? (
+        {load.accounting_desk === "accounting" || load.status === "accounting" ? (
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-900">
-            Released to invoicing
+            Accounting
           </span>
         ) : null}
       </div>
