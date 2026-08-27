@@ -696,6 +696,13 @@ export function migrate(db: Database): void {
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fuel_import_sources (
+      source_file TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
   ensureColumn(db, "loads", "non_revenue", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "drivers", "last_trailer_id", "INTEGER");
   ensureColumn(db, "load_stops", "arrived_at", "TEXT NOT NULL DEFAULT ''");

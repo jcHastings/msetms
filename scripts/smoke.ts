@@ -4864,25 +4864,26 @@ Continuous reefer. Two load locks.
   const deniseMatch = matchFuelDriver(parsedFuel.rows[0]!, queries.listDrivers(), queries.listTrucks());
   assert.equal(queries.getDriver(deniseMatch.driverId ?? 0)?.name, "Denise Ortega");
   const unitMatch = matchFuelDriver(parsedFuel.rows[1]!, queries.listDrivers(), queries.listTrucks());
-  assert.equal(queries.getDriver(unitMatch.driverId ?? 0)?.name, "Priya Shah");
+  assert.equal(unitMatch.driverId, null);
   const unknownMatch = matchFuelDriver(parsedFuel.rows[2]!, queries.listDrivers(), queries.listTrucks());
   assert.equal(unknownMatch.driverId, null);
 
   const firstFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily.csv");
-  assert.equal(firstFuel.created, 2);
-  assert.equal(firstFuel.unmatched, 1);
+  assert.equal(firstFuel.created, 1);
+  assert.equal(firstFuel.unmatched, 2);
   assert.equal(firstFuel.skipped, 1);
   const secondFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily-again.csv");
   assert.equal(secondFuel.created, 0);
   assert.equal(secondFuel.unmatched, 0);
   assert.equal(secondFuel.skipped, 4);
   const unmatchedFuel = fuelStore.listFuelTransactions({ unmatchedOnly: true });
-  assert.equal(unmatchedFuel.length, 1);
-  assert.equal(unmatchedFuel[0]?.driver_name_raw, "Unknown Driver");
+  assert.equal(unmatchedFuel.length, 2);
+  const unknownFuel = unmatchedFuel.find((row) => row.driver_name_raw === "Unknown Driver");
+  assert.ok(unknownFuel);
   const fuelTyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(fuelTyrell);
-  fuelStore.assignFuelTransactionDriver(unmatchedFuel[0]!.id, fuelTyrell.id);
-  assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 0);
+  fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
+  assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 1);
   const fuelDenise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
   assert.ok(fuelDenise);
   const deniseFuel = fuelStore.getDriverFuelRollup(fuelDenise.id);
@@ -7629,13 +7630,30 @@ Continuous reefer. Two load locks.
     "Report Total 528.120 45.0820 3,262.28",
     "Money Code 340.25",
     "08/25 N Diesel ULTRA LOW SULFUR DIESEL 32 D84 157166699 542161 NE 88.800 5.6490 505.62 LOVES #730 TRAVEL OMAHA",
+    "NChristoph",
+    "er Howell",
     "08/25 N Diesel ULTRA LOW SULFUR DIESEL 26 D033 157149183 516319 IA 121.310 5.3590 650.10 ONE9 496 ATALISSA",
+    "NSteve",
+    "Eller",
     "08/25 N Reefer REEFER ULTRA LOW SULFUR 26 D033 157149183 516319 ONE9 496 ATALISSA IA 31.180 5.3590 167.58",
+    "NSteve",
+    "Eller",
     "08/25 N Diesel ULTRA LOW SULFUR DIESEL 42 D42 157166120 526745 ONVO TRAVEL PLAZA WHITE HAVEN PA 71.270 5.8590 417.36",
+    "NCeferino",
+    "Oquendo",
+    "Garcia",
     "08/25 N Diesel ULTRA LOW SULFUR DIESEL 28 D075 157146929 518177 PILOT SIOUX CITY 5 SIOUX CITY IA 100.450 5.7590 538.81",
+    "NKelvin",
+    "Whaley",
     "08/25 NANUET NY 10954 N Diesel ULTRA LOW SULFUR DIESEL 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 98.000 5.9990 558.47",
+    "NGerman",
+    "Avilla",
     "08/25 N Reefer REEFER ULTRA LOW SULFUR 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 10.950 5.9990 62.90",
+    "NGerman",
+    "Avilla",
     "08/25 N DEF DIESEL EXHAUST FLUID UREA 36 D38 157151774 519038 SUNOCO #7012 EAST BRUNSWICK NJ 4.160 5.0990 21.19",
+    "NGerman",
+    "Avilla",
     "08/25 N Money Code MONEY CODE 137.25",
     "08/25 N Money Code MONEY CODE 203.00",
     "/ Ds201902 / Dm201902",
@@ -7683,24 +7701,39 @@ Continuous reefer. Two load locks.
     .listFuelTransactions()
     .filter((row) => row.source_file === "FleetOne_TransactionActivityReport_pdf");
   assert.equal(officeRows.filter((row) => row.category !== "money_code").length, 8);
+  assert.equal(officeParsed.rows.find((row) => row.amount === 505.62)?.driverName, "Christopher Howell");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 650.1)?.driverName, "Steve Eller");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 167.58)?.driverName, "Steve Eller");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 417.36)?.driverName, "Ceferino Oquendo Garcia");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 538.81)?.driverName, "Kelvin Whaley");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 558.47)?.driverName, "German Avilla");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 62.9)?.driverName, "German Avilla");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 21.19)?.driverName, "German Avilla");
+  assert.equal(officeParsed.rows.find((row) => row.amount === 137.25)?.driverName, "");
   assert.equal(officeRows.find((row) => row.amount === 505.62)?.driver_id, howellId);
   assert.equal(officeRows.find((row) => row.amount === 650.1)?.driver_id, ellerId);
+  assert.equal(officeRows.find((row) => row.amount === 167.58)?.driver_id, ellerId);
   assert.equal(officeRows.find((row) => row.amount === 538.81)?.driver_id, whaleyId);
   assert.equal(officeRows.find((row) => row.amount === 558.47)?.driver_id, avila);
+  assert.equal(officeRows.find((row) => row.amount === 62.9)?.driver_id, avila);
+  assert.equal(officeRows.find((row) => row.amount === 21.19)?.driver_id, avila);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
+  assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_name_raw, "Ceferino Oquendo Garcia");
   assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
-  const { extractNProductDriverName } = await import("../lib/fuel-fleetone");
+  const { extractNProductDriverName, stitchFleetOneNName } = await import("../lib/fuel-fleetone");
   assert.equal(extractNProductDriverName("Christoph Howell"), "Christoph Howell");
   assert.equal(extractNProductDriverName("CHRISTOPHER HOWELL"), "Christopher Howell");
   assert.equal(extractNProductDriverName("ULTRA LOW SULFUR DIESEL"), "");
   assert.equal(extractNProductDriverName("ULTRA LOW SULFUR DIESEL Christoph Howell"), "Christoph Howell");
   assert.equal(extractNProductDriverName("MONEY CODE"), "");
+  assert.equal(stitchFleetOneNName("Christoph", "er Howell"), "Christopher Howell");
+  assert.equal(stitchFleetOneNName("NGerman".replace(/^N/, ""), "Avilla"), "German Avilla");
   const unit36Match = matchFuelDriver(
     { driverName: "", driverIdRaw: "", unitNumber: "36", prompt: "" },
     queries.listDrivers(),
     queries.listTrucks(),
   );
-  assert.equal(unit36Match.driverId, avila);
+  assert.equal(unit36Match.driverId, null);
   const noTruckDriver = matchFuelDriver(
     { driverName: "", driverIdRaw: "", unitNumber: "42", prompt: "" },
     queries.listDrivers(),
@@ -7715,13 +7748,35 @@ Continuous reefer. Two load locks.
     ),
     [{ truck_id: truck36, driver_id: avila, status: "in_transit" }],
   );
-  assert.equal(loadFallback.driverId, avila);
+  assert.equal(loadFallback.driverId, null);
+  const avillaMatch = matchFuelDriver(
+    { driverName: "German Avilla", driverIdRaw: "", unitNumber: "36", prompt: "" },
+    queries.listDrivers(),
+    queries.listTrucks(),
+  );
+  assert.equal(avillaMatch.driverId, avila);
   const sunocoUnmatched = officeRows.find((row) => row.amount === 558.47);
   assert.ok(sunocoUnmatched);
   getDb().prepare("UPDATE fuel_transactions SET driver_id = NULL WHERE id = ?").run(sunocoUnmatched.id);
   assert.equal(fuelStore.getFuelTransaction(sunocoUnmatched.id)?.driver_id, null);
   assert.ok(fuelStore.rematchUnmatchedFuelTransactions() >= 1);
   assert.equal(fuelStore.getFuelTransaction(sunocoUnmatched.id)?.driver_id, avila);
+  const lovesRow = fuelStore
+    .listFuelTransactions()
+    .find((row) => row.amount === 505.62 && row.source_file === "FleetOne_TransactionActivityReport_pdf");
+  assert.ok(lovesRow);
+  getDb()
+    .prepare("UPDATE fuel_transactions SET driver_id = NULL, driver_name_raw = '' WHERE id = ?")
+    .run(lovesRow.id);
+  assert.ok(fuelStore.rematchFuelTransactionDrivers() >= 1);
+  assert.equal(fuelStore.getFuelTransaction(lovesRow.id)?.driver_id, howellId);
+  assert.equal(fuelStore.getFuelTransaction(lovesRow.id)?.driver_name_raw, "Christopher Howell");
+  getDb()
+    .prepare("UPDATE fuel_transactions SET driver_id = ?, driver_name_raw = '' WHERE id = ?")
+    .run(howellId, lovesRow.id);
+  getDb().prepare("DELETE FROM fuel_import_sources").run();
+  assert.ok(fuelStore.rematchFuelTransactionDrivers() >= 1);
+  assert.equal(fuelStore.getFuelTransaction(lovesRow.id)?.driver_id, null);
   assert.equal(
     fuelStore
       .listFuelTransactions()
@@ -7750,6 +7805,12 @@ Continuous reefer. Two load locks.
     [],
   );
   assert.equal(moneyUnmatched.driverId, null);
+  const sameLineN = parseFuelReport(
+    "08/25 N Diesel ULTRA LOW SULFUR DIESEL 32 D84 157166699 542161 NE 50.123 3.4567 173.00 LOVES #730 TRAVEL OMAHA NChristoph\ner Howell",
+    "FleetOne_TransactionActivityReport.pdf",
+  );
+  assert.equal(sameLineN.rows[0]?.driverName, "Christopher Howell");
+  assert.equal(sameLineN.rows[0]?.unitNumber, "32");
 
   const { isFuelPdfUpload, readFuelUploadText } = await import("../lib/fuel-pdf");
   assert.equal(isFuelPdfUpload("FleetOne_TransactionActivityReport_pdf", "application/octet-stream"), true);
@@ -7833,6 +7894,8 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /\/\[A-Za-z\]\{2\}\\d\{4,\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /FuelDeleteButton/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /rematchUnmatchedFuelTransactions/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /rematchFuelTransactionDrivers/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /driverAssignedToTruck/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8"),
     /disabled=\{pending \|\| !canAssign\}/,

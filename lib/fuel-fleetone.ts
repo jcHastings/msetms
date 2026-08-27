@@ -77,10 +77,16 @@ export function parseFleetOneFuelText(text: string): {
   const reportDate =
     text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/)?.[1] ??
     new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+  let pending: FleetOneParsedRow | null = null;
+
+  const flushPending = () => {
+    if (pending) rows.push(pending);
+    pending = null;
+  };
 
   for (const raw of lines) {
     excelRow += 1;
-    if (isFleetOneJunkLine(raw) && !MONEY_CODE_RE.test(raw) && !ACTIVITY_KIND.test(raw)) {
+    if (isFleetOneJunkLine(raw) && !MONEY_CODE_RE.test(raw) && !ACTIVITY_KIND.test(raw) && !isFleetOneNNameLine(raw)) {
       skipped += 1;
       continue;
     }
@@ -92,14 +98,23 @@ export function parseFleetOneFuelText(text: string): {
     if (MONEY_CODE_RE.test(line)) {
       const money = parseFleetOneMoneyCode(line, excelRow, reportDate, reportYear);
       if (money) {
+        flushPending();
         rows.push(money);
         continue;
       }
     }
     const activity = parseFleetOneNProductLine(line, excelRow, reportYear);
     if (activity) {
-      rows.push(activity);
+      flushPending();
+      pending = activity;
       continue;
+    }
+    if (pending && !MONEY_CODE_RE.test(line)) {
+      const fragment = parseFleetOneNNameFragment(line);
+      if (fragment != null) {
+        pending.driverName = stitchFleetOneNName(pending.driverName, fragment);
+        continue;
+      }
     }
     if (!PRODUCT_RE.test(line) || !/\d{1,2}\/\d{1,2}/.test(line)) continue;
     const parsed = parseFleetOneFuelLine(line, excelRow, reportYear);
@@ -107,8 +122,10 @@ export function parseFleetOneFuelText(text: string): {
       errors.push({ row: excelRow, error: "Could not read that funded fuel line." });
       continue;
     }
-    rows.push(parsed);
+    flushPending();
+    pending = parsed;
   }
+  flushPending();
 
   const kept = dropSummaryMoneyCodes(rows);
   if (kept.length === 0 && errors.length === 0) {
@@ -181,18 +198,21 @@ function parseFleetOneNProductLine(line: string, row: number, reportYear: number
     .replace(/\b\d{4,}\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const afterAmount = afterPrompt
-    .slice((amountTok.index ?? 0) + amountTok[0].length)
-    .replace(/[^\sA-Za-z0-9#]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const afterAmountSplit = takeTrailingNName(
+    afterPrompt
+      .slice((amountTok.index ?? 0) + amountTok[0].length)
+      .replace(/[^\sA-Za-z0-9#]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+  const afterAmount = afterAmountSplit.text;
   const station = (stationBefore.length >= afterAmount.length ? stationBefore : afterAmount) || stationBefore || afterAmount;
   const location = [station, state].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   if (isFleetOneJunkAmount(gallons, amount, unit, location)) return null;
   return {
     row,
     occurredAt: occurred.toISOString(),
-    driverName: extractNProductDriverName(rest.slice(0, unitPrompt.index)),
+    driverName: afterAmountSplit.name || extractNProductDriverName(rest.slice(0, unitPrompt.index)),
     unitNumber: unit,
     location,
     gallons,
@@ -394,6 +414,70 @@ function fleetOneInvoice(text: string): string {
 
 const N_PRODUCT_NAME_JUNK =
   /^(DIESEL|REEFER|DEF|ULSD|ULTRA|LOW|SULFUR|EXHAUST|FLUID|UREA|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA|MONEY|CODE|ONVO|ONE9|CAT|SCALES?|FUNDED)$/i;
+
+function isFleetOneNNameLine(line: string): boolean {
+  const cleaned = stripFleetOneHeaderLeak(line);
+  return parseFleetOneNNameFragment(cleaned) != null;
+}
+
+function takeTrailingNName(text: string): { text: string; name: string } {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return { text: "", name: "" };
+  const glued = cleaned.match(/^(.*?)(?:\s+)N(?!\s+(?:Diesel|Reefer|DEF|Money\s*Code)\b)([A-Z][A-Za-z'.-]*)(?:\s+(.*))?$/i);
+  if (glued) {
+    const name = stitchFleetOneNName(glued[2] ?? "", glued[3] ?? "");
+    return { text: (glued[1] ?? "").trim(), name };
+  }
+  return { text: cleaned, name: "" };
+}
+
+export function parseFleetOneNNameFragment(line: string): string | null {
+  const cleaned = line.replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+  if (ACTIVITY_KIND.test(cleaned) || MONEY_CODE_RE.test(cleaned)) return null;
+  if (PRODUCT_RE.test(cleaned) && /\d{1,2}\/\d{1,2}/.test(cleaned)) return null;
+  if (/^\d{1,2}\/\d{1,2}/.test(cleaned)) return null;
+  if (COMPANY_JUNK.test(cleaned)) return null;
+  if (N_PRODUCT_NAME_JUNK.test(cleaned)) return null;
+  if (/^N$/i.test(cleaned)) return "";
+  const glued = cleaned.match(/^N([A-Z][A-Za-z'.-]*)(?:\s+(.*))?$/);
+  if (glued) {
+    const name = [glued[1], glued[2]].filter(Boolean).join(" ").trim();
+    return N_PRODUCT_NAME_JUNK.test(name) ? null : name;
+  }
+  const spaced = cleaned.match(/^N\s+([A-Z][A-Za-z'.-].*)$/);
+  if (spaced && !/^(Diesel|Reefer|DEF|Money)\b/i.test(spaced[1])) {
+    return spaced[1].trim();
+  }
+  if (/^[a-z]{1,6}(?:\s+[A-Z][A-Za-z'.-]+)*$/.test(cleaned)) return cleaned;
+  if (
+    /^[A-Z][a-z]+(?:[.'-][A-Za-z]+)?(?:\s+[A-Z][a-z]+(?:[.'-][A-Za-z]+)?){0,2}$/.test(cleaned) &&
+    !N_PRODUCT_NAME_JUNK.test(cleaned.split(" ")[0] ?? "")
+  ) {
+    return cleaned;
+  }
+  return null;
+}
+
+export function stitchFleetOneNName(current: string, addition: string): string {
+  const add = addition.replace(/\s+/g, " ").trim();
+  if (!add) return current.replace(/\s+/g, " ").trim();
+  if (!current.trim()) return titleCaseIfCaps(add);
+  const curParts = current.trim().split(/\s+/);
+  const addParts = add.split(/\s+/);
+  if (/^[a-z]/.test(addParts[0] ?? "")) {
+    curParts[curParts.length - 1] = `${curParts[curParts.length - 1]}${addParts[0]}`;
+    return titleCaseIfCaps([...curParts, ...addParts.slice(1)].join(" "));
+  }
+  return titleCaseIfCaps([...curParts, ...addParts].join(" "));
+}
+
+function titleCaseIfCaps(value: string): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  if (/^[A-Z][a-z]/.test(cleaned) || /[a-z]/.test(cleaned)) return cleaned;
+  return titleCaseCapsName(cleaned);
+}
 
 function titleCaseCapsName(value: string): string {
   return value
