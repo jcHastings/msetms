@@ -618,7 +618,9 @@ export type FuelWeekPaidStats = {
 };
 
 export function isDieselPaidCategory(category: string): boolean {
-  return category === "truck_diesel" || category === "reefer_diesel";
+  if (category === "truck_diesel" || category === "reefer_diesel") return true;
+  const classified = classifyFuelCategory(category);
+  return classified === "truck_diesel" || classified === "reefer_diesel";
 }
 
 function mean(values: number[]): number | null {

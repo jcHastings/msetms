@@ -4775,6 +4775,7 @@ Continuous reefer. Two load locks.
     [
       { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100, price_per_gallon: 3 },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "reefer_diesel", amount: 300, price_per_gallon: 4 },
+      { occurred_at: "2026-08-26T12:00:00.000Z", category: "Truck diesel", amount: 200, price_per_gallon: 3.5 },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "money_code", amount: 500, price_per_gallon: null },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "def", amount: 20, price_per_gallon: null },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "scale", amount: 18, price_per_gallon: null },
@@ -4783,7 +4784,7 @@ Continuous reefer. Two load locks.
     ],
     wedNy,
   );
-  assert.equal(weekPaid.count, 2);
+  assert.equal(weekPaid.count, 3);
   assert.equal(weekPaid.minAmount, 100);
   assert.equal(weekPaid.maxAmount, 300);
   assert.equal(weekPaid.avgAmount, 200);
