@@ -97,7 +97,6 @@ export function LoadCustomerScreen({
       {selectedCustomer ? (
         <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
           <div className="font-medium">{selectedCustomer.name}</div>
-          <p className="text-slate-600">Profile phone and address live on the customer record. Load contact below is for this load only.</p>
         </div>
       ) : null}
       <div className="field">

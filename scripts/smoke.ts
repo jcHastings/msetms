@@ -1502,7 +1502,7 @@ async function main() {
   assert.match(docsPanel, /LOAD_DOCUMENT_KINDS/);
   assert.match(docsPanel, /download=1/);
   assert.match(docsPanel, /Replace/);
-  assert.match(docsPanel, /Rate confirmation/);
+  assert.match(docsPanel, /Load documents/);
   const kindsSource = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
   assert.match(kindsSource, /Invoice \(customer\)/);
   assert.match(kindsSource, /Bill \/ carrier invoice/);
