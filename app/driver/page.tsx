@@ -11,15 +11,17 @@ import { formatRelayLane } from "@/lib/relays";
 import { DriverDestinations } from "@/components/driver-destinations";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
-import { labelForDriverProgress, type ReeferReading } from "@/lib/types";
+import { isActiveLoadStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DriverHomePage() {
   const driver = await getSignedInDriver();
   if (!driver) redirect("/driver/login");
-  const active = listLoadsForDriver(driver.id).filter((load) => load.status !== "delivered");
-  const delivered = listLoadsForDriver(driver.id).filter((load) => load.status === "delivered");
+  const active = listLoadsForDriver(driver.id).filter((load) => isActiveLoadStatus(load.status));
+  const delivered = listLoadsForDriver(driver.id).filter(
+    (load) => load.status === "delivered" || load.status === "completed",
+  );
   const hos = await getHosForDriver(driver.id);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of active) {

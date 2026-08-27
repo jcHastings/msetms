@@ -21,6 +21,7 @@ import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-s
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
+import { loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -37,7 +38,7 @@ export default async function BoardPage({
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
   const current = { status, date };
-  const loads = listLoads({ status, date });
+  const loads = listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status));
   const relayLabels = extraRelayLabelsByLoad(loads);
   const reefers = await getReeferSnapshots();
   const fleet = await getSamsaraFleet();

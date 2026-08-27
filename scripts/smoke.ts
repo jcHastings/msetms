@@ -87,6 +87,7 @@ async function main() {
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
   assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
+  assert.match(boardUi, /loadShowsOnDispatchBoard/);
   assert.match(boardUi, /data-dispatch-board/);
   assert.match(boardUi, /table-grid-board/);
   assert.match(boardUi, />Tractor</);
@@ -142,6 +143,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Approve Load Pay Items for Driver Pay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/bills/page.tsx"), "utf8"), /tab=bills/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk.ts"), "utf8"), /sendLoadToAccounting/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk.ts"), "utf8"), /status = 'accounting'/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /browserUrl/);
   const qboCallback = fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/callback/route.ts"), "utf8");
@@ -6040,6 +6042,20 @@ Continuous reefer. Two load locks.
   assert.equal(sentBooks.status, "accounting");
   assert.equal(sentBooks.accounting_desk, "accounting");
   assert.equal(queries.listLoads({ status: "active" }).some((load) => load.id === deliveredForBooks.id), false);
+  assert.equal(queries.listLoads().some((load) => load.id === deliveredForBooks.id), false);
+  const { isActiveLoadStatus } = await import("../lib/types");
+  const { loadShowsOnDispatchBoard } = await import("../lib/load-list-shared");
+  assert.equal(isActiveLoadStatus(sentBooks.status), false);
+  assert.equal(loadShowsOnDispatchBoard(sentBooks.status), false);
+  if (sentBooks.driver_id) {
+    assert.equal(
+      queries
+        .listLoadsForDriver(sentBooks.driver_id)
+        .filter((load) => isActiveLoadStatus(load.status))
+        .some((load) => load.id === sentBooks.id),
+      false,
+    );
+  }
   assert.ok(accounting.listReceivables().some((row) => row.id === deliveredForBooks.id));
   assert.ok(
     queries.searchLoads({ includeLive: true, includeArchived: false, q: "MSE-1047" }).some(

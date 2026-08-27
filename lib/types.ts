@@ -52,6 +52,10 @@ export const EQUIPMENT_REQUIRED = [
   { value: "", label: "Any" },
 ] as const;
 
+export function isActiveLoadStatus(status: string): boolean {
+  return (ACTIVE_LOAD_STATUSES as readonly string[]).includes(status);
+}
+
 export function isClosedStatus(status: string): boolean {
   return status === "delivered" || status === "completed" || status === "accounting" || status === "cancelled";
 }

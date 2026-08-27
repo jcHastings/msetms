@@ -73,7 +73,7 @@ export default async function DashboardPage({
     fineCount: todayActive.filter((load) => !attentionIds.has(load.id)).length,
   };
   const recap = dailyRecap();
-  const watched = listWatchedLoads().filter((load) => loadTouchesToday(load));
+  const watched = listWatchedLoads().filter((load) => loadTouchesToday(load) && load.status !== "accounting");
   const handoff = getHandoffNote();
   const needCover = listNeedCover(fleet.locations);
 

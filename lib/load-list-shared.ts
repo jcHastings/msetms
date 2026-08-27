@@ -10,6 +10,10 @@ export type LoadListTab = (typeof LOAD_LIST_TABS)[number]["value"];
 
 export const PLANNING_LOAD_STATUSES = ["available", "hold"] as const;
 
+export function loadShowsOnDispatchBoard(status: string): boolean {
+  return status !== "accounting";
+}
+
 export function parseLoadListTab(value: string | null | undefined): LoadListTab {
   if (value === "planning" || value === "all") return value;
   return "active";
