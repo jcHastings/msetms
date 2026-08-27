@@ -466,6 +466,9 @@ async function main() {
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
+  assert.match(hubSource, /overflow-x-auto/);
+  assert.match(hubSource, /min-w-max/);
+  assert.match(hubSource, /title="Send back to Load Management"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);

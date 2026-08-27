@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ACCOUNTING_HUB_TABS, parseAccountingHubTab } from "@/lib/accounting-desk-shared";
 import {
@@ -106,6 +107,29 @@ export function AccountingHub({
   );
 }
 
+function HubTableCard({
+  toolbar,
+  children,
+}: {
+  toolbar?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="card">
+      {toolbar ? <div className="px-4 pt-4">{toolbar}</div> : null}
+      <div className="overflow-x-auto">{children}</div>
+    </section>
+  );
+}
+
+function HubActions({ children }: { children: ReactNode }) {
+  return (
+    <td className="min-w-[12rem]">
+      <div className="flex min-w-[12rem] flex-col items-stretch gap-1">{children}</div>
+    </td>
+  );
+}
+
 function SearchBox({
   q,
   tab,
@@ -145,9 +169,8 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
   const settings = getCompanySettings();
   const rows = listReceivables().filter((row) => matchesQuery(row, q) && matchesBranch(row, branch));
   return (
-    <section className="card overflow-hidden">
-      <SearchBox q={q} tab="invoices" branch={branch} branches={branches} />
-      <table className="table-grid">
+    <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
+      <table className="table-grid min-w-max">
         <thead>
           <tr>
             <th>Company Name</th>
@@ -160,7 +183,7 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
             <th>Invoice Total</th>
             <th>Balance</th>
             <th>QB Export</th>
-            <th></th>
+            <th className="min-w-[12rem]">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -202,7 +225,7 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
                       </button>
                     </form>
                   </td>
-                  <td className="space-y-1 text-right">
+                  <HubActions>
                     {invoice ? (
                       <a className="btn btn-secondary" href={`/api/attachments/${invoice.id}`}>
                         Invoice PDF
@@ -226,18 +249,22 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
                     )}
                     <form action={returnLoadToOperationsFormAction}>
                       <input type="hidden" name="load_id" value={row.id} />
-                      <button className="btn btn-secondary" type="submit">
-                        Send back to Load Management
+                      <button
+                        className="btn btn-secondary"
+                        type="submit"
+                        title="Send back to Load Management"
+                      >
+                        Send back
                       </button>
                     </form>
-                  </td>
+                  </HubActions>
                 </tr>
               );
             })
           )}
         </tbody>
       </table>
-    </section>
+    </HubTableCard>
   );
 }
 
@@ -291,8 +318,8 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
           Record received bill
         </button>
       </form>
-      <section className="card overflow-hidden">
-        <table className="table-grid">
+      <HubTableCard>
+        <table className="table-grid min-w-max">
           <thead>
             <tr>
               <th>Company Name</th>
@@ -308,7 +335,7 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
               <th>Balance to Pay</th>
               <th>Remit To</th>
               <th>QBO Export</th>
-              <th></th>
+              <th className="min-w-[12rem]">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -352,23 +379,23 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
                         </button>
                       </form>
                     </td>
-                    <td>
+                    <HubActions>
                       {bill.status === "open" ? (
                         <form action={payBillAction}>
                           <input type="hidden" name="bill_id" value={bill.id} />
                           <button className="btn btn-secondary" type="submit">
-                            Record bill payment
+                            Record payment
                           </button>
                         </form>
                       ) : null}
-                    </td>
+                    </HubActions>
                   </tr>
                 );
               })
             )}
           </tbody>
         </table>
-      </section>
+      </HubTableCard>
     </div>
   );
 }
@@ -378,14 +405,15 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
     (load) => matchesQuery(load, q) && matchesBranch(load, branch),
   );
   return (
-    <section className="card overflow-hidden">
-      <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">
-        List of All Loads Sent to Accounting
-      </header>
-      <div className="px-5 pt-3">
-        <SearchBox q={q} tab="reconcile" branch={branch} branches={branches} />
-      </div>
-      <table className="table-grid">
+    <HubTableCard
+      toolbar={
+        <>
+          <div className="mb-3 text-sm font-semibold">List of All Loads Sent to Accounting</div>
+          <SearchBox q={q} tab="reconcile" branch={branch} branches={branches} />
+        </>
+      }
+    >
+      <table className="table-grid min-w-max">
         <thead>
           <tr>
             <th>Load #</th>
@@ -394,7 +422,7 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
             <th>Invoice(s) Total</th>
             <th>Bill(s) Total</th>
             <th>Gross P/L</th>
-            <th></th>
+            <th className="min-w-[12rem]">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -423,7 +451,7 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
                   <td>{formatMoney(invoiceTotal)}</td>
                   <td>{formatMoney(billTotal + expense)}</td>
                   <td>{formatMoney(invoiceTotal - billTotal - expense)}</td>
-                  <td className="space-y-1 text-right">
+                  <HubActions>
                     <form action={archiveAccountingLoadFormAction}>
                       <input type="hidden" name="load_id" value={load.id} />
                       <button className="btn btn-secondary" type="submit">
@@ -432,18 +460,22 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
                     </form>
                     <form action={returnLoadToOperationsFormAction}>
                       <input type="hidden" name="load_id" value={load.id} />
-                      <button className="btn btn-secondary" type="submit">
-                        Send back to Load Management
+                      <button
+                        className="btn btn-secondary"
+                        type="submit"
+                        title="Send back to Load Management"
+                      >
+                        Send back
                       </button>
                     </form>
-                  </td>
+                  </HubActions>
                 </tr>
               );
             })
           )}
         </tbody>
       </table>
-    </section>
+    </HubTableCard>
   );
 }
 
@@ -452,16 +484,13 @@ function ArchivedTab({ q, branch, branches }: { q: string; branch: string; branc
     (load) => matchesQuery(load, q) && matchesBranch(load, branch),
   );
   return (
-    <section className="card overflow-hidden">
-      <div className="px-5 pt-3">
-        <SearchBox q={q} tab="archived" branch={branch} branches={branches} />
-      </div>
-      <table className="table-grid">
+    <HubTableCard toolbar={<SearchBox q={q} tab="archived" branch={branch} branches={branches} />}>
+      <table className="table-grid min-w-max">
         <thead>
           <tr>
             <th>Load #</th>
             <th>Company Name</th>
-            <th></th>
+            <th className="min-w-[12rem]">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -480,20 +509,20 @@ function ArchivedTab({ q, branch, branches }: { q: string; branch: string; branc
                   </Link>
                 </td>
                 <td>{load.customer_name}</td>
-                <td className="text-right">
+                <HubActions>
                   <form action={unarchiveAccountingLoadFormAction}>
                     <input type="hidden" name="load_id" value={load.id} />
                     <button className="btn btn-secondary" type="submit">
                       Unarchive
                     </button>
                   </form>
-                </td>
+                </HubActions>
               </tr>
             ))
           )}
         </tbody>
       </table>
-    </section>
+    </HubTableCard>
   );
 }
 
@@ -590,8 +619,8 @@ function ApproveTab() {
     driverPayItems(load.id).some((item) => !item.paid_at),
   );
   return (
-    <section className="card overflow-hidden">
-      <table className="table-grid">
+    <HubTableCard>
+      <table className="table-grid min-w-max">
         <thead>
           <tr>
             <th>Load ID</th>
@@ -639,7 +668,7 @@ function ApproveTab() {
           )}
         </tbody>
       </table>
-    </section>
+    </HubTableCard>
   );
 }
 
