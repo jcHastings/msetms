@@ -137,6 +137,7 @@ async function main() {
   assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /color: #ffffff !important/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Reconcile and Archive/);

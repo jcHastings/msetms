@@ -58,9 +58,11 @@ a {
 a.hub-tab-active,
 .hub-tab-active,
 a.hub-tab-active:hover,
-.hub-tab-active:hover {
+.hub-tab-active:hover,
+a.hub-tab-active .hub-tab-label,
+.hub-tab-active .hub-tab-label {
   background: #0b1f3a;
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 input,

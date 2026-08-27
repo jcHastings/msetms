@@ -50,7 +50,7 @@ export default async function QuickbooksAccountingPage({
             href={`/accounting/quickbooks?tab=${item.value}`}
             className={hubTabClass(tab === item.value)}
           >
-            {item.label}
+            <span className="hub-tab-label">{item.label}</span>
           </Link>
         ))}
       </nav>

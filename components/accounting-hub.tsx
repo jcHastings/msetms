@@ -91,7 +91,7 @@ export function AccountingHub({
             href={`/accounting/invoices?tab=${item.value}`}
             className={hubTabClass(current === item.value)}
           >
-            {item.label}
+            <span className="hub-tab-label">{item.label}</span>
           </Link>
         ))}
       </nav>
