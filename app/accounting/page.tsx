@@ -28,7 +28,7 @@ export default async function AccountingHomePage() {
         <Card href="/accounting/invoices" label="Open AR" value={formatMoney(unpaid.reduce((sum, row) => sum + (row.rate ?? 0), 0))} hint={`${unpaid.length} delivered unbilled or unpaid`} />
         <Card href="/accounting/bills" label="Open AP" value={formatMoney(openBills.reduce((sum, bill) => sum + bill.amount, 0))} hint={`${openBills.length} vendor bills`} />
         <Card href="/accounting/pay" label="OO pay due" value={formatMoney(openPay.reduce((sum, row) => sum + row.amount, 0))} hint={`${openPay.length} settlements`} />
-        <Card href="/accounting/commissions" label="Commissions" value={formatMoney(commissionTotal)} hint="3% of delivered customer rate" />
+        <Card href="/accounting/commissions" label="Commissions" value={formatMoney(commissionTotal)} />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <Link href="/accounting/quickbooks" className="card p-5 hover:border-slate-300">
@@ -57,13 +57,13 @@ function Card({
   href: string;
   label: string;
   value: string;
-  hint: string;
+  hint?: string;
 }) {
   return (
     <Link href={href} className="card block p-5 hover:border-slate-300">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-1 text-sm text-slate-500">{hint}</div>
+      {hint ? <div className="mt-1 text-sm text-slate-500">{hint}</div> : null}
     </Link>
   );
 }

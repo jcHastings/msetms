@@ -26,7 +26,7 @@ export function OrbcommTrailerImport() {
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">
-          <label htmlFor="orbcomm-fleet-file">Orbcomm CSV or JSON export</label>
+          <label htmlFor="orbcomm-fleet-file">Trailer spreadsheet</label>
           <input
             id="orbcomm-fleet-file"
             name="file"

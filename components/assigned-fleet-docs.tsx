@@ -20,7 +20,6 @@ export function AssignedFleetDocs({
   return (
     <section className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Assigned unit documents</h2>
-      <p className="mt-1 text-sm text-slate-500">CDL, medical card, and registration.</p>
       <div className="mt-4 grid gap-5 md:grid-cols-3">
         {driverId ? (
           <DocGroup

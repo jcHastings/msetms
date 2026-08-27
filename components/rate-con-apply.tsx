@@ -67,10 +67,6 @@ export function RateConApply({
       >
         <div>
           <h2 className="text-sm font-semibold">Apply a rate confirmation</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Upload a PDF or image, review the fields, then save to overwrite this load and attach
-            the original file.
-          </p>
         </div>
         {localError ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">

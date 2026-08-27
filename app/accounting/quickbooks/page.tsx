@@ -24,9 +24,8 @@ export default async function QuickbooksAccountingPage() {
       <section className="card mb-4 p-5">
         <div className="text-sm font-semibold">Connection</div>
         <p className="mt-1 text-sm text-slate-600">
-          Status: <span className="font-semibold">{qbo.status}</span>
+          {qbo.configured || qbo.refreshTokenSet ? "Connected" : "Not connected"}
           {qbo.companyName ? ` · ${qbo.companyName}` : ""}
-          {qbo.configured ? " · live Online company" : qbo.oauthReady ? " · app keys set, not connected" : " · demo mode, no secrets"}
         </p>
         {qbo.error ? (
           <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">

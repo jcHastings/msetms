@@ -32,7 +32,7 @@ import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmpt
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { canDeleteDocuments, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
-import { isGooglePlacesConfigured, isTwilioConfigured } from "@/lib/env";
+import { isTwilioConfigured } from "@/lib/env";
 import { routeGuideFromLoad } from "@/lib/routing-shared";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatRelayLane } from "@/lib/relays";
@@ -163,11 +163,7 @@ export async function LoadEditor({
             locations={locations}
             routeGuide={routeGuideFromLoad(load)}
           />
-          <LoadRoutingGuide
-            loadId={load.id}
-            guide={routeGuideFromLoad(load)}
-            mapsConfigured={isGooglePlacesConfigured()}
-          />
+          <LoadRoutingGuide loadId={load.id} guide={routeGuideFromLoad(load)} />
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">
@@ -256,8 +252,6 @@ export async function LoadEditor({
               loadId={load.id}
               report={ifta.report}
               canRefresh={ifta.canRefresh}
-              configured={ifta.configured}
-              reason={ifta.reason}
             />
           ) : null}
           <LoadExtraDetails load={load} claims={claims} />
@@ -301,14 +295,10 @@ export async function LoadEditor({
               })}
             </ul>
           </section>
-          {showFinancials && (load.status === "delivered" || load.status === "completed") ? (
-            load.rate != null ? (
-              <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
-            ) : (
-              <section className="card mb-4 p-5 text-sm text-slate-600">
-                Add a customer income line item on a delivered load to send a QuickBooks invoice.
-              </section>
-            )
+          {showFinancials &&
+          (load.status === "delivered" || load.status === "completed") &&
+          load.rate != null ? (
+            <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
           ) : null}
           <MakeBolPanel loadId={load.id} attachments={attachments} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />

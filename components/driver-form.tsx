@@ -104,7 +104,6 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
       </div>
       <fieldset className="field md:col-span-2" data-cdl-endorsements="">
         <legend className="text-sm font-semibold text-slate-900">CDL endorsements</legend>
-        <p className="mb-2 text-xs text-slate-500">CDL endorsements only (H, N, X, T).</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {CDL_ENDORSEMENTS.map((item) => (
             <label key={item.value} className="flex items-center gap-2 text-sm">
@@ -158,11 +157,6 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
           pattern="\d{4,8}"
           placeholder={driver?.has_app_login ? "Leave blank to keep current" : "4–8 digits"}
         />
-        <p className="mt-1 text-xs text-slate-500">
-          {driver?.has_app_login
-            ? "4–8 digits. Same PIN the driver uses on /driver. Leave blank to keep the current PIN."
-            : "4–8 digits. The driver cannot sign in until a PIN is set. Do not invent one unless you are assigning it now."}
-        </p>
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="notes">Internal Notes</label>

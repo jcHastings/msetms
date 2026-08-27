@@ -102,9 +102,7 @@ export function TotpSetupPanel({
   return (
     <section className="card space-y-3 p-6">
       <h2 className="text-sm font-semibold">Set up 2-step</h2>
-      <p className="text-sm text-slate-600">
-        Optional until an admin requires it for all dispatchers. Driver PIN login is not affected.
-      </p>
+      <p className="text-sm text-slate-600">Optional until an admin requires it for all dispatchers.</p>
       <form action={startAction}>
         <FormBanner result={startState} />
         <button className="btn btn-primary" type="submit" disabled={starting}>
@@ -120,10 +118,7 @@ export function TwoFactorPolicyForm({ required, canEdit }: { required: boolean; 
   return (
     <section className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Require 2-step for all dispatchers</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Off by default so the office PC keeps working. When on, every dispatcher must enroll before using the
-        desk.
-      </p>
+      <p className="mt-1 text-sm text-slate-600">When on, every dispatcher must enroll before using the desk.</p>
       <form action={action} className="mt-4 space-y-3">
         <FormBanner result={state} />
         <label className="flex items-start gap-2 text-sm">

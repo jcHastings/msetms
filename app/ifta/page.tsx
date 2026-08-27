@@ -47,7 +47,6 @@ export default async function IftaPage({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Estimate</p>
             <h2 className="text-sm font-semibold text-slate-900">{estimate.label}</h2>
-            <p className="mt-1 text-sm text-slate-600">Imported fuel and stored load miles.</p>
           </div>
           <form className="flex flex-wrap items-end gap-2" method="get">
             <div className="field">

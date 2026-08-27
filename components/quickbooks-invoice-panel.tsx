@@ -27,15 +27,7 @@ export function QuickbooksInvoicePanel({
 
   return (
     <section className="card mb-4 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
-          <p className="mt-1 text-sm text-slate-600">Customer invoice.</p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-          {preview.mode === "demo" ? "Demo" : "QuickBooks"}
-        </span>
-      </div>
+      <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
         <div>
@@ -89,9 +81,6 @@ export function QuickbooksInvoicePanel({
       <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
         {preview.memo}
       </pre>
-      {preview.ownerOperatorNote ? (
-        <p className="mt-2 text-sm text-slate-600">{preview.ownerOperatorNote}</p>
-      ) : null}
 
       <form action={formAction} className="mt-4 space-y-3">
         {state?.ok ? (

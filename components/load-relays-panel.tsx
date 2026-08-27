@@ -31,7 +31,6 @@ export function LoadRelaysPanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Relays</h2>
-          <p className="mt-1 text-sm text-slate-500">Internal handoff. Not billed.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
           + Add Relay
@@ -154,7 +153,6 @@ function RelayDialog({
           <label htmlFor="relay-handoff">Relay point</label>
           <input id="relay-handoff" name="handoff" required placeholder="Handoff city" />
         </div>
-        <p className="text-xs text-slate-500">Internal handoff. Not billed.</p>
         {error ? <p className="text-sm text-rose-700">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <button className="btn btn-secondary" type="button" onClick={onClose}>

@@ -8,11 +8,9 @@ import { formatRouteMiles, type LoadRouteGuide } from "@/lib/routing-shared";
 export function LoadRoutingGuide({
   loadId,
   guide,
-  mapsConfigured,
 }: {
   loadId: number;
   guide: LoadRouteGuide;
-  mapsConfigured: boolean;
 }) {
   const [refreshState, refreshAction, refreshPending] = useActionState(refreshRouteAction, null);
   const [manualState, manualAction, manualPending] = useActionState(saveManualRouteMilesAction, null);
@@ -23,11 +21,6 @@ export function LoadRoutingGuide({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Routing guide</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Google route miles from the first pickup through the last delivery, including stops in order.
-            State miles are an <span className="font-semibold">IFTA estimate</span> only. Official truck IFTA
-            stays on Load Log (Samsara).
-          </p>
         </div>
         <form action={refreshAction}>
           <input type="hidden" name="load_id" value={loadId} />
@@ -54,10 +47,6 @@ export function LoadRoutingGuide({
         </div>
       </dl>
 
-      {!mapsConfigured ? (
-        <p className="text-sm text-slate-600">Enter miles manually.</p>
-      ) : null}
-
       <form action={manualAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="load_id" value={loadId} />
         <div className="field">
@@ -79,11 +68,8 @@ export function LoadRoutingGuide({
 
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">IFTA estimate</h3>
-        <p className="mt-1 text-xs text-slate-500">
-          From the Google route polyline. Not Samsara IFTA and not for tax filing.
-        </p>
         {guide.states.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No state breakdown yet. Refresh route after stops have cities.</p>
+          <p className="mt-2 text-sm text-slate-500">No state breakdown yet.</p>
         ) : (
           <table className="table-grid mt-2">
             <thead>

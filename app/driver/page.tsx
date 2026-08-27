@@ -37,7 +37,7 @@ export default async function DriverHomePage() {
           <p className="text-sm text-slate-500">
             {driver.truck_unit ? `Unit ${driver.truck_unit}` : "No assigned truck"}
             {hos
-              ? ` · ${formatDurationMs(hos.driveRemainingMs)} drive left${hos.source === "demo" ? " (demo)" : ""}`
+              ? ` · ${formatDurationMs(hos.driveRemainingMs)} drive left`
               : ""}
           </p>
         </div>

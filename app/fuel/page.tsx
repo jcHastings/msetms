@@ -149,7 +149,6 @@ function FuelMatchQueue() {
     <section className="card mb-6 overflow-hidden" data-fuel-match-queue="">
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">Receipt match</h2>
-        <p className="mt-1 text-xs text-slate-500">Match a driver photo to the card-file stop.</p>
       </header>
       <div className="overflow-x-auto">
         <table className="table-grid">

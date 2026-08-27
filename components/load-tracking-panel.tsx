@@ -12,7 +12,6 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
   return (
     <section id="load-map" data-load-tab="log" className="card p-5">
       <h2 className="text-sm font-semibold">Load map</h2>
-      <p className="mt-1 text-sm text-slate-500">This load only.</p>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="overflow-hidden rounded-lg border border-slate-200">
           <LoadMapCanvas apiKey={apiKey} points={points} />
@@ -31,7 +30,6 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
         </div>
         <div>
           <h3 className="text-sm font-semibold">Recent events</h3>
-          <p className="text-xs text-slate-500">Check calls and stored GPS.</p>
           {events.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">No check calls or GPS pings on this load yet.</p>
           ) : (

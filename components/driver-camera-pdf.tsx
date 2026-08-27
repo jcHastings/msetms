@@ -206,9 +206,6 @@ function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasE
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm">
       <h2 className="text-base font-semibold">Take a document photo</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Camera first. Preview, then make a PDF (Receipt / Scale Ticket / BOL / POD) on this phone.
-      </p>
 
       <div className="mt-3 field">
         <label htmlFor="camera-kind">Type</label>

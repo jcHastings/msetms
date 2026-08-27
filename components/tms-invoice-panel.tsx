@@ -73,7 +73,6 @@ export function TmsInvoicePanel({
         <h2 className="text-sm font-semibold">Invoice</h2>
       </div>
       <div className="p-5">
-      <p className="text-sm text-slate-600">Customer invoice.</p>
       {invoice ? (
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>

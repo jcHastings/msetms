@@ -86,10 +86,6 @@ export function RateConPicker({
       }}
     >
       <p className="text-sm font-semibold">Rate con file</p>
-      <p className="mt-1 text-sm text-slate-500">
-        PDF or image. Drag onto this box or choose a file. The picker lists every file so Windows
-        does not drop the PDF.
-      </p>
       <input
         id={inputId}
         ref={inputRef}

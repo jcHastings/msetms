@@ -2,7 +2,6 @@
 
 import { SettingsForm } from "@/components/settings-form";
 import {
-  DISPATCHER_ROLE_HINTS,
   formRoleValue,
   selectableDispatcherRoles,
   type PublicDispatcher,
@@ -43,9 +42,6 @@ export function DispatcherUserForm({
           autoComplete="new-password"
           disabled={!canEdit}
         />
-        <p className="mt-1 text-xs text-slate-500">
-          4–8 digits. The current PIN is never shown.
-        </p>
       </div>
       <div className="field">
         <label htmlFor="role">Role</label>
@@ -56,16 +52,6 @@ export function DispatcherUserForm({
             </option>
           ))}
         </select>
-        <ul className="mt-2 space-y-1 text-xs text-slate-500">
-          {roles
-            .filter((role) => role.value !== "read_only")
-            .map((role) => (
-              <li key={role.value}>
-                <span className="font-medium text-slate-600">{role.label}:</span>{" "}
-                {DISPATCHER_ROLE_HINTS[role.value]}
-              </li>
-            ))}
-        </ul>
       </div>
       <div className="field">
         <label htmlFor="active">Status</label>

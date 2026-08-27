@@ -3,7 +3,6 @@ import { PageHeader } from "@/components/page-header";
 import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { disconnectQuickbooksAction } from "@/lib/actions";
-import { formatDateTime } from "@/lib/format";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
 
 export const dynamic = "force-dynamic";
@@ -15,17 +14,15 @@ export default async function QuickbooksSettingsPage({
 }) {
   const params = await searchParams;
   const qbo = await getQuickbooksStatus();
+  const connected = Boolean(qbo.refreshTokenSet);
   return (
     <SettingsAdminGate>
       <SettingsBack />
-      <PageHeader
-        title="QuickBooks Online"
-        subtitle="Connect QuickBooks for customer invoices."
-      />
+      <PageHeader title="QuickBooks Online" />
 
       {params.connected ? (
         <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          QuickBooks is connected. Realm and refresh tokens are stored on the server.
+          QuickBooks is connected.
         </p>
       ) : null}
       {params.error ? (
@@ -41,40 +38,7 @@ export default async function QuickbooksSettingsPage({
 
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Connection</h2>
-        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-slate-500">Client ID</dt>
-            <dd className="font-semibold">{qbo.clientIdSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Client secret</dt>
-            <dd className="font-semibold">{qbo.clientSecretSet ? "Set (hidden)" : "Not set"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Redirect URI</dt>
-            <dd className="font-semibold break-all">{qbo.redirectUri}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Environment</dt>
-            <dd className="font-semibold">{qbo.environment}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Refresh token</dt>
-            <dd className="font-semibold">{qbo.refreshTokenSet ? "Stored on server (hidden)" : "Not connected"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Company / realm</dt>
-            <dd className="font-semibold">{qbo.realmIdSet ? "Stored on server (hidden)" : "Not connected"}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Status</dt>
-            <dd className="font-semibold">{qbo.status}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Last check</dt>
-            <dd className="font-semibold">{formatDateTime(qbo.fetchedAt)}</dd>
-          </div>
-        </dl>
+        <p className="mt-4 text-sm font-semibold">{connected ? "Connected" : "Not connected"}</p>
         {qbo.companyName ? (
           <p className="mt-3 text-sm text-slate-600">
             Connected company: <span className="font-semibold">{qbo.companyName}</span>
@@ -98,12 +62,6 @@ export default async function QuickbooksSettingsPage({
           </Link>
         </div>
       </section>
-
-      {!qbo.oauthReady ? (
-        <p className="text-sm text-slate-600">Not connected.</p>
-      ) : (
-        <p className="text-sm text-slate-600">Customer invoices only.</p>
-      )}
     </SettingsAdminGate>
   );
 }

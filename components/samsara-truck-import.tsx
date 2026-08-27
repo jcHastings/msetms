@@ -55,9 +55,6 @@ export function SamsaraTruckImport() {
       {rows.length > 0 ? (
         <form action={confirmAction} className="space-y-3">
           <input type="hidden" name="rows" value={JSON.stringify(rows)} />
-          <p className="text-sm text-slate-600">
-            Review pairings, then confirm to write. Uncheck any vehicle you do not want.
-          </p>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="table-grid">
               <thead>

@@ -10,7 +10,7 @@ export function LoadAuditTable({
   showLoad?: boolean;
 }) {
   if (rows.length === 0) {
-    return <p className="px-5 py-6 text-sm text-slate-500">No audit entries yet. Changes from now on are logged.</p>;
+    return <p className="px-5 py-6 text-sm text-slate-500">No audit entries yet.</p>;
   }
   return (
     <table className="table-grid">

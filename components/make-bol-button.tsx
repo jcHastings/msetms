@@ -19,10 +19,6 @@ export function MakeBolPanel({
   return (
     <section className="card mb-4 p-5">
       <h2 className="text-sm font-semibold">Bill of lading</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Optional. Builds a BOL from this load (shipper, consignee, commodity, equipment, reefer) and
-        saves it here as type BOL. Nothing is created until you click the button.
-      </p>
       <FormBanner result={state} />
       <form action={formAction} className="mt-3">
         <button className="btn btn-primary" type="submit" disabled={pending}>

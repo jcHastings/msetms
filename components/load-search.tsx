@@ -124,9 +124,6 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">Search criteria</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Filter live loads by first pickup date. Open a saved report or save the current view.
-            </p>
           </div>
           <div className="field min-w-56">
             <label htmlFor="saved_report">Saved reports</label>

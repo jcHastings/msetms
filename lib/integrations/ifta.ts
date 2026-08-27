@@ -495,7 +495,7 @@ function isAuthError(error: unknown): boolean {
 
 function iftaStatusMessage(status: number, context: string): string {
   if (status === 401 || status === 403) {
-    return `Samsara ${context} failed (HTTP ${status}). Check SAMSARA_API_TOKEN and the Read IFTA (US) / Write IFTA (US) scopes.`;
+    return `Samsara ${context} failed (HTTP ${status}).`;
   }
   if (status === 429) return `Samsara rate-limited the ${context} request.`;
   return `Samsara ${context} failed (HTTP ${status}).`;

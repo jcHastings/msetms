@@ -65,10 +65,6 @@ export default async function AlertsSettingsPage() {
               step="0.5"
               defaultValue={settings.alert_gps_quiet_hours}
             />
-            <p className="mt-1 text-xs text-slate-500">
-              Alert when an assigned truck has a stored Samsara ping older than this. Default 2 hours. No alert if
-              GPS was never received.
-            </p>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -77,7 +73,7 @@ export default async function AlertsSettingsPage() {
               value="1"
               defaultChecked={Boolean(settings.alert_emails_enabled)}
             />
-            Email alerts later (saved, not sent)
+            Email alerts
           </label>
         </SettingsForm>
       </section>

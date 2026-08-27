@@ -857,28 +857,28 @@ function asNumber(value: unknown): number | null {
 
 function orbcommStatusMessage(status: number): string {
   if (status === 401 || status === 403) {
-    return `Orbcomm rejected the credentials (HTTP ${status}). Check ORBCOMM_USERNAME / ORBCOMM_PASSWORD and restart. Showing demo temps.`;
+    return `Orbcomm rejected the credentials (HTTP ${status}).`;
   }
-  return `Orbcomm request failed (HTTP ${status}). Showing demo temps.`;
+  return `Orbcomm request failed (HTTP ${status}).`;
 }
 
 function publicOrbcommError(error: unknown): string {
   if (error instanceof OrbcommHttpError) return error.message;
   if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "Orbcomm request timed out. Showing demo temps.";
+    return "Orbcomm request timed out.";
   }
-  return "Orbcomm request failed. Showing demo temps.";
+  return "Orbcomm request failed.";
 }
 
 function publicOrbcommImportError(error: unknown): string {
   if (error instanceof OrbcommHttpError) {
     if (error.status === 401 || error.status === 403) {
-      return `Orbcomm rejected the credentials (HTTP ${error.status}). Check ORBCOMM_USERNAME / ORBCOMM_PASSWORD and restart, or upload a CSV/export.`;
+      return `Orbcomm rejected the credentials (HTTP ${error.status}).`;
     }
-    return `Orbcomm request failed (HTTP ${error.status}). Upload a CSV/export if the API has no trailer list.`;
+    return `Orbcomm request failed (HTTP ${error.status}).`;
   }
   if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "Orbcomm request timed out. Upload a CSV/export, or try again.";
+    return "Orbcomm request timed out.";
   }
-  return "Orbcomm request failed. Upload a CSV/export from Orbcomm (do not scrape the portal).";
+  return "Orbcomm request failed.";
 }

@@ -55,13 +55,11 @@ export default async function TrucksPage() {
       <SamsaraTruckImport />
       {!fleet.tokenSet ? (
         <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {SAMSARA_TOKEN_MISSING_MESSAGE} GPS stays if it was already saved. Driver and HOS stay empty until
-          the token is set.
+          {SAMSARA_TOKEN_MISSING_MESSAGE}
         </p>
       ) : fleet.error ? (
         <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {fleet.error} Live GPS is kept when the location call succeeds. Driver and HOS stay empty if those
-          Samsara endpoints failed.
+          {fleet.error}
         </p>
       ) : null}
       <div className="card">

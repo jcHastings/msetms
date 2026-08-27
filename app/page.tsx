@@ -104,7 +104,6 @@ export default async function DashboardPage({
       <div className="mb-6 grid gap-4 xl:grid-cols-3">
         <section className="card p-5">
           <h2 className="text-sm font-semibold">Shift handoff</h2>
-          <p className="mt-1 text-sm text-slate-500">What’s on fire for the next desk.</p>
           <form action={saveHandoffAction} className="mt-3">
             <textarea
               name="handoff_note"
@@ -245,13 +244,6 @@ export default async function DashboardPage({
 
         <section className="card p-5 xl:col-span-3">
           <h2 className="text-sm font-semibold">Upcoming / expired documents</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days. Full list on{" "}
-            <Link href="/compliance" className="font-medium underline">
-              Compliance
-            </Link>
-            .
-          </p>
           <div className="mt-3">
             {expirations.length === 0 ? (
               <p className="text-sm text-slate-500">Nothing expiring in those windows.</p>

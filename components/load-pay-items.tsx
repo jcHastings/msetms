@@ -286,10 +286,6 @@ function PayItemDialog({
             <option value="customer">{customerName || "Customer invoice"}</option>
             <option value="driver">{ownerOperatorName || "Owner-operator / lumper"}</option>
           </select>
-          <p className="text-xs text-slate-500">
-            QBO invoices customer line items only. Expenses are payable to an owner-operator, lumper, or similar
-            — not a company driver.
-          </p>
         </div>
         <div className="field">
           <label htmlFor={`${side}-category`}>Category</label>

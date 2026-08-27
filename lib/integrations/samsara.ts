@@ -872,7 +872,7 @@ function asNumber(value: unknown): number | null {
 
 function samsaraStatusMessage(status: number): string {
   if (status === 401 || status === 403) {
-    return `Samsara rejected the API token (HTTP ${status}). Check SAMSARA_API_TOKEN and token scopes, then restart.`;
+    return `Samsara rejected the API token (HTTP ${status}).`;
   }
   if (status === 429) return "Samsara rate-limited the request. Try again in a minute.";
   return `Samsara request failed (HTTP ${status}).`;
@@ -889,7 +889,7 @@ function publicSamsaraError(error: unknown): string {
 function publicSamsaraImportError(error: unknown): string {
   if (error instanceof SamsaraHttpError) {
     if (error.status === 401 || error.status === 403) {
-      return `Samsara rejected the API token (HTTP ${error.status}). Check SAMSARA_API_TOKEN and token scopes, then restart.`;
+      return `Samsara rejected the API token (HTTP ${error.status}).`;
     }
     if (error.status === 429) return "Samsara rate-limited the request. Try again in a minute.";
     return `Samsara request failed (HTTP ${error.status}).`;

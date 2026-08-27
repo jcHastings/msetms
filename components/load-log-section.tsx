@@ -9,7 +9,6 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
     <div className="space-y-4">
       <section id="load-check-call" className="card p-5">
         <h2 className="text-sm font-semibold">Log check call</h2>
-        <p className="mt-1 text-sm text-slate-500">Timestamp, notes, and who (the signed-in dispatcher).</p>
         <form action={logCheckCallFormAction} className="mt-3 grid gap-3 md:grid-cols-3">
           <input type="hidden" name="load_id" value={loadId} />
           <div className="field">
@@ -34,7 +33,6 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
       <section id="load-log" className="card overflow-hidden">
         <header className="border-b border-slate-100 px-5 py-3">
           <h2 className="text-sm font-semibold">Load log</h2>
-          <p className="text-xs text-slate-500">Status changes, check calls, and texts, newest first.</p>
         </header>
         {rows.length === 0 ? (
           <p className="px-5 py-6 text-sm text-slate-500">No status changes or check calls yet.</p>

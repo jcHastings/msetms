@@ -14,7 +14,6 @@ export function FleetDocsPanel({
   return (
     <section className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Documents</h2>
-      <p className="mt-1 text-sm text-slate-500">View or download uploaded files.</p>
       <form action={attachFleetDocFormAction} className="mt-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="owner_type" value={ownerType} />
         <input type="hidden" name="owner_id" value={ownerId} />

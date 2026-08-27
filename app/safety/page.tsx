@@ -62,7 +62,7 @@ export default async function SafetyPage() {
       </div>
       {!fleet.tokenSet ? (
         <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {SAMSARA_TOKEN_MISSING_MESSAGE} HOS stays on this board as “not available” until the token is set.
+          {SAMSARA_TOKEN_MISSING_MESSAGE}
         </p>
       ) : null}
       {board.insurance ? (

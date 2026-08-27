@@ -110,7 +110,7 @@ async function main() {
   assert.match(editorSource, /LoadRelaysPanel/);
   const relayPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8");
   assert.match(relayPanelSource, /\+ Add Relay/);
-  assert.match(relayPanelSource, /Internal handoff/);
+  assert.doesNotMatch(relayPanelSource, /Internal handoff|Not billed/);
   assert.match(relayPanelSource, /Driver A/);
   assert.match(relayPanelSource, /Driver B/);
   assert.match(relayPanelSource, /Relay point/);
@@ -276,7 +276,7 @@ async function main() {
   assert.match(paySource, /Income \/ Budget/);
   assert.match(paySource, /Expenses/);
   assert.match(paySource, /Owner-operator \/ lumper/);
-  assert.match(paySource, /not a company driver/);
+  assert.doesNotMatch(paySource, /not a company driver|QBO invoices customer/);
   assert.match(paySource, /Payable to/);
   assert.match(paySource, />Lumper</);
   assert.match(paySource, /ownerOperators/);
@@ -341,7 +341,7 @@ async function main() {
   assert.match(rateConReviewSource, /Type any name or address/);
   assert.doesNotMatch(rateConReviewSource, /Change the dropdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /This load only/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /This load only|Check calls and stored GPS/);
   const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
   assert.match(mapCanvasSource, /maps\.googleapis\.com\/maps\/api\/js/);
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
@@ -7652,7 +7652,7 @@ Continuous reefer. Two load locks.
   const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
   const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
   assert.match(pageSubtitles, /Fuel card file and driver receipt photos/);
-  const lectureCopy = /Official IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off/i;
+  const lectureCopy = /Official IFTA|Official truck IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off|Trucks from Samsara|Internal handoff|Never printed|Prints on the driver|Prints on confirmation|Prints on customer|Customer invoices only|Realm and refresh tokens|Set \(hidden\)|Demo GPS|Demo invoice preview|Samsara miles for this load|Estimate for this load|Match a driver photo|HOS stays on this board|token is set|default MS Express mark|Same list as the Users tab|Driver PIN is unchanged|Driver PIN login is not affected|office PC|Not Samsara IFTA|not for tax filing|QBO invoices customer|Review pairings|app keys set|demo mode, no secrets|Product name stays|CDL endorsements only|Do not invent one|Pick one so the row|Imported fuel and stored load miles|This load only|Check calls and stored GPS|Customer invoice\.|Windows does not drop|What's on fire|on fire for the next/i;
   assert.doesNotMatch(pageSubtitles, lectureCopy);
   assert.doesNotMatch(pageCopy, lectureCopy);
   assert.doesNotMatch(componentCopy, lectureCopy);
@@ -7875,7 +7875,7 @@ Continuous reefer. Two load locks.
   assert.match(newLoadPage, /RateConImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /Assign & Dispatch/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Imported fuel and stored load miles/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Imported fuel and stored load miles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
 
   closeDb();

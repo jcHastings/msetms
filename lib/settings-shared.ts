@@ -5,7 +5,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/company",
         label: "Company contact",
-        hint: "Name, phone, email, address, and logo (default MS Express mark)",
+        hint: "Name, phone, email, address, and logo",
       },
       {
         href: "/settings/insurance",
@@ -60,7 +60,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/loads",
         label: "Load numbers and sample data",
-        hint: "Prefix, next number, and show sample loads",
+        hint: "Prefix and next number",
       },
     ],
   },
@@ -70,12 +70,12 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/users",
         label: "Users",
-        hint: "Administrators, Standard dispatchers, and Accounting. Same list as the Users tab.",
+        hint: "Administrators, Standard dispatchers, and Accounting",
       },
       {
         href: "/settings/security",
         label: "2-step verification",
-        hint: "Authenticator app for dispatcher login. Driver PIN is unchanged.",
+        hint: "Authenticator app for dispatcher login",
       },
     ],
   },
@@ -85,12 +85,12 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/quickbooks",
         label: "QuickBooks Online",
-        hint: "Connect for customer invoices",
+        hint: "Connect QuickBooks",
       },
       {
         href: "/settings/integrations",
         label: "Samsara, Orbcomm, QuickBooks, tracking",
-        hint: "Samsara, Orbcomm, and QuickBooks status",
+        hint: "Samsara, Orbcomm, and QuickBooks",
       },
     ],
   },

@@ -242,12 +242,10 @@ export function LoadBasicsScreen({
       <div className="field md:col-span-2 note-public">
         <label htmlFor="public_notes">Public notes</label>
         <textarea id="public_notes" name="public_notes" rows={2} defaultValue={load?.public_notes ?? ""} />
-        <p className="mt-1 text-xs text-emerald-800">Prints on customer/driver confirmation and the invoice.</p>
       </div>
       <div className="field md:col-span-2 note-private">
         <label htmlFor="notes">Private notes</label>
         <textarea id="notes" name="notes" rows={2} defaultValue={load?.notes ?? defaults.notes ?? ""} />
-        <p className="mt-1 text-xs text-slate-600">Internal only. Never printed on confirmation or invoice.</p>
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="posting_notes">Posting notes</label>

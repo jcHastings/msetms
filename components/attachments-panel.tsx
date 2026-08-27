@@ -28,7 +28,6 @@ export function AttachmentsPanel({
   return (
     <section id="load-documents" className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Load documents</h2>
-      <p className="mt-1 text-sm text-slate-500">Rate confirmation, invoice, BOL, and POD.</p>
       <form action={attachFileFormAction} className="mt-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="load_id" value={loadId} />
         <div className="field min-w-44">

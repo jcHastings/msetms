@@ -27,9 +27,6 @@ export default async function CompanySettingsPage() {
       </section>
       <section className="card p-6">
         <h2 className="text-sm font-semibold">Logo</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Shows on login, the dispatcher header, and load confirmation PDFs. Product name stays MS Express TMS.
-        </p>
         <div className="mt-4">
           <LogoUploadForm
             hasCustom={hasCustomCompanyLogo(settings)}
