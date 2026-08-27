@@ -4739,6 +4739,8 @@ Continuous reefer. Two load locks.
   assert.match(fuelPage, /Per-truck totals/);
   const fuelRollupUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-rollup-table.tsx"), "utf8");
   const fuelLabels = fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8");
+  assert.doesNotMatch(fuelRollupUi, /Four first-class buckets|Never lumped into Other|first-class/);
+  assert.doesNotMatch(fuelRollupUi, /<p className="mt-1 text-xs text-slate-500">/);
   assert.match(fuelRollupUi + fuelLabels, /Truck diesel/);
   assert.match(fuelRollupUi + fuelLabels, /Reefer diesel|reefer diesel/);
   assert.match(fuelRollupUi + fuelLabels, /DEF/);
