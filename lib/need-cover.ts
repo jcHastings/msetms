@@ -66,7 +66,7 @@ export function listNeedCoverRows(
       input.truckIdByDriver?.get(driver.id) ?? current?.truck_id ?? lastDone?.truck_id ?? driver.truck_id ?? null;
     const gps = input.locations.find((item) => item.truckId === truckId) ?? null;
     const samsaraPlace =
-      isLiveSamsaraGps(gps as VehicleLocation) ? cityStateFromPlace(gps.address) : "";
+      gps && isLiveSamsaraGps(gps as VehicleLocation) ? cityStateFromPlace(gps.address) : "";
     const loadPlace = cityStateFromPlace((current ?? lastDone)?.destination ?? "");
     rows.push({
       driverId: driver.id,
