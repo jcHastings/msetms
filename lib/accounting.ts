@@ -13,6 +13,7 @@ export type Bill = {
   load_id: number | null;
   status: "open" | "paid";
   created_at: string;
+  qbo_bill_id: string;
 };
 
 export type Settlement = {
@@ -43,7 +44,10 @@ export function listReceivables(): Array<
 }
 
 export function listBills(): Bill[] {
-  return getDb().prepare("SELECT * FROM bills ORDER BY id DESC").all() as Bill[];
+  return (getDb().prepare("SELECT * FROM bills ORDER BY id DESC").all() as Bill[]).map((bill) => ({
+    ...bill,
+    qbo_bill_id: bill.qbo_bill_id || "",
+  }));
 }
 
 export function createBill(input: { vendor: string; memo: string; amount: number; loadId?: number | null }): number {
@@ -60,6 +64,14 @@ export function createBill(input: { vendor: string; memo: string; amount: number
 
 export function markBillPaid(id: number): void {
   getDb().prepare("UPDATE bills SET status = 'paid' WHERE id = ?").run(id);
+}
+
+export function getBill(id: number): Bill | null {
+  return (getDb().prepare("SELECT * FROM bills WHERE id = ?").get(id) as Bill | undefined) ?? null;
+}
+
+export function markQboBill(id: number, qboBillId: string): void {
+  getDb().prepare("UPDATE bills SET qbo_bill_id = ? WHERE id = ?").run(qboBillId, id);
 }
 
 export type DriverPayLine = {

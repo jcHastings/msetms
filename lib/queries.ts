@@ -99,7 +99,13 @@ function now(): string {
 }
 
 function asLoadView(row: LoadView | undefined): LoadView | null {
-  return row ?? null;
+  if (!row) return null;
+  return {
+    ...row,
+    accounting_desk: row.accounting_desk || "operations",
+    accounting_return_status: row.accounting_return_status || "",
+    accounting_sent_at: row.accounting_sent_at || "",
+  };
 }
 
 export function listLocations(role?: "shipper" | "receiver"): Location[] {
@@ -1093,9 +1099,10 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return getDb()
-    .prepare(
-      `${LOAD_SELECT} ${where}
+  return (
+    getDb()
+      .prepare(
+        `${LOAD_SELECT} ${where}
        ORDER BY CASE loads.status
          WHEN 'in_transit' THEN 0
          WHEN 'picked_up' THEN 0
@@ -1111,8 +1118,12 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
          WHEN 'completed' THEN 5
          ELSE 6
        END, loads.pickup_start ASC`,
-    )
-    .all(...params) as LoadView[];
+      )
+      .all(...params) as LoadView[]
+  ).flatMap((row) => {
+    const load = asLoadView(row);
+    return load ? [load] : [];
+  });
 }
 
 export function getLoad(id: number): LoadView | null {
@@ -1186,7 +1197,10 @@ export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[]
     )
     .all(...params) as LoadView[];
 
-  return rows.filter((load) => {
+  return rows.flatMap((row) => {
+    const load = asLoadView(row);
+    return load ? [load] : [];
+  }).filter((load) => {
     if (criteria.originState && extractStateCode(load.origin) !== criteria.originState.toUpperCase()) {
       return false;
     }

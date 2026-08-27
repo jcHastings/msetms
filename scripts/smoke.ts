@@ -136,7 +136,10 @@ async function main() {
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8"), /Reconcile and Archive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Reconcile and Archive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Search Archived Loads/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Approve Load Pay Items for Driver Pay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/bills/page.tsx"), "utf8"), /tab=bills/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk.ts"), "utf8"), /sendLoadToAccounting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/connect/route.ts"), "utf8"), /isQuickbooksOAuthReady/);
@@ -461,7 +464,7 @@ async function main() {
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
-  assert.match(hubSource, /Driver Pay Mgmt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);

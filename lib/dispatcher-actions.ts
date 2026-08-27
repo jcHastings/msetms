@@ -635,9 +635,12 @@ export async function payAllOpenBillsAction(): Promise<ActionResult> {
     try {
       await requireCapability(canAccessAccounting, "Bills are for Administrator and Accounting.");
       const { listBills, markBillPaid } = await import("./accounting");
+      const { listLoadsOnAccountingDesk } = await import("./accounting-desk");
+      const accountingIds = new Set(listLoadsOnAccountingDesk("accounting").map((load) => load.id));
       let count = 0;
       for (const bill of listBills()) {
         if (bill.status !== "open") continue;
+        if (bill.load_id && !accountingIds.has(bill.load_id)) continue;
         markBillPaid(bill.id);
         count += 1;
       }
@@ -655,10 +658,11 @@ export async function saveQboItemMapAction(formData: FormData): Promise<ActionRe
       await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
       const category = String(formData.get("category") ?? "").trim();
       const qboItemId = String(formData.get("qbo_item_id") ?? "").trim();
-      const qboItemName = String(formData.get("qbo_item_name") ?? "").trim();
       if (!category) throw new Error("Pick a pay item.");
+      const { listQboItems } = await import("./integrations/quickbooks");
       const { upsertQboItemMap } = await import("./accounting-desk");
-      upsertQboItemMap(category, qboItemId, qboItemName);
+      const named = (await listQboItems()).find((row) => row.id === qboItemId)?.name ?? "";
+      upsertQboItemMap(category, qboItemId, named);
       refresh();
       return { ok: true, message: "Pay item mapped." };
     } catch (error) {
@@ -673,12 +677,29 @@ export async function saveQboVendorMapAction(formData: FormData): Promise<Action
       await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
       const payee = String(formData.get("payee") ?? "").trim();
       const qboVendorId = String(formData.get("qbo_vendor_id") ?? "").trim();
-      const qboVendorName = String(formData.get("qbo_vendor_name") ?? "").trim();
       if (!payee) throw new Error("Pick a vendor.");
+      const { listQboVendors } = await import("./integrations/quickbooks");
       const { upsertQboVendorMap } = await import("./accounting-desk");
-      upsertQboVendorMap(payee, qboVendorId, qboVendorName);
+      const named = (await listQboVendors()).find((row) => row.id === qboVendorId)?.name ?? "";
+      upsertQboVendorMap(payee, qboVendorId, named);
       refresh();
       return { ok: true, message: "Vendor mapped." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function sendBillToQuickbooksAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireCapability(canAccessAccounting, "Sending bills is for Administrator and Accounting.");
+      const billId = parseOptionalInt(formData.get("bill_id"));
+      if (!billId) throw new Error("Bill is missing.");
+      const { sendBillToQuickbooks } = await import("./integrations/quickbooks");
+      await sendBillToQuickbooks(billId);
+      refresh();
+      return { ok: true, id: billId };
     } catch (error) {
       return fail(error);
     }
@@ -825,4 +846,8 @@ export async function saveQboVendorMapFormAction(formData: FormData): Promise<vo
 
 export async function saveQboCustomerMapFormAction(formData: FormData): Promise<void> {
   await throwIfFailed(await saveQboCustomerMapAction(formData));
+}
+
+export async function sendBillToQuickbooksFormAction(formData: FormData): Promise<void> {
+  await throwIfFailed(await sendBillToQuickbooksAction(formData));
 }

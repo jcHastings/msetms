@@ -159,6 +159,70 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   return lines;
 }
 
+export async function sendBillToQuickbooks(billId: number): Promise<{ billId: string; source: "demo" | "quickbooks" }> {
+  const { getBill, markQboBill } = await import("../accounting");
+  const { listQboVendorMaps } = await import("../accounting-desk");
+  const bill = getBill(billId);
+  if (!bill) throw new Error("Bill not found.");
+  if (bill.qbo_bill_id) throw new Error("This bill was already sent to QuickBooks.");
+  if (!hasQuickbooksSession()) {
+    const demoId = `demo-bill-${bill.id}-${uniqueDemoInvoiceStamp()}`;
+    markQboBill(bill.id, demoId);
+    return { billId: demoId, source: "demo" };
+  }
+  const mapped = listQboVendorMaps().find((row) => row.payee === bill.vendor);
+  const vendorId = mapped?.qbo_vendor_id || (await findOrCreateVendor(bill.vendor));
+  const expenseId = await findExpenseAccountId();
+  const created = await qboPost<{ Bill?: { Id?: string } }>(
+    "/bill",
+    {
+      VendorRef: { value: vendorId },
+      PrivateNote: (bill.memo || `Bill ${bill.id}`).slice(0, 4000),
+      Line: [
+        {
+          Amount: bill.amount,
+          DetailType: "AccountBasedExpenseLineDetail",
+          Description: bill.memo || `Bill ${bill.id}`,
+          AccountBasedExpenseLineDetail: { AccountRef: { value: expenseId } },
+        },
+      ],
+    },
+    "bill create",
+  );
+  const id = created.Bill?.Id;
+  if (!id) throw new Error("QuickBooks did not return a bill id.");
+  markQboBill(bill.id, id);
+  return { billId: id, source: "quickbooks" };
+}
+
+async function findOrCreateVendor(name: string): Promise<string> {
+  const displayName = name.trim().slice(0, 500);
+  const found = await qboQuery<{ Vendor?: Array<{ Id?: string }> }>(
+    `select * from Vendor where DisplayName = '${escapeQboString(displayName)}'`,
+    "vendor query",
+  );
+  const existing = found.QueryResponse?.Vendor?.[0]?.Id;
+  if (existing) return existing;
+  const created = await qboPost<{ Vendor?: { Id?: string } }>(
+    "/vendor",
+    { DisplayName: displayName },
+    "vendor create",
+  );
+  const id = created.Vendor?.Id;
+  if (!id) throw new Error("QuickBooks did not return a vendor id.");
+  return id;
+}
+
+async function findExpenseAccountId(): Promise<string> {
+  const accounts = await qboQuery<{ Account?: Array<{ Id?: string }> }>(
+    "select * from Account where AccountType = 'Expense' maxresults 1",
+    "expense account query",
+  );
+  const id = accounts.QueryResponse?.Account?.[0]?.Id;
+  if (!id) throw new Error("QuickBooks has no expense account for this bill.");
+  return id;
+}
+
 export async function sendLoadToQuickbooks(
   loadId: number,
   options: { confirmResend?: boolean } = {},

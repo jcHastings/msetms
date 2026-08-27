@@ -8,6 +8,7 @@ import {
   payAllOpenBillsFormAction,
   payBillAction,
   returnLoadToOperationsFormAction,
+  sendBillToQuickbooksFormAction,
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
 import { sendToQuickbooksFormAction } from "@/lib/actions";
@@ -157,6 +158,7 @@ function InvoicesTab({ q }: { q: string }) {
                   <td>
                     <form action={sendToQuickbooksFormAction}>
                       <input type="hidden" name="load_id" value={row.id} />
+                      {row.qbo_invoice_id ? <input type="hidden" name="confirm_resend" value="1" /> : null}
                       <button className="btn btn-secondary" type="submit">
                         {row.qbo_invoice_id ? "Resend QBO" : "Export to QBO"}
                       </button>
@@ -207,6 +209,7 @@ function BillsTab({ q }: { q: string }) {
   const loadById = new Map(accountingLoads.map((load) => [load.id, load]));
   const filtered = bills.filter((bill) => {
     const load = bill.load_id ? loadById.get(bill.load_id) : null;
+    if (bill.load_id && !load) return false;
     if (!q.trim()) return true;
     const hay = [bill.vendor, bill.memo, load?.load_number, load?.customer_name].join(" ").toLowerCase();
     return hay.includes(q.trim().toLowerCase());
@@ -302,7 +305,14 @@ function BillsTab({ q }: { q: string }) {
                     <td>{formatMoney(bill.amount)}</td>
                     <td>{bill.status === "paid" ? formatMoney(0) : formatMoney(bill.amount)}</td>
                     <td>{bill.vendor}</td>
-                    <td>—</td>
+                    <td>
+                      <form action={sendBillToQuickbooksFormAction}>
+                        <input type="hidden" name="bill_id" value={bill.id} />
+                        <button className="btn btn-secondary" type="submit" disabled={Boolean(bill.qbo_bill_id)}>
+                          {bill.qbo_bill_id ? "Sent to QBO" : "Export bill to QBO"}
+                        </button>
+                      </form>
+                    </td>
                     <td>
                       {bill.status === "open" ? (
                         <form action={payBillAction}>

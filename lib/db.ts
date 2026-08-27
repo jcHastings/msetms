@@ -659,6 +659,7 @@ export function migrate(db: Database): void {
      WHERE id = 1 AND trim(street) = '' AND trim(city) = ''`,
   ).run();
 
+  ensureColumn(db, "bills", "qbo_bill_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");

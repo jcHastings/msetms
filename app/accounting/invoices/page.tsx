@@ -13,7 +13,14 @@ export default async function InvoicesPage({
   const tab = parseAccountingHubTab(params.tab);
   return (
     <>
-      <PageHeader title="Invoices / Bills" />
+      <PageHeader
+        title="Invoices / Bills"
+        actions={
+          <a className="btn btn-secondary" href="/api/accounting/invoices/export">
+            Download invoices
+          </a>
+        }
+      />
       <AccountingHub tab={tab} q={params.q ?? ""} from={params.from} to={params.to} />
     </>
   );

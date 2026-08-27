@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   returnLoadToOperationsAction,
   sendToAccountingAction,
 } from "@/lib/dispatcher-actions";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
+import { isBillableStatus } from "@/lib/types";
 
 export function SendToAccountingControls({
   loadId,
@@ -26,6 +28,7 @@ export function SendToAccountingControls({
 }) {
   const onDesk = loadIsOnAccountingDesk({ accounting_desk: desk, status });
   const archived = desk === "archived";
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -42,6 +45,7 @@ export function SendToAccountingControls({
       return;
     }
     setOpen(false);
+    router.refresh();
   }
 
   async function sendBack() {
@@ -51,7 +55,11 @@ export function SendToAccountingControls({
     form.set("load_id", String(loadId));
     const result = await returnLoadToOperationsAction(form);
     setPending(false);
-    if (!result.ok) setError(result.error);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   if (onDesk && !archived) {
@@ -87,7 +95,7 @@ export function SendToAccountingControls({
     );
   }
 
-  if (!canSend) return null;
+  if (!canSend || !isBillableStatus(status)) return null;
 
   return (
     <div>
