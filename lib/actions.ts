@@ -1185,10 +1185,10 @@ export async function assignFuelDriverAction(
     const id = parseOptionalInt(formData.get("fuel_id"));
     const driverId = parseOptionalInt(formData.get("driver_id"));
     const loadId = parseOptionalInt(formData.get("load_id"));
-    if (!id) throw new Error("Fuel row is missing.");
+    if (!id) return { ok: false, error: "Fuel row is missing." };
+    if (!driverId && !loadId) return { ok: false, error: "Pick a driver or a load." };
     if (driverId) assignFuelTransactionDriver(id, driverId);
     if (loadId) assignFuelTransactionLoad(id, loadId);
-    if (!driverId && !loadId) throw new Error("Pick a driver or a load.");
     refresh();
     return { ok: true };
   } catch (error) {

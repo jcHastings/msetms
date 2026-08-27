@@ -1,8 +1,8 @@
 import { parseCsvRecords } from "./location-csv";
 import { renderUtf8Csv } from "./csv";
 import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
-import { looksLikeFleetOneReport, parseFleetOneFuelText } from "./fuel-fleetone";
-import type { DriverWithTruck, TruckWithDriver } from "./types";
+import { extractNProductDriverName, looksLikeFleetOneReport, parseFleetOneFuelText } from "./fuel-fleetone";
+import { statusNeedsAssets, type DriverWithTruck, type TruckWithDriver } from "./types";
 
 export const FUEL_BUCKETS = [
   { value: "truck_diesel", label: "Truck diesel" },
@@ -371,21 +371,61 @@ export function fuelRowDedupKey(input: {
   return `dt|${fuelDedupKey(input.occurred, input.gallons, input.amount, input.cardLast4)}`;
 }
 
+export type FuelMatchLoad = {
+  truck_id: number | null;
+  driver_id: number | null;
+  status: string;
+};
+
 export function matchFuelDriver(
   row: Pick<ParsedFuelCsvRow, "driverName" | "driverIdRaw" | "unitNumber" | "prompt">,
   drivers: DriverWithTruck[],
   trucks: TruckWithDriver[],
+  loads: FuelMatchLoad[] = [],
 ): { driverId: number | null; truckId: number | null; unitNumber: string } {
   const truck =
     findTruckByUnit(row.unitNumber, trucks) ?? findTruckByUnit(row.prompt ?? "", trucks);
+  const extractedName =
+    extractNProductDriverName(row.driverName) || extractNProductDriverName(row.prompt ?? "");
   const byId = findDriverById(row.driverIdRaw, drivers);
-  const byName = findDriverByName(row.driverName, drivers);
-  const driver = byId ?? byName ?? (truck?.assigned_driver_id ? drivers.find((item) => item.id === truck.assigned_driver_id) : undefined);
+  const byName = findDriverByName(row.driverName, drivers) ?? findDriverByName(extractedName, drivers);
+  const driver = byId ?? byName ?? driverAssignedToTruck(truck, drivers, loads);
   return {
     driverId: driver?.id ?? null,
     truckId: truck?.id ?? driver?.truck_id ?? null,
     unitNumber: truck?.unit_number || row.unitNumber.trim() || (row.prompt ?? "").trim(),
   };
+}
+
+function sameId(left: number | null | undefined, right: number | null | undefined): boolean {
+  const a = Number(left);
+  const b = Number(right);
+  return Number.isFinite(a) && Number.isFinite(b) && a > 0 && a === b;
+}
+
+function driverAssignedToTruck(
+  truck: TruckWithDriver | undefined,
+  drivers: DriverWithTruck[],
+  loads: FuelMatchLoad[],
+): DriverWithTruck | undefined {
+  if (!truck) return undefined;
+  const assignedId = Number(truck.assigned_driver_id);
+  if (Number.isFinite(assignedId) && assignedId > 0) {
+    const assigned = drivers.find((item) => sameId(item.id, assignedId));
+    if (assigned) return assigned;
+  }
+  const roster = drivers.filter((item) => sameId(item.truck_id, truck.id));
+  if (roster.length === 1) return roster[0];
+  if (roster.length > 1) return undefined;
+  const onLoads = new Map<number, DriverWithTruck>();
+  for (const load of loads) {
+    if (!sameId(load.truck_id, truck.id) || load.driver_id == null) continue;
+    if (!statusNeedsAssets(load.status)) continue;
+    const found = drivers.find((item) => sameId(item.id, load.driver_id));
+    if (found) onLoads.set(found.id, found);
+  }
+  if (onLoads.size === 1) return [...onLoads.values()][0];
+  return undefined;
 }
 
 export function parseEfsFuelText(text: string): FuelCsvParseResult {

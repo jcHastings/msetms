@@ -3,16 +3,19 @@ import {
   emptyPeriodTotals,
   fuelWeekPaidStats,
   isFuelBucket,
+  isMoneyCodeCategory,
   matchFuelDriver,
   parseFuelReport,
   startOfLocalMonth,
   startOfLocalWeek,
   type FuelCsvRowError,
+  type FuelMatchLoad,
   type FuelPeriodTotals,
   type FuelRollup,
   type FuelTransactionView,
   type FuelWeekPaidStats,
 } from "./fuel";
+import { extractNProductDriverName } from "./fuel-fleetone";
 import { listDrivers, listTrucks } from "./queries";
 
 function nowIso(): string {
@@ -59,6 +62,65 @@ export function getFuelTransaction(id: number): FuelTransactionView | null {
   );
 }
 
+function listFuelMatchLoads(): FuelMatchLoad[] {
+  return getDb()
+    .prepare(
+      `SELECT truck_id, driver_id, status FROM loads
+       WHERE truck_id IS NOT NULL AND driver_id IS NOT NULL`,
+    )
+    .all() as FuelMatchLoad[];
+}
+
+function fuelRowDriverName(row: { driver_name_raw: string; prompt_data: string }): string {
+  return (
+    extractNProductDriverName(row.driver_name_raw) ||
+    row.driver_name_raw.trim() ||
+    extractNProductDriverName(row.prompt_data)
+  );
+}
+
+export function rematchUnmatchedFuelTransactions(): number {
+  const drivers = listDrivers();
+  const trucks = listTrucks();
+  const loads = listFuelMatchLoads();
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT id, truck_id, category, unit_number, driver_name_raw, prompt_data
+       FROM fuel_transactions WHERE driver_id IS NULL`,
+    )
+    .all() as Array<{
+    id: number;
+    truck_id: number | null;
+    category: string;
+    unit_number: string;
+    driver_name_raw: string;
+    prompt_data: string;
+  }>;
+  const update = db.prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?");
+  let updated = 0;
+  db.transaction(() => {
+    for (const row of rows) {
+      if (isMoneyCodeCategory(row.category)) continue;
+      const match = matchFuelDriver(
+        {
+          driverName: fuelRowDriverName(row),
+          driverIdRaw: "",
+          unitNumber: row.unit_number,
+          prompt: row.prompt_data,
+        },
+        drivers,
+        trucks,
+        loads,
+      );
+      if (!match.driverId) continue;
+      update.run(match.driverId, match.truckId ?? row.truck_id, row.id);
+      updated += 1;
+    }
+  })();
+  return updated;
+}
+
 export function importFuelFromText(
   text: string,
   sourceFile: string,
@@ -66,6 +128,7 @@ export function importFuelFromText(
   const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
   const trucks = listTrucks();
+  const loads = listFuelMatchLoads();
   const db = getDb();
   const existing = new Set(
     (db.prepare("SELECT dedup_key FROM fuel_transactions").all() as Array<{ dedup_key: string }>).map(
@@ -89,7 +152,7 @@ export function importFuelFromText(
         skipped += 1;
         continue;
       }
-      const match = matchFuelDriver(row, drivers, trucks);
+      const match = matchFuelDriver(row, drivers, trucks, loads);
       insert.run(
         row.occurredAt,
         match.driverId,
@@ -114,6 +177,7 @@ export function importFuelFromText(
       else unmatched += 1;
     }
   })();
+  rematchUnmatchedFuelTransactions();
   return { created, skipped, unmatched, errors: parsed.errors };
 }
 

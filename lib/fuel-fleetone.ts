@@ -392,7 +392,44 @@ function fleetOneInvoice(text: string): string {
   return text.match(/\b(\d{6,})\b/)?.[1] ?? "";
 }
 
-function extractNProductDriverName(beforeUnit: string): string {
+const N_PRODUCT_NAME_JUNK =
+  /^(DIESEL|REEFER|DEF|ULSD|ULTRA|LOW|SULFUR|EXHAUST|FLUID|UREA|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA|MONEY|CODE|ONVO|ONE9|CAT|SCALES?|FUNDED)$/i;
+
+function titleCaseCapsName(value: string): string {
+  return value
+    .toLowerCase()
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function looksLikePersonName(value: string): boolean {
+  const words = value.split(/\s+/).filter(Boolean);
+  return words.length >= 2 && words.every((word) => !N_PRODUCT_NAME_JUNK.test(word));
+}
+
+function findEmbeddedPersonName(tokens: string[], mode: "title" | "caps"): string {
+  const hits: string[] = [];
+  for (let n = 3; n >= 2; n -= 1) {
+    for (let i = 0; i <= tokens.length - n; i += 1) {
+      const slice = tokens.slice(i, i + n);
+      const ok = slice.every((token) =>
+        mode === "title"
+          ? /^[A-Z][a-z]+(?:[.'-][A-Za-z]+)?$/.test(token)
+          : /^[A-Z]{2,}(?:[.'-][A-Z]+)?$/.test(token),
+      );
+      if (!ok) continue;
+      const joined = slice.join(" ");
+      if (looksLikePersonName(joined)) {
+        hits.push(mode === "title" ? joined : titleCaseCapsName(joined));
+      }
+    }
+    if (hits.length) return hits[hits.length - 1] ?? "";
+  }
+  return "";
+}
+
+export function extractNProductDriverName(beforeUnit: string): string {
   const cleaned = beforeUnit.replace(/\s+/g, " ").trim();
   if (!cleaned) return "";
   const titled = cleaned.match(
@@ -400,14 +437,11 @@ function extractNProductDriverName(beforeUnit: string): string {
   );
   if (titled) return titled[1];
   const capped = cleaned.match(/^([A-Z]{2,}(?:\s+[A-Z]{2,}){0,2})$/);
-  if (capped && !/(DIESEL|REEFER|DEF|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA)/.test(capped[1])) {
-    return capped[1]
-      .toLowerCase()
-      .split(" ")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
+  if (capped && !/(DIESEL|REEFER|DEF|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA|MONEY|CODE|ULTRA|SULFUR)/.test(capped[1])) {
+    return titleCaseCapsName(capped[1]);
   }
-  return "";
+  const tokens = cleaned.split(" ").filter(Boolean);
+  return findEmbeddedPersonName(tokens, "title") || findEmbeddedPersonName(tokens, "caps");
 }
 
 function fleetOneDriver(text: string): string {

@@ -13,7 +13,13 @@ import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-ses
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
-import { getFuelWeekPaidStats, listFuelRollups, listFuelTransactions, listTruckFuelRollups } from "@/lib/fuel-store";
+import {
+  getFuelWeekPaidStats,
+  listFuelRollups,
+  listFuelTransactions,
+  listTruckFuelRollups,
+  rematchUnmatchedFuelTransactions,
+} from "@/lib/fuel-store";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
@@ -36,6 +42,7 @@ export default async function FuelPage({
   const view = parseFuelPageView(params.view);
   const selectedDriverId = Number.isFinite(driverId) ? driverId : null;
   const selectedTruckId = Number.isFinite(truckId) ? truckId : null;
+  rematchUnmatchedFuelTransactions();
   const drivers = listDrivers();
   const trucks = listTrucks();
   const loadOptions = listLoads({ status: "all" })
