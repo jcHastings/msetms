@@ -2,6 +2,14 @@ import Link from "next/link";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { PageHeader } from "@/components/page-header";
 import type { FleetMapModel } from "@/lib/fleet-map-shared";
+import { formatDateTime } from "@/lib/format";
+
+function messageTime(iso: string | undefined): string {
+  const raw = String(iso ?? "").trim();
+  if (!raw) return "";
+  const shown = formatDateTime(raw);
+  return shown === "—" ? "" : shown;
+}
 
 export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: string }) {
   return (
@@ -34,6 +42,11 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                       {pin.speedMph != null ? ` · ${Math.round(pin.speedMph)} mph` : ""}
                     </span>
                   ) : null}
+                  {messageTime(pin.recordedAt) ? (
+                    <div className="text-xs text-slate-500" data-orbcomm-message="">
+                      {messageTime(pin.recordedAt)}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -65,6 +78,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                 <th>Temp °F</th>
                 <th>Alarm</th>
                 <th>Location</th>
+                <th>Message</th>
               </tr>
             </thead>
             <tbody>
@@ -82,6 +96,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     {row.alarm || "—"}
                   </td>
                   <td>{row.location || "—"}</td>
+                  <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
                 </tr>
               ))}
             </tbody>

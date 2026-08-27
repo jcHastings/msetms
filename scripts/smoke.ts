@@ -5636,6 +5636,11 @@ Continuous reefer. Two load locks.
   assert.equal(reeferPin?.lat, 39.7684);
   assert.equal(reeferPin?.lng, -86.1581);
   assert.equal(reeferPin?.href, `/fleet/trailers/${fleetReeferId}`);
+  assert.ok(reeferPin?.recordedAt, "pin list should carry the Orbcomm message time");
+  const reeferStatus = orbcommFleetMap.statusRows?.find((row) => row.trailer === "FM-R1");
+  assert.ok(reeferStatus?.messageAt, "status row should show the Orbcomm message time");
+  const emptyStatus = orbcommFleetMap.statusRows?.find((row) => row.trailer === "FM-R0");
+  assert.equal(emptyStatus?.messageAt ?? "", "", "no message yet stays blank");
   assert.equal(orbcommFleetMap.pins.some((pin) => pin.label === "FM-DRY"), false, "dry-van trailers stay off the reefer map");
   assert.ok(orbcommFleetMap.missing.some((item) => item.label === "FM-R0" && item.id === fleetEmptyReeferId));
   assert.match(orbcommFleetMap.sourceNote, /stored|not connected/i);
@@ -8218,6 +8223,11 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /messageAt/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Official IFTA|<code>\.env|GOOGLE_MAPS_API_KEY/);
 
   const { attentionLabel } = await import("../lib/exceptions");
   assert.equal(attentionLabel({ kind: "late", severity: "HIGH", title: "Late to pickup" }), "Running late");

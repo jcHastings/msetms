@@ -11,6 +11,7 @@ export type FleetMapPin = {
   href: string;
   motion?: FleetMapMotion | "";
   speedMph?: number | null;
+  recordedAt?: string;
 };
 
 export type FleetMapMissing = {
@@ -28,6 +29,7 @@ export type FleetStatusRow = {
   temperatureF: number | null;
   alarm: string;
   location: string;
+  messageAt: string;
 };
 
 export type FleetMapModel = {

@@ -182,6 +182,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: trailerHref(trailer, loads),
+        recordedAt: snapshot.recordedAt,
       },
       trailer.id,
     );
@@ -190,23 +191,25 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   for (const trailer of trailers) {
     if (usedTrailerIds.has(trailer.id)) continue;
     const reading = latestReeferForTrailer(trailer);
-    const readingCoord =
-      reading && reading.source === "orbcomm" ? plottableCoord(reading.latitude, reading.longitude) : null;
-    if (readingCoord) {
-      addPin(
-        pins,
-        usedTrailerIds,
-        {
-          id: `trailer-${trailer.id}`,
-          label: trailer.unit_number,
-          kind: "trailer",
-          lat: readingCoord.lat,
-          lng: readingCoord.lng,
-          href: trailerHref(trailer, loads),
-        },
-        trailer.id,
-      );
-      continue;
+    if (reading && reading.source === "orbcomm") {
+      const readingCoord = plottableCoord(reading.latitude, reading.longitude);
+      if (readingCoord) {
+        addPin(
+          pins,
+          usedTrailerIds,
+          {
+            id: `trailer-${trailer.id}`,
+            label: trailer.unit_number,
+            kind: "trailer",
+            lat: readingCoord.lat,
+            lng: readingCoord.lng,
+            href: trailerHref(trailer, loads),
+            recordedAt: reading.recorded_at,
+          },
+          trailer.id,
+        );
+        continue;
+      }
     }
     const stored = persistedTrailerLocation(trailer);
     if (!stored || stored.source !== "orbcomm") continue;
@@ -222,6 +225,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: trailerHref(trailer, loads),
+        recordedAt: stored.recordedAt,
       },
       trailer.id,
     );
@@ -277,6 +281,12 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       snapshot && "address" in snapshot
         ? String(snapshot.address ?? "")
         : persistedTrailerLocation(trailer)?.address ?? "";
+    const messageAt =
+      snapshot && "recordedAt" in snapshot && snapshot.recordedAt
+        ? String(snapshot.recordedAt)
+        : snapshot && "recorded_at" in snapshot && snapshot.recorded_at
+          ? String(snapshot.recorded_at)
+          : persistedTrailerLocation(trailer)?.recordedAt ?? "";
     return {
       id: `status-${trailer.id}`,
       trailer: trailer.unit_number,
@@ -286,6 +296,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       temperatureF: temperatureF ?? null,
       alarm,
       location,
+      messageAt,
     };
   });
 
