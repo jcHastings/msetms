@@ -17,7 +17,6 @@ export default async function PaySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Pay and margin"
-        subtitle="Owner-operator percent and payment method."
       />
       <section className="card p-6">
         <SettingsForm action={savePayAction} submitLabel="Save pay defaults" canEdit={canEdit}>

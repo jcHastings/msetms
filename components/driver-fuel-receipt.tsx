@@ -19,7 +19,6 @@ export function DriverFuelReceipt({ loadId }: { loadId: number }) {
       }}
     >
       <h2 className="text-base font-semibold">Fuel receipt</h2>
-      <p className="mt-1 text-sm text-slate-600">Photo of this fill.</p>
       <input type="hidden" name="load_id" value={loadId} />
       <input type="hidden" name="kind" value="fuel_receipt" />
       <div className="mt-3 field">

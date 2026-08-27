@@ -6,7 +6,7 @@ import type { FleetMapModel } from "@/lib/fleet-map-shared";
 export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: string }) {
   return (
     <>
-      <PageHeader title={model.title} subtitle={model.sourceNote} />
+      <PageHeader title={model.title} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" data-fleet-map={model.title.toLowerCase()}>
         <section className="card overflow-hidden">
           <LoadMapCanvas

@@ -19,7 +19,6 @@ export default async function SearchPage({
     <>
       <PageHeader
         title="Search"
-        subtitle="Find live, archived, and cancelled loads."
       />
       <LoadSearch
         customers={listCustomers()}

@@ -17,7 +17,6 @@ export default async function LoadManagementPage() {
       <SettingsBack />
       <PageHeader
         title="Load numbers and sample data"
-        subtitle="Prefix and next number for new loads."
       />
       <section className="card p-6">
         <p className="mb-4 text-sm text-slate-600">

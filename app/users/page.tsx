@@ -15,7 +15,6 @@ export default async function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        subtitle="Dispatchers and office staff."
         actions={
           canManage ? (
             <Link href="/users/new" className="btn btn-primary">

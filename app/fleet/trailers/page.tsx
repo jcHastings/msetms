@@ -39,7 +39,6 @@ export default async function TrailersPage() {
     <>
       <PageHeader
         title="Trailers"
-        subtitle="53' reefers and dry vans."
         actions={
           <>
             <a href="/api/fleet/trailers/export" className="btn btn-secondary">

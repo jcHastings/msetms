@@ -12,7 +12,6 @@ export function FuelCsvImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Daily fuel-card import</h2>
-        <p className="mt-1 text-sm text-slate-600">Upload a fuel file, then import.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <a href="/api/fuel/template" className="btn btn-secondary">

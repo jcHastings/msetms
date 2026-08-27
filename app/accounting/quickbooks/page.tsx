@@ -19,7 +19,6 @@ export default async function QuickbooksAccountingPage() {
     <>
       <PageHeader
         title="QuickBooks"
-        subtitle="Customer invoices in QuickBooks."
       />
       <section className="card mb-4 p-5">
         <div className="text-sm font-semibold">Connection</div>

@@ -17,7 +17,6 @@ export default async function CompanySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Company contact"
-        subtitle="Company name and logo on confirmations."
       />
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Contact</h2>

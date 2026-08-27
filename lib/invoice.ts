@@ -301,7 +301,12 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   const defaults = getDocumentDefaults("invoice");
   const settings = getCompanySettings();
   const currency = settings.currency;
-  const doc = new PDFDocument({ size: "LETTER", margin: 48, bufferPages: true });
+  const doc = new PDFDocument({
+    size: "LETTER",
+    bufferPages: true,
+    autoFirstPage: true,
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
+  });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
   const done = new Promise<Buffer>((resolve) => {
@@ -525,6 +530,7 @@ function drawPinnedFooter(
   x: number,
   width: number,
 ): void {
+  doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const top = 748;
   doc.moveTo(x, top).lineTo(x + width, top).strokeColor("#9ca3af").lineWidth(0.6).stroke();
   doc.moveTo(x + 172, top).lineTo(x + 172, top + 28).stroke();
@@ -532,9 +538,23 @@ function drawPinnedFooter(
   const dispatcher = (model.dispatcherName ?? "").trim();
   const right = dispatcher ? `${dispatcher} (${model.companyLegalName})` : model.companyLegalName;
   doc.font("Helvetica").fontSize(8).fillColor("#111111");
-  doc.text(`Page ${page} of ${pageCount}`, x + 8, top + 10, { width: 156, lineBreak: false });
-  doc.text(`Load #${model.loadNumber}`, x + 180, top + 10, { width: 156, align: "center", lineBreak: false });
-  doc.text(right, x + 352, top + 10, { width: 156, align: "right", lineBreak: false });
+  doc.text(`Page ${page} of ${pageCount}`, x + 8, top + 10, {
+    width: 156,
+    lineBreak: false,
+    height: 12,
+  });
+  doc.text(`Load #${model.loadNumber}`, x + 180, top + 10, {
+    width: 156,
+    align: "center",
+    lineBreak: false,
+    height: 12,
+  });
+  doc.text(right, x + 352, top + 10, {
+    width: 156,
+    align: "right",
+    lineBreak: false,
+    height: 12,
+  });
 }
 
 function drawLetterTable(

@@ -11,7 +11,6 @@ export default async function SettingsHubPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="Company, documents, users, and integrations."
       />
       {dispatcher ? (
         <p className="mb-6 text-sm text-slate-600">
@@ -35,7 +34,6 @@ export default async function SettingsHubPage() {
               {items.map((item) => (
                 <Link key={item.href} href={item.href} className="card block p-5 hover:border-slate-300">
                   <div className="text-sm font-semibold">{item.label}</div>
-                  <p className="mt-1 text-sm text-slate-600">{item.hint}</p>
                 </Link>
               ))}
             </div>

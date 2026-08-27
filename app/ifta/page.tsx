@@ -41,7 +41,7 @@ export default async function IftaPage({
 
   return (
     <>
-      <PageHeader title="IFTA" subtitle="Fuel and miles by state for the quarter." />
+      <PageHeader title="IFTA" />
       <section className="card mb-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

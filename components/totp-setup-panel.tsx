@@ -118,7 +118,6 @@ export function TwoFactorPolicyForm({ required, canEdit }: { required: boolean; 
   return (
     <section className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Require 2-step for all dispatchers</h2>
-      <p className="mt-1 text-sm text-slate-600">When on, every dispatcher must enroll before using the desk.</p>
       <form action={action} className="mt-4 space-y-3">
         <FormBanner result={state} />
         <label className="flex items-start gap-2 text-sm">

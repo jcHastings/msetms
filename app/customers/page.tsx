@@ -18,7 +18,6 @@ export default function CustomersPage() {
     <>
       <PageHeader
         title="Customers"
-        subtitle="Shippers and bill-to accounts."
         actions={
           <Link href="/customers/new" className="btn btn-primary">
             New customer

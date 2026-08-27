@@ -22,7 +22,6 @@ export function OrbcommTrailerImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import from Orbcomm</h2>
-        <p className="mt-1 text-sm text-slate-600">Upload a spreadsheet or fetch from Orbcomm.</p>
       </div>
       <form action={previewAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <div className="field">

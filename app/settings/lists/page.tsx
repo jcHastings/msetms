@@ -21,7 +21,6 @@ export default async function ListsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Dropdown lists"
-        subtitle="Commodities, equipment, and load statuses."
       />
       {DROPDOWN_KINDS.map((kind) => {
         const rows = options.filter((item) => item.kind === kind.value);

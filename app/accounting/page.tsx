@@ -22,7 +22,6 @@ export default async function AccountingHomePage() {
     <>
       <PageHeader
         title="Accounting"
-        subtitle="Invoices, bills, and owner-operator pay."
       />
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card href="/accounting/invoices" label="Open AR" value={formatMoney(unpaid.reduce((sum, row) => sum + (row.rate ?? 0), 0))} hint={`${unpaid.length} delivered unbilled or unpaid`} />
@@ -33,14 +32,10 @@ export default async function AccountingHomePage() {
       <div className="grid gap-3 md:grid-cols-2">
         <Link href="/accounting/quickbooks" className="card p-5 hover:border-slate-300">
           <div className="text-sm font-semibold">QuickBooks Online</div>
-          <p className="mt-1 text-sm text-slate-600">
-            Send customer invoices from a delivered load.
-          </p>
         </Link>
         {showReports ? (
         <Link href="/reports" className="card p-5 hover:border-slate-300">
           <div className="text-sm font-semibold">Revenue report</div>
-          <p className="mt-1 text-sm text-slate-600">By customer, plus on-time and a loads CSV.</p>
         </Link>
         ) : null}
       </div>

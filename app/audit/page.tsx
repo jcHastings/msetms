@@ -28,7 +28,6 @@ export default async function AuditPage({
     <>
       <PageHeader
         title="Audit"
-        subtitle="Load change history."
       />
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="field">

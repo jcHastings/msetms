@@ -14,7 +14,6 @@ export default async function NewUserPage() {
       <UsersBack />
       <PageHeader
         title="Add user"
-        subtitle="Add a dispatcher with a PIN."
       />
       <section className="card p-6">
         <DispatcherUserForm

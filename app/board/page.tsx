@@ -50,7 +50,6 @@ export default async function BoardPage({
     <BoardFilterProvider>
       <PageHeader
         title="Dispatch board"
-        subtitle="Assign a unit and move loads through the lane."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load

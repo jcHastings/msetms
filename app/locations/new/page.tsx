@@ -11,7 +11,6 @@ export default function NewLocationPage() {
     <>
       <PageHeader
         title="New location"
-        subtitle="Add a shipper or receiver."
         actions={
           <Link href="/locations" className="btn btn-secondary">
             Back to locations

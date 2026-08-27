@@ -22,7 +22,6 @@ export function SamsaraTruckImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Import from Samsara</h2>
-        <p className="mt-1 text-sm text-slate-600">Preview vehicles, then import.</p>
       </div>
       <form action={previewAction} className="flex flex-wrap gap-2">
         <button className="btn btn-secondary" type="submit" disabled={previewPending}>

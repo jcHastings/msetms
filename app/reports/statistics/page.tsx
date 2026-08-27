@@ -78,7 +78,6 @@ export default async function StatisticsPage({
     <>
       <PageHeader
         title="Advanced Statistics"
-        subtitle="Thirteen-month load and revenue totals."
       />
       <StatsFilters
         category={category}

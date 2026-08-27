@@ -20,7 +20,6 @@ export default async function LocationsPage() {
     <>
       <PageHeader
         title="Locations"
-        subtitle="Shippers and receivers for booking loads."
         actions={
           <>
             {canExport ? (

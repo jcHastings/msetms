@@ -64,7 +64,6 @@ export default async function FuelPage({
     <>
       <PageHeader
         title="Fuel"
-        subtitle="Fuel card file and driver receipt photos."
         actions={
           <>
             {canExportCsv(dispatcher.role) ? (

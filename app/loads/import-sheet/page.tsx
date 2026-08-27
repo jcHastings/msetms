@@ -15,7 +15,6 @@ export default async function ImportLoadsPage() {
     <>
       <PageHeader
         title="Import loads"
-        subtitle="Import loads from a spreadsheet."
         actions={
           <div className="flex gap-2">
             <Link href="/loads/new" className="btn btn-secondary">

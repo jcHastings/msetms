@@ -15,9 +15,6 @@ export function LocationCsvImport() {
     <section className="card mb-6 space-y-4 p-6">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Mass upload</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Upload a spreadsheet, preview, then import. Matches by name.
-        </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <a href="/api/locations/template" className="btn btn-secondary">

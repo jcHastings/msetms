@@ -17,7 +17,6 @@ export default async function AlertsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Alerts"
-        subtitle="Warning windows for license and registration dates."
       />
       <section className="card p-6">
         <SettingsForm action={saveAlertsAction} submitLabel="Save alert windows" canEdit={canEdit}>

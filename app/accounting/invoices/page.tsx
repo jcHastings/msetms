@@ -15,7 +15,6 @@ export default function InvoicesPage() {
     <>
       <PageHeader
         title="Invoices (AR)"
-        subtitle="Customer invoices for delivered loads."
         actions={
           <div className="flex gap-2">
             <a href="/api/accounting/invoices/export" className="btn btn-secondary">

@@ -74,7 +74,6 @@ export default async function DashboardPage({
     <>
       <PageHeader
         title="Dispatch desk"
-        subtitle="Loads picking up or delivering today."
         actions={
           <Link href="/loads/new" className="btn btn-primary">
             New load
@@ -85,20 +84,10 @@ export default async function DashboardPage({
       <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} />
 
       <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Open loads" value={stats.openLoads} hint="Not delivered, completed, or cancelled" href="/board" />
-        <Kpi label="Rolling" value={stats.inTransit} hint="Dispatched through unloading" href="/board?status=in_transit" />
-        <Kpi
-          label="Available trucks"
-          value={stats.availableTrucks}
-          hint={`${trucks.length} in the fleet`}
-          href="/fleet"
-        />
-        <Kpi
-          label="Unassigned loads"
-          value={stats.unassignedLoads}
-          hint="Need a truck and driver"
-          href="/board?status=available"
-        />
+        <Kpi label="Open loads" value={stats.openLoads} href="/board" />
+        <Kpi label="Rolling" value={stats.inTransit} href="/board?status=in_transit" />
+        <Kpi label="Available trucks" value={stats.availableTrucks} href="/fleet" />
+        <Kpi label="Unassigned loads" value={stats.unassignedLoads} href="/board?status=available" />
       </div>
 
       <div className="mb-6 grid gap-4 xl:grid-cols-3">
@@ -343,14 +332,14 @@ function Kpi({
 }: {
   label: string;
   value: number;
-  hint: string;
+  hint?: string;
   href: string;
 }) {
   return (
     <Link href={href} className="card block p-5 transition hover:border-slate-300">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-2 font-mono text-3xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-1 text-sm text-slate-500">{hint}</div>
+      {hint ? <div className="mt-1 text-sm text-slate-500">{hint}</div> : null}
     </Link>
   );
 }

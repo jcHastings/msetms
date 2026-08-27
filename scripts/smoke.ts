@@ -393,7 +393,7 @@ async function main() {
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
   assert.match(payPageSource, /Close period/);
   assert.match(payPageSource, /Download Excel/);
-  assert.match(payPageSource, /Owner-operator settlements/);
+  assert.match(payPageSource, /Driver pay/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
@@ -826,7 +826,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /TMS unit/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"),
-    /Preview vehicles/,
+    /Fetch Samsara vehicles/,
   );
   const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
   const unit28Copy = /unit 28|including 28|Unit 28|JC.?s unit \*\*28/i;
@@ -879,10 +879,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /samsaraRecordIsActive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchTruckForSamsaraLive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /matchTruckForSamsaraLive/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Preview vehicles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Fetch Samsara vehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Import from Orbcomm/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Upload a spreadsheet or fetch/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Trailer spreadsheet/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/vehicles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /console\.log/);
   const orbcommAuth = fs.readFileSync(path.join(process.cwd(), "lib/integrations/orbcomm.ts"), "utf8");
@@ -6801,6 +6801,7 @@ Continuous reefer. Two load locks.
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
+  assert.equal((await PDFDocument.load(made.buffer)).getPageCount(), 1);
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
@@ -6834,6 +6835,55 @@ Continuous reefer. Two load locks.
   assert.match(invoiceLibSource, /bufferPages/);
   assert.match(invoiceLibSource, /drawPinnedFooter/);
   assert.match(invoiceLibSource, /Pay Items/);
+  assert.match(invoiceLibSource, /margins: \{ top: 0, bottom: 0/);
+  const onePageInvoice = await renderTmsInvoicePdf({
+    ...tmsInvoiceModel,
+    invoiceNumber: "INV-1005921",
+    date: "05/29/26",
+    customerName: "M & S Loads LLC.",
+    customerStreet: "600 E 39th St",
+    customerCityStateZip: "Hastings, NE 68901",
+    customerPhone: "402-302-0097",
+    companyLegalName: "M&S Loads LLC",
+    companyPhone: "402-302-0097",
+    dispatcherName: "MS Test",
+    lines: [{ name: "Flat Rate", description: "", amount: 3500, qty: 1, rate: 3500 }],
+    total: 3500,
+    publicNotes: "",
+    stops: [
+      {
+        sequence: 1,
+        kind: "Pickup",
+        window: "05/28/26 8:00 AM – 05/28/26 5:00 PM",
+        name: "Tyson-Amarillo",
+        street: "5000 FM1912",
+        city: "Amarillo",
+        state: "TX",
+        zip: "79120",
+        phone: "806-335-1531",
+        reference: "",
+        cargo: "",
+      },
+      {
+        sequence: 2,
+        kind: "Delivery",
+        window: "05/29/26 8:00 AM – 05/29/26 5:00 PM",
+        name: "Nebraska Cold Storage Inc",
+        street: "600 E 39th St",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        phone: "402-461-4442",
+        reference: "",
+        cargo: "",
+      },
+    ],
+  });
+  assert.equal((await PDFDocument.load(onePageInvoice)).getPageCount(), 1, "simple invoice must stay on one letter page");
+  const onePageText = await extractDocumentText(onePageInvoice, "application/pdf", "INV-1005921-one.pdf");
+  assert.match(onePageText, /Page 1 of 1/);
+  assert.match(onePageText, /Load #/);
+  assert.match(onePageText, /MS Test \(M&S Loads LLC\)/);
   const freightPdf = await renderTmsInvoicePdf({
     ...tmsInvoiceModel,
     invoiceNumber: "INV-1005921",
@@ -6889,6 +6939,7 @@ Continuous reefer. Two load locks.
       })),
     ],
   });
+  assert.equal((await PDFDocument.load(freightPdf)).getPageCount(), 2);
   const freightText = await extractDocumentText(freightPdf, "application/pdf", "INV-1005921.pdf");
   assert.match(freightText, /05\/29\/26/);
   assert.doesNotMatch(freightText, /2026-05-29/);
@@ -7779,7 +7830,7 @@ Continuous reefer. Two load locks.
 
   const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
   assert.match(dashToday, /loadTouchesToday/);
-  assert.match(dashToday, /Loads picking up or delivering today/);
+  assert.doesNotMatch(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /America\/New_York/);
   const pageCopy = [
@@ -7796,8 +7847,13 @@ Continuous reefer. Two load locks.
     .join("\n");
   const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
   const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
-  assert.match(pageSubtitles, /Fuel card file and driver receipt photos/);
-  const lectureCopy = /Official IFTA|Official truck IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off|Trucks from Samsara|Internal handoff|Never printed|Prints on the driver|Prints on confirmation|Prints on customer|Customer invoices only|Realm and refresh tokens|Set \(hidden\)|Demo GPS|Demo invoice preview|Samsara miles for this load|Estimate for this load|Match a driver photo|HOS stays on this board|token is set|default MS Express mark|Same list as the Users tab|Driver PIN is unchanged|Driver PIN login is not affected|office PC|Not Samsara IFTA|not for tax filing|QBO invoices customer|Review pairings|app keys set|demo mode, no secrets|Product name stays|CDL endorsements only|Do not invent one|Pick one so the row|Imported fuel and stored load miles|This load only|Check calls and stored GPS|Customer invoice\.|Windows does not drop|What's on fire|on fire for the next/i;
+  assert.equal(pageSubtitles, "", "app pages must not print helper PageHeader subtitles");
+  assert.doesNotMatch(componentCopy, /subtitle="[^"]+"/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"),
+    /subtitle=\{\`\$\{load\.origin\} → \$\{load\.destination\}\`\}/,
+  );
+  const lectureCopy = /Official IFTA|Official truck IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off|Trucks from Samsara|Internal handoff|Never printed|Prints on the driver|Prints on confirmation|Prints on customer|Customer invoices only|Realm and refresh tokens|Set \(hidden\)|Demo GPS|Demo invoice preview|Samsara miles for this load|Estimate for this load|Match a driver photo|HOS stays on this board|token is set|default MS Express mark|Same list as the Users tab|Driver PIN is unchanged|Driver PIN login is not affected|office PC|Not Samsara IFTA|not for tax filing|QBO invoices customer|Review pairings|app keys set|demo mode, no secrets|Product name stays|CDL endorsements only|Do not invent one|Pick one so the row|Imported fuel and stored load miles|This load only|Check calls and stored GPS|Customer invoice\.|Windows does not drop|What's on fire|on fire for the next|Fuel card file|Company drivers and|Four first-class|Upload a spreadsheet|Upload a fuel file/i;
   assert.doesNotMatch(pageSubtitles, lectureCopy);
   assert.doesNotMatch(pageCopy, lectureCopy);
   assert.doesNotMatch(componentCopy, lectureCopy);

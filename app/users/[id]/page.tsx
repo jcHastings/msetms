@@ -22,7 +22,6 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
       <UsersBack />
       <PageHeader
         title={user.name}
-        subtitle="Name, PIN, role, and active status."
       />
       <section className="card p-6">
         <DispatcherUserForm

@@ -18,7 +18,6 @@ export default async function CompliancePage() {
     <>
       <PageHeader
         title="Compliance"
-        subtitle="License, medical card, and registration dates."
         actions={
           <Link href="/fleet" className="btn btn-secondary">
             Open fleet

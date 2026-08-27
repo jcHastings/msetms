@@ -37,7 +37,6 @@ export default async function TrucksPage() {
     <>
       <PageHeader
         title="Trucks"
-        subtitle="Power units, plates, and compliance."
         actions={
           <>
             <Link href="/fuel" className="btn btn-secondary">

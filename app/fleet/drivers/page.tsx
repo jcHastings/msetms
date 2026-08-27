@@ -24,7 +24,6 @@ export default async function DriversPage() {
     <>
       <PageHeader
         title="Drivers"
-        subtitle="Company drivers and owner-operators."
         actions={
           <>
             <Link href="/fuel" className="btn btn-secondary">

@@ -90,7 +90,6 @@ export function AssignDialog({
           <form className="card w-full max-w-md p-5 shadow-xl" onSubmit={onSubmit}>
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Assign {loadNumber}</h2>
-              <p className="mt-1 text-sm text-slate-500">Pair a truck, trailer, and driver.</p>
             </div>
             <input type="hidden" name="load_id" value={loadId} />
             {confirmed ? <input type="hidden" name="confirm_expired" value="1" /> : null}

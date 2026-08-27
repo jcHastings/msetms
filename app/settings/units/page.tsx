@@ -17,7 +17,6 @@ export default async function UnitsSettingsPage() {
       <SettingsBack />
       <PageHeader
         title="Currency and units"
-        subtitle="Working currency and weight units."
       />
       <section className="card p-6">
         <SettingsForm action={saveUnitsAction} submitLabel="Save units" canEdit={canEdit}>

@@ -24,7 +24,6 @@ export default async function NewLoadPage() {
     <>
       <PageHeader
         title="New load"
-        subtitle="Book freight, then assign it from the board."
         actions={
           <div className="flex gap-2">
             <Link href="/loads/import-sheet" className="btn btn-secondary">

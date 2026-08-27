@@ -25,7 +25,6 @@ export default async function SecuritySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="2-step verification"
-        subtitle="Authenticator codes for dispatcher sign-in."
       />
       {required && !enrolled ? (
         <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">

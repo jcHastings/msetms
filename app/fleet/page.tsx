@@ -29,7 +29,6 @@ export default async function FleetPage({
     <>
       <PageHeader
         title="Fleet"
-        subtitle="Trucks, trailers, and drivers."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/fleet/drivers" className="btn btn-secondary">

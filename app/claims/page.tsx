@@ -10,7 +10,6 @@ export default function ClaimsPage() {
     <>
       <PageHeader
         title="Claims / OS&D"
-        subtitle="Claims on a load."
       />
       <div className="card overflow-hidden">
         {claims.length === 0 ? (

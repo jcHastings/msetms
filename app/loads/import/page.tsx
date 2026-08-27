@@ -11,7 +11,6 @@ export default function ImportRateConPage() {
     <>
       <PageHeader
         title="Load from rate confirmation"
-        subtitle="Upload a rate confirmation PDF or image."
         actions={
           <Link href="/loads/new" className="btn btn-secondary">
             Type a load instead
