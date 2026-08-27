@@ -468,6 +468,7 @@ async function main() {
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /overflow-x-auto/);
   assert.match(hubSource, /min-w-max/);
+  assert.match(hubSource, /sticky right-0/);
   assert.match(hubSource, /title="Send back to Load Management"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
