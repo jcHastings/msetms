@@ -195,12 +195,18 @@ function confirmationParty(
   };
 }
 
+function looksLikeBillingAddress(value: string): boolean {
+  if (/\d/.test(value) && /\b[A-Z]{2}\b/.test(value)) return true;
+  return /\d/.test(value) && /\b(st|street|ave|rd|blvd|dr|way|ln|ct|hwy|pkwy|box)\b/i.test(value);
+}
+
 function printableCustomerBilling(notes: string): string {
   const trimmed = notes.trim();
   if (!trimmed) return "";
   if (/created from a rate confirmation/i.test(trimmed)) return "";
   if (/^net\s*\d+\s*\.?$/i.test(trimmed)) return "";
-  return trimmed.replace(/\s*\n+\s*/g, ", ");
+  const flattened = trimmed.replace(/\s*\n+\s*/g, ", ");
+  return looksLikeBillingAddress(flattened) ? flattened : "";
 }
 
 function confirmationCustomer(load: LoadView): {
