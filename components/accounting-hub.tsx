@@ -40,10 +40,22 @@ function matchesQuery(load: LoadView, q: string): boolean {
     load.origin,
     load.destination,
     load.status,
+    load.branch,
   ]
     .join(" ")
     .toLowerCase();
   return hay.includes(q.trim().toLowerCase());
+}
+
+function matchesBranch(load: { branch?: string }, branch: string): boolean {
+  if (!branch.trim()) return true;
+  return (load.branch || "").trim() === branch.trim();
+}
+
+function uniqueBranches(loads: Array<{ branch?: string }>): string[] {
+  return [...new Set(loads.map((load) => (load.branch || "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
 }
 
 export function AccountingHub({
@@ -51,16 +63,24 @@ export function AccountingHub({
   q = "",
   from,
   to,
+  branch = "",
+  driver = "",
 }: {
   tab: string;
   q?: string;
   from?: string;
   to?: string;
+  branch?: string;
+  driver?: string;
 }) {
   const current = parseAccountingHubTab(tab);
   const period = defaultPayPeriod();
   const payFrom = from || period.from;
   const payTo = to || period.to;
+  const branches = uniqueBranches([
+    ...listLoadsOnAccountingDesk("accounting"),
+    ...listLoadsOnAccountingDesk("archived"),
+  ]);
   return (
     <div>
       <nav className="mb-4 flex flex-wrap gap-1 border-b border-slate-200 pb-2">
@@ -76,20 +96,38 @@ export function AccountingHub({
           </Link>
         ))}
       </nav>
-      {current === "invoices" ? <InvoicesTab q={q} /> : null}
-      {current === "bills" ? <BillsTab q={q} /> : null}
-      {current === "reconcile" ? <ReconcileTab q={q} /> : null}
-      {current === "archived" ? <ArchivedTab q={q} /> : null}
-      {current === "pay" ? <PayTab from={payFrom} to={payTo} /> : null}
+      {current === "invoices" ? <InvoicesTab q={q} branch={branch} branches={branches} /> : null}
+      {current === "bills" ? <BillsTab q={q} branch={branch} branches={branches} /> : null}
+      {current === "reconcile" ? <ReconcileTab q={q} branch={branch} branches={branches} /> : null}
+      {current === "archived" ? <ArchivedTab q={q} branch={branch} branches={branches} /> : null}
+      {current === "pay" ? <PayTab from={payFrom} to={payTo} driver={driver} /> : null}
       {current === "approve" ? <ApproveTab /> : null}
     </div>
   );
 }
 
-function SearchBox({ q, tab }: { q: string; tab: string }) {
+function SearchBox({
+  q,
+  tab,
+  branch = "",
+  branches = [],
+}: {
+  q: string;
+  tab: string;
+  branch?: string;
+  branches?: string[];
+}) {
   return (
     <form className="mb-3 flex flex-wrap gap-2" method="get">
       <input type="hidden" name="tab" value={tab} />
+      <select name="branch" defaultValue={branch} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+        <option value="">All branches</option>
+        {branches.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </select>
       <input
         name="q"
         defaultValue={q}
@@ -103,12 +141,12 @@ function SearchBox({ q, tab }: { q: string; tab: string }) {
   );
 }
 
-function InvoicesTab({ q }: { q: string }) {
+function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const settings = getCompanySettings();
-  const rows = listReceivables().filter((row) => matchesQuery(row, q));
+  const rows = listReceivables().filter((row) => matchesQuery(row, q) && matchesBranch(row, branch));
   return (
     <section className="card overflow-hidden">
-      <SearchBox q={q} tab="invoices" />
+      <SearchBox q={q} tab="invoices" branch={branch} branches={branches} />
       <table className="table-grid">
         <thead>
           <tr>
@@ -203,13 +241,14 @@ function InvoicesTab({ q }: { q: string }) {
   );
 }
 
-function BillsTab({ q }: { q: string }) {
+function BillsTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const bills = listBills();
   const accountingLoads = listLoadsOnAccountingDesk("accounting");
   const loadById = new Map(accountingLoads.map((load) => [load.id, load]));
   const filtered = bills.filter((bill) => {
     const load = bill.load_id ? loadById.get(bill.load_id) : null;
     if (bill.load_id && !load) return false;
+    if (load && !matchesBranch(load, branch)) return false;
     if (!q.trim()) return true;
     const hay = [bill.vendor, bill.memo, load?.load_number, load?.customer_name].join(" ").toLowerCase();
     return hay.includes(q.trim().toLowerCase());
@@ -217,7 +256,7 @@ function BillsTab({ q }: { q: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SearchBox q={q} tab="bills" />
+        <SearchBox q={q} tab="bills" branch={branch} branches={branches} />
         <form action={payAllOpenBillsFormAction}>
           <button className="btn btn-primary" type="submit">
             Pay All Received Bills
@@ -334,15 +373,17 @@ function BillsTab({ q }: { q: string }) {
   );
 }
 
-function ReconcileTab({ q }: { q: string }) {
-  const loads = listLoadsOnAccountingDesk("accounting").filter((load) => matchesQuery(load, q));
+function ReconcileTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
+  const loads = listLoadsOnAccountingDesk("accounting").filter(
+    (load) => matchesQuery(load, q) && matchesBranch(load, branch),
+  );
   return (
     <section className="card overflow-hidden">
       <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">
         List of All Loads Sent to Accounting
       </header>
       <div className="px-5 pt-3">
-        <SearchBox q={q} tab="reconcile" />
+        <SearchBox q={q} tab="reconcile" branch={branch} branches={branches} />
       </div>
       <table className="table-grid">
         <thead>
@@ -406,12 +447,14 @@ function ReconcileTab({ q }: { q: string }) {
   );
 }
 
-function ArchivedTab({ q }: { q: string }) {
-  const loads = listLoadsOnAccountingDesk("archived").filter((load) => matchesQuery(load, q));
+function ArchivedTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
+  const loads = listLoadsOnAccountingDesk("archived").filter(
+    (load) => matchesQuery(load, q) && matchesBranch(load, branch),
+  );
   return (
     <section className="card overflow-hidden">
       <div className="px-5 pt-3">
-        <SearchBox q={q} tab="archived" />
+        <SearchBox q={q} tab="archived" branch={branch} branches={branches} />
       </div>
       <table className="table-grid">
         <thead>
@@ -454,9 +497,10 @@ function ArchivedTab({ q }: { q: string }) {
   );
 }
 
-function PayTab({ from, to }: { from: string; to: string }) {
+function PayTab({ from, to, driver }: { from: string; to: string; driver: string }) {
   const lines = listDriverPay(from, to);
-  const groups = groupDriverPay(lines);
+  const groups = groupDriverPay(lines).filter((group) => !driver.trim() || group.driverName === driver);
+  const driverNames = [...new Set(lines.map((line) => line.driverName))].sort((a, b) => a.localeCompare(b));
   const exportHref = `/api/accounting/pay/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   return (
     <div>
@@ -470,6 +514,17 @@ function PayTab({ from, to }: { from: string; to: string }) {
           <div className="field">
             <label htmlFor="to">Period end</label>
             <input id="to" name="to" type="date" defaultValue={to} />
+          </div>
+          <div className="field">
+            <label htmlFor="driver">Driver</label>
+            <select id="driver" name="driver" defaultValue={driver}>
+              <option value="">All drivers</option>
+              {driverNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </div>
           <button className="btn btn-secondary" type="submit">
             Apply period
