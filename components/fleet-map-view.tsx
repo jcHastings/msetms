@@ -15,6 +15,11 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
   return (
     <>
       <PageHeader title={model.title} />
+      {model.title === "Orbcomm" && /live Orbcomm did not update/i.test(model.sourceNote) ? (
+        <p className="mb-3 text-sm text-slate-600" data-orbcomm-live-note="">
+          {model.sourceNote}
+        </p>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" data-fleet-map={model.title.toLowerCase()}>
         <section className="card overflow-hidden">
           <LoadMapCanvas

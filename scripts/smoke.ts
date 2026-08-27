@@ -3203,8 +3203,10 @@ Continuous reefer. Two load locks.
     assert.doesNotMatch(failedFleet.error, /Showing demo/);
 
     const failedReefer = await orbcomm.getReeferSnapshots();
-    assert.equal(failedReefer.mode, "demo", "ORBCOMM 401 should fall back to demo temps");
+    assert.equal(failedReefer.mode, "orbcomm");
+    assert.equal(failedReefer.credentialsSet, true);
     assert.ok(failedReefer.error && /401/.test(failedReefer.error));
+    assert.match(failedReefer.note ?? "", /live Orbcomm did not update/i);
     const fallbackReading = await orbcomm.getLatestReeferForLoad(reeferLoad.id);
     assert.equal(fallbackReading?.source, "demo");
     assert.match(orbcommTokenBody, /"userName":"demo-user"/);
@@ -7524,18 +7526,141 @@ Continuous reefer. Two load locks.
   assert.equal(liveSnapshots.some((row) => row.loadId == null && row.trailerId === "MS1514"), true);
   const liveNested = orbcomm.normalizeOrbcommPayload({
     code: 1000,
-    data: [
-      {
-        assetName: "MS1514",
-        reeferStatus: { returnTemp: 2, setpointTemp: 1, reeferPowerDesc: "Power On", activeAlarms: ["Passed"] },
-        positionStatus: { city: "Omaha", state: "NE" },
-      },
-    ],
+    data: {
+      assets: [
+        {
+          assetName: "MS1514",
+          lastReportTime: "2026-08-25T18:48:00Z",
+          reeferStatus: {
+            returnTemp: 2,
+            setpointTemp: 1,
+            reeferPowerDesc: "Power On",
+            activeAlarms: ["Passed"],
+            eventTime: "2026-08-27T14:10:00Z",
+          },
+          positionStatus: { city: "Omaha", state: "NE", gpsTime: "2026-08-27T14:05:00Z" },
+        },
+      ],
+    },
   });
   assert.equal(liveNested[0]?.temperatureF, 35.6);
   assert.equal(liveNested[0]?.setpointF, 33.8);
   assert.equal(liveNested[0]?.powerOn, true);
   assert.equal(liveNested[0]?.alarm, "");
+  assert.equal(liveNested[0]?.recordedAt, "2026-08-27T14:10:00.000Z");
+
+  const liveRefreshTrailerId = queries.createTrailer({
+    unit_number: "LIVE-R1",
+    type: "reefer",
+    orbcomm_asset_id: "orb-live-r1",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "LIVE-R1",
+    setpoint_f: 34,
+    temperature_f: 36,
+    return_air_f: 36,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    latitude: 41.2565,
+    longitude: -95.9345,
+    address: "Omaha, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-25T18:48:00Z",
+  });
+  const liveRefreshUser = process.env.ORBCOMM_USERNAME;
+  const liveRefreshPass = process.env.ORBCOMM_PASSWORD;
+  const liveRefreshAccount = process.env.ORBCOMM_ACCOUNT_ID;
+  process.env.ORBCOMM_USERNAME = "demo-user";
+  process.env.ORBCOMM_PASSWORD = "demo-pass";
+  process.env.ORBCOMM_ACCOUNT_ID = "test-org";
+  const liveRefreshFetch = globalThis.fetch;
+  let liveAssetNamesBody = "";
+  globalThis.fetch = (async (input, init) => {
+    const url = String(input);
+    if (url.includes("generateToken")) {
+      return new Response(JSON.stringify({ data: { accessToken: "live-token" }, code: 200 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("getAssetStatus")) {
+      liveAssetNamesBody = String(init?.body ?? "");
+      return new Response(
+        JSON.stringify({
+          code: 1000,
+          data: {
+            assets: [
+              {
+                assetName: "LIVE-R1",
+                assetId: "orb-live-r1",
+                lastReportTime: "2026-08-25T18:48:00Z",
+                reeferStatus: {
+                  returnTemp: 2,
+                  setpointTemp: 1,
+                  reeferPowerDesc: "Power On",
+                  eventTime: "2026-08-27T14:10:00Z",
+                },
+                positionStatus: { city: "Omaha", state: "NE", latitude: 41.2565, longitude: -95.9345, gpsTime: "2026-08-27T14:05:00Z" },
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  try {
+    orbcomm.resetOrbcommCacheForTests();
+    const liveRefresh = await orbcomm.getReeferSnapshots();
+    assert.equal(liveRefresh.mode, "orbcomm");
+    assert.equal(liveRefresh.note ?? "", "");
+    assert.match(liveAssetNamesBody, /LIVE-R1/);
+    assert.match(liveAssetNamesBody, /orb-live-r1/);
+    const liveRow = liveRefresh.readings.find((row) => /live-r1/i.test(row.trailerId) || row.trailerId === "LIVE-R1");
+    assert.equal(liveRow?.recordedAt, "2026-08-27T14:10:00.000Z");
+    const storedLive = orbcomm.latestReeferForTrailer({
+      unit_number: "LIVE-R1",
+      orbcomm_asset_id: "orb-live-r1",
+    });
+    assert.equal(storedLive?.recorded_at, "2026-08-27T14:10:00.000Z");
+    assert.equal(storedLive?.source, "orbcomm");
+    orbcomm.resetOrbcommCacheForTests();
+    globalThis.fetch = (async (input) => {
+      if (String(input).includes("generateToken")) {
+        return new Response(JSON.stringify({ data: { accessToken: "live-token" }, code: 200 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("unavailable", { status: 500 });
+    }) as typeof fetch;
+    const staleRefresh = await orbcomm.getReeferSnapshots();
+    assert.match(staleRefresh.note ?? "", /Last message 08\/27\/26 — live Orbcomm did not update/);
+    assert.equal(
+      staleRefresh.readings.some((row) => row.recordedAt === "2026-08-27T14:10:00.000Z"),
+      true,
+    );
+    const { buildOrbcommFleetMap } = await import("../lib/fleet-map");
+    orbcomm.resetOrbcommCacheForTests();
+    const staleMap = await buildOrbcommFleetMap();
+    assert.match(staleMap.sourceNote, /Last message 08\/27\/26 — live Orbcomm did not update/);
+    assert.equal(staleMap.statusRows?.some((row) => row.trailer === "LIVE-R1" && row.messageAt === "2026-08-27T14:10:00.000Z"), true);
+    assert.equal(staleMap.title, "Orbcomm");
+  } finally {
+    globalThis.fetch = liveRefreshFetch;
+    if (liveRefreshUser == null) delete process.env.ORBCOMM_USERNAME;
+    else process.env.ORBCOMM_USERNAME = liveRefreshUser;
+    if (liveRefreshPass == null) delete process.env.ORBCOMM_PASSWORD;
+    else process.env.ORBCOMM_PASSWORD = liveRefreshPass;
+    if (liveRefreshAccount == null) delete process.env.ORBCOMM_ACCOUNT_ID;
+    else process.env.ORBCOMM_ACCOUNT_ID = liveRefreshAccount;
+    orbcomm.resetOrbcommCacheForTests();
+    queries.setTrailerActive(liveRefreshTrailerId, false);
+  }
 
   const fleetOneText = [
     "Transaction Activity Report",
@@ -8225,8 +8350,13 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-live-note/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /messageAt/);
+  assert.match(orbcommAuth, /orbcomm_asset_id/);
+  assert.match(orbcommAuth, /eventTime/);
+  assert.match(orbcommAuth, /persistLiveReeferReadings/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Official IFTA|<code>\.env|GOOGLE_MAPS_API_KEY/);
 
   const { attentionLabel } = await import("../lib/exceptions");

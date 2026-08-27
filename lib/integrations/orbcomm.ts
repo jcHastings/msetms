@@ -11,6 +11,7 @@ import {
   orbcommAssetFromUnknown,
   type OrbcommAssetInput,
 } from "../fleet-import-shared";
+import { formatMdYDisplay } from "../format";
 import { listLoads, listTrailers, listTrucks } from "../queries";
 import type { ReeferReading, ReeferStatus } from "../types";
 
@@ -226,36 +227,43 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
 
   try {
     const token = await generateOrbcommToken();
-    const liveAssets = await tryFetchAssetStatus(token);
-    if (liveAssets.length > 0) {
-      return {
-        mode: "orbcomm",
-        credentialsSet: true,
-        fetchedAt: new Date().toISOString(),
-        readings: snapshotsFromLiveAssets({
-          loads: mappingLoads(),
-          trucks: mappingTrucks(),
-          trailers: mappingTrailers(),
-          assets: liveAssets,
-        }),
-      };
+    const live = await tryFetchAssetStatus(token);
+    if (live.assets.length > 0) {
+      const trailers = mappingTrailers();
+      const readings = snapshotsFromLiveAssets({
+        loads: mappingLoads(),
+        trucks: mappingTrucks(),
+        trailers,
+        assets: live.assets,
+      });
+      if (readings.length > 0) {
+        persistLiveReeferReadings(readings, trailers);
+        return {
+          mode: "orbcomm",
+          credentialsSet: true,
+          fetchedAt: new Date().toISOString(),
+          readings,
+        };
+      }
     }
 
-    const imported = listLatestReeferReadings("orbcomm").map(toSnapshot);
+    const stored = listStoredOrbcommSnapshots();
     return {
       mode: "orbcomm",
       credentialsSet: true,
       fetchedAt: new Date().toISOString(),
-      note: imported.length
-        ? "Orbcomm sign-in succeeded. Showing the last imported Reefer Status Report."
-        : "Orbcomm sign-in succeeded. Import a Reefer Status Report export to load trailer temps, or ask Orbcomm to enable B2B asset snapshot access.",
-      readings: imported,
+      note: lastLiveFailNote(stored),
+      readings: stored,
     };
   } catch (error) {
+    const stored = listStoredOrbcommSnapshots();
     return {
-      ...demo,
+      mode: "orbcomm",
       credentialsSet: true,
+      fetchedAt: new Date().toISOString(),
       error: publicOrbcommError(error),
+      note: lastLiveFailNote(stored),
+      readings: stored,
     };
   }
 }
@@ -411,7 +419,7 @@ export async function listOrbcommFleetAssets(): Promise<
   }
   try {
     const token = await generateOrbcommToken();
-    const readings = await tryFetchAssetStatus(token);
+    const readings = (await tryFetchAssetStatus(token)).assets;
     const assets = readings
       .map((reading) =>
         orbcommAssetFromUnknown({
@@ -437,49 +445,136 @@ export async function listOrbcommFleetAssets(): Promise<
   }
 }
 
-async function tryFetchAssetStatus(token: string): Promise<OrbcommAssetReading[]> {
-  const assetNames = listTrailers()
-    .filter((trailer) => trailer.active !== 0)
-    .map((trailer) => trailer.unit_number.trim())
-    .filter(Boolean);
-  if (assetNames.length === 0) return [];
-  try {
-    const url = new URL("/SynB2BGatewayService/api/getAssetStatus", getOrbcommApiBase());
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: token,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        assetNames,
-        assetGroupNames: [],
-        watermark: null,
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!response.ok) return [];
-    const body = (await response.json()) as Record<string, unknown>;
-    const code = typeof body.code === "number" ? body.code : Number(body.code);
-    if (code === 1008 || code === 1007) return [];
-    if (code && code !== 1000) return [];
-    const parsed = normalizeOrbcommPayload(body);
-    if (parsed.length) return parsed;
-  } catch {
-    // Fail-soft to import/demo.
+function liveAssetNameLists(): string[][] {
+  const units: string[] = [];
+  const ids: string[] = [];
+  const seenUnits = new Set<string>();
+  const seenIds = new Set<string>();
+  for (const trailer of listTrailers().filter((item) => item.active !== 0)) {
+    const unit = String(trailer.unit_number ?? "").trim();
+    const assetId = String(trailer.orbcomm_asset_id ?? "").trim();
+    if (unit && !seenUnits.has(normalizeKey(unit))) {
+      seenUnits.add(normalizeKey(unit));
+      units.push(unit);
+    }
+    if (assetId && !seenIds.has(normalizeKey(assetId))) {
+      seenIds.add(normalizeKey(assetId));
+      ids.push(assetId);
+    }
   }
-  return [];
+  const combined: string[] = [];
+  const seen = new Set<string>();
+  for (const name of [...units, ...ids]) {
+    const key = normalizeKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    combined.push(name);
+  }
+  return [combined, ids, units].filter((list) => list.length > 0);
+}
+
+async function postAssetStatus(token: string, assetNames: string[]): Promise<OrbcommAssetReading[]> {
+  const url = new URL("/SynB2BGatewayService/api/getAssetStatus", getOrbcommApiBase());
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: token,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      assetNames,
+      assetGroupNames: [],
+      watermark: null,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new OrbcommHttpError(response.status);
+  const body = (await response.json()) as Record<string, unknown>;
+  const code = typeof body.code === "number" ? body.code : Number(body.code);
+  if (code === 1008 || code === 1007) return [];
+  if (code && code !== 1000 && code !== 200) return [];
+  return normalizeOrbcommPayload(body);
+}
+
+async function tryFetchAssetStatus(token: string): Promise<{ assets: OrbcommAssetReading[] }> {
+  const attempts = liveAssetNameLists();
+  if (attempts.length === 0) return { assets: [] };
+  let lastError: unknown = null;
+  for (const assetNames of attempts) {
+    try {
+      const parsed = await postAssetStatus(token, assetNames);
+      if (parsed.length) return { assets: parsed };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return { assets: [] };
 }
 
 export function normalizeOrbcommPayload(body: unknown): OrbcommAssetReading[] {
-  if (!body) return [];
-  if (Array.isArray(body)) return body.map(normalizeOrbcommRow).filter(hasIdentity);
-  if (typeof body !== "object") return [];
-  const record = body as Record<string, unknown>;
-  const rows = record.data ?? record.assets ?? record.rows ?? record.result ?? record.Results;
-  return Array.isArray(rows) ? rows.map(normalizeOrbcommRow).filter(hasIdentity) : [];
+  return collectAssetRows(body).map(normalizeOrbcommRow).filter(hasIdentity);
+}
+
+function looksLikeAssetRow(value: unknown): boolean {
+  const rec = asRecord(value);
+  if (!rec) return false;
+  return Boolean(
+    rec.assetName ||
+      rec.asset_name ||
+      rec.assetId ||
+      rec.asset_id ||
+      rec.AssetId ||
+      rec.trailerId ||
+      rec.trailer_id ||
+      rec.TrailerId ||
+      rec.reeferStatus ||
+      rec.ReeferStatus ||
+      rec.positionStatus ||
+      rec.PositionStatus ||
+      rec.assetStatus ||
+      rec.AssetStatus,
+  );
+}
+
+function collectAssetRows(value: unknown, depth = 0): unknown[] {
+  if (!value || depth > 6) return [];
+  if (Array.isArray(value)) {
+    if (value.some(looksLikeAssetRow)) return value.filter((item) => item && typeof item === "object");
+    for (const item of value) {
+      const nested = collectAssetRows(item, depth + 1);
+      if (nested.length) return nested;
+    }
+    return [];
+  }
+  const record = asRecord(value);
+  if (!record) return [];
+  const preferred = [
+    "data",
+    "assets",
+    "rows",
+    "result",
+    "Results",
+    "assetStatus",
+    "AssetStatus",
+    "assetList",
+    "items",
+    "records",
+  ];
+  for (const key of preferred) {
+    if (!(key in record)) continue;
+    const nested = collectAssetRows(record[key], depth + 1);
+    if (nested.length) return nested;
+  }
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (preferred.includes(key)) continue;
+    if (!nestedValue || typeof nestedValue !== "object") continue;
+    const nested = collectAssetRows(nestedValue, depth + 1);
+    if (nested.length) return nested;
+  }
+  return looksLikeAssetRow(record) ? [record] : [];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -490,12 +585,71 @@ function flattenLiveAsset(row: Record<string, unknown>): Record<string, unknown>
   const assetStatus = asRecord(row.assetStatus) ?? asRecord(row.AssetStatus);
   const positionStatus = asRecord(row.positionStatus) ?? asRecord(row.PositionStatus);
   const reeferStatus = asRecord(row.reeferStatus) ?? asRecord(row.ReeferStatus);
+  const gps = asRecord(row.gps) ?? asRecord(row.GPS) ?? asRecord(row.position) ?? asRecord(row.Position);
   return {
     ...row,
     ...(assetStatus ?? {}),
     ...(positionStatus ?? {}),
     ...(reeferStatus ?? {}),
+    ...(gps ?? {}),
   };
+}
+
+function newestMessageTime(row: Record<string, unknown>, flat: Record<string, unknown>): string | undefined {
+  const blobs = [
+    row,
+    flat,
+    asRecord(row.assetStatus),
+    asRecord(row.AssetStatus),
+    asRecord(row.positionStatus),
+    asRecord(row.PositionStatus),
+    asRecord(row.reeferStatus),
+    asRecord(row.ReeferStatus),
+    asRecord(row.gps),
+    asRecord(row.GPS),
+    asRecord(row.position),
+    asRecord(flat.gps),
+    asRecord(flat.GPS),
+  ].filter((item): item is Record<string, unknown> => Boolean(item));
+  const keys = [
+    "lastReportTime",
+    "LastReportTime",
+    "last_report_time",
+    "recordedAt",
+    "recorded_at",
+    "eventTime",
+    "EventTime",
+    "event_time",
+    "eventDateTime",
+    "gpsTime",
+    "GpsTime",
+    "gps_time",
+    "positionTime",
+    "messageTime",
+    "lastMessageTime",
+    "deviceTime",
+    "reportTime",
+    "timestamp",
+    "time",
+  ];
+  let newestMs = Number.NEGATIVE_INFINITY;
+  let newestText = "";
+  for (const blob of blobs) {
+    for (const key of keys) {
+      const text = asString(blob[key]);
+      if (!text) continue;
+      const ms = Date.parse(text);
+      if (!Number.isNaN(ms)) {
+        if (ms > newestMs) {
+          newestMs = ms;
+          newestText = new Date(ms).toISOString();
+        }
+        continue;
+      }
+      if (!newestText) newestText = text;
+    }
+  }
+  return newestText || undefined;
 }
 
 function celsiusToF(value: number): number {
@@ -592,15 +746,7 @@ function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
     supplyAirF: firstTempF(item, ["supplyAirF", "supply_air_f", "SupplyAir"]),
     powerOn: parseReeferPower(item),
     alarm: liveAlarms(item) || firstString(item, ["alarm", "Alarm", "alarms"]) || "",
-    recordedAt:
-      firstString(item, [
-        "recordedAt",
-        "recorded_at",
-        "lastReportTime",
-        "LastReportTime",
-        "timestamp",
-        "time",
-      ]) ?? undefined,
+    recordedAt: newestMessageTime(row as Record<string, unknown>, item),
     latitude: firstNumber(item, ["latitude", "Latitude", "lat", "Lat", "LAT"]),
     longitude: firstNumber(item, ["longitude", "Longitude", "lng", "lon", "Lon", "LNG"]),
     address: address ?? "",
@@ -784,6 +930,68 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
   }
   cache = null;
   return readings.length;
+}
+
+function listStoredOrbcommSnapshots(): ReeferSnapshot[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM reefer_readings
+       WHERE source = 'orbcomm' AND trailer_id != ''
+       ORDER BY recorded_at DESC, id DESC`,
+    )
+    .all() as ReeferReading[];
+  const seen = new Set<string>();
+  const snapshots: ReeferSnapshot[] = [];
+  for (const row of rows) {
+    const key = normalizeKey(row.trailer_id);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    snapshots.push(toSnapshot(row));
+  }
+  return snapshots;
+}
+
+function lastLiveFailNote(readings: ReeferSnapshot[]): string {
+  const newest = readings
+    .map((row) => Date.parse(row.recordedAt))
+    .filter((ms) => !Number.isNaN(ms));
+  if (!newest.length) return "Live Orbcomm did not update.";
+  return `Last message ${formatMdYDisplay(new Date(Math.max(...newest)).toISOString())} — live Orbcomm did not update.`;
+}
+
+function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedTrailer[]): void {
+  const exists = getDb().prepare(
+    `SELECT id FROM reefer_readings
+     WHERE source = 'orbcomm' AND recorded_at = ? AND trailer_id = ?
+     LIMIT 1`,
+  );
+  for (const reading of readings) {
+    if (reading.source !== "orbcomm") continue;
+    const trailer = trailers.find(
+      (item) =>
+        normalizeKey(item.unit_number) === normalizeKey(reading.trailerId) ||
+        normalizeKey(item.orbcomm_asset_id) === normalizeKey(reading.trailerId),
+    );
+    const trailerId = trailer?.unit_number || reading.trailerId;
+    if (!trailerId || !reading.recordedAt) continue;
+    if (exists.get(reading.recordedAt, trailerId)) continue;
+    insertReeferReading({
+      load_id: reading.loadId,
+      truck_id: reading.truckId,
+      trailer_id: trailerId,
+      setpoint_f: reading.setpointF,
+      temperature_f: reading.temperatureF,
+      return_air_f: reading.returnAirF,
+      supply_air_f: reading.supplyAirF,
+      door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
+      alarm: reading.alarm,
+      latitude: reading.latitude,
+      longitude: reading.longitude,
+      address: reading.address,
+      source: "orbcomm",
+      recorded_at: reading.recordedAt,
+    });
+  }
 }
 
 export function insertReeferReading(input: Omit<ReeferReading, "id">): void {

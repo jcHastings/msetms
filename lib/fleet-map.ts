@@ -157,7 +157,9 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   const usedTrailerIds = new Set<number>();
   const pins: FleetMapPin[] = [];
   const configured = isOrbcommConfigured();
-  const snapshots = configured ? await getReeferSnapshots() : { readings: [] as Awaited<ReturnType<typeof getReeferSnapshots>>["readings"] };
+  const snapshots = configured
+    ? await getReeferSnapshots()
+    : { readings: [] as Awaited<ReturnType<typeof getReeferSnapshots>>["readings"], note: undefined as string | undefined };
 
   for (const snapshot of snapshots.readings) {
     if (snapshot.source !== "orbcomm") continue;
@@ -239,13 +241,8 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       href: trailerHref(trailer, loads),
     }));
 
-  const liveCount = snapshots.readings.filter(
-    (reading) => reading.source === "orbcomm" && isPlottableCoord(reading.latitude, reading.longitude),
-  ).length;
   const sourceNote = configured
-    ? liveCount
-      ? "Live Orbcomm GPS for reefer trailers."
-      : "Last stored trailer GPS."
+    ? String(snapshots.note ?? "").trim()
     : "Last stored trailer GPS. Orbcomm is not connected.";
 
   const statusRows: FleetStatusRow[] = trailers.map((trailer) => {
