@@ -10,5 +10,6 @@ export function printablePaperworkCopy(text: string): string {
   if (lower.includes("linehaul is the customer rate")) return "";
   if (lower.includes("accessorials are billed separately")) return "";
   if (lower.includes("payment due per customer terms")) return "";
+  if (lower.includes("customer portal")) return "";
   return text.trim();
 }

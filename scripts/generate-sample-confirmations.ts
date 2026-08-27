@@ -17,7 +17,20 @@ const company = {
   zip: "",
 };
 
+const emptyCustomer = {
+  packet: "internal" as const,
+  customerName: "",
+  customerBilling: "",
+  customerContact: "",
+  customerPhone: "",
+  customerEmail: "",
+  customerReference: "",
+  customerRate: null,
+  customerRateLines: [],
+};
+
 const ooSample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "owner_operator",
   company,
   loadNumber: "1006149",
@@ -76,6 +89,7 @@ const ooSample: ConfirmationModel = {
 };
 
 const companySample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "company_driver",
   company,
   loadNumber: "1006151",

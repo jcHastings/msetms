@@ -12,7 +12,14 @@ export function LoadConfirmationLink({
   const className = variant === "driver" ? "btn btn-primary" : "btn btn-secondary";
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <a className={className} href={`/api/loads/${loadId}/confirmation`}>
+      <a
+        className={className}
+        href={
+          variant === "driver"
+            ? `/api/loads/${loadId}/confirmation?packet=internal`
+            : `/api/loads/${loadId}/confirmation`
+        }
+      >
         {variant === "driver" ? "Download load confirmation" : `Download ${loadNumber} confirmation`}
       </a>
       {variant === "dispatcher" && hasRelays ? (

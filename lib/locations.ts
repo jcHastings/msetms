@@ -110,9 +110,11 @@ function cityStateAgrees(
   location: Pick<Location, "city" | "state">,
   stop: StopLocationMatch,
 ): boolean {
-  const city = normalizeLocationName(stop.city ?? "");
-  const state = (stop.state ?? "").trim().toUpperCase();
-  if (city && normalizeLocationName(location.city) && normalizeLocationName(location.city) !== city) {
+  const stopCityRaw = normalizeLocationName(stop.city ?? "");
+  const stopCity = stopCityRaw.replace(/\s+[a-z]{2}$/, "").trim();
+  const locCity = normalizeLocationName(location.city);
+  const state = (stop.state ?? "").trim().toUpperCase() || extractStateCode(stop.city ?? "");
+  if (stopCity && locCity && locCity !== stopCity && locCity !== stopCityRaw) {
     return false;
   }
   if (state.length === 2 && location.state.trim() && location.state.trim().toUpperCase() !== state) {

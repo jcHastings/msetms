@@ -19,7 +19,8 @@ export async function GET(
   const load = getLoad(loadId);
   if (!load) return new Response("Not found", { status: 404 });
 
-  const packet = new URL(request.url).searchParams.get("packet") === "internal" ? "internal" : "customer";
+  const wantInternal = new URL(request.url).searchParams.get("packet") === "internal";
+  const packet = dispatcher && !wantInternal ? "customer" : "internal";
   const driverId = Number.parseInt(new URL(request.url).searchParams.get("driver") ?? "", 10);
   // Single-tenant local desk: leftover driver-app cookies must not 404 a
   // dispatcher download for a load they just created (often still unassigned).
@@ -28,7 +29,7 @@ export async function GET(
     driverId: Number.isFinite(driverId) ? driverId : undefined,
   });
   const pdf = await renderConfirmationPdf(model);
-  const suffix = packet === "internal" ? "-driver-packet" : "-load-confirmation";
+  const suffix = packet === "internal" ? "-driver-packet" : "-customer-confirmation";
   const filename = `${load.load_number}${suffix}.pdf`;
   return new Response(new Uint8Array(pdf), {
     headers: {

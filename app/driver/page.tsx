@@ -59,7 +59,7 @@ export default async function DriverHomePage() {
               { href: current ? `${loadHref}#upload` : "#active", label: "Upload", disabled: !current },
               { href: current ? `${loadHref}#bol` : "#active", label: "BOL", disabled: !current },
               {
-                href: current ? `/api/loads/${current.id}/confirmation` : "#active",
+                href: current ? `/api/loads/${current.id}/confirmation?packet=internal` : "#active",
                 label: "Confirmation",
                 disabled: !current,
               },

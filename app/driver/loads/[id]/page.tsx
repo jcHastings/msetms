@@ -75,7 +75,7 @@ export default async function DriverLoadPage({
       ) : null}
 
       <div id="confirmation" className="mt-4 flex flex-wrap gap-2">
-        <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation`}>
+        <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation?packet=internal`}>
           Download load confirmation
         </a>
         {attachments

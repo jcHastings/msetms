@@ -314,6 +314,27 @@ async function main() {
   assert.match(paySource, /ViewInvoiceButton/);
   assert.match(paySource, /View Customer Confirmation/);
   assert.match(paySource, /View Carrier Confirmation/);
+  assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation`/);
+  assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation\?packet=internal/);
+  const confirmationRouteSource = fs.readFileSync(
+    path.join(process.cwd(), "app/api/loads/[id]/confirmation/route.ts"),
+    "utf8",
+  );
+  assert.match(confirmationRouteSource, /packet === "internal"/);
+  assert.match(confirmationRouteSource, /dispatcher && !wantInternal \? "customer" : "internal"/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8"),
+    /confirmation\?packet=internal/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"),
+    /confirmation\?packet=internal/,
+  );
+  const confirmationLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");
+  assert.match(confirmationLibSource, /Customer Confirmation/);
+  assert.match(confirmationLibSource, /tmsCustomerInvoiceLines/);
+  assert.match(confirmationLibSource, /drawCustomerBlock/);
+  assert.match(confirmationLibSource, /drawCustomerRate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /View Invoice/);
   assert.match(paySource, /data-financials-totals/);
   assert.match(paySource, /finance-income/);
@@ -2536,9 +2557,11 @@ Continuous reefer. Two load locks.
   assert.equal(companyLogoPath(), defaultCompanyLogoPath());
   assert.equal(header.dispatcher_name, "MS Test");
   const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
+  assert.equal(coleConfirm.packet, "customer");
   assert.equal(coleConfirm.style, "owner_operator");
   assert.equal(coleConfirm.loadNumber, coleLoad.load_number);
-  assert.ok(coleConfirm.agreedAmount != null);
+  assert.equal(coleConfirm.agreedAmount, null);
+  assert.ok(coleConfirm.customerRate != null);
   assert.ok(!["1006149", "1006151"].includes(coleConfirm.loadNumber));
   const colePdf = await confirmation.renderConfirmationPdf(coleConfirm);
   assert.equal(colePdf.subarray(0, 4).toString(), "%PDF");
@@ -2546,21 +2569,48 @@ Continuous reefer. Two load locks.
   const { extractText } = await import("unpdf");
   assert.equal((await PDFDocument.load(colePdf)).getPageCount(), 1, "confirmation must be one page");
   const coleText = String((await extractText(new Uint8Array(colePdf), { mergePages: true })).text ?? "");
-  assert.match(coleText, /Rate & Load Confirmation/);
+  assert.match(coleText, /Customer Confirmation/);
+  assert.doesNotMatch(coleText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(coleText, /Agreed Amount/);
+  const coleDriver = confirmation.buildConfirmationForLoad(coleLoad.id, { packet: "internal" });
+  assert.equal(coleDriver.packet, "internal");
+  assert.ok(coleDriver.agreedAmount != null);
+  assert.equal(coleDriver.customerRate, null);
+  const coleDriverPdf = await confirmation.renderConfirmationPdf(coleDriver);
+  const coleDriverText = String((await extractText(new Uint8Array(coleDriverPdf), { mergePages: true })).text ?? "");
+  assert.match(coleDriverText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(coleDriverText, /Customer Confirmation/);
   const deniseLoad =
     queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1045") ??
     queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
   assert.ok(deniseLoad);
   const deniseConfirm = confirmation.buildConfirmationForLoad(deniseLoad.id);
+  assert.equal(deniseConfirm.packet, "customer");
   assert.equal(deniseConfirm.style, "company_driver");
   assert.equal(deniseConfirm.agreedAmount, null);
+  assert.ok(deniseConfirm.customerRate != null);
   assert.equal(deniseConfirm.loadNumber, deniseLoad.load_number);
   const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
   assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
   assert.equal((await PDFDocument.load(denisePdf)).getPageCount(), 1, "company confirmation must be one page");
   const deniseText = String((await extractText(new Uint8Array(denisePdf), { mergePages: true })).text ?? "");
-  assert.match(deniseText, /Load Confirmation/);
+  assert.match(deniseText, /Customer Confirmation/);
   assert.doesNotMatch(deniseText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(deniseText, /Load Confirmation/);
+  assert.match(deniseText, /River City Produce/);
+  assert.equal(deniseConfirm.customerRate, 3100);
+  assert.match(deniseText, /3,100/);
+  const deniseDriver = confirmation.buildConfirmationForLoad(deniseLoad.id, { packet: "internal" });
+  assert.equal(deniseDriver.agreedAmount, null);
+  assert.equal(deniseDriver.customerRate, null);
+  const deniseDriverPdf = await confirmation.renderConfirmationPdf(deniseDriver);
+  const deniseDriverText = String(
+    (await extractText(new Uint8Array(deniseDriverPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(deniseDriverText, /Load Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /Customer Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /Customer Rate|^Rate$/m);
+  assert.doesNotMatch(deniseDriverText, /3,100/);
   assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
   assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
   assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
@@ -2633,6 +2683,32 @@ Continuous reefer. Two load locks.
     matchLocationForStop(queries.listLocations(), { name: "Unknown Plant LLC", city: "Avenel", state: "NJ" }),
     null,
   );
+  const stuffedCity = matchLocationForStop(queries.listLocations(), {
+    name: "Lineage Logistics - Avenel",
+    city: "Avenel, NJ",
+  });
+  assert.ok(stuffedCity);
+  assert.match(stuffedCity?.street ?? "", /275 Blair/);
+  const hastingsColdId = queries.createLocation({
+    name: "Hastings Cold Storage Smoke",
+    street: "600 E 39th St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    phone: "(402) 461-4442",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "Daily 06:00–16:00",
+    scheduling_notes: "FCFS",
+  });
+  const stuffedHastings = matchLocationForStop(queries.listLocations(), {
+    name: "Hastings Cold Storage Smoke",
+    city: "Hastings, NE",
+  });
+  assert.ok(stuffedHastings);
+  assert.equal(stuffedHastings?.id, hastingsColdId);
+  assert.match(stuffedHastings?.street ?? "", /600 E 39th/);
   const importedConfirm = confirmation.buildConfirmationForLoad(confirmImportId);
   assert.equal(importedConfirm.shipper.name, "Lineage Logistics - Avenel");
   assert.equal(importedConfirm.shipper.address, "275 Blair rd\nAvenel, NJ 07001");
@@ -3011,7 +3087,152 @@ Continuous reefer. Two load locks.
   assert.equal(customerPacket.internalLegs, "");
   assert.match(customerPacket.shipper.address, /New York/);
   assert.equal(customerPacket.agreedAmount, null);
+  assert.equal(customerPacket.customerRate, 3200);
+  assert.equal(customerPacket.customerRateLines.some((line) => line.name === "Flat Rate"), true);
   assert.doesNotMatch(customerPacket.dispatchNotes, /Chicago|internal \$900|Relay Bravo/i);
+  const customerPacketPdf = await confirmation.renderConfirmationPdf(customerPacket);
+  const customerPacketText = String(
+    (await extractText(new Uint8Array(customerPacketPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(customerPacketText, /Customer Confirmation/);
+  assert.match(customerPacketText, /3,200/);
+  assert.doesNotMatch(customerPacketText, /Relay Bravo|internal \$900|Your leg/);
+  const billedCustomerId = queries.createCustomer({
+    name: "Westside Foods Billing Co",
+    billing_notes: "4400 Packer Ave\nKansas City, MO 64120",
+    contacts: [
+      { name: "Avery Billing", role: "AP", phone: "816-555-0101", email: "ap@westside-smoke.example" },
+    ],
+  });
+  const billedLoadId = queries.createLoad({
+    customer_id: billedCustomerId,
+    load_number: "1006153-SMOKE",
+    origin: "Hastings, NE",
+    destination: "Kansas City, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen beef",
+    rate: 2000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "FCFS",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 26,
+    reefer_mode: "continuous",
+    trailer_number: "MS1519",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+    contact_name: "Jordan Buyer",
+    contact_phone: "816-555-0199",
+    contact_email: "jordan@westside-smoke.example",
+    customer_reference: "WSF-1006153",
+  });
+  replaceStops(billedLoadId, [
+    {
+      kind: "pickup",
+      name: "Hastings Cold Storage Smoke",
+      city: "Hastings, NE",
+      state: "",
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+      notes: "FCFS",
+    },
+    {
+      kind: "delivery",
+      name: "Westside Foods Smoke Dock",
+      street: "12 Test Dock Rd",
+      city: "Kansas City",
+      state: "MO",
+      zip: "64120",
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+  ]);
+  addPayItem(billedLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Westside Foods Billing Co",
+    category: "flat_rate",
+    rate: 2000,
+    qty: 1,
+    total: 2000,
+    notes: "",
+  });
+  addPayItem(billedLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Westside Foods Billing Co",
+    category: "detention",
+    rate: 150,
+    qty: 1,
+    total: 150,
+    notes: "",
+  });
+  addPayItem(billedLoadId, {
+    side: "expense",
+    bill_to: "driver",
+    payee: "OO Smoke Pay",
+    category: "flat_rate",
+    rate: 400,
+    qty: 1,
+    total: 400,
+    notes: "",
+  });
+  const billedPacket = confirmation.buildConfirmationForLoad(billedLoadId);
+  assert.equal(billedPacket.packet, "customer");
+  assert.equal(billedPacket.customerName, "Westside Foods Billing Co");
+  assert.match(billedPacket.customerBilling, /4400 Packer Ave/);
+  assert.match(billedPacket.customerBilling, /Kansas City, MO 64120/);
+  assert.equal(billedPacket.customerContact, "Jordan Buyer");
+  assert.equal(billedPacket.customerPhone, "816-555-0199");
+  assert.equal(billedPacket.customerEmail, "jordan@westside-smoke.example");
+  assert.equal(billedPacket.customerReference, "WSF-1006153");
+  assert.equal(billedPacket.customerRate, 2150);
+  assert.deepEqual(
+    billedPacket.customerRateLines.map((line) => [line.name, line.amount]),
+    [
+      ["Flat Rate", 2000],
+      ["Detention", 150],
+    ],
+  );
+  assert.equal(billedPacket.agreedAmount, null);
+  assert.match(billedPacket.shipper.address, /600 E 39th/);
+  assert.match(billedPacket.consignee.address, /12 Test Dock Rd/);
+  const billedPdf = await confirmation.renderConfirmationPdf(billedPacket);
+  assert.equal((await PDFDocument.load(billedPdf)).getPageCount(), 1, "customer confirmation must be one page");
+  const billedText = String((await extractText(new Uint8Array(billedPdf), { mergePages: true })).text ?? "");
+  assert.match(billedText, /Customer Confirmation/);
+  assert.match(billedText, /Westside Foods Billing Co/);
+  assert.match(billedText, /4400 Packer Ave/);
+  assert.match(billedText, /Jordan Buyer/);
+  assert.match(billedText, /WSF-1006153/);
+  assert.match(billedText, /Flat Rate/);
+  assert.match(billedText, /Detention/);
+  assert.match(billedText, /2,150/);
+  assert.match(billedText, /600 E 39th/);
+  assert.match(billedText, /12 Test Dock Rd/);
+  assert.match(billedText, /26\s*°?\s*F|26°F/);
+  assert.match(billedText, /Continuous/);
+  assert.doesNotMatch(billedText, /Load Confirmation|Rate & Load Confirmation/);
+  assert.doesNotMatch(billedText, /OO Smoke Pay|Agreed Amount|Carrier Pay|Your leg|Internal legs/);
+  assert.doesNotMatch(billedText, /customer portal|packet=|tmsCustomer|programming/i);
+  const billedDriver = confirmation.buildConfirmationForLoad(billedLoadId, { packet: "internal" });
+  assert.equal(billedDriver.customerRate, null);
+  assert.equal(billedDriver.customerName, "");
+  const billedDriverText = String(
+    (await extractText(new Uint8Array(await confirmation.renderConfirmationPdf(billedDriver)), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(billedDriverText, /Load Confirmation/);
+  assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|Westside Foods Billing Co|WSF-1006153/);
+  const billedInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(billedLoadId)!);
+  assert.equal(billedInvoice.total, 2150);
+  assert.equal(billedInvoice.total, billedPacket.customerRate);
   const internalPacket = confirmation.buildConfirmationForLoad(relayLoadId, {
     packet: "internal",
     driverId: relayDriverB,

@@ -1,6 +1,7 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { formatMdYDisplay } from "./format";
+import { isCompanyCustomerName, tmsCustomerInvoiceLines } from "./invoice";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   applyLocationToStop,
@@ -10,7 +11,7 @@ import {
   matchLocationForStop,
   normalizeLocationName,
 } from "./locations";
-import { getLoad, getLocation, getTrailer, listLocations } from "./queries";
+import { getCustomer, getLoad, getLocation, getTrailer, listLocations } from "./queries";
 import { listStops, type LoadStop } from "./stops";
 import { locationRuleLabels } from "./location-rules-shared";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
@@ -38,7 +39,13 @@ export type ConfirmationStop = {
   description: string;
 };
 
+export type ConfirmationRateLine = {
+  name: string;
+  amount: number;
+};
+
 export type ConfirmationModel = {
+  packet: "customer" | "internal";
   style: "owner_operator" | "company_driver";
   company: CompanyProfile;
   loadNumber: string;
@@ -53,6 +60,14 @@ export type ConfirmationModel = {
   truckNumber: string;
   trailerNumber: string;
   agreedAmount: number | null;
+  customerName: string;
+  customerBilling: string;
+  customerContact: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerReference: string;
+  customerRate: number | null;
+  customerRateLines: ConfirmationRateLine[];
   loadStatus: string;
   shipper: ConfirmationStop;
   consignee: ConfirmationStop;
@@ -180,7 +195,45 @@ function confirmationParty(
   };
 }
 
-export function buildConfirmationModel(load: LoadView, company = getCompanyProfile()): ConfirmationModel {
+function printableCustomerBilling(notes: string): string {
+  const trimmed = notes.trim();
+  if (!trimmed) return "";
+  if (/created from a rate confirmation/i.test(trimmed)) return "";
+  if (/^net\s*\d+\s*\.?$/i.test(trimmed)) return "";
+  return trimmed.replace(/\s*\n+\s*/g, ", ");
+}
+
+function confirmationCustomer(load: LoadView): {
+  name: string;
+  billing: string;
+  contact: string;
+  phone: string;
+  email: string;
+  reference: string;
+} {
+  const customer = getCustomer(load.customer_id);
+  const contact = customer?.contacts[0];
+  const billingFromNotes = printableCustomerBilling(String(customer?.billing_notes ?? ""));
+  const company = getCompanyProfile();
+  const settings = getCompanySettings();
+  const office = formatCompanyAddress(settings);
+  const billing =
+    isCompanyCustomerName(load.customer_name, company.company_name) && office ? office : billingFromNotes;
+  return {
+    name: load.customer_name.trim(),
+    billing,
+    contact: (load.contact_name || contact?.name || "").trim(),
+    phone: (load.contact_phone || contact?.phone || "").trim(),
+    email: (load.contact_email || contact?.email || "").trim(),
+    reference: (load.customer_reference || load.po_number || load.reference_number || "").trim(),
+  };
+}
+
+export function buildConfirmationModel(
+  load: LoadView,
+  company = getCompanyProfile(),
+  options: { packet?: "customer" | "internal" } = {},
+): ConfirmationModel {
   const stops = listStops(load.id);
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
   const delivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
@@ -206,7 +259,15 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     truck_type: load.truck_type,
     trailer_type: trailer?.type ?? load.trailer_type,
   });
+  const packet = options.packet === "internal" ? "internal" : "customer";
+  const customer = confirmationCustomer(load);
+  const rateLines =
+    packet === "customer"
+      ? tmsCustomerInvoiceLines(load).map((line) => ({ name: line.name, amount: line.amount }))
+      : [];
+  const customerRate = rateLines.length ? rateLines.reduce((sum, line) => sum + line.amount, 0) : null;
   return {
+    packet,
     style,
     company,
     loadNumber: load.load_number,
@@ -220,7 +281,15 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     equipment: equipmentLabel(load),
     truckNumber: load.truck_unit ?? "",
     trailerNumber: load.trailer_unit || load.trailer_number || "",
-    agreedAmount: agreedAmountForLoad(load),
+    agreedAmount: packet === "internal" ? agreedAmountForLoad(load) : null,
+    customerName: packet === "customer" ? customer.name : "",
+    customerBilling: packet === "customer" ? customer.billing : "",
+    customerContact: packet === "customer" ? customer.contact : "",
+    customerPhone: packet === "customer" ? customer.phone : "",
+    customerEmail: packet === "customer" ? customer.email : "",
+    customerReference: packet === "customer" ? customer.reference : "",
+    customerRate: packet === "customer" ? customerRate : null,
+    customerRateLines: packet === "customer" ? rateLines : [],
     loadStatus: confirmationStatus(load),
     shipper: {
       title: "Shipper 1",
@@ -271,8 +340,9 @@ export function buildConfirmationForLoad(
 ): ConfirmationModel {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  const model = buildConfirmationModel(load);
-  if (options.packet !== "internal") return model;
+  const packet = options.packet === "internal" ? "internal" : "customer";
+  const model = buildConfirmationModel(load, getCompanyProfile(), { packet });
+  if (packet !== "internal") return model;
   const relays = listRelays(load.id);
   const yours = options.driverId ? relayForDriver(load.id, options.driverId) : null;
   const lines = [
@@ -305,6 +375,11 @@ async function dropEmptyExtraPages(buffer: Buffer): Promise<Buffer> {
 }
 
 function confirmationTitle(model: ConfirmationModel, headerText: string): string {
+  if (model.packet === "customer") {
+    const custom = headerText.trim();
+    if (custom && !/load confirmation|rate & load/i.test(custom)) return custom;
+    return "Customer Confirmation";
+  }
   const custom = headerText.trim();
   const stock = "Rate & Load Confirmation";
   if (custom && custom !== stock) return custom;
@@ -315,7 +390,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const pageW = 612;
   const left = 36;
   const width = 540;
-  const defaults = getDocumentDefaults("load_confirmation");
+  const defaults = getDocumentDefaults(model.packet === "customer" ? "customer_confirmation" : "load_confirmation");
   const bodySize = defaults.font_size || 10;
   const title = confirmationTitle(model, defaults.header_text);
   const contactRows: Array<[string, string]> = [
@@ -371,7 +446,16 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   let y = Math.max(148, cardY + cardH + 10);
 
-  if (model.style === "owner_operator") {
+  if (model.packet === "customer") {
+    y = drawCustomerBlock(doc, left, y, width, model);
+    y = drawCustomerRate(doc, left, y + 6, width, model);
+    y = drawPartyRow(doc, left, y + 6, width, [
+      ["Equipment", model.equipment],
+      ["Truck #", model.truckNumber],
+      ["Trailer #", model.trailerNumber],
+      ["Load Status", model.loadStatus],
+    ]);
+  } else if (model.style === "owner_operator") {
     y = drawPartyRow(doc, left, y, width, [
       ["Carrier", model.carrierName],
       ["Phone #", model.carrierPhone],
@@ -406,10 +490,10 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     });
     y += 12;
     doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
-    const notesH = model.style === "owner_operator" ? 28 : 40;
+    const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
     doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
     y = Math.min(y + notesH + 6, model.style === "owner_operator" ? 650 : 700);
-    if (model.internalLegs && y < 700) {
+    if (model.packet === "internal" && model.internalLegs && y < 700) {
       doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text("Internal legs (not billed):", left, y, {
         lineBreak: false,
       });
@@ -423,7 +507,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     }
   }
 
-  if (model.style === "owner_operator" && y < 668) {
+  if (model.packet === "internal" && model.style === "owner_operator" && y < 668) {
     doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y, { lineBreak: false });
     y += 12;
     const haul = formatUsd(model.agreedAmount) || "$0.00 USD";
@@ -452,13 +536,81 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   } catch {
     // Single-page documents have no extra buffer to switch.
   }
-  if (defaults.terms_text) {
+  if (defaults.terms_text && model.packet !== "customer") {
     doc.font("Helvetica").fontSize(7).fillColor("#374151");
     doc.text(defaults.terms_text, left, 718, { width, height: 16, lineBreak: true });
   }
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
   doc.text(defaults.footer_text || "Page 1 of 1", left, 752, { width, align: "center", lineBreak: false });
   doc.rect(left, 28, width, 726).strokeColor("#d1d5db").lineWidth(0.4).stroke();
+}
+
+function drawCustomerBlock(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  model: ConfirmationModel,
+): number {
+  const rows: Array<[string, string]> = [
+    ["Customer", model.customerName],
+    ["Billing", model.customerBilling],
+    ["Contact", model.customerContact],
+    ["Phone", model.customerPhone],
+    ["Email", model.customerEmail],
+    ["Reference #", model.customerReference],
+  ].filter(([, value]) => value.trim());
+  if (!rows.length) {
+    rows.push(["Customer", model.customerName || " "]);
+  }
+  const rowH = 12;
+  const height = rows.length * rowH + 8;
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  rows.forEach(([label, value], index) => {
+    kv(doc, x + 6, y + 5 + index * rowH, 70, width - 16, label, value, label === "Customer");
+  });
+  return y + height;
+}
+
+function drawCustomerRate(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  model: ConfirmationModel,
+): number {
+  const lines = model.customerRateLines.length
+    ? model.customerRateLines
+    : model.customerRate != null
+      ? [{ name: "Flat Rate", amount: model.customerRate }]
+      : [];
+  const rowH = 13;
+  const height = Math.max(28, 18 + lines.length * rowH + 14);
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827").text("Rate", x + 6, y + 5, {
+    lineBreak: false,
+  });
+  if (!lines.length) {
+    doc.font("Helvetica").fontSize(8).text(" ", x + 6, y + 18);
+    return y + height;
+  }
+  lines.forEach((line, index) => {
+    doc.font("Helvetica").fontSize(8).fillColor("#111827");
+    doc.text(line.name, x + 6, y + 18 + index * rowH, { width: width - 120, lineBreak: false });
+    doc.text(formatUsd(line.amount), x + width - 130, y + 18 + index * rowH, {
+      width: 120,
+      align: "right",
+      lineBreak: false,
+    });
+  });
+  doc.font("Helvetica-Bold").fontSize(8);
+  doc.text("Total", x + 6, y + 18 + lines.length * rowH, { width: width - 120, lineBreak: false });
+  doc.text(formatUsd(model.customerRate), x + width - 130, y + 18 + lines.length * rowH, {
+    width: 120,
+    align: "right",
+    lineBreak: false,
+  });
+  return y + height;
 }
 
 function drawContactCard(
