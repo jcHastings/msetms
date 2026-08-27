@@ -7718,7 +7718,6 @@ Continuous reefer. Two load locks.
   assert.equal(loadFallback.driverId, avila);
   const sunocoUnmatched = officeRows.find((row) => row.amount === 558.47);
   assert.ok(sunocoUnmatched);
-  const { getDb } = await import("../lib/db");
   getDb().prepare("UPDATE fuel_transactions SET driver_id = NULL WHERE id = ?").run(sunocoUnmatched.id);
   assert.equal(fuelStore.getFuelTransaction(sunocoUnmatched.id)?.driver_id, null);
   assert.ok(fuelStore.rematchUnmatchedFuelTransactions() >= 1);
