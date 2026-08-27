@@ -552,14 +552,15 @@ function drawCustomerBlock(
   width: number,
   model: ConfirmationModel,
 ): number {
-  const rows: Array<[string, string]> = [
+  const fields: Array<[string, string]> = [
     ["Customer", model.customerName],
     ["Billing", model.customerBilling],
     ["Contact", model.customerContact],
     ["Phone", model.customerPhone],
     ["Email", model.customerEmail],
     ["Reference #", model.customerReference],
-  ].filter(([, value]) => value.trim());
+  ];
+  const rows = fields.filter(([, value]) => value.trim());
   if (!rows.length) {
     rows.push(["Customer", model.customerName || " "]);
   }
