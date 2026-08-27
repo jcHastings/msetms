@@ -52,6 +52,7 @@ export default async function DriverHomePage() {
         return (
           <DriverDestinations
             items={[
+              { href: "#active", label: "Dispatch" },
               { href: "#active", label: "Active" },
               { href: "#delivered", label: "Delivered" },
               { href: current ? `${loadHref}#fuel` : "#active", label: "Fuel", disabled: !current },

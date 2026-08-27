@@ -221,6 +221,8 @@ function makeProposal(
 
 function findLoadFromText(text: string) {
   const loads = listLoads({ status: "all" });
+  const byFull = loads.find((load) => load.load_number && text.includes(load.load_number));
+  if (byFull) return getLoad(byFull.id);
   const numbers = [...text.matchAll(/\b(\d{4,8})\b/g)].map((item) => item[1]);
   for (const number of numbers) {
     const hit = loads.find((load) => load.load_number === number);

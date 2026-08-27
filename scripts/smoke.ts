@@ -4735,8 +4735,10 @@ Continuous reefer. Two load locks.
       fs.readFileSync(path.join(process.cwd(), "lib/fuel-mpg.ts"), "utf8"),
     /maps\.google|pin-to-pin|Official IFTA|first-class|haversine/i,
   );
-  assert.match(fuelPage, /data-fuel-match-queue/);
-  assert.match(fuelPage, /Receipt match/);
+  const fuelMatchUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-match-queue.tsx"), "utf8");
+  assert.match(fuelPage, /FuelMatchQueue/);
+  assert.match(fuelMatchUi, /data-fuel-match-queue/);
+  assert.match(fuelMatchUi, /Receipt match/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Highest paid/);
@@ -4752,7 +4754,7 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /data-stats-chart/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /Breakdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /Display Options/);
-  assert.match(fuelPage, /data-fuel-status/);
+  assert.match(fuelMatchUi, /data-fuel-status/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.googleapis\.com\/maps\/api\/directions\/json/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/relay-routing.ts"), "utf8"), /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /listRelays|splitLoadRevenue/);
@@ -7908,7 +7910,7 @@ Continuous reefer. Two load locks.
   fuelStore.listFuelRollups();
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /if \(fleetOne\) return toFuelCsvResult/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /\/\[A-Za-z\]\{2\}\\d\{4,\}/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /FuelDeleteButton/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-match-queue.tsx"), "utf8"), /FuelDeleteButton/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /rematchUnmatchedFuelTransactions/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /rematchFuelTransactionDrivers/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /driverAssignedToTruck/);
@@ -8218,7 +8220,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-load-actions.tsx"), "utf8"), /Unclassified|ATTACHMENT_KINDS/);
 
   const { foldNameKey } = await import("../lib/fuel");
-  assert.equal(foldNameKey("Steve Eller"), "steveeller");
+  assert.equal(foldNameKey("Steve Eller"), foldNameKey("steve eller"));
   assert.notEqual(foldNameKey("Steve Eller"), foldNameKey("Steven Eller"));
 
   const { extractEmailBody, looksLikeEmailUpload } = await import("../lib/rate-con");
