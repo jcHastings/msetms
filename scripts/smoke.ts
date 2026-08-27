@@ -6808,7 +6808,11 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(invoicePdfText, /Notes/);
   assert.doesNotMatch(invoicePdfText, /Stops \/ Actions/);
   assert.match(invoicePdfText, /Pickup \/ Delivery/);
-  assert.match(invoicePdfText, /Subtotal/);
+  assert.match(invoicePdfText, /Pay Items/);
+  assert.match(invoicePdfText, /Page 1 of /);
+  assert.match(invoicePdfText, /Load #/);
+  assert.doesNotMatch(invoicePdfText, /Subtotal/);
+  assert.doesNotMatch(invoicePdfText, /AscendTMS|Powered by|Nanuet|228 East Route/);
   assert.match(invoicePdfText, /100 Fleet Way|600 E 39th/);
   const invoiceLibSource = fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8");
   assert.match(invoiceLibSource, /showNotes/);
@@ -6827,7 +6831,9 @@ Continuous reefer. Two load locks.
   assert.match(invoiceLibSource, /Date\/Time/);
   assert.match(invoiceLibSource, /Quantity/);
   assert.match(invoiceLibSource, /paperworkCompanyName/);
-  assert.match(invoiceLibSource, /drawTotalsBox/);
+  assert.match(invoiceLibSource, /bufferPages/);
+  assert.match(invoiceLibSource, /drawPinnedFooter/);
+  assert.match(invoiceLibSource, /Pay Items/);
   const freightPdf = await renderTmsInvoicePdf({
     ...tmsInvoiceModel,
     invoiceNumber: "INV-1005921",
@@ -6865,9 +6871,22 @@ Continuous reefer. Two load locks.
         state: "NE",
         zip: "68901",
         phone: "402-461-4442",
-        reference: "",
+        reference: "2405556-Moshe",
         cargo: "",
       },
+      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((sequence) => ({
+        sequence,
+        kind: sequence % 2 ? "Pickup" : "Delivery",
+        window: "05/29/26 8:00 AM – 05/29/26 5:00 PM",
+        name: `Warehouse ${sequence}`,
+        street: "100 Industrial Rd",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        phone: "402-461-4442",
+        reference: sequence === 4 ? "REF-2405556" : "",
+        cargo: "",
+      })),
     ],
   });
   const freightText = await extractDocumentText(freightPdf, "application/pdf", "INV-1005921.pdf");
@@ -6879,10 +6898,16 @@ Continuous reefer. Two load locks.
   assert.match(freightText, /79120/);
   assert.match(freightText, /402-461-4442/);
   assert.match(freightText, /Pickup \/ Delivery/);
-  assert.match(freightText, /Subtotal/);
+  assert.match(freightText, /Pay Items/);
+  assert.match(freightText, /Page 1 of 2/);
+  assert.match(freightText, /Page 2 of 2/);
+  assert.match(freightText, /Load #/);
+  assert.match(freightText, /References: 2405556-Moshe/);
+  assert.doesNotMatch(freightText, /Subtotal/);
   assert.doesNotMatch(freightText, /Stops \/ Actions/);
   assert.doesNotMatch(freightText, /Notes/);
   assert.doesNotMatch(freightText, /Linehaul is the customer rate/);
+  assert.doesNotMatch(freightText, /AscendTMS|Powered by|Nanuet|228 East Route/);
   assert.equal(tmsInvoiceModel.lines[0]?.name, "Flat Rate");
   assert.ok(tmsInvoiceModel.stops[0]?.name);
   assert.ok("window" in tmsInvoiceModel.stops[0]!);
