@@ -154,15 +154,14 @@ export default async function BoardPage({
                         <span className="text-slate-400">Unassigned</span>
                       )}
                     </td>
-                    <td>
-                      <LocationBadge
-                        location={tractorLocation}
-                        empty={samsaraGpsEmptyState({
-                          truckAssigned: Boolean(load.truck_id),
-                          samsaraVehicleId: load.truck_samsara_id,
-                          location: tractorLocation,
-                        })}
-                      />
+                    <td
+                      title={samsaraGpsEmptyState({
+                        truckAssigned: Boolean(load.truck_id),
+                        samsaraVehicleId: load.truck_samsara_id,
+                        location: tractorLocation,
+                      })}
+                    >
+                      <LocationBadge location={tractorLocation} empty="—" />
                     </td>
                     <td>
                       <TrailerLocationBadge
@@ -174,11 +173,8 @@ export default async function BoardPage({
                         }
                       />
                     </td>
-                    <td>
-                      <HosBadge
-                        hos={driverHos}
-                        empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
-                      />
+                    <td title={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}>
+                      <HosBadge hos={driverHos} empty="—" />
                     </td>
                     <td>
                       <ReeferBadge
