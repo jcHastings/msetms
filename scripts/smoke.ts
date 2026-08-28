@@ -3691,6 +3691,149 @@ Continuous reefer. Two load locks.
   assert.equal(internalPacket.shipper.title, "Shipper 1");
   assert.equal(internalPacket.consignee.title, "Consignee 1");
   assert.doesNotMatch(internalPacket.shipper.address, /Chicago/);
+  const multiDropLoadId = queries.createLoad({
+    customer_id: customerId,
+    load_number: "1006150-SMOKE",
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Kosher frozen",
+    rate: 4500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 26,
+    reefer_mode: "continuous",
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  replaceStops(multiDropLoadId, [
+    {
+      kind: "pickup",
+      name: "Nebraska Cold Storage Inc",
+      city: "Hastings",
+      state: "NE",
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Springfield Group Inc - Kosher",
+      street: "5600 1st ave",
+      city: "Brooklyn",
+      state: "NY",
+      zip: "11220",
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Westside Foods - Kosher",
+      city: "Bronx",
+      state: "NJ",
+    },
+    {
+      kind: "delivery",
+      name: "Chef Kingdom",
+      street: "1 Alpine Ct",
+      city: "Chestnut Ridge",
+      state: "NY",
+    },
+    {
+      kind: "delivery",
+      name: "Wakefern-Keasbey",
+      street: "5000 Riverside dr",
+      city: "Keasbey",
+      state: "NJ",
+      zip: "08832",
+    },
+    {
+      kind: "delivery",
+      name: "Kayco",
+      street: "72 New Hook Rd",
+      city: "Bayonne",
+      state: "NJ",
+      zip: "07002",
+    },
+  ]);
+  const multiDropNames = [
+    "Nebraska Cold Storage Inc",
+    "Springfield Group Inc - Kosher",
+    "Westside Foods - Kosher",
+    "Chef Kingdom",
+    "Wakefern-Keasbey",
+    "Kayco",
+  ];
+  function assertStopsInOrder(text: string, label: string) {
+    let cursor = 0;
+    for (const name of multiDropNames) {
+      const at = text.indexOf(name, cursor);
+      assert.ok(at >= 0, `${label} is missing ${name}`);
+      cursor = at + name.length;
+    }
+  }
+  const multiInternal = confirmation.buildConfirmationForLoad(multiDropLoadId, { packet: "internal" });
+  assert.equal(multiInternal.stops.length, 6);
+  assert.deepEqual(
+    multiInternal.stops.map((stop) => stop.title),
+    ["Shipper 1", "Consignee 1", "Consignee 2", "Consignee 3", "Consignee 4", "Consignee 5"],
+  );
+  assert.equal(multiInternal.shipper.title, "Shipper 1");
+  assert.equal(multiInternal.shipper.name, "Nebraska Cold Storage Inc");
+  assert.equal(multiInternal.consignee.title, "Consignee 1");
+  assert.match(multiInternal.consignee.name, /Springfield Group/);
+  assert.match(multiInternal.stops[1]?.address ?? "", /5600 1st/);
+  assert.match(multiInternal.stops[5]?.name ?? "", /Kayco/);
+  assert.match(multiInternal.stops[5]?.address ?? "", /72 New Hook/);
+  const multiInternalPdf = await confirmation.renderConfirmationPdf(multiInternal);
+  const multiInternalPages = (await PDFDocument.load(multiInternalPdf)).getPageCount();
+  assert.ok(multiInternalPages >= 2, "1 pickup + 5 deliveries must use extra pages, not collapse to the last drop");
+  const multiInternalText = String(
+    (await extractText(new Uint8Array(multiInternalPdf), { mergePages: true })).text ?? "",
+  );
+  assertStopsInOrder(multiInternalText, "internal driver packet");
+  assert.match(multiInternalText, /Shipper 1/);
+  assert.match(multiInternalText, /Consignee 1/);
+  assert.match(multiInternalText, /Consignee 2/);
+  assert.match(multiInternalText, /Consignee 3/);
+  assert.match(multiInternalText, /Consignee 4/);
+  assert.match(multiInternalText, /Consignee 5/);
+  assert.match(multiInternalText, /5600 1st/);
+  assert.match(multiInternalText, /1 Alpine Ct/);
+  assert.match(multiInternalText, /5000 Riverside/);
+  assert.match(multiInternalText, /72 New Hook/);
+  assert.match(multiInternalText, /Page 1 of /);
+  assert.match(multiInternalText, new RegExp(`Page ${multiInternalPages} of ${multiInternalPages}`));
+  const multiCustomer = confirmation.buildConfirmationForLoad(multiDropLoadId);
+  assert.equal(multiCustomer.stops.length, 6);
+  assert.equal(multiCustomer.internalLegs, "");
+  assert.deepEqual(
+    multiCustomer.stops.map((stop) => stop.name),
+    multiDropNames,
+  );
+  const multiCustomerPdf = await confirmation.renderConfirmationPdf(multiCustomer);
+  const multiCustomerPages = (await PDFDocument.load(multiCustomerPdf)).getPageCount();
+  assert.ok(multiCustomerPages >= 2, "customer confirmation must list every drop, using extra pages if needed");
+  const multiCustomerText = String(
+    (await extractText(new Uint8Array(multiCustomerPdf), { mergePages: true })).text ?? "",
+  );
+  assertStopsInOrder(multiCustomerText, "customer confirmation");
+  assert.match(multiCustomerText, /Customer Confirmation/);
+  assert.match(multiCustomerText, /Consignee 5/);
+  assert.match(multiCustomerText, new RegExp(`Page ${multiCustomerPages} of ${multiCustomerPages}`));
+  const multiMail = loadMail.buildDriverLoadDraft(queries.getLoad(multiDropLoadId)!);
+  assert.match(multiMail.text, /Pickup 1/);
+  assert.match(multiMail.text, /Delivery 1/);
+  assert.match(multiMail.text, /Delivery 5/);
+  assertStopsInOrder(multiMail.text, "driver load email");
   const qboPreview = (await import("../lib/integrations/quickbooks")).previewQuickbooksInvoice(
     queries.getLoad(relayLoadId)!,
   );

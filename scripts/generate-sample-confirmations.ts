@@ -82,11 +82,13 @@ const ooSample: ConfirmationModel = {
     appointment: "Yes",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
   internalLegs: "",
   reeferSetpoint: "",
   reeferMode: "",
 };
+ooSample.stops = [ooSample.shipper, ooSample.consignee];
 
 const companySample: ConfirmationModel = {
   ...emptyCustomer,
@@ -141,11 +143,13 @@ const companySample: ConfirmationModel = {
     appointment: "No",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
   internalLegs: "",
   reeferSetpoint: "",
   reeferMode: "",
 };
+companySample.stops = [companySample.shipper, companySample.consignee];
 
 async function main(): Promise<void> {
   const oo = await renderConfirmationPdf(ooSample);

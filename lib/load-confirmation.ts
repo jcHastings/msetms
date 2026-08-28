@@ -12,7 +12,7 @@ import {
   normalizeLocationName,
 } from "./locations";
 import { getCustomer, getLoad, getLocation, getTrailer, listLocations } from "./queries";
-import { listStops, type LoadStop } from "./stops";
+import { listStops, stopTypeNumber, type LoadStop } from "./stops";
 import { locationRuleLabels } from "./location-rules-shared";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
@@ -71,6 +71,7 @@ export type ConfirmationModel = {
   loadStatus: string;
   shipper: ConfirmationStop;
   consignee: ConfirmationStop;
+  stops: ConfirmationStop[];
   dispatchNotes: string;
   internalLegs: string;
   reeferSetpoint: string;
@@ -248,6 +249,42 @@ function confirmationCustomer(load: LoadView): {
   };
 }
 
+function confirmationStopTitle(kind: string | undefined, typeNumber: number): string {
+  const n = typeNumber > 0 ? typeNumber : 1;
+  if (kind === "delivery") return `Consignee ${n}`;
+  return `Shipper ${n}`;
+}
+
+function confirmationStopFromParty(
+  stop: LoadStop | undefined,
+  all: LoadStop[],
+  load: LoadView,
+  fallbackLocationId: number | null,
+  laneFallback: string,
+): ConfirmationStop {
+  const party = confirmationParty(stop, fallbackLocationId, laneFallback, load.customer_name);
+  const kind = stop?.kind ?? (fallbackLocationId === load.consignee_location_id ? "delivery" : "pickup");
+  const isPickup = kind === "pickup";
+  return {
+    title: confirmationStopTitle(kind, stop ? stopTypeNumber(all, stop.id) : 1),
+    name: party.name,
+    address: party.address,
+    phone: party.phone,
+    date: formatMdY(stop?.window_start || (isPickup ? load.pickup_start : load.delivery_start)),
+    time: formatStopClock(stop, isPickup ? load.pickup_start : load.delivery_start),
+    type: "",
+    quantity: "",
+    weight: load.weight != null ? String(load.weight) : "",
+    poNumber: stop?.reference.trim() || load.po_number,
+    confirmationNumber: stop?.confirmation.trim() || load.reference_number,
+    extra: party.extra,
+    hoursLabel: isPickup ? "Shipping Hours" : "Receiving Hours",
+    hours: party.hours,
+    appointment: party.appointment || appointmentLabel(load.appointment_notes),
+    description: load.commodity,
+  };
+}
+
 export function buildConfirmationModel(
   load: LoadView,
   company = getCompanyProfile(),
@@ -255,16 +292,45 @@ export function buildConfirmationModel(
 ): ConfirmationModel {
   const stops = listStops(load.id);
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
-  const delivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
-  const shipper = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
-  const consignee = confirmationParty(delivery, load.consignee_location_id, load.destination, load.customer_name);
+  const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
+  const firstDelivery = stops.find((stop) => stop.kind === "delivery") ?? lastDelivery;
+  const shipperParty = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
+  const lastDeliveryParty = confirmationParty(
+    lastDelivery,
+    load.consignee_location_id,
+    load.destination,
+    load.customer_name,
+  );
+  const listedStops = stops.length
+    ? stops.map((stop) => {
+        const isFirstPickup = Boolean(pickup && stop.id === pickup.id);
+        const isLastDelivery = Boolean(lastDelivery && stop.id === lastDelivery.id);
+        return confirmationStopFromParty(
+          stop,
+          stops,
+          load,
+          isFirstPickup ? load.shipper_location_id : isLastDelivery ? load.consignee_location_id : stop.location_id,
+          isFirstPickup ? load.origin : isLastDelivery ? load.destination : "",
+        );
+      })
+    : [
+        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin),
+        confirmationStopFromParty(lastDelivery, stops, load, load.consignee_location_id, load.destination),
+      ];
+  const shipper =
+    listedStops.find((stop) => stop.title.startsWith("Shipper")) ??
+    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin);
+  const consignee =
+    listedStops.find((stop) => stop.title === "Consignee 1") ??
+    listedStops.find((stop) => stop.title.startsWith("Consignee")) ??
+    confirmationStopFromParty(firstDelivery, stops, load, load.consignee_location_id, load.destination);
   const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
     load.public_notes,
     load.special_instructions,
     load.appointment_notes,
-    shipper.location ? `Pickup: ${formatSchedulingSummary(shipper.location)}` : "",
-    consignee.location ? `Delivery: ${formatSchedulingSummary(consignee.location)}` : "",
+    shipperParty.location ? `Pickup: ${formatSchedulingSummary(shipperParty.location)}` : "",
+    lastDeliveryParty.location ? `Delivery: ${formatSchedulingSummary(lastDeliveryParty.location)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -310,42 +376,9 @@ export function buildConfirmationModel(
     customerRate: packet === "customer" ? customerRate : null,
     customerRateLines: packet === "customer" ? rateLines : [],
     loadStatus: confirmationStatus(load),
-    shipper: {
-      title: "Shipper 1",
-      name: shipper.name,
-      address: shipper.address,
-      phone: shipper.phone,
-      date: formatMdY(pickup?.window_start || load.pickup_start),
-      time: formatStopClock(pickup, load.pickup_start),
-      type: "",
-      quantity: "",
-      weight: load.weight != null ? String(load.weight) : "",
-      poNumber: pickup?.reference.trim() || load.po_number,
-      confirmationNumber: pickup?.confirmation.trim() || load.reference_number,
-      extra: shipper.extra,
-      hoursLabel: "Shipping Hours",
-      hours: shipper.hours,
-      appointment: shipper.appointment || appointmentLabel(load.appointment_notes),
-      description: load.commodity,
-    },
-    consignee: {
-      title: "Consignee 1",
-      name: consignee.name,
-      address: consignee.address,
-      phone: consignee.phone,
-      date: formatMdY(delivery?.window_start || load.delivery_start),
-      time: formatStopClock(delivery, load.delivery_start),
-      type: "",
-      quantity: "",
-      weight: load.weight != null ? String(load.weight) : "",
-      poNumber: delivery?.reference.trim() || load.po_number,
-      confirmationNumber: delivery?.confirmation.trim() || load.reference_number,
-      extra: consignee.extra,
-      hoursLabel: "Receiving Hours",
-      hours: consignee.hours,
-      appointment: consignee.appointment || appointmentLabel(load.appointment_notes),
-      description: load.commodity,
-    },
+    shipper,
+    consignee,
+    stops: listedStops,
     dispatchNotes: notes,
     internalLegs: "",
     reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
@@ -372,7 +405,7 @@ export function buildConfirmationForLoad(
 }
 
 export async function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {
-  const raw = await new Promise<Buffer>((resolve, reject) => {
+  return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 36, bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -381,16 +414,6 @@ export async function renderConfirmationPdf(model: ConfirmationModel): Promise<B
     drawConfirmation(doc, model);
     doc.end();
   });
-  return dropEmptyExtraPages(raw);
-}
-
-async function dropEmptyExtraPages(buffer: Buffer): Promise<Buffer> {
-  const { PDFDocument } = await import("pdf-lib");
-  const pdf = await PDFDocument.load(buffer);
-  while (pdf.getPageCount() > 1) {
-    pdf.removePage(pdf.getPageCount() - 1);
-  }
-  return Buffer.from(await pdf.save());
 }
 
 function confirmationTitle(model: ConfirmationModel, headerText: string): string {
@@ -499,34 +522,52 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
   }
 
-  y = drawStop(doc, left, y + 10, width, model.shipper);
-  y = drawStop(doc, left, y + 8, width, model.consignee);
+  const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
+  const pageLimit = 704;
+  const stopHeight = 108;
 
-  y += 8;
-  if (y < 620) {
-    doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y, {
-      lineBreak: false,
-    });
-    y += 12;
-    doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
-    const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
-    doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
-    y = Math.min(y + notesH + 6, model.style === "owner_operator" ? 650 : 700);
-    if (model.packet === "internal" && model.internalLegs && y < 700) {
-      doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text("Internal legs (not billed):", left, y, {
-        lineBreak: false,
-      });
-      y += 11;
-      doc.font("Helvetica").fontSize(Math.max(7, bodySize - 2)).text(model.internalLegs, left, y, {
-        width,
-        height: 28,
-        lineBreak: true,
-      });
-      y += 30;
-    }
+  function addContentPage() {
+    doc.addPage();
+    y = 48;
   }
 
-  if (model.packet === "internal" && model.style === "owner_operator" && y < 668) {
+  function ensureSpace(needed: number) {
+    if (y + needed <= pageLimit) return;
+    addContentPage();
+  }
+
+  for (let index = 0; index < stopBoxes.length; index += 1) {
+    const gap = index === 0 ? 10 : 8;
+    ensureSpace(gap + stopHeight);
+    y = drawStop(doc, left, y + gap, width, stopBoxes[index]);
+  }
+
+  y += 8;
+  const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
+  const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
+  ensureSpace(12 + notesH + 6 + legsH);
+  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y, {
+    lineBreak: false,
+  });
+  y += 12;
+  doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
+  doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
+  y += notesH + 6;
+  if (model.packet === "internal" && model.internalLegs) {
+    doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text("Internal legs (not billed):", left, y, {
+      lineBreak: false,
+    });
+    y += 11;
+    doc.font("Helvetica").fontSize(Math.max(7, bodySize - 2)).text(model.internalLegs, left, y, {
+      width,
+      height: 28,
+      lineBreak: true,
+    });
+    y += 30;
+  }
+
+  if (model.packet === "internal" && model.style === "owner_operator") {
+    ensureSpace(68);
     doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y, { lineBreak: false });
     y += 12;
     const haul = formatUsd(model.agreedAmount) || "$0.00 USD";
@@ -535,32 +576,44 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
       lineBreak: false,
     });
     y += 16;
-    if (y < 690) {
-      doc.font("Helvetica").fontSize(8);
-      drawWriteLine(doc, left, y, 170, "Accepted By");
-      drawWriteLine(doc, left + 186, y, 120, "Date");
-      drawWriteLine(doc, left + 322, y, 218, "Signature");
-      y += 20;
-      if (y < 712) {
-        drawWriteLine(doc, left, y, 150, "Driver Name", model.driverName);
-        drawWriteLine(doc, left + 166, y, 120, "Cell #", model.driverPhone);
-        drawWriteLine(doc, left + 302, y, 110, "Truck #", model.truckNumber);
-        drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
-      }
-    }
+    doc.font("Helvetica").fontSize(8);
+    drawWriteLine(doc, left, y, 170, "Accepted By");
+    drawWriteLine(doc, left + 186, y, 120, "Date");
+    drawWriteLine(doc, left + 322, y, 218, "Signature");
+    y += 20;
+    drawWriteLine(doc, left, y, 150, "Driver Name", model.driverName);
+    drawWriteLine(doc, left + 166, y, 120, "Cell #", model.driverPhone);
+    drawWriteLine(doc, left + 302, y, 110, "Truck #", model.truckNumber);
+    drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
   }
 
-  try {
-    doc.switchToPage(0);
-  } catch {
-    // Single-page documents have no extra buffer to switch.
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i += 1) {
+    doc.switchToPage(range.start + i);
+    stampConfirmationFooter(doc, model, defaults, left, width, i + 1, range.count);
   }
+}
+
+function stampConfirmationFooter(
+  doc: PDFKit.PDFDocument,
+  model: ConfirmationModel,
+  defaults: ReturnType<typeof getDocumentDefaults>,
+  left: number,
+  width: number,
+  page: number,
+  pageCount: number,
+): void {
+  doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   if (defaults.terms_text && model.packet !== "customer") {
     doc.font("Helvetica").fontSize(7).fillColor("#374151");
     doc.text(defaults.terms_text, left, 718, { width, height: 16, lineBreak: true });
   }
+  const footer = defaults.footer_text.trim();
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
-  doc.text(defaults.footer_text || "Page 1 of 1", left, 752, { width, align: "center", lineBreak: false });
+  if (footer) {
+    doc.text(footer, left, 738, { width: width - 100, height: 12, lineBreak: false });
+  }
+  doc.text(`Page ${page} of ${pageCount}`, left, 752, { width, align: "center", lineBreak: false });
   doc.rect(left, 28, width, 726).strokeColor("#d1d5db").lineWidth(0.4).stroke();
 }
 
