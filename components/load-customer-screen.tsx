@@ -25,7 +25,7 @@ export function LoadCustomerScreen({
         : "",
   );
   const [customerQuery, setCustomerQuery] = useState("");
-  const [createName, setCreateName] = useState(defaults.customer_name ?? "");
+  const [createName, setCreateName] = useState(load?.customer_id ? "" : (defaults.customer_name ?? ""));
   const selectedCustomer = customers.find((item) => String(item.id) === customerId) ?? null;
   const customerMatches = customers.filter((customer) =>
     customer.name.toLowerCase().includes(customerQuery.trim().toLowerCase()),
@@ -86,21 +86,8 @@ export function LoadCustomerScreen({
           </ul>
         ) : null}
       </div>
-      <div className="field md:col-span-2">
-        <label htmlFor="new_customer_name">Or create customer</label>
-        <div className="flex flex-wrap gap-2">
-          <input
-            id="new_customer_name"
-            value={createName}
-            onChange={(event) => {
-              setCreateName(event.target.value);
-              if (event.target.value) {
-                setCustomerId("");
-                setCustomerQuery("");
-              }
-            }}
-            placeholder="New customer name"
-          />
+      {selectedCustomer ? (
+        <div className="md:col-span-2">
           <button
             type="button"
             className="btn btn-secondary"
@@ -113,7 +100,23 @@ export function LoadCustomerScreen({
             Remove customer
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="field md:col-span-2">
+          <label htmlFor="new_customer_name">Or create customer</label>
+          <input
+            id="new_customer_name"
+            value={createName}
+            onChange={(event) => {
+              setCreateName(event.target.value);
+              if (event.target.value) {
+                setCustomerId("");
+                setCustomerQuery("");
+              }
+            }}
+            placeholder="New customer name"
+          />
+        </div>
+      )}
       <div className="field">
         <label htmlFor="contact_name">Contact name</label>
         <input id="contact_name" name="contact_name" defaultValue={load?.contact_name ?? ""} />
@@ -137,8 +140,9 @@ export function LoadCustomerScreen({
           name="customer_reference"
           defaultValue={
             load?.customer_reference ||
+            load?.po_number ||
+            load?.reference_number ||
             defaults.customer_reference ||
-            defaults.load_number_hint ||
             defaults.reference_number ||
             ""
           }

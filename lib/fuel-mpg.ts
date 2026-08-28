@@ -77,7 +77,12 @@ export function officialGoogleMilesForLoad(
     | "empty_source"
   >,
 ): number | null {
-  const loaded = routeGuideFromLoad(load).totalMiles;
+  const official = routeGuideFromLoad(load).totalMiles;
+  const storedGoogle =
+    load.route_source === "google" && load.route_miles != null && Number.isFinite(load.route_miles)
+      ? load.route_miles
+      : null;
+  const loaded = official ?? storedGoogle;
   const empty = officialEmptyMiles(load.empty_miles, load.empty_source);
   if (loaded == null && empty == null) return null;
   return Math.round(((loaded ?? 0) + (empty ?? 0)) * 10) / 10;

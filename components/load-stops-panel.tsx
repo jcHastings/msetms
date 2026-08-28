@@ -60,7 +60,7 @@ export function LoadStopsPanel({
   }
 
   return (
-    <section data-load-tab="stops" className="card overflow-hidden">
+    <section data-load-tab="stops" className="card overflow-x-auto">
       <div className="section-head flex flex-wrap items-center justify-between gap-2 px-4 py-2">
         <div>
           <h2 className="text-sm font-semibold">Stops</h2>

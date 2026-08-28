@@ -90,14 +90,25 @@ export function LoadPayItems({
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
         actions={
-          <a
-            className="btn btn-secondary"
-            href={`/api/loads/${loadId}/confirmation?packet=internal`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View Carrier Confirmation
-          </a>
+          driverName ? (
+            <a
+              className="btn btn-secondary"
+              href={`/api/loads/${loadId}/confirmation?packet=internal`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Carrier Confirmation
+            </a>
+          ) : (
+            <span
+              className="btn btn-secondary"
+              aria-disabled="true"
+              title="Assign a driver first"
+              data-carrier-confirmation-off=""
+            >
+              View Carrier Confirmation
+            </span>
+          )
         }
       />
     </section>

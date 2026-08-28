@@ -532,7 +532,8 @@ button {
   position: sticky;
   right: 0;
   z-index: 2;
-  min-width: 8rem;
+  min-width: 10.5rem;
+  overflow: visible;
   white-space: nowrap;
   box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
 }
@@ -602,6 +603,15 @@ button {
 
 .finance-head .btn-secondary:hover {
   background: #f7f3e4;
+}
+
+.finance-head .btn-secondary:disabled,
+.finance-head .btn-secondary[disabled],
+.finance-head .btn-secondary[aria-disabled="true"] {
+  opacity: 1;
+  background: #e8eef6;
+  border-color: #d4a017;
+  color: #0b1f3a;
 }
 
 .note-public {

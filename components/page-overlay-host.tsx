@@ -53,9 +53,19 @@ export function PageOverlayHost({
       if (event.data?.type !== "ms-close-load") return;
       closeLoadOverlay(returnTo);
     }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      const current = openIdFromLocation();
+      if (!current || current === serverOpenId) return;
+      closeLoadOverlay(returnTo);
+    }
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [returnTo]);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [returnTo, serverOpenId]);
 
   const frameId = openId && openId !== serverOpenId ? openId : null;
   const src = frameId

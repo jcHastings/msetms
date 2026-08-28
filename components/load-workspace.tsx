@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { LoadEditProvider } from "@/components/load-edit-context";
 import {
   assignLoadDispatcherAction,
@@ -147,8 +148,29 @@ export function LoadWorkspace({
       window.parent.postMessage({ type: "ms-close-load" }, window.location.origin);
       return;
     }
+    if (new URL(window.location.href).searchParams.has("open")) {
+      closeLoadOverlay(href);
+      return;
+    }
     router.push(href);
   }
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (dispatchOpen) {
+        setDispatchOpen(false);
+        return;
+      }
+      if (openMenu) {
+        setOpenMenu(null);
+        return;
+      }
+      confirmLeave(returnTo);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function driverPhoneError(channel: "sms" | "whatsapp" = "sms"): string | null {
     if (channel === "sms" && !smsConfigured) return SMS_MISSING_KEYS;
@@ -231,7 +253,12 @@ export function LoadWorkspace({
               {pending ? "Saving…" : "Save"}
             </button>
           ) : null}
-          <button className="btn load-tab-back" type="button" onClick={() => confirmLeave(returnTo)}>
+          <button
+            className="btn load-tab-back"
+            type="button"
+            data-load-overlay-close=""
+            onClick={() => confirmLeave(returnTo)}
+          >
             Close
           </button>
         </div>

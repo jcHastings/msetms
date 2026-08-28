@@ -119,6 +119,56 @@ function borderLngAtLat(border: Array<{ lat: number; lng: number }>, lat: number
   return null;
 }
 
+/** 103rd meridian, 32nd parallel, then the Rio Grande. El Paso is Texas. */
+function resolveTxNm(lat: number, lng: number): "TX" | "NM" {
+  if (lat >= 32) return lng >= -103 ? "TX" : "NM";
+  return lng <= -106.53 ? "NM" : "TX";
+}
+
+/**
+ * Red River then the 36°30′ panhandle line, east → west.
+ * South is Texas, north is Oklahoma. Amarillo is Texas.
+ */
+const TX_OK_BORDER: Array<{ lat: number; lng: number }> = [
+  { lat: 33.64, lng: -94.5 },
+  { lat: 33.85, lng: -95.0 },
+  { lat: 33.78, lng: -96.0 },
+  { lat: 33.74, lng: -97.15 },
+  { lat: 34.05, lng: -98.0 },
+  { lat: 34.15, lng: -98.5 },
+  { lat: 34.45, lng: -99.2 },
+  { lat: 34.57, lng: -100.0 },
+  { lat: 36.5, lng: -100.0 },
+  { lat: 36.5, lng: -103.0 },
+];
+
+function borderLatAtLng(border: Array<{ lat: number; lng: number }>, lng: number): number | null {
+  if (border.length < 2) return null;
+  const first = border[0];
+  const last = border[border.length - 1];
+  const minLng = Math.min(first.lng, last.lng);
+  const maxLng = Math.max(first.lng, last.lng);
+  if (lng <= minLng) return first.lng <= last.lng ? first.lat : last.lat;
+  if (lng >= maxLng) return first.lng <= last.lng ? last.lat : first.lat;
+  for (let i = 1; i < border.length; i += 1) {
+    const a = border[i - 1];
+    const b = border[i];
+    const lo = Math.min(a.lng, b.lng);
+    const hi = Math.max(a.lng, b.lng);
+    if (lng >= lo && lng <= hi) {
+      const span = b.lng - a.lng || 1;
+      return a.lat + ((lng - a.lng) / span) * (b.lat - a.lat);
+    }
+  }
+  return null;
+}
+
+function resolveTxOk(lat: number, lng: number): "TX" | "OK" {
+  const river = borderLatAtLng(TX_OK_BORDER, lng);
+  if (river == null) return lat >= 36.5 ? "OK" : "TX";
+  return lat >= river ? "OK" : "TX";
+}
+
 function pickFromHits(hits: UsStateBox[], lat: number, lng: number): UsStateBox {
   return hits.reduce((winner, box) => {
     const areaDelta = boxArea(box) - boxArea(winner);
@@ -139,6 +189,16 @@ export function usStateForPoint(lat: number, lng: number): { code: string; name:
       const named = hits.find((box) => box.code === code);
       if (named) return { code: named.code, name: named.name };
     }
+  }
+  if (codes.has("TX") && codes.has("NM")) {
+    const code = resolveTxNm(lat, lng);
+    const named = hits.find((box) => box.code === code);
+    if (named) return { code: named.code, name: named.name };
+  }
+  if (codes.has("TX") && codes.has("OK")) {
+    const code = resolveTxOk(lat, lng);
+    const named = hits.find((box) => box.code === code);
+    if (named) return { code: named.code, name: named.name };
   }
   const best = pickFromHits(hits, lat, lng);
   return { code: best.code, name: best.name };
