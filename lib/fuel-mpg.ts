@@ -80,7 +80,7 @@ export function officialGoogleMilesForLoad(
   const loaded = routeGuideFromLoad(load).totalMiles;
   const empty = officialEmptyMiles(load.empty_miles, load.empty_source);
   if (loaded == null && empty == null) return null;
-  return (loaded ?? 0) + (empty ?? 0);
+  return Math.round(((loaded ?? 0) + (empty ?? 0)) * 10) / 10;
 }
 
 export function googleMilesForDriverInRange(
@@ -100,7 +100,7 @@ export function googleMilesForDriverInRange(
     total += miles;
     found = true;
   }
-  return found ? total : null;
+  return found ? Math.round(total * 10) / 10 : null;
 }
 
 export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()): DriverMpgBoard {
