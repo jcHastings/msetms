@@ -95,13 +95,13 @@ export function routeGuideFromLoad(load: {
   route_source?: string | null;
 }): LoadRouteGuide {
   const source = load.route_source === "google" || load.route_source === "manual" ? load.route_source : "";
+  const official = Boolean(source);
   const legMiles = parseRouteLegMiles(load.route_leg_miles);
   return {
-    totalMiles: load.route_miles ?? null,
-    legMiles:
-      legMiles.length === 0 && load.route_miles != null ? [] : legMiles,
-    states: parseRouteStateMiles(load.route_state_miles),
-    calculatedAt: load.route_calculated_at ?? "",
+    totalMiles: official ? load.route_miles ?? null : null,
+    legMiles: official ? (legMiles.length === 0 && load.route_miles != null ? [] : legMiles) : [],
+    states: official ? parseRouteStateMiles(load.route_state_miles) : [],
+    calculatedAt: official ? load.route_calculated_at ?? "" : "",
     source,
   };
 }

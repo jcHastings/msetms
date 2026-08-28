@@ -519,6 +519,9 @@ async function main() {
   const routingLib = fs.readFileSync(path.join(process.cwd(), "lib/routing.ts"), "utf8");
   assert.match(routingLib, /maps\.googleapis\.com\/maps\/api\/directions/);
   assert.doesNotMatch(routingLib, /maps\.google\.com/);
+  assert.match(routingLib, /clearUnofficialRouteMiles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /official \? load\.route_miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /refreshLoadRouteQuiet/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
   const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
@@ -4746,6 +4749,10 @@ Continuous reefer. Two load locks.
     googleCalls += 1;
     throw new Error("Google should not be called without a key");
   };
+  const { getDb } = await import("../lib/db");
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 880.7, route_source = '' WHERE id = ?")
+    .run(routeLoadId);
   const missingRoute = await routing.refreshLoadRoute(routeLoadId);
   assert.equal(missingRoute.ok, true);
   assert.equal(missingRoute.configured, false);
@@ -4792,8 +4799,11 @@ Continuous reefer. Two load locks.
   assert.match(storedRoute?.route_state_miles ?? "", /NY|PA|OH|IN|IL/);
   assert.match(storedRoute?.route_leg_miles ?? "", /800/);
   assert.ok(String(storedRoute?.route_polyline ?? "").trim(), "Google Directions should store the route polyline");
-  const { milesForStopGap } = await import("../lib/routing-shared");
+  const { milesForStopGap, routeGuideFromLoad } = await import("../lib/routing-shared");
   assert.equal(milesForStopGap(0, 2, { totalMiles: 12.3, legMiles: [] }), 12.3);
+  assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "" }).totalMiles, null);
+  assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "google" }).totalMiles, 880.7);
+  assert.equal(routeGuideFromLoad({ route_miles: 12.3, route_source: "manual" }).totalMiles, 12.3);
   assert.equal(milesForStopGap(0, 3, { totalMiles: 12.3, legMiles: [] }), null);
   assert.equal(milesForStopGap(1, 3, { totalMiles: 12.3, legMiles: [8, 4.3] }), 4.3);
   const officialIfta = queries.getIftaReport(reeferLoad.id);

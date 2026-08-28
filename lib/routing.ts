@@ -181,6 +181,13 @@ function currentGuide(loadId: number): LoadRouteGuide {
   return routeGuideFromLoad(load);
 }
 
+function clearUnofficialRouteMiles(loadId: number, existing: LoadRouteGuide): LoadRouteGuide {
+  if (existing.source === "google" || existing.source === "manual") return existing;
+  const load = getLoad(loadId);
+  if (load?.route_miles == null && !String(load?.route_leg_miles ?? "").trim()) return existing;
+  return persistRoute(loadId, { totalMiles: null, states: [], source: "", polyline: "" });
+}
+
 export function saveManualRouteMiles(loadId: number, miles: number | null): LoadRouteGuide {
   if (!getLoad(loadId)) throw new Error("Load not found.");
   const rounded = miles == null || Number.isNaN(miles) ? null : Math.round(Math.max(0, miles) * 10) / 10;
@@ -247,9 +254,10 @@ export async function refreshLoadRoute(
   options: { quiet?: boolean } = {},
 ): Promise<RouteRefreshResult> {
   if (!getLoad(loadId)) throw new Error("Load not found.");
-  const existing = currentGuide(loadId);
+  let existing = currentGuide(loadId);
   const configured = mapsRoutingConfigured();
   if (!configured) {
+    existing = clearUnofficialRouteMiles(loadId, existing);
     return {
       ok: true,
       configured: false,
@@ -289,6 +297,7 @@ export async function refreshLoadRoute(
       message: "Route miles updated from Google Directions.",
     };
   } catch (error) {
+    existing = clearUnofficialRouteMiles(loadId, existing);
     if (options.quiet) {
       return {
         ok: false,
