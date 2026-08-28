@@ -7801,8 +7801,11 @@ Continuous reefer. Two load locks.
   const driverDestUi = fs.readFileSync(path.join(process.cwd(), "components/driver-destinations.tsx"), "utf8");
   assert.match(driverDestUi, /driver-dest-label/);
   assert.match(driverDestUi, /driver-dest-off/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.driver-dest/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /#122033 !important/);
+  const driverCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+  assert.match(driverCss, /a\.driver-dest/);
+  assert.match(driverCss, /#122033 !important/);
+  assert.match(driverCss, /\.driver-dest-off[\s\S]*#334155/);
+  assert.match(driverCss, /\.driver-app a\.btn-secondary/);
   assert.match(driverHome, /Dispatch/);
   assert.match(driverHome, /Fuel/);
   assert.match(driverHome, /Upload/);

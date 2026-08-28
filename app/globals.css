@@ -67,8 +67,7 @@ a.hub-tab-active .hub-tab-label,
 
 .driver-dest,
 a.driver-dest,
-a.driver-dest:hover,
-a.driver-dest .driver-dest-label {
+a.driver-dest:hover {
   display: block;
   border-radius: 1rem;
   padding: 1.25rem 1rem;
@@ -78,6 +77,11 @@ a.driver-dest .driver-dest-label {
   background: #ffffff;
   color: #122033 !important;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+a.driver-dest .driver-dest-label,
+.driver-dest .driver-dest-label {
+  color: #122033 !important;
 }
 
 .driver-dest-off {
