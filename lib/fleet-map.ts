@@ -15,6 +15,7 @@ import {
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
+import { SAMSARA_TRUCK_PIN_COLOR } from "./load-map-shared";
 import { getSamsaraFleet } from "./integrations/samsara";
 import {
   listLoads,
@@ -182,6 +183,7 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         headingDeg: location.headingDeg,
         pinShape: orbcommPinShape(location.speedMph),
         recordedAt: location.recordedAt,
+        pinColor: SAMSARA_TRUCK_PIN_COLOR,
       },
       truck.id,
     );
@@ -208,6 +210,7 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         headingDeg: stored.headingDeg,
         pinShape: orbcommPinShape(stored.speedMph),
         recordedAt: stored.recordedAt,
+        pinColor: SAMSARA_TRUCK_PIN_COLOR,
       },
       truck.id,
     );

@@ -34,7 +34,8 @@ export type FleetMapPin = {
 export type FleetPinLabelOrigin = { x: number; y: number };
 
 const PIN_LABEL_CLUSTER_DECIMALS = 4;
-const PIN_LABEL_Y_SLOTS = [0, -1.25, 1.25] as const;
+const PIN_LABEL_CENTER = 14;
+const PIN_LABEL_Y_SLOTS = [0, -14, 14] as const;
 
 export function clusterPinLabelSlots(
   pins: Array<{ id: string; lat: number; lng: number; label?: string }>,
@@ -56,10 +57,10 @@ export function clusterPinLabelSlots(
 
 export function unitLabelBesideOrigin(text: string, slot = 0): FleetPinLabelOrigin {
   const chars = Math.max(1, text.trim().length);
-  const xMag = 1.85 + chars * 0.38;
+  const xMag = PIN_LABEL_CENTER + 6 + chars * 4;
   const side = slot % 2 === 0 ? 1 : -1;
-  const y = PIN_LABEL_Y_SLOTS[Math.floor(slot / 2) % PIN_LABEL_Y_SLOTS.length];
-  return { x: side * xMag, y };
+  const y = PIN_LABEL_CENTER + PIN_LABEL_Y_SLOTS[Math.floor(slot / 2) % PIN_LABEL_Y_SLOTS.length];
+  return { x: PIN_LABEL_CENTER + side * xMag, y };
 }
 
 export function fleetMapDisplayPoints(pins: FleetMapPin[]): Array<

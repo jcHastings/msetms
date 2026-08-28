@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { LoadMapPathPoint, LoadMapPoint } from "@/lib/load-map-shared";
+import {
+  LOAD_MAP_PIN_SIZE,
+  loadMapPinIconUrl,
+  type LoadMapPathPoint,
+  type LoadMapPoint,
+} from "@/lib/load-map-shared";
 
 type GoogleMaps = {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => {
@@ -11,9 +16,9 @@ type GoogleMaps = {
     addListener: (event: string, handler: () => void) => void;
   };
   Point: new (x: number, y: number) => unknown;
+  Size: new (width: number, height: number) => unknown;
   Polyline: new (opts: Record<string, unknown>) => unknown;
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
-  SymbolPath: { CIRCLE: unknown; FORWARD_CLOSED_ARROW: unknown };
 };
 
 declare global {
@@ -23,13 +28,7 @@ declare global {
   }
 }
 
-const MARKER_COLOR: Record<LoadMapPoint["kind"], string> = {
-  pickup: "#166534",
-  delivery: "#be123c",
-  truck: "#0b1f3a",
-  trailer: "#d97706",
-  track: "#64748b",
-};
+const PIN_ANCHOR = LOAD_MAP_PIN_SIZE / 2;
 
 function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
   if (window.google?.maps) return Promise.resolve(window.google.maps);
@@ -127,31 +126,15 @@ export function LoadMapCanvas({
                   className: point.labelClassName,
                 }
               : undefined,
-            icon:
-              point.pinShape === "arrow"
-                ? {
-                    path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 5,
-                    rotation: point.headingDeg ?? 0,
-                    fillColor: point.pinColor || MARKER_COLOR[point.kind],
-                    fillOpacity: 0.95,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 1,
-                    labelOrigin: point.labelOrigin
-                      ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
-                      : new maps.Point(0, -2),
-                  }
-                : {
-                    path: maps.SymbolPath.CIRCLE,
-                    scale: point.kind === "track" ? 4 : 8,
-                    fillColor: point.pinColor || MARKER_COLOR[point.kind],
-                    fillOpacity: 0.95,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 1,
-                    labelOrigin: point.labelOrigin
-                      ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
-                      : new maps.Point(0, -2),
-                  },
+            icon: {
+              url: loadMapPinIconUrl(point),
+              size: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
+              scaledSize: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
+              anchor: new maps.Point(PIN_ANCHOR, PIN_ANCHOR),
+              labelOrigin: point.labelOrigin
+                ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
+                : new maps.Point(PIN_ANCHOR, -2),
+            },
           });
           if (point.href) {
             const href = point.href;

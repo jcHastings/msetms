@@ -630,8 +630,9 @@ async function main() {
   assert.match(mapCanvasSource, /markerText/);
   assert.match(mapCanvasSource, /labelOrigin/);
   assert.match(mapCanvasSource, /point\.labelOrigin/);
-  assert.match(mapCanvasSource, /new maps\.Point\(0, -2\)/);
-  assert.match(mapCanvasSource, /FORWARD_CLOSED_ARROW/);
+  assert.match(mapCanvasSource, /new maps\.Point\(PIN_ANCHOR, -2\)/);
+  assert.match(mapCanvasSource, /loadMapPinIconUrl/);
+  assert.doesNotMatch(mapCanvasSource, /SymbolPath|FORWARD_CLOSED_ARROW/);
   assert.match(mapCanvasSource, /featureType: "poi"/);
   assert.match(mapCanvasSource, /gm_authFailure|data-map-off/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /stopTypeLabel/);
@@ -7640,11 +7641,21 @@ Continuous reefer. Two load locks.
   assert.equal(liveTruckPin?.lng, -95.9345);
   assert.equal(liveTruckPin?.href, `/fleet/trucks/${fleetMapTruckId}`);
   assert.equal(liveTruckPin?.reeferStatus, undefined);
-  assert.equal(liveTruckPin?.pinColor, undefined);
+  const { SAMSARA_TRUCK_PIN_COLOR, loadMapPinFill, loadMapPinSvg } = await import("../lib/load-map-shared");
+  assert.equal(liveTruckPin?.pinColor, SAMSARA_TRUCK_PIN_COLOR);
+  assert.equal(liveTruckPin?.pinColor, "#0b1f3a");
+  assert.notEqual(liveTruckPin?.pinColor, "#000");
+  assert.notEqual(liveTruckPin?.pinColor, "#000000");
   assert.equal(liveTruckPin?.pinShape, "circle");
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#0b1f3a/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#000000|#000["']/);
+  assert.equal(loadMapPinFill({ kind: "truck", pinColor: liveTruckPin?.pinColor }), SAMSARA_TRUCK_PIN_COLOR);
   const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
   assert.equal(movingTruckPin?.pinShape, "arrow");
   assert.equal(movingTruckPin?.headingDeg, 85);
+  assert.equal(movingTruckPin?.pinColor, SAMSARA_TRUCK_PIN_COLOR);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /#0b1f3a/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /rotate\(85/);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
@@ -7787,6 +7798,14 @@ Continuous reefer. Two load locks.
   ]);
   assert.equal(overlapSlots.get("a") === overlapSlots.get("b"), false);
   assert.equal(overlapSlots.get("c"), 0);
+  const fortyOneFortyTwo = clusterPinLabelSlots([
+    { id: "truck-41", lat: 37.9289, lng: -100.9857, label: "41" },
+    { id: "truck-42", lat: 41.2565, lng: -95.9345, label: "42" },
+  ]);
+  assert.equal(fortyOneFortyTwo.get("truck-41"), 0);
+  assert.equal(fortyOneFortyTwo.get("truck-42"), 0);
+  assert.equal(samsaraFleetMap.pins.filter((pin) => pin.label === "41").length <= 1, true);
+  assert.equal(samsaraFleetMap.pins.filter((pin) => pin.label === "42").length <= 1, true);
   const samsaraLabels = fleetMapDisplayPoints(samsaraFleetMap.pins);
   const labeledLiveTruck = samsaraLabels.find((pin) => pin.label === "FM-SAM-1");
   assert.equal(labeledLiveTruck?.markerText, "FM-SAM-1");
@@ -10728,10 +10747,14 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /ORBCOMM_MOVING_SPEED_MPH = 5/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /fleetMapDisplayPoints/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /unitLabelBesideOrigin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /loadMapPinSvg/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /fleet-pin-label/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /orbcommPinShape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /classifyOrbcommReeferMode/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /pinColor/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /loadMapPinIconUrl/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /SAMSARA_TRUCK_PIN_COLOR/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /SAMSARA_TRUCK_PIN_COLOR/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-fleet-pin-color/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /messageAt/);
   assert.match(orbcommAuth, /orbcomm_asset_id/);

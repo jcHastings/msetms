@@ -70,12 +70,17 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
             <ul className="mt-2 divide-y divide-slate-100 text-sm">
               {model.pins.map((pin) => (
                 <li key={pin.id} className="py-1.5">
-                  {pin.reeferStatus ? (
+                  {pin.reeferStatus || pin.pinColor ? (
                     <span
                       className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle"
-                      style={{ background: pin.pinColor || ORBCOMM_REEFER_PIN_COLOR[pin.reeferStatus] }}
+                      style={{
+                        background:
+                          pin.pinColor ||
+                          (pin.reeferStatus ? ORBCOMM_REEFER_PIN_COLOR[pin.reeferStatus] : undefined),
+                      }}
                       data-reefer-pin={pin.reeferStatus}
-                      title={REEFER_PIN_LABEL[pin.reeferStatus]}
+                      data-fleet-pin-color={pin.pinColor}
+                      title={pin.reeferStatus ? REEFER_PIN_LABEL[pin.reeferStatus] : undefined}
                     />
                   ) : null}
                   <Link href={pin.href} className="font-semibold underline">
