@@ -6913,7 +6913,7 @@ Continuous reefer. Two load locks.
       longitude: row.lng,
       address: "Hastings, NE",
       source: "orbcomm",
-      recorded_at: "2026-08-28T12:00:00Z",
+      recorded_at: "2026-08-25T12:00:00Z",
     });
   }
   const coloredOrbcommMap = await fleetMap.buildOrbcommFleetMap();
