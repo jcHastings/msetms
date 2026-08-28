@@ -1,5 +1,5 @@
 export const MAIL_MISSING = "Add SMTP or SendGrid in .env";
-export const MAIL_FROM_DEFAULT = "info@msloads.com";
+export const MAIL_FROM_DEFAULT = "dispatch@msloads.com";
 export const MAIL_FROM_NAME = "MS Express TMS";
 export const MAIL_NOREPLY = "noreply@msloads.com";
 

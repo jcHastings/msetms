@@ -546,6 +546,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /customerRefFromRateCon/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /MAIL_FROM_DEFAULT/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /officialEmptyMiles/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
@@ -823,7 +825,9 @@ async function main() {
   assert.match(envExample, /npm start/);
   assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
   assert.match(envExample, /SMTP_HOST=/);
-  assert.match(envExample, /SMTP_FROM=info@msloads.com/);
+  assert.match(envExample, /SMTP_FROM=dispatch@msloads.com/);
+  assert.match(envExample, /SMTP_USER=dispatch@msloads.com/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_FROM_DEFAULT = "dispatch@msloads.com"/);
   assert.match(envExample, /SENDGRID_API_KEY=/);
   for (const file of [
     "app/fleet/layout.tsx",
@@ -1987,10 +1991,19 @@ async function main() {
     lastLocation: "Memphis, TN",
     eta: "412 mi on file · 08/28/26",
     nextStop: "Delivery 1 · Birmingham, AL",
+    stops: [
+      { title: "Pickup 1", place: "Lineage Logistics, Avenel, NJ" },
+      { title: "Delivery 1", place: "Nebraska Cold Storage, Hastings, NE" },
+      { title: "Delivery 2", place: "Kayco, Bronx, NY" },
+    ],
   });
   assert.match(customerDraft.text, /Truck 112/);
   assert.match(customerDraft.text, /Memphis, TN/);
   assert.match(customerDraft.text, /412 mi on file/);
+  assert.match(customerDraft.text, /Pickup 1 Lineage Logistics, Avenel, NJ/);
+  assert.match(customerDraft.text, /Delivery 1 Nebraska Cold Storage, Hastings, NE/);
+  assert.match(customerDraft.text, /Delivery 2 Kayco, Bronx, NY/);
+  assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th/);
   assert.equal(customerDraft.replyTo, "noreply@msloads.com");
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
@@ -2131,7 +2144,7 @@ async function main() {
   assert.equal(noCustomerResult.ok, false);
   if (!noCustomerResult.ok) assert.match(noCustomerResult.error, /no customer email/);
   process.env.SENDGRID_API_KEY = "SG.test-secret-do-not-log";
-  process.env.SMTP_FROM = "info@msloads.com";
+  process.env.SMTP_FROM = "dispatch@msloads.com";
   assert.equal(mailer.mailTransport(), "sendgrid");
   await assert.rejects(
     () =>
@@ -2171,7 +2184,8 @@ async function main() {
       return new Response(null, { status: 202 });
     }) as typeof fetch,
   );
-  assert.match(sendgridBody, /"email":"info@msloads.com"/);
+  assert.match(sendgridBody, /"email":"dispatch@msloads.com"/);
+  assert.doesNotMatch(sendgridBody, /info@msloads\.com/);
   assert.match(sendgridBody, /"reply_to":\{"email":"noreply@msloads.com"\}/);
   assert.doesNotMatch(sendgridBody, /ana@/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
@@ -2185,6 +2199,11 @@ async function main() {
     assert.match(input.subject, /PO-MAIL|RC-MAIL/);
     assert.doesNotMatch(input.subject, /MSE-/);
     assert.doesNotMatch(input.text, /Load MSE-/);
+    assert.match(input.text, /Pickup 1/);
+    assert.match(input.text, /Delivery 1/);
+    assert.match(input.text, /Hastings/);
+    assert.match(input.text, /Birmingham/);
+    assert.doesNotMatch(input.text, /\$|settlement|relay|oo pay/i);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
   for (const key of mailEnvKeys) {

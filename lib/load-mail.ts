@@ -129,10 +129,14 @@ export function composeCustomerUpdateEmail(input: {
   lastLocation: string;
   eta: string;
   nextStop: string;
+  stops?: Array<{ title: string; place: string }>;
   officePhone?: string;
 }): CustomerUpdateMailDraft {
   const shown = input.loadNumber.trim();
   const extraRef = input.customerRef.trim();
+  const stopLines = (input.stops ?? [])
+    .filter((stop) => stop.place.trim())
+    .map((stop) => `${stop.title} ${stop.place}`);
   const lines = [
     shown ? `Load ${shown}` : "Tracking update",
     extraRef && extraRef !== shown ? `Your ref ${extraRef}` : "",
@@ -142,6 +146,7 @@ export function composeCustomerUpdateEmail(input: {
     `Last location ${input.lastLocation || "not on file"}`,
     input.eta ? `ETA ${input.eta}` : "",
     input.nextStop ? `Next stop ${input.nextStop}` : "",
+    ...stopLines,
     "",
     mailNoReplyLine(input.officePhone),
     "",
@@ -192,6 +197,7 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
         }`
       : "";
   const shown = customerFacingLoadNumber(load);
+  const stops = listStops(load.id);
   const draft = composeCustomerUpdateEmail({
     loadNumber: shown,
     customerRef: shown,
@@ -200,7 +206,8 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
     trailer: (load.trailer_unit || load.trailer_number || "").trim(),
     lastLocation,
     eta,
-    nextStop: nextOpenStopLabel(listStops(load.id)),
+    nextStop: nextOpenStopLabel(stops),
+    stops: customerMailStops(stops),
     officePhone: getCompanyProfile().dispatcher_phone,
   });
   return { ...draft, to: resolveLoadCustomerEmail(load) };
@@ -279,6 +286,27 @@ function mailStopLines(
     appointment: stop.confirmation.trim() || stop.notes.trim(),
     reference: stop.reference.trim(),
   };
+}
+
+function customerStopPlace(stop: LoadStop): string {
+  const name = stop.name.trim();
+  const cityState = [stop.city.trim(), stop.state.trim()].filter(Boolean).join(", ");
+  if (name && cityState) return `${name}, ${cityState}`;
+  return name || cityState;
+}
+
+function customerMailStops(stops: LoadStop[]): Array<{ title: string; place: string }> {
+  const lines: Array<{ title: string; place: string }> = [];
+  const pickups = stops.filter((stop) => stop.kind === "pickup");
+  const firstPickup = pickups[0];
+  if (firstPickup) {
+    lines.push({ title: stopTypeLabel(firstPickup.kind, 1), place: customerStopPlace(firstPickup) });
+  }
+  const deliveries = stops.filter((stop) => stop.kind === "delivery");
+  deliveries.forEach((stop, index) => {
+    lines.push({ title: stopTypeLabel(stop.kind, index + 1), place: customerStopPlace(stop) });
+  });
+  return lines;
 }
 
 function nextOpenStopLabel(stops: LoadStop[]): string {

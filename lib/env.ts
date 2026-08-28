@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "dotenv";
+import { MAIL_FROM_DEFAULT } from "./mail-shared";
 
 function existsInDir(dir: string, name: string): boolean {
   return fs.existsSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name));
@@ -398,7 +399,7 @@ export function getSendgridApiKey(): string | undefined {
 }
 
 export function getSmtpFrom(): string {
-  return readSecret("SMTP_FROM") ?? readSecret("MAIL_FROM") ?? "info@msloads.com";
+  return readSecret("SMTP_FROM") ?? readSecret("MAIL_FROM") ?? MAIL_FROM_DEFAULT;
 }
 
 export function isSmtpConfigured(): boolean {
