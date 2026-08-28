@@ -395,6 +395,7 @@ async function main() {
   assert.match(paySource, /View Customer Confirmation/);
   assert.match(paySource, /View Carrier Confirmation/);
   assert.match(paySource, /data-carrier-confirmation-off/);
+  assert.match(paySource, /pointer-events-none/);
   assert.match(paySource, /Assign a driver first/);
   assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation`/);
   assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation\?packet=internal/);

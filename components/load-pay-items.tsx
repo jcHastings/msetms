@@ -101,7 +101,7 @@ export function LoadPayItems({
             </a>
           ) : (
             <span
-              className="btn btn-secondary"
+              className="btn btn-secondary pointer-events-none cursor-not-allowed"
               aria-disabled="true"
               title="Assign a driver first"
               data-carrier-confirmation-off=""
