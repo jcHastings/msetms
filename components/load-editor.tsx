@@ -38,7 +38,7 @@ import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
-import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
+import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
@@ -224,9 +224,7 @@ export async function LoadEditor({
             guide={routeGuide}
             emptyMiles={officialEmptyMiles(routed.empty_miles, routed.empty_source)}
             emptyLane={routed.empty_from && routed.empty_to ? `${routed.empty_from} → ${routed.empty_to}` : ""}
-            emptyStates={
-              routed.empty_source === "google" ? parseRouteStateMiles(routed.empty_state_miles) : []
-            }
+            emptyStates={emptyStateMilesFromLoad(routed)}
           />
             </>
           ) : (

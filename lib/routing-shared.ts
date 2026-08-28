@@ -1,8 +1,12 @@
+import { usStateForPoint, usStateName } from "./us-state-lookup";
+
 export type RouteStateMile = {
   state: string;
   name: string;
   miles: number;
 };
+
+export type RouteLatLng = { lat: number; lng: number };
 
 export type LoadRouteGuide = {
   totalMiles: number | null;
@@ -73,6 +77,108 @@ export function parseRouteLegMiles(raw: string | null | undefined): number[] {
 
 export function serializeRouteLegMiles(miles: number[]): string {
   return JSON.stringify(miles.map((value) => Math.round(value * 10) / 10));
+}
+
+export function decodePolyline(encoded: string): RouteLatLng[] {
+  const points: RouteLatLng[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const text = String(encoded ?? "");
+  while (index < text.length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+    do {
+      byte = text.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    result = 0;
+    shift = 0;
+    do {
+      byte = text.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
+
+function segmentChordMiles(a: RouteLatLng, b: RouteLatLng): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+/**
+ * Walk a Google Directions polyline and assign each step to the state that point is in.
+ * Scales to the official driving total. A 2–3 point air hop across states returns [].
+ */
+export function estimateStateMiles(points: RouteLatLng[], totalMiles: number): RouteStateMile[] {
+  if (points.length < 2 || !(totalMiles > 0)) return [];
+  const vertexStates = points.map((point) => usStateForPoint(point.lat, point.lng)?.code ?? "");
+  const known = new Set(vertexStates.filter(Boolean));
+  if (points.length <= 3 && known.size > 1) return [];
+
+  const raw = new Map<string, { name: string; miles: number }>();
+  let chord = 0;
+  let assigned = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const miles = segmentChordMiles(a, b);
+    if (miles <= 0) continue;
+    chord += miles;
+    const samples = Math.max(1, Math.min(16, Math.ceil(miles * 4)));
+    for (let step = 0; step < samples; step += 1) {
+      const t = (step + 0.5) / samples;
+      const lat = a.lat + (b.lat - a.lat) * t;
+      const lng = a.lng + (b.lng - a.lng) * t;
+      const state = usStateForPoint(lat, lng);
+      if (!state) continue;
+      const slice = miles / samples;
+      const current = raw.get(state.code) ?? { name: state.name, miles: 0 };
+      current.miles += slice;
+      raw.set(state.code, current);
+      assigned += slice;
+    }
+  }
+  if (chord <= 0 || assigned <= 0 || assigned / chord < 0.85) return [];
+  const scale = totalMiles / assigned;
+  return [...raw.entries()]
+    .map(([state, row]) => ({
+      state,
+      name: row.name || usStateName(state),
+      miles: Math.round(row.miles * scale * 10) / 10,
+    }))
+    .filter((row) => row.miles > 0)
+    .sort((a, b) => b.miles - a.miles || a.state.localeCompare(b.state));
+}
+
+export function stateMilesFromPolyline(encoded: string | null | undefined, totalMiles: number | null | undefined): RouteStateMile[] {
+  if (totalMiles == null || !(totalMiles > 0)) return [];
+  const points = decodePolyline(String(encoded ?? ""));
+  return estimateStateMiles(points, totalMiles);
+}
+
+export function emptyStateMilesFromLoad(load: {
+  empty_miles?: number | null;
+  empty_source?: string | null;
+  empty_state_miles?: string | null;
+  empty_polyline?: string | null;
+}): RouteStateMile[] {
+  if (officialEmptyMiles(load.empty_miles, load.empty_source) == null) return [];
+  const encoded = String(load.empty_polyline ?? "").trim();
+  if (!encoded) return [];
+  return stateMilesFromPolyline(encoded, load.empty_miles);
 }
 
 /** Count points in an encoded polyline without allocating the path. */
@@ -175,7 +281,12 @@ export function routeGuideFromLoad(
   return {
     totalMiles: official ? load.route_miles ?? null : null,
     legMiles: official ? (legMiles.length === 0 && load.route_miles != null ? [] : legMiles) : [],
-    states: official ? parseRouteStateMiles(load.route_state_miles) : [],
+    states:
+      official && source === "google"
+        ? stateMilesFromPolyline(load.route_polyline, load.route_miles)
+        : official
+          ? parseRouteStateMiles(load.route_state_miles)
+          : [],
     calculatedAt: official ? load.route_calculated_at ?? "" : "",
     source,
   };

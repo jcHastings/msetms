@@ -573,6 +573,8 @@ async function main() {
   assert.match(routingLib, /clearUnofficialRouteMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isOfficialDrivingRoute/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isDrivingPolyline/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /estimateStateMiles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/us-state-lookup.ts"), "utf8"), /NE_IA_RIVER/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /stopCount/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /OverlayOpenLink/);
@@ -5414,7 +5416,74 @@ Continuous reefer. Two load locks.
   assert.equal(usStateForPoint(41.8781, -87.6298)?.code, "IL");
   assert.equal(usStateForPoint(39.7392, -104.9903)?.code, "CO");
   assert.equal(usStateForPoint(32.7767, -96.797)?.code, "TX");
+  assert.equal(usStateForPoint(40.5861, -98.3884)?.code, "NE");
+  assert.equal(usStateForPoint(40.8136, -96.7026)?.code, "NE");
+  assert.equal(usStateForPoint(41.02, -96.35)?.code, "NE");
+  assert.equal(usStateForPoint(41.2565, -95.9345)?.code, "NE");
+  assert.equal(usStateForPoint(41.228, -95.92)?.code, "NE");
+  assert.equal(usStateForPoint(41.228, -95.84)?.code, "IA");
+  assert.equal(usStateForPoint(41.2619, -95.8608)?.code, "IA");
+  assert.equal(usStateForPoint(41.653, -95.327)?.code, "IA");
   const routing = await import("../lib/routing");
+  const sharedRouting = await import("../lib/routing-shared");
+  const airHastingsHarlan = routing.estimateStateMiles(
+    [
+      { lat: 40.5861, lng: -98.3884 },
+      { lat: 41.653, lng: -95.327 },
+    ],
+    210.3,
+  );
+  assert.deepEqual(airHastingsHarlan, [], "two-stop air hop cannot split IFTA states");
+  const corridor = [
+    { lat: 40.586, lng: -98.392 },
+    { lat: 40.925, lng: -98.342 },
+    { lat: 40.82, lng: -97.6 },
+    { lat: 40.813, lng: -96.703 },
+    { lat: 40.91, lng: -96.53 },
+    { lat: 41.04, lng: -96.37 },
+    { lat: 41.14, lng: -96.24 },
+    { lat: 41.23, lng: -96.05 },
+    { lat: 41.256, lng: -95.935 },
+    { lat: 41.228, lng: -95.9 },
+    { lat: 41.228, lng: -95.852 },
+    { lat: 41.24, lng: -95.82 },
+    { lat: 41.35, lng: -95.7 },
+    { lat: 41.5, lng: -95.5 },
+    { lat: 41.653, lng: -95.327 },
+  ];
+  const denseCorridor: Array<{ lat: number; lng: number }> = [];
+  for (let i = 1; i < corridor.length; i += 1) {
+    const a = corridor[i - 1];
+    const b = corridor[i];
+    for (let step = 0; step < 8; step += 1) {
+      const t = step / 8;
+      denseCorridor.push({ lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t });
+    }
+  }
+  denseCorridor.push(corridor[corridor.length - 1]);
+  const split = routing.estimateStateMiles(denseCorridor, 210.3);
+  const neMiles = split.find((row) => row.state === "NE")?.miles ?? 0;
+  const iaMiles = split.find((row) => row.state === "IA")?.miles ?? 0;
+  assert.ok(neMiles >= 150 && neMiles <= 170, `Hastings→Harlan NE should be ~155–160, got ${neMiles}`);
+  assert.ok(iaMiles >= 40 && iaMiles <= 60, `Hastings→Harlan IA should be ~50, got ${iaMiles}`);
+  assert.ok(Math.abs(neMiles + iaMiles - 210.3) < 0.2);
+  const encodedGuide = routing.encodePolyline(denseCorridor);
+  const fromStored = sharedRouting.routeGuideFromLoad(
+    {
+      route_miles: 210.3,
+      route_source: "google",
+      route_leg_miles: "[210.3]",
+      route_polyline: encodedGuide,
+      route_state_miles: JSON.stringify([
+        { state: "NE", name: "Nebraska", miles: 109.4 },
+        { state: "IA", name: "Iowa", miles: 100.9 },
+      ]),
+    },
+    { stopCount: 2 },
+  );
+  assert.equal(fromStored.totalMiles, 210.3);
+  const storedNe = fromStored.states.find((row) => row.state === "NE")?.miles ?? 0;
+  assert.ok(storedNe >= 150 && storedNe <= 170, "stored 109 NE leftover must be replaced from the driving polyline");
   const encoded = routing.encodePolyline([
     { lat: 40.71, lng: -74.0 },
     { lat: 41.88, lng: -87.63 },

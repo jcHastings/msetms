@@ -1,6 +1,6 @@
 import { getDb } from "./db";
-import { estimateStateMiles, fetchLaneDirections, mapsRoutingConfigured, stopRouteLabel } from "./routing";
-import { serializeRouteStateMiles, type RouteStateMile } from "./routing-shared";
+import { encodePolyline, fetchLaneDirections, mapsRoutingConfigured, stopRouteLabel } from "./routing";
+import { estimateStateMiles, serializeRouteStateMiles, type RouteStateMile } from "./routing-shared";
 import { getDriver, getLoad, listLoadsForDriver } from "./queries";
 import { listStops } from "./stops";
 import type { LoadStop } from "./stops-shared";
@@ -16,13 +16,20 @@ export type EmptyMilesGuide = {
 
 function persistEmptyMiles(
   loadId: number,
-  input: { miles: number | null; states: RouteStateMile[]; from: string; to: string; source: "google" | "" },
+  input: {
+    miles: number | null;
+    states: RouteStateMile[];
+    from: string;
+    to: string;
+    source: "google" | "";
+    polyline?: string;
+  },
 ): EmptyMilesGuide {
   const timestamp = input.miles == null ? "" : new Date().toISOString();
   getDb()
     .prepare(
       `UPDATE loads SET empty_miles = ?, empty_state_miles = ?, empty_from = ?, empty_to = ?,
-         empty_calculated_at = ?, empty_source = ?, updated_at = ?
+         empty_calculated_at = ?, empty_source = ?, empty_polyline = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -32,6 +39,7 @@ function persistEmptyMiles(
       input.to,
       timestamp,
       input.source,
+      input.polyline ?? "",
       new Date().toISOString(),
       loadId,
     );
@@ -120,6 +128,7 @@ export async function refreshLoadEmptyMiles(loadId: number): Promise<EmptyMilesG
       from: lane.from,
       to: lane.to,
       source: "google",
+      polyline: encodePolyline(points),
     });
   } catch {
     return persistEmptyMiles(loadId, { miles: null, states: [], from: lane.from, to: lane.to, source: "" });

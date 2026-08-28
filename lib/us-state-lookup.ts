@@ -81,15 +81,66 @@ function distanceSq(box: UsStateBox, lat: number, lng: number): number {
   return dLat * dLat + dLng * dLng;
 }
 
-export function usStateForPoint(lat: number, lng: number): { code: string; name: string } | null {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  const hits = US_STATE_BOXES.filter((box) => contains(box, lat, lng));
-  if (hits.length === 0) return null;
-  const best = hits.reduce((winner, box) => {
+/** Missouri River, south → north. West is Nebraska, east is Iowa. Not a straight midpoint. */
+const NE_IA_RIVER: Array<{ lat: number; lng: number }> = [
+  { lat: 40.575, lng: -95.765 },
+  { lat: 40.65, lng: -95.82 },
+  { lat: 40.8, lng: -95.87 },
+  { lat: 41.0, lng: -95.875 },
+  { lat: 41.15, lng: -95.88 },
+  { lat: 41.208, lng: -95.87 },
+  { lat: 41.228, lng: -95.852 },
+  { lat: 41.26, lng: -95.915 },
+  { lat: 41.32, lng: -95.95 },
+  { lat: 41.4, lng: -95.99 },
+  { lat: 41.52, lng: -96.05 },
+  { lat: 41.7, lng: -96.12 },
+  { lat: 41.9, lng: -96.18 },
+  { lat: 42.15, lng: -96.3 },
+  { lat: 42.4, lng: -96.38 },
+  { lat: 42.49, lng: -96.413 },
+  { lat: 42.61, lng: -96.48 },
+  { lat: 42.75, lng: -96.6 },
+];
+
+function borderLngAtLat(border: Array<{ lat: number; lng: number }>, lat: number): number | null {
+  if (border.length < 2) return null;
+  if (lat <= border[0].lat) return border[0].lng;
+  const last = border[border.length - 1];
+  if (lat >= last.lat) return last.lng;
+  for (let i = 1; i < border.length; i += 1) {
+    const a = border[i - 1];
+    const b = border[i];
+    if (lat >= a.lat && lat <= b.lat) {
+      const span = b.lat - a.lat || 1;
+      return a.lng + ((lat - a.lat) / span) * (b.lng - a.lng);
+    }
+  }
+  return null;
+}
+
+function pickFromHits(hits: UsStateBox[], lat: number, lng: number): UsStateBox {
+  return hits.reduce((winner, box) => {
     const areaDelta = boxArea(box) - boxArea(winner);
     if (Math.abs(areaDelta) > 1e-6) return areaDelta < 0 ? box : winner;
     return distanceSq(box, lat, lng) < distanceSq(winner, lat, lng) ? box : winner;
   });
+}
+
+export function usStateForPoint(lat: number, lng: number): { code: string; name: string } | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const hits = US_STATE_BOXES.filter((box) => contains(box, lat, lng));
+  if (hits.length === 0) return null;
+  const codes = new Set(hits.map((box) => box.code));
+  if (codes.has("NE") && codes.has("IA")) {
+    const river = borderLngAtLat(NE_IA_RIVER, lat);
+    if (river != null) {
+      const code = lng < river ? "NE" : "IA";
+      const named = hits.find((box) => box.code === code);
+      if (named) return { code: named.code, name: named.name };
+    }
+  }
+  const best = pickFromHits(hits, lat, lng);
   return { code: best.code, name: best.name };
 }
 

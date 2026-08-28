@@ -1,7 +1,12 @@
 import { getDb } from "./db";
 import { extractStateCode } from "./locations";
 import { getDriver, getTruck } from "./queries";
-import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad, type RouteStateMile } from "./routing-shared";
+import {
+  emptyStateMilesFromLoad,
+  officialEmptyMiles,
+  routeGuideFromLoad,
+  type RouteStateMile,
+} from "./routing-shared";
 
 export type IftaQuarter = {
   year: number;
@@ -154,7 +159,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     .prepare(
       `SELECT id, load_number, origin, destination, pickup_start, delivery_end,
               route_miles, route_leg_miles, route_state_miles, route_source, route_polyline,
-              empty_miles, empty_state_miles, empty_from, empty_to, empty_source,
+              empty_miles, empty_state_miles, empty_from, empty_to, empty_source, empty_polyline,
               driver_id, truck_id
        FROM loads
        WHERE status != 'cancelled'
@@ -177,6 +182,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     empty_from: string;
     empty_to: string;
     empty_source: string;
+    empty_polyline: string;
     driver_id: number | null;
     truck_id: number | null;
   }>;
@@ -192,10 +198,8 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
 
   for (const load of loads) {
     const guide = routeGuideFromLoad(load);
-    const loadedStates = guide.source ? parseRouteStateMiles(load.route_state_miles) : [];
-    const emptyStates = officialEmptyMiles(load.empty_miles, load.empty_source) != null
-      ? parseRouteStateMiles(load.empty_state_miles)
-      : [];
+    const loadedStates = guide.states;
+    const emptyStates = emptyStateMilesFromLoad(load);
     const loaded = guide.totalMiles ?? (loadedStates.length ? loadedStates.reduce((sum, row) => sum + row.miles, 0) : 0);
     const empty = officialEmptyMiles(load.empty_miles, load.empty_source) ?? 0;
     if (loadedStates.length === 0 && empty <= 0 && loaded <= 0) {

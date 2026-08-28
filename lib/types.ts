@@ -503,6 +503,7 @@ export type Load = {
   empty_to: string;
   empty_calculated_at: string;
   empty_source: string;
+  empty_polyline: string;
   tms_invoice_number: string;
   tms_invoice_at: string;
   non_revenue: number;

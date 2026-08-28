@@ -3,16 +3,20 @@ import { getDb } from "./db";
 import { getGoogleMapsApiKey } from "./env";
 import { getLoad } from "./queries";
 import {
+  decodePolyline,
+  estimateStateMiles,
   isOfficialDrivingRoute,
   metersToRouteMiles,
   routeGuideFromLoad,
   serializeRouteLegMiles,
   serializeRouteStateMiles,
   type LoadRouteGuide,
+  type RouteLatLng,
   type RouteStateMile,
 } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
-import { usStateForPoint, usStateName } from "./us-state-lookup";
+
+export { decodePolyline, estimateStateMiles } from "./routing-shared";
 
 export type { LoadRouteGuide, RouteStateMile } from "./routing-shared";
 export { routeGuideFromLoad } from "./routing-shared";
@@ -26,7 +30,7 @@ export type RouteRefreshResult = {
   message: string;
 };
 
-type LatLng = { lat: number; lng: number };
+type LatLng = RouteLatLng;
 
 export function mapsRoutingConfigured(): boolean {
   return Boolean(getGoogleMapsApiKey());
@@ -43,34 +47,6 @@ export function stopRouteLabel(stop: Pick<LoadStop, "street" | "city" | "state" 
 
 export function usableRouteStops(stops: LoadStop[]): LoadStop[] {
   return stops.filter((stop) => Boolean(stop.city.trim() || stop.street.trim() || /\d/.test(stop.name)));
-}
-
-export function decodePolyline(encoded: string): LatLng[] {
-  const points: LatLng[] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    result = 0;
-    shift = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
-  }
-  return points;
 }
 
 export function encodePolyline(points: LatLng[]): string {
@@ -97,45 +73,6 @@ function encodeSigned(value: number): string {
   }
   chunk += String.fromCharCode(next + 63);
   return chunk;
-}
-
-function haversineMiles(a: LatLng, b: LatLng): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLng = Math.sin(dLng / 2);
-  const h = sinLat * sinLat + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-export function estimateStateMiles(points: LatLng[], totalMiles: number): RouteStateMile[] {
-  if (points.length < 2 || totalMiles <= 0) return [];
-  const raw = new Map<string, { name: string; miles: number }>();
-  let assigned = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    const a = points[i - 1];
-    const b = points[i];
-    const miles = haversineMiles(a, b);
-    if (miles <= 0) continue;
-    const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
-    const state = usStateForPoint(mid.lat, mid.lng) ?? usStateForPoint(a.lat, a.lng);
-    if (!state) continue;
-    const current = raw.get(state.code) ?? { name: state.name, miles: 0 };
-    current.miles += miles;
-    raw.set(state.code, current);
-    assigned += miles;
-  }
-  if (assigned <= 0) return [];
-  const scale = totalMiles / assigned;
-  return [...raw.entries()]
-    .map(([state, row]) => ({
-      state,
-      name: row.name || usStateName(state),
-      miles: Math.round(row.miles * scale * 10) / 10,
-    }))
-    .filter((row) => row.miles > 0)
-    .sort((a, b) => b.miles - a.miles || a.state.localeCompare(b.state));
 }
 
 function persistRoute(
