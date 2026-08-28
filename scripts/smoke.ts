@@ -9915,6 +9915,7 @@ Continuous reefer. Two load locks.
     formatMikeTmsStatsReply,
     parseMikeReeferQuestion,
     parseMikeTmsStatsQuestion,
+    sameTrailerUnit,
     topCustomersByBilled,
     topDriversByBilled,
     topDriversByTmsMiles,
@@ -10042,6 +10043,9 @@ Continuous reefer. Two load locks.
   assert.match(String(liveMilesAsk), /TMS miles/i);
   assert.doesNotMatch(String(liveMilesAsk), /I don't have information/i);
   assert.equal(parseMikeReeferQuestion("What's the Reefer temperature on trailer MS1519"), "MS1519");
+  assert.equal(sameTrailerUnit("MS1519", "1519"), true);
+  assert.equal(sameTrailerUnit("MS1519", "MS-1519"), true);
+  assert.equal(sameTrailerUnit("MK1519", "MS1519"), false);
   queries.createTrailer({
     unit_number: "MK1519",
     type: "reefer",
@@ -10063,6 +10067,19 @@ Continuous reefer. Two load locks.
   assert.match(String(reeferAsk), /York, NE/);
   assert.doesNotMatch(String(reeferAsk), /I don't have information/i);
   assert.match(formatMikeReeferReply({ unit: "MS1519", setpointF: 34, returnF: 35.2, mode: "continuous", city: "York, NE" }), /setpoint 34°F/);
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, operating_mode, address, source, recorded_at, alarm
+      ) VALUES (NULL, NULL, '1519', 36, 37.1, 37.1, 'continuous', 'Hastings, NE', 'orbcomm', '2026-08-19T12:00:00Z', '')`,
+    )
+    .run();
+  const ms1519Ask = await answerMikeReeferQuestion("What's the Reefer temperature on trailer MS1519");
+  assert.match(String(ms1519Ask), /36/);
+  assert.match(String(ms1519Ask), /37\.1/);
+  assert.match(String(ms1519Ask), /Continuous/);
+  assert.match(String(ms1519Ask), /Hastings, NE/);
+  assert.doesNotMatch(String(ms1519Ask), /I don't have information/i);
   const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
   assert.equal(
     matchLinkedSamsaraVehicle(

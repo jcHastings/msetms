@@ -1,7 +1,7 @@
 import { getDb } from "./db";
-import { canonicalFleetKey } from "./fleet-import-shared";
+import { canonicalFleetKey, unitDigits } from "./fleet-import-shared";
 import { listFuelRollups, listFuelTransactions } from "./fuel-store";
-import { getReeferSnapshots, latestReeferForTrailer, type ReeferSnapshot } from "./integrations/orbcomm";
+import { getReeferSnapshots, latestReeferForTrailer, normalizeKey, type ReeferSnapshot } from "./integrations/orbcomm";
 import { listLoads, listTrailers, listTruckOdometerReadings, listTrucks } from "./queries";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import type { LoadView, ReeferReading } from "./types";
@@ -241,9 +241,23 @@ export function answerMikeTmsQuestion(question: string, now = new Date()): strin
 export function parseMikeReeferQuestion(question: string): string | null {
   const text = question.trim();
   const match =
-    text.match(/\b(?:reefer|temp(?:erature)?)\b.{0,48}\b(?:trailer\s*)?([A-Za-z]{0,4}\d{2,6})\b/i) ||
-    text.match(/\btrailer\s+([A-Za-z]{0,4}\d{2,6})\b.{0,48}\b(?:reefer|temp)/i);
+    text.match(/\b(?:reefer|temp(?:erature)?)\b.{0,64}\b(?:trailer\s*)?([A-Za-z]{0,6}\d{2,6})\b/i) ||
+    text.match(/\btrailer\s+([A-Za-z]{0,6}\d{2,6})\b.{0,64}\b(?:reefer|temp)/i);
   return match?.[1] ? match[1].toUpperCase() : null;
+}
+
+export function sameTrailerUnit(left: string, right: string): boolean {
+  const a = normalizeKey(left);
+  const b = normalizeKey(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (canonicalFleetKey(left) === canonicalFleetKey(right)) return true;
+  const digitsA = unitDigits(left);
+  const digitsB = unitDigits(right);
+  if (!digitsA || !digitsB || digitsA !== digitsB || digitsA.length < 3) return false;
+  const prefixA = a.replace(/\d+/g, "");
+  const prefixB = b.replace(/\d+/g, "");
+  return !prefixA || !prefixB || prefixA === prefixB;
 }
 
 function reeferModeLabel(raw: string | null | undefined): string {
@@ -277,27 +291,58 @@ export function reeferFromStoredReading(unit: string, reading: ReeferReading | n
   });
 }
 
+function latestStoredReeferForAsk(asked: string, trailer: { unit_number: string; orbcomm_asset_id: string } | null): ReeferReading | null {
+  if (trailer) {
+    const mapped = latestReeferForTrailer(trailer);
+    if (mapped) return mapped;
+  }
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM reefer_readings
+       WHERE trailer_id != ''
+       ORDER BY recorded_at DESC, id DESC`,
+    )
+    .all() as ReeferReading[];
+  return (
+    rows.find(
+      (row) =>
+        sameTrailerUnit(row.trailer_id, asked) ||
+        Boolean(trailer && (sameTrailerUnit(row.trailer_id, trailer.unit_number) || sameTrailerUnit(row.trailer_id, trailer.orbcomm_asset_id))),
+    ) ?? null
+  );
+}
+
 export async function answerMikeReeferQuestion(
   question: string,
   liveReadings: ReeferSnapshot[] = [],
 ): Promise<string | null> {
   const asked = parseMikeReeferQuestion(question);
   if (!asked) return null;
-  const trailer = listTrailers().find(
-    (row) =>
-      canonicalFleetKey(row.unit_number) === canonicalFleetKey(asked) ||
-      canonicalFleetKey(row.orbcomm_asset_id) === canonicalFleetKey(asked),
-  );
-  if (!trailer) return `No trailer ${asked} in the TMS roster.`;
-  const stored = latestReeferForTrailer(trailer);
+  const trailer =
+    listTrailers().find(
+      (row) => sameTrailerUnit(row.unit_number, asked) || sameTrailerUnit(row.orbcomm_asset_id, asked),
+    ) ?? null;
+  const loadTrailer =
+    listLoads({ status: "all" }).find(
+      (load) => sameTrailerUnit(load.trailer_unit || "", asked) || sameTrailerUnit(load.trailer_number || "", asked),
+    ) ?? null;
+  const stored = latestStoredReeferForAsk(asked, trailer);
   const live = liveReadings.find(
     (reading) =>
-      canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.unit_number) ||
-      canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.orbcomm_asset_id),
+      sameTrailerUnit(reading.trailerId, asked) ||
+      Boolean(
+        trailer &&
+          (sameTrailerUnit(reading.trailerId, trailer.unit_number) ||
+            sameTrailerUnit(reading.trailerId, trailer.orbcomm_asset_id)),
+      ),
   );
+  const unit = trailer?.unit_number || loadTrailer?.trailer_unit || loadTrailer?.trailer_number || asked;
+  if (!trailer && !stored && !live && !loadTrailer) {
+    return `No trailer ${asked} in the TMS roster or Orbcomm readings.`;
+  }
   return formatMikeReeferReply({
-    unit: trailer.unit_number,
-    setpointF: live?.setpointF ?? stored?.setpoint_f ?? trailer.reefer_setpoint_f,
+    unit,
+    setpointF: live?.setpointF ?? stored?.setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
     returnF: live?.returnAirF ?? live?.temperatureF ?? stored?.return_air_f ?? stored?.temperature_f ?? null,
     mode: live?.operatingMode || stored?.operating_mode,
     city: live?.address || stored?.address,
@@ -306,6 +351,10 @@ export async function answerMikeReeferQuestion(
 
 export async function answerMikeReeferFromOrbcomm(question: string): Promise<string | null> {
   if (!parseMikeReeferQuestion(question)) return null;
-  const snapshots = await getReeferSnapshots();
-  return answerMikeReeferQuestion(question, snapshots.readings);
+  try {
+    const snapshots = await getReeferSnapshots();
+    return answerMikeReeferQuestion(question, snapshots.readings);
+  } catch {
+    return answerMikeReeferQuestion(question, []);
+  }
 }
