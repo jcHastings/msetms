@@ -391,7 +391,11 @@ async function main() {
   assert.match(stopsSource, /stopTypeNumber/);
   assert.match(stopsSource, /stopTypeLabel/);
   assert.match(stopsSource, /data-stop-kind/);
-  assert.match(stopsSource, /formData\.set\("kind"/);
+  assert.match(stopsSource, /value=\{draft\.kind\}/);
+  assert.match(stopsSource, /formData\.set\("kind", draft\.kind\)/);
+  assert.match(stopsSource, /event\.preventDefault\(\)/);
+  assert.doesNotMatch(stopsSource, /action=\{onSubmit\}/);
+  assert.doesNotMatch(stopsSource, /defaultValue=\{draft\.kind\}/);
   assert.doesNotMatch(stopsSource, /name="kind" value=\{kind\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /export function stopTypeNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /Delivery" : "Pickup"/);

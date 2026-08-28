@@ -263,16 +263,15 @@ function StopDialog({
     setDraft((current) => applyLocationToDraft(current, location));
   }
 
-  async function onSubmit(formData: FormData) {
+  async function saveStop(formData: FormData) {
     setSaving(true);
     setError(null);
     try {
-      const postedKind = String(formData.get("kind") ?? draft.kind) === "delivery" ? "delivery" : "pickup";
-      formData.set("kind", postedKind);
+      formData.set("kind", draft.kind);
       if (mode === "add") {
         formData.set("load_id", String(loadId));
         if (!String(formData.get("name") ?? "").trim()) {
-          formData.set("name", postedKind === "pickup" ? "Pickup" : "Delivery");
+          formData.set("name", draft.kind === "pickup" ? "Pickup" : "Delivery");
         }
         await addStopAction(formData);
       } else if (stop) {
@@ -291,15 +290,23 @@ function StopDialog({
 
   return (
     <div className="pay-item-dialog-backdrop" role="dialog" aria-label={mode === "add" ? "Add stop" : "Edit stop"} data-add-stop-dialog="">
-      <form action={onSubmit} className="pay-item-dialog card max-w-xl space-y-3 p-5">
+      <form
+        className="pay-item-dialog card max-w-xl space-y-3 p-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const formData = new FormData(event.currentTarget);
+          formData.set("kind", draft.kind);
+          void saveStop(formData);
+        }}
+      >
         <h3 className="text-sm font-semibold">{mode === "add" ? "Add Stop" : "Edit Stop"}</h3>
         <div className="field">
           <label htmlFor="stop-kind">Type</label>
+          <input type="hidden" name="kind" value={draft.kind} />
           <select
             id="stop-kind"
-            name="kind"
-            data-stop-kind=""
-            defaultValue={draft.kind}
+            value={draft.kind}
+            data-stop-kind={draft.kind}
             onChange={(event) => {
               const next = event.target.value === "delivery" ? "delivery" : "pickup";
               setDraft((current) => ({ ...current, kind: next }));
