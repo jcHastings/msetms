@@ -10404,8 +10404,15 @@ Continuous reefer. Two load locks.
   assert.equal(shortPlaceLabel("Holcomb, KS"), "Holcomb, KS");
   assert.doesNotMatch(shortPlaceLabel("Holcomb, KS"), /LCOMB/);
   assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-place-line/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /text-overflow: ellipsis/);
+  const boardCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+  const placeBlock = boardCss.match(/\.board-place\s*\{[^}]+\}/)?.[0] ?? "";
+  const placeLine = boardCss.match(/\.board-place-line\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(placeBlock, /max-width:/);
+  assert.match(placeBlock, /overflow:\s*hidden/);
+  assert.match(placeLine, /text-overflow:\s*ellipsis/);
+  assert.match(placeLine, /direction:\s*ltr/);
+  assert.doesNotMatch(placeBlock, /direction:\s*rtl/);
+  assert.doesNotMatch(placeLine, /direction:\s*rtl/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /board-place-cell/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   const { criteriaFromSearchParams } = await import("../lib/search");

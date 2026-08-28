@@ -132,8 +132,8 @@ async function BoardLiveSection({
                   <th>Pickup</th>
                   <th>Delivery</th>
                   <th>Unit</th>
-                  <th>Tractor</th>
-                  <th>Trailer</th>
+                  <th className="board-place-cell">Tractor</th>
+                  <th className="board-place-cell">Trailer</th>
                   <th>HOS</th>
                   <th>Reefer</th>
                   <th>Rate</th>

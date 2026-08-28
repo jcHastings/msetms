@@ -159,17 +159,34 @@ button {
   line-height: 1.2;
 }
 
+/* Clip city labels at the END only. Never slice the start
+   (Holcomb must not read as LCOMB; Hastings must not read as STINGS).
+   overflow on <td> is ignored under auto table-layout, so clip the inner block
+   to the cell content box — a max-width equal to the td still spills through
+   horizontal padding and covers the next cell's first letters. */
 .table-grid-board .board-place-cell {
+  width: 9.5rem;
+  min-width: 9.5rem;
   max-width: 9.5rem;
   overflow: hidden;
 }
 
-.board-place,
+.board-place {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 8.5rem;
+  overflow: hidden;
+}
+
 .board-place-line {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .table-grid-board .board-edit-head,
