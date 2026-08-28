@@ -26,7 +26,7 @@ function parsedStopFromForm(formData: FormData, prefix: "pickup" | "delivery"): 
     zip: String(formData.get(`${prefix}_stop_zip`) ?? "").trim(),
     phone: String(formData.get(`${prefix}_stop_phone`) ?? "").trim(),
   };
-  return parsedStopHasDetails(stop) || stop.city ? stop : null;
+  return stop.name || stop.street || stop.city ? stop : null;
 }
 
 function extraStopsFromForm(formData: FormData): ParsedExtraStop[] {
@@ -102,7 +102,7 @@ function stopInputFromParts(
       schedule_type: existing?.schedule_type,
     };
   }
-  if (!parsed || (!parsedStopHasDetails(parsed) && !parsed.city.trim())) return null;
+  if (!parsed || !(parsed.name.trim() || parsed.street.trim() || parsed.city.trim())) return null;
   const split = splitLaneCityState(lane);
   return {
     kind,
