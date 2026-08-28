@@ -4749,7 +4749,6 @@ Continuous reefer. Two load locks.
     googleCalls += 1;
     throw new Error("Google should not be called without a key");
   };
-  const { getDb } = await import("../lib/db");
   getDb()
     .prepare("UPDATE loads SET route_miles = 880.7, route_source = '' WHERE id = ?")
     .run(routeLoadId);
