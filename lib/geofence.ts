@@ -1,16 +1,26 @@
 import { getDb } from "./db";
 import { stopAddressLine } from "./load-map-shared";
+import { matchLocationForStop } from "./locations";
 import { geocodeAddress } from "./places";
-import { getLocation, getLoad, getTruck } from "./queries";
+import {
+  getLocation,
+  getLoad,
+  getTruck,
+  listLocations,
+  listTruckGpsReadings,
+  saveLocationCoords,
+} from "./queries";
 
 export const GEOFENCE_MILES = 2;
 
 export type GpsPoint = { latitude: number; longitude: number };
+export type GpsPing = GpsPoint & { recordedAt: string };
 
 type StopFenceRow = {
   id: number;
   location_id: number | null;
   arrived_at: string;
+  departed_at: string;
   name: string;
   street: string;
   city: string;
@@ -33,12 +43,17 @@ function storedGps(row: {
   gps_latitude?: number | null;
   gps_longitude?: number | null;
   gps_source?: string;
-} | null): GpsPoint | null {
+  gps_recorded_at?: string;
+} | null): GpsPing | null {
   if (!row) return null;
   if (row.gps_source && row.gps_source !== "samsara") return null;
   if (row.gps_latitude == null || row.gps_longitude == null) return null;
   if (!Number.isFinite(row.gps_latitude) || !Number.isFinite(row.gps_longitude)) return null;
-  return { latitude: row.gps_latitude, longitude: row.gps_longitude };
+  return {
+    latitude: row.gps_latitude,
+    longitude: row.gps_longitude,
+    recordedAt: String(row.gps_recorded_at ?? "").trim(),
+  };
 }
 
 export function gpsForLoad(loadId: number): GpsPoint | null {
@@ -47,10 +62,36 @@ export function gpsForLoad(loadId: number): GpsPoint | null {
   return storedGps(getTruck(load.truck_id));
 }
 
+export function gpsPingsForLoad(loadId: number): GpsPing[] {
+  const load = getLoad(loadId);
+  if (!load?.truck_id) return [];
+  const truck = getTruck(load.truck_id);
+  const pings: GpsPing[] = listTruckGpsReadings(load.truck_id)
+    .filter((row) => row.source === "samsara")
+    .map((row) => ({
+      latitude: row.latitude,
+      longitude: row.longitude,
+      recordedAt: row.recorded_at,
+    }));
+  const current = storedGps(truck);
+  if (current) {
+    const already = pings.some(
+      (ping) =>
+        ping.recordedAt === current.recordedAt &&
+        ping.latitude === current.latitude &&
+        ping.longitude === current.longitude,
+    );
+    if (!already) pings.push(current);
+  }
+  return pings
+    .filter((ping) => Number.isFinite(ping.latitude) && Number.isFinite(ping.longitude))
+    .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+}
+
 function listFenceStops(loadId: number): StopFenceRow[] {
   return getDb()
     .prepare(
-      `SELECT id, location_id, arrived_at, name, street, city, state, zip
+      `SELECT id, location_id, arrived_at, departed_at, name, street, city, state, zip
        FROM load_stops WHERE load_id = ? ORDER BY sequence, id`,
     )
     .all(loadId) as StopFenceRow[];
@@ -59,11 +100,33 @@ function listFenceStops(loadId: number): StopFenceRow[] {
 function coordsForStop(stop: StopFenceRow, extra?: Map<number, GpsPoint>): GpsPoint | null {
   const extraPoint = extra?.get(stop.id);
   if (extraPoint) return extraPoint;
-  if (!stop.location_id) return null;
-  const location = getLocation(stop.location_id);
-  if (location?.latitude == null || location.longitude == null) return null;
-  if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) return null;
-  return { latitude: location.latitude, longitude: location.longitude };
+  if (stop.location_id) {
+    const location = getLocation(stop.location_id);
+    if (location?.latitude != null && location.longitude != null) {
+      if (Number.isFinite(location.latitude) && Number.isFinite(location.longitude)) {
+        return { latitude: location.latitude, longitude: location.longitude };
+      }
+    }
+  }
+  const matched = matchLocationForStop(listLocations(), {
+    name: stop.name,
+    street: stop.street,
+    city: stop.city,
+    state: stop.state,
+  });
+  if (matched?.latitude != null && matched.longitude != null) {
+    if (Number.isFinite(matched.latitude) && Number.isFinite(matched.longitude)) {
+      return { latitude: matched.latitude, longitude: matched.longitude };
+    }
+  }
+  return null;
+}
+
+function stampIfEmpty(stopId: number, field: "arrived_at" | "departed_at", iso: string): boolean {
+  const result = getDb()
+    .prepare(`UPDATE load_stops SET ${field} = ? WHERE id = ? AND ${field} = ''`)
+    .run(iso, stopId);
+  return result.changes > 0;
 }
 
 export function applyGeofenceArrivals(
@@ -71,29 +134,46 @@ export function applyGeofenceArrivals(
   now = new Date(),
   extraCoords?: Map<number, GpsPoint>,
 ): number {
-  const gps = gpsForLoad(loadId);
-  if (!gps) return 0;
+  const pings = gpsPingsForLoad(loadId);
+  if (!pings.length) return 0;
   const stops = listFenceStops(loadId);
   let stamped = 0;
-  const stamp = now.toISOString();
+  const fallback = now.toISOString();
   for (const stop of stops) {
-    if (String(stop.arrived_at ?? "").trim()) continue;
     const dest = coordsForStop(stop, extraCoords);
     if (!dest) continue;
-    if (milesBetween(gps, dest) > GEOFENCE_MILES) continue;
-    getDb().prepare("UPDATE load_stops SET arrived_at = ? WHERE id = ? AND arrived_at = ''").run(stamp, stop.id);
-    stamped += 1;
+    let arrived = String(stop.arrived_at ?? "").trim();
+    let departed = String(stop.departed_at ?? "").trim();
+    for (const ping of pings) {
+      const at = ping.recordedAt || fallback;
+      const inside = milesBetween(ping, dest) <= GEOFENCE_MILES;
+      if (!arrived && inside) {
+        if (stampIfEmpty(stop.id, "arrived_at", at)) stamped += 1;
+        arrived = at;
+      }
+      if (arrived && !departed && !inside && at >= arrived) {
+        if (stampIfEmpty(stop.id, "departed_at", at)) stamped += 1;
+        departed = at;
+      }
+    }
   }
   return stamped;
 }
 
 export async function applyGeofenceArrivalsWithGeocode(loadId: number, now = new Date()): Promise<number> {
+  try {
+    const { refreshTruckGpsHistoryForLoad } = await import("./integrations/samsara");
+    await refreshTruckGpsHistoryForLoad(loadId);
+  } catch {
+    // Missing key / no vehicle / Samsara down: use stored pings only.
+  }
   const extra = new Map<number, GpsPoint>();
   for (const stop of listFenceStops(loadId)) {
-    if (String(stop.arrived_at ?? "").trim()) continue;
     if (coordsForStop(stop)) continue;
     const geo = await geocodeAddress(stopAddressLine(stop) || String(stop.name ?? ""));
-    if (geo) extra.set(stop.id, geo);
+    if (!geo) continue;
+    extra.set(stop.id, geo);
+    if (stop.location_id) saveLocationCoords(stop.location_id, geo.latitude, geo.longitude);
   }
   return applyGeofenceArrivals(loadId, now, extra);
 }

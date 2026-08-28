@@ -14,7 +14,17 @@ import {
   unionActiveSamsaraVehicles,
   type SamsaraVehicleInput,
 } from "../fleet-import-shared";
-import { listDrivers, listLoads, listTrucks, persistedTruckLocation, saveTruckGps, saveTruckOdometer } from "../queries";
+import {
+  getLoad,
+  getTruck,
+  listDrivers,
+  listLoads,
+  listTrucks,
+  persistedTruckLocation,
+  recordTruckGpsReading,
+  saveTruckGps,
+  saveTruckOdometer,
+} from "../queries";
 
 export { SAMSARA_ID_MISSING_MESSAGE };
 
@@ -776,6 +786,93 @@ function truckDriverRow(
     samsaraDriverName: samsaraDriverName || tms?.name || "",
     tmsDriverId: tms?.id ?? null,
   };
+}
+
+const gpsHistoryFetchedAt = new Map<number, number>();
+
+function parseHistoryGpsPoints(vehicle: Record<string, unknown>): Array<{
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+  address: string;
+}> {
+  const raw = vehicle.gps ?? vehicle.locations ?? [];
+  const rows = Array.isArray(raw) ? raw : [raw];
+  const points: Array<{ latitude: number; longitude: number; recordedAt: string; address: string }> = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as Record<string, unknown>;
+    const gps = extractSamsaraGps({ gps: rec });
+    if (gps.latitude == null || gps.longitude == null) continue;
+    points.push({
+      latitude: gps.latitude,
+      longitude: gps.longitude,
+      recordedAt: gps.recordedAt || "",
+      address: gps.address,
+    });
+  }
+  return points;
+}
+
+export async function refreshTruckGpsHistoryForLoad(loadId: number): Promise<void> {
+  await loadRuntimeEnv();
+  if (!isSamsaraTokenSet()) return;
+  const load = getLoad(loadId);
+  if (!load?.truck_id) return;
+  const truck = getTruck(load.truck_id);
+  const vehicleId = String(truck?.samsara_vehicle_id ?? "").trim();
+  if (!vehicleId) return;
+  const last = gpsHistoryFetchedAt.get(load.truck_id) ?? 0;
+  if (Date.now() - last < 60_000) return;
+  const start = load.pickup_start || new Date(Date.now() - 3 * 86400000).toISOString();
+  const end = new Date().toISOString();
+  try {
+    const points = await fetchVehicleGpsHistory(vehicleId, start, end);
+    gpsHistoryFetchedAt.set(load.truck_id, Date.now());
+    for (const point of points) {
+      if (!point.recordedAt) continue;
+      recordTruckGpsReading(load.truck_id, {
+        latitude: point.latitude,
+        longitude: point.longitude,
+        address: point.address,
+        recordedAt: point.recordedAt,
+        source: "samsara",
+      });
+    }
+  } catch {
+    // Fail soft: list keeps blank Arrived/Departed.
+  }
+}
+
+async function fetchVehicleGpsHistory(
+  vehicleId: string,
+  startTime: string,
+  endTime: string,
+): Promise<Array<{ latitude: number; longitude: number; recordedAt: string; address: string }>> {
+  const token = getSamsaraApiToken();
+  if (!token) return [];
+  const url = new URL("/fleet/vehicles/stats/history", SAMSARA_BASE);
+  url.searchParams.set("vehicleIds", vehicleId);
+  url.searchParams.set("types", "gps");
+  url.searchParams.set("startTime", startTime);
+  url.searchParams.set("endTime", endTime);
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) return [];
+  const body = (await response.json()) as { data?: unknown };
+  const rows = Array.isArray(body.data) ? body.data : body.data ? [body.data] : [];
+  const points: Array<{ latitude: number; longitude: number; recordedAt: string; address: string }> = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    points.push(...parseHistoryGpsPoints(row as Record<string, unknown>));
+  }
+  return points.slice(0, 400);
 }
 
 async function fetchVehicleStats(): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {

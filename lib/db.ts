@@ -747,6 +747,19 @@ export function migrate(db: Database): void {
       ON truck_odometer_readings(truck_id, recorded_at);
   `);
   db.exec(`
+    CREATE TABLE IF NOT EXISTS truck_gps_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      truck_id INTEGER NOT NULL REFERENCES trucks(id) ON DELETE CASCADE,
+      recorded_at TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      address TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'samsara'
+    );
+    CREATE INDEX IF NOT EXISTS idx_truck_gps_truck_time
+      ON truck_gps_readings(truck_id, recorded_at);
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS sent_mail (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       load_id INTEGER NOT NULL,

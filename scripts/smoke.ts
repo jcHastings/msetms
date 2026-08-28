@@ -453,6 +453,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /applyGeofenceArrivals\(loadId\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /departed_at/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /applyGeofenceArrivalsWithGeocode/);
   const mapLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8");
   assert.match(mapLibSource, /persistedTruckLocation/);
   assert.match(mapLibSource, /geocodeAddress/);
@@ -9325,7 +9327,7 @@ Continuous reefer. Two load locks.
   queries.assignLoad(followLoad, truckId, otherDriverId);
   assert.equal(queries.getLoad(followLoad)?.trailer_id, trailerForLast);
 
-  const { milesBetween, applyGeofenceArrivals, GEOFENCE_MILES } = await import("../lib/geofence");
+  const { milesBetween, applyGeofenceArrivals, applyGeofenceArrivalsWithGeocode, GEOFENCE_MILES } = await import("../lib/geofence");
   assert.equal(GEOFENCE_MILES, 2);
   assert.ok(milesBetween({ latitude: 41.2565, longitude: -95.9345 }, { latitude: 41.2565, longitude: -95.9345 }) < 0.01);
   assert.equal(applyGeofenceArrivals(followLoad), 0);
@@ -9406,6 +9408,7 @@ Continuous reefer. Two load locks.
   assert.ok(milesBetween({ latitude: 40.586, longitude: -98.39 }, { latitude: 40.63, longitude: -98.39 }) > 2);
   const stampedFence = loadStops.getStop(fenceStopId);
   assert.ok(stampedFence?.arrived_at, "Samsara GPS inside 2 miles should stamp Arrived");
+  assert.equal(stampedFence.departed_at, "");
   const keptArrival = stampedFence.arrived_at;
   queries.saveTruckGps(fenceTruckId, {
     latitude: 40.587,
@@ -9415,6 +9418,26 @@ Continuous reefer. Two load locks.
     source: "samsara",
   });
   assert.equal(loadStops.getStop(fenceStopId)?.arrived_at, keptArrival);
+  assert.equal(loadStops.getStop(fenceStopId)?.departed_at, "");
+  queries.saveTruckGps(fenceTruckId, {
+    latitude: 40.63,
+    longitude: -98.39,
+    address: "Away, NE",
+    recordedAt: new Date(Date.now() + 60_000).toISOString(),
+    source: "samsara",
+  });
+  const afterLeave = loadStops.getStop(fenceStopId);
+  assert.equal(afterLeave?.arrived_at, keptArrival);
+  assert.ok(afterLeave?.departed_at, "Samsara GPS outside 2 miles after arrival should stamp Departed");
+  const keptDeparted = afterLeave.departed_at;
+  queries.saveTruckGps(fenceTruckId, {
+    latitude: 40.64,
+    longitude: -98.39,
+    address: "Farther, NE",
+    recordedAt: new Date(Date.now() + 120_000).toISOString(),
+    source: "samsara",
+  });
+  assert.equal(loadStops.getStop(fenceStopId)?.departed_at, keptDeparted);
   const farLoadId = queries.createLoad({
     customer_id: customerId,
     origin: "Hastings, NE",
@@ -9467,6 +9490,76 @@ Continuous reefer. Two load locks.
     source: "samsara",
   });
   assert.equal(loadStops.getStop(farStopId)?.arrived_at, "");
+  assert.equal(loadStops.getStop(farStopId)?.departed_at, "");
+  const histTruckId = queries.createTruck({
+    unit_number: "FENCE-HIST",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const histDriverId = queries.createDriver({
+    name: "Fence Hist Smoke",
+    phone: "555-0290",
+    license: "NE-CDL-FENCE-H",
+    pin: "2902",
+    truck_id: histTruckId,
+    status: "available",
+  });
+  const histLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    pickup_start: "2026-08-25T12:00:00.000Z",
+    pickup_end: "2026-08-25T18:00:00.000Z",
+    delivery_start: "2026-08-26T20:00:00.000Z",
+    delivery_end: "2026-08-26T22:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  const histStopId = loadStops.addStop(histLoadId, {
+    kind: "pickup",
+    name: "Nebraska Cold Storage Inc",
+    city: "Hastings",
+    state: "NE",
+    location_id: fenceDock,
+  });
+  queries.assignLoad(histLoadId, histTruckId, histDriverId);
+  queries.recordTruckGpsReading(histTruckId, {
+    latitude: 40.586,
+    longitude: -98.39,
+    address: "Hastings, NE",
+    recordedAt: "2026-08-25T13:00:00.000Z",
+    source: "samsara",
+  });
+  queries.recordTruckGpsReading(histTruckId, {
+    latitude: 40.63,
+    longitude: -98.39,
+    address: "Away, NE",
+    recordedAt: "2026-08-25T16:00:00.000Z",
+    source: "samsara",
+  });
+  applyGeofenceArrivals(histLoadId);
+  const histStop = loadStops.getStop(histStopId);
+  assert.equal(histStop?.arrived_at, "2026-08-25T13:00:00.000Z");
+  assert.equal(histStop?.departed_at, "2026-08-25T16:00:00.000Z");
+  getDb()
+    .prepare("UPDATE load_stops SET arrived_at = ?, departed_at = ? WHERE id = ?")
+    .run("2026-08-20T12:00:00.000Z", "2026-08-20T14:00:00.000Z", histStopId);
+  applyGeofenceArrivals(histLoadId);
+  assert.equal(loadStops.getStop(histStopId)?.arrived_at, "2026-08-20T12:00:00.000Z");
+  assert.equal(loadStops.getStop(histStopId)?.departed_at, "2026-08-20T14:00:00.000Z");
+  await applyGeofenceArrivalsWithGeocode(histLoadId);
   const { buildStopsMapModel } = await import("../lib/load-map");
   const fenceMap = await buildStopsMapModel(fenceLoadId);
   assert.ok(fenceMap.points.some((point) => point.kind === "delivery"));

@@ -49,6 +49,7 @@ import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listT
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
+import { applyGeofenceArrivalsWithGeocode } from "@/lib/geofence";
 import { ensureDefaultStops } from "@/lib/stops";
 import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
 
@@ -88,6 +89,7 @@ export async function LoadEditor({
   const relays = listRelays(load.id);
   const tractorLocation = await getLocationForLoad(load.id);
   const driverHos = await getHosForLoad(load.id);
+  await applyGeofenceArrivalsWithGeocode(load.id);
   const stops = ensureDefaultStops(load.id);
   const payItems = listPayItems(load.id);
   const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;

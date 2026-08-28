@@ -702,8 +702,78 @@ export function saveTruckGps(
        WHERE id = ?`,
     )
     .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
+  recordTruckGpsReading(id, {
+    latitude: input.latitude,
+    longitude: input.longitude,
+    address: input.address,
+    recordedAt: input.recordedAt,
+    source: input.source,
+  });
   const { applyGeofenceArrivalsForTruck } = require("./geofence") as typeof import("./geofence");
   applyGeofenceArrivalsForTruck(id);
+}
+
+export function recordTruckGpsReading(
+  truckId: number,
+  input: {
+    latitude: number | null;
+    longitude: number | null;
+    address?: string;
+    recordedAt: string;
+    source: "samsara";
+  },
+): void {
+  if (input.source !== "samsara") return;
+  if (input.latitude == null || input.longitude == null) return;
+  if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) return;
+  const recordedAt = String(input.recordedAt ?? "").trim();
+  if (!recordedAt) return;
+  const existing = getDb()
+    .prepare(
+      `SELECT id FROM truck_gps_readings
+       WHERE truck_id = ? AND recorded_at = ? AND latitude = ? AND longitude = ?`,
+    )
+    .get(truckId, recordedAt, input.latitude, input.longitude) as { id: number } | undefined;
+  if (existing) return;
+  getDb()
+    .prepare(
+      `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+       VALUES (?, ?, ?, ?, ?, 'samsara')`,
+    )
+    .run(truckId, recordedAt, input.latitude, input.longitude, String(input.address ?? "").trim());
+}
+
+export function listTruckGpsReadings(truckId: number): Array<{
+  recorded_at: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  source: string;
+}> {
+  return getDb()
+    .prepare(
+      `SELECT recorded_at, latitude, longitude, address, source
+       FROM truck_gps_readings
+       WHERE truck_id = ? AND source = 'samsara' AND latitude IS NOT NULL AND longitude IS NOT NULL
+       ORDER BY recorded_at ASC, id ASC`,
+    )
+    .all(truckId) as Array<{
+    recorded_at: string;
+    latitude: number;
+    longitude: number;
+    address: string;
+    source: string;
+  }>;
+}
+
+export function saveLocationCoords(id: number, latitude: number, longitude: number): void {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  getDb()
+    .prepare(
+      `UPDATE locations SET latitude = ?, longitude = ?, updated_at = ?
+       WHERE id = ? AND (latitude IS NULL OR longitude IS NULL)`,
+    )
+    .run(latitude, longitude, now(), id);
 }
 
 export type TruckOdometerReading = {
