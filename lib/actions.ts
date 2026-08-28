@@ -13,6 +13,7 @@ import {
   createDriver,
   createLoad,
   createLocation,
+  findDuplicateLocation,
   getLoad,
   getLocation,
   createSavedReport,
@@ -1054,6 +1055,7 @@ function parseLocationInput(formData: FormData) {
     call_before: String(formData.get("call_before") ?? "") === "1" ? 1 : 0,
     latitude: parseOptionalFloat(formData.get("latitude")),
     longitude: parseOptionalFloat(formData.get("longitude")),
+    google_place_id: String(formData.get("google_place_id") ?? "").trim(),
   };
 }
 
@@ -1087,7 +1089,19 @@ export async function createLocationAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
-    const id = createLocation(parseLocationInput(formData));
+    const input = parseLocationInput(formData);
+    if (String(formData.get("confirm_duplicate") ?? "") !== "1") {
+      const existing = findDuplicateLocation(input);
+      if (existing) {
+        return {
+          ok: false,
+          error: "Location already exists.",
+          duplicate: true,
+          existingId: existing.id,
+        };
+      }
+    }
+    const id = createLocation(input);
     refresh();
     redirect(`/locations/${id}`);
   } catch (error) {

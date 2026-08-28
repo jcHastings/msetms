@@ -1130,6 +1130,7 @@ async function main() {
       },
     ],
     {
+      placeId: "place-lineage",
       name: "Lineage Logistics - Avenel",
       street: "275 Blair rd",
       city: "Avenel",
@@ -1143,6 +1144,7 @@ async function main() {
   assert.equal(matchedId, 9);
   assert.equal(
     matchLocationForPlace([], {
+      placeId: "",
       name: "",
       street: "",
       city: "",
@@ -5124,6 +5126,88 @@ Continuous reefer. Two load locks.
     scheduling_notes: "FCFS after hours.",
   });
   assert.equal(queries.getLocation(oneOffShipper)?.scheduling_type, "fcfs");
+
+  const spacedDup = queries.findDuplicateLocation({
+    name: "  Smoke One-Off Yard ",
+    street: "200   Test Rd",
+    city: "Jackson",
+    state: "ms",
+  });
+  assert.equal(spacedDup?.id, oneOffShipper, "extra spaces and state casing still match");
+  assert.equal(
+    queries.findDuplicateLocation({
+      name: "Smoke One-Off Yard",
+      street: "999 Other Rd",
+      city: "Jackson",
+      state: "MS",
+    }),
+    null,
+    "a different street is a new location",
+  );
+  assert.equal(
+    queries.findDuplicateLocation({
+      name: "Smoke One-Off Yard",
+      street: "200 Test Rd",
+      city: "Gulfport",
+      state: "MS",
+    }),
+    null,
+    "a different city is a new location",
+  );
+  const placeDupId = queries.createLocation({
+    name: "Places Dock",
+    street: "1 Dock Rd",
+    city: "Omaha",
+    state: "NE",
+    zip: "68102",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    google_place_id: "place-omaha-dock",
+  });
+  assert.equal(
+    queries.findDuplicateLocation({
+      name: "Different Label",
+      street: "9 Other St",
+      city: "Lincoln",
+      state: "NE",
+      google_place_id: "place-omaha-dock",
+    })?.id,
+    placeDupId,
+  );
+  const copyId = queries.createLocation({
+    name: "Smoke One-Off Yard",
+    street: "200 Test Rd",
+    city: "Jackson",
+    state: "MS",
+    zip: "39201",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "",
+    scheduling_notes: "",
+  });
+  assert.notEqual(copyId, oneOffShipper, "a confirmed second copy is allowed");
+  const dupForm = new FormData();
+  dupForm.set("name", "Smoke One-Off Yard");
+  dupForm.set("street", "200 Test Rd");
+  dupForm.set("city", "Jackson");
+  dupForm.set("state", "MS");
+  const dupWarn = await (await import("../lib/actions")).createLocationAction(null, dupForm);
+  assert.equal(dupWarn.ok, false);
+  if (!dupWarn.ok) {
+    assert.match(dupWarn.error, /already exists/i);
+    assert.equal(dupWarn.duplicate, true);
+    assert.ok(dupWarn.existingId);
+  }
+  const locationFormDup = fs.readFileSync(path.join(process.cwd(), "components/location-form.tsx"), "utf8");
+  assert.match(locationFormDup, /Location already exists/);
+  assert.match(locationFormDup, /confirm_duplicate/);
+  assert.match(locationFormDup, /Create anyway/);
 
   const locationsPage = fs.readFileSync(path.join(process.cwd(), "app/locations/page.tsx"), "utf8");
   assert.match(locationsPage, /LocationCsvImport/);

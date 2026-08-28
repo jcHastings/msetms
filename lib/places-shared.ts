@@ -4,6 +4,7 @@ export type PlaceSuggestion = {
 };
 
 export type PlaceDetails = {
+  placeId: string;
   name: string;
   street: string;
   city: string;

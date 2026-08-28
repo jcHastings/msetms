@@ -177,6 +177,7 @@ export type Location = {
   call_before: number;
   latitude: number | null;
   longitude: number | null;
+  google_place_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -607,7 +608,7 @@ export type DashboardStats = {
 
 export type ActionResult =
   | { ok: true; id?: number; message?: string; needsTotp?: boolean; recoveryCodes?: string[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; duplicate?: boolean; existingId?: number };
 
 export function labelForLoadStatus(status: string): string {
   switch (status) {

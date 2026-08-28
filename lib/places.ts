@@ -60,6 +60,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
   const streetNumber = pick("street_number");
   const route = components.find((item) => item.types.includes("route"))?.long_name ?? "";
   return {
+    placeId,
     name: payload.result.name ?? "",
     street: [streetNumber, route].filter(Boolean).join(" "),
     city: pick("locality") || pick("sublocality") || pick("administrative_area_level_3"),

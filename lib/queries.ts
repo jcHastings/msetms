@@ -54,7 +54,7 @@ import {
   normalizeDriverKind,
 } from "./types";
 import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
-import { extractStateCode } from "./locations";
+import { extractStateCode, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
 import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
@@ -120,6 +120,29 @@ export function getLocation(id: number): Location | null {
   return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
 }
 
+export function findDuplicateLocation(input: {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  google_place_id?: string;
+}): Location | null {
+  const placeId = String(input.google_place_id ?? "").trim();
+  if (placeId) {
+    const byPlace = getDb()
+      .prepare("SELECT * FROM locations WHERE google_place_id = ? AND google_place_id != '' LIMIT 1")
+      .get(placeId) as Location | undefined;
+    if (byPlace) return byPlace;
+  }
+  const key = locationPlaceKey(input.name, input.street, input.city, input.state);
+  if (!key.replace(/\|/g, "").trim()) return null;
+  return (
+    listLocations().find(
+      (location) => locationPlaceKey(location.name, location.street, location.city, location.state) === key,
+    ) ?? null
+  );
+}
+
 export function findLocationByNameAddress(
   name: string,
   street: string,
@@ -182,8 +205,8 @@ export function createLocation(input: LocationInput): number {
     .prepare(
       `INSERT INTO locations (
         name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes,
-        call_before, latitude, longitude, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        call_before, latitude, longitude, google_place_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -200,6 +223,7 @@ export function createLocation(input: LocationInput): number {
       input.call_before ? 1 : 0,
       input.latitude ?? null,
       input.longitude ?? null,
+      input.google_place_id ?? "",
       timestamp,
       timestamp,
     );
@@ -213,7 +237,7 @@ export function updateLocation(id: number, input: LocationInput): void {
       `UPDATE locations
        SET name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?, notes = ?,
            role = ?, scheduling_type = ?, hours = ?, scheduling_notes = ?,
-           call_before = ?, latitude = ?, longitude = ?, updated_at = ?
+           call_before = ?, latitude = ?, longitude = ?, google_place_id = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -231,6 +255,7 @@ export function updateLocation(id: number, input: LocationInput): void {
       input.call_before ? 1 : 0,
       input.latitude ?? null,
       input.longitude ?? null,
+      input.google_place_id ?? "",
       now(),
       id,
     );

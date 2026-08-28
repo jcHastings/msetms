@@ -25,7 +25,21 @@ export type LocationInput = {
   call_before?: number;
   latitude?: number | null;
   longitude?: number | null;
+  google_place_id?: string;
 };
+
+export function normalizeLocationPart(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function locationPlaceKey(
+  name: string,
+  street: string,
+  city: string,
+  state: string,
+): string {
+  return [name, street, city, state].map(normalizeLocationPart).join("|");
+}
 
 export function formatLocationCityState(location: Pick<Location, "city" | "state" | "name">): string {
   const cityState = [location.city.trim(), location.state.trim()].filter(Boolean).join(", ");

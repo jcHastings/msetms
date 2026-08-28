@@ -27,15 +27,34 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
   const [zip, setZip] = useState(location?.zip ?? "");
   const [latitude, setLatitude] = useState(location?.latitude != null ? String(location.latitude) : "");
   const [longitude, setLongitude] = useState(location?.longitude != null ? String(location.longitude) : "");
+  const [placeId, setPlaceId] = useState(location?.google_place_id ?? "");
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
-      <FormBanner result={state} />
+      {state && !state.ok && state.duplicate ? (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="font-medium">Location already exists.</p>
+          <p className="mt-1">Create a second copy, or keep the one already on file.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn btn-secondary" type="submit" name="confirm_duplicate" value="1">
+              Create anyway
+            </button>
+            {state.existingId ? (
+              <a className="btn btn-ghost" href={`/locations/${state.existingId}`}>
+                Keep existing
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <FormBanner result={state} />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <PlaceSearch
           enabled={placesEnabled}
           placeholder="Search a shipper or receiver address"
           onPick={(place) => {
+            if (place.placeId) setPlaceId(place.placeId);
             if (place.name) setName(place.name);
             if (place.street) setStreet(place.street);
             if (place.city) setCity(place.city);
@@ -74,6 +93,7 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
         </div>
         <input type="hidden" name="latitude" value={latitude} />
         <input type="hidden" name="longitude" value={longitude} />
+        <input type="hidden" name="google_place_id" value={placeId} />
         <div className="field">
           <label htmlFor="phone">Phone</label>
           <input id="phone" name="phone" defaultValue={location?.phone} />
