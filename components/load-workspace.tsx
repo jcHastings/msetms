@@ -18,7 +18,8 @@ import {
 } from "@/lib/dispatcher-actions";
 import { LoadMailMenuItems } from "@/components/load-mail-panel";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
-import { updateLoadStatusAction } from "@/lib/actions";
+import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
+import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
 import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
 import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, tabNeedsServerPaint, type LoadTab } from "@/lib/load-tabs";
@@ -100,11 +101,33 @@ export function LoadWorkspace({
     setPending(state.pending);
   }, []);
 
+  const flushEverydayFields = useCallback(async () => {
+    if (!loadId) return true;
+    const form = document.getElementById(formId);
+    if (!(form instanceof HTMLFormElement)) return true;
+    const fields = everydayFieldsFromForm(form);
+    if (!Object.keys(fields).length) return true;
+    const formData = new FormData();
+    formData.set("stay_on_load", "1");
+    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+    const result = await updateLoadAction(loadId, null, formData);
+    if (result && !result.ok) {
+      window.alert(result.error);
+      return false;
+    }
+    return true;
+  }, [formId, loadId]);
+
   const setTab = useCallback(
     (next: LoadTab, hash?: string) => {
-      if (dirty && tab !== next && isFormTab(tab)) {
-        if (!window.confirm("You have unsaved changes on this screen. Switch anyway?")) return;
-        setDirty(false);
+      void (async () => {
+      if (tab !== next) {
+        const saved = await flushEverydayFields();
+        if (!saved) return;
+        if (dirty && isFormTab(tab)) {
+          if (!window.confirm("You have unsaved changes on this screen. Switch anyway?")) return;
+          setDirty(false);
+        }
       }
       setTabState(next);
       const url = new URL(window.location.href);
@@ -119,8 +142,9 @@ export function LoadWorkspace({
       if (hash) {
         window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
       }
+      })();
     },
-    [dirty, tab, router],
+    [dirty, flushEverydayFields, tab, router],
   );
 
   useEffect(() => {
@@ -142,6 +166,9 @@ export function LoadWorkspace({
   }, [dirty]);
 
   function confirmLeave(href: string) {
+    void (async () => {
+    const saved = await flushEverydayFields();
+    if (!saved) return;
     if (dirty && !window.confirm("You have unsaved load changes. Leave this page anyway?")) return;
     const embed = new URLSearchParams(window.location.search).get("embed") === "1";
     if (embed && window.parent !== window) {
@@ -153,6 +180,7 @@ export function LoadWorkspace({
       return;
     }
     router.push(href);
+    })();
   }
 
   useEffect(() => {
@@ -571,12 +599,16 @@ export function LoadWorkspace({
 
       <div
         onInput={(event) => {
-          if ((event.target as HTMLElement | null)?.closest?.("[data-ignore-dirty]")) return;
+          const target = event.target as HTMLElement | null;
+          if (target?.closest?.("[data-ignore-dirty]")) return;
+          if (target?.closest?.("[data-autosave]")) return;
           setDirty(true);
         }}
         onChange={(event) => {
-          if ((event.target as HTMLElement | null)?.closest?.("[data-ignore-dirty]")) return;
-          if ((event.target as HTMLElement | null)?.closest?.("[data-first-assign]")) return;
+          const target = event.target as HTMLElement | null;
+          if (target?.closest?.("[data-ignore-dirty]")) return;
+          if (target?.closest?.("[data-autosave]")) return;
+          if (target?.closest?.("[data-first-assign]")) return;
           setDirty(true);
         }}
       >

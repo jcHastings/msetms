@@ -16,7 +16,7 @@ export function LoadCustomerScreen({
   defaults?: LoadFormDefaults;
   card?: boolean;
 }) {
-  const { handleAssign } = useLoadAssignPersist(load?.id);
+  const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
   const [customerId, setCustomerId] = useState(
     load?.customer_id
       ? String(load.customer_id)
@@ -43,7 +43,7 @@ export function LoadCustomerScreen({
       <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <input type="hidden" name="customer_name" value={customerId ? "" : createName} />
       <input type="hidden" id="customer_id" name="customer_id" value={customerId} required={!createName} />
-      <div className="field md:col-span-2" data-customer-picker="">
+      <div className="field md:col-span-2" data-customer-picker="" data-critical-save="">
         <label htmlFor="customer_search">Customer</label>
         <input
           id="customer_search"
@@ -95,6 +95,7 @@ export function LoadCustomerScreen({
               setCustomerId("");
               setCreateName("");
               setCustomerQuery("");
+              if (load) handleAssign(load.customer_id, "", "customer_id");
             }}
           >
             Remove customer
@@ -119,19 +120,44 @@ export function LoadCustomerScreen({
       )}
       <div className="field">
         <label htmlFor="contact_name">Contact name</label>
-        <input id="contact_name" name="contact_name" defaultValue={load?.contact_name ?? ""} />
+        <input
+          id="contact_name"
+          name="contact_name"
+          data-autosave=""
+          defaultValue={load?.contact_name ?? ""}
+          onBlur={blurPersist("contact_name", load?.contact_name ?? "")}
+        />
       </div>
       <div className="field">
         <label htmlFor="contact_email">Contact email</label>
-        <input id="contact_email" name="contact_email" type="email" defaultValue={load?.contact_email ?? ""} />
+        <input
+          id="contact_email"
+          name="contact_email"
+          type="email"
+          data-autosave=""
+          defaultValue={load?.contact_email ?? ""}
+          onBlur={blurPersist("contact_email", load?.contact_email ?? "")}
+        />
       </div>
       <div className="field">
         <label htmlFor="contact_phone">Contact phone</label>
-        <input id="contact_phone" name="contact_phone" defaultValue={load?.contact_phone ?? ""} />
+        <input
+          id="contact_phone"
+          name="contact_phone"
+          data-autosave=""
+          defaultValue={load?.contact_phone ?? ""}
+          onBlur={blurPersist("contact_phone", load?.contact_phone ?? "")}
+        />
       </div>
       <div className="field">
         <label htmlFor="contact_ext">Ext</label>
-        <input id="contact_ext" name="contact_ext" defaultValue={load?.contact_ext ?? ""} />
+        <input
+          id="contact_ext"
+          name="contact_ext"
+          data-autosave=""
+          defaultValue={load?.contact_ext ?? ""}
+          onBlur={blurPersist("contact_ext", load?.contact_ext ?? "")}
+        />
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="customer_reference">Customer reference #</label>

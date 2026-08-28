@@ -344,6 +344,9 @@ async function main() {
   assert.match(basicsChunk, /Equipment Type/);
   assert.match(basicsChunk, /useLoadAssignPersist/);
   assert.match(basicsChunk, /handleAssign/);
+  assert.match(basicsChunk, /data-autosave/);
+  assert.match(basicsChunk, /blurPersist/);
+  assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
@@ -357,6 +360,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8"), /applyLocationToStop/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
   assert.match(customerChunk, /data-load-tab="customer"/);
+  assert.match(customerChunk, /data-critical-save/);
+  assert.match(customerChunk, /blurPersist/);
   assert.match(customerChunk, /useLoadAssignPersist/);
   assert.match(customerChunk, /Customer reference/);
   assert.match(customerChunk, /load\?\.po_number/);
@@ -370,8 +375,40 @@ async function main() {
   assert.match(assetsChunk, /name="trailer_id"/);
   assert.match(assetsChunk, /useLoadAssignPersist/);
   assert.match(assetsChunk, /handleAssign/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8"), /stay_on_load/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8"), /isAssignEdit/);
+  const persistHook = fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8");
+  assert.match(persistHook, /stay_on_load/);
+  assert.match(persistHook, /isAssignEdit/);
+  assert.match(persistHook, /isLoadAutosaveField/);
+  assert.match(persistHook, /isLoadCriticalField/);
+  assert.doesNotMatch(persistHook, /clearDirty\(\)/);
+  assert.match(workspaceSource, /flushEverydayFields/);
+  assert.match(workspaceSource, /data-autosave/);
+  const autosaveShared = fs.readFileSync(path.join(process.cwd(), "lib/load-autosave-shared.ts"), "utf8");
+  assert.match(autosaveShared, /commodity/);
+  assert.match(autosaveShared, /temperature_f/);
+  assert.match(autosaveShared, /reefer_mode/);
+  assert.match(autosaveShared, /customer_id/);
+  assert.match(autosaveShared, /declared_value/);
+  const { isLoadAutosaveField, isLoadCriticalField, everydayFieldsFromForm } = await import("../lib/load-autosave-shared");
+  assert.equal(isLoadAutosaveField("commodity"), true);
+  assert.equal(isLoadAutosaveField("weight"), true);
+  assert.equal(isLoadAutosaveField("notes"), true);
+  assert.equal(isLoadAutosaveField("reefer_mode"), true);
+  assert.equal(isLoadAutosaveField("rate"), false);
+  assert.equal(isLoadAutosaveField("customer_id"), false);
+  assert.equal(isLoadAutosaveField("declared_value"), false);
+  assert.equal(isLoadCriticalField("customer_id"), true);
+  assert.equal(isLoadCriticalField("rate"), true);
+  assert.equal(isLoadCriticalField("shipper_location_id"), true);
+  assert.equal(isLoadCriticalField("commodity"), false);
+  assert.deepEqual(
+    everydayFieldsFromForm({
+      elements: {
+        namedItem: (name: string) => (name === "commodity" ? { value: "Berries" } : name === "rate" ? { value: "999" } : null),
+      },
+    } as Pick<HTMLFormElement, "elements">),
+    { commodity: "Berries" },
+  );
   assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
@@ -1567,6 +1604,20 @@ async function main() {
   assert.equal(queries.getLoad(persistLoadId)?.driver_id, jamesId, "first driver pick writes driver_id to sqlite");
   assert.equal(mergedBasics.commodity, "Berries");
   assert.equal(mergedBasics.status, "dispatched");
+  const autoBasics = new FormData();
+  autoBasics.set("commodity", "Lettuce");
+  autoBasics.set("weight", "22000");
+  autoBasics.set("temperature_f", "34");
+  autoBasics.set("notes", "Call the dock");
+  autoBasics.set("reefer_mode", "continuous");
+  const autoMerged = parseLoadInput(autoBasics, true, persistAfter);
+  assert.equal(autoMerged.commodity, "Lettuce");
+  assert.equal(autoMerged.weight, 22000);
+  assert.equal(autoMerged.temperature_f, 34);
+  assert.equal(autoMerged.notes, "Call the dock");
+  assert.equal(autoMerged.rate, persistAfter.rate, "everyday persist must not rewrite billed rate");
+  assert.equal(autoMerged.customer_id, persistAfter.customer_id, "everyday persist must not rewrite customer");
+  assert.equal(autoMerged.origin, persistAfter.origin, "everyday persist must not rewrite shipper lane");
   const customerOnly = new FormData();
   customerOnly.set("customer_id", String(persistAfter.customer_id));
   customerOnly.set("contact_name", "Pat");
