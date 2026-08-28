@@ -329,6 +329,9 @@ async function main() {
   assert.match(loadFormSource, /data-assign-fields/);
   assert.match(loadFormSource, /hidden=\{resolvedScreen !== "assets"/);
   assert.match(loadFormSource, /stay_on_load/);
+  assert.match(loadFormSource, /preventDefault/);
+  assert.match(loadFormSource, /startTransition/);
+  assert.doesNotMatch(loadFormSource, /<form[^>]*action=\{formAction\}/);
   assert.match(loadFormSource, /\/loads\/\$\{load\.id\}/);
   const actionsSource = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
   assert.match(actionsSource, /redirect\(`\/loads\/\$\{id\}`\)/);
@@ -344,6 +347,9 @@ async function main() {
   assert.match(basicsChunk, /Equipment Type/);
   assert.match(basicsChunk, /useLoadAssignPersist/);
   assert.match(basicsChunk, /handleAssign/);
+  assert.match(basicsChunk, /data-load-status/);
+  assert.match(basicsChunk, /data-truck-status/);
+  assert.match(basicsChunk, /truckStatusOptions/);
   assert.match(basicsChunk, /data-autosave/);
   assert.match(basicsChunk, /blurPersist/);
   assert.match(basicsChunk, /data-critical-save/);
@@ -1677,6 +1683,57 @@ async function main() {
   assert.equal(savedUnassigned?.status, "dispatched");
   assert.equal(savedUnassigned?.truck_id, null);
   assert.equal(savedUnassigned?.driver_id, null);
+
+  const { truckStatusOptions } = await import("../lib/load-page-shared");
+  assert.ok(truckStatusOptions("IN TRANSIT").some((item) => item.value === "IN TRANSIT"));
+  assert.equal(
+    truckStatusOptions("IN TRANSIT").some((item) => item.value === "rolling"),
+    false,
+    "do not invent a truck status",
+  );
+  const mse1055Id = queries.createLoad({
+    load_number: "MSE-1055",
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Harlan, IA",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_status: "IN TRANSIT",
+    truck_id: null,
+    driver_id: null,
+  });
+  const mse1055 = queries.getLoad(mse1055Id);
+  assert.ok(mse1055);
+  assert.equal(mse1055.status, "available");
+  assert.equal(mse1055.truck_status, "IN TRANSIT");
+  const statusSave = new FormData();
+  statusSave.set("status", "in_transit");
+  statusSave.set("truck_status", "dispatched");
+  const statusMerged = parseLoadInput(statusSave, true, mse1055);
+  assert.equal(statusMerged.status, "in_transit");
+  assert.equal(statusMerged.truck_status, "dispatched");
+  assert.equal(statusMerged.rate, mse1055.rate, "status save must not invent a rate");
+  queries.updateLoad(mse1055Id, statusMerged);
+  const mse1055Saved = queries.getLoad(mse1055Id);
+  assert.equal(mse1055Saved?.load_number, "MSE-1055");
+  assert.equal(mse1055Saved?.status, "in_transit", "Available → In Transit must persist on Save");
+  assert.equal(mse1055Saved?.truck_status, "dispatched", "IN TRANSIT → Dispatched must persist on Save");
+  const statusAgain = parseLoadInput(new FormData(), true, mse1055Saved);
+  assert.equal(statusAgain.status, "in_transit", "a later save must not revert Load Status");
+  assert.equal(statusAgain.truck_status, "dispatched", "a later save must not revert Truck Status");
 
   const cancelBoardId = queries.createLoad({
     customer_id: customerId,

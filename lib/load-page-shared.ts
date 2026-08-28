@@ -6,6 +6,19 @@ export const LOAD_TRUCK_STATUSES = [
   { value: "empty", label: "Empty" },
 ] as const;
 
+/** Keep a stored truck status visible when it is not in the stock list. Do not invent values. */
+export function truckStatusOptions(current?: string | null): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = LOAD_TRUCK_STATUSES.map((item) => ({
+    value: item.value,
+    label: item.label,
+  }));
+  const extra = String(current ?? "").trim();
+  if (extra && !options.some((item) => item.value === extra)) {
+    options.push({ value: extra, label: extra });
+  }
+  return options;
+}
+
 export const LOAD_SIZES = [
   { value: "", label: "—" },
   { value: "full", label: "Full" },

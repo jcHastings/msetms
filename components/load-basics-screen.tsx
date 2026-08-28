@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  LOAD_SIZES,
-  LOAD_TRUCK_STATUSES,
-} from "@/lib/load-page-shared";
+import { useState } from "react";
+import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -59,6 +57,8 @@ export function LoadBasicsScreen({
   card?: boolean;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
+  const [status, setStatus] = useState(load?.status ?? "available");
+  const [truckStatus, setTruckStatus] = useState(load?.truck_status ?? "");
   const looksReefer = Boolean(
     load?.reefer_mode ||
       defaults.reefer_mode ||
@@ -78,44 +78,48 @@ export function LoadBasicsScreen({
       <div className="field">
         <label htmlFor="status">Load Status</label>
         <div className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="status" value={status} data-load-status="" />
           <select
             id="status"
-            name="status"
-            defaultValue={load?.status ?? "available"}
             className="flex-1"
             data-autosave=""
-            data-first-assign={load?.status ? undefined : ""}
+            data-load-status-select=""
+            value={status}
             onChange={(event) => {
-              if (load) handleAssign(load.status, event.target.value, "status", event);
+              const next = event.target.value;
+              setStatus(next);
+              if (load) handleAssign(status, next, "status", event);
             }}
           >
-            {LOAD_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {labelForLoadStatus(status)}
+            {LOAD_STATUSES.map((item) => (
+              <option key={item} value={item}>
+                {labelForLoadStatus(item)}
               </option>
             ))}
-            {extraStatuses.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
+            {extraStatuses.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
               </option>
             ))}
           </select>
-          {load?.status ? <LoadStatusBadge status={load.status} /> : null}
+          {status ? <LoadStatusBadge status={status} /> : null}
         </div>
       </div>
       <div className="field">
         <label htmlFor="truck_status">Truck Status</label>
+        <input type="hidden" name="truck_status" value={truckStatus} data-truck-status="" />
         <select
           id="truck_status"
-          name="truck_status"
-          defaultValue={load?.truck_status ?? ""}
           data-autosave=""
-          data-first-assign={load?.truck_status ? undefined : ""}
+          data-truck-status-select=""
+          value={truckStatus}
           onChange={(event) => {
-            if (load) handleAssign(load.truck_status, event.target.value, "truck_status", event);
+            const next = event.target.value;
+            setTruckStatus(next);
+            if (load) handleAssign(truckStatus, next, "truck_status", event);
           }}
         >
-          {LOAD_TRUCK_STATUSES.map((item) => (
+          {truckStatusOptions(load?.truck_status ?? truckStatus).map((item) => (
             <option key={item.value || "blank"} value={item.value}>
               {item.label}
             </option>

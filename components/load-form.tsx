@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useState } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
 import { LoadBasicsScreen, type LoadFormDefaults } from "@/components/load-basics-screen";
@@ -88,7 +88,16 @@ export function LoadForm({
   }, [workspace?.clearDirty, state, router]);
 
   return (
-    <form id={formId} action={formAction} className={workspace ? "space-y-6" : "card space-y-6 p-6"}>
+    <form
+      id={formId}
+      className={workspace ? "space-y-6" : "card space-y-6 p-6"}
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => {
+          formAction(new FormData(event.currentTarget));
+        });
+      }}
+    >
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
       <RateConStopFields prefix="pickup" stop={extraDefaults.shipper} />
