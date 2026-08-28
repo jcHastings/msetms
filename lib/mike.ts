@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import {
   closestTrucksToCity,
   extractCityFromQuestion,
+  findCityCenter,
   formatClosestCityReply,
   isClosestCityQuestion,
   rankTrucksToCoords,
@@ -14,6 +15,12 @@ import { getSamsaraFleet, isLiveSamsaraGps, resetSamsaraCache } from "./integrat
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
 import { mikeWorkReply, proposeMikeWork } from "./mike-work";
+import {
+  buildMikeTmsSnapshot,
+  formatMikeTmsStatsReply,
+  parseMikeTmsStatsQuestion,
+  tmsMilesForLoad,
+} from "./mike-tms-stats";
 import { geocodeAddress } from "./places";
 
 export type { MikeMessage };
@@ -182,15 +189,24 @@ export async function resolveClosestCityRanking(
   },
   geocode: (address: string) => Promise<{ latitude: number; longitude: number } | null> = geocodeAddress,
 ): Promise<ClosestCityResult | null> {
-  const { gps, skippedNoPing, closestToCity } = buildMikeGpsContext(question, input);
+  const gps = mikeGpsPointsFromFleet({
+    trucks: input.trucks,
+    locations: input.locations.filter((item) => item.source === "samsara"),
+  });
+  const skippedNoPing = gps.filter((item) => !item.hasPosition).length;
   const skippedNoSamsaraId = gps.filter((point) => !String(point.samsaraVehicleId ?? "").trim()).length;
-  if (closestToCity?.found) return closestToCity;
-  const asked = (closestToCity?.asked || extractCityFromQuestion(question)).trim();
-  if (!asked || (!isClosestCityQuestion(question) && !closestToCity)) {
-    return closestToCity;
+  if (!isClosestCityQuestion(question)) {
+    return closestTrucksToCity(question, gps, input.tmsLocations ?? []);
+  }
+  const asked = extractCityFromQuestion(question).trim();
+  if (!asked) {
+    return { asked: "", found: false, reason: "city_not_found", ranked: [], skippedNoPing, skippedNoSamsaraId };
   }
   const geo = await geocode(asked);
-  if (!geo) {
+  const table = findCityCenter(asked, input.tmsLocations ?? []);
+  const lat = geo?.latitude ?? table?.lat;
+  const lng = geo?.longitude ?? table?.lng;
+  if (lat == null || lng == null) {
     return {
       asked,
       found: false,
@@ -200,13 +216,13 @@ export async function resolveClosestCityRanking(
       skippedNoSamsaraId,
     };
   }
-  const ranked = rankTrucksToCoords(gps, geo.latitude, geo.longitude, input.tmsLocations ?? []);
+  const ranked = rankTrucksToCoords(gps, lat, lng, input.tmsLocations ?? []);
   return {
     asked,
     found: true,
-    city: asked,
-    lat: geo.latitude,
-    lng: geo.longitude,
+    city: table?.label || asked,
+    lat,
+    lng,
     ranked,
     reason: ranked.length === 0 ? "no_gps" : undefined,
     skippedNoPing,
@@ -318,15 +334,21 @@ export function attachMikeFleetTelemetry(input: {
 }
 
 async function buildOpsSnapshot(question = ""): Promise<string> {
-  const loads = listLoads({ status: "active" }).slice(0, 80).map((load) => ({
+  const loads = listLoads({ status: "all" }).slice(0, 200).map((load) => ({
     load: load.load_number,
+    ref: load.customer_reference || load.reference_number || "",
     status: load.status,
+    customer: load.customer_name,
+    billed: load.rate,
+    commodity: load.commodity,
     origin: load.origin,
     destination: load.destination,
     pickup: load.pickup_start,
+    delivery: load.delivery_start,
     driver: load.driver_name || "unassigned",
     truck: load.truck_unit || "unassigned",
     trailer: load.trailer_unit || "unassigned",
+    tmsMiles: tmsMilesForLoad(load),
     emptySoon: load.status === "at_delivery" || load.status === "unloading" || load.status === "delivered",
   }));
   const drivers = listDrivers().map((driver) => ({
@@ -384,10 +406,12 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     goingEmptySoon,
     skippedNoPing,
     closestToCity,
+    tmsStats: buildMikeTmsSnapshot(),
     rules: [
       "Never invent GPS or HOS. Every truck with a Samsara vehicle id has lastGps (lat/lng or city) and hos. Use those. Coords are live or last persisted Samsara pings — never invent them.",
       "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
       "Closest to a city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
+      "TMS totals: use tmsStats. Billed freight is the customer/load rate, not driver pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent totals.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
@@ -416,6 +440,15 @@ export async function askMike(
       tmsLocations,
     });
     const reply = formatClosestCityReply(closest, extractCityFromQuestion(question));
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
+      proposals: work.proposals,
+    };
+  }
+  const tmsQuestion = parseMikeTmsStatsQuestion(question);
+  if (tmsQuestion) {
+    const reply = formatMikeTmsStatsReply(tmsQuestion);
     return {
       configured: isOpenAiConfigured(),
       reply: work.reply ? `${reply}\n\n${work.reply}` : reply,

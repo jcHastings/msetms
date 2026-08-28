@@ -1282,6 +1282,10 @@ async function main() {
   assert.match(mikeSrc, /geocodeAddress/);
   assert.match(mikeSrc, /isClosestCityQuestion/);
   assert.match(mikeSrc, /Never say no trucks ranked closest/);
+  assert.match(mikeSrc, /tmsStats/);
+  assert.match(mikeSrc, /parseMikeTmsStatsQuestion/);
+  assert.match(mikeSrc, /formatMikeTmsStatsReply/);
+  assert.match(mikeSrc, /await geocode\(asked\)/);
   const cityCoordsSrc = fs.readFileSync(path.join(process.cwd(), "lib/city-coords-shared.ts"), "utf8");
   assert.match(cityCoordsSrc, /Des Moines/);
   assert.match(cityCoordsSrc, /formatClosestCityReply/);
@@ -5106,7 +5110,9 @@ Continuous reefer. Two load locks.
   assert.match(extractCityFromQuestion("what truck is closest to Oklahoma City?"), /Oklahoma City/i);
   assert.match(extractCityFromQuestion("What truck is closest to Des Moines, Iowa?"), /Des Moines/i);
   assert.equal(isClosestCityQuestion("What truck is closest to Des Moines, Iowa?"), true);
+  assert.equal(isClosestCityQuestion("What driver is closest to Dodge city Kansas"), true);
   assert.equal(isClosestCityQuestion("What about truck 32 in Holcomb, Kansas?"), false);
+  assert.match(extractCityFromQuestion("What driver is closest to Dodge city Kansas"), /Dodge city/i);
   const closestOkc = closestTrucksToCity(
     "what truck is closest to Oklahoma City?",
     [
@@ -9864,6 +9870,159 @@ Continuous reefer. Two load locks.
   assert.equal(geocodeMiss?.reason, "city_not_found");
   assert.match(formatClosestCityReply(geocodeMiss), /could not place/i);
   assert.doesNotMatch(formatClosestCityReply(geocodeMiss), /no trucks ranked/i);
+  let geocodedAsk = "";
+  const coldDodge = await resolveClosestCityRanking(
+    "What driver is closest to Dodge city Kansas",
+    {
+      trucks: [
+        { id: 32, unit_number: "32", samsara_vehicle_id: "sam-32" },
+        { id: 42, unit_number: "42", samsara_vehicle_id: "sam-42" },
+      ],
+      locations: [
+        {
+          vehicleId: "sam-32",
+          unitNumber: "32",
+          latitude: 37.9861,
+          longitude: -100.9957,
+          address: "Holcomb, KS",
+          source: "samsara",
+        },
+        {
+          vehicleId: "sam-42",
+          unitNumber: "42",
+          latitude: 25.7617,
+          longitude: -80.1918,
+          address: "Miami, FL",
+          source: "samsara",
+        },
+      ],
+    },
+    async (address) => {
+      geocodedAsk = address;
+      return { latitude: 37.7528, longitude: -100.0171 };
+    },
+  );
+  assert.match(geocodedAsk, /Dodge/i, "first closest-to ask must geocode the city without a named truck");
+  assert.equal(coldDodge?.found, true);
+  assert.equal(coldDodge?.ranked[0]?.unit, "32", "cold Dodge City ask must rank live Samsara GPS without priming");
+  assert.doesNotMatch(formatClosestCityReply(coldDodge), /no trucks ranked/i);
+
+  const {
+    formatMikeTmsStatsReply,
+    parseMikeTmsStatsQuestion,
+    topCustomersByBilled,
+    topDriversByBilled,
+    topDriversByTmsMiles,
+    weekBounds,
+  } = await import("../lib/mike-tms-stats");
+  const mikeNow = new Date("2026-08-28T15:00:00");
+  assert.equal(parseMikeTmsStatsQuestion("Who is our top customer on 2026?", mikeNow)?.kind, "top_customer");
+  assert.equal(parseMikeTmsStatsQuestion("What's highest grossing driver this month?", mikeNow)?.kind, "driver_billed");
+  assert.equal(parseMikeTmsStatsQuestion("What driver did the most miles this week?", mikeNow)?.kind, "miles_week");
+  const billedCustomer = queries.createCustomer({ name: "Billed Freight Foods", billing_notes: "", contacts: [] });
+  const otherCustomer = queries.createCustomer({ name: "Small Broker LLC", billing_notes: "", contacts: [] });
+  const billedTruck = queries.createTruck({
+    unit_number: "77",
+    type: "reefer",
+    capacity_lbs: 43000,
+    status: "available",
+  });
+  const billedDriver = queries.createDriver({
+    name: "Dana Billed",
+    phone: "555-0177",
+    license: "NE-CDL-BILLED",
+    pin: "7171",
+    truck_id: billedTruck,
+    status: "available",
+  });
+  const otherTruck = queries.createTruck({
+    unit_number: "88",
+    type: "reefer",
+    capacity_lbs: 43000,
+    status: "available",
+  });
+  const otherDriver = queries.createDriver({
+    name: "Evan Miles",
+    phone: "555-0188",
+    license: "IA-CDL-MILES",
+    pin: "8181",
+    truck_id: otherTruck,
+    status: "available",
+  });
+  const billedLoadId = queries.createLoad({
+    customer_id: billedCustomer,
+    origin: "Hastings, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-08-26T12:00:00.000Z",
+    pickup_end: "2026-08-26T18:00:00.000Z",
+    delivery_start: "2026-08-27T12:00:00.000Z",
+    delivery_end: "2026-08-27T18:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 250000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: billedTruck,
+    driver_id: billedDriver,
+  });
+  const smallLoadId = queries.createLoad({
+    customer_id: otherCustomer,
+    origin: "Omaha, NE",
+    destination: "Des Moines, IA",
+    pickup_start: "2026-08-25T12:00:00.000Z",
+    pickup_end: "2026-08-25T18:00:00.000Z",
+    delivery_start: "2026-08-26T12:00:00.000Z",
+    delivery_end: "2026-08-26T18:00:00.000Z",
+    weight: 20000,
+    commodity: "Pork",
+    rate: 2100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: otherTruck,
+    driver_id: otherDriver,
+  });
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 9000, route_source = 'manual', empty_miles = 80, empty_source = 'google' WHERE id = ?")
+    .run(billedLoadId);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 140, route_source = 'manual', empty_miles = 20, empty_source = 'google' WHERE id = ?")
+    .run(smallLoadId);
+  assert.equal(topCustomersByBilled(2026)[0]?.name, "Billed Freight Foods");
+  assert.equal(topDriversByBilled(2026, 8)[0]?.name, "Dana Billed");
+  assert.equal(topDriversByBilled(2026, 8)[0]?.unit, "77");
+  const week = weekBounds(mikeNow);
+  assert.equal(topDriversByTmsMiles(week.start, week.end)[0]?.name, "Dana Billed");
+  const customerReply = formatMikeTmsStatsReply(
+    { kind: "top_customer", year: 2026, weekStart: week.start, weekEnd: week.end },
+    mikeNow,
+  );
+  assert.match(customerReply, /Billed Freight Foods/);
+  assert.doesNotMatch(customerReply, /I don't have information/i);
+  const driverReply = formatMikeTmsStatsReply(
+    { kind: "driver_billed", year: 2026, month: 8, weekStart: week.start, weekEnd: week.end },
+    mikeNow,
+  );
+  assert.match(driverReply, /Dana Billed/);
+  assert.match(driverReply, /billed freight/i);
+  assert.match(driverReply, /not driver pay/i);
+  const milesReply = formatMikeTmsStatsReply(
+    { kind: "miles_week", year: 2026, weekStart: week.start, weekEnd: week.end },
+    mikeNow,
+  );
+  assert.match(milesReply, /Dana Billed/);
+  assert.match(milesReply, /TMS miles/i);
   const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
   assert.equal(
     matchLinkedSamsaraVehicle(

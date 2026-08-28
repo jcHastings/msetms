@@ -134,16 +134,24 @@ export function normalizeCityKey(value: string): string {
 }
 
 export function isClosestCityQuestion(question: string): boolean {
-  return /(?:closest|nearest)\b.{0,48}\b(?:to|from)\b/i.test(question);
+  return (
+    /(?:closest|nearest)\b.{0,48}\b(?:to|from)\b/i.test(question) ||
+    /(?:closest|nearest)\s+(?:driver|truck|unit)\b/i.test(question)
+  );
 }
 
 export function extractCityFromQuestion(question: string): string {
   const raw = question.trim();
   if (!raw) return "";
-  const closest = raw.match(
-    /(?:closest|nearest|near)\s+(?:truck\s+|unit\s+)?(?:to|from)\s+(.+?)(?:\?|$)/i,
-  );
-  if (closest?.[1]) return closest[1].replace(/\b(the|city of)\b/gi, " ").trim();
+  const patterns = [
+    /(?:driver|truck|unit)\s+is\s+(?:the\s+)?(?:closest|nearest)\s+to\s+(.+?)(?:\?|$)/i,
+    /(?:closest|nearest|near)\s+(?:the\s+)?(?:driver|truck|unit)\s+(?:to|from)\s+(.+?)(?:\?|$)/i,
+    /(?:closest|nearest|near)\s+(?:truck\s+|unit\s+|driver\s+)?(?:to|from)\s+(.+?)(?:\?|$)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) return match[1].replace(/\b(the|city of)\b/gi, " ").replace(/\s+/g, " ").trim();
+  }
   return raw;
 }
 
