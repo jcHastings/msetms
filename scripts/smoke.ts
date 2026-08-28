@@ -9927,7 +9927,7 @@ Continuous reefer. Two load locks.
     capacity_lbs: 43000,
     status: "available",
   });
-  const billedDriver = queries.createDriver({
+  const mikeBilledDriver = queries.createDriver({
     name: "Dana Billed",
     phone: "555-0177",
     license: "NE-CDL-BILLED",
@@ -9949,7 +9949,7 @@ Continuous reefer. Two load locks.
     truck_id: otherTruck,
     status: "available",
   });
-  const billedLoadId = queries.createLoad({
+  const mikeBilledLoadId = queries.createLoad({
     customer_id: billedCustomer,
     origin: "Hastings, NE",
     destination: "Chicago, IL",
@@ -9969,7 +9969,7 @@ Continuous reefer. Two load locks.
     trailer_number: "",
     status: "delivered",
     truck_id: billedTruck,
-    driver_id: billedDriver,
+    driver_id: mikeBilledDriver,
   });
   const smallLoadId = queries.createLoad({
     customer_id: otherCustomer,
@@ -9995,30 +9995,30 @@ Continuous reefer. Two load locks.
   });
   getDb()
     .prepare("UPDATE loads SET route_miles = 9000, route_source = 'manual', empty_miles = 80, empty_source = 'google' WHERE id = ?")
-    .run(billedLoadId);
+    .run(mikeBilledLoadId);
   getDb()
     .prepare("UPDATE loads SET route_miles = 140, route_source = 'manual', empty_miles = 20, empty_source = 'google' WHERE id = ?")
     .run(smallLoadId);
   assert.equal(topCustomersByBilled(2026)[0]?.name, "Billed Freight Foods");
   assert.equal(topDriversByBilled(2026, 8)[0]?.name, "Dana Billed");
   assert.equal(topDriversByBilled(2026, 8)[0]?.unit, "77");
-  const week = weekBounds(mikeNow);
-  assert.equal(topDriversByTmsMiles(week.start, week.end)[0]?.name, "Dana Billed");
+  const mikeWeek = weekBounds(mikeNow);
+  assert.equal(topDriversByTmsMiles(mikeWeek.start, mikeWeek.end)[0]?.name, "Dana Billed");
   const customerReply = formatMikeTmsStatsReply(
-    { kind: "top_customer", year: 2026, weekStart: week.start, weekEnd: week.end },
+    { kind: "top_customer", year: 2026, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
     mikeNow,
   );
   assert.match(customerReply, /Billed Freight Foods/);
   assert.doesNotMatch(customerReply, /I don't have information/i);
   const driverReply = formatMikeTmsStatsReply(
-    { kind: "driver_billed", year: 2026, month: 8, weekStart: week.start, weekEnd: week.end },
+    { kind: "driver_billed", year: 2026, month: 8, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
     mikeNow,
   );
   assert.match(driverReply, /Dana Billed/);
   assert.match(driverReply, /billed freight/i);
   assert.match(driverReply, /not driver pay/i);
   const milesReply = formatMikeTmsStatsReply(
-    { kind: "miles_week", year: 2026, weekStart: week.start, weekEnd: week.end },
+    { kind: "miles_week", year: 2026, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
     mikeNow,
   );
   assert.match(milesReply, /Dana Billed/);
