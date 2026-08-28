@@ -41,7 +41,17 @@ import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./de
 import { refreshRelayLegMilesQuiet } from "./relay-routing";
 import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay } from "./relay-store";
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
-import { addStop, deleteStop, moveStop, reorderStops, updateStop, type LoadStopKind } from "./stops";
+import {
+  addStop,
+  deleteStop,
+  getStop,
+  moveStop,
+  reorderStops,
+  setStopDelivered,
+  stopIsDelivered,
+  updateStop,
+  type LoadStopKind,
+} from "./stops";
 import { createLoadFromTemplate, saveTemplateFromLoad } from "./templates";
 import type { ActionResult } from "./types";
 
@@ -317,6 +327,26 @@ export async function updateStopAction(formData: FormData): Promise<void> {
       | { load_id: number }
       | undefined;
     if (stop) await refreshLoadRouteQuiet(stop.load_id);
+    refresh();
+  });
+}
+
+export async function markStopDeliveredAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("stop_id"));
+    if (!id) throw new Error("Stop is missing.");
+    const delivered = String(formData.get("delivered") ?? "") === "1";
+    const stop = getStop(id);
+    if (!stop) throw new Error("Stop not found.");
+    setStopDelivered(id, delivered);
+    recordLoadAudit({
+      loadId: stop.load_id,
+      action: "stop",
+      field: "delivered",
+      oldValue: stopIsDelivered(stop) ? "1" : "0",
+      newValue: delivered ? "1" : "0",
+    });
     refresh();
   });
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   addStopAction,
   deleteStopAction,
+  markStopDeliveredAction,
   reorderStopsAction,
   updateStopAction,
 } from "@/lib/dispatcher-actions";
@@ -16,7 +17,7 @@ import type { PlaceDetails } from "@/lib/places-shared";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
-import { stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
+import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
 import type { Location } from "@/lib/types";
 
 export function LoadStopsPanel({
@@ -455,6 +456,15 @@ function StopDialog({
             <input name="departed_at" type="datetime-local" value={draft.departedAt} onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))} />
           </div>
         </div>
+        {stop ? (
+          <StopDeliveredButton
+            stop={stop}
+            onDone={() => {
+              router.refresh();
+              onClose();
+            }}
+          />
+        ) : null}
         <div className="field">
           <label>PO / reference</label>
           <input name="reference" value={draft.reference} onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))} />
@@ -635,6 +645,7 @@ function StopGridBlock({
           <span className={`stop-chip ${pickup ? "stop-chip-pickup" : "stop-chip-delivery"}`} data-stop-type={typeLabel}>
             {typeLabel}
           </span>
+          <StopDeliveredButton stop={stop} onDone={() => router.refresh()} />
         </td>
         <td className="font-semibold">{draft.name}</td>
         <td className="stop-front-address">{address || "—"}</td>
@@ -709,5 +720,47 @@ function StopGridBlock({
         </tr>
       ) : null}
     </>
+  );
+}
+
+function StopDeliveredButton({
+  stop,
+  onDone,
+}: {
+  stop: LoadStop;
+  onDone: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const delivered = stopIsDelivered(stop);
+  const pickup = stop.kind === "pickup";
+  const label = pickup ? "Picked up" : "Delivered";
+
+  async function toggle() {
+    setPending(true);
+    try {
+      const formData = new FormData();
+      formData.set("stop_id", String(stop.id));
+      formData.set("delivered", delivered ? "0" : "1");
+      await markStopDeliveredAction(formData);
+      onDone();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not update the stop.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <label className="stop-delivered-check">
+      <input
+        type="checkbox"
+        checked={delivered}
+        data-stop-delivered={delivered ? "1" : "0"}
+        disabled={pending}
+        aria-label={label}
+        onChange={() => void toggle()}
+      />
+      {pending ? "Saving…" : label}
+    </label>
   );
 }

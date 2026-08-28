@@ -2,10 +2,10 @@ import { getDb } from "./db";
 import { applyGeofenceArrivals } from "./geofence";
 import { applyLocationToStop, matchLocationForStop } from "./locations";
 import { getLoad, getLocation, listLocations } from "./queries";
-import type { LoadStopKind, LoadStop, StopInput } from "./stops-shared";
+import { stopDeliveredFlag, type LoadStopKind, type LoadStop, type StopInput } from "./stops-shared";
 
 export type { LoadStopKind, LoadStop, StopInput };
-export { stopTypeNumber, stopTypeLabel } from "./stops-shared";
+export { stopTypeNumber, stopTypeLabel, stopIsDelivered, stopDeliveredFlag } from "./stops-shared";
 
 
 function asStopKind(value: string): LoadStopKind {
@@ -34,6 +34,7 @@ function asStop(row: Record<string, unknown>): LoadStop {
     notes: String(row.notes ?? ""),
     arrived_at: String(row.arrived_at ?? ""),
     departed_at: String(row.departed_at ?? ""),
+    delivered: stopDeliveredFlag(row.delivered),
     schedule_type: String(row.schedule_type ?? ""),
   };
 }
@@ -152,8 +153,8 @@ export function addStop(loadId: number, input: StopInput): number {
       `INSERT INTO load_stops (
         load_id, sequence, kind, location_id, name, street, city, state, zip, phone,
         window_start, window_end, confirmation, cargo, reference, instructions, notes,
-        arrived_at, departed_at, schedule_type
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        arrived_at, departed_at, delivered, schedule_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       loadId,
@@ -175,6 +176,7 @@ export function addStop(loadId: number, input: StopInput): number {
       input.notes ?? "",
       input.arrived_at ?? "",
       input.departed_at ?? "",
+      stopDeliveredFlag(input.delivered),
       input.schedule_type ?? "",
     );
   syncLoadLaneFromStops(loadId);
@@ -185,6 +187,16 @@ export function stampStopTime(stopId: number, field: "arrived_at" | "departed_at
   const stop = getDb().prepare("SELECT id FROM load_stops WHERE id = ?").get(stopId) as { id: number } | undefined;
   if (!stop) throw new Error("Stop not found.");
   getDb().prepare(`UPDATE load_stops SET ${field} = ? WHERE id = ?`).run(iso, stopId);
+}
+
+export function setStopDelivered(stopId: number, delivered: boolean): void {
+  const stop = getStop(stopId);
+  if (!stop) throw new Error("Stop not found.");
+  const hasTimes = Boolean(stop.arrived_at.trim() || stop.departed_at.trim());
+  const value = delivered ? 1 : hasTimes ? 2 : 0;
+  getDb()
+    .prepare("UPDATE load_stops SET delivered = ? WHERE id = ?")
+    .run(value, stopId);
 }
 
 export function getStop(stopId: number): LoadStop | null {
@@ -203,7 +215,7 @@ export function updateStop(stopId: number, input: StopInput): void {
       `UPDATE load_stops SET
         kind = ?, location_id = ?, name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?,
         window_start = ?, window_end = ?, confirmation = ?, cargo = ?, reference = ?,
-        instructions = ?, notes = ?, arrived_at = ?, departed_at = ?, schedule_type = ?
+        instructions = ?, notes = ?, arrived_at = ?, departed_at = ?, delivered = ?, schedule_type = ?
        WHERE id = ?`,
     )
     .run(
@@ -224,6 +236,9 @@ export function updateStop(stopId: number, input: StopInput): void {
       input.notes ?? "",
       input.arrived_at ?? String(stop.arrived_at ?? ""),
       input.departed_at ?? String(stop.departed_at ?? ""),
+      input.delivered === 1 || input.delivered === 0 || input.delivered === 2
+        ? input.delivered
+        : stopDeliveredFlag(stop.delivered),
       input.schedule_type ?? String(stop.schedule_type ?? ""),
       stopId,
     );

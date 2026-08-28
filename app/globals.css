@@ -445,6 +445,24 @@ button {
   color: #fff1f2;
 }
 
+.stop-delivered-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.stop-delivered-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #047857;
+}
+
 .stop-front {
   display: flex;
   align-items: center;

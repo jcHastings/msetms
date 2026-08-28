@@ -99,6 +99,7 @@ function stopInputFromParts(
       notes: existing?.notes ?? "",
       arrived_at: existing?.arrived_at,
       departed_at: existing?.departed_at,
+      delivered: existing?.delivered,
       schedule_type: existing?.schedule_type,
     };
   }
@@ -122,6 +123,7 @@ function stopInputFromParts(
     notes: existing?.notes ?? "",
     arrived_at: existing?.arrived_at,
     departed_at: existing?.departed_at,
+    delivered: existing?.delivered,
     schedule_type: existing?.schedule_type,
   };
 }

@@ -733,6 +733,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "load_stops", "arrived_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_stops", "departed_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_stops", "schedule_type", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "delivered", "INTEGER NOT NULL DEFAULT 0");
   db.prepare(
     `UPDATE trucks SET type = 'sleeper' WHERE type NOT IN ('sleeper', 'day_cab')`,
   ).run();

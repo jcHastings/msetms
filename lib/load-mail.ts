@@ -9,7 +9,7 @@ import { isUsableEmail, MAIL_NOREPLY, normalizeEmail, type LoadMailKind, type Se
 import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { listStops } from "./stops";
-import { stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
+import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
 import { isOwnerOperator, labelForLoadStatus, type LoadView } from "./types";
 
 export type DriverLoadMailDraft = {
@@ -158,7 +158,7 @@ export function composeCustomerUpdateEmail(input: {
   lastLocation: string;
   eta: string;
   nextStop: string;
-  stops?: Array<{ title: string; place: string }>;
+  stops?: Array<{ title: string; place: string; delivered?: boolean }>;
   officePhone?: string;
 }): CustomerUpdateMailDraft {
   const shown = input.loadNumber.trim();
@@ -166,11 +166,19 @@ export function composeCustomerUpdateEmail(input: {
   const places = (input.stops ?? []).filter((stop) => stop.place.trim());
   const pickups = places.filter((stop) => /^pickup/i.test(stop.title));
   const deliveries = places.filter((stop) => /^delivery/i.test(stop.title));
+  const stopLine = (stop: { title: string; place: string; delivered?: boolean }) => {
+    if (!stop.delivered) return stop.place;
+    return /^pickup/i.test(stop.title) ? `${stop.place} · Picked up` : `${stop.place} · Delivered`;
+  };
+  const pickupDone = pickups.some((stop) => stop.delivered);
+  const loadDelivered = deliveries.length > 0 && deliveries.every((stop) => stop.delivered);
   const location = cityStateFromAddress(input.lastLocation);
   const header = [
     shown ? `Load ${shown}` : "Tracking update",
     extraRef && extraRef !== shown ? `Your ref: ${extraRef}` : "",
     input.status ? `Status: ${input.status}` : "",
+    pickupDone ? "The load was picked up." : "",
+    loadDelivered ? "The load was delivered." : "",
   ].filter(Boolean);
   const assets = [
     input.truck ? `Truck: ${input.truck}` : "",
@@ -181,9 +189,9 @@ export function composeCustomerUpdateEmail(input: {
     assets.join("\n"),
     location ? `Last location: ${location}` : "",
     input.eta && isClockEta(input.eta) ? `ETA: ${input.eta}` : "",
-    pickups.length ? ["Pickup", ...pickups.map((stop) => stop.place)].join("\n") : "",
+    pickups.length ? ["Pickup", ...pickups.map((stop) => stopLine(stop))].join("\n") : "",
     deliveries.length
-      ? ["Deliveries", ...deliveries.map((stop, index) => `${index + 1}. ${stop.place}`)].join("\n")
+      ? ["Deliveries", ...deliveries.map((stop, index) => `${index + 1}. ${stopLine(stop)}`)].join("\n")
       : "",
     mailNoReplyLine(input.officePhone),
     "M & S Loads LLC · MS Express TMS",
@@ -330,16 +338,24 @@ function customerStopPlace(stop: LoadStop): string {
   return name || cityState;
 }
 
-function customerMailStops(stops: LoadStop[]): Array<{ title: string; place: string }> {
-  const lines: Array<{ title: string; place: string }> = [];
+function customerMailStops(stops: LoadStop[]): Array<{ title: string; place: string; delivered: boolean }> {
+  const lines: Array<{ title: string; place: string; delivered: boolean }> = [];
   const pickups = stops.filter((stop) => stop.kind === "pickup");
   const firstPickup = pickups[0];
   if (firstPickup) {
-    lines.push({ title: stopTypeLabel(firstPickup.kind, 1), place: customerStopPlace(firstPickup) });
+    lines.push({
+      title: stopTypeLabel(firstPickup.kind, 1),
+      place: customerStopPlace(firstPickup),
+      delivered: stopIsDelivered(firstPickup),
+    });
   }
   const deliveries = stops.filter((stop) => stop.kind === "delivery");
   deliveries.forEach((stop, index) => {
-    lines.push({ title: stopTypeLabel(stop.kind, index + 1), place: customerStopPlace(stop) });
+    lines.push({
+      title: stopTypeLabel(stop.kind, index + 1),
+      place: customerStopPlace(stop),
+      delivered: stopIsDelivered(stop),
+    });
   });
   return lines;
 }

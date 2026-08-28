@@ -21,6 +21,7 @@ export type LoadStop = {
   notes: string;
   arrived_at: string;
   departed_at: string;
+  delivered: number;
   schedule_type: string;
 };
 
@@ -42,8 +43,27 @@ export type StopInput = {
   location_id?: number | null;
   arrived_at?: string;
   departed_at?: string;
+  delivered?: number;
   schedule_type?: string;
 };
+
+export function stopDeliveredFlag(value: unknown): number {
+  const flag = Number(value);
+  return flag === 1 || flag === 2 ? flag : 0;
+}
+
+export function stopIsDelivered(stop: {
+  delivered?: number | boolean | null;
+  arrived_at?: string | null;
+  departed_at?: string | null;
+}): boolean {
+  const flag = stopDeliveredFlag(stop.delivered);
+  if (flag === 2) return false;
+  if (flag === 1 || stop.delivered === true) return true;
+  if (String(stop.arrived_at ?? "").trim()) return true;
+  if (String(stop.departed_at ?? "").trim()) return true;
+  return false;
+}
 
 export function stopTypeNumber(
   stops: Array<{ id: number; kind: string }>,

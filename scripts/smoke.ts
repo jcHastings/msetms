@@ -414,6 +414,15 @@ async function main() {
   assert.match(stopsSource, /stopTypeNumber/);
   assert.match(stopsSource, /stopTypeLabel/);
   assert.match(stopsSource, /data-stop-kind/);
+  assert.match(stopsSource, /data-stop-delivered/);
+  assert.match(stopsSource, /type="checkbox"/);
+  assert.match(stopsSource, /markStopDeliveredAction/);
+  assert.match(stopsSource, /Picked up/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /export function stopIsDelivered/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /export function setStopDelivered/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /export async function markStopDeliveredAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /The load was picked up/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /The load was delivered/);
   assert.match(stopsSource, /value=\{draft\.kind\}/);
   assert.match(stopsSource, /formData\.set\("kind", draft\.kind\)/);
   assert.match(stopsSource, /event\.preventDefault\(\)/);
@@ -2030,6 +2039,49 @@ async function main() {
   assert.match(customerDraft.text, /2\. Kayco, Bayonne, NJ/);
   assert.match(customerDraft.text, /Call the office at 402-302-0097/);
   assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th|MSE-/);
+  const deliveredDraft = loadMail.composeCustomerUpdateEmail({
+    loadNumber: "12345",
+    customerRef: "12345",
+    status: "Assigned",
+    truck: "28",
+    trailer: "MS1519",
+    lastLocation: "Hastings, NE",
+    eta: "",
+    nextStop: "",
+    stops: [
+      { title: "Pickup 1", place: "Nebraska Cold Storage Inc, Hastings, NE" },
+      { title: "Delivery 1", place: "Place A, Avenel, NJ", delivered: true },
+      { title: "Delivery 2", place: "Place B, Newark, NJ", delivered: true },
+      { title: "Delivery 3", place: "Place C, Elizabeth, NJ" },
+      { title: "Delivery 4", place: "Place D, Jersey City, NJ" },
+      { title: "Delivery 5", place: "Kayco, Bayonne, NJ" },
+    ],
+  });
+  assert.match(deliveredDraft.text, /1\. Place A, Avenel, NJ · Delivered/);
+  assert.match(deliveredDraft.text, /2\. Place B, Newark, NJ · Delivered/);
+  assert.match(deliveredDraft.text, /3\. Place C, Elizabeth, NJ/);
+  assert.match(deliveredDraft.text, /5\. Kayco, Bayonne, NJ/);
+  assert.doesNotMatch(deliveredDraft.text, /3\. Place C, Elizabeth, NJ · Delivered|Kayco, Bayonne, NJ · Delivered/);
+  assert.doesNotMatch(deliveredDraft.text, /The load was delivered|The load was picked up/);
+  assert.doesNotMatch(deliveredDraft.text, /mi on file|\$|relay|oo pay/i);
+  const pickedDraft = loadMail.composeCustomerUpdateEmail({
+    loadNumber: "12345",
+    customerRef: "12345",
+    status: "In Transit",
+    truck: "28",
+    trailer: "MS1519",
+    lastLocation: "Hastings, NE",
+    eta: "",
+    nextStop: "",
+    stops: [
+      { title: "Pickup 1", place: "Nebraska Cold Storage Inc, Hastings, NE", delivered: true },
+      { title: "Delivery 1", place: "Kayco, Bayonne, NJ", delivered: true },
+    ],
+  });
+  assert.match(pickedDraft.text, /The load was picked up/);
+  assert.match(pickedDraft.text, /Nebraska Cold Storage Inc, Hastings, NE · Picked up/);
+  assert.match(pickedDraft.text, /The load was delivered/);
+  assert.match(pickedDraft.text, /1\. Kayco, Bayonne, NJ · Delivered/);
   assert.equal(customerDraft.replyTo, "noreply@msloads.com");
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
@@ -2235,6 +2287,107 @@ async function main() {
     assert.doesNotMatch(input.text, /\$|settlement|relay|oo pay/i);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
+  const {
+    replaceStops: replaceDropStops,
+    setStopDelivered,
+    getStop,
+    stampStopTime,
+    stopIsDelivered,
+    listStops: listDropStops,
+  } = await import("../lib/stops");
+  assert.equal(stopIsDelivered({ delivered: 1, arrived_at: "", departed_at: "" }), true);
+  assert.equal(stopIsDelivered({ delivered: 0, arrived_at: "", departed_at: "" }), false);
+  assert.equal(stopIsDelivered({ delivered: 0, arrived_at: "2026-08-28T12:00:00.000Z", departed_at: "" }), true);
+  assert.equal(stopIsDelivered({ delivered: 0, arrived_at: "", departed_at: "2026-08-28T13:00:00.000Z" }), true);
+  assert.equal(stopIsDelivered({ delivered: 2, arrived_at: "2026-08-28T12:00:00.000Z", departed_at: "" }), false);
+  const dropLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 4500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-DROPS",
+    po_number: "PO-DROPS",
+    reefer_setpoint_f: 10,
+    trailer_number: "TR-DROPS",
+    status: "in_transit",
+    truck_id: null,
+    driver_id: mailDriverId,
+  });
+  getDb()
+    .prepare("UPDATE loads SET contact_email = ?, customer_reference = ? WHERE id = ?")
+    .run("ap.drops@customer.example", "45090-DROPS", dropLoadId);
+  replaceDropStops(dropLoadId, [
+    { kind: "pickup", name: "Nebraska Cold Storage Inc", city: "Hastings", state: "NE" },
+    { kind: "delivery", name: "Place A", city: "Avenel", state: "NJ" },
+    { kind: "delivery", name: "Place B", city: "Newark", state: "NJ" },
+    { kind: "delivery", name: "Place C", city: "Elizabeth", state: "NJ" },
+    { kind: "delivery", name: "Place D", city: "Jersey City", state: "NJ" },
+    { kind: "delivery", name: "Kayco", city: "Bayonne", state: "NJ" },
+  ]);
+  const dropStops = listDropStops(dropLoadId);
+  const dropDeliveries = dropStops.filter((stop) => stop.kind === "delivery");
+  const dropPickup = dropStops.find((stop) => stop.kind === "pickup");
+  assert.equal(dropDeliveries.length, 5);
+  assert.ok(dropPickup);
+  assert.equal(dropDeliveries[0].arrived_at, "");
+  assert.equal(dropDeliveries[0].departed_at, "");
+  setStopDelivered(dropDeliveries[0].id, true);
+  setStopDelivered(dropDeliveries[1].id, true);
+  assert.equal(getStop(dropDeliveries[0].id)?.delivered, 1);
+  assert.equal(getStop(dropDeliveries[0].id)?.arrived_at, "");
+  assert.equal(getStop(dropDeliveries[1].id)?.departed_at, "");
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 1369.2, route_source = 'google' WHERE id = ?")
+    .run(dropLoadId);
+  const dropLoad = queries.getLoad(dropLoadId);
+  assert.ok(dropLoad);
+  const dropDraft = await loadMail.buildCustomerUpdateDraft(dropLoad);
+  assert.match(dropDraft.text, /Load 45090-DROPS/);
+  assert.match(dropDraft.text, /1\. Place A, Avenel, NJ · Delivered/);
+  assert.match(dropDraft.text, /2\. Place B, Newark, NJ · Delivered/);
+  assert.match(dropDraft.text, /3\. Place C, Elizabeth, NJ/);
+  assert.match(dropDraft.text, /4\. Place D, Jersey City, NJ/);
+  assert.match(dropDraft.text, /5\. Kayco, Bayonne, NJ/);
+  assert.doesNotMatch(dropDraft.text, /3\. Place C, Elizabeth, NJ · Delivered|4\. Place D, Jersey City, NJ · Delivered|Kayco, Bayonne, NJ · Delivered/);
+  assert.doesNotMatch(dropDraft.text, /The load was delivered/);
+  assert.doesNotMatch(dropDraft.text, /mi on file|\$|settlement|relay|oo pay/i);
+  assert.equal(dropDraft.replyTo, "noreply@msloads.com");
+  const typedAt = "2026-08-27T15:00:00.000Z";
+  stampStopTime(dropDeliveries[1].id, "arrived_at", typedAt);
+  setStopDelivered(dropDeliveries[1].id, true);
+  assert.equal(getStop(dropDeliveries[1].id)?.arrived_at, typedAt);
+  stampStopTime(dropDeliveries[2].id, "arrived_at", typedAt);
+  const stampedDraft = await loadMail.buildCustomerUpdateDraft(queries.getLoad(dropLoadId)!);
+  assert.match(stampedDraft.text, /3\. Place C, Elizabeth, NJ · Delivered/);
+  setStopDelivered(dropDeliveries[2].id, false);
+  assert.equal(getStop(dropDeliveries[2].id)?.arrived_at, typedAt);
+  const uncheckedDraft = await loadMail.buildCustomerUpdateDraft(queries.getLoad(dropLoadId)!);
+  assert.doesNotMatch(uncheckedDraft.text, /3\. Place C, Elizabeth, NJ · Delivered/);
+  setStopDelivered(dropPickup.id, true);
+  const pickedUpDraft = await loadMail.buildCustomerUpdateDraft(queries.getLoad(dropLoadId)!);
+  assert.match(pickedUpDraft.text, /The load was picked up/);
+  assert.match(pickedUpDraft.text, /Nebraska Cold Storage Inc, Hastings, NE/);
+  setStopDelivered(dropPickup.id, false);
+  const unpickedDraft = await loadMail.buildCustomerUpdateDraft(queries.getLoad(dropLoadId)!);
+  assert.doesNotMatch(unpickedDraft.text, /The load was picked up/);
+  await loadMail.sendCustomerUpdateMail(dropLoadId, async (input) => {
+    assert.equal(input.to, "ap.drops@customer.example");
+    assert.equal(input.replyTo, "noreply@msloads.com");
+    assert.match(input.text, /1\. Place A, Avenel, NJ · Delivered/);
+    assert.match(input.text, /2\. Place B, Newark, NJ · Delivered/);
+    assert.doesNotMatch(input.text, /Kayco, Bayonne, NJ · Delivered/);
+    assert.doesNotMatch(input.subject, /MSE-/);
+    assert.doesNotMatch(input.text, /\$|relay|oo pay/i);
+  });
   for (const key of mailEnvKeys) {
     const value = previousMail[key];
     if (value == null) delete process.env[key];
@@ -9843,6 +9996,7 @@ Continuous reefer. Two load locks.
       notes: "",
       arrived_at: "",
       departed_at: "",
+      delivered: 0,
       schedule_type: "",
     },
     {
@@ -9866,6 +10020,7 @@ Continuous reefer. Two load locks.
       notes: "",
       arrived_at: "",
       departed_at: "",
+      delivered: 0,
       schedule_type: "",
     },
   ]);
