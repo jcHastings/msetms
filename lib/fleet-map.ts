@@ -98,8 +98,7 @@ function reeferStatusFromAny(snapshot: ReturnType<typeof snapshotForTrailer>): O
     });
   }
   return reeferPinStatusFromSnapshot({
-    operatingMode: "operating_mode" in snapshot ? snapshot.operating_mode : "",
-    powerOn: "powerOn" in snapshot ? snapshot.powerOn : null,
+    operatingMode: snapshot.operating_mode,
   });
 }
 
