@@ -1,5 +1,6 @@
-import { listFuelTransactions } from "./fuel-store";
-import { listLoads } from "./queries";
+import { getDb } from "./db";
+import { listFuelRollups, listFuelTransactions } from "./fuel-store";
+import { listLoads, listTruckOdometerReadings, listTrucks } from "./queries";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import type { LoadView } from "./types";
 
@@ -57,27 +58,43 @@ export function tmsMilesForLoad(load: LoadView): number {
 }
 
 export function parseMikeTmsStatsQuestion(question: string, now = new Date()): MikeTmsStatsQuestion | null {
-  const text = question.trim();
+  const text = question.trim().replace(/[\u2018\u2019]/g, "'");
   if (!text) return null;
   const yearMatch = text.match(/\b(20\d{2})\b/);
   const year = yearMatch ? Number(yearMatch[1]) : now.getFullYear();
   const week = weekBounds(now);
-  if (/\b(top|highest|most)\b.{0,40}\bcustomer/i.test(text) || /\bcustomer\b.{0,24}\b(top|highest|most|rank)/i.test(text)) {
+  if (/\b(top|highest|most)\b.{0,48}\bcustomer/i.test(text) || /\bcustomer\b.{0,32}\b(top|highest|most|rank)/i.test(text)) {
     return { kind: "top_customer", year, weekStart: week.start, weekEnd: week.end };
   }
-  if (
-    /\b(highest grossing|top|most)\b.{0,40}\bdriver/i.test(text) ||
-    /\bdriver\b.{0,32}\b(gross|revenue|billed|freight)/i.test(text)
-  ) {
-    if (/\bmiles?\b/i.test(text)) {
-      return { kind: "miles_week", year, weekStart: week.start, weekEnd: week.end };
-    }
-    return { kind: "driver_billed", year, month: now.getMonth() + 1, weekStart: week.start, weekEnd: week.end };
-  }
-  if (/\b(most|highest|top)\b.{0,32}\bmiles?\b/i.test(text) || /\bmiles?\b.{0,24}\b(week|driver)\b/i.test(text)) {
+  if (/\bmiles?\b/i.test(text) && /\b(week|driver|truck|most|highest|top)\b/i.test(text)) {
     return { kind: "miles_week", year, weekStart: week.start, weekEnd: week.end };
   }
+  if (
+    /\b(highest grossing|grossing|top|most)\b.{0,48}\bdriver/i.test(text) ||
+    /\bdriver\b.{0,40}\b(gross|revenue|billed|freight)\b/i.test(text) ||
+    /\bgrossing\b/i.test(text)
+  ) {
+    return { kind: "driver_billed", year, month: now.getMonth() + 1, weekStart: week.start, weekEnd: week.end };
+  }
   return null;
+}
+
+export function loadStopSummaries(): Map<number, string[]> {
+  const grouped = new Map<number, string[]>();
+  const rows = getDb()
+    .prepare(
+      `SELECT load_id, city, state, kind FROM load_stops
+       ORDER BY load_id, sequence, id`,
+    )
+    .all() as Array<{ load_id: number; city: string; state: string; kind: string }>;
+  for (const row of rows) {
+    const place = [row.city, row.state].map((part) => String(part ?? "").trim()).filter(Boolean).join(", ");
+    if (!place) continue;
+    const list = grouped.get(row.load_id) ?? [];
+    list.push(`${row.kind === "delivery" ? "del" : "pu"} ${place}`);
+    grouped.set(row.load_id, list);
+  }
+  return grouped;
 }
 
 function billedLoads(year: number, month?: number): LoadView[] {
@@ -142,15 +159,38 @@ export function buildMikeTmsSnapshot(now = new Date()): {
   topDriversBilledMonth: MikeTmsNamedTotal[];
   topDriversMilesWeek: MikeTmsNamedTotal[];
   fuelRows: number;
+  fuel: Array<{ name: string; gallons: number; amount: number }>;
+  odometer: Array<{ unit: string; miles: number; recordedAt: string }>;
   note: string;
 } {
   const week = weekBounds(now);
+  const fuelRows = listFuelTransactions();
+  const trucksById = new Map(listTrucks().map((truck) => [truck.id, truck.unit_number]));
+  const lastOdo = new Map<number, { miles: number; recordedAt: string }>();
+  for (const reading of listTruckOdometerReadings()) {
+    lastOdo.set(reading.truck_id, { miles: reading.miles, recordedAt: reading.recorded_at });
+  }
+  const odometer = [...lastOdo.entries()]
+    .map(([truckId, reading]) => {
+      const unit = trucksById.get(truckId);
+      return unit ? { unit, miles: reading.miles, recordedAt: reading.recordedAt } : null;
+    })
+    .filter((row): row is { unit: string; miles: number; recordedAt: string } => row != null)
+    .slice(0, 20);
   return {
     topCustomersYear: topCustomersByBilled(now.getFullYear()).slice(0, 8),
     topDriversBilledMonth: topDriversByBilled(now.getFullYear(), now.getMonth() + 1).slice(0, 8),
     topDriversMilesWeek: topDriversByTmsMiles(week.start, week.end).slice(0, 8),
-    fuelRows: listFuelTransactions().length,
-    note: "Billed freight is the customer/load rate, not driver pay. Miles are TMS Google loaded + empty miles, not Samsara IFTA.",
+    fuelRows: fuelRows.length,
+    fuel: fuelRows.length
+      ? listFuelRollups(now).slice(0, 8).map((row) => ({
+          name: row.name,
+          gallons: row.monthGallons,
+          amount: row.monthAmount,
+        }))
+      : [],
+    odometer,
+    note: "The TMS has no driver Pay tab. Billed freight is the customer/load rate, not pay. Miles are TMS Google loaded + empty miles, not Samsara IFTA.",
   };
 }
 
@@ -175,10 +215,10 @@ export function formatMikeTmsStatsReply(question: MikeTmsStatsQuestion, now = ne
     const rows = topDriversByBilled(question.year, month);
     const label = `${now.toLocaleString("en-US", { month: "long" })} ${question.year}`;
     if (!rows.length) {
-      return `No assigned drivers have billed freight on TMS loads in ${label}. This is billed freight (customer rate), not driver pay.`;
+      return `The TMS has no driver Pay tab. No assigned drivers have billed freight on TMS loads in ${label}.`;
     }
     const top = rows[0];
-    return `${namedLine(top, `${money(top.total)} billed freight this month`)} across ${top.loads} loads. That is billed freight, not driver pay.`;
+    return `The TMS has no driver Pay tab. ${namedLine(top, `${money(top.total)} billed freight this month`)} across ${top.loads} loads (customer rate, not pay).`;
   }
   const rows = topDriversByTmsMiles(question.weekStart, question.weekEnd);
   if (!rows.length) {
@@ -186,4 +226,10 @@ export function formatMikeTmsStatsReply(question: MikeTmsStatsQuestion, now = ne
   }
   const top = rows[0];
   return `${namedLine(top, `${top.total.toLocaleString("en-US")} TMS miles this week`)} across ${top.loads} loads. Those are TMS miles, not Samsara IFTA.`;
+}
+
+export function answerMikeTmsQuestion(question: string, now = new Date()): string | null {
+  const parsed = parseMikeTmsStatsQuestion(question, now);
+  if (!parsed) return null;
+  return formatMikeTmsStatsReply(parsed, now);
 }

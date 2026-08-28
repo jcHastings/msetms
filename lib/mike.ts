@@ -16,9 +16,9 @@ import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from 
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
 import { mikeWorkReply, proposeMikeWork } from "./mike-work";
 import {
+  answerMikeTmsQuestion,
   buildMikeTmsSnapshot,
-  formatMikeTmsStatsReply,
-  parseMikeTmsStatsQuestion,
+  loadStopSummaries,
   tmsMilesForLoad,
 } from "./mike-tms-stats";
 import { geocodeAddress } from "./places";
@@ -334,6 +334,7 @@ export function attachMikeFleetTelemetry(input: {
 }
 
 async function buildOpsSnapshot(question = ""): Promise<string> {
+  const stopByLoad = loadStopSummaries();
   const loads = listLoads({ status: "all" }).slice(0, 200).map((load) => ({
     load: load.load_number,
     ref: load.customer_reference || load.reference_number || "",
@@ -348,6 +349,7 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     driver: load.driver_name || "unassigned",
     truck: load.truck_unit || "unassigned",
     trailer: load.trailer_unit || "unassigned",
+    stops: stopByLoad.get(load.id) ?? [],
     tmsMiles: tmsMilesForLoad(load),
     emptySoon: load.status === "at_delivery" || load.status === "unloading" || load.status === "delivered",
   }));
@@ -446,12 +448,11 @@ export async function askMike(
       proposals: work.proposals,
     };
   }
-  const tmsQuestion = parseMikeTmsStatsQuestion(question);
-  if (tmsQuestion) {
-    const reply = formatMikeTmsStatsReply(tmsQuestion);
+  const tmsReply = answerMikeTmsQuestion(question);
+  if (tmsReply) {
     return {
       configured: isOpenAiConfigured(),
-      reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
+      reply: work.reply ? `${tmsReply}\n\n${work.reply}` : tmsReply,
       proposals: work.proposals,
     };
   }
@@ -479,7 +480,7 @@ export async function askMike(
       {
         role: "system",
         content:
-          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
+          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. TMS totals: use tmsStats. The TMS has no driver Pay tab — billed freight is the customer rate, not pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent earnings, rankings, or miles. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),

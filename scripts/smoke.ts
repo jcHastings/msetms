@@ -1283,8 +1283,8 @@ async function main() {
   assert.match(mikeSrc, /isClosestCityQuestion/);
   assert.match(mikeSrc, /Never say no trucks ranked closest/);
   assert.match(mikeSrc, /tmsStats/);
-  assert.match(mikeSrc, /parseMikeTmsStatsQuestion/);
-  assert.match(mikeSrc, /formatMikeTmsStatsReply/);
+  assert.match(mikeSrc, /answerMikeTmsQuestion/);
+  assert.match(mikeSrc, /loadStopSummaries/);
   assert.match(mikeSrc, /await geocode\(asked\)/);
   const cityCoordsSrc = fs.readFileSync(path.join(process.cwd(), "lib/city-coords-shared.ts"), "utf8");
   assert.match(cityCoordsSrc, /Des Moines/);
@@ -9908,6 +9908,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(formatClosestCityReply(coldDodge), /no trucks ranked/i);
 
   const {
+    answerMikeTmsQuestion,
     formatMikeTmsStatsReply,
     parseMikeTmsStatsQuestion,
     topCustomersByBilled,
@@ -10015,14 +10016,26 @@ Continuous reefer. Two load locks.
     mikeNow,
   );
   assert.match(driverReply, /Dana Billed/);
+  assert.match(driverReply, /77/);
   assert.match(driverReply, /billed freight/i);
-  assert.match(driverReply, /not driver pay/i);
+  assert.match(driverReply, /no driver Pay tab/i);
+  assert.doesNotMatch(driverReply, /I don't have information/i);
   const milesReply = formatMikeTmsStatsReply(
     { kind: "miles_week", year: 2026, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
     mikeNow,
   );
   assert.match(milesReply, /Dana Billed/);
   assert.match(milesReply, /TMS miles/i);
+  const liveCustomerAsk = answerMikeTmsQuestion("Who is our top customer on 2026?", mikeNow);
+  const liveDriverAsk = answerMikeTmsQuestion("What's highest grossing driver this month?", mikeNow);
+  const liveMilesAsk = answerMikeTmsQuestion("What driver did the most miles this week?", mikeNow);
+  assert.match(String(liveCustomerAsk), /Billed Freight Foods/);
+  assert.doesNotMatch(String(liveCustomerAsk), /I don't have information/i);
+  assert.match(String(liveDriverAsk), /Dana Billed/);
+  assert.match(String(liveDriverAsk), /billed freight/i);
+  assert.doesNotMatch(String(liveDriverAsk), /I don't have information/i);
+  assert.match(String(liveMilesAsk), /TMS miles/i);
+  assert.doesNotMatch(String(liveMilesAsk), /I don't have information/i);
   const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
   assert.equal(
     matchLinkedSamsaraVehicle(
