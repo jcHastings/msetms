@@ -31,6 +31,49 @@ export type FleetMapPin = {
   pinColor?: string;
 };
 
+export type FleetPinLabelOrigin = { x: number; y: number };
+
+const PIN_LABEL_CLUSTER_DECIMALS = 4;
+const PIN_LABEL_Y_SLOTS = [0, -1.25, 1.25] as const;
+
+export function clusterPinLabelSlots(
+  pins: Array<{ id: string; lat: number; lng: number; label?: string }>,
+): Map<string, number> {
+  const groups = new Map<string, Array<{ id: string; lat: number; lng: number; label?: string }>>();
+  for (const pin of pins) {
+    const key = `${pin.lat.toFixed(PIN_LABEL_CLUSTER_DECIMALS)},${pin.lng.toFixed(PIN_LABEL_CLUSTER_DECIMALS)}`;
+    const list = groups.get(key) ?? [];
+    list.push(pin);
+    groups.set(key, list);
+  }
+  const slots = new Map<string, number>();
+  for (const list of groups.values()) {
+    list.sort((left, right) => (left.label ?? left.id).localeCompare(right.label ?? right.id));
+    list.forEach((pin, index) => slots.set(pin.id, index));
+  }
+  return slots;
+}
+
+export function unitLabelBesideOrigin(text: string, slot = 0): FleetPinLabelOrigin {
+  const chars = Math.max(1, text.trim().length);
+  const xMag = 1.85 + chars * 0.38;
+  const side = slot % 2 === 0 ? 1 : -1;
+  const y = PIN_LABEL_Y_SLOTS[Math.floor(slot / 2) % PIN_LABEL_Y_SLOTS.length];
+  return { x: side * xMag, y };
+}
+
+export function fleetMapDisplayPoints(pins: FleetMapPin[]): Array<
+  FleetMapPin & { markerText: string; labelClassName: string; labelOrigin: FleetPinLabelOrigin }
+> {
+  const slots = clusterPinLabelSlots(pins);
+  return pins.map((pin) => ({
+    ...pin,
+    markerText: pin.label,
+    labelClassName: "fleet-pin-label",
+    labelOrigin: unitLabelBesideOrigin(pin.label, slots.get(pin.id) ?? 0),
+  }));
+}
+
 export type FleetMapMissing = {
   id: number;
   label: string;

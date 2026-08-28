@@ -124,6 +124,7 @@ export function LoadMapCanvas({
                   color: "#0f172a",
                   fontSize: "11px",
                   fontWeight: "700",
+                  className: point.labelClassName,
                 }
               : undefined,
             icon:
@@ -136,7 +137,9 @@ export function LoadMapCanvas({
                     fillOpacity: 0.95,
                     strokeColor: "#ffffff",
                     strokeWeight: 1,
-                    labelOrigin: new maps.Point(0, -2),
+                    labelOrigin: point.labelOrigin
+                      ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
+                      : new maps.Point(0, -2),
                   }
                 : {
                     path: maps.SymbolPath.CIRCLE,
@@ -145,7 +148,9 @@ export function LoadMapCanvas({
                     fillOpacity: 0.95,
                     strokeColor: "#ffffff",
                     strokeWeight: 1,
-                    labelOrigin: new maps.Point(0, -2),
+                    labelOrigin: point.labelOrigin
+                      ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
+                      : new maps.Point(0, -2),
                   },
           });
           if (point.href) {

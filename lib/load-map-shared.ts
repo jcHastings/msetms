@@ -2,6 +2,8 @@
 
 export type LoadMapPointKind = "pickup" | "delivery" | "truck" | "trailer" | "track";
 
+export type LoadMapLabelOrigin = { x: number; y: number };
+
 export type LoadMapPoint = {
   id: string;
   kind: LoadMapPointKind;
@@ -12,6 +14,8 @@ export type LoadMapPoint = {
   href?: string;
   pinColor?: string;
   markerText?: string;
+  labelClassName?: string;
+  labelOrigin?: LoadMapLabelOrigin;
   pinShape?: "circle" | "arrow";
   headingDeg?: number | null;
 };

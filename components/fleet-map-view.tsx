@@ -3,6 +3,7 @@ import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { PageHeader } from "@/components/page-header";
 import {
   ORBCOMM_REEFER_PIN_COLOR,
+  fleetMapDisplayPoints,
   type FleetMapModel,
   type OrbcommReeferPinStatus,
 } from "@/lib/fleet-map-shared";
@@ -35,7 +36,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
         <section className="card overflow-hidden">
           <LoadMapCanvas
             apiKey={apiKey}
-            points={model.pins}
+            points={fleetMapDisplayPoints(model.pins)}
             className="h-[36rem] w-full bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No GPS pins."

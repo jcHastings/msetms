@@ -528,6 +528,9 @@ async function main() {
   assert.match(mapCanvasSource, /point\.href/);
   assert.match(mapCanvasSource, /Polyline/);
   assert.match(mapCanvasSource, /markerText/);
+  assert.match(mapCanvasSource, /labelOrigin/);
+  assert.match(mapCanvasSource, /point\.labelOrigin/);
+  assert.match(mapCanvasSource, /new maps\.Point\(0, -2\)/);
   assert.match(mapCanvasSource, /FORWARD_CLOSED_ARROW/);
   assert.match(mapCanvasSource, /featureType: "poi"/);
   assert.match(mapCanvasSource, /gm_authFailure|data-map-off/);
@@ -570,6 +573,7 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /buildSamsaraFleetMap|buildOrbcommFleetMap|FleetMapView/);
   const fleetMapView = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
   assert.doesNotMatch(fleetMapView, /from ["']@\/lib\/(db|env|settings|places)["']/);
+  assert.match(fleetMapView, /fleetMapDisplayPoints/);
   assert.match(fleetMapView, /Map is off/);
   assert.doesNotMatch(fleetMapView, /GOOGLE_MAPS_API_KEY|<code>\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/samsara/page.tsx"), "utf8"), /buildSamsaraFleetMap/);
@@ -7576,18 +7580,51 @@ Continuous reefer. Two load locks.
     speed_mph: 3,
     heading_deg: 10,
   });
-  const { orbcommPinShape, orbcommTrailerMoving } = await import("../lib/fleet-map-shared");
+  const { orbcommPinShape, orbcommTrailerMoving, clusterPinLabelSlots, unitLabelBesideOrigin, fleetMapDisplayPoints } =
+    await import("../lib/fleet-map-shared");
   assert.equal(orbcommTrailerMoving(5), true);
   assert.equal(orbcommTrailerMoving(4), false);
   assert.equal(orbcommTrailerMoving(null), false);
   assert.equal(orbcommPinShape(62), "arrow");
   assert.equal(orbcommPinShape(3), "circle");
+  const besideShort = unitLabelBesideOrigin("27", 0);
+  const besideLong = unitLabelBesideOrigin("MS1522", 0);
+  const besideOverlap = unitLabelBesideOrigin("28", 1);
+  assert.ok(besideShort.x > 0, "unit number sits to the right of a lone pin");
+  assert.ok(besideLong.x > besideShort.x, "longer trailer numbers sit farther beside the pin");
+  assert.ok(besideOverlap.x < 0, "overlapping pins offset the next label to the other side");
+  assert.notEqual(besideOverlap.x, besideShort.x);
+  const overlapSlots = clusterPinLabelSlots([
+    { id: "a", lat: 40.586, lng: -98.39, label: "27" },
+    { id: "b", lat: 40.586, lng: -98.39, label: "28" },
+    { id: "c", lat: 41.2565, lng: -95.9345, label: "42" },
+  ]);
+  assert.equal(overlapSlots.get("a") === overlapSlots.get("b"), false);
+  assert.equal(overlapSlots.get("c"), 0);
+  const samsaraLabels = fleetMapDisplayPoints(samsaraFleetMap.pins);
+  const labeledLiveTruck = samsaraLabels.find((pin) => pin.label === "FM-SAM-1");
+  assert.equal(labeledLiveTruck?.markerText, "FM-SAM-1");
+  assert.equal(labeledLiveTruck?.labelClassName, "fleet-pin-label");
+  assert.ok(labeledLiveTruck?.labelOrigin && labeledLiveTruck.labelOrigin.x !== 0);
+  assert.doesNotMatch(labeledLiveTruck?.markerText ?? "", /Dallas|Omaha|Indianapolis|Hastings|, TX|, NE/);
+  const labeledMovingTruck = samsaraLabels.find((pin) => pin.label === "FM-SAM-GO");
+  assert.equal(labeledMovingTruck?.markerText, "FM-SAM-GO");
+  assert.equal(labeledMovingTruck?.pinShape, "arrow");
   assert.equal(orbcomm.parseOrbcommSpeedMph({ speedMph: 58 }), 58);
   assert.equal(orbcomm.parseOrbcommHeadingDeg({ course: 90 }), 90);
   const coloredOrbcommMap = await fleetMap.buildOrbcommFleetMap();
   assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-MOVE")?.pinShape, "arrow");
   assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-MOVE")?.headingDeg, 85);
   assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-STOP")?.pinShape, "circle");
+  const orbcommLabels = fleetMapDisplayPoints(coloredOrbcommMap.pins);
+  const labeledMove = orbcommLabels.find((pin) => pin.label === "FM-MOVE");
+  const labeledStop = orbcommLabels.find((pin) => pin.label === "FM-STOP");
+  assert.equal(labeledMove?.markerText, "FM-MOVE");
+  assert.equal(labeledStop?.markerText, "FM-STOP");
+  assert.equal(labeledMove?.pinShape, "arrow");
+  assert.equal(labeledStop?.pinShape, "circle");
+  assert.equal(labeledMove?.pinColor, ORBCOMM_REEFER_PIN_COLOR.running);
+  assert.doesNotMatch(labeledMove?.markerText ?? "", /Hastings|Indianapolis|, IN|, NE/);
   for (const row of [
     { unit: "FM-RUN", status: "running" as const },
     { unit: "FM-OFF", status: "off" as const },
@@ -10490,6 +10527,9 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Dot = parked/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /ORBCOMM_MOVING_SPEED_MPH = 5/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /fleetMapDisplayPoints/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /unitLabelBesideOrigin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /fleet-pin-label/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /orbcommPinShape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /classifyOrbcommReeferMode/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /pinColor/);

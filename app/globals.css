@@ -913,3 +913,11 @@ html:has([data-load-embed]) body {
   font-size: 0.75rem;
   color: #475569;
 }
+
+.fleet-pin-label {
+  background: #ffffff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
+  line-height: 1.2;
+}
