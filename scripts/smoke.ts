@@ -7811,9 +7811,27 @@ Continuous reefer. Two load locks.
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /BOL/);
   assert.match(driverHome, /Confirmation/);
+  assert.match(driverHome, /pickDriverDestinationLoad/);
+  const { pickDriverDestinationLoad } = await import("../lib/driver-destinations-shared");
+  assert.equal(pickDriverDestinationLoad([{ id: 11 }], [{ id: 22, delivery_end: "2026-08-01T00:00:00.000Z" }])?.id, 11);
+  assert.equal(
+    pickDriverDestinationLoad(
+      [],
+      [
+        { id: 22, delivery_end: "2026-01-01T00:00:00.000Z" },
+        { id: 33, delivery_end: "2026-08-01T00:00:00.000Z" },
+      ],
+    )?.id,
+    33,
+  );
+  assert.equal(pickDriverDestinationLoad([], []), null);
   const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
   assert.match(driverLoadPage, /driverFacingPay/);
   assert.doesNotMatch(driverLoadPage, /formatMoney\(load\.rate\)/);
+  assert.match(driverLoadPage, /id="fuel"/);
+  assert.match(driverLoadPage, /id="upload"/);
+  assert.match(driverLoadPage, /id="bol"/);
+  assert.match(driverLoadPage, /packet=internal/);
 
   const cabTruckId = queries.createTruck({
     unit_number: "CAB-1",

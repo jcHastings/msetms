@@ -9,6 +9,7 @@ import { listLoadsForDriver } from "@/lib/queries";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { DriverDestinations } from "@/components/driver-destinations";
+import { pickDriverDestinationLoad } from "@/lib/driver-destinations-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
 import { isActiveLoadStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -49,7 +50,7 @@ export default async function DriverHomePage() {
       </header>
 
       {(() => {
-        const current = active[0];
+        const current = pickDriverDestinationLoad(active, delivered);
         const loadHref = current ? `/driver/loads/${current.id}` : "";
         return (
           <DriverDestinations
