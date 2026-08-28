@@ -33,6 +33,7 @@ import {
   updateLoad,
   updateLoadDetails,
   updateLoadStatus,
+  updateLoadTruckStatus,
   updateLocation,
   setDriverActive,
   setTrailerActive,
@@ -601,6 +602,27 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
       if (status === "cancelled") {
         redirect(safeReturnTo(formData.get("return_to"), "/board"));
       }
+      return { ok: true, id: loadId };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
+}
+
+export async function updateLoadTruckStatusAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const actor = await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const existing = getLoad(loadId);
+      if (existing) {
+        const { assertCanEditLoadRecord } = await import("./accounting-desk");
+        assertCanEditLoadRecord(existing, actor.role);
+      }
+      updateLoadTruckStatus(loadId, String(formData.get("truck_status") ?? ""));
+      refresh();
       return { ok: true, id: loadId };
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;

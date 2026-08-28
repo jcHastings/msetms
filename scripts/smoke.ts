@@ -386,6 +386,8 @@ async function main() {
   assert.match(persistHook, /isAssignEdit/);
   assert.match(persistHook, /isLoadAutosaveField/);
   assert.match(persistHook, /isLoadCriticalField/);
+  assert.match(persistHook, /updateLoadStatusAction/);
+  assert.match(persistHook, /updateLoadTruckStatusAction/);
   assert.doesNotMatch(persistHook, /clearDirty\(\)/);
   assert.match(workspaceSource, /flushEverydayFields/);
   assert.match(workspaceSource, /data-autosave/);
@@ -400,6 +402,10 @@ async function main() {
   assert.equal(isLoadAutosaveField("weight"), true);
   assert.equal(isLoadAutosaveField("notes"), true);
   assert.equal(isLoadAutosaveField("reefer_mode"), true);
+  assert.equal(isLoadAutosaveField("status"), true);
+  assert.equal(isLoadAutosaveField("truck_status"), true);
+  assert.equal(isLoadCriticalField("status"), false);
+  assert.equal(isLoadCriticalField("truck_status"), false);
   assert.equal(isLoadAutosaveField("rate"), false);
   assert.equal(isLoadAutosaveField("customer_id"), false);
   assert.equal(isLoadAutosaveField("declared_value"), false);
@@ -1692,7 +1698,7 @@ async function main() {
     "do not invent a truck status",
   );
   const mse1055Id = queries.createLoad({
-    load_number: "MSE-1055",
+    load_number: "MSE-1055-REPRO",
     customer_id: customerId,
     origin: "Hastings, NE",
     destination: "Harlan, IA",
@@ -1719,6 +1725,12 @@ async function main() {
   assert.ok(mse1055);
   assert.equal(mse1055.status, "available");
   assert.equal(mse1055.truck_status, "IN TRANSIT");
+  queries.updateLoadStatus(mse1055Id, "in_transit");
+  assert.equal(queries.getLoad(mse1055Id)?.status, "in_transit");
+  assert.equal(queries.getLoad(mse1055Id)?.truck_status, "IN TRANSIT", "Load Status write must leave Truck Status");
+  queries.updateLoadTruckStatus(mse1055Id, "dispatched");
+  assert.equal(queries.getLoad(mse1055Id)?.status, "in_transit", "Truck Status write must leave Load Status");
+  assert.equal(queries.getLoad(mse1055Id)?.truck_status, "dispatched");
   const statusSave = new FormData();
   statusSave.set("status", "in_transit");
   statusSave.set("truck_status", "dispatched");
@@ -1728,7 +1740,7 @@ async function main() {
   assert.equal(statusMerged.rate, mse1055.rate, "status save must not invent a rate");
   queries.updateLoad(mse1055Id, statusMerged);
   const mse1055Saved = queries.getLoad(mse1055Id);
-  assert.equal(mse1055Saved?.load_number, "MSE-1055");
+  assert.equal(mse1055Saved?.load_number, "MSE-1055-REPRO");
   assert.equal(mse1055Saved?.status, "in_transit", "Available → In Transit must persist on Save");
   assert.equal(mse1055Saved?.truck_status, "dispatched", "IN TRANSIT → Dispatched must persist on Save");
   const statusAgain = parseLoadInput(new FormData(), true, mse1055Saved);

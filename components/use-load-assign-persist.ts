@@ -2,9 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useLoadEdit } from "@/components/load-edit-context";
-import { updateLoadAction } from "@/lib/actions";
+import { updateLoadAction, updateLoadStatusAction, updateLoadTruckStatusAction } from "@/lib/actions";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { isLoadAutosaveField, isLoadCriticalField } from "@/lib/load-autosave-shared";
+
+function isStatusPairField(name: string): boolean {
+  return name === "status" || name === "truck_status";
+}
 
 export function useLoadAssignPersist(loadId?: number) {
   const router = useRouter();
@@ -15,6 +19,32 @@ export function useLoadAssignPersist(loadId?: number) {
     options?: { refresh?: boolean },
   ): Promise<boolean> {
     if (!loadId) return false;
+    const keys = Object.keys(fields);
+    const statusPairOnly = keys.length > 0 && keys.every(isStatusPairField);
+    if (statusPairOnly) {
+      if (fields.status !== undefined) {
+        const statusData = new FormData();
+        statusData.set("load_id", String(loadId));
+        statusData.set("status", fields.status);
+        const result = await updateLoadStatusAction(statusData);
+        if (result && !result.ok) {
+          window.alert(result.error);
+          return false;
+        }
+      }
+      if (fields.truck_status !== undefined) {
+        const truckData = new FormData();
+        truckData.set("load_id", String(loadId));
+        truckData.set("truck_status", fields.truck_status);
+        const result = await updateLoadTruckStatusAction(truckData);
+        if (result && !result.ok) {
+          window.alert(result.error);
+          return false;
+        }
+      }
+      if (options?.refresh) router.refresh();
+      return true;
+    }
     const formData = new FormData();
     formData.set("stay_on_load", "1");
     for (const [key, value] of Object.entries(fields)) formData.set(key, value);

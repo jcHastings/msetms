@@ -1775,6 +1775,17 @@ export function markQboInvoice(
     .run(input.invoiceId, input.invoiceNumber, input.sentAt, input.source, input.sentAt, loadId);
 }
 
+export function updateLoadTruckStatus(loadId: number, truckStatus: string): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  getDb()
+    .prepare("UPDATE loads SET truck_status = ?, updated_at = ? WHERE id = ?")
+    .run(truckStatus, now(), loadId);
+  recordLoadChanges(loadId, "update", [
+    { field: "truck_status", oldValue: load.truck_status, newValue: truckStatus },
+  ]);
+}
+
 export function updateLoadStatus(loadId: number, status: string): void {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
