@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { LoadOverlayFallback } from "@/components/load-overlay-fallback";
+import { requestLoadOverlay } from "@/components/page-overlay-host";
 
 export function OverlayOpenLink({
   href,
@@ -35,6 +36,11 @@ export function OverlayOpenLink({
             return;
           }
           event.preventDefault();
+          const next = new URL(href, window.location.origin);
+          if (next.pathname === window.location.pathname) {
+            requestLoadOverlay(href);
+            return;
+          }
           start(() => {
             router.push(href);
           });

@@ -26,7 +26,7 @@ export function AppShell({
   const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="desk-sidebar sticky top-0 flex h-screen w-[4.75rem] shrink-0 flex-col">
+      <aside className="desk-sidebar sticky top-0 flex h-screen w-[4.75rem] shrink-0 flex-col" data-desk-chrome="">
         <div className="desk-sidebar-brand border-b border-white/10 px-1 py-3">
           <Link href="/" className="block">
             <BrandMark variant="dark" size="sm" />
@@ -47,9 +47,11 @@ export function AppShell({
       </aside>
       <div className="min-w-0 flex-1">
         <div className="mx-auto w-full max-w-[1400px] px-8 py-7">
+          <div data-desk-chrome="">
           <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
+          </div>
           {showSetupPrompt ? (
-            <div className="mb-4 flex flex-wrap items-center justify-end gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="mb-4 flex flex-wrap items-center justify-end gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" data-desk-chrome="">
               <Link href="/settings/security" className="btn btn-secondary">
                 Set up 2-step
               </Link>

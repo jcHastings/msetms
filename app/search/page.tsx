@@ -1,4 +1,5 @@
 import { LoadOverlay } from "@/components/load-overlay";
+import { PageOverlayHost } from "@/components/page-overlay-host";
 import { LoadSearch } from "@/components/load-search";
 import { PageHeader } from "@/components/page-header";
 import { overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
@@ -16,7 +17,7 @@ export default async function SearchPage({
   const openId = parseOpenLoadId(params.open);
   const initial = defaultSearchCriteria();
   return (
-    <>
+    <PageOverlayHost returnTo={overlayReturnTo("/search")} serverOpenId={openId}>
       <PageHeader
         title="Search"
       />
@@ -29,6 +30,6 @@ export default async function SearchPage({
         initialResults={searchLoads(initial)}
       />
       {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/search")} /> : null}
-    </>
+    </PageOverlayHost>
   );
 }

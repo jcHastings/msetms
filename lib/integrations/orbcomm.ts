@@ -101,6 +101,7 @@ export type MappedTrailer = {
 
 type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult };
 let cache: CacheEntry | null = null;
+let inflight: Promise<ReeferSnapshotResult> | null = null;
 
 class OrbcommHttpError extends Error {
   status: number;
@@ -113,6 +114,7 @@ class OrbcommHttpError extends Error {
 
 export function resetOrbcommCacheForTests(): void {
   cache = null;
+  inflight = null;
 }
 
 export function latestReeferForTrailer(trailer: {
@@ -219,9 +221,24 @@ export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?:
 export async function getReeferSnapshots(): Promise<ReeferSnapshotResult> {
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
-  const result = await loadReeferSnapshots();
-  cache = { expiresAt: now + CACHE_TTL_MS, result };
-  return result;
+  if (cache) {
+    void refreshReeferSnapshotCache();
+    return cache.result;
+  }
+  return refreshReeferSnapshotCache();
+}
+
+async function refreshReeferSnapshotCache(): Promise<ReeferSnapshotResult> {
+  if (inflight) return inflight;
+  inflight = loadReeferSnapshots()
+    .then((result) => {
+      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result };
+      return result;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {

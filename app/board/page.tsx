@@ -23,6 +23,7 @@ import {
 } from "@/lib/integrations/samsara";
 import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
+import { PageOverlayHost } from "@/components/page-overlay-host";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
@@ -45,6 +46,9 @@ export default async function BoardPage({
   const openTab = params.tab;
   const current = { status, date };
   const loads = listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status));
+  const assignableTrucks = listAssignableTrucks();
+  const assignableTrailers = listAssignableTrailers();
+  const assignableDrivers = listAssignableDrivers();
   const relayLabels = extraRelayLabelsByLoad(loads);
   const reefers = await getReeferSnapshots();
   const fleet = await getSamsaraFleet();
@@ -58,6 +62,7 @@ export default async function BoardPage({
   }
 
   return (
+    <PageOverlayHost returnTo={overlayReturnTo("/board", current)} serverOpenId={openId}>
     <BoardFilterProvider>
       <PageHeader
         title="Dispatch board"
@@ -207,9 +212,9 @@ export default async function BoardPage({
                           <AssignDialog
                             loadId={load.id}
                             loadNumber={load.load_number}
-                            trucks={listAssignableTrucks(load.id)}
-                            trailers={listAssignableTrailers(load.id)}
-                            drivers={listAssignableDrivers(load.id)}
+                            trucks={assignableTrucks}
+                            trailers={assignableTrailers}
+                            drivers={assignableDrivers}
                             defaultOoPercent={defaultOoPercent()}
                             alertWindows={complianceWindows()}
                             label={load.driver_id ? "Change unit" : "Assign"}
@@ -232,5 +237,6 @@ export default async function BoardPage({
         <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
       ) : null}
     </BoardFilterProvider>
+    </PageOverlayHost>
   );
 }

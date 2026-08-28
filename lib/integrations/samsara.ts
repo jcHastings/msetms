@@ -79,6 +79,7 @@ export type SamsaraFleetResult = {
 
 type CacheEntry = { expiresAt: number; result: SamsaraFleetResult };
 let cache: CacheEntry | null = null;
+let inflight: Promise<SamsaraFleetResult> | null = null;
 
 class SamsaraHttpError extends Error {
   status: number;
@@ -95,6 +96,7 @@ export function isSamsaraConfigured(): boolean {
 
 export function resetSamsaraCache(): void {
   cache = null;
+  inflight = null;
 }
 
 export function resetSamsaraCacheForTests(): void {
@@ -141,9 +143,24 @@ export async function getSamsaraFleet(): Promise<SamsaraFleetResult> {
   await loadRuntimeEnv();
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
-  const result = await loadSamsaraFleet();
-  cache = { expiresAt: now + CACHE_TTL_MS, result };
-  return result;
+  if (cache) {
+    void refreshSamsaraFleetCache();
+    return cache.result;
+  }
+  return refreshSamsaraFleetCache();
+}
+
+async function refreshSamsaraFleetCache(): Promise<SamsaraFleetResult> {
+  if (inflight) return inflight;
+  inflight = loadSamsaraFleet()
+    .then((result) => {
+      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result };
+      return result;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 export function isLiveSamsaraGps(location: VehicleLocation | null | undefined): location is VehicleLocation {

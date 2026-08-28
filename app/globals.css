@@ -634,6 +634,19 @@ summary.btn.load-action-btn:hover {
   overflow: auto;
 }
 
+html:has([data-load-embed]) [data-desk-chrome] {
+  display: none;
+}
+
+html:has([data-load-embed]) .mx-auto {
+  max-width: none;
+  padding: 0.75rem 1rem 1.25rem;
+}
+
+html:has([data-load-embed]) body {
+  background: #eef2f6;
+}
+
 .load-overlay-panel,
 .pay-item-dialog {
   width: min(1100px, 100%);

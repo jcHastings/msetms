@@ -1,5 +1,5 @@
 import { agreedAmountForLoad, buildConfirmationForLoad, formatUsd, renderConfirmationPdf } from "./load-confirmation";
-import { formatMdYDisplay, formatStopWindow } from "./format";
+import { formatStopWindow } from "./format";
 import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
 import { formatStopPartyAddress } from "./locations";
@@ -8,7 +8,6 @@ import { getCompanyProfile } from "./company";
 import { isUsableEmail, MAIL_NOREPLY, normalizeEmail, type LoadMailKind, type SentMailRow } from "./mail-shared";
 import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
-import { routeGuideFromLoad } from "./routing-shared";
 import { listStops } from "./stops";
 import { stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
 import { isOwnerOperator, labelForLoadStatus, type LoadView } from "./types";
@@ -120,6 +119,36 @@ export function customerFacingLoadNumber(load: {
   return picks.find((value) => value !== internal) || picks.find((value) => value === internal) || "";
 }
 
+export function cityStateFromAddress(address: string): string {
+  const parts = String(address ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  const last = parts[parts.length - 1] ?? "";
+  const lastStateZip = last.match(/^([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/);
+  if (lastStateZip && parts.length >= 2) {
+    return `${parts[parts.length - 2]}, ${lastStateZip[1].toUpperCase()}`;
+  }
+  if (parts.length >= 3 && /^\d{5}(?:-\d{4})?$/.test(last)) {
+    const state = parts[parts.length - 2] ?? "";
+    if (/^[A-Za-z]{2}$/.test(state)) {
+      return `${parts[parts.length - 3]}, ${state.toUpperCase()}`;
+    }
+  }
+  if (parts.length === 2 && /^[A-Za-z]{2}$/.test(last)) {
+    return `${parts[0]}, ${last.toUpperCase()}`;
+  }
+  return parts.join(", ");
+}
+
+function isClockEta(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  if (/\bmi\b|on file|leftover/i.test(text)) return false;
+  return /\d/.test(text);
+}
+
 export function composeCustomerUpdateEmail(input: {
   loadNumber: string;
   customerRef: string;
@@ -134,28 +163,35 @@ export function composeCustomerUpdateEmail(input: {
 }): CustomerUpdateMailDraft {
   const shown = input.loadNumber.trim();
   const extraRef = input.customerRef.trim();
-  const stopLines = (input.stops ?? [])
-    .filter((stop) => stop.place.trim())
-    .map((stop) => `${stop.title} ${stop.place}`);
-  const lines = [
+  const places = (input.stops ?? []).filter((stop) => stop.place.trim());
+  const pickups = places.filter((stop) => /^pickup/i.test(stop.title));
+  const deliveries = places.filter((stop) => /^delivery/i.test(stop.title));
+  const location = cityStateFromAddress(input.lastLocation);
+  const header = [
     shown ? `Load ${shown}` : "Tracking update",
-    extraRef && extraRef !== shown ? `Your ref ${extraRef}` : "",
-    input.status ? `Status ${input.status}` : "",
-    input.truck ? `Truck ${input.truck}` : "",
-    input.trailer ? `Trailer ${input.trailer}` : "",
-    `Last location ${input.lastLocation || "not on file"}`,
-    input.eta ? `ETA ${input.eta}` : "",
-    input.nextStop ? `Next stop ${input.nextStop}` : "",
-    ...stopLines,
-    "",
+    extraRef && extraRef !== shown ? `Your ref: ${extraRef}` : "",
+    input.status ? `Status: ${input.status}` : "",
+  ].filter(Boolean);
+  const assets = [
+    input.truck ? `Truck: ${input.truck}` : "",
+    input.trailer ? `Trailer: ${input.trailer}` : "",
+  ].filter(Boolean);
+  const blocks = [
+    header.join("\n"),
+    assets.join("\n"),
+    location ? `Last location: ${location}` : "",
+    input.eta && isClockEta(input.eta) ? `ETA: ${input.eta}` : "",
+    pickups.length ? ["Pickup", ...pickups.map((stop) => stop.place)].join("\n") : "",
+    deliveries.length
+      ? ["Deliveries", ...deliveries.map((stop, index) => `${index + 1}. ${stop.place}`)].join("\n")
+      : "",
     mailNoReplyLine(input.officePhone),
-    "",
     "M & S Loads LLC · MS Express TMS",
   ].filter(Boolean);
   return {
     to: "",
     subject: shown ? `Load ${shown} — tracking update` : "Tracking update",
-    text: lines.join("\n").trim() + "\n",
+    text: `${blocks.join("\n\n").trim()}\n`,
     replyTo: MAIL_NOREPLY,
   };
 }
@@ -188,14 +224,7 @@ export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
 
 export async function buildCustomerUpdateDraft(load: LoadView): Promise<CustomerUpdateMailDraft> {
   const location = await getLocationForLoad(load.id);
-  const lastLocation = location?.address?.trim() || "";
-  const guide = routeGuideFromLoad(load);
-  const eta =
-    guide.totalMiles != null
-      ? `${guide.totalMiles.toLocaleString("en-US", { maximumFractionDigits: 1 })} mi on file${
-          guide.calculatedAt ? ` · ${formatMdYDisplay(guide.calculatedAt)}` : ""
-        }`
-      : "";
+  const lastLocation = cityStateFromAddress(location?.address?.trim() || "");
   const shown = customerFacingLoadNumber(load);
   const stops = listStops(load.id);
   const draft = composeCustomerUpdateEmail({
@@ -205,8 +234,8 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
     truck: (load.truck_unit || "").trim(),
     trailer: (load.trailer_unit || load.trailer_number || "").trim(),
     lastLocation,
-    eta,
-    nextStop: nextOpenStopLabel(stops),
+    eta: "",
+    nextStop: "",
     stops: customerMailStops(stops),
     officePhone: getCompanyProfile().dispatcher_phone,
   });
@@ -290,8 +319,14 @@ function mailStopLines(
 
 function customerStopPlace(stop: LoadStop): string {
   const name = stop.name.trim();
-  const cityState = [stop.city.trim(), stop.state.trim()].filter(Boolean).join(", ");
-  if (name && cityState) return `${name}, ${cityState}`;
+  const city = stop.city.trim();
+  const cityState = [city, stop.state.trim()].filter(Boolean).join(", ");
+  if (name && cityState) {
+    if (name.toLowerCase() === city.toLowerCase() || name.toLowerCase() === cityState.toLowerCase()) {
+      return cityState;
+    }
+    return `${name}, ${cityState}`;
+  }
   return name || cityState;
 }
 
@@ -307,12 +342,4 @@ function customerMailStops(stops: LoadStop[]): Array<{ title: string; place: str
     lines.push({ title: stopTypeLabel(stop.kind, index + 1), place: customerStopPlace(stop) });
   });
   return lines;
-}
-
-function nextOpenStopLabel(stops: LoadStop[]): string {
-  const open = stops.find((stop) => !stop.departed_at.trim());
-  if (!open) return "";
-  const title = stopTypeLabel(open.kind, stopTypeNumber(stops, open.id));
-  const city = [open.city, open.state].filter(Boolean).join(", ");
-  return city ? `${title} · ${city}` : title;
 }

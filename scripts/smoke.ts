@@ -484,8 +484,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /applyGeofenceArrivals\(loadId\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /departed_at/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /applyGeofenceArrivals/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /scheduleLoadOpenWork/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /isOfficialDrivingRoute/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /after\(/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /applyGeofenceArrivalsWithGeocode/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /refreshLoadRouteQuiet/);
@@ -544,7 +544,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isOfficialDrivingRoute/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /OverlayOpenLink/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /assignableTrucks/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /PageOverlayHost/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /Opening/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /requestLoadOverlay/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /ms-open-load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
@@ -555,6 +559,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /cityStateFromAddress/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /MAIL_FROM_DEFAULT/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /officialEmptyMiles/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
@@ -1996,28 +2001,35 @@ async function main() {
   assert.match(companyDraft.text, /Do not reply/);
   assert.match(companyDraft.text, /not monitored/);
   assert.doesNotMatch(companyDraft.text, /\$|USD|1,400|1400/);
+  assert.equal(loadMail.cityStateFromAddress("2200 North Kansas Avenue, Hastings, NE, 68901"), "Hastings, NE");
+  assert.equal(loadMail.cityStateFromAddress("Hastings, NE"), "Hastings, NE");
   const customerDraft = loadMail.composeCustomerUpdateEmail({
-    loadNumber: "MSE-MAIL",
-    customerRef: "RC-SMOKE",
-    status: "In transit",
-    truck: "112",
-    trailer: "TR-12",
-    lastLocation: "Memphis, TN",
-    eta: "412 mi on file · 08/28/26",
-    nextStop: "Delivery 1 · Birmingham, AL",
+    loadNumber: "12345",
+    customerRef: "12345",
+    status: "Assigned",
+    truck: "28/511698",
+    trailer: "MS1519",
+    lastLocation: "2200 North Kansas Avenue, Hastings, NE, 68901",
+    eta: "1,539.3 mi on file · 08/28/26",
+    nextStop: "Pickup 1 · Hastings, NE",
     stops: [
-      { title: "Pickup 1", place: "Lineage Logistics, Avenel, NJ" },
-      { title: "Delivery 1", place: "Nebraska Cold Storage, Hastings, NE" },
-      { title: "Delivery 2", place: "Kayco, Bronx, NY" },
+      { title: "Pickup 1", place: "Nebraska Cold Storage Inc, Hastings, NE" },
+      { title: "Delivery 1", place: "Lineage Logistics, Avenel, NJ" },
+      { title: "Delivery 5", place: "Kayco, Bayonne, NJ" },
     ],
+    officePhone: "402-302-0097",
   });
-  assert.match(customerDraft.text, /Truck 112/);
-  assert.match(customerDraft.text, /Memphis, TN/);
-  assert.match(customerDraft.text, /412 mi on file/);
-  assert.match(customerDraft.text, /Pickup 1 Lineage Logistics, Avenel, NJ/);
-  assert.match(customerDraft.text, /Delivery 1 Nebraska Cold Storage, Hastings, NE/);
-  assert.match(customerDraft.text, /Delivery 2 Kayco, Bronx, NY/);
-  assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th/);
+  assert.match(customerDraft.text, /Load 12345/);
+  assert.match(customerDraft.text, /Status: Assigned/);
+  assert.match(customerDraft.text, /Truck: 28\/511698/);
+  assert.match(customerDraft.text, /Trailer: MS1519/);
+  assert.match(customerDraft.text, /Last location: Hastings, NE/);
+  assert.doesNotMatch(customerDraft.text, /2200 North Kansas|1,539\.3 mi on file|Next stop/);
+  assert.match(customerDraft.text, /Pickup\nNebraska Cold Storage Inc, Hastings, NE/);
+  assert.match(customerDraft.text, /Deliveries\n1\. Lineage Logistics, Avenel, NJ/);
+  assert.match(customerDraft.text, /2\. Kayco, Bayonne, NJ/);
+  assert.match(customerDraft.text, /Call the office at 402-302-0097/);
+  assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th|MSE-/);
   assert.equal(customerDraft.replyTo, "noreply@msloads.com");
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
@@ -2209,14 +2221,17 @@ async function main() {
     assert.doesNotMatch(input.text, /\$|2200|settlement/i);
     assert.match(input.text, /Do not reply/);
     assert.match(input.text, /not monitored/);
-    assert.match(input.text, /Truck|Last location/);
+    assert.match(input.text, /Status: In Transit/);
+    assert.match(input.text, /Trailer: TR-MAIL/);
+    assert.doesNotMatch(input.text, /mi on file/);
     assert.match(input.subject, /PO-MAIL|RC-MAIL/);
     assert.doesNotMatch(input.subject, /MSE-/);
     assert.doesNotMatch(input.text, /Load MSE-/);
-    assert.match(input.text, /Pickup 1/);
-    assert.match(input.text, /Delivery 1/);
-    assert.match(input.text, /Hastings/);
-    assert.match(input.text, /Birmingham/);
+    assert.match(input.text, /Pickup/);
+    assert.match(input.text, /Deliveries/);
+    assert.match(input.text, /Hastings, NE/);
+    assert.match(input.text, /Birmingham, AL/);
+    assert.doesNotMatch(input.text, /Hastings, Hastings|Birmingham, Birmingham/);
     assert.doesNotMatch(input.text, /\$|settlement|relay|oo pay/i);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");

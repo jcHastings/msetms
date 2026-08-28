@@ -32,6 +32,7 @@ import {
 import { loadFormSettings } from "@/lib/settings";
 import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
+import { PageOverlayHost } from "@/components/page-overlay-host";
 import { RateConImport } from "@/components/rate-con-import";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -79,7 +80,7 @@ export default async function DashboardPage({
   const needCover = listNeedCover(fleet.locations);
 
   return (
-    <>
+    <PageOverlayHost returnTo={overlayReturnTo("/", current)} serverOpenId={openId}>
       <PageHeader
         title="Dispatch desk"
         actions={
@@ -375,7 +376,7 @@ export default async function DashboardPage({
         </section>
       </div>
       {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/", current)} /> : null}
-    </>
+    </PageOverlayHost>
   );
 }
 

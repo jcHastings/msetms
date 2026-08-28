@@ -142,6 +142,11 @@ export function LoadWorkspace({
 
   function confirmLeave(href: string) {
     if (dirty && !window.confirm("You have unsaved load changes. Leave this page anyway?")) return;
+    const embed = new URLSearchParams(window.location.search).get("embed") === "1";
+    if (embed && window.parent !== window) {
+      window.parent.postMessage({ type: "ms-close-load" }, window.location.origin);
+      return;
+    }
     router.push(href);
   }
 

@@ -51,7 +51,6 @@ import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listT
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
-import { applyGeofenceArrivals } from "@/lib/geofence";
 import { ensureDefaultStops } from "@/lib/stops";
 import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
 
@@ -92,7 +91,6 @@ export async function LoadEditor({
   const tractorLocation = tab === "log" ? await getLocationForLoad(load.id) : null;
   const driverHos = tab === "log" ? await getHosForLoad(load.id) : null;
   const stops = ensureDefaultStops(load.id);
-  applyGeofenceArrivals(load.id);
   scheduleLoadOpenWork(load.id);
   const routed = getLoad(load.id) ?? load;
   const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
