@@ -41,6 +41,7 @@ export type VehicleLocation = {
   latitude: number | null;
   longitude: number | null;
   speedMph: number | null;
+  headingDeg?: number | null;
   address: string;
   recordedAt: string;
   source: "demo" | "samsara";
@@ -419,6 +420,7 @@ function demoLocations(): VehicleLocation[] {
       latitude: 32.7767,
       longitude: -96.797,
       speedMph: 58,
+      headingDeg: 185,
       address: "Dallas, TX",
       recordedAt: now,
       source: "demo",
@@ -443,6 +445,7 @@ function demoLocations(): VehicleLocation[] {
       latitude: 38.627,
       longitude: -90.1994,
       speedMph: 47,
+      headingDeg: 95,
       address: "St. Louis, MO",
       recordedAt: now,
       source: "demo",
@@ -492,6 +495,7 @@ export function extractSamsaraGps(vehicle: Record<string, unknown>): {
   latitude: number | null;
   longitude: number | null;
   speedMph: number | null;
+  headingDeg: number | null;
   address: string;
   recordedAt: string;
 } {
@@ -509,9 +513,16 @@ export function extractSamsaraGps(vehicle: Record<string, unknown>): {
     latitude: asNumber(rec.latitude ?? rec.lat),
     longitude: asNumber(rec.longitude ?? rec.lng ?? rec.lon),
     speedMph: asNumber(rec.speedMilesPerHour ?? rec.speedMph),
+    headingDeg: samsaraHeadingDeg(rec),
     address: address.trim(),
     recordedAt: typeof rec.time === "string" ? rec.time : "",
   };
+}
+
+function samsaraHeadingDeg(rec: Record<string, unknown>): number | null {
+  const heading = asNumber(rec.headingDegrees ?? rec.headingDegree ?? rec.heading ?? rec.course);
+  if (heading == null || !Number.isFinite(heading)) return null;
+  return ((heading % 360) + 360) % 360;
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -586,6 +597,7 @@ export function mapVehicleLocations(input: {
       latitude: gps.latitude,
       longitude: gps.longitude,
       speedMph: gps.speedMph,
+      headingDeg: gps.headingDeg,
       address: gps.address,
       recordedAt: gps.recordedAt || new Date().toISOString(),
       source: "samsara",
@@ -604,6 +616,8 @@ function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
       address: location.address,
       recordedAt: location.recordedAt,
       source: "samsara",
+      speedMph: location.speedMph,
+      headingDeg: location.headingDeg,
     });
   }
   return locations;

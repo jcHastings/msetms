@@ -7241,6 +7241,24 @@ Continuous reefer. Two load locks.
     address: "Omaha, NE",
     recordedAt: new Date().toISOString(),
     source: "samsara",
+    speedMph: 3,
+    headingDeg: 10,
+  });
+  const fleetMapMoveId = queries.createTruck({
+    unit_number: "FM-SAM-GO",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "sam-fm-go",
+  });
+  queries.saveTruckGps(fleetMapMoveId, {
+    latitude: 41.26,
+    longitude: -95.94,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+    speedMph: 62,
+    headingDeg: 85,
   });
   const fleetMapOldId = queries.createTruck({
     unit_number: "FM-OLD",
@@ -7271,6 +7289,10 @@ Continuous reefer. Two load locks.
   assert.equal(liveTruckPin?.href, `/fleet/trucks/${fleetMapTruckId}`);
   assert.equal(liveTruckPin?.reeferStatus, undefined);
   assert.equal(liveTruckPin?.pinColor, undefined);
+  assert.equal(liveTruckPin?.pinShape, "circle");
+  const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
+  assert.equal(movingTruckPin?.pinShape, "arrow");
+  assert.equal(movingTruckPin?.headingDeg, 85);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
@@ -9270,6 +9292,12 @@ Continuous reefer. Two load locks.
   assert.equal(linkedGps[0]?.unitNumber, "40", "linked Samsara id must win even when the name has other digits");
   assert.equal(linkedGps[0]?.address, "Oklahoma City, OK");
   assert.equal(samsara.extractSamsaraGps({ gps: [{ latitude: 35.4, longitude: -97.5, reverseGeo: { formattedLocation: "OKC" } }] }).address, "OKC");
+  assert.equal(
+    samsara.extractSamsaraGps({
+      gps: { latitude: 41.25, longitude: -95.93, speedMilesPerHour: 62, headingDegrees: 85 },
+    }).headingDeg,
+    85,
+  );
   const odometerMiles = samsara.extractSamsaraOdometerMiles({
     obdOdometerMeters: { time: "2026-08-26T12:00:00.000Z", value: 160934.4 },
   }).miles;
@@ -10287,6 +10315,8 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Arrow = moving/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Circle = stopped/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Dot = parked/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /ORBCOMM_MOVING_SPEED_MPH = 5/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /orbcommPinShape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /classifyOrbcommReeferMode/);

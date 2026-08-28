@@ -716,6 +716,8 @@ export function saveTruckGps(
     address: string;
     recordedAt: string;
     source: "samsara" | "demo";
+    speedMph?: number | null;
+    headingDeg?: number | null;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
@@ -723,10 +725,20 @@ export function saveTruckGps(
   getDb()
     .prepare(
       `UPDATE trucks
-       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, updated_at = ?
+       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, gps_speed_mph = ?, gps_heading_deg = ?, updated_at = ?
        WHERE id = ?`,
     )
-    .run(input.latitude, input.longitude, input.address, input.recordedAt, input.source, now(), id);
+    .run(
+      input.latitude,
+      input.longitude,
+      input.address,
+      input.recordedAt,
+      input.source,
+      input.speedMph ?? null,
+      input.headingDeg ?? null,
+      now(),
+      id,
+    );
   recordTruckGpsReading(id, {
     latitude: input.latitude,
     longitude: input.longitude,
@@ -858,6 +870,8 @@ export function persistedTruckLocation(truck: {
   gps_address?: string;
   gps_recorded_at?: string;
   gps_source?: string;
+  gps_speed_mph?: number | null;
+  gps_heading_deg?: number | null;
 }): {
   truckId: number;
   loadId: number | null;
@@ -866,6 +880,7 @@ export function persistedTruckLocation(truck: {
   latitude: number | null;
   longitude: number | null;
   speedMph: number | null;
+  headingDeg: number | null;
   address: string;
   recordedAt: string;
   source: "samsara";
@@ -881,7 +896,8 @@ export function persistedTruckLocation(truck: {
     unitNumber: truck.unit_number,
     latitude: truck.gps_latitude ?? null,
     longitude: truck.gps_longitude ?? null,
-    speedMph: null,
+    speedMph: truck.gps_speed_mph ?? null,
+    headingDeg: truck.gps_heading_deg ?? null,
     address: String(truck.gps_address ?? "").trim(),
     recordedAt: truck.gps_recorded_at || "",
     source: "samsara",

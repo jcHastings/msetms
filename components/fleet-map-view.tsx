@@ -40,20 +40,24 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
             missingKeyMessage="Map is off."
             emptyMessage="No GPS pins."
           />
-          {model.title === "Orbcomm" ? (
-            <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-orbcomm-pin-legend="">
-              {(["running", "off", "shutdown", "unknown"] as const).map((status) => (
-                <li key={status} className="inline-flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ background: ORBCOMM_REEFER_PIN_COLOR[status] }}
-                    data-reefer-pin={status}
-                  />
-                  {REEFER_PIN_LABEL[status]}
-                </li>
-              ))}
+          {model.title === "Orbcomm" || model.title === "Samsara" ? (
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-orbcomm-pin-legend={model.title === "Orbcomm" ? "" : undefined} data-samsara-pin-legend={model.title === "Samsara" ? "" : undefined}>
+              {model.title === "Orbcomm"
+                ? (["running", "off", "shutdown", "unknown"] as const).map((status) => (
+                    <li key={status} className="inline-flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ background: ORBCOMM_REEFER_PIN_COLOR[status] }}
+                        data-reefer-pin={status}
+                      />
+                      {REEFER_PIN_LABEL[status]}
+                    </li>
+                  ))
+                : null}
               <li data-orbcomm-pin-shape="arrow">Arrow = moving</li>
-              <li data-orbcomm-pin-shape="circle">Circle = stopped</li>
+              <li data-orbcomm-pin-shape="circle">
+                {model.title === "Samsara" ? "Dot = parked" : "Circle = stopped"}
+              </li>
             </ul>
           ) : null}
         </section>
