@@ -16,6 +16,7 @@ import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from 
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
 import { mikeWorkReply, proposeMikeWork } from "./mike-work";
 import {
+  answerMikeReeferFromOrbcomm,
   answerMikeTmsQuestion,
   buildMikeTmsSnapshot,
   loadStopSummaries,
@@ -445,6 +446,14 @@ export async function askMike(
     return {
       configured: isOpenAiConfigured(),
       reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
+      proposals: work.proposals,
+    };
+  }
+  const reeferReply = await answerMikeReeferFromOrbcomm(question);
+  if (reeferReply) {
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${reeferReply}\n\n${work.reply}` : reeferReply,
       proposals: work.proposals,
     };
   }

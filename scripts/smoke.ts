@@ -1284,6 +1284,7 @@ async function main() {
   assert.match(mikeSrc, /Never say no trucks ranked closest/);
   assert.match(mikeSrc, /tmsStats/);
   assert.match(mikeSrc, /answerMikeTmsQuestion/);
+  assert.match(mikeSrc, /answerMikeReeferFromOrbcomm/);
   assert.match(mikeSrc, /loadStopSummaries/);
   assert.match(mikeSrc, /await geocode\(asked\)/);
   const cityCoordsSrc = fs.readFileSync(path.join(process.cwd(), "lib/city-coords-shared.ts"), "utf8");
@@ -9908,8 +9909,11 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(formatClosestCityReply(coldDodge), /no trucks ranked/i);
 
   const {
+    answerMikeReeferQuestion,
     answerMikeTmsQuestion,
+    formatMikeReeferReply,
     formatMikeTmsStatsReply,
+    parseMikeReeferQuestion,
     parseMikeTmsStatsQuestion,
     topCustomersByBilled,
     topDriversByBilled,
@@ -10015,10 +10019,11 @@ Continuous reefer. Two load locks.
     { kind: "driver_billed", year: 2026, month: 8, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
     mikeNow,
   );
-  assert.match(driverReply, /Dana Billed/);
-  assert.match(driverReply, /77/);
+  assert.match(driverReply, /Dana Billed on unit 77/);
+  assert.match(driverReply, /\$250,000/);
   assert.match(driverReply, /billed freight/i);
-  assert.match(driverReply, /no driver Pay tab/i);
+  assert.match(driverReply, /Financials/i);
+  assert.doesNotMatch(driverReply, /paycheck|oo pay|relay pay|settlement/i);
   assert.doesNotMatch(driverReply, /I don't have information/i);
   const milesReply = formatMikeTmsStatsReply(
     { kind: "miles_week", year: 2026, weekStart: mikeWeek.start, weekEnd: mikeWeek.end },
@@ -10036,6 +10041,28 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(String(liveDriverAsk), /I don't have information/i);
   assert.match(String(liveMilesAsk), /TMS miles/i);
   assert.doesNotMatch(String(liveMilesAsk), /I don't have information/i);
+  assert.equal(parseMikeReeferQuestion("What's the Reefer temperature on trailer MS1519"), "MS1519");
+  queries.createTrailer({
+    unit_number: "MK1519",
+    type: "reefer",
+    orbcomm_asset_id: "orb-mk1519",
+    status: "available",
+  });
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, operating_mode, address, source, recorded_at, alarm
+      ) VALUES (NULL, NULL, 'MK1519', 34, 35.2, 35.2, 'continuous', 'York, NE', 'orbcomm', '2026-08-20T16:00:00Z', '')`,
+    )
+    .run();
+  const reeferAsk = await answerMikeReeferQuestion("What's the Reefer temperature on trailer MK1519");
+  assert.match(String(reeferAsk), /MK1519/);
+  assert.match(String(reeferAsk), /34/);
+  assert.match(String(reeferAsk), /35\.2/);
+  assert.match(String(reeferAsk), /Continuous/);
+  assert.match(String(reeferAsk), /York, NE/);
+  assert.doesNotMatch(String(reeferAsk), /I don't have information/i);
+  assert.match(formatMikeReeferReply({ unit: "MS1519", setpointF: 34, returnF: 35.2, mode: "continuous", city: "York, NE" }), /setpoint 34°F/);
   const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
   assert.equal(
     matchLinkedSamsaraVehicle(
