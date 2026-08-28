@@ -522,8 +522,10 @@ async function main() {
   assert.match(routingLib, /maps\.googleapis\.com\/maps\/api\/directions/);
   assert.doesNotMatch(routingLib, /maps\.google\.com/);
   assert.match(routingLib, /clearUnofficialRouteMiles/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /official \? load\.route_miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isOfficialDrivingRoute/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /refreshLoadRouteQuiet/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /officialEmptyMiles/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
   const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
@@ -4759,6 +4761,12 @@ Continuous reefer. Two load locks.
   assert.equal(missingRoute.configured, false);
   assert.equal(googleCalls, 0);
   assert.equal(queries.getLoad(routeLoadId)?.route_miles ?? null, null);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 880.7, route_source = 'google', route_polyline = '', route_leg_miles = '' WHERE id = ?")
+    .run(routeLoadId);
+  const fakeGoogleAir = await routing.refreshLoadRoute(routeLoadId);
+  assert.equal(fakeGoogleAir.configured, false);
+  assert.equal(queries.getLoad(routeLoadId)?.route_miles ?? null, null);
   routing.saveManualRouteMiles(routeLoadId, 12.3);
   assert.equal(queries.getLoad(routeLoadId)?.route_miles, 12.3);
   assert.equal(queries.getLoad(routeLoadId)?.route_source, "manual");
@@ -4800,11 +4808,18 @@ Continuous reefer. Two load locks.
   assert.match(storedRoute?.route_state_miles ?? "", /NY|PA|OH|IN|IL/);
   assert.match(storedRoute?.route_leg_miles ?? "", /800/);
   assert.ok(String(storedRoute?.route_polyline ?? "").trim(), "Google Directions should store the route polyline");
-  const { milesForStopGap, routeGuideFromLoad } = await import("../lib/routing-shared");
+  const { milesForStopGap, officialEmptyMiles, routeGuideFromLoad } = await import("../lib/routing-shared");
   assert.equal(milesForStopGap(0, 2, { totalMiles: 12.3, legMiles: [] }), 12.3);
   assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "" }).totalMiles, null);
-  assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "google" }).totalMiles, 880.7);
+  assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "google" }).totalMiles, null);
+  assert.equal(
+    routeGuideFromLoad({ route_miles: 880.7, route_source: "google", route_leg_miles: "[880.7]" }).totalMiles,
+    880.7,
+  );
   assert.equal(routeGuideFromLoad({ route_miles: 12.3, route_source: "manual" }).totalMiles, 12.3);
+  assert.equal(officialEmptyMiles(880.7, ""), null);
+  assert.equal(officialEmptyMiles(158, "google"), 158);
+  assert.equal(officialEmptyMiles(0, ""), 0);
   assert.equal(milesForStopGap(0, 3, { totalMiles: 12.3, legMiles: [] }), null);
   assert.equal(milesForStopGap(1, 3, { totalMiles: 12.3, legMiles: [8, 4.3] }), 4.3);
   const officialIfta = queries.getIftaReport(reeferLoad.id);

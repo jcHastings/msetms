@@ -182,9 +182,13 @@ function currentGuide(loadId: number): LoadRouteGuide {
 }
 
 function clearUnofficialRouteMiles(loadId: number, existing: LoadRouteGuide): LoadRouteGuide {
-  if (existing.source === "google" || existing.source === "manual") return existing;
+  if (existing.source === "manual") return existing;
   const load = getLoad(loadId);
-  if (load?.route_miles == null && !String(load?.route_leg_miles ?? "").trim()) return existing;
+  if (!load) return existing;
+  if (existing.source === "google") return existing;
+  if (load.route_miles == null && !String(load.route_leg_miles ?? "").trim() && !String(load.route_polyline ?? "").trim()) {
+    return existing;
+  }
   return persistRoute(loadId, { totalMiles: null, states: [], source: "", polyline: "" });
 }
 
@@ -234,6 +238,7 @@ export async function fetchLaneDirections(
   const route = payload.routes[0];
   const legs = route.legs ?? [];
   const meters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0);
+  if (!legs.length || meters <= 0) throw new Error("Route could not be calculated.");
   const totalMiles = metersToRouteMiles(meters);
   const legMiles = legs.map((leg) => metersToRouteMiles(leg.distance?.value ?? 0));
   const points = decodePolyline(route.overview_polyline?.points ?? "");

@@ -38,7 +38,7 @@ import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
-import { parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
+import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { refreshLoadRouteQuiet } from "@/lib/routing";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
@@ -218,9 +218,11 @@ export async function LoadEditor({
           <LoadRoutingGuide
             loadId={load.id}
             guide={routeGuideFromLoad(routed)}
-            emptyMiles={routed.empty_miles}
+            emptyMiles={officialEmptyMiles(routed.empty_miles, routed.empty_source)}
             emptyLane={routed.empty_from && routed.empty_to ? `${routed.empty_from} → ${routed.empty_to}` : ""}
-            emptyStates={parseRouteStateMiles(routed.empty_state_miles)}
+            emptyStates={
+              routed.empty_source === "google" ? parseRouteStateMiles(routed.empty_state_miles) : []
+            }
           />
         </LoadTabPanel>
 

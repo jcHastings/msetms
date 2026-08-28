@@ -75,6 +75,47 @@ export function serializeRouteLegMiles(miles: number[]): string {
   return JSON.stringify(miles.map((value) => Math.round(value * 10) / 10));
 }
 
+/** Count points in an encoded polyline without allocating the path. */
+export function encodedPolylinePointCount(encoded: string): number {
+  const text = encoded.trim();
+  if (!text) return 0;
+  let index = 0;
+  let count = 0;
+  while (index < text.length) {
+    for (let pass = 0; pass < 2; pass += 1) {
+      let result = 0;
+      let shift = 0;
+      let byte = 0;
+      do {
+        if (index >= text.length) return count;
+        byte = text.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+    }
+    count += 1;
+  }
+  return count;
+}
+
+export function isOfficialDrivingRoute(load: {
+  route_source?: string | null;
+  route_polyline?: string | null;
+  route_leg_miles?: string | null;
+}): "google" | "manual" | "" {
+  if (load.route_source === "manual") return "manual";
+  if (load.route_source !== "google") return "";
+  const legs = parseRouteLegMiles(load.route_leg_miles);
+  if (legs.length > 0) return "google";
+  return encodedPolylinePointCount(load.route_polyline ?? "") >= 3 ? "google" : "";
+}
+
+export function officialEmptyMiles(miles: number | null | undefined, source: string | null | undefined): number | null {
+  if (source === "google") return miles ?? null;
+  if (miles == null || miles === 0) return miles ?? 0;
+  return null;
+}
+
 /** Miles between stop[index] and stop[index+1]. Never invents a split of the total. */
 export function milesForStopGap(
   gapIndex: number,
@@ -93,8 +134,9 @@ export function routeGuideFromLoad(load: {
   route_state_miles?: string | null;
   route_calculated_at?: string | null;
   route_source?: string | null;
+  route_polyline?: string | null;
 }): LoadRouteGuide {
-  const source = load.route_source === "google" || load.route_source === "manual" ? load.route_source : "";
+  const source = isOfficialDrivingRoute(load);
   const official = Boolean(source);
   const legMiles = parseRouteLegMiles(load.route_leg_miles);
   return {
