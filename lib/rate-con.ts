@@ -347,29 +347,39 @@ function stopKey(stop: ParsedStop): string {
     .join("|");
 }
 
+function isUsefulExtraStop(stop: ParsedStop, shipper: ParsedStop, consignee: ParsedStop, seen: Set<string>): boolean {
+  if (!parsedStopHasDetails(stop) || !(stop.street.trim() || stop.city.trim())) return false;
+  const key = stopKey(stop);
+  if (!key || seen.has(key)) return false;
+  const name = stop.name.trim().toLowerCase();
+  if (name && (name === shipper.name.trim().toLowerCase() || name === consignee.name.trim().toLowerCase())) {
+    return false;
+  }
+  return true;
+}
+
 function parseAscendExtraStops(text: string, shipper: ParsedStop, consignee: ParsedStop): ParsedExtraStop[] {
   const seen = new Set([stopKey(shipper), stopKey(consignee)].filter(Boolean));
   const extras: ParsedExtraStop[] = [];
-  const stacked = text.matchAll(
-    /(?:^|\n)\s*(?:\d+\s*\n\s*)?(pickup|pick\s*up|pu|delivery|deliver|drop)\s*\n\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*\n([\s\S]{0,320}?)(?=\n\s*(?:\d+\s*\n\s*)?(?:delivery|deliver|drop|pickup|pick\s*up|pay items|terms of load)|$)/gi,
-  );
+  const stacked = [...text.matchAll(
+    /(?:^|\n)\s*(?:\d+\s*\n\s*)?(pickup|pick\s*up|delivery|deliver|drop)\s*\n\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*\n([\s\S]{0,320}?)(?=\n\s*(?:\d+\s*\n\s*)?(?:delivery|deliver|drop|pickup|pick\s*up|pay items|terms of load)|$)/gi,
+  )];
   for (const match of stacked) {
     const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
     const stop = parseAddressBlob(match[3] ?? "");
-    const key = stopKey(stop);
-    if (!parsedStopHasDetails(stop) || seen.has(key)) continue;
-    seen.add(key);
+    if (!isUsefulExtraStop(stop, shipper, consignee, seen)) continue;
+    seen.add(stopKey(stop));
     extras.push({ kind, stop });
   }
+  if (stacked.length) return extras;
   const lined = text.matchAll(
-    /(?:^|\n)\s*(?:\d+\s+)?(pickup|pick\s*up|pu|delivery|deliver|drop)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})(?:\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\s+(.+)/gi,
+    /(?:^|\n)\s*(?:\d+\s+)?(pickup|pick\s*up|delivery|deliver|drop)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})(?:\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\s+(.+)/gi,
   );
   for (const match of lined) {
     const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
     const stop = parseAddressBlob(match[3] ?? "");
-    const key = stopKey(stop);
-    if (!parsedStopHasDetails(stop) || seen.has(key)) continue;
-    seen.add(key);
+    if (!isUsefulExtraStop(stop, shipper, consignee, seen)) continue;
+    seen.add(stopKey(stop));
     extras.push({ kind, stop });
   }
   return extras;
@@ -407,9 +417,13 @@ function parsePrintedExtraStops(text: string, shipper: ParsedStop, consignee: Pa
 
 function parseAscendStop(text: string, kind: "pickup" | "delivery"): StopParse {
   const action = kind === "pickup" ? "(?:pick\\s*up|pickup|pu)" : "(?:delivery|deliver|drop)";
+  const until =
+    kind === "pickup"
+      ? "delivery|deliver|drop|pickup|pick\\s*up"
+      : "pickup|pick\\s*up|delivery|deliver|drop|pay items|terms of load|terms";
   const oneLine = text.match(
     new RegExp(
-      `(?:^|\\n|\\s)(?:\\d+\\s+)?${action}\\s+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})(?:\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\s+(.+?)(?=\\s+(?:\\d{1,2}\\s+)?(?:${kind === "pickup" ? "delivery|deliver|drop" : "pay items|terms of load|terms"})|$)`,
+      `(?:^|\\n|\\s)(?:\\d+\\s+)?${action}\\s+(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})(?:\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\s+(.+?)(?=\\s+(?:\\d{1,2}\\s+)?(?:${until})|$)`,
       "is",
     ),
   );

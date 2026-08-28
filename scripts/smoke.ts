@@ -313,8 +313,9 @@ async function main() {
   assert.match(basicsChunk, /Load Reference ID/);
   assert.doesNotMatch(basicsChunk, /Equipment Length|Reefer setpoint|Required low|Required high/);
   assert.doesNotMatch(basicsChunk, /htmlFor="branch"|New\/Used|Lower temp threshold|Upper temp threshold|Temp time tolerance|Container #|Last free day/);
-  assert.match(loadFormSource, /pickup_stop_name/);
-  assert.match(loadFormSource, /delivery_stop_street/);
+  assert.match(loadFormSource, /RateConStopFields/);
+  assert.match(loadFormSource, /\$\{prefix\}_stop_name/);
+  assert.match(loadFormSource, /\$\{prefix\}_stop_street/);
   assert.match(loadFormSource, /extra_stops_json/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8"), /applyLocationToStop/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
