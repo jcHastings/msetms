@@ -13,11 +13,15 @@ export async function GET(
   }
   const doc = getFleetDocument(Number.parseInt((await params).id, 10));
   if (!doc) return new Response("Not found", { status: 404 });
-  const buffer = await readFile(getFleetDocumentPath(doc));
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": doc.mime_type || "application/octet-stream",
-      "Content-Disposition": `inline; filename="${doc.original_name.replaceAll('"', "")}"`,
-    },
-  });
+  try {
+    const buffer = await readFile(getFleetDocumentPath(doc));
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type": doc.mime_type || "application/octet-stream",
+        "Content-Disposition": `inline; filename="${doc.original_name.replaceAll('"', "")}"`,
+      },
+    });
+  } catch {
+    return new Response("This file is no longer on this computer.", { status: 404 });
+  }
 }

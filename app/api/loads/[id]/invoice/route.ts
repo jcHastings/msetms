@@ -13,11 +13,16 @@ async function serveGeneratedInvoice(
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) return unauthorizedResponse();
   if (!canEditLoads(dispatcher.role)) {
-    return Response.json({ error: "Creating invoices is for dispatch and accounting." }, { status: 403 });
+    return new Response("Creating invoices is for dispatch and accounting.", {
+      status: 403,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
   const loadId = Number.parseInt((await params).id, 10);
   const load = getLoad(loadId);
-  if (!load) return Response.json({ error: "Load not found." }, { status: 404 });
+  if (!load) {
+    return new Response("Load not found.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
   try {
     const result = await createTmsInvoice(loadId);
     return new Response(new Uint8Array(result.buffer), {
@@ -30,7 +35,7 @@ async function serveGeneratedInvoice(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create invoice.";
-    return Response.json({ error: message }, { status: 400 });
+    return new Response(message, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 }
 

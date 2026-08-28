@@ -36,8 +36,15 @@ export function ViewInvoiceButton({
       const response = await fetch(`/api/loads/${loadId}/invoice`, { method: "POST" });
       if (!response.ok) {
         preview?.close();
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error || "Could not create invoice.");
+        const raw = await response.text();
+        let message = raw.trim();
+        try {
+          const parsed = JSON.parse(raw) as { error?: string };
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // plain-text error from generate
+        }
+        setError(message || "Could not create invoice.");
         return;
       }
       const blob = await response.blob();

@@ -145,6 +145,8 @@ async function main() {
   assert.match(attachmentRoute, /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/regenerate-attachment.ts"), "utf8"), /buildTmsInvoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /export async function GET/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/confirmation/route.ts"), "utf8"), /This file is no longer on this computer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fleet-docs/[id]/route.ts"), "utf8"), /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Reconcile and Archive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Search Archived Loads/);
@@ -7440,6 +7442,18 @@ Continuous reefer. Two load locks.
   });
   fs.unlinkSync(getAttachmentPath(missingPhoto));
   assert.equal(await regenerateMissingAttachment(missingPhoto), null);
+  const missingConfirm = addAttachment({
+    loadId: invoiceLoadId,
+    kind: "other",
+    originalName: "1005911-customer-confirmation.pdf",
+    buffer: Buffer.from("%PDF-1.4 gone"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  fs.unlinkSync(getAttachmentPath(missingConfirm));
+  const recoveredConfirm = await regenerateMissingAttachment(missingConfirm);
+  assert.ok(recoveredConfirm);
+  assert.equal(recoveredConfirm.buffer.subarray(0, 4).toString(), "%PDF");
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);

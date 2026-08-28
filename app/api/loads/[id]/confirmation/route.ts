@@ -24,17 +24,22 @@ export async function GET(
   const driverId = Number.parseInt(new URL(request.url).searchParams.get("driver") ?? "", 10);
   // Single-tenant local desk: leftover driver-app cookies must not 404 a
   // dispatcher download for a load they just created (often still unassigned).
-  const model = buildConfirmationForLoad(load.id, {
-    packet,
-    driverId: Number.isFinite(driverId) ? driverId : undefined,
-  });
-  const pdf = await renderConfirmationPdf(model);
-  const suffix = packet === "internal" ? "-driver-packet" : "-customer-confirmation";
-  const filename = `${load.load_number}${suffix}.pdf`;
-  return new Response(new Uint8Array(pdf), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
+  try {
+    const model = buildConfirmationForLoad(load.id, {
+      packet,
+      driverId: Number.isFinite(driverId) ? driverId : undefined,
+    });
+    const pdf = await renderConfirmationPdf(model);
+    const suffix = packet === "internal" ? "-driver-packet" : "-customer-confirmation";
+    const filename = `${load.load_number}${suffix}.pdf`;
+    return new Response(new Uint8Array(pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "This file is no longer on this computer.";
+    return new Response(message, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
 }
