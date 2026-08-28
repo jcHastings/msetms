@@ -1,9 +1,9 @@
 import { LoadMapCanvas } from "@/components/load-map-canvas";
-import { applyGeofenceArrivalsWithGeocode } from "@/lib/geofence";
+import { applyGeofenceArrivals } from "@/lib/geofence";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 
 export async function LoadStopsMap({ loadId }: { loadId: number }) {
-  await applyGeofenceArrivalsWithGeocode(loadId);
+  applyGeofenceArrivals(loadId);
   const [{ points, path }, apiKey] = await Promise.all([
     buildStopsMapModel(loadId),
     Promise.resolve(mapsBrowserKey()),

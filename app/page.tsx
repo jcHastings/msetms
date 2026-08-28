@@ -31,6 +31,7 @@ import {
 } from "@/lib/queries";
 import { loadFormSettings } from "@/lib/settings";
 import { LoadOverlay } from "@/components/load-overlay";
+import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { RateConImport } from "@/components/rate-con-import";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -194,12 +195,12 @@ export default async function DashboardPage({
             <ul className="mt-3 space-y-2 text-sm">
               {watched.map((load) => (
                 <li key={load.id} className={`flex justify-between gap-2 ${loadStatusRowClass(load.status)} px-2 py-1`}>
-                  <Link
+                  <OverlayOpenLink
                     href={overlayHref("/", load.id, current)}
                     className={`font-mono font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
                   >
                     {load.load_number}
-                  </Link>
+                  </OverlayOpenLink>
                   <LoadStatusBadge status={load.status} />
                 </li>
               ))}
@@ -247,9 +248,9 @@ export default async function DashboardPage({
                     </td>
                     <td className="whitespace-nowrap">{formatDateTime(load.pickup_start)}</td>
                     <td className="text-right">
-                      <Link href={overlayHref("/", load.id, current)} className="btn btn-ghost">
+                      <OverlayOpenLink href={overlayHref("/", load.id, current)} className="btn btn-ghost">
                         Open
-                      </Link>
+                      </OverlayOpenLink>
                     </td>
                   </tr>
                 ))}
@@ -325,12 +326,12 @@ export default async function DashboardPage({
                   return (
                   <tr key={load.id} className={loadStatusRowClass(load.status)}>
                     <td>
-                      <Link
+                      <OverlayOpenLink
                         href={overlayHref("/", load.id, current)}
                         className={`font-mono text-sm font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
                       >
                         {load.load_number}
-                      </Link>
+                      </OverlayOpenLink>
                       <div className="text-xs text-slate-500">{load.customer_name}</div>
                     </td>
                     <td>

@@ -39,7 +39,8 @@ import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canV
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
-import { refreshLoadRouteQuiet, usableRouteStops } from "@/lib/routing";
+import { scheduleLoadOpenWork } from "@/lib/load-open-work";
+import { usableRouteStops } from "@/lib/routing";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatDateTime } from "@/lib/format";
@@ -50,7 +51,7 @@ import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listT
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
-import { applyGeofenceArrivalsWithGeocode } from "@/lib/geofence";
+import { applyGeofenceArrivals } from "@/lib/geofence";
 import { ensureDefaultStops } from "@/lib/stops";
 import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
 
@@ -90,9 +91,9 @@ export async function LoadEditor({
   const relays = listRelays(load.id);
   const tractorLocation = await getLocationForLoad(load.id);
   const driverHos = await getHosForLoad(load.id);
-  await applyGeofenceArrivalsWithGeocode(load.id);
   const stops = ensureDefaultStops(load.id);
-  await refreshLoadRouteQuiet(load.id);
+  applyGeofenceArrivals(load.id);
+  scheduleLoadOpenWork(load.id);
   const routed = getLoad(load.id) ?? load;
   const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
   const payItems = listPayItems(load.id);
@@ -209,6 +210,8 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
+          {tab === "stops" ? (
+            <>
           <LoadStopsMap loadId={load.id} />
           <LoadStopsPanel
             loadId={load.id}
@@ -226,6 +229,10 @@ export async function LoadEditor({
               routed.empty_source === "google" ? parseRouteStateMiles(routed.empty_state_miles) : []
             }
           />
+            </>
+          ) : (
+            <p className="px-5 py-6 text-sm text-slate-500">Opening stops…</p>
+          )}
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">
@@ -272,6 +279,8 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="log">
+          {tab === "log" ? (
+          <div>
           <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="card p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
@@ -329,6 +338,10 @@ export async function LoadEditor({
           <LoadExtraDetails load={load} claims={claims} />
           <LoadTrackingPanel loadId={load.id} />
           <LoadAuditSection loadId={load.id} />
+          </div>
+          ) : (
+            <p className="px-5 py-6 text-sm text-slate-500">Opening log…</p>
+          )}
         </LoadTabPanel>
 
         <LoadTabPanel when="docs">

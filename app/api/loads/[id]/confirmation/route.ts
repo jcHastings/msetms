@@ -1,6 +1,7 @@
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { buildConfirmationForLoad, renderConfirmationPdf } from "@/lib/load-confirmation";
+import { pdfResponseHeaders } from "@/lib/pdf-response";
 import { getLoad } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -33,10 +34,7 @@ export async function GET(
     const suffix = packet === "internal" ? "-driver-packet" : "-customer-confirmation";
     const filename = `${load.load_number}${suffix}.pdf`;
     return new Response(new Uint8Array(pdf), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
+      headers: pdfResponseHeaders(filename),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "This file is no longer on this computer.";

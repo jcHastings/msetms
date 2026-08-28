@@ -8,7 +8,12 @@ import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { getLatestReeferForLoad, getReeferSnapshots, snapshotToTrailerLocation } from "@/lib/integrations/orbcomm";
+import {
+  getDemoReeferForLoad,
+  getReeferSnapshots,
+  snapshotToReading,
+  snapshotToTrailerLocation,
+} from "@/lib/integrations/orbcomm";
 import {
   getSamsaraFleet,
   hosForLoad,
@@ -17,6 +22,7 @@ import {
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
 import { LoadOverlay } from "@/components/load-overlay";
+import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
@@ -44,7 +50,11 @@ export default async function BoardPage({
   const fleet = await getSamsaraFleet();
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
-    reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
+    const live = reefers.readings.find((reading) => reading.loadId === load.id);
+    reeferByLoad.set(
+      load.id,
+      live ? snapshotToReading(live) : reefers.mode === "orbcomm" && !reefers.error ? null : getDemoReeferForLoad(load.id),
+    );
   }
 
   return (
@@ -112,13 +122,13 @@ export default async function BoardPage({
                       .toLowerCase()}
                   >
                     <td className="leading-tight">
-                      <Link
+                      <OverlayOpenLink
                         href={overlayHref("/board", load.id, current)}
                         className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
                         title={load.customer_name}
                       >
                         {load.load_number}
-                      </Link>
+                      </OverlayOpenLink>
                       <div className="text-xs">
                         {load.origin}
                         <span className="mx-1 text-slate-400">→</span>
@@ -205,9 +215,9 @@ export default async function BoardPage({
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}
-                        <Link href={overlayHref("/board", load.id, current)} className="btn btn-ghost">
+                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="btn btn-ghost">
                           Edit
-                        </Link>
+                        </OverlayOpenLink>
                       </div>
                     </td>
                   </BoardFilterRow>

@@ -474,7 +474,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /applyGeofenceArrivals\(loadId\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /departed_at/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /applyGeofenceArrivalsWithGeocode/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /applyGeofenceArrivals/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /scheduleLoadOpenWork/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /after\(/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /applyGeofenceArrivalsWithGeocode/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /refreshLoadRouteQuiet/);
   const mapLibSource = fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8");
   assert.match(mapLibSource, /persistedTruckLocation/);
   assert.match(mapLibSource, /geocodeAddress/);
@@ -529,7 +533,9 @@ async function main() {
   assert.match(routingLib, /clearUnofficialRouteMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isOfficialDrivingRoute/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /refreshLoadRouteQuiet/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /OverlayOpenLink/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /Opening/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Encoding.*identity/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /officialEmptyMiles/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');

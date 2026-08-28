@@ -1,6 +1,7 @@
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
 import { canEditLoads } from "@/lib/settings-shared";
 import { createTmsInvoice } from "@/lib/invoice";
+import { pdfResponseHeaders } from "@/lib/pdf-response";
 import { getLoad } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -26,12 +27,10 @@ async function serveGeneratedInvoice(
   try {
     const result = await createTmsInvoice(loadId);
     return new Response(new Uint8Array(result.buffer), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      headers: pdfResponseHeaders(result.filename, {
         "X-Attachment-Id": String(result.attachmentId),
         "Access-Control-Expose-Headers": "Content-Disposition, X-Attachment-Id",
-      },
+      }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create invoice.";

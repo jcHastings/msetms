@@ -221,14 +221,14 @@ export function samsaraHosEmptyState(input: { assigned: boolean; hos?: HosClock 
 
 export async function getLocationForLoad(loadId: number): Promise<VehicleLocation | null> {
   const fleet = await getSamsaraFleet();
-  const load = listLoads({ status: "all" }).find((item) => item.id === loadId);
+  const load = getLoad(loadId);
   if (!load) return fleet.locations.find((item) => item.loadId === loadId) ?? null;
   return locationForLoad(fleet, load);
 }
 
 export async function getHosForLoad(loadId: number): Promise<HosClock | null> {
   const fleet = await getSamsaraFleet();
-  const load = listLoads({ status: "all" }).find((item) => item.id === loadId);
+  const load = getLoad(loadId);
   if (!load) return fleet.hos.find((item) => item.loadId === loadId) ?? null;
   return hosForLoad(fleet, load);
 }
