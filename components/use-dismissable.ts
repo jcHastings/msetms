@@ -5,6 +5,7 @@ import { useEffect, useRef, type RefObject } from "react";
 const MENU_CONTROL = "a, button, input, select, textarea, label, form";
 
 let activeOverflowClose: (() => void) | null = null;
+let ignoreRowClickUntil = 0;
 
 /** Only one overflow menu stays open; opening another closes the first. */
 export function claimOverflowMenu(close: () => void): () => void {
@@ -18,6 +19,14 @@ export function claimOverflowMenu(close: () => void): () => void {
 function isMenuControl(target: Node | null): boolean {
   const el = target instanceof Element ? target : target?.parentElement;
   return Boolean(el?.closest(MENU_CONTROL));
+}
+
+export function shouldIgnoreRowClick(): boolean {
+  return Date.now() < ignoreRowClickUntil;
+}
+
+function markOverflowDismissed(): void {
+  ignoreRowClickUntil = Date.now() + 400;
 }
 
 function swallowNextClick(): void {
@@ -58,6 +67,7 @@ export function useDismissable(
       const el = target instanceof Element ? target : target?.parentElement;
       if (el?.closest("[data-row-overflow-trigger], .row-actions-btn")) return;
       event.stopPropagation();
+      markOverflowDismissed();
       swallowNextClick();
     }
 

@@ -285,6 +285,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /pointerdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /claimOverflowMenu/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /swallowNextClick/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /shouldIgnoreRowClick/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/clickable-row.tsx"), "utf8"), /shouldIgnoreRowClick/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /data-row-overflow-menu/);
   assert.match(workspaceSource, /tabNeedsServerPaint/);
   assert.match(workspaceSource, /history\.replaceState/);

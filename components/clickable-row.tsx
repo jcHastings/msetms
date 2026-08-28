@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { shouldIgnoreRowClick } from "@/components/use-dismissable";
 
 export function ClickableRow({
   href,
@@ -19,6 +20,7 @@ export function ClickableRow({
       onClick={(event) => {
         const target = event.target as HTMLElement | null;
         if (target?.closest("a, button, summary, input, select, textarea, label, form, details")) return;
+        if (shouldIgnoreRowClick()) return;
         router.push(href);
       }}
     >
