@@ -57,7 +57,7 @@ export function LoadBasicsScreen({
   card?: boolean;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
-  const [status, setStatus] = useState(load?.status ?? "available");
+  const [status, setStatus] = useState<string>(load?.status ?? "available");
   const [truckStatus, setTruckStatus] = useState(load?.truck_status ?? "");
   const looksReefer = Boolean(
     load?.reefer_mode ||
