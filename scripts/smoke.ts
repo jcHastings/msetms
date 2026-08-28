@@ -2258,6 +2258,8 @@ async function main() {
   assert.equal(companyDraft.replyTo, "noreply@msloads.com");
   assert.match(companyDraft.text, /Do not reply/);
   assert.match(companyDraft.text, /not monitored/);
+  assert.match(companyDraft.text, /if you need further assistance/);
+  assert.doesNotMatch(companyDraft.text, /if you need something/);
   assert.doesNotMatch(companyDraft.text, /\$|USD|1,400|1400/);
   assert.equal(loadMail.cityStateFromAddress("2200 North Kansas Avenue, Hastings, NE, 68901"), "Hastings, NE");
   assert.equal(loadMail.cityStateFromAddress("Hastings, NE"), "Hastings, NE");
@@ -2286,7 +2288,12 @@ async function main() {
   assert.match(customerDraft.text, /Pickup\nNebraska Cold Storage Inc, Hastings, NE/);
   assert.match(customerDraft.text, /Deliveries\n1\. Lineage Logistics, Avenel, NJ/);
   assert.match(customerDraft.text, /2\. Kayco, Bayonne, NJ/);
-  assert.match(customerDraft.text, /Call the office at 402-302-0097/);
+  assert.match(customerDraft.text, /Call the office at 402-302-0097 if you need further assistance/);
+  assert.doesNotMatch(customerDraft.text, /if you need something/);
+  assert.equal(
+    loadMail.mailNoReplyLine("402-302-0097"),
+    "Do not reply. This mailbox is not monitored. Call the office at 402-302-0097 if you need further assistance.",
+  );
   assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th|MSE-/);
   const deliveredDraft = loadMail.composeCustomerUpdateEmail({
     loadNumber: "12345",
@@ -2426,6 +2433,8 @@ async function main() {
   assert.match(builtDriver.text, /Do not reply/);
   assert.match(builtDriver.text, /not monitored/);
   assert.match(builtDriver.text, /402-302-0097/);
+  assert.match(builtDriver.text, /if you need further assistance/);
+  assert.doesNotMatch(builtDriver.text, /if you need something/);
   const { sendLoadMailAction } = await import("../lib/dispatcher-actions");
   const missingMail = new FormData();
   missingMail.set("load_id", String(mailLoadId));
@@ -2524,6 +2533,8 @@ async function main() {
     assert.doesNotMatch(input.text, /\$|2200|settlement/i);
     assert.match(input.text, /Do not reply/);
     assert.match(input.text, /not monitored/);
+    assert.match(input.text, /if you need further assistance/);
+    assert.doesNotMatch(input.text, /if you need something/);
     assert.match(input.text, /Status: In Transit/);
     assert.match(input.text, /Trailer: TR-MAIL/);
     assert.doesNotMatch(input.text, /mi on file/);

@@ -55,8 +55,8 @@ export function customerMailBlockReason(load: LoadView | null): string {
 export function mailNoReplyLine(officePhone = ""): string {
   const phone = officePhone.trim();
   return phone
-    ? `Do not reply. This mailbox is not monitored. Call the office at ${phone} if you need something.`
-    : "Do not reply. This mailbox is not monitored. Call the office if you need something.";
+    ? `Do not reply. This mailbox is not monitored. Call the office at ${phone} if you need further assistance.`
+    : "Do not reply. This mailbox is not monitored. Call the office if you need further assistance.";
 }
 
 export function composeDriverLoadEmail(input: {
