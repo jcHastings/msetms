@@ -24,6 +24,7 @@ export type CustomerUpdateMailDraft = {
   to: string;
   subject: string;
   text: string;
+  replyTo: string;
 };
 
 export function resolveLoadDriverEmail(load: Pick<LoadView, "driver_id">): string {
@@ -52,7 +53,7 @@ export function customerMailBlockReason(load: LoadView | null): string {
   return "";
 }
 
-export function driverLoadNoReplyLine(officePhone = ""): string {
+export function mailNoReplyLine(officePhone = ""): string {
   const phone = officePhone.trim();
   return phone
     ? `Do not reply. This mailbox is not monitored. Call the office at ${phone} if you need something.`
@@ -94,7 +95,7 @@ export function composeDriverLoadEmail(input: {
     input.specialInstructions ? `Special instructions: ${input.specialInstructions}` : "",
     input.settlement ? `Settlement ${input.settlement}` : "",
     "",
-    driverLoadNoReplyLine(input.officePhone),
+    mailNoReplyLine(input.officePhone),
     "",
     "M & S Loads LLC · MS Express TMS",
   ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
@@ -115,6 +116,7 @@ export function composeCustomerUpdateEmail(input: {
   lastLocation: string;
   eta: string;
   nextStop: string;
+  officePhone?: string;
 }): CustomerUpdateMailDraft {
   const lines = [
     `Load ${input.loadNumber}`,
@@ -126,12 +128,15 @@ export function composeCustomerUpdateEmail(input: {
     input.eta ? `ETA ${input.eta}` : "",
     input.nextStop ? `Next stop ${input.nextStop}` : "",
     "",
+    mailNoReplyLine(input.officePhone),
+    "",
     "M & S Loads LLC · MS Express TMS",
   ].filter(Boolean);
   return {
     to: "",
     subject: `Load ${input.loadNumber} — tracking update`,
     text: lines.join("\n").trim() + "\n",
+    replyTo: MAIL_NOREPLY,
   };
 }
 
@@ -180,6 +185,7 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
     lastLocation,
     eta,
     nextStop: nextOpenStopLabel(listStops(load.id)),
+    officePhone: getCompanyProfile().dispatcher_phone,
   });
   return { ...draft, to: resolveLoadCustomerEmail(load) };
 }
@@ -218,7 +224,12 @@ export async function sendCustomerUpdateMail(
   const blocked = customerMailBlockReason(load);
   if (!load || blocked) throw new Error(blocked || "Load not found.");
   const draft = await buildCustomerUpdateDraft(load);
-  await send({ to: draft.to, subject: draft.subject, text: draft.text });
+  await send({
+    to: draft.to,
+    subject: draft.subject,
+    text: draft.text,
+    replyTo: draft.replyTo || MAIL_NOREPLY,
+  });
   recordSentMail({ loadId, kind: "customer_update", to: draft.to, subject: draft.subject });
   return { to: draft.to, subject: draft.subject };
 }

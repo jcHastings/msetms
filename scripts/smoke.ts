@@ -1975,7 +1975,9 @@ async function main() {
   assert.match(customerDraft.text, /Truck 112/);
   assert.match(customerDraft.text, /Memphis, TN/);
   assert.match(customerDraft.text, /412 mi on file/);
-  assert.doesNotMatch(customerDraft.text, /Do not reply|not monitored/i);
+  assert.equal(customerDraft.replyTo, "noreply@msloads.com");
+  assert.match(customerDraft.text, /Do not reply/);
+  assert.match(customerDraft.text, /not monitored/);
   assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
   const mailDriverId = queries.createDriver({
     name: "Pat Mail",
@@ -2114,9 +2116,11 @@ async function main() {
   assert.doesNotMatch(sendgridBody, /ana@/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
     assert.equal(input.to, "ap.mail@customer.example");
-    assert.equal(input.replyTo, undefined);
+    assert.equal(input.replyTo, "noreply@msloads.com");
+    assert.doesNotMatch(input.replyTo ?? "", /ana@|info@msloads\.com/);
     assert.doesNotMatch(input.text, /\$|2200|settlement/i);
-    assert.doesNotMatch(input.text, /Do not reply|not monitored/i);
+    assert.match(input.text, /Do not reply/);
+    assert.match(input.text, /not monitored/);
     assert.match(input.text, /Truck|Last location/);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
