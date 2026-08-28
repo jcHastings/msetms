@@ -99,7 +99,7 @@ export default async function TrailersPage() {
                       {reeferStub(trailer)}
                       {trailer.reefer_setpoint_f != null ? <div>Setpoint {trailer.reefer_setpoint_f}°F</div> : null}
                     </td>
-                    <td>
+                    <td className="whitespace-nowrap">
                       <TrailerLocationBadge location={persistedTrailerLocation(trailer)} />
                     </td>
                     <ActiveStatusCell active={trailer.active} />

@@ -155,8 +155,9 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: truckHref(truck, loads),
-        motion: motionFromSpeedMph(location.speedMph),
+        motion: motionFromSpeedMph(location.speedMph) || "Parked",
         speedMph: location.speedMph,
+        recordedAt: location.recordedAt,
       },
       truck.id,
     );
@@ -178,6 +179,9 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: truckHref(truck, loads),
+        motion: motionFromSpeedMph(stored.speedMph) || "Parked",
+        speedMph: stored.speedMph,
+        recordedAt: stored.recordedAt,
       },
       truck.id,
     );

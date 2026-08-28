@@ -94,12 +94,17 @@ async function main() {
   assert.match(boardUi, /Promise\.all\(\[getReeferSnapshots\(\), getSamsaraFleet\(\)\]\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/loading.tsx"), "utf8"), /data-board-loading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-edit-cell/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /truncate whitespace-nowrap/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /whitespace-nowrap text-left/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /max-w-\[8\.5rem\]/);
   assert.match(boardUi, />Tractor</);
   assert.match(boardUi, />Trailer</);
   assert.match(boardUi, />HOS</);
   assert.match(boardUi, />Reefer</);
   assert.match(boardUi, /Change unit|Assign/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/search/page.tsx"), "utf8"), /criteriaFromSearchParams/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /initialCriteria/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /truckUnitForDriver/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /motionFromSpeedMph\(location\.speedMph\) \|\| "Parked"/);
   assert.doesNotMatch(boardUi, /Find New Shippers|EDI \/ Tenders|Post\/Search Load Boards/);
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
@@ -9811,6 +9816,24 @@ Continuous reefer. Two load locks.
 
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
   assert.equal(shortPlaceLabel("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
+  assert.equal(shortPlaceLabel("Dakota City, NE"), "Dakota City, NE");
+  assert.equal(shortPlaceLabel("Holcomb, KS"), "Holcomb, KS");
+  const { criteriaFromSearchParams } = await import("../lib/search");
+  assert.equal(criteriaFromSearchParams({ q: "MSE-1055" }).q, "MSE-1055");
+  assert.equal(criteriaFromSearchParams({ q: "  " }).q, "");
+  const { truckUnitForDriver } = await import("../lib/integrations/samsara");
+  assert.equal(
+    truckUnitForDriver(
+      { id: 4, name: "Pat Driver", truck_unit: "", samsara_driver_id: "sam-pat" },
+      [{ id: 9, unit_number: "27" }],
+      {
+        truckDrivers: [
+          { truckId: 9, samsaraDriverId: "sam-pat", samsaraDriverName: "Pat Driver", tmsDriverId: 4 },
+        ],
+      },
+    ),
+    "27",
+  );
   assert.equal(gpsMotionLabel(0), "Parked");
   assert.equal(gpsMotionLabel(58), "58 mph");
   assert.equal(labelForFuelBucket("DATE DB CATEGORY"), "DATE DB CATEGORY");

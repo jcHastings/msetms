@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { assignedFleetAssetIds, listDrivers } from "@/lib/queries";
+import { getSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
+import { assignedFleetAssetIds, listDrivers, listTrucks } from "@/lib/queries";
 import { formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
 
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
 export default async function DriversPage() {
   const windows = complianceWindows();
   const drivers = listDrivers();
+  const trucks = listTrucks();
+  const fleet = await getSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
   const assignedIds = assignedFleetAssetIds("driver");
@@ -65,6 +68,7 @@ export default async function DriversPage() {
             ) : (
               drivers.map((driver) => {
                 const alerts = driverComplianceAlerts(driver, windows);
+                const truckUnit = truckUnitForDriver(driver, trucks, fleet);
                 return (
                   <ClickableRow
                     key={driver.id}
@@ -82,7 +86,7 @@ export default async function DriversPage() {
                       ) : null}
                     </td>
                     <td>{formatCdlEndorsements(driver.cdl_endorsements)}</td>
-                    <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>
+                    <td>{truckUnit ? `Unit ${truckUnit}` : "—"}</td>
                     <ExpiryCell value={driver.license_expires} alert={alerts.find((item) => item.kind === "license")} />
                     <ExpiryCell value={driver.medical_expires} alert={alerts.find((item) => item.kind === "medical")} />
                     <td>{driver.pin ? "Set" : "—"}</td>

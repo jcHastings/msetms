@@ -6,7 +6,7 @@ import {
   type FleetMapModel,
   type OrbcommReeferPinStatus,
 } from "@/lib/fleet-map-shared";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, shortPlaceLabel } from "@/lib/format";
 
 const REEFER_PIN_LABEL: Record<OrbcommReeferPinStatus, string> = {
   running: "Running",
@@ -136,7 +136,9 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                   <td className={row.alarm ? "font-semibold text-rose-700" : undefined}>
                     {row.alarm || "—"}
                   </td>
-                  <td>{row.location || "—"}</td>
+                  <td className="whitespace-nowrap text-left">
+                    {shortPlaceLabel(row.location) || row.location || "—"}
+                  </td>
                   <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
                 </tr>
               ))}

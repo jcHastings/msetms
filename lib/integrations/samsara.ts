@@ -189,6 +189,24 @@ export function driverForTruck(fleet: SamsaraFleetResult, truckId: number | null
   return fleet.truckDrivers.find((item) => item.truckId === truckId) ?? null;
 }
 
+export function truckUnitForDriver(
+  driver: { id: number; name: string; truck_unit?: string | null; samsara_driver_id?: string | null },
+  trucks: Array<{ id: number; unit_number: string }>,
+  fleet: Pick<SamsaraFleetResult, "truckDrivers">,
+): string {
+  if (driver.truck_unit) return driver.truck_unit;
+  const row = fleet.truckDrivers.find(
+    (item) =>
+      item.tmsDriverId === driver.id ||
+      (driver.samsara_driver_id &&
+        item.samsaraDriverId &&
+        normalizeKey(item.samsaraDriverId) === normalizeKey(driver.samsara_driver_id)) ||
+      (driver.name && item.samsaraDriverName && normalizeKey(item.samsaraDriverName) === normalizeKey(driver.name)),
+  );
+  if (!row) return "";
+  return trucks.find((truck) => truck.id === row.truckId)?.unit_number ?? "";
+}
+
 export function hosForAssignedTruck(
   fleet: SamsaraFleetResult,
   truck: { id: number; assigned_driver_id?: number | null },

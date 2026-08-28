@@ -32,18 +32,29 @@ type Props = {
   trucks: Truck[];
   trailers: Trailer[];
   reports: SavedReport[];
+  initialCriteria?: LoadSearchCriteria;
   initialResults: LoadView[];
 };
 
 const SEARCH_STATE_KEY = "msetms-search-state";
 
-export function LoadSearch({ customers, drivers, trucks, trailers, reports, initialResults }: Props) {
-  const [criteria, setCriteria] = useState<LoadSearchCriteria>(defaultSearchCriteria());
+export function LoadSearch({
+  customers,
+  drivers,
+  trucks,
+  trailers,
+  reports,
+  initialCriteria,
+  initialResults,
+}: Props) {
+  const seed = initialCriteria ?? defaultSearchCriteria();
+  const [criteria, setCriteria] = useState<LoadSearchCriteria>(seed);
   const [columns, setColumns] = useState<SearchColumnKey[]>(defaultSearchColumns());
   const [results, setResults] = useState<LoadView[]>(initialResults);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(Boolean(seed.q.trim()));
 
   useEffect(() => {
+    if (seed.q.trim()) return;
     try {
       const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
       if (!raw) return;
@@ -60,7 +71,7 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
     } catch {
       // ignore a bad saved search
     }
-  }, []);
+  }, [seed.q]);
 
   useEffect(() => {
     try {

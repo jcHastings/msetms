@@ -4,18 +4,18 @@ import { LoadSearch } from "@/components/load-search";
 import { PageHeader } from "@/components/page-header";
 import { overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { listCustomers, listDrivers, listSavedReports, listTrailers, listTrucks, searchLoads } from "@/lib/queries";
-import { defaultSearchCriteria } from "@/lib/search";
+import { criteriaFromSearchParams } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ open?: string }>;
+  searchParams: Promise<{ open?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const openId = parseOpenLoadId(params.open);
-  const initial = defaultSearchCriteria();
+  const initial = criteriaFromSearchParams(params);
   return (
     <PageOverlayHost returnTo={overlayReturnTo("/search")} serverOpenId={openId}>
       <PageHeader
@@ -27,6 +27,7 @@ export default async function SearchPage({
         trucks={listTrucks()}
         trailers={listTrailers()}
         reports={listSavedReports()}
+        initialCriteria={initial}
         initialResults={searchLoads(initial)}
       />
       {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/search")} /> : null}
