@@ -62,7 +62,7 @@ function baseRow(load: LoadView, allocated: number | null, driverName: string): 
     trailer: load.trailer_unit ?? "",
     dispatcher: load.dispatcher_name ?? "",
     miles: load.route_miles ?? "",
-    empty_miles: "",
+    empty_miles: load.empty_miles ?? "",
     revenue: load.rate ?? 0,
     driver_pay: driverPay(load),
     allocated_revenue: allocated ?? "",
@@ -84,6 +84,7 @@ export function listReportExportRows(filters: ReportExportFilters): ReportExport
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles ?? "",
+            empty_miles: leg.driverId === load.driver_id ? load.empty_miles ?? "" : "",
             allocated_revenue: leg.allocatedRevenue ?? "",
           });
         }

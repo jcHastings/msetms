@@ -36,6 +36,8 @@ export default async function IftaPage({
       name: miles?.name ?? state,
       gallons: fuel?.gallons ?? 0,
       amount: fuel?.amount ?? 0,
+      loaded: miles?.loaded ?? 0,
+      empty: miles?.empty ?? 0,
       miles: miles?.miles ?? 0,
     };
   });
@@ -68,7 +70,9 @@ export default async function IftaPage({
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Stat label="Fuel gallons" value={estimate.fuelGallons.toLocaleString("en-US")} />
           <Stat label="Fuel dollars" value={formatMoney(estimate.fuelAmount)} />
-          <Stat label="Stored miles" value={`${estimate.miles.toLocaleString("en-US")} mi`} />
+          <Stat label="Loaded miles" value={`${estimate.loadedMiles.toLocaleString("en-US")} mi`} />
+          <Stat label="Empty miles" value={`${estimate.emptyMiles.toLocaleString("en-US")} mi`} />
+          <Stat label="Total miles" value={`${estimate.miles.toLocaleString("en-US")} mi`} />
         </div>
       </section>
 
@@ -85,7 +89,9 @@ export default async function IftaPage({
                 <th className="px-5 py-2">State</th>
                 <th className="px-5 py-2">Gallons</th>
                 <th className="px-5 py-2">Fuel $</th>
-                <th className="px-5 py-2">Miles</th>
+                <th className="px-5 py-2">Loaded</th>
+                <th className="px-5 py-2">Empty</th>
+                <th className="px-5 py-2">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -98,6 +104,12 @@ export default async function IftaPage({
                   <td className="px-5 py-2 tabular-nums">{row.gallons.toLocaleString("en-US")}</td>
                   <td className="px-5 py-2 tabular-nums">{formatMoney(row.amount)}</td>
                   <td className="px-5 py-2 tabular-nums">
+                    {row.loaded > 0 ? `${row.loaded.toLocaleString("en-US")} mi` : "—"}
+                  </td>
+                  <td className="px-5 py-2 tabular-nums">
+                    {row.empty > 0 ? `${row.empty.toLocaleString("en-US")} mi` : "—"}
+                  </td>
+                  <td className="px-5 py-2 tabular-nums">
                     {row.miles > 0 ? `${row.miles.toLocaleString("en-US")} mi` : "—"}
                   </td>
                 </tr>
@@ -109,6 +121,66 @@ export default async function IftaPage({
 
       <LoadTiedFuelReceipts />
       <FuelMatchQueue />
+
+      <section className="card mb-4 overflow-hidden">
+        <header className="border-b border-slate-200 px-5 py-3">
+          <h2 className="text-sm font-semibold">Driver mileage</h2>
+        </header>
+        {estimate.drivers.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-slate-500">No driver miles in this quarter.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-2">Driver</th>
+                <th className="px-5 py-2">Loaded</th>
+                <th className="px-5 py-2">Empty</th>
+                <th className="px-5 py-2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimate.drivers.map((row) => (
+                <tr key={row.id} className="border-t border-slate-100">
+                  <td className="px-5 py-2 font-semibold">{row.name}</td>
+                  <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card mb-4 overflow-hidden">
+        <header className="border-b border-slate-200 px-5 py-3">
+          <h2 className="text-sm font-semibold">Truck mileage</h2>
+        </header>
+        {estimate.trucks.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-slate-500">No truck miles in this quarter.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-2">Truck</th>
+                <th className="px-5 py-2">Loaded</th>
+                <th className="px-5 py-2">Empty</th>
+                <th className="px-5 py-2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimate.trucks.map((row) => (
+                <tr key={row.id} className="border-t border-slate-100">
+                  <td className="px-5 py-2 font-semibold">{row.name}</td>
+                  <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       <section className="card overflow-hidden">
         <header className="border-b border-slate-200 px-5 py-3">
@@ -130,7 +202,15 @@ export default async function IftaPage({
                 </Link>
                 <span className="ml-2 text-sm text-slate-600">{item.lane}</span>
                 <div className="mt-1 text-xs text-slate-500">
-                  {item.states.map((state) => `${state.state} ${state.miles}`).join(" · ")} mi
+                  Loaded {item.loaded} mi
+                  {item.empty > 0 ? ` · Empty ${item.empty} mi` : ""}
+                  {item.emptyLane ? ` · ${item.emptyLane}` : ""}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {item.states.map((state) => `${state.state} ${state.miles}`).join(" · ")}
+                  {item.emptyStates.length
+                    ? ` · Empty ${item.emptyStates.map((state) => `${state.state} ${state.miles}`).join(" · ")}`
+                    : ""}
                 </div>
               </li>
             ))}

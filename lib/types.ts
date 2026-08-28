@@ -496,6 +496,12 @@ export type Load = {
   route_calculated_at: string;
   route_source: string;
   route_polyline: string;
+  empty_miles: number | null;
+  empty_state_miles: string;
+  empty_from: string;
+  empty_to: string;
+  empty_calculated_at: string;
+  empty_source: string;
   tms_invoice_number: string;
   tms_invoice_at: string;
   non_revenue: number;

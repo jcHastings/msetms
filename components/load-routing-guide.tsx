@@ -3,14 +3,20 @@
 import { useActionState } from "react";
 import { refreshRouteAction, saveManualRouteMilesAction } from "@/lib/dispatcher-actions";
 import { formatDateTime } from "@/lib/format";
-import { formatRouteMiles, type LoadRouteGuide } from "@/lib/routing-shared";
+import { formatRouteMiles, type LoadRouteGuide, type RouteStateMile } from "@/lib/routing-shared";
 
 export function LoadRoutingGuide({
   loadId,
   guide,
+  emptyMiles = null,
+  emptyLane = "",
+  emptyStates = [],
 }: {
   loadId: number;
   guide: LoadRouteGuide;
+  emptyMiles?: number | null;
+  emptyLane?: string;
+  emptyStates?: RouteStateMile[];
 }) {
   const [refreshState, refreshAction, refreshPending] = useActionState(refreshRouteAction, null);
   const [manualState, manualAction, manualPending] = useActionState(saveManualRouteMilesAction, null);
@@ -32,8 +38,12 @@ export function LoadRoutingGuide({
 
       <dl className="grid gap-3 text-sm md:grid-cols-3">
         <div>
-          <dt className="text-slate-500">Total miles</dt>
+          <dt className="text-slate-500">Loaded miles</dt>
           <dd className="font-semibold">{formatRouteMiles(guide.totalMiles)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">Empty miles</dt>
+          <dd className="font-semibold">{formatRouteMiles(emptyMiles)}</dd>
         </div>
         <div>
           <dt className="text-slate-500">Source</dt>
@@ -68,12 +78,14 @@ export function LoadRoutingGuide({
 
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">IFTA estimate</h3>
-        {guide.states.length === 0 ? (
+        {emptyLane ? <p className="mt-1 text-xs text-slate-500">Empty {emptyLane}</p> : null}
+        {guide.states.length === 0 && emptyStates.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">No state breakdown yet.</p>
         ) : (
           <table className="table-grid mt-2">
             <thead>
               <tr>
+                <th>Kind</th>
                 <th>State</th>
                 <th>Name</th>
                 <th>Miles (est.)</th>
@@ -81,7 +93,16 @@ export function LoadRoutingGuide({
             </thead>
             <tbody>
               {guide.states.map((row) => (
-                <tr key={row.state}>
+                <tr key={`loaded-${row.state}`}>
+                  <td>Loaded</td>
+                  <td className="font-semibold">{row.state}</td>
+                  <td>{row.name}</td>
+                  <td>{formatRouteMiles(row.miles)}</td>
+                </tr>
+              ))}
+              {emptyStates.map((row) => (
+                <tr key={`empty-${row.state}`}>
+                  <td>Empty</td>
                   <td className="font-semibold">{row.state}</td>
                   <td>{row.name}</td>
                   <td>{formatRouteMiles(row.miles)}</td>

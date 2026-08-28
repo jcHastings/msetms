@@ -38,7 +38,7 @@ import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
-import { routeGuideFromLoad } from "@/lib/routing-shared";
+import { parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatDateTime } from "@/lib/format";
@@ -210,7 +210,13 @@ export async function LoadEditor({
             locations={locations}
             routeGuide={routeGuideFromLoad(load)}
           />
-          <LoadRoutingGuide loadId={load.id} guide={routeGuideFromLoad(load)} />
+          <LoadRoutingGuide
+            loadId={load.id}
+            guide={routeGuideFromLoad(load)}
+            emptyMiles={load.empty_miles}
+            emptyLane={load.empty_from && load.empty_to ? `${load.empty_from} → ${load.empty_to}` : ""}
+            emptyStates={parseRouteStateMiles(load.empty_state_miles)}
+          />
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">

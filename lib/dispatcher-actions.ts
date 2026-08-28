@@ -385,6 +385,8 @@ export async function refreshRouteAction(
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const result = await refreshLoadRoute(loadId);
+      const { refreshEmptyMilesAround } = await import("./empty-miles");
+      await refreshEmptyMilesAround(loadId);
       refresh();
       if (!result.ok) return { ok: false, error: result.message };
       return { ok: true, id: loadId, message: result.message };

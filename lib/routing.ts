@@ -203,20 +203,19 @@ type DirectionsPayload = {
   }>;
 };
 
-async function fetchGoogleDirections(
-  stops: LoadStop[],
+export async function fetchLaneDirections(
+  origin: string,
+  destination: string,
+  waypoints: string[] = [],
 ): Promise<{ totalMiles: number; legMiles: number[]; points: LatLng[] }> {
   const key = getGoogleMapsApiKey();
   if (!key) throw new Error("missing-key");
-  const origin = stopRouteLabel(stops[0]);
-  const destination = stopRouteLabel(stops[stops.length - 1]);
-  const middle = stops.slice(1, -1).slice(0, 23).map(stopRouteLabel);
   const url = new URL("https://maps.googleapis.com/maps/api/directions/json");
   url.searchParams.set("origin", origin);
   url.searchParams.set("destination", destination);
   url.searchParams.set("units", "imperial");
   url.searchParams.set("mode", "driving");
-  if (middle.length) url.searchParams.set("waypoints", middle.join("|"));
+  if (waypoints.length) url.searchParams.set("waypoints", waypoints.slice(0, 23).join("|"));
   url.searchParams.set("key", key);
   // Do not log `url` — the query string includes the server key.
   const response = await fetch(url, { cache: "no-store" });
@@ -232,6 +231,15 @@ async function fetchGoogleDirections(
   const legMiles = legs.map((leg) => metersToRouteMiles(leg.distance?.value ?? 0));
   const points = decodePolyline(route.overview_polyline?.points ?? "");
   return { totalMiles, legMiles, points };
+}
+
+async function fetchGoogleDirections(
+  stops: LoadStop[],
+): Promise<{ totalMiles: number; legMiles: number[]; points: LatLng[] }> {
+  const origin = stopRouteLabel(stops[0]);
+  const destination = stopRouteLabel(stops[stops.length - 1]);
+  const middle = stops.slice(1, -1).slice(0, 23).map(stopRouteLabel);
+  return fetchLaneDirections(origin, destination, middle);
 }
 
 export async function refreshLoadRoute(
@@ -300,5 +308,11 @@ export async function refreshLoadRouteQuiet(loadId: number): Promise<void> {
     await refreshLoadRoute(loadId, { quiet: true });
   } catch {
     // Stop saves must succeed even when Google is down or the key is missing.
+  }
+  try {
+    const { refreshEmptyMilesAround } = await import("./empty-miles");
+    await refreshEmptyMilesAround(loadId);
+  } catch {
+    // Empty miles stay 0 when Directions is down.
   }
 }

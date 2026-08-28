@@ -509,10 +509,13 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
         assertCanEditLoadRecord(existing, actor.role);
       }
       enforceAssignmentCompliance(formData, truckId, driverId, trailerId);
+      const previousDriverId = existing?.driver_id ?? null;
       assignLoad(loadId, truckId, driverId, trailerId, {
         oo_percent: parseOptionalFloat(formData.get("oo_percent")),
         dispatch: String(formData.get("dispatch") ?? "") === "1",
       });
+      const { refreshEmptyMilesAround } = await import("./empty-miles");
+      await refreshEmptyMilesAround(loadId, previousDriverId);
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {

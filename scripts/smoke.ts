@@ -9054,6 +9054,176 @@ Continuous reefer. Two load locks.
   const afterEmpty = buildIftaQuarterEstimate(iftaQ);
   assert.equal(afterEmpty.waypoints.some((row) => row.loadId === emptyMilesLoad), false);
 
+  const { refreshLoadEmptyMiles, previousLoadForEmptyMiles } = await import("../lib/empty-miles");
+  const deadheadTruckId = queries.createTruck({
+    unit_number: "IFTA-DH-1",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const deadheadDriverId = queries.createDriver({
+    name: "Dana Deadhead",
+    phone: "555-0177",
+    license: "NE-CDL-DEADHEAD",
+    pin: "7788",
+    truck_id: deadheadTruckId,
+    status: "available",
+  });
+  const omahaLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T18:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Produce",
+    rate: 800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: deadheadTruckId,
+    driver_id: deadheadDriverId,
+  });
+  const hastingsLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-22T12:00:00.000Z",
+    pickup_end: "2026-08-22T18:00:00.000Z",
+    delivery_start: "2026-08-23T12:00:00.000Z",
+    delivery_end: "2026-08-23T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Produce",
+    rate: 1100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: deadheadTruckId,
+    driver_id: deadheadDriverId,
+  });
+  ensureRouteStops(omahaLoadId);
+  ensureRouteStops(hastingsLoadId);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = ?, route_state_miles = ?, route_source = 'manual' WHERE id = ?")
+    .run(100, serializeRouteStateMiles([{ state: "NE", name: "Nebraska", miles: 100 }]), omahaLoadId);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = ?, route_state_miles = ?, route_source = 'manual' WHERE id = ?")
+    .run(250, serializeRouteStateMiles([{ state: "KS", name: "Kansas", miles: 250 }]), hastingsLoadId);
+  assert.equal(previousLoadForEmptyMiles(queries.getLoad(hastingsLoadId)! )?.id, omahaLoadId);
+  const savedMapsForEmpty = process.env.GOOGLE_MAPS_API_KEY;
+  const prevEmptyFetch = globalThis.fetch;
+  let emptyGoogleCalls = 0;
+  try {
+    process.env.GOOGLE_MAPS_API_KEY = "";
+    globalThis.fetch = async () => {
+      emptyGoogleCalls += 1;
+      throw new Error("Google should not be called without a key");
+    };
+    const missingEmpty = await refreshLoadEmptyMiles(hastingsLoadId);
+    assert.equal(missingEmpty.miles, 0);
+    assert.equal(emptyGoogleCalls, 0);
+    assert.equal(queries.getLoad(hastingsLoadId)?.route_miles, 250);
+    process.env.GOOGLE_MAPS_API_KEY = "test-not-a-real-maps-key";
+    globalThis.fetch = async (input) => {
+      emptyGoogleCalls += 1;
+      const url = new URL(String(input));
+      assert.equal(url.hostname, "maps.googleapis.com");
+      assert.match(url.pathname, /\/maps\/api\/directions\//);
+      assert.doesNotMatch(url.hostname, /maps\.google\.com/);
+      const points = routing.encodePolyline([
+        { lat: 41.2565, lng: -95.9345 },
+        { lat: 40.9264, lng: -97.088 },
+        { lat: 40.5861, lng: -98.3884 },
+      ]);
+      return new Response(
+        JSON.stringify({
+          status: "OK",
+          routes: [{ overview_polyline: { points }, legs: [{ distance: { value: 254277 } }] }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const firstEmpty = await refreshLoadEmptyMiles(omahaLoadId);
+    assert.equal(firstEmpty.miles, 0);
+    assert.equal(firstEmpty.from, "");
+    const omahaBefore = emptyGoogleCalls;
+    const deadheadEmpty = await refreshLoadEmptyMiles(hastingsLoadId);
+    assert.equal(deadheadEmpty.miles, 158);
+    assert.equal(deadheadEmpty.source, "google");
+    assert.match(deadheadEmpty.from, /Omaha/i);
+    assert.match(deadheadEmpty.to, /Hastings/i);
+    assert.ok(deadheadEmpty.states.some((row) => row.state === "NE"));
+    assert.ok(emptyGoogleCalls > omahaBefore);
+    const storedDeadhead = queries.getLoad(hastingsLoadId);
+    assert.equal(storedDeadhead?.empty_miles, 158);
+    assert.equal(storedDeadhead?.route_miles, 250);
+    assert.equal(storedDeadhead?.empty_source, "google");
+    assert.match(storedDeadhead?.empty_from ?? "", /Omaha/i);
+    assert.match(storedDeadhead?.empty_to ?? "", /Hastings/i);
+    assert.match(storedDeadhead?.empty_state_miles ?? "", /NE/);
+    assert.equal(queries.getLoad(omahaLoadId)?.empty_miles, 0);
+    assert.equal(queries.getLoad(omahaLoadId)?.route_miles, 100);
+    const iftaQ3 = parseIftaQuarter("2026-3");
+    const deadheadEstimate = buildIftaQuarterEstimate(iftaQ3);
+    const deadheadDriverMiles = deadheadEstimate.drivers.find((row) => row.id === deadheadDriverId);
+    const deadheadTruckMiles = deadheadEstimate.trucks.find((row) => row.id === deadheadTruckId);
+    assert.ok(deadheadDriverMiles);
+    assert.equal(deadheadDriverMiles.loaded, 350);
+    assert.equal(deadheadDriverMiles.empty, 158);
+    assert.equal(deadheadDriverMiles.total, 508);
+    assert.ok(deadheadTruckMiles);
+    assert.equal(deadheadTruckMiles.loaded, 350);
+    assert.equal(deadheadTruckMiles.empty, 158);
+    assert.equal(deadheadTruckMiles.total, 508);
+    const hastingsWaypoint = deadheadEstimate.waypoints.find((row) => row.loadId === hastingsLoadId);
+    assert.ok(hastingsWaypoint);
+    assert.equal(hastingsWaypoint.loaded, 250);
+    assert.equal(hastingsWaypoint.empty, 158);
+    assert.match(hastingsWaypoint.emptyLane, /Omaha/i);
+    assert.match(hastingsWaypoint.emptyLane, /Hastings/i);
+    assert.ok(hastingsWaypoint.emptyStates.some((row) => row.state === "NE"));
+    const omahaWaypoint = deadheadEstimate.waypoints.find((row) => row.loadId === omahaLoadId);
+    assert.ok(omahaWaypoint);
+    assert.equal(omahaWaypoint.loaded, 100);
+    assert.equal(omahaWaypoint.empty, 0);
+    const { buildStatistics } = await import("../lib/reports-stats");
+    const { listReportExportRows } = await import("../lib/reports-export");
+    const driverStats = buildStatistics({
+      category: "driver",
+      entityId: deadheadDriverId,
+      dateBasis: "pickup",
+      end: new Date(2026, 7, 28),
+    });
+    const driverStatRow = driverStats.rows.find((row) => row.id === deadheadDriverId);
+    assert.ok(driverStatRow);
+    assert.equal(driverStatRow.totals.miles, 350);
+    assert.equal(driverStatRow.totals.emptyMiles, 158);
+    const exportRow = listReportExportRows({
+      category: "driver",
+      entityId: deadheadDriverId,
+      dateBasis: "pickup",
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-31",
+    }).find((row) => row.empty_miles === 158);
+    assert.ok(exportRow);
+  } finally {
+    globalThis.fetch = prevEmptyFetch;
+    if (savedMapsForEmpty == null) delete process.env.GOOGLE_MAPS_API_KEY;
+    else process.env.GOOGLE_MAPS_API_KEY = savedMapsForEmpty;
+  }
+
   const dispatchLoad = queries.createLoad({
     customer_id: customerId,
     origin: "Omaha, NE",
@@ -9266,6 +9436,11 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /LoadTiedFuelReceipts/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /FuelMatchQueue/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Driver mileage/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Truck mileage/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Empty miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Loaded miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
   assert.match(workspaceSource, /WhatsApp load/);
   assert.match(workspaceSource, /Send WhatsApp/);
