@@ -22,6 +22,7 @@ export type MikeGpsPoint = {
 export type ClosestCityResult = {
   asked: string;
   found: boolean;
+  reason?: "city_not_found" | "no_gps";
   city?: string;
   lat?: number;
   lng?: number;
@@ -57,15 +58,83 @@ export const US_CITY_CENTERS: CityCenter[] = [
   { label: "Phoenix, AZ", city: "Phoenix", state: "AZ", lat: 33.4484, lng: -112.074, aliases: ["phoenix"] },
   { label: "Los Angeles, CA", city: "Los Angeles", state: "CA", lat: 34.0522, lng: -118.2437, aliases: ["los angeles", "la"] },
   { label: "Minneapolis, MN", city: "Minneapolis", state: "MN", lat: 44.9778, lng: -93.265, aliases: ["minneapolis"] },
+  { label: "Des Moines, IA", city: "Des Moines", state: "IA", lat: 41.5868, lng: -93.625, aliases: ["des moines", "des moines iowa"] },
+  { label: "Cedar Rapids, IA", city: "Cedar Rapids", state: "IA", lat: 41.9778, lng: -91.6656, aliases: ["cedar rapids"] },
+  { label: "Davenport, IA", city: "Davenport", state: "IA", lat: 41.5236, lng: -90.5776, aliases: ["davenport"] },
+  { label: "Sioux City, IA", city: "Sioux City", state: "IA", lat: 42.4994, lng: -96.4003, aliases: ["sioux city"] },
+  { label: "Dodge City, KS", city: "Dodge City", state: "KS", lat: 37.7528, lng: -100.0171, aliases: ["dodge city"] },
+  { label: "Holcomb, KS", city: "Holcomb", state: "KS", lat: 37.9861, lng: -100.9957, aliases: ["holcomb"] },
+  { label: "Hastings, NE", city: "Hastings", state: "NE", lat: 40.5861, lng: -98.3884, aliases: ["hastings"] },
 ];
 
+const STATE_NAME_TO_ABBR: Record<string, string> = {
+  alabama: "al",
+  alaska: "ak",
+  arizona: "az",
+  arkansas: "ar",
+  california: "ca",
+  colorado: "co",
+  connecticut: "ct",
+  delaware: "de",
+  florida: "fl",
+  georgia: "ga",
+  hawaii: "hi",
+  idaho: "id",
+  illinois: "il",
+  indiana: "in",
+  iowa: "ia",
+  kansas: "ks",
+  kentucky: "ky",
+  louisiana: "la",
+  maine: "me",
+  maryland: "md",
+  massachusetts: "ma",
+  michigan: "mi",
+  minnesota: "mn",
+  mississippi: "ms",
+  missouri: "mo",
+  montana: "mt",
+  nebraska: "ne",
+  nevada: "nv",
+  "new hampshire": "nh",
+  "new jersey": "nj",
+  "new mexico": "nm",
+  "new york": "ny",
+  "north carolina": "nc",
+  "north dakota": "nd",
+  ohio: "oh",
+  oklahoma: "ok",
+  oregon: "or",
+  pennsylvania: "pa",
+  "rhode island": "ri",
+  "south carolina": "sc",
+  "south dakota": "sd",
+  tennessee: "tn",
+  texas: "tx",
+  utah: "ut",
+  vermont: "vt",
+  virginia: "va",
+  washington: "wa",
+  "west virginia": "wv",
+  wisconsin: "wi",
+  wyoming: "wy",
+};
+
 export function normalizeCityKey(value: string): string {
-  return value
+  let text = value
     .toLowerCase()
     .replace(/[.,]/g, " ")
     .replace(/\bst\.?\s+/g, "st ")
     .replace(/\s+/g, " ")
     .trim();
+  for (const [name, abbr] of Object.entries(STATE_NAME_TO_ABBR)) {
+    text = text.replace(new RegExp(`\\b${name}\\b`, "g"), abbr);
+  }
+  return text.replace(/\s+/g, " ").trim();
+}
+
+export function isClosestCityQuestion(question: string): boolean {
+  return /(?:closest|nearest)\b.{0,48}\b(?:to|from)\b/i.test(question);
 }
 
 export function extractCityFromQuestion(question: string): string {
@@ -113,6 +182,48 @@ export function haversineMiles(aLat: number, aLng: number, bLat: number, bLng: n
   return 3958.8 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+export function rankTrucksToCoords(
+  points: MikeGpsPoint[],
+  lat: number,
+  lng: number,
+  locations: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }> = [],
+  limit = 8,
+): Array<{ unit: string; miles: number; address: string }> {
+  return points
+    .map((point) => {
+      if (point.lat != null && point.lng != null) {
+        return {
+          unit: point.unit,
+          miles: Math.round(haversineMiles(lat, lng, point.lat, point.lng)),
+          address: point.address?.trim() || "last GPS",
+        };
+      }
+      const fromCity = findCityCenter(String(point.address ?? ""), locations);
+      if (!fromCity) return null;
+      return {
+        unit: point.unit,
+        miles: Math.round(haversineMiles(lat, lng, fromCity.lat, fromCity.lng)),
+        address: point.address?.trim() || fromCity.label,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null)
+    .sort((a, b) => a.miles - b.miles)
+    .slice(0, limit);
+}
+
+export function formatClosestCityReply(result: ClosestCityResult | null, askedFallback = ""): string {
+  const asked = (result?.city || result?.asked || askedFallback || "that city").trim();
+  if (!result || !result.found) {
+    return `I could not place ${asked} on the map, so I cannot rank trucks to it. Fleet GPS is still available — try the city and state again.`;
+  }
+  if (result.ranked.length === 0) {
+    return `I placed ${asked}, but none of the trucks currently have a GPS ping to rank.`;
+  }
+  const top = result.ranked[0];
+  const place = top.address?.trim() ? ` in ${top.address.trim()}` : "";
+  return `Truck ${top.unit}${place} is the closest to ${asked}, about ${top.miles} miles away.`;
+}
+
 export function closestTrucksToCity(
   question: string,
   points: MikeGpsPoint[],
@@ -127,28 +238,9 @@ export function closestTrucksToCity(
   const skippedNoSamsaraId = points.filter((point) => !String(point.samsaraVehicleId ?? "").trim()).length;
   const city = findCityCenter(asked, locations);
   if (!city) {
-    return { asked, found: false, ranked: [], skippedNoPing, skippedNoSamsaraId };
+    return { asked, found: false, reason: "city_not_found", ranked: [], skippedNoPing, skippedNoSamsaraId };
   }
-  const ranked = points
-    .map((point) => {
-      if (point.lat != null && point.lng != null) {
-        return {
-          unit: point.unit,
-          miles: Math.round(haversineMiles(city.lat, city.lng, point.lat, point.lng)),
-          address: point.address?.trim() || "last GPS",
-        };
-      }
-      const fromCity = findCityCenter(String(point.address ?? ""), locations);
-      if (!fromCity) return null;
-      return {
-        unit: point.unit,
-        miles: Math.round(haversineMiles(city.lat, city.lng, fromCity.lat, fromCity.lng)),
-        address: point.address?.trim() || fromCity.label,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row != null)
-    .sort((a, b) => a.miles - b.miles)
-    .slice(0, 5);
+  const ranked = rankTrucksToCoords(points, city.lat, city.lng, locations, 8);
   return {
     asked,
     found: true,
@@ -156,6 +248,7 @@ export function closestTrucksToCity(
     lat: city.lat,
     lng: city.lng,
     ranked,
+    reason: ranked.length === 0 ? "no_gps" : undefined,
     skippedNoPing,
     skippedNoSamsaraId,
   };

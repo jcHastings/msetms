@@ -1277,6 +1277,17 @@ async function main() {
   assert.match(mikeSrc, /lastGps/);
   assert.match(mikeSrc, /resetSamsaraCache\(\)/);
   assert.match(mikeSrc, /Do not say you have no GPS when any lastGps.hasPosition is true/);
+  assert.match(mikeSrc, /formatClosestCityReply/);
+  assert.match(mikeSrc, /resolveClosestCityRanking/);
+  assert.match(mikeSrc, /geocodeAddress/);
+  assert.match(mikeSrc, /isClosestCityQuestion/);
+  assert.match(mikeSrc, /Never say no trucks ranked closest/);
+  const cityCoordsSrc = fs.readFileSync(path.join(process.cwd(), "lib/city-coords-shared.ts"), "utf8");
+  assert.match(cityCoordsSrc, /Des Moines/);
+  assert.match(cityCoordsSrc, /formatClosestCityReply/);
+  assert.match(cityCoordsSrc, /isClosestCityQuestion/);
+  assert.match(cityCoordsSrc, /rankTrucksToCoords/);
+  assert.doesNotMatch(cityCoordsSrc, /no trucks ranked/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchLinkedSamsaraVehicle/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /extractSamsaraGps/);
   assert.match(
@@ -5082,9 +5093,20 @@ Continuous reefer. Two load locks.
   });
   assert.equal(noLooseGps.find((row) => row.unitNumber === "28"), undefined);
 
-  const { closestTrucksToCity, extractCityFromQuestion, findCityCenter } = await import("../lib/city-coords-shared");
+  const {
+    closestTrucksToCity,
+    extractCityFromQuestion,
+    findCityCenter,
+    formatClosestCityReply,
+    isClosestCityQuestion,
+  } = await import("../lib/city-coords-shared");
   assert.ok(findCityCenter("Oklahoma City"));
+  assert.ok(findCityCenter("Des Moines, Iowa"), "Des Moines, Iowa must geocode from the public city table");
+  assert.ok(findCityCenter("Des Moines"));
   assert.match(extractCityFromQuestion("what truck is closest to Oklahoma City?"), /Oklahoma City/i);
+  assert.match(extractCityFromQuestion("What truck is closest to Des Moines, Iowa?"), /Des Moines/i);
+  assert.equal(isClosestCityQuestion("What truck is closest to Des Moines, Iowa?"), true);
+  assert.equal(isClosestCityQuestion("What about truck 32 in Holcomb, Kansas?"), false);
   const closestOkc = closestTrucksToCity(
     "what truck is closest to Oklahoma City?",
     [
@@ -5098,6 +5120,46 @@ Continuous reefer. Two load locks.
   assert.equal(closestOkc?.ranked[0]?.unit, "36", "Samsara vehicle named 36 has Oklahoma City; 32 must not receive that ping");
   assert.notEqual(closestOkc?.ranked[0]?.unit, "32");
   assert.equal(closestOkc?.skippedNoPing, 1);
+  const desMoinesFleet = [
+    { unit: "32", lat: 37.9861, lng: -100.9957, hasPosition: true, address: "Holcomb, KS", samsaraVehicleId: "sam-32" },
+    { unit: "41", lat: 40.5861, lng: -98.3884, hasPosition: true, address: "Hastings, NE", samsaraVehicleId: "sam-41" },
+    { unit: "28", lat: 41.9778, lng: -91.6656, hasPosition: true, address: "Cedar Rapids, IA", samsaraVehicleId: "sam-28" },
+    { unit: "36", lat: 41.8781, lng: -87.6298, hasPosition: true, address: "near Chicago, IL", samsaraVehicleId: "sam-36" },
+    { unit: "26", lat: 41.8781, lng: -87.6298, hasPosition: true, address: "Chicago, IL", samsaraVehicleId: "sam-26" },
+    { unit: "42", lat: 25.7617, lng: -80.1918, hasPosition: true, address: "Miami, FL", samsaraVehicleId: "sam-42" },
+  ];
+  const closestDesMoines = closestTrucksToCity(
+    "What truck is closest to Des Moines, Iowa?",
+    desMoinesFleet,
+    [],
+  );
+  assert.equal(closestDesMoines?.found, true);
+  assert.equal(closestDesMoines?.ranked[0]?.unit, "28", "Iowa GPS (28) must beat Holcomb / Chicago / Florida for Des Moines");
+  assert.ok((closestDesMoines?.ranked[0]?.miles ?? 9999) < 200);
+  assert.notEqual(closestDesMoines?.ranked[0]?.unit, "32");
+  const desMoinesReply = formatClosestCityReply(closestDesMoines);
+  assert.match(desMoinesReply, /28/);
+  assert.match(desMoinesReply, /\d+ miles/i);
+  assert.doesNotMatch(desMoinesReply, /no trucks ranked/i);
+  const closestDodge = closestTrucksToCity("So what truck is closest to Dodge city Kansas?", desMoinesFleet, []);
+  assert.equal(closestDodge?.ranked[0]?.unit, "32");
+  assert.ok((closestDodge?.ranked[0]?.miles ?? 9999) < 30);
+  const unknownCity = closestTrucksToCity("What truck is closest to Xyzzyville, ZZ?", desMoinesFleet, []);
+  assert.equal(unknownCity?.found, false);
+  assert.equal(unknownCity?.reason, "city_not_found");
+  assert.equal(unknownCity?.ranked.length, 0);
+  const unknownReply = formatClosestCityReply(unknownCity);
+  assert.match(unknownReply, /could not place/i);
+  assert.doesNotMatch(unknownReply, /no trucks ranked/i);
+  const noGpsCity = closestTrucksToCity(
+    "What truck is closest to Des Moines, Iowa?",
+    [{ unit: "99", lat: null, lng: null, hasPosition: false, samsaraVehicleId: "sam-99" }],
+    [],
+  );
+  assert.equal(noGpsCity?.found, true);
+  assert.equal(noGpsCity?.reason, "no_gps");
+  assert.match(formatClosestCityReply(noGpsCity), /GPS ping to rank/);
+  assert.doesNotMatch(formatClosestCityReply(noGpsCity), /no trucks ranked/i);
   const no112 = samsaraUnmatchedUnitsWarning(
     [{ id: 8, unit_number: "112", samsara_vehicle_id: "112" }],
     [{ id: "v-pete", name: "Pete" }, { id: "v-dallas", name: "Dallas spare" }],
@@ -9595,7 +9657,8 @@ Continuous reefer. Two load locks.
   queries.setTruckActive(assignedTruckId, false);
   assert.equal(queries.getTruck(assignedTruckId)?.active, 0);
 
-  const { attachMikeFleetTelemetry, buildMikeGpsContext, mikeGpsPointsFromFleet } = await import("../lib/mike");
+  const { attachMikeFleetTelemetry, buildMikeGpsContext, mikeGpsPointsFromFleet, resolveClosestCityRanking } =
+    await import("../lib/mike");
   const mikeGps = mikeGpsPointsFromFleet({
     trucks: [
       {
@@ -9724,6 +9787,83 @@ Continuous reefer. Two load locks.
   assert.equal(cityOnly.trucks.find((row) => row.unit === "41")?.hos?.note, "no live HOS");
   assert.equal(cityOnly.closestToCity?.ranked[0]?.unit, "40");
   assert.equal(cityOnly.skippedNoPing, 1);
+  const liveDesMoines = await resolveClosestCityRanking("What truck is closest to Des Moines, Iowa?", {
+    trucks: [
+      { id: 28, unit_number: "28", samsara_vehicle_id: "sam-28" },
+      { id: 32, unit_number: "32", samsara_vehicle_id: "sam-32" },
+      { id: 42, unit_number: "42", samsara_vehicle_id: "sam-42" },
+    ],
+    locations: [
+      {
+        vehicleId: "sam-28",
+        unitNumber: "28",
+        latitude: 41.9778,
+        longitude: -91.6656,
+        address: "Cedar Rapids, IA",
+        source: "samsara",
+      },
+      {
+        vehicleId: "sam-32",
+        unitNumber: "32",
+        latitude: 37.9861,
+        longitude: -100.9957,
+        address: "Holcomb, KS",
+        source: "samsara",
+      },
+      {
+        vehicleId: "sam-42",
+        unitNumber: "42",
+        latitude: 25.7617,
+        longitude: -80.1918,
+        address: "Miami, FL",
+        source: "samsara",
+      },
+    ],
+  });
+  assert.equal(liveDesMoines?.found, true);
+  assert.equal(liveDesMoines?.ranked[0]?.unit, "28");
+  assert.match(formatClosestCityReply(liveDesMoines), /28/);
+  assert.doesNotMatch(formatClosestCityReply(liveDesMoines), /no trucks ranked/i);
+  const geocodeFallback = await resolveClosestCityRanking(
+    "What truck is closest to Xyzzyville, ZZ?",
+    {
+      trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28" }],
+      locations: [
+        {
+          vehicleId: "sam-28",
+          unitNumber: "28",
+          latitude: 41.9778,
+          longitude: -91.6656,
+          address: "Cedar Rapids, IA",
+          source: "samsara",
+        },
+      ],
+    },
+    async () => ({ latitude: 41.5868, longitude: -93.625 }),
+  );
+  assert.equal(geocodeFallback?.found, true);
+  assert.equal(geocodeFallback?.ranked[0]?.unit, "28");
+  const geocodeMiss = await resolveClosestCityRanking(
+    "What truck is closest to Xyzzyville, ZZ?",
+    {
+      trucks: [{ id: 28, unit_number: "28", samsara_vehicle_id: "sam-28" }],
+      locations: [
+        {
+          vehicleId: "sam-28",
+          unitNumber: "28",
+          latitude: 41.9778,
+          longitude: -91.6656,
+          address: "Cedar Rapids, IA",
+          source: "samsara",
+        },
+      ],
+    },
+    async () => null,
+  );
+  assert.equal(geocodeMiss?.found, false);
+  assert.equal(geocodeMiss?.reason, "city_not_found");
+  assert.match(formatClosestCityReply(geocodeMiss), /could not place/i);
+  assert.doesNotMatch(formatClosestCityReply(geocodeMiss), /no trucks ranked/i);
   const { matchLinkedSamsaraVehicle } = await import("../lib/fleet-import-shared");
   assert.equal(
     matchLinkedSamsaraVehicle(

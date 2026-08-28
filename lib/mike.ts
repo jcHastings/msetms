@@ -1,11 +1,20 @@
 import { cookies } from "next/headers";
-import { closestTrucksToCity, type ClosestCityResult, type MikeGpsPoint } from "./city-coords-shared";
+import {
+  closestTrucksToCity,
+  extractCityFromQuestion,
+  formatClosestCityReply,
+  isClosestCityQuestion,
+  rankTrucksToCoords,
+  type ClosestCityResult,
+  type MikeGpsPoint,
+} from "./city-coords-shared";
 import { canonicalFleetKey, unitDigits } from "./fleet-import-shared";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
 import { getSamsaraFleet, isLiveSamsaraGps, resetSamsaraCache } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
 import { mikeWorkReply, proposeMikeWork } from "./mike-work";
+import { geocodeAddress } from "./places";
 
 export type { MikeMessage };
 
@@ -145,6 +154,63 @@ export function buildMikeGpsContext(
     gps,
     skippedNoPing: gps.filter((item) => !item.hasPosition).length,
     closestToCity: closestTrucksToCity(question, gps, input.tmsLocations ?? []),
+  };
+}
+
+export async function resolveClosestCityRanking(
+  question: string,
+  input: {
+    trucks: Array<{
+      id?: number;
+      unit_number: string;
+      samsara_vehicle_id: string;
+      gps_latitude?: number | null;
+      gps_longitude?: number | null;
+      gps_address?: string;
+      gps_source?: string;
+    }>;
+    locations: Array<{
+      truckId?: number | null;
+      vehicleId?: string;
+      unitNumber: string;
+      latitude: number | null;
+      longitude: number | null;
+      address: string;
+      source: string;
+    }>;
+    tmsLocations?: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }>;
+  },
+  geocode: (address: string) => Promise<{ latitude: number; longitude: number } | null> = geocodeAddress,
+): Promise<ClosestCityResult | null> {
+  const { gps, skippedNoPing, closestToCity } = buildMikeGpsContext(question, input);
+  const skippedNoSamsaraId = gps.filter((point) => !String(point.samsaraVehicleId ?? "").trim()).length;
+  if (closestToCity?.found) return closestToCity;
+  const asked = (closestToCity?.asked || extractCityFromQuestion(question)).trim();
+  if (!asked || (!isClosestCityQuestion(question) && !closestToCity)) {
+    return closestToCity;
+  }
+  const geo = await geocode(asked);
+  if (!geo) {
+    return {
+      asked,
+      found: false,
+      reason: "city_not_found",
+      ranked: [],
+      skippedNoPing,
+      skippedNoSamsaraId,
+    };
+  }
+  const ranked = rankTrucksToCoords(gps, geo.latitude, geo.longitude, input.tmsLocations ?? []);
+  return {
+    asked,
+    found: true,
+    city: asked,
+    lat: geo.latitude,
+    lng: geo.longitude,
+    ranked,
+    reason: ranked.length === 0 ? "no_gps" : undefined,
+    skippedNoPing,
+    skippedNoSamsaraId,
   };
 }
 
@@ -321,7 +387,7 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     rules: [
       "Never invent GPS or HOS. Every truck with a Samsara vehicle id has lastGps (lat/lng or city) and hos. Use those. Coords are live or last persisted Samsara pings — never invent them.",
       "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
-      "Closest to a city: use closestToCity.ranked when it has trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
+      "Closest to a city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
@@ -333,6 +399,29 @@ export async function askMike(
 ): Promise<{ configured: boolean; reply: string; proposals: MikeProposal[] }> {
   await loadRuntimeEnv();
   const work = proposeMikeWork(question);
+  if (isClosestCityQuestion(question)) {
+    const truckRows = listTrucks();
+    const tmsLocations = listLocations().slice(0, 120).map((location) => ({
+      name: location.name,
+      city: location.city,
+      state: location.state,
+      lat: location.latitude,
+      lng: location.longitude,
+    }));
+    resetSamsaraCache();
+    const fleet = await getSamsaraFleet();
+    const closest = await resolveClosestCityRanking(question, {
+      trucks: truckRows,
+      locations: fleet.locations,
+      tmsLocations,
+    });
+    const reply = formatClosestCityReply(closest, extractCityFromQuestion(question));
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
+      proposals: work.proposals,
+    };
+  }
   if (!isOpenAiConfigured()) {
     return {
       configured: false,
@@ -357,7 +446,7 @@ export async function askMike(
       {
         role: "system",
         content:
-          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
+          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),
