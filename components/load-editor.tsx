@@ -153,12 +153,7 @@ export async function LoadEditor({
         canSendToAccounting={canEditLoads(role) && !load.non_revenue}
         canReturnFromAccounting={canAccessAccounting(role)}
       >
-        <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
-          {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
-            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-              This load is in Accounting. Ask Accounting to send it back before changing it.
-            </p>
-          ) : null}
+        <LoadTabPanel when="basics">
           <LoadMoneyBox load={load} />
           {canSendSms(role) ? (
             <LoadMailPanel
@@ -176,6 +171,13 @@ export async function LoadEditor({
                 return row ? formatDateTime(row.created_at) : "";
               })()}
             />
+          ) : null}
+        </LoadTabPanel>
+        <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
+          {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              This load is in Accounting. Ask Accounting to send it back before changing it.
+            </p>
           ) : null}
           <LoadForm
             customers={customers}

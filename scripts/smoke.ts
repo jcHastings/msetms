@@ -470,6 +470,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible && !keepMounted\) return null/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /keepMounted/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /when="basics"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadMoneyBox/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadLogLiveCards/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Suspense/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Opening stops/);
