@@ -9,6 +9,7 @@ import { LoadCustomerScreen } from "@/components/load-customer-screen";
 import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
 import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export type LoadFormScreen = "basics" | "customer" | "assets" | "all";
@@ -90,6 +91,11 @@ export function LoadForm({
     <form id={formId} action={formAction} className={workspace ? "space-y-6" : "card space-y-6 p-6"}>
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
+      <RateConStopFields prefix="pickup" stop={extraDefaults.shipper} />
+      <RateConStopFields prefix="delivery" stop={extraDefaults.consignee} />
+      {extraDefaults.extra_stops?.length ? (
+        <input type="hidden" name="extra_stops_json" value={JSON.stringify(extraDefaults.extra_stops)} />
+      ) : null}
       <input type="hidden" name="return_to" value={load ? `/loads/${load.id}` : returnTo} />
       {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
 
@@ -142,6 +148,20 @@ export function LoadForm({
         </div>
       )}
     </form>
+  );
+}
+
+function RateConStopFields({ prefix, stop }: { prefix: "pickup" | "delivery"; stop?: ParsedStop }) {
+  if (!stop || !parsedStopHasDetails(stop)) return null;
+  return (
+    <>
+      <input type="hidden" name={`${prefix}_stop_name`} value={stop.name} />
+      <input type="hidden" name={`${prefix}_stop_street`} value={stop.street} />
+      <input type="hidden" name={`${prefix}_stop_city`} value={stop.city} />
+      <input type="hidden" name={`${prefix}_stop_state`} value={stop.state} />
+      <input type="hidden" name={`${prefix}_stop_zip`} value={stop.zip} />
+      <input type="hidden" name={`${prefix}_stop_phone`} value={stop.phone} />
+    </>
   );
 }
 

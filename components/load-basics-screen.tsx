@@ -31,6 +31,12 @@ export type LoadFormDefaults = Partial<{
   trailer_number: string;
   shipper_location_id: number | null;
   consignee_location_id: number | null;
+  shipper: { name: string; street: string; city: string; state: string; zip: string; phone: string };
+  consignee: { name: string; street: string; city: string; state: string; zip: string; phone: string };
+  extra_stops: Array<{
+    kind: "pickup" | "delivery";
+    stop: { name: string; street: string; city: string; state: string; zip: string; phone: string };
+  }>;
 }>;
 
 export function LoadBasicsScreen({
@@ -54,9 +60,10 @@ export function LoadBasicsScreen({
   const looksReefer = Boolean(
     load?.reefer_mode ||
       defaults.reefer_mode ||
+      load?.temperature_f != null ||
       load?.reefer_setpoint_f != null ||
       defaults.reefer_setpoint_f != null ||
-      /reefer/i.test(load?.equipment ?? ""),
+      /reefer/i.test(load?.equipment ?? DEFAULT_LOAD_EQUIPMENT),
   );
   return (
     <section data-load-tab="basics" className={card ? "card overflow-hidden" : undefined}>
@@ -180,30 +187,8 @@ export function LoadBasicsScreen({
         </select>
       </div>
       <div className="field">
-        <label htmlFor="equipment_length">Equipment Length</label>
-        <input id="equipment_length" name="equipment_length" defaultValue={load?.equipment_length ?? ""} />
-      </div>
-      <div className="field">
         <label htmlFor="temperature_f">Required temp °F</label>
         <input id="temperature_f" name="temperature_f" type="number" step="0.1" defaultValue={load?.temperature_f ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
-        <input
-          id="reefer_setpoint_f"
-          name="reefer_setpoint_f"
-          type="number"
-          step="0.1"
-          defaultValue={load?.reefer_setpoint_f ?? defaults.reefer_setpoint_f ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="temp_low_f">Required low °F</label>
-        <input id="temp_low_f" name="temp_low_f" type="number" step="0.1" defaultValue={load?.temp_low_f ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="temp_high_f">Required high °F</label>
-        <input id="temp_high_f" name="temp_high_f" type="number" step="0.1" defaultValue={load?.temp_high_f ?? ""} />
       </div>
       <div className="field">
         <label htmlFor="unload_type">Live vs Drop</label>

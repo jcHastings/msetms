@@ -10,6 +10,11 @@ export type ParsedStop = {
   phone: string;
 };
 
+export type ParsedExtraStop = {
+  kind: "pickup" | "delivery";
+  stop: ParsedStop;
+};
+
 export type ParsedRateCon = {
   customer_name: string;
   customer_id: number | null;
@@ -32,6 +37,7 @@ export type ParsedRateCon = {
   raw_text: string;
   shipper: ParsedStop;
   consignee: ParsedStop;
+  extra_stops: ParsedExtraStop[];
   shipper_location_id: number | null;
   consignee_location_id: number | null;
 };
@@ -70,6 +76,7 @@ export function emptyParsedRateCon(): ParsedRateCon {
     raw_text: "",
     shipper: emptyParsedStop(),
     consignee: emptyParsedStop(),
+    extra_stops: [],
     shipper_location_id: null,
     consignee_location_id: null,
   };

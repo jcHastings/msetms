@@ -11,7 +11,8 @@ import {
 import { LocationPicker } from "@/components/location-picker";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
-import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
+import { applyLocationToStop, formatLocationAddress, matchLocationForStop, US_STATES } from "@/lib/locations";
+import type { PlaceDetails } from "@/lib/places-shared";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
@@ -23,11 +24,13 @@ export function LoadStopsPanel({
   stops,
   locations = [],
   routeGuide,
+  placesEnabled = false,
 }: {
   loadId: number;
   stops: LoadStop[];
   locations?: Location[];
   routeGuide?: LoadRouteGuide;
+  placesEnabled?: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<{ mode: "add" | "edit"; kind: "pickup" | "delivery"; stop?: LoadStop } | null>(
@@ -142,6 +145,7 @@ export function LoadStopsPanel({
           kind={dialog.kind}
           stop={dialog.stop}
           locations={locations}
+          placesEnabled={placesEnabled}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -231,12 +235,25 @@ function applyLocationToDraft(draft: StopDraft, location: Location): StopDraft {
   };
 }
 
+function applyPlaceToDraft(draft: StopDraft, place: PlaceDetails): StopDraft {
+  return {
+    ...draft,
+    locationId: "",
+    name: place.name || draft.name,
+    street: place.street || draft.street,
+    city: place.city || draft.city,
+    state: place.state || draft.state,
+    zip: place.zip || draft.zip,
+  };
+}
+
 function StopDialog({
   loadId,
   mode,
   kind,
   stop,
   locations,
+  placesEnabled,
   onClose,
 }: {
   loadId: number;
@@ -244,6 +261,7 @@ function StopDialog({
   kind: "pickup" | "delivery";
   stop?: LoadStop;
   locations: Location[];
+  placesEnabled: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -323,12 +341,60 @@ function StopDialog({
             locations={locations}
             value={draft.locationId}
             onChange={pickLocation}
+            onPlacePick={(place) => setDraft((current) => applyPlaceToDraft(current, place))}
+            placesEnabled={placesEnabled}
             emptyLabel="One-off address"
             placeholder="Type any name or address"
           />
-          {formatLocationAddress(draft) ? (
-            <p className="stop-front-address mt-1">{formatLocationAddress(draft)}</p>
-          ) : null}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="field sm:col-span-2">
+              <label htmlFor="stop-name">Name</label>
+              <input
+                id="stop-name"
+                value={draft.name}
+                onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              />
+            </div>
+            <div className="field sm:col-span-2">
+              <label htmlFor="stop-street">Street</label>
+              <input
+                id="stop-street"
+                value={draft.street}
+                onChange={(event) => setDraft((current) => ({ ...current, street: event.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="stop-city">City</label>
+              <input
+                id="stop-city"
+                value={draft.city}
+                onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="stop-state">State</label>
+              <select
+                id="stop-state"
+                value={draft.state}
+                onChange={(event) => setDraft((current) => ({ ...current, state: event.target.value }))}
+              >
+                <option value="">—</option>
+                {US_STATES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="stop-zip">ZIP</label>
+              <input
+                id="stop-zip"
+                value={draft.zip}
+                onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))}
+              />
+            </div>
+          </div>
           {mode === "edit" && isAssignEdit(persistedLocationId, draft.locationId) ? (
             <p className="mt-1 text-[11px] text-slate-500" data-stop-autosave="">
               Save to keep this location change.

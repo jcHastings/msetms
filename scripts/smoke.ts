@@ -302,16 +302,20 @@ async function main() {
   );
   assert.doesNotMatch(loadFormSource, /name="origin"|name="destination"|name="pickup_start"|hidden leftover/);
   assert.match(basicsChunk, /data-load-tab="basics"/);
-  assert.match(basicsChunk, /Reefer setpoint/);
+  assert.match(basicsChunk, /Required temp/);
   assert.match(basicsChunk, /Reefer mode/);
+  assert.match(basicsChunk, /Equipment Type/);
   assert.match(basicsChunk, /useLoadAssignPersist/);
   assert.match(basicsChunk, /handleAssign/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
   assert.match(basicsChunk, /Truck Status/);
   assert.match(basicsChunk, /Load Reference ID/);
-  assert.match(basicsChunk, /Reefer setpoint/);
+  assert.doesNotMatch(basicsChunk, /Equipment Length|Reefer setpoint|Required low|Required high/);
   assert.doesNotMatch(basicsChunk, /htmlFor="branch"|New\/Used|Lower temp threshold|Upper temp threshold|Temp time tolerance|Container #|Last free day/);
+  assert.match(loadFormSource, /pickup_stop_name/);
+  assert.match(loadFormSource, /delivery_stop_street/);
+  assert.match(loadFormSource, /extra_stops_json/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8"), /applyLocationToStop/);
   assert.doesNotMatch(basicsChunk, /Shipper location|Consignee location|Pickup window|Delivery window|htmlFor="origin"|htmlFor="destination"/);
   assert.match(customerChunk, /data-load-tab="customer"/);
@@ -1086,6 +1090,16 @@ async function main() {
   assert.match(placeSearchSource, /Search is off/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/places["']/);
   assert.doesNotMatch(placeSearchSource, /from ["']@\/lib\/env["']/);
+  const locationFormSource = fs.readFileSync(path.join(process.cwd(), "components/location-form.tsx"), "utf8");
+  assert.doesNotMatch(locationFormSource, /place\.street \|\| place\.formatted/);
+  assert.match(locationFormSource, /if \(place\.street\) setStreet\(place\.street\)/);
+  const locationPickerSource = fs.readFileSync(path.join(process.cwd(), "components/location-picker.tsx"), "utf8");
+  assert.match(locationPickerSource, /searchPlacesAction/);
+  assert.match(locationPickerSource, /onPlacePick/);
+  assert.doesNotMatch(locationPickerSource, /from ["']@\/lib\/places["']/);
+  const stopsPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-stops-panel.tsx"), "utf8");
+  assert.match(stopsPanelSource, /placesEnabled/);
+  assert.match(stopsPanelSource, /htmlFor="stop-street"/);
   for (const file of [
     "components/rate-con-import.tsx",
     "components/rate-con-apply.tsx",
@@ -2259,6 +2273,47 @@ Load #45090 | Powered by AscendTMS.com
   assert.equal(stackedAscend.consignee.phone, "402-461-4442");
   assert.equal(stackedAscend.shipper_location_id, null, "parse must not invent a location id");
   assert.equal(stackedAscend.consignee_location_id, null, "parse must not invent a location id");
+  assert.deepEqual(stackedAscend.extra_stops, []);
+
+  const threeStopAscend = parseRateConText(
+    `
+LOAD CONFIRMATION
+Load # 45091
+Weight 42000 lbs
+Commodity FRESH BEEF
+Rate $2800 / Flat Rate
+1
+Pickup
+08/25/26
+Midwest Beef Hastings
+100 Packer Rd
+Hastings, NE 68901
+2
+Pickup
+08/25/26
+Grand Island Cooler
+50 Warehouse Ave
+Grand Island, NE 68801
+3
+Delivery
+08/27/26
+El Paso Foods
+200 Border St
+El Paso, TX 79901
+Pay Items
+Total
+$ 2,800.00
+`,
+  );
+  assert.equal(threeStopAscend.shipper.name, "Midwest Beef Hastings");
+  assert.match(threeStopAscend.shipper.street, /100 Packer/i);
+  assert.equal(threeStopAscend.shipper.city, "Hastings");
+  assert.equal(threeStopAscend.consignee.name, "El Paso Foods");
+  assert.match(threeStopAscend.consignee.street, /200 Border/i);
+  assert.equal(threeStopAscend.extra_stops.length, 1);
+  assert.equal(threeStopAscend.extra_stops[0]?.kind, "pickup");
+  assert.equal(threeStopAscend.extra_stops[0]?.stop.name, "Grand Island Cooler");
+  assert.match(threeStopAscend.extra_stops[0]?.stop.street ?? "", /50 Warehouse/i);
 
   const withPhones = parseRateConText(
     `
@@ -2450,6 +2505,81 @@ Continuous reefer. Two load locks.
     assert.equal(afterConfirm.consignee_location_id, savedStop.location.id);
   }
   assert.equal(queries.listLocations().length, locationsAfterParse + 1, "only the confirmed save adds a location");
+
+  const { applyRateConStopsToLoad } = await import("../lib/rate-con-stops");
+  const { listStops: listRateConStops, ensureDefaultStops: ensureRateConStops } = await import("../lib/stops");
+  const cityOnlyLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 42000,
+    commodity: "FRESH BEEF",
+    rate: 2800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const cityOnlyStops = ensureRateConStops(cityOnlyLoadId);
+  assert.equal(cityOnlyStops[0]?.street, "", "city/state lane must not invent a street");
+  assert.equal(cityOnlyStops[0]?.city, "Hastings");
+  assert.equal(cityOnlyStops[0]?.state, "NE");
+  assert.equal(cityOnlyStops[1]?.city, "El Paso");
+  assert.equal(cityOnlyStops[1]?.state, "TX");
+
+  const rateConStopForm = new FormData();
+  rateConStopForm.set("pickup_stop_name", "Midwest Beef Hastings");
+  rateConStopForm.set("pickup_stop_street", "100 Packer Rd");
+  rateConStopForm.set("pickup_stop_city", "Hastings");
+  rateConStopForm.set("pickup_stop_state", "NE");
+  rateConStopForm.set("pickup_stop_zip", "68901");
+  rateConStopForm.set("delivery_stop_name", "El Paso Foods");
+  rateConStopForm.set("delivery_stop_street", "200 Border St");
+  rateConStopForm.set("delivery_stop_city", "El Paso");
+  rateConStopForm.set("delivery_stop_state", "TX");
+  rateConStopForm.set("delivery_stop_zip", "79901");
+  rateConStopForm.set(
+    "extra_stops_json",
+    JSON.stringify([{ kind: "pickup", stop: threeStopAscend.extra_stops[0]?.stop }]),
+  );
+  applyRateConStopsToLoad(cityOnlyLoadId, rateConStopForm);
+  const filledStops = listRateConStops(cityOnlyLoadId);
+  const filledPickup = filledStops.find((stop) => stop.kind === "pickup" && stop.name === "Midwest Beef Hastings");
+  const filledExtra = filledStops.find((stop) => stop.name === "Grand Island Cooler");
+  const filledDelivery = filledStops.find((stop) => stop.kind === "delivery");
+  assert.equal(filledPickup?.name, "Midwest Beef Hastings");
+  assert.match(filledPickup?.street ?? "", /100 Packer/i);
+  assert.equal(filledPickup?.city, "Hastings");
+  assert.equal(filledPickup?.state, "NE");
+  assert.equal(filledPickup?.zip, "68901");
+  assert.equal(filledDelivery?.name, "El Paso Foods");
+  assert.match(filledDelivery?.street ?? "", /200 Border/i);
+  assert.equal(filledDelivery?.city, "El Paso");
+  assert.equal(filledDelivery?.zip, "79901");
+  assert.equal(filledExtra?.street, "50 Warehouse Ave");
+  assert.equal(filledStops.length, 3);
+  const keepStreetForm = new FormData();
+  keepStreetForm.set("pickup_stop_name", "Other Plant");
+  keepStreetForm.set("pickup_stop_street", "999 Invented Ave");
+  keepStreetForm.set("pickup_stop_city", "Hastings");
+  keepStreetForm.set("pickup_stop_state", "NE");
+  applyRateConStopsToLoad(cityOnlyLoadId, keepStreetForm);
+  assert.equal(
+    listRateConStops(cityOnlyLoadId).find((stop) => stop.kind === "pickup" && stop.name === "Midwest Beef Hastings")
+      ?.street,
+    filledPickup?.street,
+    "a filled street must not be overwritten on a later apply",
+  );
 
   const blankPdf = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });

@@ -6,6 +6,7 @@ import {
   emptyParsedStop,
   parseAddressBlob,
   parsedStopHasDetails,
+  type ParsedExtraStop,
   type ParsedRateCon,
   type ParsedStop,
 } from "./rate-con-shared";
@@ -17,6 +18,7 @@ export {
   emptyParsedRateCon,
   emptyParsedStop,
   parseAddressBlob,
+  type ParsedExtraStop,
   type ParsedRateCon,
   type ParsedStop,
 } from "./rate-con-shared";
@@ -185,6 +187,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       raw_text: text,
       shipper,
       consignee,
+      extra_stops: dedupeExtraStops([...ascend.extra_stops, ...printed.extra_stops]),
       shipper_location_id: null,
       consignee_location_id: null,
     },
@@ -207,6 +210,7 @@ function parseAscendConfirmation(text: string): {
   special_instructions: string;
   shipper: ParsedStop;
   consignee: ParsedStop;
+  extra_stops: ParsedExtraStop[];
 } {
   const empty = {
     customer_name: "",
@@ -223,6 +227,7 @@ function parseAscendConfirmation(text: string): {
     special_instructions: "",
     shipper: emptyParsedStop(),
     consignee: emptyParsedStop(),
+    extra_stops: [] as ParsedExtraStop[],
   };
   const looksAscend =
     /load confirmation/i.test(text) ||
@@ -269,6 +274,7 @@ function parseAscendConfirmation(text: string): {
     special_instructions: parseAscendInstructions(text, equipment),
     shipper: pickup.stop,
     consignee: delivery.stop,
+    extra_stops: parseAscendExtraStops(text, pickup.stop, delivery.stop),
   };
 }
 
@@ -319,6 +325,84 @@ function parseAscendRate(text: string): number | null {
     if (Number.isFinite(value) && value >= 50 && value <= 50000) return value;
   }
   return null;
+}
+
+function dedupeExtraStops(stops: ParsedExtraStop[]): ParsedExtraStop[] {
+  const seen = new Set<string>();
+  const extras: ParsedExtraStop[] = [];
+  for (const extra of stops) {
+    if (!parsedStopHasDetails(extra.stop)) continue;
+    const key = `${extra.kind}:${stopKey(extra.stop)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    extras.push(extra);
+  }
+  return extras;
+}
+
+function stopKey(stop: ParsedStop): string {
+  return [stop.name, stop.street, stop.city, stop.state, stop.zip]
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+}
+
+function parseAscendExtraStops(text: string, shipper: ParsedStop, consignee: ParsedStop): ParsedExtraStop[] {
+  const seen = new Set([stopKey(shipper), stopKey(consignee)].filter(Boolean));
+  const extras: ParsedExtraStop[] = [];
+  const stacked = text.matchAll(
+    /(?:^|\n)\s*(?:\d+\s*\n\s*)?(pickup|pick\s*up|pu|delivery|deliver|drop)\s*\n\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*\n([\s\S]{0,320}?)(?=\n\s*(?:\d+\s*\n\s*)?(?:delivery|deliver|drop|pickup|pick\s*up|pay items|terms of load)|$)/gi,
+  );
+  for (const match of stacked) {
+    const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
+    const stop = parseAddressBlob(match[3] ?? "");
+    const key = stopKey(stop);
+    if (!parsedStopHasDetails(stop) || seen.has(key)) continue;
+    seen.add(key);
+    extras.push({ kind, stop });
+  }
+  const lined = text.matchAll(
+    /(?:^|\n)\s*(?:\d+\s+)?(pickup|pick\s*up|pu|delivery|deliver|drop)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})(?:\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\s+(.+)/gi,
+  );
+  for (const match of lined) {
+    const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
+    const stop = parseAddressBlob(match[3] ?? "");
+    const key = stopKey(stop);
+    if (!parsedStopHasDetails(stop) || seen.has(key)) continue;
+    seen.add(key);
+    extras.push({ kind, stop });
+  }
+  return extras;
+}
+
+function parsePrintedExtraStops(text: string, shipper: ParsedStop, consignee: ParsedStop): ParsedExtraStop[] {
+  const seen = new Set([stopKey(shipper), stopKey(consignee)].filter(Boolean));
+  const extras: ParsedExtraStop[] = [];
+  for (let n = 2; n <= 6; n += 1) {
+    const shipperBlock = captureBlockRaw(
+      text,
+      new RegExp(`shipper\\s*${n}\\b`, "i"),
+      /shipper\s*\d|consignee\s*\d|dispatch notes|carrier pay|page \d/i,
+    );
+    const consigneeBlock = captureBlockRaw(
+      text,
+      new RegExp(`consignee\\s*${n}\\b`, "i"),
+      /shipper\s*\d|consignee\s*\d|dispatch notes|carrier pay|page \d/i,
+    );
+    const nextShipper = parseAddressBlob(shipperBlock);
+    const shipperKey = stopKey(nextShipper);
+    if (parsedStopHasDetails(nextShipper) && !seen.has(shipperKey)) {
+      seen.add(shipperKey);
+      extras.push({ kind: "pickup", stop: nextShipper });
+    }
+    const nextConsignee = parseAddressBlob(consigneeBlock);
+    const consigneeKey = stopKey(nextConsignee);
+    if (parsedStopHasDetails(nextConsignee) && !seen.has(consigneeKey)) {
+      seen.add(consigneeKey);
+      extras.push({ kind: "delivery", stop: nextConsignee });
+    }
+  }
+  return extras;
 }
 
 function parseAscendStop(text: string, kind: "pickup" | "delivery"): StopParse {
@@ -388,6 +472,7 @@ function parsePrintedConfirmation(text: string): {
   appointment_notes: string;
   shipper: ParsedStop;
   consignee: ParsedStop;
+  extra_stops: ParsedExtraStop[];
 } {
   const empty = {
     customer_name: "",
@@ -405,6 +490,7 @@ function parsePrintedConfirmation(text: string): {
     appointment_notes: "",
     shipper: emptyParsedStop(),
     consignee: emptyParsedStop(),
+    extra_stops: [] as ParsedExtraStop[],
   };
   if (!/shipper\s*1|consignee\s*1|dispatch notes/i.test(text)) return empty;
 
@@ -438,6 +524,7 @@ function parsePrintedConfirmation(text: string): {
     appointment_notes: labeled(text, ["appointment"]) ?? "",
     shipper,
     consignee,
+    extra_stops: parsePrintedExtraStops(text, shipper, consignee),
   };
 }
 

@@ -214,6 +214,7 @@ export async function LoadEditor({
             stops={stops}
             locations={locations}
             routeGuide={routeGuideFromLoad(routed)}
+            placesEnabled={formSettings.placesEnabled}
           />
           <LoadRoutingGuide
             loadId={load.id}

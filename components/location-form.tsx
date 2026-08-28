@@ -36,8 +36,8 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
           enabled={placesEnabled}
           placeholder="Search a shipper or receiver address"
           onPick={(place) => {
-            if (!name.trim() && place.name) setName(place.name);
-            setStreet(place.street || place.formatted || street);
+            if (place.name) setName(place.name);
+            if (place.street) setStreet(place.street);
             if (place.city) setCity(place.city);
             if (place.state) setRegion(place.state);
             if (place.zip) setZip(place.zip);

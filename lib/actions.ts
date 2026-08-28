@@ -432,6 +432,8 @@ export async function createLoadAction(
         const { attachInboxToLoad } = await import("./files");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
+      const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
+      if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
       refresh();
       redirect(`/loads/${id}`);
     } catch (error) {
@@ -482,6 +484,8 @@ export async function updateLoadAction(
         const { attachInboxToLoad } = await import("./files");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
       }
+      const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
+      if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
       refresh();
       // Existing-load Save must stay on this load/tab. Close is what leaves.
       return { ok: true, id };

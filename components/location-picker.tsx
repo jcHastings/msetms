@@ -7,6 +7,8 @@ import {
   formatLocationAddress,
   type LocationPickerRow,
 } from "@/lib/locations";
+import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
+import { matchLocationForPlace, type PlaceDetails, type PlaceSuggestion } from "@/lib/places-shared";
 
 const RESULT_LIMIT = 50;
 
@@ -18,6 +20,8 @@ export function LocationPicker({
   value,
   defaultValue = "",
   onChange,
+  onPlacePick,
+  placesEnabled = false,
   emptyLabel = "One-off address",
   placeholder = "Type any name or address",
 }: {
@@ -28,6 +32,8 @@ export function LocationPicker({
   value?: string;
   defaultValue?: string;
   onChange?: (locationId: string) => void;
+  onPlacePick?: (place: PlaceDetails) => void;
+  placesEnabled?: boolean;
   emptyLabel?: string;
   placeholder?: string;
 }) {
@@ -44,7 +50,29 @@ export function LocationPicker({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const matches = useMemo(() => filterLocationsForPicker(locations, query, RESULT_LIMIT), [locations, query]);
+  const [placeResults, setPlaceResults] = useState<PlaceSuggestion[]>([]);
+  const [placePending, setPlacePending] = useState(false);
   const options = useMemo(() => [{ id: "", name: emptyLabel }, ...matches], [emptyLabel, matches]);
+
+  useEffect(() => {
+    if (!placesEnabled || !onPlacePick) {
+      setPlaceResults([]);
+      return;
+    }
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      setPlaceResults([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      setPlacePending(true);
+      void searchPlacesAction(trimmed)
+        .then((next) => setPlaceResults(next))
+        .catch(() => setPlaceResults([]))
+        .finally(() => setPlacePending(false));
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [onPlacePick, placesEnabled, query]);
 
   function setSelected(next: string) {
     if (value === undefined) setUncontrolled(next);
@@ -62,6 +90,22 @@ export function LocationPicker({
     if (next && !location) return;
     setSelected(next);
     close();
+  }
+
+  async function pickPlace(placeId: string) {
+    try {
+      const place = await placeDetailsAction(placeId);
+      const matchedId = matchLocationForPlace(locations, place);
+      if (matchedId != null) {
+        pick(String(matchedId));
+        return;
+      }
+      setSelected("");
+      onPlacePick?.(place);
+      close();
+    } catch {
+      close();
+    }
   }
 
   function updateMenuRect() {
@@ -182,7 +226,9 @@ export function LocationPicker({
                 {query.trim() ? (
                   matches.length === 0 ? (
                     <li className="px-3 py-2 text-xs text-slate-500">
-                      No saved location matches. Keep typing a one-off address — this does not create a location.
+                      {placesEnabled
+                        ? "No saved location matches. Pick a Google result or keep a one-off address."
+                        : "No saved location matches. Keep typing a one-off address — this does not create a location."}
                     </li>
                   ) : (
                     matches.map((location, index) => {
@@ -210,6 +256,23 @@ export function LocationPicker({
                     Type any name or address to filter {locations.length.toLocaleString()} saved locations.
                   </li>
                 )}
+                {placesEnabled && query.trim().length >= 3 ? (
+                  <li className="border-t border-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {placePending ? "Searching places…" : "Google places"}
+                  </li>
+                ) : null}
+                {placeResults.map((item) => (
+                  <li key={item.placeId}>
+                    <button
+                      type="button"
+                      role="option"
+                      className="w-full px-3 py-2 text-left hover:bg-slate-100"
+                      onClick={() => void pickPlace(item.placeId)}
+                    >
+                      <div className="font-semibold text-slate-900">{item.label}</div>
+                    </button>
+                  </li>
+                ))}
               </ul>
             </div>,
             document.body,

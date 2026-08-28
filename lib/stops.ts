@@ -70,30 +70,68 @@ export function listStops(loadId: number): LoadStop[] {
     .map((stop) => hydrateStopFromLocations(stop, locations));
 }
 
+function splitLaneCityState(value: string): { city: string; state: string } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.+),\s*([A-Za-z]{2})$/);
+  if (match) return { city: match[1].trim(), state: match[2].toUpperCase() };
+  return { city: trimmed, state: "" };
+}
+
+function seedStopFromLane(
+  kind: LoadStopKind,
+  locationId: number | null,
+  lane: string,
+  windowStart: string,
+  windowEnd: string,
+  extra: Partial<StopInput> = {},
+): StopInput {
+  const location = locationId ? getLocation(locationId) : null;
+  if (location) {
+    return {
+      kind,
+      location_id: location.id,
+      name: location.name,
+      street: location.street,
+      city: location.city,
+      state: location.state,
+      zip: location.zip,
+      phone: location.phone,
+      window_start: windowStart,
+      window_end: windowEnd,
+      ...extra,
+    };
+  }
+  const split = splitLaneCityState(lane);
+  return {
+    kind,
+    name: split.city || lane,
+    street: "",
+    city: split.city || lane,
+    state: split.state,
+    zip: "",
+    window_start: windowStart,
+    window_end: windowEnd,
+    ...extra,
+  };
+}
+
 export function ensureDefaultStops(loadId: number): LoadStop[] {
   const existing = listStops(loadId);
   if (existing.length) return existing;
   const load = getLoad(loadId);
   if (!load) return [];
-  addStop(loadId, {
-    kind: "pickup",
-    name: load.origin,
-    city: load.origin,
-    state: "",
-    window_start: load.pickup_start,
-    window_end: load.pickup_end,
-    confirmation: load.appointment_confirmation ?? "",
-    instructions: load.special_instructions,
-    notes: load.appointment_notes,
-  });
-  addStop(loadId, {
-    kind: "delivery",
-    name: load.destination,
-    city: load.destination,
-    state: "",
-    window_start: load.delivery_start,
-    window_end: load.delivery_end,
-  });
+  addStop(
+    loadId,
+    seedStopFromLane("pickup", load.shipper_location_id, load.origin, load.pickup_start, load.pickup_end, {
+      confirmation: load.appointment_confirmation ?? "",
+      instructions: load.special_instructions,
+      notes: load.appointment_notes,
+    }),
+  );
+  addStop(
+    loadId,
+    seedStopFromLane("delivery", load.consignee_location_id, load.destination, load.delivery_start, load.delivery_end),
+  );
   return listStops(loadId);
 }
 
