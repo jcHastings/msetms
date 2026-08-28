@@ -3,7 +3,9 @@ import { canonicalFleetKey } from "./fleet-import-shared";
 import {
   isPlottableCoord,
   motionFromSpeedMph,
+  orbcommPinShape,
   orbcommReeferPinColor,
+  orbcommTrailerMoving,
   plottableCoord,
   reeferPinStatusFromSnapshot,
   type FleetMapMissing,
@@ -109,6 +111,20 @@ function powerLabel(status: OrbcommReeferPinStatus): string {
   return "—";
 }
 
+function snapshotSpeedMph(snapshot: ReturnType<typeof snapshotForTrailer>): number | null {
+  if (!snapshot) return null;
+  if ("speedMph" in snapshot && snapshot.speedMph != null) return snapshot.speedMph;
+  if ("speed_mph" in snapshot && snapshot.speed_mph != null) return snapshot.speed_mph;
+  return null;
+}
+
+function snapshotHeadingDeg(snapshot: ReturnType<typeof snapshotForTrailer>): number | null {
+  if (!snapshot) return null;
+  if ("headingDeg" in snapshot && snapshot.headingDeg != null) return snapshot.headingDeg;
+  if ("heading_deg" in snapshot && snapshot.heading_deg != null) return snapshot.heading_deg;
+  return null;
+}
+
 function orbcommTrailerPin(input: {
   trailer: Trailer;
   lat: number;
@@ -118,6 +134,8 @@ function orbcommTrailerPin(input: {
   snapshot: ReturnType<typeof snapshotForTrailer>;
 }): FleetMapPin {
   const reeferStatus = reeferStatusFromAny(input.snapshot);
+  const speedMph = snapshotSpeedMph(input.snapshot);
+  const headingDeg = snapshotHeadingDeg(input.snapshot);
   return {
     id: `trailer-${input.trailer.id}`,
     label: input.trailer.unit_number,
@@ -128,6 +146,10 @@ function orbcommTrailerPin(input: {
     recordedAt: input.recordedAt,
     reeferStatus,
     pinColor: orbcommReeferPinColor(reeferStatus),
+    speedMph,
+    headingDeg,
+    pinShape: orbcommPinShape(speedMph),
+    motion: speedMph == null ? undefined : orbcommTrailerMoving(speedMph) ? "Moving" : "Parked",
   };
 }
 

@@ -11,6 +11,10 @@ export const ORBCOMM_REEFER_PIN_COLOR: Record<OrbcommReeferPinStatus, string> = 
   unknown: "#64748b",
 };
 
+export const ORBCOMM_MOVING_SPEED_MPH = 5;
+
+export type FleetMapPinShape = "circle" | "arrow";
+
 export type FleetMapPin = {
   id: string;
   label: string;
@@ -20,6 +24,8 @@ export type FleetMapPin = {
   href: string;
   motion?: FleetMapMotion | "";
   speedMph?: number | null;
+  headingDeg?: number | null;
+  pinShape?: FleetMapPinShape;
   recordedAt?: string;
   reeferStatus?: OrbcommReeferPinStatus;
   pinColor?: string;
@@ -54,6 +60,14 @@ export type FleetMapModel = {
 export function motionFromSpeedMph(speedMph: number | null | undefined): FleetMapMotion | "" {
   if (speedMph == null || Number.isNaN(speedMph)) return "";
   return Math.abs(speedMph) < 1 ? "Parked" : "Moving";
+}
+
+export function orbcommTrailerMoving(speedMph: number | null | undefined): boolean {
+  return speedMph != null && Number.isFinite(speedMph) && speedMph >= ORBCOMM_MOVING_SPEED_MPH;
+}
+
+export function orbcommPinShape(speedMph: number | null | undefined): FleetMapPinShape {
+  return orbcommTrailerMoving(speedMph) ? "arrow" : "circle";
 }
 
 export function plottableCoord(

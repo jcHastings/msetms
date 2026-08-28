@@ -37,6 +37,8 @@ export type ReeferSnapshot = {
   address: string;
   source: "demo" | "orbcomm";
   recordedAt: string;
+  speedMph?: number | null;
+  headingDeg?: number | null;
 };
 
 export type TrailerLocation = {
@@ -76,6 +78,8 @@ export type OrbcommAssetReading = {
   latitude?: number | null;
   longitude?: number | null;
   address?: string;
+  speedMph?: number | null;
+  headingDeg?: number | null;
 };
 
 export type MappedTruck = {
@@ -334,6 +338,8 @@ export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
     address: snapshot.address,
     source: snapshot.source,
     recorded_at: snapshot.recordedAt,
+    speed_mph: snapshot.speedMph ?? null,
+    heading_deg: snapshot.headingDeg ?? null,
   };
 }
 
@@ -356,6 +362,8 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
     address: row.address ?? "",
     source: row.source === "orbcomm" ? "orbcomm" : "demo",
     recordedAt: row.recorded_at,
+    speedMph: row.speed_mph ?? null,
+    headingDeg: row.heading_deg ?? null,
   };
 }
 
@@ -797,6 +805,8 @@ function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
     latitude: firstNumber(item, ["latitude", "Latitude", "lat", "Lat", "LAT"]),
     longitude: firstNumber(item, ["longitude", "Longitude", "lng", "lon", "Lon", "LNG"]),
     address: address ?? "",
+    speedMph: parseOrbcommSpeedMph(item),
+    headingDeg: parseOrbcommHeadingDeg(item),
   };
 }
 
@@ -842,6 +852,8 @@ export function mapOrbcommReadingsToLoads(input: {
       address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
+      speedMph: asset.speedMph ?? null,
+      headingDeg: asset.headingDeg ?? null,
     });
   }
   return readings;
@@ -890,6 +902,8 @@ export function snapshotsFromLiveAssets(input: {
       address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
+      speedMph: asset.speedMph ?? null,
+      headingDeg: asset.headingDeg ?? null,
     });
   }
   return [...assigned, ...extras];
@@ -984,6 +998,8 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
       address: reading.address,
       source: "orbcomm",
       recorded_at: reading.recordedAt,
+      speed_mph: reading.speedMph ?? null,
+      heading_deg: reading.headingDeg ?? null,
     });
   }
   cache = null;
@@ -1049,6 +1065,8 @@ function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedT
       address: reading.address,
       source: "orbcomm",
       recorded_at: reading.recordedAt,
+      speed_mph: reading.speedMph ?? null,
+      heading_deg: reading.headingDeg ?? null,
     });
   }
 }
@@ -1057,8 +1075,8 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
   getDb()
     .prepare(
         `INSERT INTO reefer_readings (
-        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, operating_mode, latitude, longitude, address, source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, operating_mode, latitude, longitude, address, source, recorded_at, speed_mph, heading_deg
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.load_id,
@@ -1076,7 +1094,42 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
       input.address ?? "",
       input.source,
       input.recorded_at,
+      input.speed_mph ?? null,
+      input.heading_deg ?? null,
     );
+}
+
+export function parseOrbcommSpeedMph(item: Record<string, unknown>): number | null {
+  const mph = firstNumber(item, ["speedMph", "speed_mph", "SpeedMph", "speedMPH"]);
+  if (mph != null) return mph;
+  const kph = firstNumber(item, ["speedKph", "speed_kph", "speedKmh", "speedKmH"]);
+  if (kph != null) return kph * 0.621371;
+  const knots = firstNumber(item, ["speedKnots", "speed_knots"]);
+  if (knots != null) return knots * 1.15078;
+  const speed = firstNumber(item, ["speed", "Speed", "velocity", "gpsSpeed", "groundSpeed", "GroundSpeed"]);
+  if (speed == null) return null;
+  const unit = firstString(item, ["speedUnit", "speed_unit", "SpeedUnit", "speedUom"]) ?? "";
+  if (/km/i.test(unit)) return speed * 0.621371;
+  if (/knot/i.test(unit)) return speed * 1.15078;
+  if (/m\/s|mps/i.test(unit)) return speed * 2.23694;
+  return speed;
+}
+
+export function parseOrbcommHeadingDeg(item: Record<string, unknown>): number | null {
+  const heading = firstNumber(item, [
+    "heading",
+    "Heading",
+    "headingDeg",
+    "heading_deg",
+    "course",
+    "Course",
+    "bearing",
+    "direction",
+    "Direction",
+  ]);
+  if (heading == null || !Number.isFinite(heading)) return null;
+  const wrapped = ((heading % 360) + 360) % 360;
+  return wrapped;
 }
 
 export function normalizeKey(value: string): string {

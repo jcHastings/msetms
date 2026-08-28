@@ -10,9 +10,10 @@ type GoogleMaps = {
   Marker: new (opts: Record<string, unknown>) => {
     addListener: (event: string, handler: () => void) => void;
   };
+  Point: new (x: number, y: number) => unknown;
   Polyline: new (opts: Record<string, unknown>) => unknown;
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
-  SymbolPath: { CIRCLE: unknown };
+  SymbolPath: { CIRCLE: unknown; FORWARD_CLOSED_ARROW: unknown };
 };
 
 declare global {
@@ -95,6 +96,10 @@ export function LoadMapCanvas({
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
+          styles: [
+            { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+            { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
+          ],
         });
         const bounds = new maps.LatLngBounds();
         if (route.length >= 2) {
@@ -121,14 +126,27 @@ export function LoadMapCanvas({
                   fontWeight: "700",
                 }
               : undefined,
-            icon: {
-              path: maps.SymbolPath.CIRCLE,
-              scale: point.kind === "track" ? 4 : 8,
-              fillColor: point.pinColor || MARKER_COLOR[point.kind],
-              fillOpacity: 0.95,
-              strokeColor: "#ffffff",
-              strokeWeight: 1,
-            },
+            icon:
+              point.pinShape === "arrow"
+                ? {
+                    path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                    scale: 5,
+                    rotation: point.headingDeg ?? 0,
+                    fillColor: point.pinColor || MARKER_COLOR[point.kind],
+                    fillOpacity: 0.95,
+                    strokeColor: "#ffffff",
+                    strokeWeight: 1,
+                    labelOrigin: new maps.Point(0, -2),
+                  }
+                : {
+                    path: maps.SymbolPath.CIRCLE,
+                    scale: point.kind === "track" ? 4 : 8,
+                    fillColor: point.pinColor || MARKER_COLOR[point.kind],
+                    fillOpacity: 0.95,
+                    strokeColor: "#ffffff",
+                    strokeWeight: 1,
+                    labelOrigin: new maps.Point(0, -2),
+                  },
           });
           if (point.href) {
             const href = point.href;

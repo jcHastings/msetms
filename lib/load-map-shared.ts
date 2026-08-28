@@ -12,6 +12,8 @@ export type LoadMapPoint = {
   href?: string;
   pinColor?: string;
   markerText?: string;
+  pinShape?: "circle" | "arrow";
+  headingDeg?: number | null;
 };
 
 export type LoadTrackingEvent = {

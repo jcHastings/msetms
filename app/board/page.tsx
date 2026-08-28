@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
 import { BoardFilterProvider, BoardFilterRow } from "@/components/board-filter";
 import { BoardToolbar } from "@/components/board-toolbar";
@@ -50,15 +51,6 @@ export default async function BoardPage({
   const assignableTrailers = listAssignableTrailers();
   const assignableDrivers = listAssignableDrivers();
   const relayLabels = extraRelayLabelsByLoad(loads);
-  const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
-  const reeferByLoad = new Map<number, ReeferReading | null>();
-  for (const load of loads) {
-    const live = reefers.readings.find((reading) => reading.loadId === load.id);
-    reeferByLoad.set(
-      load.id,
-      live ? snapshotToReading(live) : reefers.mode === "orbcomm" && !reefers.error ? null : getDemoReeferForLoad(load.id),
-    );
-  }
 
   return (
     <PageOverlayHost returnTo={overlayReturnTo("/board", current)} serverOpenId={openId}>
@@ -71,6 +63,52 @@ export default async function BoardPage({
           </Link>
         }
       />
+      <BoardToolbar status={status} date={date} />
+      <Suspense fallback={<div className="card h-72 bg-slate-50" data-board-loading="" />}>
+        <BoardLiveSection
+          loads={loads}
+          current={current}
+          assignableTrucks={assignableTrucks}
+          assignableTrailers={assignableTrailers}
+          assignableDrivers={assignableDrivers}
+          relayLabels={relayLabels}
+        />
+      </Suspense>
+      {openId ? (
+        <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
+      ) : null}
+    </BoardFilterProvider>
+    </PageOverlayHost>
+  );
+}
+
+async function BoardLiveSection({
+  loads,
+  current,
+  assignableTrucks,
+  assignableTrailers,
+  assignableDrivers,
+  relayLabels,
+}: {
+  loads: ReturnType<typeof listLoads>;
+  current: { status: string; date: string };
+  assignableTrucks: ReturnType<typeof listAssignableTrucks>;
+  assignableTrailers: ReturnType<typeof listAssignableTrailers>;
+  assignableDrivers: ReturnType<typeof listAssignableDrivers>;
+  relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
+}) {
+  const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
+  const reeferByLoad = new Map<number, ReeferReading | null>();
+  for (const load of loads) {
+    const live = reefers.readings.find((reading) => reading.loadId === load.id);
+    reeferByLoad.set(
+      load.id,
+      live ? snapshotToReading(live) : reefers.mode === "orbcomm" && !reefers.error ? null : getDemoReeferForLoad(load.id),
+    );
+  }
+
+  return (
+    <>
       {fleet.error ? (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           {fleet.error}
@@ -81,7 +119,6 @@ export default async function BoardPage({
           {reefers.error}
         </p>
       ) : null}
-      <BoardToolbar status={status} date={date} />
       <div className="card overflow-hidden">
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
@@ -235,10 +272,6 @@ export default async function BoardPage({
           </div>
         )}
       </div>
-      {openId ? (
-        <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
-      ) : null}
-    </BoardFilterProvider>
-    </PageOverlayHost>
+    </>
   );
 }

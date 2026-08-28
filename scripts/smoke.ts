@@ -92,6 +92,8 @@ async function main() {
   assert.match(boardUi, /table-grid-board/);
   assert.match(boardUi, /board-edit-cell/);
   assert.match(boardUi, /Promise\.all\(\[getReeferSnapshots\(\), getSamsaraFleet\(\)\]\)/);
+  assert.match(boardUi, /<Suspense/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/orbcomm/page.tsx"), "utf8"), /redirect\("\/fleet\/orbcomm"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/loading.tsx"), "utf8"), /data-board-loading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-edit-cell/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /whitespace-nowrap text-left/);
@@ -500,6 +502,8 @@ async function main() {
   assert.match(mapCanvasSource, /point\.href/);
   assert.match(mapCanvasSource, /Polyline/);
   assert.match(mapCanvasSource, /markerText/);
+  assert.match(mapCanvasSource, /FORWARD_CLOSED_ARROW/);
+  assert.match(mapCanvasSource, /featureType: "poi"/);
   assert.match(mapCanvasSource, /gm_authFailure|data-map-off/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /stopTypeLabel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /stopMapMarkerText/);
@@ -6284,6 +6288,8 @@ Continuous reefer. Two load locks.
       fs.readFileSync(path.join(process.cwd(), "lib/fuel-mpg.ts"), "utf8"),
     /maps\.google|pin-to-pin|Official IFTA|first-class|haversine/i,
   );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-mpg.ts"), "utf8"), /googleMilesForDriverInRange/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-mpg.ts"), "utf8"), /officialGoogleMilesForLoad/);
   const fuelMatchUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-match-queue.tsx"), "utf8");
   assert.match(fuelPage, /FuelMatchQueue/);
   assert.match(fuelMatchUi, /data-fuel-match-queue/);
@@ -6445,7 +6451,13 @@ Continuous reefer. Two load locks.
   assert.equal(deniseFuel.week.reefer_diesel.gallons, 0);
   assert.equal(deniseFuel.week.def.gallons, 0);
   assert.equal(deniseFuel.week.scale.amount, 0);
-  const { listDriverMpg, odometerDeltaMiles } = await import("../lib/fuel-mpg");
+  const {
+    listDriverMpg,
+    odometerDeltaMiles,
+    officialGoogleMilesForLoad,
+    googleMilesForDriverInRange,
+    loadTouchesMpgWindow,
+  } = await import("../lib/fuel-mpg");
   const mpgNow = new Date();
   const mpgBoard = listDriverMpg("week", mpgNow);
   const activeRoster = queries.listDrivers().filter((driver) => queries.isDriverLoginEligible(driver));
@@ -6456,6 +6468,104 @@ Continuous reefer. Two load locks.
   assert.equal(deniseMpg.gallons, 100);
   assert.equal(deniseMpg.miles, null);
   assert.equal(deniseMpg.mpg, null);
+  const { encodePolyline } = await import("../lib/routing");
+  const mpgPoly = encodePolyline(
+    Array.from({ length: 24 }, (_, index) => ({ lat: 40.5 + index * 0.02, lng: -98.4 + index * 0.04 })),
+  );
+  assert.equal(
+    officialGoogleMilesForLoad({
+      route_miles: 210.3,
+      route_source: "google",
+      route_leg_miles: "[210.3]",
+      route_polyline: mpgPoly,
+      empty_miles: 50.1,
+      empty_source: "google",
+    }),
+    260.4,
+  );
+  assert.equal(
+    officialGoogleMilesForLoad({
+      route_miles: 210.3,
+      route_source: "google",
+      route_leg_miles: "",
+      route_polyline: "",
+      empty_miles: 50.1,
+      empty_source: "",
+    }),
+    null,
+  );
+  assert.equal(
+    loadTouchesMpgWindow(
+      {
+        pickup_start: startOfLocalWeek(mpgNow).toISOString(),
+        pickup_end: "",
+        delivery_start: "",
+        delivery_end: mpgNow.toISOString(),
+        status: "delivered",
+      },
+      startOfLocalWeek(mpgNow).toISOString(),
+      mpgNow.toISOString(),
+    ),
+    true,
+  );
+  const mpgJames = queries.listDrivers().find((driver) => driver.name === "James Whitaker Smoke");
+  assert.ok(mpgJames);
+  const mpgTruckId = queries.createTruck({
+    unit_number: "MPG-27",
+    type: "sleeper",
+    capacity_lbs: 80000,
+    status: "available",
+    plate: "MPG-27",
+    vin: "MPGSMOKEVIN000027",
+    assigned_driver_id: mpgJames.id,
+  });
+  const mpgCustomer = queries.listCustomers()[0];
+  assert.ok(mpgCustomer);
+  const mpgLoadId = queries.createLoad({
+    customer_id: mpgCustomer.id,
+    origin: "Hastings, NE",
+    destination: "Harlan, IA",
+    pickup_start: startOfLocalWeek(mpgNow).toISOString(),
+    pickup_end: mpgNow.toISOString(),
+    delivery_start: mpgNow.toISOString(),
+    delivery_end: mpgNow.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "MPG-GOOGLE",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.assignLoad(mpgLoadId, mpgTruckId, mpgJames.id);
+  getDb()
+    .prepare(
+      `UPDATE loads SET route_miles = 210.3, route_source = 'google', route_leg_miles = '[210.3]', route_polyline = ?, empty_miles = 50.1, empty_source = 'google' WHERE id = ?`,
+    )
+    .run(mpgPoly, mpgLoadId);
+  const mpgJamesLoad = queries.getLoad(mpgLoadId);
+  assert.ok(mpgJamesLoad);
+  assert.equal(
+    googleMilesForDriverInRange(
+      [mpgJamesLoad],
+      mpgJames.id,
+      mpgTruckId,
+      startOfLocalWeek(mpgNow).toISOString(),
+      mpgNow.toISOString(),
+    ),
+    260.4,
+  );
+  const jamesMpg = listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "James Whitaker Smoke");
+  assert.ok(jamesMpg);
+  assert.equal(jamesMpg.miles, 260.4);
+  assert.equal(jamesMpg.mpg, null);
+  assert.equal(listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "Denise Ortega")?.miles, null);
   const deniseTruck = queries.listTrucks().find((truck) => truck.unit_number === "112");
   assert.ok(deniseTruck);
   queries.saveTruckOdometer(deniseTruck.id, {
@@ -7242,7 +7352,58 @@ Continuous reefer. Two load locks.
       recorded_at: "2026-08-25T12:00:00Z",
     });
   }
+  queries.createTrailer({ unit_number: "FM-MOVE", type: "reefer" });
+  queries.createTrailer({ unit_number: "FM-STOP", type: "reefer" });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "FM-MOVE",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: 34,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.59,
+    longitude: -98.4,
+    address: "Hastings, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-25T12:05:00Z",
+    speed_mph: 62,
+    heading_deg: 85,
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "FM-STOP",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: 34,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.591,
+    longitude: -98.401,
+    address: "Hastings, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-25T12:06:00Z",
+    speed_mph: 3,
+    heading_deg: 10,
+  });
+  const { orbcommPinShape, orbcommTrailerMoving } = await import("../lib/fleet-map-shared");
+  assert.equal(orbcommTrailerMoving(5), true);
+  assert.equal(orbcommTrailerMoving(4), false);
+  assert.equal(orbcommTrailerMoving(null), false);
+  assert.equal(orbcommPinShape(62), "arrow");
+  assert.equal(orbcommPinShape(3), "circle");
+  assert.equal(orbcomm.parseOrbcommSpeedMph({ speedMph: 58 }), 58);
+  assert.equal(orbcomm.parseOrbcommHeadingDeg({ course: 90 }), 90);
   const coloredOrbcommMap = await fleetMap.buildOrbcommFleetMap();
+  assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-MOVE")?.pinShape, "arrow");
+  assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-MOVE")?.headingDeg, 85);
+  assert.equal(coloredOrbcommMap.pins.find((item) => item.label === "FM-STOP")?.pinShape, "circle");
   for (const row of [
     { unit: "FM-RUN", status: "running" as const },
     { unit: "FM-OFF", status: "off" as const },
@@ -10124,6 +10285,10 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-reefer-pin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Arrow = moving/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Circle = stopped/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /ORBCOMM_MOVING_SPEED_MPH = 5/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /orbcommPinShape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /classifyOrbcommReeferMode/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /pinColor/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);

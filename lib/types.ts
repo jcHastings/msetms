@@ -578,6 +578,8 @@ export type ReeferReading = {
   address: string;
   source: "demo" | "orbcomm";
   recorded_at: string;
+  speed_mph?: number | null;
+  heading_deg?: number | null;
 };
 
 export type IftaJurisdictionRow = {

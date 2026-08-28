@@ -233,6 +233,8 @@ export function migrate(db: Database): void {
   ensureColumn(db, "reefer_readings", "longitude", "REAL");
   ensureColumn(db, "reefer_readings", "address", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "reefer_readings", "operating_mode", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "reefer_readings", "speed_mph", "REAL");
+  ensureColumn(db, "reefer_readings", "heading_deg", "REAL");
   ensureColumn(db, "loads", "qbo_invoice_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
