@@ -1184,6 +1184,67 @@ async function main() {
     "future unassigned load stays off the inbox",
   );
   assert.ok(inbox.fineCount >= 1, "some open loads should be fine");
+  const { groupInboxExceptions } = await import("../lib/exceptions");
+  const sameLoadIssues = inbox.items.filter((item) => item.loadId === inbox.items[0]?.loadId);
+  if (sameLoadIssues.length > 1) {
+    const groupedSame = groupInboxExceptions(sameLoadIssues);
+    assert.equal(groupedSame.length, 1);
+    assert.equal(groupedSame[0]?.items.length, sameLoadIssues.length);
+  }
+  const triple = groupInboxExceptions([
+    {
+      id: "1055:late",
+      loadId: 1055,
+      loadNumber: "MSE-1055",
+      customerName: "M & S Loads LLC.",
+      origin: "Hastings, NE",
+      destination: "Harlan, IA",
+      kind: "late",
+      severity: "HIGH",
+      title: "Late to pickup",
+      detail: "Pickup window ended",
+      demo: false,
+    },
+    {
+      id: "1055:reefer",
+      loadId: 1055,
+      loadNumber: "MSE-1055",
+      customerName: "M & S Loads LLC.",
+      origin: "Hastings, NE",
+      destination: "Harlan, IA",
+      kind: "reefer",
+      severity: "MEDIUM",
+      title: "Reefer off setpoint",
+      detail: "23.9°F · set 26°F",
+      demo: false,
+    },
+    {
+      id: "1055:unassigned",
+      loadId: 1055,
+      loadNumber: "MSE-1055",
+      customerName: "M & S Loads LLC.",
+      origin: "Hastings, NE",
+      destination: "Harlan, IA",
+      kind: "unassigned",
+      severity: "MEDIUM",
+      title: "Unassigned — window passed",
+      detail: "Still needs a unit.",
+      demo: false,
+    },
+  ]);
+  assert.equal(triple.length, 1, "one card per load");
+  assert.equal(triple[0]?.loadNumber, "MSE-1055");
+  assert.equal(triple[0]?.items.length, 3);
+  assert.equal(new Set(triple.map((group) => group.loadNumber)).size, triple.length);
+  const reeferOnly = groupInboxExceptions(triple[0].items.filter((item) => item.kind === "reefer"));
+  assert.equal(reeferOnly.length, 1);
+  assert.equal(reeferOnly[0]?.items.length, 1);
+  assert.equal(reeferOnly[0]?.items[0]?.kind, "reefer");
+  const inboxUi = fs.readFileSync(path.join(process.cwd(), "components/exception-inbox.tsx"), "utf8");
+  assert.match(inboxUi, /groupInboxExceptions/);
+  assert.match(inboxUi, /data-attention-load/);
+  assert.match(inboxUi, /data-attention-issue/);
+  assert.doesNotMatch(inboxUi, /inbox\.items\.map\(\(item\)/);
 
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
@@ -6366,6 +6427,7 @@ Continuous reefer. Two load locks.
   desk.setExceptionState(firstException.id, "resolved", "smoke");
   const liveInbox = desk.listLiveExceptionInbox();
   assert.equal(liveInbox.items.some((item) => item.id === firstException.id), false);
+  assert.equal(liveInbox.attentionCount, new Set(liveInbox.items.map((item) => item.loadId)).size);
   desk.setHandoffNote("Smoke handoff");
   assert.equal(desk.getHandoffNote(), "Smoke handoff");
   queries.setLoadWatched(load1042.id, true);

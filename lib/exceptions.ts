@@ -31,6 +31,16 @@ export type ExceptionInbox = {
   items: InboxException[];
 };
 
+export type InboxExceptionGroup = {
+  loadId: number;
+  loadNumber: string;
+  customerName: string;
+  origin: string;
+  destination: string;
+  severity: ExceptionSeverity;
+  items: InboxException[];
+};
+
 const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
   CRITICAL: 0,
   HIGH: 1,
@@ -181,6 +191,39 @@ function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxE
     .filter(Boolean)
     .join(" · ");
   return [withLoad(load, "reefer", severity, title, detail, reading?.source !== "orbcomm")];
+}
+
+export function groupInboxExceptions(items: InboxException[]): InboxExceptionGroup[] {
+  const groups = new Map<number, InboxExceptionGroup>();
+  for (const item of items) {
+    const current = groups.get(item.loadId);
+    if (!current) {
+      groups.set(item.loadId, {
+        loadId: item.loadId,
+        loadNumber: item.loadNumber,
+        customerName: item.customerName,
+        origin: item.origin,
+        destination: item.destination,
+        severity: item.severity,
+        items: [item],
+      });
+      continue;
+    }
+    current.items.push(item);
+    if (SEVERITY_RANK[item.severity] < SEVERITY_RANK[current.severity]) current.severity = item.severity;
+  }
+  for (const group of groups.values()) {
+    group.items.sort((a, b) => {
+      const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+      if (severity !== 0) return severity;
+      return KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.title.localeCompare(b.title);
+    });
+  }
+  return [...groups.values()].sort((a, b) => {
+    const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+    if (severity !== 0) return severity;
+    return a.loadNumber.localeCompare(b.loadNumber);
+  });
 }
 
 export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {

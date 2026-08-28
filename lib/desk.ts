@@ -96,7 +96,11 @@ export function listLiveExceptionInbox(filters?: {
     }
     return true;
   });
-  return { ...inbox, items: filtered, attentionCount: filtered.length };
+  return {
+    ...inbox,
+    items: filtered,
+    attentionCount: new Set(filtered.map((item) => item.loadId)).size,
+  };
 }
 
 export function exceptionStateFor(item: InboxException): ExceptionState | null {
