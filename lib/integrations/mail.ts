@@ -40,11 +40,12 @@ export async function sendMail(
   const text = input.text.trim();
   if (!subject || !text) throw new Error("Email is empty.");
   const from = mailFromAddress();
+  const replyTo = input.replyTo?.trim() || undefined;
   if (transport === "smtp") {
-    await sendSmtpMail({ from, to, subject, text, attachments: input.attachments ?? [] });
+    await sendSmtpMail({ from, to, subject, text, replyTo, attachments: input.attachments ?? [] });
     return;
   }
-  await sendSendgridMail({ from, to, subject, text, attachments: input.attachments ?? [] }, fetchImpl);
+  await sendSendgridMail({ from, to, subject, text, replyTo, attachments: input.attachments ?? [] }, fetchImpl);
 }
 
 async function sendSendgridMail(
@@ -53,6 +54,7 @@ async function sendSendgridMail(
     to: string;
     subject: string;
     text: string;
+    replyTo?: string;
     attachments: NonNullable<OutgoingMail["attachments"]>;
   },
   fetchImpl: typeof fetch,
@@ -68,6 +70,7 @@ async function sendSendgridMail(
     body: JSON.stringify({
       personalizations: [{ to: [{ email: input.to }] }],
       from: { email: input.from, name: MAIL_FROM_NAME },
+      ...(input.replyTo ? { reply_to: { email: input.replyTo } } : {}),
       subject: input.subject,
       content: [{ type: "text/plain", value: input.text }],
       attachments: input.attachments.map((file) => ({
@@ -96,6 +99,7 @@ async function sendSmtpMail(input: {
   to: string;
   subject: string;
   text: string;
+  replyTo?: string;
   attachments: NonNullable<OutgoingMail["attachments"]>;
 }): Promise<void> {
   const host = getSmtpHost();
@@ -113,6 +117,7 @@ async function sendSmtpMail(input: {
     await transporter.sendMail({
       from: `${MAIL_FROM_NAME} <${input.from}>`,
       to: input.to,
+      replyTo: input.replyTo,
       subject: input.subject,
       text: input.text,
       attachments: input.attachments.map((file) => ({

@@ -1958,6 +1958,9 @@ async function main() {
   assert.match(companyDraft.text, /Delivery 1/);
   assert.match(companyDraft.text, /34°F · Continuous/);
   assert.match(companyDraft.text, /M & S Loads LLC/);
+  assert.equal(companyDraft.replyTo, "noreply@msloads.com");
+  assert.match(companyDraft.text, /Do not reply/);
+  assert.match(companyDraft.text, /not monitored/);
   assert.doesNotMatch(companyDraft.text, /\$|USD|1,400|1400/);
   const customerDraft = loadMail.composeCustomerUpdateEmail({
     loadNumber: "MSE-MAIL",
@@ -1972,6 +1975,7 @@ async function main() {
   assert.match(customerDraft.text, /Truck 112/);
   assert.match(customerDraft.text, /Memphis, TN/);
   assert.match(customerDraft.text, /412 mi on file/);
+  assert.doesNotMatch(customerDraft.text, /Do not reply|not monitored/i);
   assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
   const mailDriverId = queries.createDriver({
     name: "Pat Mail",
@@ -2014,6 +2018,10 @@ async function main() {
   const builtDriver = loadMail.buildDriverLoadDraft(mailLoad);
   assert.match(builtDriver.text, /Pickup 1|Delivery 1/);
   assert.doesNotMatch(builtDriver.text, /\$2|2200|USD/);
+  assert.equal(builtDriver.replyTo, "noreply@msloads.com");
+  assert.match(builtDriver.text, /Do not reply/);
+  assert.match(builtDriver.text, /not monitored/);
+  assert.match(builtDriver.text, /402-302-0097/);
   const { sendLoadMailAction } = await import("../lib/dispatcher-actions");
   const missingMail = new FormData();
   missingMail.set("load_id", String(mailLoadId));
@@ -2080,18 +2088,35 @@ async function main() {
   let sentMailTo = "";
   let sentMailSubject = "";
   let sentMailHasPdf = false;
+  let sentMailReplyTo = "";
   await loadMail.sendDriverLoadMail(mailLoadId, async (input) => {
     sentMailTo = input.to;
     sentMailSubject = input.subject;
     sentMailHasPdf = Boolean(input.attachments?.some((file) => file.filename.endsWith("-driver-packet.pdf")));
+    sentMailReplyTo = input.replyTo ?? "";
   });
   assert.equal(sentMailTo, "pat.mail@msloads.com");
   assert.match(sentMailSubject, /MSE-/);
   assert.equal(sentMailHasPdf, true);
+  assert.equal(sentMailReplyTo, "noreply@msloads.com");
+  assert.doesNotMatch(sentMailReplyTo, /ana@|info@msloads\.com/);
   assert.equal(loadMail.lastLoadMail(mailLoadId, "driver_load")?.to_email, "pat.mail@msloads.com");
+  let sendgridBody = "";
+  await mailer.sendMail(
+    { to: "pat.mail@msloads.com", subject: "Hi", text: "Body", replyTo: "noreply@msloads.com" },
+    (async (_url, init) => {
+      sendgridBody = String(init && typeof init === "object" && "body" in init ? init.body : "");
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+  );
+  assert.match(sendgridBody, /"email":"info@msloads.com"/);
+  assert.match(sendgridBody, /"reply_to":\{"email":"noreply@msloads.com"\}/);
+  assert.doesNotMatch(sendgridBody, /ana@/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
     assert.equal(input.to, "ap.mail@customer.example");
+    assert.equal(input.replyTo, undefined);
     assert.doesNotMatch(input.text, /\$|2200|settlement/i);
+    assert.doesNotMatch(input.text, /Do not reply|not monitored/i);
     assert.match(input.text, /Truck|Last location/);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");

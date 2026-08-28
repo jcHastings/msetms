@@ -1,6 +1,7 @@
 export const MAIL_MISSING = "Add SMTP or SendGrid in .env";
 export const MAIL_FROM_DEFAULT = "info@msloads.com";
 export const MAIL_FROM_NAME = "MS Express TMS";
+export const MAIL_NOREPLY = "noreply@msloads.com";
 
 export const LOAD_MAIL_KINDS = ["driver_load", "customer_update"] as const;
 export type LoadMailKind = (typeof LOAD_MAIL_KINDS)[number];
@@ -15,6 +16,7 @@ export type OutgoingMail = {
   to: string;
   subject: string;
   text: string;
+  replyTo?: string;
   attachments?: MailAttachment[];
 };
 

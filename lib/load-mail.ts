@@ -4,7 +4,8 @@ import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
 import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
-import { isUsableEmail, normalizeEmail, type LoadMailKind, type SentMailRow } from "./mail-shared";
+import { getCompanyProfile } from "./company";
+import { isUsableEmail, MAIL_NOREPLY, normalizeEmail, type LoadMailKind, type SentMailRow } from "./mail-shared";
 import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { routeGuideFromLoad } from "./routing-shared";
@@ -16,6 +17,7 @@ export type DriverLoadMailDraft = {
   to: string;
   subject: string;
   text: string;
+  replyTo: string;
 };
 
 export type CustomerUpdateMailDraft = {
@@ -50,6 +52,13 @@ export function customerMailBlockReason(load: LoadView | null): string {
   return "";
 }
 
+export function driverLoadNoReplyLine(officePhone = ""): string {
+  const phone = officePhone.trim();
+  return phone
+    ? `Do not reply. This mailbox is not monitored. Call the office at ${phone} if you need something.`
+    : "Do not reply. This mailbox is not monitored. Call the office if you need something.";
+}
+
 export function composeDriverLoadEmail(input: {
   loadNumber: string;
   stops: Array<{
@@ -65,6 +74,7 @@ export function composeDriverLoadEmail(input: {
   reefer: string;
   specialInstructions: string;
   settlement: string;
+  officePhone?: string;
 }): DriverLoadMailDraft {
   const lines = [
     `Load ${input.loadNumber}`,
@@ -84,12 +94,15 @@ export function composeDriverLoadEmail(input: {
     input.specialInstructions ? `Special instructions: ${input.specialInstructions}` : "",
     input.settlement ? `Settlement ${input.settlement}` : "",
     "",
+    driverLoadNoReplyLine(input.officePhone),
+    "",
     "M & S Loads LLC · MS Express TMS",
   ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
   return {
     to: "",
     subject: `Load ${input.loadNumber} — trip information`,
     text: lines.join("\n").trim() + "\n",
+    replyTo: MAIL_NOREPLY,
   };
 }
 
@@ -143,6 +156,7 @@ export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
           : "",
     specialInstructions: load.special_instructions.trim(),
     settlement,
+    officePhone: getCompanyProfile().dispatcher_phone,
   });
   return { ...draft, to: resolveLoadDriverEmail(load) };
 }
@@ -183,6 +197,7 @@ export async function sendDriverLoadMail(
     to: draft.to,
     subject: draft.subject,
     text: draft.text,
+    replyTo: draft.replyTo || MAIL_NOREPLY,
     attachments: [
       {
         filename: `${load.load_number}-driver-packet.pdf`,
