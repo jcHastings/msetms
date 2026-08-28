@@ -248,13 +248,21 @@ function parseStopKind(value: FormDataEntryValue | null): LoadStopKind {
   return kind;
 }
 
+function parseStopKindFromForm(formData: FormData): LoadStopKind {
+  const values = formData.getAll("kind").map((value) => String(value));
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (values[index] === "delivery" || values[index] === "pickup") return values[index] as LoadStopKind;
+  }
+  return parseStopKind(formData.get("kind"));
+}
+
 function parseStopInput(formData: FormData) {
   const windowStart = String(formData.get("window_start") ?? "").trim();
   const windowEnd = String(formData.get("window_end") ?? "").trim();
   const scheduleType = String(formData.get("schedule_type") ?? "").trim();
   const appt = isAppointmentSchedule(scheduleType);
   return {
-    kind: parseStopKind(formData.get("kind")),
+    kind: parseStopKindFromForm(formData),
     name: requiredString(formData.get("name"), "Stop name"),
     street: String(formData.get("street") ?? "").trim(),
     city: String(formData.get("city") ?? "").trim(),

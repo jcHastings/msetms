@@ -390,6 +390,9 @@ async function main() {
   assert.match(stopsSource, /formatLocationAddress/);
   assert.match(stopsSource, /stopTypeNumber/);
   assert.match(stopsSource, /stopTypeLabel/);
+  assert.match(stopsSource, /data-stop-kind/);
+  assert.match(stopsSource, /formData\.set\("kind"/);
+  assert.doesNotMatch(stopsSource, /name="kind" value=\{kind\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /export function stopTypeNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops-shared.ts"), "utf8"), /Delivery" : "Pickup"/);
   assert.match(stopsSource, /datetime-local/);
@@ -5855,6 +5858,33 @@ Continuous reefer. Two load locks.
   assert.equal(savedPick?.state, "NE");
   assert.equal(savedPick?.zip, "68501");
   assert.equal(savedPick?.phone, "402-555-0199");
+  loadStops.updateStop(blankStopId, {
+    kind: "delivery",
+    name: pickedRow.name,
+    street: pickedRow.street,
+    city: pickedRow.city,
+    state: pickedRow.state,
+    zip: pickedRow.zip,
+    phone: pickedRow.phone,
+    location_id: pickedRow.id,
+  });
+  const flippedKind = loadStops.getStop(blankStopId);
+  assert.equal(flippedKind?.kind, "delivery");
+  const afterFlip = loadStops.listStops(autoSaveLoad);
+  assert.equal(loadStops.stopTypeLabel(flippedKind.kind, loadStops.stopTypeNumber(afterFlip, blankStopId)), "Delivery 1");
+  loadStops.ensureDefaultStops(autoSaveLoad);
+  assert.equal(loadStops.getStop(blankStopId)?.kind, "delivery");
+  loadStops.updateStop(blankStopId, {
+    kind: "pickup",
+    name: pickedRow.name,
+    street: pickedRow.street,
+    city: pickedRow.city,
+    state: pickedRow.state,
+    zip: pickedRow.zip,
+    phone: pickedRow.phone,
+    location_id: pickedRow.id,
+  });
+  assert.equal(loadStops.getStop(blankStopId)?.kind, "pickup");
 
   const secretLocation = queries.createLocation({
     name: "Notes Leak Yard",

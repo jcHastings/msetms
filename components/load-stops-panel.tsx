@@ -150,6 +150,7 @@ export function LoadStopsPanel({
 }
 
 type StopDraft = {
+  kind: "pickup" | "delivery";
   locationId: string;
   name: string;
   street: string;
@@ -171,6 +172,7 @@ function initialStopDraft(stop: LoadStop, locations: Location[]): StopDraft {
   const matched = picked ?? matchLocationForStop(locations, stop);
   const filled = matched ? applyLocationToStop(stop, matched) : stop;
   return {
+    kind: stop.kind,
     locationId: filled.location_id ? String(filled.location_id) : "",
     name: filled.name,
     street: filled.street ?? "",
@@ -190,6 +192,7 @@ function initialStopDraft(stop: LoadStop, locations: Location[]): StopDraft {
 
 function emptyDraft(kind: "pickup" | "delivery"): StopDraft {
   return {
+    kind,
     locationId: "",
     name: kind === "pickup" ? "Pickup" : "Delivery",
     street: "",
@@ -245,7 +248,6 @@ function StopDialog({
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
-  const [stopKind, setStopKind] = useState(stop?.kind ?? kind);
   const [draft, setDraft] = useState(() => (stop ? initialStopDraft(stop, locations) : emptyDraft(kind)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -265,10 +267,12 @@ function StopDialog({
     setSaving(true);
     setError(null);
     try {
+      const postedKind = String(formData.get("kind") ?? draft.kind) === "delivery" ? "delivery" : "pickup";
+      formData.set("kind", postedKind);
       if (mode === "add") {
         formData.set("load_id", String(loadId));
         if (!String(formData.get("name") ?? "").trim()) {
-          formData.set("name", stopKind === "pickup" ? "Pickup" : "Delivery");
+          formData.set("name", postedKind === "pickup" ? "Pickup" : "Delivery");
         }
         await addStopAction(formData);
       } else if (stop) {
@@ -290,8 +294,17 @@ function StopDialog({
       <form action={onSubmit} className="pay-item-dialog card max-w-xl space-y-3 p-5">
         <h3 className="text-sm font-semibold">{mode === "add" ? "Add Stop" : "Edit Stop"}</h3>
         <div className="field">
-          <label>Type</label>
-          <select name="kind" value={stopKind} onChange={(event) => setStopKind(event.target.value as "pickup" | "delivery")}>
+          <label htmlFor="stop-kind">Type</label>
+          <select
+            id="stop-kind"
+            name="kind"
+            data-stop-kind=""
+            defaultValue={draft.kind}
+            onChange={(event) => {
+              const next = event.target.value === "delivery" ? "delivery" : "pickup";
+              setDraft((current) => ({ ...current, kind: next }));
+            }}
+          >
             <option value="pickup">Pickup</option>
             <option value="delivery">Delivery</option>
           </select>
@@ -415,7 +428,6 @@ function StopGridBlock({
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
-  const [kind, setKind] = useState(stop.kind);
   const [draft, setDraft] = useState(() => initialStopDraft(stop, locations));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -424,15 +436,14 @@ function StopGridBlock({
   );
 
   useEffect(() => {
-    setKind(stop.kind);
     setDraft(initialStopDraft(stop, locations));
     setPersistedLocationId(stop.location_id ? String(stop.location_id) : "");
   }, [stop, locations]);
 
-  async function persistStop(next: StopDraft, nextKind = kind) {
+  async function persistStop(next: StopDraft) {
     const formData = new FormData();
     formData.set("stop_id", String(stop.id));
-    formData.set("kind", nextKind);
+    formData.set("kind", next.kind);
     formData.set("name", next.name);
     formData.set("street", next.street);
     formData.set("city", next.city);
@@ -482,7 +493,7 @@ function StopGridBlock({
     }
   }
 
-  const pickup = kind === "pickup";
+  const pickup = draft.kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end, draft.scheduleType || stop.schedule_type);
   const appt = isAppointmentSchedule(draft.scheduleType || stop.schedule_type);
   const address = formatLocationAddress(draft);
@@ -496,7 +507,7 @@ function StopGridBlock({
     });
   const rules = locationRuleLabels(location);
   const notes = stopPrivateNotes(draft, location);
-  const typeLabel = stopTypeLabel(kind, typeNumber);
+  const typeLabel = stopTypeLabel(draft.kind, typeNumber);
 
   function commitTime(field: "windowStart" | "windowEnd" | "arrivedAt" | "departedAt", value: string) {
     const next = { ...draft, [field]: value };
@@ -535,7 +546,6 @@ function StopGridBlock({
             ⋮⋮
           </span>
           <div className="hidden">
-            <input form={`stop-form-${stop.id}`} name="kind" value={kind} readOnly />
             <input form={`stop-form-${stop.id}`} name="name" value={draft.name} readOnly />
             <input form={`stop-form-${stop.id}`} name="location_id" value={draft.locationId} readOnly />
             <input form={`stop-form-${stop.id}`} name="street" value={draft.street} readOnly />
