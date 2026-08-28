@@ -76,11 +76,11 @@ export function LoadBasicsScreen({
       ) : null}
       <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <div className="field">
-        <label htmlFor="status">Load Status</label>
+        <label htmlFor="load_status">Load Status</label>
         <div className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="status" value={status} data-load-status="" />
           <select
-            id="status"
+            id="load_status"
             className="flex-1"
             data-autosave=""
             data-load-status-select=""
@@ -106,10 +106,10 @@ export function LoadBasicsScreen({
         </div>
       </div>
       <div className="field">
-        <label htmlFor="truck_status">Truck Status</label>
+        <label htmlFor="load_truck_status">Truck Status</label>
         <input type="hidden" name="truck_status" value={truckStatus} data-truck-status="" />
         <select
-          id="truck_status"
+          id="load_truck_status"
           data-autosave=""
           data-truck-status-select=""
           value={truckStatus}

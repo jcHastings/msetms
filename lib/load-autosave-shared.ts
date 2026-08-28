@@ -50,12 +50,30 @@ export function isLoadCriticalField(name: string): boolean {
   return (LOAD_CRITICAL_FIELDS as readonly string[]).includes(name);
 }
 
+export function formControlValue(
+  form: Pick<HTMLFormElement, "elements">,
+  name: string,
+): string | undefined {
+  const el = form.elements.namedItem(name);
+  if (!el) return undefined;
+  const list = el as RadioNodeList;
+  if (typeof list.length === "number" && typeof list.item === "function") {
+    for (let i = 0; i < list.length; i++) {
+      const node = list.item(i) as { name?: string; value?: string } | null;
+      if (node && node.name === name && node.value !== undefined) return String(node.value);
+    }
+    return undefined;
+  }
+  if ("value" in el) return String((el as { value: string }).value);
+  return undefined;
+}
+
 export function everydayFieldsFromForm(form: Pick<HTMLFormElement, "elements">): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const name of LOAD_AUTOSAVE_FIELDS) {
-    const el = form.elements.namedItem(name);
-    if (!el || !("value" in el)) continue;
-    fields[name] = String((el as { value: string }).value);
+    const value = formControlValue(form, name);
+    if (value === undefined) continue;
+    fields[name] = value;
   }
   return fields;
 }

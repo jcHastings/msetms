@@ -349,6 +349,9 @@ async function main() {
   assert.match(basicsChunk, /handleAssign/);
   assert.match(basicsChunk, /data-load-status/);
   assert.match(basicsChunk, /data-truck-status/);
+  assert.match(basicsChunk, /htmlFor="load_status"/);
+  assert.match(basicsChunk, /htmlFor="load_truck_status"/);
+  assert.doesNotMatch(basicsChunk, /htmlFor="status"|id="status"|id="truck_status"/);
   assert.match(basicsChunk, /truckStatusOptions/);
   assert.match(basicsChunk, /data-autosave/);
   assert.match(basicsChunk, /blurPersist/);
@@ -397,7 +400,7 @@ async function main() {
   assert.match(autosaveShared, /reefer_mode/);
   assert.match(autosaveShared, /customer_id/);
   assert.match(autosaveShared, /declared_value/);
-  const { isLoadAutosaveField, isLoadCriticalField, everydayFieldsFromForm } = await import("../lib/load-autosave-shared");
+  const { isLoadAutosaveField, isLoadCriticalField, everydayFieldsFromForm, formControlValue } = await import("../lib/load-autosave-shared");
   assert.equal(isLoadAutosaveField("commodity"), true);
   assert.equal(isLoadAutosaveField("weight"), true);
   assert.equal(isLoadAutosaveField("notes"), true);
@@ -420,6 +423,23 @@ async function main() {
       },
     } as Pick<HTMLFormElement, "elements">),
     { commodity: "Berries" },
+  );
+  const statusList = Object.assign([{ id: "status", name: "", value: "" }, { name: "status", value: "in_transit" }], {
+    value: "",
+    item(index: number) {
+      return this[index] ?? null;
+    },
+  });
+  assert.equal(
+    formControlValue(
+      { elements: { namedItem: (name: string) => (name === "status" ? statusList : null) } } as Pick<
+        HTMLFormElement,
+        "elements"
+      >,
+      "status",
+    ),
+    "in_transit",
+    "Close flush must read the named status field, not a colliding select id",
   );
   assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
