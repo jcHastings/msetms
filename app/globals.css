@@ -297,15 +297,17 @@ button {
 }
 
 .desk-sidebar-brand .text-sm {
-  display: none;
+  display: block;
 }
 
 .desk-sidebar-brand img {
-  height: 1.65rem;
+  height: 2rem;
+  max-width: 100%;
 }
 
 .desk-nav-icons {
   scrollbar-width: thin;
+  overflow-x: hidden;
 }
 
 .desk-sidebar .btn-ghost {

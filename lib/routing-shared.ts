@@ -107,6 +107,20 @@ export function expectedRouteLegCount(stopCount: number | null | undefined): num
   return stopCount - 1;
 }
 
+export function minDrivingPolylinePoints(stopCount?: number | null): number {
+  const stops = stopCount != null && stopCount > 0 ? stopCount : 2;
+  return Math.max(8, stops * 3);
+}
+
+/** True only for a dense Directions overview path, not a stop-to-stop air line. */
+export function isDrivingPolyline(encoded: string, stopCount?: number | null): boolean {
+  const count = encodedPolylinePointCount(encoded);
+  const stops = stopCount != null && stopCount > 0 ? stopCount : 2;
+  if (count < 3) return false;
+  if (count <= stops + 1) return false;
+  return count >= minDrivingPolylinePoints(stops);
+}
+
 export function isOfficialDrivingRoute(
   load: {
     route_source?: string | null;
@@ -118,8 +132,8 @@ export function isOfficialDrivingRoute(
   if (load.route_source === "manual") return "manual";
   if (load.route_source !== "google") return "";
   const legs = parseRouteLegMiles(load.route_leg_miles);
-  const polyCount = encodedPolylinePointCount(load.route_polyline ?? "");
-  if (legs.length === 0 || polyCount < 3) return "";
+  if (legs.length === 0) return "";
+  if (!isDrivingPolyline(load.route_polyline ?? "", options.stopCount)) return "";
   const expected = expectedRouteLegCount(options.stopCount);
   if (expected != null && legs.length !== expected) return "";
   return "google";

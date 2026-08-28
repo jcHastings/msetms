@@ -14,7 +14,7 @@ const SECTIONS: Array<{
       { href: "/", label: "Dashboard", short: "Home", icon: "home" },
       { href: "/board", label: "Dispatch board", short: "Board", icon: "board" },
       { href: "/search", label: "Search", short: "Search", icon: "search" },
-      { href: "/loads/new", label: "New load", short: "New", icon: "new" },
+      { href: "/loads/new", label: "New load", short: "+ New", icon: "new" },
       { href: "/loads/import-sheet", label: "Import loads", short: "Import", icon: "import" },
       { href: "/loads/templates", label: "Templates", short: "Templates", icon: "templates" },
       { href: "/locations", label: "Locations", short: "Places", icon: "places" },
@@ -73,10 +73,10 @@ export function NavLinks({ role }: { role: string }) {
   })).filter((section) => section.items.length > 0);
 
   return (
-    <nav className="desk-nav-icons flex flex-1 flex-col gap-3 overflow-y-auto px-1 py-3">
+    <nav className="desk-nav-icons flex flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 py-3">
       {sections.map((section) => (
         <div key={section.title}>
-          <div className="desk-nav-section px-1 pb-1 text-center text-[8px] font-semibold uppercase tracking-[0.14em]">
+          <div className="desk-nav-section px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
             {section.title}
           </div>
           <div className="flex flex-col gap-0.5">
@@ -90,12 +90,12 @@ export function NavLinks({ role }: { role: string }) {
                   key={item.href}
                   href={item.href}
                   title={item.label}
-                  className={`desk-nav-link flex flex-col items-center rounded-md px-1 py-1.5 text-center ${
+                  className={`desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
                     active ? "desk-nav-link-active" : ""
                   }`}
                 >
                   <NavIcon name={item.icon} />
-                  <span className="mt-0.5 text-[10px] font-semibold leading-tight">{item.short}</span>
+                  <span className="text-xs font-semibold leading-tight">{item.short}</span>
                 </Link>
               );
             })}

@@ -238,6 +238,11 @@ async function main() {
   assert.match(navSource, /desk-nav-link-active/);
   const shellSource = fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8");
   assert.match(shellSource, /desk-sidebar/);
+  assert.match(shellSource, /w-60/);
+  assert.match(shellSource, /overflow-x-hidden/);
+  assert.doesNotMatch(shellSource, /w-\[4\.75rem\]/);
+  assert.match(navSource, /whitespace-nowrap/);
+  assert.match(navSource, /\+ New/);
   assert.match(workspaceSource, /Load Log/);
   assert.match(workspaceSource, /Dispatch and Tracking/);
   assert.match(workspaceSource, /Load Documents/);
@@ -551,6 +556,8 @@ async function main() {
   assert.doesNotMatch(routingLib, /maps\.google\.com/);
   assert.match(routingLib, /clearUnofficialRouteMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isOfficialDrivingRoute/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /isDrivingPolyline/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-open-work.ts"), "utf8"), /stopCount/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /OverlayOpenLink/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /assignableTrucks/);
@@ -5438,13 +5445,12 @@ Continuous reefer. Two load locks.
     assert.equal(url.hostname, "maps.googleapis.com");
     assert.match(url.pathname, /\/maps\/api\/directions\//);
     assert.doesNotMatch(url.hostname, /maps\.google\.com/);
-    const points = routing.encodePolyline([
-      { lat: 40.71, lng: -74.0 },
-      { lat: 40.8, lng: -77.2 },
-      { lat: 41.1, lng: -81.7 },
-      { lat: 41.6, lng: -86.2 },
-      { lat: 41.88, lng: -87.63 },
-    ]);
+    const points = routing.encodePolyline(
+      Array.from({ length: 12 }, (_, index) => ({
+        lat: 40.71 + index * 0.1,
+        lng: -74.0 - index * 1.2,
+      })),
+    );
     return new Response(
       JSON.stringify({
         status: "OK",
@@ -5477,10 +5483,19 @@ Continuous reefer. Two load locks.
     routeGuideFromLoad({ route_miles: 880.7, route_source: "google", route_leg_miles: "[880.7]" }).totalMiles,
     null,
   );
-  const drivingPoly = routing.encodePolyline([
-    { lat: 40.71, lng: -74.0 },
-    { lat: 41.1, lng: -81.7 },
-    { lat: 41.88, lng: -87.63 },
+  const drivingPoly = routing.encodePolyline(
+    Array.from({ length: 12 }, (_, index) => ({
+      lat: 40.71 + index * 0.1,
+      lng: -74.0 - index * 1.2,
+    })),
+  );
+  const airStopPoly = routing.encodePolyline([
+    { lat: 40.59, lng: -98.39 },
+    { lat: 40.65, lng: -73.99 },
+    { lat: 40.85, lng: -73.91 },
+    { lat: 41.08, lng: -74.15 },
+    { lat: 40.56, lng: -74.3 },
+    { lat: 40.67, lng: -74.11 },
   ]);
   assert.equal(
     routeGuideFromLoad({
@@ -5490,6 +5505,18 @@ Continuous reefer. Two load locks.
       route_polyline: drivingPoly,
     }).totalMiles,
     800,
+  );
+  assert.equal(
+    routeGuideFromLoad(
+      {
+        route_miles: 1539.3,
+        route_source: "google",
+        route_leg_miles: "[1200,80,70,90,99.3]",
+        route_polyline: airStopPoly,
+      },
+      { stopCount: 6 },
+    ).totalMiles,
+    null,
   );
   assert.equal(
     routeGuideFromLoad(
@@ -5545,8 +5572,8 @@ Continuous reefer. Two load locks.
     { kind: "delivery", name: "Kayco", street: "72 New Hook Rd", city: "Bayonne", state: "NJ", zip: "07002" },
   ]);
   getDb()
-    .prepare("UPDATE loads SET route_miles = 1369.2, route_source = 'google', route_polyline = '', route_leg_miles = ? WHERE id = ?")
-    .run("[1369.2]", multiRouteLoadId);
+    .prepare("UPDATE loads SET route_miles = 1539.3, route_source = 'google', route_polyline = ?, route_leg_miles = ? WHERE id = ?")
+    .run(airStopPoly, "[1200,80,70,90,99.3]", multiRouteLoadId);
   assert.equal(routeGuideFromLoad(queries.getLoad(multiRouteLoadId)!, { stopCount: 6 }).totalMiles, null);
   globalThis.fetch = async (input) => {
     googleCalls += 1;
@@ -5556,14 +5583,24 @@ Continuous reefer. Two load locks.
     assert.doesNotMatch(url.href, /maps\.google\.com/);
     const waypoints = url.searchParams.get("waypoints") ?? "";
     assert.match(waypoints, /Brooklyn|Bronx|Chestnut Ridge|Keasbey/);
-    const points = routing.encodePolyline([
+    const hops = [
       { lat: 40.59, lng: -98.39 },
       { lat: 40.65, lng: -73.99 },
       { lat: 40.85, lng: -73.91 },
       { lat: 41.08, lng: -74.15 },
       { lat: 40.56, lng: -74.3 },
       { lat: 40.67, lng: -74.11 },
-    ]);
+    ];
+    const points = routing.encodePolyline(
+      hops.flatMap((stop, index) => {
+        if (index === hops.length - 1) return [stop];
+        const next = hops[index + 1];
+        return Array.from({ length: 8 }, (_, step) => ({
+          lat: stop.lat + ((next.lat - stop.lat) * step) / 8,
+          lng: stop.lng + ((next.lng - stop.lng) * step) / 8,
+        }));
+      }),
+    );
     return new Response(
       JSON.stringify({
         status: "OK",
@@ -5592,8 +5629,9 @@ Continuous reefer. Two load locks.
   assert.equal(multiGuide.source, "google");
   assert.equal(multiGuide.legMiles.length, 5);
   assert.equal(multiGuide.totalMiles, storedMulti?.route_miles);
+  assert.notEqual(multiGuide.totalMiles, 1539.3);
   assert.ok(String(storedMulti?.route_polyline ?? "").trim());
-  assert.doesNotMatch(String(storedMulti?.route_leg_miles ?? ""), /^\[1369\.2\]$/);
+  assert.doesNotMatch(String(storedMulti?.route_leg_miles ?? ""), /1539\.3/);
   globalThis.fetch = prevRouteFetch;
   if (savedMapsForRoute == null) delete process.env.GOOGLE_MAPS_API_KEY;
   else process.env.GOOGLE_MAPS_API_KEY = savedMapsForRoute;
@@ -10585,6 +10623,7 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Loaded miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /Empty miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /refreshAction\(form\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
   assert.match(workspaceSource, /WhatsApp load/);
   assert.match(workspaceSource, /Send WhatsApp/);

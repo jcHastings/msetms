@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { refreshRouteAction, saveManualRouteMilesAction } from "@/lib/dispatcher-actions";
 import { formatDateTime } from "@/lib/format";
 import { formatRouteMiles, type LoadRouteGuide, type RouteStateMile } from "@/lib/routing-shared";
@@ -21,6 +21,16 @@ export function LoadRoutingGuide({
   const [refreshState, refreshAction, refreshPending] = useActionState(refreshRouteAction, null);
   const [manualState, manualAction, manualPending] = useActionState(saveManualRouteMilesAction, null);
   const state = refreshState ?? manualState;
+  const askedRef = useRef(0);
+
+  useEffect(() => {
+    if (guide.source === "google" || guide.source === "manual") return;
+    if (askedRef.current === loadId) return;
+    askedRef.current = loadId;
+    const form = new FormData();
+    form.set("load_id", String(loadId));
+    refreshAction(form);
+  }, [guide.source, loadId, refreshAction]);
 
   return (
     <section className="card mt-4 space-y-3 p-5" id="routing">

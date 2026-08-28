@@ -1,8 +1,10 @@
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { applyGeofenceArrivalsWithGeocode } from "./geofence";
 import { getLoad } from "./queries";
-import { refreshLoadRouteQuiet } from "./routing";
+import { refreshLoadRouteQuiet, usableRouteStops } from "./routing";
 import { isOfficialDrivingRoute } from "./routing-shared";
+import { listStops } from "./stops";
 
 /** Recalc route/geofence after the load UI has painted so Edit is not blocked. */
 export function scheduleLoadOpenWork(loadId: number): void {
@@ -14,10 +16,12 @@ export function scheduleLoadOpenWork(loadId: number): void {
     }
     try {
       const load = getLoad(loadId);
-      if (load && isOfficialDrivingRoute(load)) return;
+      const stopCount = usableRouteStops(listStops(loadId)).length;
+      if (load && isOfficialDrivingRoute(load, { stopCount })) return;
       await refreshLoadRouteQuiet(loadId);
+      revalidatePath("/", "layout");
     } catch {
-      // Official miles stay on file; leftovers are cleared when Directions runs.
+      // Leftover air totals are cleared when Directions cannot run.
     }
   });
 }
