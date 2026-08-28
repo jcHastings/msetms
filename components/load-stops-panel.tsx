@@ -13,7 +13,7 @@ import { useLoadEdit } from "@/components/load-edit-context";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, formatLocationAddress, matchLocationForStop } from "@/lib/locations";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
-import { formatStopWindow, toInputDateTime } from "@/lib/format";
+import { formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import { stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
 import type { Location } from "@/lib/types";
@@ -321,24 +321,44 @@ function StopDialog({
         <input type="hidden" name="state" value={draft.state} />
         <input type="hidden" name="zip" value={draft.zip} />
         <input type="hidden" name="phone" value={draft.phone} />
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="field">
-            <label>Appointment start</label>
-            <input name="window_start" type="datetime-local" value={draft.windowStart} onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))} />
-          </div>
-          <div className="field">
-            <label>Appointment end</label>
-            <input name="window_end" type="datetime-local" value={draft.windowEnd} onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))} />
-          </div>
-        </div>
         <div className="field">
           <label>APPT / FCFS</label>
-          <select name="schedule_type" value={draft.scheduleType} onChange={(event) => setDraft((current) => ({ ...current, scheduleType: event.target.value }))}>
+          <select
+            name="schedule_type"
+            value={draft.scheduleType}
+            onChange={(event) => {
+              const scheduleType = event.target.value;
+              setDraft((current) => ({ ...current, scheduleType }));
+            }}
+          >
             <option value="">From location</option>
             <option value="appointment">APPT</option>
             <option value="fcfs">FCFS</option>
           </select>
         </div>
+        {isAppointmentSchedule(draft.scheduleType) ? (
+          <div className="field">
+            <label htmlFor="stop-appointment-time">Appointment time</label>
+            <input
+              id="stop-appointment-time"
+              name="window_start"
+              type="datetime-local"
+              value={draft.windowStart}
+              onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))}
+            />
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="field">
+              <label>Appointment start</label>
+              <input name="window_start" type="datetime-local" value={draft.windowStart} onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Appointment end</label>
+              <input name="window_end" type="datetime-local" value={draft.windowEnd} onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))} />
+            </div>
+          </div>
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="field">
             <label>Arrived</label>
@@ -421,7 +441,7 @@ function StopGridBlock({
     formData.set("phone", next.phone);
     formData.set("location_id", next.locationId);
     formData.set("window_start", next.windowStart);
-    formData.set("window_end", next.windowEnd);
+    formData.set("window_end", isAppointmentSchedule(next.scheduleType) ? "" : next.windowEnd);
     formData.set("cargo", stop.cargo);
     formData.set("reference", next.reference);
     formData.set("instructions", next.instructions);
@@ -463,7 +483,8 @@ function StopGridBlock({
   }
 
   const pickup = kind === "pickup";
-  const windowLabel = formatStopWindow(stop.window_start, stop.window_end);
+  const windowLabel = formatStopWindow(stop.window_start, stop.window_end, draft.scheduleType || stop.schedule_type);
+  const appt = isAppointmentSchedule(draft.scheduleType || stop.schedule_type);
   const address = formatLocationAddress(draft);
   const location =
     locations.find((item) => String(item.id) === draft.locationId) ??
@@ -539,19 +560,21 @@ function StopGridBlock({
             <input
               className="stop-time-input"
               type="datetime-local"
-              aria-label="Window start"
+              aria-label={appt ? "Appointment time" : "Appointment start"}
               value={draft.windowStart}
               onChange={(event) => setDraft((current) => ({ ...current, windowStart: event.target.value }))}
               onBlur={(event) => commitTime("windowStart", event.target.value)}
             />
-            <input
-              className="stop-time-input"
-              type="datetime-local"
-              aria-label="Window end"
-              value={draft.windowEnd}
-              onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
-              onBlur={(event) => commitTime("windowEnd", event.target.value)}
-            />
+            {appt ? null : (
+              <input
+                className="stop-time-input"
+                type="datetime-local"
+                aria-label="Appointment end"
+                value={draft.windowEnd}
+                onChange={(event) => setDraft((current) => ({ ...current, windowEnd: event.target.value }))}
+                onBlur={(event) => commitTime("windowEnd", event.target.value)}
+              />
+            )}
           </div>
         </td>
         <td>

@@ -122,7 +122,7 @@ function invoiceStops(load: LoadView): TmsInvoiceStop[] {
     return {
       sequence: filled.sequence || index + 1,
       kind: filled.kind === "delivery" ? "Delivery" : "Pickup",
-      window: formatStopWindow(filled.window_start, filled.window_end),
+      window: formatStopWindow(filled.window_start, filled.window_end, filled.schedule_type),
       name: filled.name,
       street: filled.street,
       city: filled.city,

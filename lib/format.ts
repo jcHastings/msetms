@@ -146,7 +146,20 @@ export function gpsMotionLabel(speedMph: number | null | undefined): string {
   return `${Math.round(speedMph)} mph`;
 }
 
-export function formatStopWindow(start: string, end: string): string {
+export function isAppointmentSchedule(value?: string | null): boolean {
+  const raw = String(value ?? "").trim().toLowerCase();
+  return raw === "appointment" || raw === "appt";
+}
+
+export function isFcfsSchedule(value?: string | null): boolean {
+  return String(value ?? "").trim().toLowerCase() === "fcfs";
+}
+
+export function formatStopWindow(start: string, end: string, scheduleType?: string | null): string {
+  if (isAppointmentSchedule(scheduleType)) {
+    const from = start.trim() ? formatDateTime(start) : "";
+    return from && from !== "—" ? from : "";
+  }
   const from = start.trim() ? formatDateTime(start) : "";
   const to = end.trim() ? formatDateTime(end) : "";
   if (from && to && from !== "—" && to !== "—") return `${from} – ${to}`;

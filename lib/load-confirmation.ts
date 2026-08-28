@@ -1,6 +1,6 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
-import { formatMdYDisplay } from "./format";
+import { formatMdYDisplay, isAppointmentSchedule, isFcfsSchedule } from "./format";
 import { isCompanyCustomerName, tmsCustomerInvoiceLines } from "./invoice";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
@@ -123,6 +123,19 @@ function formatClock(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function formatStopClock(stop: LoadStop | undefined, fallback = ""): string {
+  const start = stop?.window_start || fallback;
+  if (!start) return "";
+  if (isAppointmentSchedule(stop?.schedule_type)) return formatClock(start);
+  if (isFcfsSchedule(stop?.schedule_type)) {
+    const from = formatClock(start);
+    const to = formatClock(stop?.window_end || "");
+    if (from && to && from !== to) return `${from} – ${to}`;
+    return from || to;
+  }
+  return formatClock(start);
 }
 
 function appointmentLabel(notes: string): string {
@@ -303,7 +316,7 @@ export function buildConfirmationModel(
       address: shipper.address,
       phone: shipper.phone,
       date: formatMdY(pickup?.window_start || load.pickup_start),
-      time: formatClock(pickup?.window_start || load.pickup_start),
+      time: formatStopClock(pickup, load.pickup_start),
       type: "",
       quantity: "",
       weight: load.weight != null ? String(load.weight) : "",
@@ -321,7 +334,7 @@ export function buildConfirmationModel(
       address: consignee.address,
       phone: consignee.phone,
       date: formatMdY(delivery?.window_start || load.delivery_start),
-      time: formatClock(delivery?.window_start || load.delivery_start),
+      time: formatStopClock(delivery, load.delivery_start),
       type: "",
       quantity: "",
       weight: load.weight != null ? String(load.weight) : "",

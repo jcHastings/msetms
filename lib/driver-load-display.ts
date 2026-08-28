@@ -1,4 +1,4 @@
-import { formatDateTime } from "./format";
+import { formatDateTime, isAppointmentSchedule } from "./format";
 
 export type DriverStopPlace = {
   name?: string;
@@ -7,6 +7,7 @@ export type DriverStopPlace = {
   state?: string;
   window_start?: string;
   window_end?: string;
+  schedule_type?: string;
 };
 
 export function driverLanePlace(stop: DriverStopPlace | null | undefined): string {
@@ -15,7 +16,15 @@ export function driverLanePlace(stop: DriverStopPlace | null | undefined): strin
   return cityState || String(stop.name ?? "").trim() || String(stop.street ?? "").trim();
 }
 
-export function driverWindowText(start?: string | null, end?: string | null): string {
+export function driverWindowText(
+  start?: string | null,
+  end?: string | null,
+  scheduleType?: string | null,
+): string {
+  if (isAppointmentSchedule(scheduleType)) {
+    const from = formatDateTime(String(start ?? "").trim());
+    return from === "—" ? "" : from;
+  }
   const from = formatDateTime(String(start ?? "").trim());
   const to = formatDateTime(String(end ?? "").trim());
   if (from === "—" && to === "—") return "";
@@ -29,9 +38,15 @@ export function driverStopWhen(
   headerEnd: string | null | undefined,
   stop: DriverStopPlace | null | undefined,
 ): string {
+  if (isAppointmentSchedule(stop?.schedule_type)) {
+    const when = driverWindowText(stop?.window_start || headerStart, "", stop?.schedule_type);
+    const place = driverLanePlace(stop);
+    if (when && place) return `${place} · ${when}`;
+    return when || place || "—";
+  }
   const headerWindow = driverWindowText(headerStart, headerEnd);
   if (headerWindow) return headerWindow;
-  const stopWindow = driverWindowText(stop?.window_start, stop?.window_end);
+  const stopWindow = driverWindowText(stop?.window_start, stop?.window_end, stop?.schedule_type);
   const place = driverLanePlace(stop);
   if (stopWindow && place) return `${place} · ${stopWindow}`;
   return stopWindow || place || "—";

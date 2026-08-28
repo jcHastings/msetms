@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
-import { fromInputDateTime, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import {
+  fromInputDateTime,
+  isAppointmentSchedule,
+  parseOptionalFloat,
+  parseOptionalInt,
+  requiredString,
+} from "./format";
 import {
   authenticateDispatcher,
   clearDispatcherSession,
@@ -245,6 +251,8 @@ function parseStopKind(value: FormDataEntryValue | null): LoadStopKind {
 function parseStopInput(formData: FormData) {
   const windowStart = String(formData.get("window_start") ?? "").trim();
   const windowEnd = String(formData.get("window_end") ?? "").trim();
+  const scheduleType = String(formData.get("schedule_type") ?? "").trim();
+  const appt = isAppointmentSchedule(scheduleType);
   return {
     kind: parseStopKind(formData.get("kind")),
     name: requiredString(formData.get("name"), "Stop name"),
@@ -254,7 +262,7 @@ function parseStopInput(formData: FormData) {
     zip: String(formData.get("zip") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim(),
     window_start: windowStart ? fromInputDateTime(windowStart) : "",
-    window_end: windowEnd ? fromInputDateTime(windowEnd) : "",
+    window_end: appt || !windowEnd ? "" : fromInputDateTime(windowEnd),
     confirmation: String(formData.get("confirmation") ?? "").trim(),
     cargo: String(formData.get("cargo") ?? "").trim(),
     reference: String(formData.get("reference") ?? "").trim(),
@@ -267,7 +275,7 @@ function parseStopInput(formData: FormData) {
     departed_at: String(formData.get("departed_at") ?? "").trim()
       ? fromInputDateTime(String(formData.get("departed_at")))
       : "",
-    schedule_type: String(formData.get("schedule_type") ?? "").trim(),
+    schedule_type: scheduleType,
   };
 }
 

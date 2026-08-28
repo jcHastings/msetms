@@ -362,6 +362,8 @@ async function main() {
   assert.match(confirmationLibSource, /tmsCustomerInvoiceLines/);
   assert.match(confirmationLibSource, /drawCustomerBlock/);
   assert.match(confirmationLibSource, /drawCustomerRate/);
+  assert.match(confirmationLibSource, /isAppointmentSchedule/);
+  assert.match(confirmationLibSource, /isFcfsSchedule/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /View Invoice/);
   assert.match(paySource, /data-financials-totals/);
   assert.match(paySource, /finance-income/);
@@ -445,6 +447,8 @@ async function main() {
   assert.match(stopsPanelUi, /draggable/);
   assert.match(stopsPanelUi, /APPT/);
   assert.match(stopsPanelUi, /FCFS/);
+  assert.match(stopsPanelUi, /Appointment time/);
+  assert.match(stopsPanelUi, /isAppointmentSchedule/);
   assert.match(stopsPanelUi, /Add Pickup/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
@@ -7953,9 +7957,15 @@ Continuous reefer. Two load locks.
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatDate, formatDateTime, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
+  const { formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
+  assert.equal(
+    formatStopWindow("2026-08-25T11:57:00.000Z", "2026-08-25T11:58:00.000Z", "appointment"),
+    formatDateTime("2026-08-25T11:57:00.000Z"),
+  );
+  assert.match(formatStopWindow("2026-08-25T11:57:00.000Z", "2026-08-25T17:58:00.000Z", "fcfs"), /–/);
+  assert.doesNotMatch(formatStopWindow("2026-08-25T11:57:00.000Z", "2026-08-25T11:58:00.000Z", "appointment"), /–/);
   assert.ok(
     loadTouchesToday(
       { pickup_start: "2026-08-25T12:00:00-04:00", pickup_end: "", delivery_start: "", delivery_end: "" },
@@ -8055,6 +8065,13 @@ Continuous reefer. Two load locks.
   assert.match(fromStops, /Hastings/);
   assert.match(fromStops, /08\/25\/26/);
   assert.doesNotMatch(driverStopWhen("2026-08-25T12:00:00.000Z", "2026-08-25T18:00:00.000Z", hastingsPickup), /Hastings/);
+  const apptFromStop = driverStopWhen(
+    "2026-08-25T12:00:00.000Z",
+    "2026-08-25T18:00:00.000Z",
+    { ...hastingsPickup, schedule_type: "appointment" },
+  );
+  assert.match(apptFromStop, /Hastings/);
+  assert.doesNotMatch(apptFromStop, /–/);
   assert.equal(driverStopWhen("", "", null), "—");
   assert.equal(driverLaneEnds("", "", hastingsPickup, omahaDelivery), "Hastings, NE → Omaha, NE");
   assert.equal(driverLaneEnds("Lincoln, NE", "Chicago, IL", hastingsPickup, omahaDelivery), "Lincoln, NE → Chicago, IL");

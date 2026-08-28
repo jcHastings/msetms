@@ -1,5 +1,5 @@
 import { agreedAmountForLoad, buildConfirmationForLoad, formatUsd, renderConfirmationPdf } from "./load-confirmation";
-import { formatDateTime, formatMdYDisplay } from "./format";
+import { formatMdYDisplay, formatStopWindow } from "./format";
 import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
 import { formatStopPartyAddress } from "./locations";
@@ -229,7 +229,7 @@ function mailStopLines(
   ]
     .filter(Boolean)
     .join(" — ");
-  const window = [stop.window_start, stop.window_end].filter(Boolean).map(formatDateTime).join(" – ");
+  const window = formatStopWindow(stop.window_start, stop.window_end, stop.schedule_type);
   return {
     title,
     address,
