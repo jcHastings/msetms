@@ -283,6 +283,8 @@ async function main() {
   assert.match(workspaceSource, /useDismissable/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /Escape/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /pointerdown/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /claimOverflowMenu/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /data-row-overflow-menu/);
   assert.match(workspaceSource, /tabNeedsServerPaint/);
   assert.match(workspaceSource, /history\.replaceState/);
   assert.doesNotMatch(workspaceSource, /<details/);
@@ -1016,6 +1018,9 @@ async function main() {
   assert.match(rowActions, /["']use client["']/);
   assert.match(rowActions, /from ["']@\/lib\/actions["']/);
   assert.match(rowActions, /useDismissable/);
+  assert.match(rowActions, /claimOverflowMenu/);
+  assert.match(rowActions, /createPortal/);
+  assert.match(rowActions, /data-row-overflow-menu/);
   assert.doesNotMatch(rowActions, /<details/);
   assert.match(rowActions, /Edit/);
   assert.match(rowActions, /Update/);

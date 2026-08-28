@@ -590,6 +590,18 @@ summary.btn.load-action-btn:hover {
   color: #0b1f3a;
 }
 
+.load-action-menu[data-row-overflow-menu] {
+  pointer-events: none;
+}
+
+.load-action-menu[data-row-overflow-menu] a,
+.load-action-menu[data-row-overflow-menu] button,
+.load-action-menu[data-row-overflow-menu] input,
+.load-action-menu[data-row-overflow-menu] label,
+.load-action-menu[data-row-overflow-menu] form {
+  pointer-events: auto;
+}
+
 .row-actions-btn {
   display: inline-flex;
   align-items: center;

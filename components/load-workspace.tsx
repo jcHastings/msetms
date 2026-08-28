@@ -560,7 +560,8 @@ function ActionMenu({
 }) {
   const open = openMenu === label;
   const rootRef = useRef<HTMLDivElement>(null);
-  useDismissable(open, () => setOpenMenu(null), rootRef);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpenMenu(null), rootRef, menuRef);
   return (
     <div
       ref={rootRef}
@@ -578,7 +579,11 @@ function ActionMenu({
         {label}
       </button>
       {open ? (
-        <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg" role="menu">
+        <div
+          ref={menuRef}
+          className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg"
+          role="menu"
+        >
           {children}
         </div>
       ) : null}
