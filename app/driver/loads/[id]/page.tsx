@@ -17,6 +17,7 @@ import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/lib/reefer-shared";
 import { DriverDocClassify } from "@/components/driver-doc-classify";
+import { driverFacingStopPo } from "@/lib/load-confirmation";
 import { isClosedStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -100,7 +101,10 @@ export default async function DriverLoadPage({
         {driverFacingPay(load) != null ? (
           <Row label="Your pay" value={formatMoney(driverFacingPay(load))} />
         ) : null}
-        <Row label="Ref / PO" value={[load.reference_number, load.po_number].filter(Boolean).join(" · ") || "—"} />
+        <Row
+          label="Ref / PO"
+          value={stops.map((stop) => driverFacingStopPo(stop, load)).filter(Boolean).join(" · ") || "—"}
+        />
         <Row label="Trailer" value={load.trailer_number || load.trailer_unit || "—"} />
         {reeferSpec.isReefer ? (
           <>

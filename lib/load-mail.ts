@@ -214,7 +214,7 @@ export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
   const draft = composeDriverLoadEmail({
     loadNumber: load.load_number,
     stops: stops.map((stop) => mailStopLines(stops, stop)),
-    refs: [load.reference_number, load.po_number, load.customer_reference].filter(Boolean).join(" · "),
+    refs: "",
     commodity: load.commodity.trim(),
     trailer: (load.trailer_unit || load.trailer_number || "").trim(),
     reefer:

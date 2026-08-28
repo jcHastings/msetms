@@ -249,6 +249,33 @@ function confirmationCustomer(load: LoadView): {
   };
 }
 
+export function isCustomerFacingLoadNumber(
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+  value: string,
+): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  return text === String(load.load_number ?? "").trim() || text === String(load.customer_reference ?? "").trim();
+}
+
+export function driverFacingStopPo(
+  stop: { reference?: string | null } | undefined,
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+): string {
+  const stopPo = String(stop?.reference ?? "").trim();
+  if (!stopPo || isCustomerFacingLoadNumber(load, stopPo)) return "";
+  return stopPo;
+}
+
+export function driverFacingStopConfirmation(
+  stop: { confirmation?: string | null } | undefined,
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+): string {
+  const value = String(stop?.confirmation ?? "").trim();
+  if (!value || isCustomerFacingLoadNumber(load, value)) return "";
+  return value;
+}
+
 function confirmationStopTitle(kind: string | undefined, typeNumber: number): string {
   const n = typeNumber > 0 ? typeNumber : 1;
   if (kind === "delivery") return `Consignee ${n}`;
@@ -262,6 +289,7 @@ function confirmationStopFromParty(
   fallbackLocationId: number | null,
   laneFallback: string,
   kindHint: "pickup" | "delivery" = "pickup",
+  packet: "customer" | "internal" = "customer",
 ): ConfirmationStop {
   const party = confirmationParty(stop, fallbackLocationId, laneFallback, load.customer_name);
   const kind = stop?.kind ?? kindHint;
@@ -276,8 +304,9 @@ function confirmationStopFromParty(
     type: "",
     quantity: "",
     weight: load.weight != null ? String(load.weight) : "",
-    poNumber: stop?.reference.trim() || load.po_number,
-    confirmationNumber: stop?.confirmation.trim() || load.reference_number,
+    poNumber: packet === "internal" ? driverFacingStopPo(stop, load) : stop?.reference.trim() || load.po_number,
+    confirmationNumber:
+      packet === "internal" ? driverFacingStopConfirmation(stop, load) : (stop?.confirmation ?? "").trim(),
     extra: party.extra,
     hoursLabel: isPickup ? "Shipping Hours" : "Receiving Hours",
     hours: party.hours,
@@ -291,6 +320,7 @@ export function buildConfirmationModel(
   company = getCompanyProfile(),
   options: { packet?: "customer" | "internal" } = {},
 ): ConfirmationModel {
+  const packet = options.packet === "internal" ? "internal" : "customer";
   const stops = listStops(load.id);
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
   const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
@@ -313,10 +343,11 @@ export function buildConfirmationModel(
           isFirstPickup ? load.shipper_location_id : isLastDelivery ? load.consignee_location_id : stop.location_id,
           isFirstPickup ? load.origin : isLastDelivery ? load.destination : "",
           stop.kind,
+          packet,
         );
       })
     : [
-        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup"),
+        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup", packet),
         confirmationStopFromParty(
           lastDelivery,
           stops,
@@ -324,11 +355,12 @@ export function buildConfirmationModel(
           load.consignee_location_id,
           load.destination,
           "delivery",
+          packet,
         ),
       ];
   const shipper =
     listedStops.find((stop) => stop.title.startsWith("Shipper")) ??
-    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup");
+    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup", packet);
   const consignee =
     listedStops.find((stop) => stop.title === "Consignee 1") ??
     listedStops.find((stop) => stop.title.startsWith("Consignee")) ??
@@ -339,6 +371,7 @@ export function buildConfirmationModel(
       load.consignee_location_id,
       load.destination,
       "delivery",
+      packet,
     );
   const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
@@ -360,7 +393,6 @@ export function buildConfirmationModel(
     truck_type: load.truck_type,
     trailer_type: trailer?.type ?? load.trailer_type,
   });
-  const packet = options.packet === "internal" ? "internal" : "customer";
   const customer = confirmationCustomer(load);
   const rateLines =
     packet === "customer"

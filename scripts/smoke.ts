@@ -394,6 +394,19 @@ async function main() {
   assert.match(paySource, /ViewInvoiceButton/);
   assert.match(paySource, /View Customer Confirmation/);
   assert.match(paySource, /View Carrier Confirmation/);
+  const confirmationPoSource = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");
+  assert.match(confirmationPoSource, /driverFacingStopPo/);
+  assert.match(confirmationPoSource, /driverFacingStopConfirmation/);
+  assert.doesNotMatch(confirmationPoSource, /stop\?\.confirmation\.trim\(\) \|\| load\.reference_number/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8"), /driverFacingStopPo/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8"),
+    /load\.reference_number, load\.po_number/,
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"),
+    /refs: \[load\.reference_number, load\.po_number, load\.customer_reference\]/,
+  );
   assert.match(paySource, /data-carrier-confirmation-off/);
   assert.match(paySource, /pointer-events-none/);
   assert.match(paySource, /Assign a driver first/);
@@ -2244,6 +2257,8 @@ async function main() {
   const builtDriver = loadMail.buildDriverLoadDraft(mailLoad);
   assert.match(builtDriver.text, /Pickup 1|Delivery 1/);
   assert.doesNotMatch(builtDriver.text, /\$2|2200|USD/);
+  assert.doesNotMatch(builtDriver.text, /Refs /);
+  assert.doesNotMatch(builtDriver.text, /PO-MAIL|RC-MAIL/);
   assert.equal(builtDriver.replyTo, "noreply@msloads.com");
   assert.match(builtDriver.text, /Do not reply/);
   assert.match(builtDriver.text, /not monitored/);
@@ -4078,6 +4093,70 @@ Continuous reefer. Two load locks.
   );
   assert.match(billedDriverText, /Load Confirmation/);
   assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|Westside Foods Billing Co|WSF-1006153/);
+  const driverPoLoadId = queries.createLoad({
+    customer_id: billedCustomerId,
+    load_number: "1006150",
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Kosher frozen",
+    rate: 4500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "12345",
+    po_number: "12345",
+    reefer_setpoint_f: 26,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+    customer_reference: "12345",
+  });
+  replaceStops(driverPoLoadId, [
+    {
+      kind: "pickup",
+      name: "Hastings Cold Storage Smoke",
+      city: "Hastings",
+      state: "NE",
+      reference: "STOP-PO-7",
+      confirmation: "APPT-22",
+      window_start: pickup.toISOString(),
+      window_end: pickupEnd.toISOString(),
+    },
+    {
+      kind: "delivery",
+      name: "Bayonne Dock",
+      city: "Bayonne",
+      state: "NJ",
+      window_start: delivery.toISOString(),
+      window_end: deliveryEnd.toISOString(),
+    },
+  ]);
+  const driverPoPacket = confirmation.buildConfirmationForLoad(driverPoLoadId, { packet: "internal" });
+  assert.equal(driverPoPacket.loadNumber, "1006150");
+  assert.equal(driverPoPacket.customerReference, "");
+  assert.equal(driverPoPacket.stops[0]?.poNumber, "STOP-PO-7");
+  assert.equal(driverPoPacket.stops[0]?.confirmationNumber, "APPT-22");
+  assert.equal(driverPoPacket.stops[1]?.poNumber, "");
+  assert.equal(driverPoPacket.stops[1]?.confirmationNumber, "");
+  const driverPoText = String(
+    (await extractText(new Uint8Array(await confirmation.renderConfirmationPdf(driverPoPacket)), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(driverPoText, /1006150/);
+  assert.match(driverPoText, /STOP-PO-7/);
+  assert.match(driverPoText, /APPT-22/);
+  assert.doesNotMatch(driverPoText, /12345/);
+  const customerPoPacket = confirmation.buildConfirmationForLoad(driverPoLoadId);
+  assert.equal(customerPoPacket.customerReference, "12345");
+  assert.equal(confirmation.driverFacingStopPo({ reference: "12345" }, { load_number: "1006150", customer_reference: "12345" }), "");
+  assert.equal(confirmation.driverFacingStopPo({ reference: "1006150" }, { load_number: "1006150", customer_reference: "12345" }), "");
+  assert.equal(confirmation.driverFacingStopConfirmation({ confirmation: "12345" }, { load_number: "1006150", customer_reference: "12345" }), "");
   const billedInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(billedLoadId)!);
   assert.equal(billedInvoice.total, 2150);
   assert.equal(billedInvoice.total, billedPacket.customerRate);
