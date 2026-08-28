@@ -4,14 +4,14 @@ import { getGoogleMapsApiKey } from "./env";
 import { getTrailerLocationForLoad } from "./integrations/orbcomm";
 import { getLocationForLoad } from "./integrations/samsara";
 import {
-  pathThroughStops,
   stopAddressLine,
   stopsRoutePoints,
   type LoadMapPathPoint,
   type LoadMapPoint,
   type LoadTrackingEvent,
 } from "./load-map-shared";
-import { decodePolyline } from "./routing";
+import { decodePolyline, usableRouteStops } from "./routing";
+import { isOfficialDrivingRoute } from "./routing-shared";
 import {
   getLoad,
   getLocation,
@@ -71,9 +71,13 @@ export async function buildStopsMapModel(loadId: number): Promise<{
 }> {
   const points = stopsRoutePoints(await buildLoadMapPoints(loadId));
   const stored = storedRoutePath(loadId);
+  const load = getLoad(loadId);
+  const official =
+    load &&
+    isOfficialDrivingRoute(load, { stopCount: usableRouteStops(listStops(loadId)).length }) === "google";
   return {
     points,
-    path: stored.length >= 2 ? stored : pathThroughStops(points),
+    path: official && stored.length >= 2 ? stored : [],
   };
 }
 

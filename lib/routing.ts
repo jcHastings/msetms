@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { getGoogleMapsApiKey } from "./env";
 import { getLoad } from "./queries";
 import {
+  isOfficialDrivingRoute,
   metersToRouteMiles,
   routeGuideFromLoad,
   serializeRouteLegMiles,
@@ -178,18 +179,19 @@ function persistRoute(
 function currentGuide(loadId: number): LoadRouteGuide {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  return routeGuideFromLoad(load);
+  return routeGuideFromLoad(load, { stopCount: usableRouteStops(listStops(loadId)).length });
 }
 
 function clearUnofficialRouteMiles(loadId: number, existing: LoadRouteGuide): LoadRouteGuide {
   if (existing.source === "manual") return existing;
   const load = getLoad(loadId);
   if (!load) return existing;
-  if (existing.source === "google") return existing;
+  const official = isOfficialDrivingRoute(load, { stopCount: usableRouteStops(listStops(loadId)).length });
+  if (official === "manual" || official === "google") return existing;
   if (load.route_miles == null && !String(load.route_leg_miles ?? "").trim() && !String(load.route_polyline ?? "").trim()) {
     return existing;
   }
-  return persistRoute(loadId, { totalMiles: null, states: [], source: "", polyline: "" });
+  return persistRoute(loadId, { totalMiles: null, legMiles: [], states: [], source: "", polyline: "" });
 }
 
 export function saveManualRouteMiles(loadId: number, miles: number | null): LoadRouteGuide {
@@ -274,6 +276,7 @@ export async function refreshLoadRoute(
   }
   const usable = usableRouteStops(listStops(loadId));
   if (usable.length < 2) {
+    existing = clearUnofficialRouteMiles(loadId, existing);
     return {
       ok: true,
       configured: true,

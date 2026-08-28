@@ -98,21 +98,37 @@ export function encodedPolylinePointCount(encoded: string): number {
   return count;
 }
 
-export function isOfficialDrivingRoute(load: {
-  route_source?: string | null;
-  route_polyline?: string | null;
-  route_leg_miles?: string | null;
-}): "google" | "manual" | "" {
+export type OfficialRouteOptions = {
+  stopCount?: number;
+};
+
+export function expectedRouteLegCount(stopCount: number | null | undefined): number | null {
+  if (stopCount == null || stopCount < 2) return null;
+  return stopCount - 1;
+}
+
+export function isOfficialDrivingRoute(
+  load: {
+    route_source?: string | null;
+    route_polyline?: string | null;
+    route_leg_miles?: string | null;
+  },
+  options: OfficialRouteOptions = {},
+): "google" | "manual" | "" {
   if (load.route_source === "manual") return "manual";
   if (load.route_source !== "google") return "";
   const legs = parseRouteLegMiles(load.route_leg_miles);
-  if (legs.length > 0) return "google";
-  return encodedPolylinePointCount(load.route_polyline ?? "") >= 3 ? "google" : "";
+  const polyCount = encodedPolylinePointCount(load.route_polyline ?? "");
+  if (legs.length === 0 || polyCount < 3) return "";
+  const expected = expectedRouteLegCount(options.stopCount);
+  if (expected != null && legs.length !== expected) return "";
+  return "google";
 }
 
 export function officialEmptyMiles(miles: number | null | undefined, source: string | null | undefined): number | null {
   if (source === "google") return miles ?? null;
-  if (miles == null || miles === 0) return miles ?? 0;
+  if (miles == null) return null;
+  if (miles === 0) return 0;
   return null;
 }
 
@@ -128,15 +144,18 @@ export function milesForStopGap(
   return null;
 }
 
-export function routeGuideFromLoad(load: {
-  route_miles?: number | null;
-  route_leg_miles?: string | null;
-  route_state_miles?: string | null;
-  route_calculated_at?: string | null;
-  route_source?: string | null;
-  route_polyline?: string | null;
-}): LoadRouteGuide {
-  const source = isOfficialDrivingRoute(load);
+export function routeGuideFromLoad(
+  load: {
+    route_miles?: number | null;
+    route_leg_miles?: string | null;
+    route_state_miles?: string | null;
+    route_calculated_at?: string | null;
+    route_source?: string | null;
+    route_polyline?: string | null;
+  },
+  options: OfficialRouteOptions = {},
+): LoadRouteGuide {
+  const source = isOfficialDrivingRoute(load, options);
   const official = Boolean(source);
   const legMiles = parseRouteLegMiles(load.route_leg_miles);
   return {

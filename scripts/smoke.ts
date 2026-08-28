@@ -5133,6 +5133,13 @@ Continuous reefer. Two load locks.
   const fakeGoogleAir = await routing.refreshLoadRoute(routeLoadId);
   assert.equal(fakeGoogleAir.configured, false);
   assert.equal(queries.getLoad(routeLoadId)?.route_miles ?? null, null);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 1369.2, route_source = 'google', route_polyline = '', route_leg_miles = ? WHERE id = ?")
+    .run("[1369.2]", routeLoadId);
+  const leftoverLabeledGoogle = await routing.refreshLoadRoute(routeLoadId);
+  assert.equal(leftoverLabeledGoogle.configured, false);
+  assert.equal(queries.getLoad(routeLoadId)?.route_miles ?? null, null);
+  assert.equal(queries.getLoad(routeLoadId)?.route_source, "");
   routing.saveManualRouteMiles(routeLoadId, 12.3);
   assert.equal(queries.getLoad(routeLoadId)?.route_miles, 12.3);
   assert.equal(queries.getLoad(routeLoadId)?.route_source, "manual");
@@ -5180,7 +5187,33 @@ Continuous reefer. Two load locks.
   assert.equal(routeGuideFromLoad({ route_miles: 880.7, route_source: "google" }).totalMiles, null);
   assert.equal(
     routeGuideFromLoad({ route_miles: 880.7, route_source: "google", route_leg_miles: "[880.7]" }).totalMiles,
-    880.7,
+    null,
+  );
+  const drivingPoly = routing.encodePolyline([
+    { lat: 40.71, lng: -74.0 },
+    { lat: 41.1, lng: -81.7 },
+    { lat: 41.88, lng: -87.63 },
+  ]);
+  assert.equal(
+    routeGuideFromLoad({
+      route_miles: 800,
+      route_source: "google",
+      route_leg_miles: "[800]",
+      route_polyline: drivingPoly,
+    }).totalMiles,
+    800,
+  );
+  assert.equal(
+    routeGuideFromLoad(
+      {
+        route_miles: 1369.2,
+        route_source: "google",
+        route_leg_miles: "[1369.2]",
+        route_polyline: drivingPoly,
+      },
+      { stopCount: 6 },
+    ).totalMiles,
+    null,
   );
   assert.equal(routeGuideFromLoad({ route_miles: 12.3, route_source: "manual" }).totalMiles, 12.3);
   assert.equal(officialEmptyMiles(880.7, ""), null);
@@ -5191,6 +5224,88 @@ Continuous reefer. Two load locks.
   const officialIfta = queries.getIftaReport(reeferLoad.id);
   assert.ok(officialIfta);
   assert.notEqual(officialIfta.source, "google");
+  const { replaceStops: replaceRouteStops } = await import("../lib/stops");
+  const multiRouteLoadId = queries.createLoad({
+    customer_id: customerId,
+    load_number: "1006150-MILES",
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Kosher frozen",
+    rate: 4500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 26,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  replaceRouteStops(multiRouteLoadId, [
+    { kind: "pickup", name: "Nebraska Cold Storage Inc", city: "Hastings", state: "NE" },
+    { kind: "delivery", name: "Springfield Group Inc - Kosher", street: "5600 1st ave", city: "Brooklyn", state: "NY", zip: "11220" },
+    { kind: "delivery", name: "Westside Foods - Kosher", city: "Bronx", state: "NJ" },
+    { kind: "delivery", name: "Chef Kingdom", street: "1 Alpine Ct", city: "Chestnut Ridge", state: "NY" },
+    { kind: "delivery", name: "Wakefern-Keasbey", street: "5000 Riverside dr", city: "Keasbey", state: "NJ", zip: "08832" },
+    { kind: "delivery", name: "Kayco", street: "72 New Hook Rd", city: "Bayonne", state: "NJ", zip: "07002" },
+  ]);
+  getDb()
+    .prepare("UPDATE loads SET route_miles = 1369.2, route_source = 'google', route_polyline = '', route_leg_miles = ? WHERE id = ?")
+    .run("[1369.2]", multiRouteLoadId);
+  assert.equal(routeGuideFromLoad(queries.getLoad(multiRouteLoadId)!, { stopCount: 6 }).totalMiles, null);
+  globalThis.fetch = async (input) => {
+    googleCalls += 1;
+    const url = new URL(String(input));
+    assert.equal(url.hostname, "maps.googleapis.com");
+    assert.match(url.pathname, /\/maps\/api\/directions\//);
+    assert.doesNotMatch(url.href, /maps\.google\.com/);
+    const waypoints = url.searchParams.get("waypoints") ?? "";
+    assert.match(waypoints, /Brooklyn|Bronx|Chestnut Ridge|Keasbey/);
+    const points = routing.encodePolyline([
+      { lat: 40.59, lng: -98.39 },
+      { lat: 40.65, lng: -73.99 },
+      { lat: 40.85, lng: -73.91 },
+      { lat: 41.08, lng: -74.15 },
+      { lat: 40.56, lng: -74.3 },
+      { lat: 40.67, lng: -74.11 },
+    ]);
+    return new Response(
+      JSON.stringify({
+        status: "OK",
+        routes: [
+          {
+            overview_polyline: { points },
+            legs: [
+              { distance: { value: 2100000 } },
+              { distance: { value: 90000 } },
+              { distance: { value: 80000 } },
+              { distance: { value: 70000 } },
+              { distance: { value: 66203 } },
+            ],
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+  const multiRouted = await routing.refreshLoadRoute(multiRouteLoadId);
+  assert.equal(multiRouted.ok, true);
+  assert.equal(multiRouted.source, "google");
+  assert.ok((multiRouted.totalMiles ?? 0) > 1369.2, "driving miles must beat leftover air total");
+  const storedMulti = queries.getLoad(multiRouteLoadId);
+  const multiGuide = routeGuideFromLoad(storedMulti!, { stopCount: 6 });
+  assert.equal(multiGuide.source, "google");
+  assert.equal(multiGuide.legMiles.length, 5);
+  assert.equal(multiGuide.totalMiles, storedMulti?.route_miles);
+  assert.ok(String(storedMulti?.route_polyline ?? "").trim());
+  assert.doesNotMatch(String(storedMulti?.route_leg_miles ?? ""), /^\[1369\.2\]$/);
   globalThis.fetch = prevRouteFetch;
   if (savedMapsForRoute == null) delete process.env.GOOGLE_MAPS_API_KEY;
   else process.env.GOOGLE_MAPS_API_KEY = savedMapsForRoute;
@@ -9730,7 +9845,7 @@ Continuous reefer. Two load locks.
       throw new Error("Google should not be called without a key");
     };
     const missingEmpty = await refreshLoadEmptyMiles(hastingsLoadId);
-    assert.equal(missingEmpty.miles, 0);
+    assert.equal(missingEmpty.miles, null);
     assert.equal(emptyGoogleCalls, 0);
     assert.equal(queries.getLoad(hastingsLoadId)?.route_miles, 250);
     process.env.GOOGLE_MAPS_API_KEY = "test-not-a-real-maps-key";
@@ -10115,7 +10230,6 @@ Continuous reefer. Two load locks.
   const fenceMap = await buildStopsMapModel(fenceLoadId);
   assert.ok(fenceMap.points.some((point) => point.kind === "delivery"));
   assert.ok(fenceMap.points.some((point) => point.kind === "truck"));
-  assert.ok(fenceMap.path.length >= 2);
 
   const newLoadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
   assert.match(newLoadPage, /RateConImport/);

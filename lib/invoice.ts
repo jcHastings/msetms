@@ -7,6 +7,7 @@ import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } fro
 import { customerInvoicePayItems } from "./pay-items";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
+import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
 
@@ -241,7 +242,10 @@ export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
     companyPhone: company.dispatcher_phone,
     companyEmail: company.dispatcher_email,
     weight: load.weight != null ? formatWeight(load.weight, settings.weight_unit) : "",
-    miles: load.route_miles != null ? String(load.route_miles) : "",
+    miles: (() => {
+      const total = routeGuideFromLoad(load, { stopCount: listStops(load.id).length }).totalMiles;
+      return total != null ? String(total) : "";
+    })(),
     customerStreet: customer.street,
     customerCityStateZip: customer.cityStateZip,
     customerPhone: customer.phone,

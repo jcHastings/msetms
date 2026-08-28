@@ -39,7 +39,7 @@ import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canV
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad } from "@/lib/routing-shared";
-import { refreshLoadRouteQuiet } from "@/lib/routing";
+import { refreshLoadRouteQuiet, usableRouteStops } from "@/lib/routing";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatDateTime } from "@/lib/format";
@@ -94,6 +94,7 @@ export async function LoadEditor({
   const stops = ensureDefaultStops(load.id);
   await refreshLoadRouteQuiet(load.id);
   const routed = getLoad(load.id) ?? load;
+  const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
   const payItems = listPayItems(load.id);
   const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
 
@@ -213,12 +214,12 @@ export async function LoadEditor({
             loadId={load.id}
             stops={stops}
             locations={locations}
-            routeGuide={routeGuideFromLoad(routed)}
+            routeGuide={routeGuide}
             placesEnabled={formSettings.placesEnabled}
           />
           <LoadRoutingGuide
             loadId={load.id}
-            guide={routeGuideFromLoad(routed)}
+            guide={routeGuide}
             emptyMiles={officialEmptyMiles(routed.empty_miles, routed.empty_source)}
             emptyLane={routed.empty_from && routed.empty_to ? `${routed.empty_from} → ${routed.empty_to}` : ""}
             emptyStates={

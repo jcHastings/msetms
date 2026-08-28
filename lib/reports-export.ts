@@ -8,7 +8,15 @@ import {
   type ReportExportColumn,
 } from "./reports-shared";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
+import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import { isOwnerOperator, type LoadView } from "./types";
+
+function officialExportMiles(load: LoadView): { loaded: number | null; empty: number | null } {
+  return {
+    loaded: routeGuideFromLoad(load).totalMiles,
+    empty: officialEmptyMiles(load.empty_miles, load.empty_source),
+  };
+}
 
 export type ReportExportFilters = {
   category: ReportCategory;
@@ -61,8 +69,8 @@ function baseRow(load: LoadView, allocated: number | null, driverName: string): 
     truck: load.truck_unit ?? "",
     trailer: load.trailer_unit ?? "",
     dispatcher: load.dispatcher_name ?? "",
-    miles: load.route_miles ?? "",
-    empty_miles: load.empty_miles ?? "",
+    miles: officialExportMiles(load).loaded ?? "",
+    empty_miles: officialExportMiles(load).empty ?? "",
     revenue: load.rate ?? 0,
     driver_pay: driverPay(load),
     allocated_revenue: allocated ?? "",
@@ -84,7 +92,7 @@ export function listReportExportRows(filters: ReportExportFilters): ReportExport
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles ?? "",
-            empty_miles: leg.driverId === load.driver_id ? load.empty_miles ?? "" : "",
+            empty_miles: leg.driverId === load.driver_id ? officialExportMiles(load).empty ?? "" : "",
             allocated_revenue: leg.allocatedRevenue ?? "",
           });
         }

@@ -109,7 +109,7 @@ export async function refreshLoadEmptyMiles(loadId: number): Promise<EmptyMilesG
   const lane = emptyLaneForLoad(load);
   if (!lane) return persistEmptyMiles(loadId, { miles: 0, states: [], from: "", to: "", source: "" });
   if (!mapsRoutingConfigured()) {
-    return persistEmptyMiles(loadId, { miles: 0, states: [], from: lane.from, to: lane.to, source: "" });
+    return persistEmptyMiles(loadId, { miles: null, states: [], from: lane.from, to: lane.to, source: "" });
   }
   try {
     const { totalMiles, points } = await fetchLaneDirections(lane.from, lane.to);
@@ -122,7 +122,7 @@ export async function refreshLoadEmptyMiles(loadId: number): Promise<EmptyMilesG
       source: "google",
     });
   } catch {
-    return persistEmptyMiles(loadId, { miles: 0, states: [], from: lane.from, to: lane.to, source: "" });
+    return persistEmptyMiles(loadId, { miles: null, states: [], from: lane.from, to: lane.to, source: "" });
   }
 }
 

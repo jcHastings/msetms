@@ -435,6 +435,8 @@ export async function createLoadAction(
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
+      const { refreshLoadRouteQuiet } = await import("./routing");
+      await refreshLoadRouteQuiet(id);
       refresh();
       redirect(`/loads/${id}`);
     } catch (error) {
@@ -487,6 +489,8 @@ export async function updateLoadAction(
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
+      const { refreshLoadRouteQuiet } = await import("./routing");
+      await refreshLoadRouteQuiet(id);
       refresh();
       // Existing-load Save must stay on this load/tab. Close is what leaves.
       return { ok: true, id };

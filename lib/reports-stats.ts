@@ -2,7 +2,15 @@ import { listPayItems } from "./pay-items";
 import { listLoads } from "./queries";
 import { splitLoadRevenueByRelayMiles } from "./reports-relay-revenue";
 import type { ReportCategory, ReportDateBasis } from "./reports-shared";
+import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import type { LoadView } from "./types";
+
+function officialReportMiles(load: LoadView): { loaded: number | null; empty: number | null } {
+  return {
+    loaded: routeGuideFromLoad(load).totalMiles,
+    empty: officialEmptyMiles(load.empty_miles, load.empty_source),
+  };
+}
 
 export type StatsMonthKey = string;
 
@@ -133,7 +141,7 @@ export function buildStatistics(input: {
           const slice: StatsMetrics = {
             loads: 1,
             miles: leg.miles ?? 0,
-            emptyMiles: leg.driverId === load.driver_id ? load.empty_miles ?? 0 : 0,
+            emptyMiles: leg.driverId === load.driver_id ? officialReportMiles(load).empty ?? 0 : 0,
             gross,
             fees: feeShare,
             net: Math.round((gross - feeShare) * 100) / 100,
@@ -150,8 +158,8 @@ export function buildStatistics(input: {
     const gross = load.rate ?? 0;
     const slice: StatsMetrics = {
       loads: 1,
-      miles: load.route_miles ?? 0,
-      emptyMiles: load.empty_miles ?? 0,
+      miles: officialReportMiles(load).loaded ?? 0,
+      emptyMiles: officialReportMiles(load).empty ?? 0,
       gross,
       fees,
       net: Math.round((gross - fees) * 100) / 100,
@@ -199,7 +207,7 @@ export function listStatisticsDrill(input: {
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles,
-            emptyMiles: leg.driverId === load.driver_id ? load.empty_miles ?? 0 : 0,
+            emptyMiles: leg.driverId === load.driver_id ? officialReportMiles(load).empty ?? 0 : 0,
             revenue: load.rate,
             fees: feeShare,
             allocatedRevenue: leg.allocatedRevenue,
@@ -219,8 +227,8 @@ export function listStatisticsDrill(input: {
       customer: load.customer_name,
       origin: load.origin,
       destination: load.destination,
-      miles: load.route_miles,
-      emptyMiles: load.empty_miles ?? 0,
+      miles: officialReportMiles(load).loaded,
+      emptyMiles: officialReportMiles(load).empty ?? 0,
       revenue: load.rate,
       fees,
       allocatedRevenue: load.rate,

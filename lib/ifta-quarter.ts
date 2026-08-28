@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { extractStateCode } from "./locations";
 import { getDriver, getTruck } from "./queries";
-import { parseRouteStateMiles, type RouteStateMile } from "./routing-shared";
+import { officialEmptyMiles, parseRouteStateMiles, routeGuideFromLoad, type RouteStateMile } from "./routing-shared";
 
 export type IftaQuarter = {
   year: number;
@@ -153,7 +153,8 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
   const loads = db
     .prepare(
       `SELECT id, load_number, origin, destination, pickup_start, delivery_end,
-              route_miles, route_state_miles, empty_miles, empty_state_miles, empty_from, empty_to,
+              route_miles, route_leg_miles, route_state_miles, route_source, route_polyline,
+              empty_miles, empty_state_miles, empty_from, empty_to, empty_source,
               driver_id, truck_id
        FROM loads
        WHERE status != 'cancelled'
@@ -167,11 +168,15 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     pickup_start: string;
     delivery_end: string;
     route_miles: number | null;
+    route_leg_miles: string;
     route_state_miles: string;
+    route_source: string;
+    route_polyline: string;
     empty_miles: number | null;
     empty_state_miles: string;
     empty_from: string;
     empty_to: string;
+    empty_source: string;
     driver_id: number | null;
     truck_id: number | null;
   }>;
@@ -186,10 +191,13 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
   let emptyMiles = 0;
 
   for (const load of loads) {
-    const loadedStates = parseRouteStateMiles(load.route_state_miles);
-    const emptyStates = parseRouteStateMiles(load.empty_state_miles);
-    const loaded = load.route_miles ?? (loadedStates.length ? loadedStates.reduce((sum, row) => sum + row.miles, 0) : 0);
-    const empty = load.empty_miles ?? 0;
+    const guide = routeGuideFromLoad(load);
+    const loadedStates = guide.source ? parseRouteStateMiles(load.route_state_miles) : [];
+    const emptyStates = officialEmptyMiles(load.empty_miles, load.empty_source) != null
+      ? parseRouteStateMiles(load.empty_state_miles)
+      : [];
+    const loaded = guide.totalMiles ?? (loadedStates.length ? loadedStates.reduce((sum, row) => sum + row.miles, 0) : 0);
+    const empty = officialEmptyMiles(load.empty_miles, load.empty_source) ?? 0;
     if (loadedStates.length === 0 && empty <= 0 && loaded <= 0) {
       loadsWithoutMiles += 1;
       continue;
