@@ -873,9 +873,9 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
 export async function sendLoadWhatsAppAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
-      const { sendWhatsAppMessage, whatsappConfigured } = await import("./integrations/whatsapp");
+      const { sendWhatsAppMessage, twilioWhatsAppConfigured } = await import("./integrations/whatsapp");
       const { WHATSAPP_MISSING } = await import("./whatsapp-shared");
-      if (!whatsappConfigured()) throw new Error(WHATSAPP_MISSING);
+      if (!twilioWhatsAppConfigured()) throw new Error(WHATSAPP_MISSING);
       await requireCapability(canSendSms, "WhatsApp is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");

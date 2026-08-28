@@ -281,10 +281,11 @@ export function LoadWorkspace({
             Text dispatch to driver
           </button>
         ) : null}
-        {canSendSms(role) ? (
+        {canSendSms(role) && whatsappConfigured ? (
           <button
             type="button"
             className="btn load-action-btn"
+            data-whatsapp-load=""
             onClick={() => {
               if (!requireDriverPhone("whatsapp")) return;
               setSmsNotice(null);
@@ -329,9 +330,11 @@ export function LoadWorkspace({
               >
                 Send Text Message
               </button>
+              {whatsappConfigured ? (
               <button
                 type="button"
                 className="menu-item"
+                data-whatsapp-message=""
                 onClick={() => {
                   if (!requireDriverPhone("whatsapp")) return;
                   const body = window.prompt("Short WhatsApp to the assigned driver:");
@@ -345,6 +348,7 @@ export function LoadWorkspace({
               >
                 Send WhatsApp
               </button>
+              ) : null}
             </>
           ) : null}
         </ActionMenu>
@@ -519,10 +523,12 @@ export function LoadWorkspace({
               >
                 {smsPending ? "Sending…" : "Send text"}
               </button>
+              {whatsappConfigured ? (
               <button
                 className="btn btn-secondary"
                 type="button"
                 disabled={smsPending}
+                data-whatsapp-send=""
                 onClick={() => {
                   if (!requireDriverPhone("whatsapp")) return;
                   void sendWhatsApp("load_info");
@@ -530,6 +536,7 @@ export function LoadWorkspace({
               >
                 {smsPending ? "Sending…" : "Send WhatsApp"}
               </button>
+              ) : null}
               <button
                 className="btn btn-secondary"
                 type="button"

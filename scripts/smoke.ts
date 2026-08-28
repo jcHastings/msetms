@@ -906,6 +906,9 @@ async function main() {
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);
   assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
+  assert.match(envExample, /TWILIO_WHATSAPP_FROM=/);
+  assert.doesNotMatch(envExample, /whatsapp:\+1\d{10}/);
+  assert.doesNotMatch(envExample, /WHATSAPP_ACCESS_TOKEN|graph\.facebook|web\.whatsapp|contentSid|ContentSid/);
   assert.match(envExample, /SMTP_HOST=/);
   assert.match(envExample, /SMTP_FROM=dispatch@msloads.com/);
   assert.match(envExample, /SMTP_USER=dispatch@msloads.com/);
@@ -11135,7 +11138,20 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
   assert.match(workspaceSource, /WhatsApp load/);
   assert.match(workspaceSource, /Send WhatsApp/);
+  assert.match(workspaceSource, /whatsappConfigured/);
+  assert.match(workspaceSource, /data-whatsapp-load/);
+  assert.match(workspaceSource, /data-whatsapp-send/);
   assert.match(workspaceSource, /Send text/);
+  const whatsappSource = fs.readFileSync(path.join(process.cwd(), "lib/integrations/whatsapp.ts"), "utf8");
+  assert.match(whatsappSource, /TWILIO_WHATSAPP_FROM|getTwilioWhatsAppFrom/);
+  assert.match(whatsappSource, /2010-04-01\/Accounts/);
+  assert.doesNotMatch(whatsappSource, /getTwilioFromNumber/);
+  assert.doesNotMatch(whatsappSource, /contentSid|ContentSid/);
+  assert.doesNotMatch(whatsappSource, /graph\.facebook\.com|web\.whatsapp\.com/);
+  const whatsappActionSource = fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8");
+  assert.match(whatsappActionSource, /sendLoadWhatsAppAction/);
+  assert.match(whatsappActionSource, /twilioWhatsAppConfigured/);
+  assert.match(whatsappActionSource, /The assigned driver needs a mobile number/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /Texting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /WhatsApp/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /TWILIO_|OPENAI_API_KEY|WHATSAPP_ACCESS_TOKEN/);
@@ -11166,15 +11182,23 @@ Continuous reefer. Two load locks.
   const detentionWork = proposeMikeWork(`Draft detention email for ${created.load_number}`);
   assert.ok(detentionWork.proposals.some((item) => item.kind === "detention_email"));
 
-  const previousWhatsApp = process.env.TWILIO_WHATSAPP_FROM;
-  delete process.env.TWILIO_WHATSAPP_FROM;
-  delete process.env.WHATSAPP_ACCESS_TOKEN;
-  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
-  delete process.env.META_WHATSAPP_TOKEN;
-  delete process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+  const whatsappEnvKeys = [
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_FROM_NUMBER",
+    "TWILIO_WHATSAPP_FROM",
+    "WHATSAPP_ACCESS_TOKEN",
+    "WHATSAPP_PHONE_NUMBER_ID",
+    "META_WHATSAPP_TOKEN",
+    "META_WHATSAPP_PHONE_NUMBER_ID",
+  ] as const;
+  const previousWhatsAppEnv = Object.fromEntries(whatsappEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of whatsappEnvKeys) delete process.env[key];
   const whatsapp = await import("../lib/integrations/whatsapp");
   const { WHATSAPP_MISSING } = await import("../lib/whatsapp-shared");
+  const { isWhatsAppConfigured } = await import("../lib/env");
   assert.equal(whatsapp.whatsappConfigured(), false);
+  assert.equal(isWhatsAppConfigured(), false);
   await assert.rejects(
     () => whatsapp.sendWhatsAppMessage({ to: "(312) 555-0148", body: "Load" }),
     (error: unknown) => {
@@ -11182,8 +11206,67 @@ Continuous reefer. Two load locks.
       return true;
     },
   );
-  if (previousWhatsApp == null) delete process.env.TWILIO_WHATSAPP_FROM;
-  else process.env.TWILIO_WHATSAPP_FROM = previousWhatsApp;
+  process.env.WHATSAPP_ACCESS_TOKEN = "meta-token-not-used";
+  process.env.WHATSAPP_PHONE_NUMBER_ID = "123456789";
+  assert.equal(whatsapp.whatsappConfigured(), false, "Meta env must not enable WhatsApp");
+  delete process.env.WHATSAPP_ACCESS_TOKEN;
+  delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+  process.env.TWILIO_ACCOUNT_SID = "ACtestnotreal";
+  process.env.TWILIO_AUTH_TOKEN = "twilio-secret-token-do-not-log";
+  process.env.TWILIO_FROM_NUMBER = "+15555550100";
+  assert.equal(whatsapp.whatsappConfigured(), false, "SMS From alone must not enable WhatsApp");
+  await assert.rejects(
+    () => whatsapp.sendWhatsAppMessage({ to: "(312) 555-0148", body: "Load 1001" }),
+    (error: unknown) => {
+      assert.equal(error instanceof Error && error.message, WHATSAPP_MISSING);
+      return true;
+    },
+  );
+  const { sendLoadWhatsAppAction } = await import("../lib/dispatcher-actions");
+  const missingWhatsAppForm = new FormData();
+  missingWhatsAppForm.set("load_id", String(loadId));
+  missingWhatsAppForm.set("kind", "load_info");
+  const missingWhatsApp = await sendLoadWhatsAppAction(missingWhatsAppForm);
+  assert.equal(missingWhatsApp.ok, false);
+  if (!missingWhatsApp.ok) assert.match(missingWhatsApp.error, /WhatsApp is not connected/);
+  const smsStillWorks = await import("../lib/integrations/twilio");
+  let smsOnlyBody = "";
+  const smsOnlyFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    smsOnlyBody = String(init?.body ?? "");
+    return new Response(JSON.stringify({ sid: "SM-sms-only" }), {
+      status: 201,
+      statusText: "Created",
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  await smsStillWorks.sendTwilioSms({ to: "(312) 555-0148", body: "SMS still works" }, smsOnlyFetch);
+  assert.match(smsOnlyBody, /From=%2B15555550100|From=\+15555550100/);
+  assert.doesNotMatch(smsOnlyBody, /whatsapp/);
+  process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+15555550199";
+  assert.equal(whatsapp.whatsappConfigured(), true);
+  assert.equal(isWhatsAppConfigured(), true);
+  let whatsappUrl = "";
+  let whatsappSent = "";
+  const whatsappOkFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    whatsappUrl = String(url);
+    whatsappSent = String(init?.body ?? "");
+    return new Response(JSON.stringify({ sid: "SM-wa" }), {
+      status: 201,
+      statusText: "Created",
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  await whatsapp.sendWhatsAppMessage({ to: "(312) 555-0148", body: "Load 1001 ready" }, whatsappOkFetch);
+  assert.match(whatsappUrl, /api\.twilio\.com\/2010-04-01\/Accounts\/ACtestnotreal\/Messages\.json/);
+  assert.match(whatsappSent, /From=whatsapp%3A%2B15555550199|From=whatsapp:\+15555550199/);
+  assert.match(whatsappSent, /To=whatsapp%3A%2B13125550148|To=whatsapp:\+13125550148/);
+  assert.match(whatsappSent, /Load\+1001|Load%201001|Load 1001/);
+  assert.doesNotMatch(whatsappSent, /ContentSid|contentSid/);
+  for (const key of whatsappEnvKeys) {
+    const value = previousWhatsAppEnv[key];
+    if (value == null) delete process.env[key];
+    else process.env[key] = value;
+  }
 
   closeDb();
   const reopened = getDb();
