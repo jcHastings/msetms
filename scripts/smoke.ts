@@ -259,8 +259,15 @@ async function main() {
   assert.match(shellSource, /w-60/);
   assert.match(shellSource, /overflow-x-hidden/);
   assert.match(shellSource, /desk-sidebar-user/);
+  assert.match(shellSource, /desk-phone-bar/);
+  assert.match(shellSource, /desk-phone-menu/);
   assert.match(cssSource, /min-width: 15rem/);
+  assert.match(cssSource, /@media \(max-width: 47\.99rem\)/);
+  assert.match(cssSource, /desk-phone-bar/);
+  assert.match(cssSource, /translateX\(-100%\)/);
+  assert.doesNotMatch(cssSource, /html,\s*body\s*\{[^}]*overflow-x:\s*hidden/);
   assert.doesNotMatch(shellSource, /w-\[4\.75rem\]/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /width: "device-width"/);
   assert.doesNotMatch(shellSource, /Set up 2-step/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /fixed right-6 bottom-6/);
   assert.match(navSource, /whitespace-nowrap/);

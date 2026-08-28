@@ -378,6 +378,89 @@ button {
   color: #ffffff;
 }
 
+.desk-phone-bar,
+.desk-nav-backdrop {
+  display: none;
+}
+
+@media (max-width: 47.99rem) {
+  html,
+  body {
+    overflow-x: auto;
+  }
+
+  .desk-shell {
+    flex-direction: column;
+  }
+
+  .desk-phone-bar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 3rem;
+    padding: 0.5rem 0.75rem;
+    background: #0b1f3a;
+    color: #e8eef6;
+  }
+
+  .desk-phone-menu {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 0;
+    border-radius: 0.375rem;
+    background: #d4a017;
+    color: #0b1f3a;
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .desk-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: 0;
+    background: rgba(15, 23, 42, 0.45);
+  }
+
+  .desk-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+  }
+
+  .desk-shell[data-nav-open="true"] .desk-sidebar {
+    transform: translateX(0);
+  }
+
+  .desk-main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .desk-main-inner {
+    padding: 1rem 0.85rem 1.5rem;
+    max-width: 100%;
+  }
+
+  .load-overlay-backdrop {
+    padding: 0.5rem;
+  }
+
+  .load-overlay-panel {
+    max-height: calc(100vh - 1rem);
+  }
+}
+
 .desk-nav-section {
   color: #d4a017;
 }

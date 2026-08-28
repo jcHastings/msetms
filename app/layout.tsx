@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   description: "Transportation management for a small trucking fleet",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await loadRuntimeEnv();
   const dispatcher = await getSignedInDispatcher();
