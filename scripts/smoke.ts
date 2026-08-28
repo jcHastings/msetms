@@ -3389,7 +3389,11 @@ Continuous reefer. Two load locks.
   const { getCompanyProfile } = await import("../lib/company");
   const header = getCompanyProfile();
   assert.equal(header.company_name, "M&S Loads");
-  const { companyLogoPath, defaultCompanyLogoPath, hasCustomCompanyLogo } = await import("../lib/settings");
+  const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo } = await import("../lib/settings");
+  assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
+  assert.equal(getDocumentDefaults("load_confirmation").terms_text, "");
+  assert.equal(getDocumentDefaults("invoice").footer_text, "");
+  assert.equal(getDocumentDefaults("invoice").terms_text, "");
   assert.equal(hasCustomCompanyLogo(), false);
   assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
   assert.equal(companyLogoPath(), defaultCompanyLogoPath());
@@ -3418,6 +3422,9 @@ Continuous reefer. Two load locks.
   const coleDriverText = String((await extractText(new Uint8Array(coleDriverPdf), { mergePages: true })).text ?? "");
   assert.match(coleDriverText, /Rate & Load Confirmation/);
   assert.doesNotMatch(coleDriverText, /Customer Confirmation/);
+  assert.doesNotMatch(coleDriverText, /Thank you for hauling with us/);
+  assert.doesNotMatch(coleDriverText, /Carrier is responsible for cargo/);
+  assert.doesNotMatch(coleDriverText, /Report exceptions at pickup/);
   const deniseLoad =
     queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1045") ??
     queries.listLoads({ status: "all" }).find((load) => load.driver_id === denise.id);
@@ -3447,6 +3454,9 @@ Continuous reefer. Two load locks.
   );
   assert.match(deniseDriverText, /Load Confirmation/);
   assert.doesNotMatch(deniseDriverText, /Customer Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /Thank you for hauling with us/);
+  assert.doesNotMatch(deniseDriverText, /Carrier is responsible for cargo/);
+  assert.doesNotMatch(deniseDriverText, /Report exceptions at pickup/);
   assert.doesNotMatch(deniseDriverText, /Customer Rate|^Rate$/m);
   assert.doesNotMatch(deniseDriverText, /3,100/);
   assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
@@ -8064,6 +8074,13 @@ Continuous reefer. Two load locks.
   });
   assert.equal(settings.getDocumentDefaults("invoice").footer_text, "");
   assert.equal(settings.getDocumentDefaults("invoice").terms_text, "");
+  const { printablePaperworkCopy } = await import("../lib/paperwork-copy");
+  assert.equal(printablePaperworkCopy("Thank you for hauling with us."), "");
+  assert.equal(
+    printablePaperworkCopy("Carrier is responsible for cargo while in its possession. Report exceptions at pickup."),
+    "",
+  );
+  assert.equal(printablePaperworkCopy("Keep this note. Thank you for hauling with us."), "Keep this note.");
   const commodityId = settings.addDropdownOption({ kind: "commodity", value: "", label: "Smoke commodity" });
   assert.ok(settings.commoditySuggestions().includes("Smoke commodity"));
   settings.setDropdownOptionActive(commodityId, false);
@@ -8780,6 +8797,9 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
   assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
+  assert.doesNotMatch(invoicePdfText, /Thank you for hauling with us/);
+  assert.doesNotMatch(invoicePdfText, /Carrier is responsible for cargo/);
+  assert.doesNotMatch(invoicePdfText, /Report exceptions at pickup/);
   assert.doesNotMatch(invoicePdfText, /Notes/);
   assert.doesNotMatch(invoicePdfText, /Stops \/ Actions/);
   assert.match(invoicePdfText, /Pickup \/ Delivery/);

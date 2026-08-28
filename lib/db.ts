@@ -887,13 +887,7 @@ function backfillDocumentDefaults(db: Database): void {
      VALUES (?, ?, ?, ?, ?)`,
   );
   const rows: Array<[string, string, string, string, number]> = [
-    [
-      "load_confirmation",
-      "Rate & Load Confirmation",
-      "Thank you for hauling with us.",
-      "Carrier is responsible for cargo while in its possession. Report exceptions at pickup.",
-      10,
-    ],
+    ["load_confirmation", "Rate & Load Confirmation", "", "", 10],
     [
       "carrier_confirmation",
       "Carrier Confirmation",
@@ -924,6 +918,9 @@ function backfillDocumentDefaults(db: Database): void {
        WHEN lower(footer_text) LIKE '%linehaul is the customer rate%'
          OR lower(footer_text) LIKE '%accessorials are billed separately%'
          OR lower(footer_text) = 'payment due per customer terms.'
+         OR lower(footer_text) LIKE '%thank you for hauling with us%'
+         OR lower(footer_text) LIKE '%carrier is responsible for cargo%'
+         OR lower(footer_text) LIKE '%report exceptions at pickup%'
        THEN ''
        ELSE footer_text
      END,
@@ -931,6 +928,9 @@ function backfillDocumentDefaults(db: Database): void {
        WHEN lower(terms_text) LIKE '%linehaul is the customer rate%'
          OR lower(terms_text) LIKE '%accessorials are billed separately%'
          OR lower(terms_text) = 'payment due per customer terms.'
+         OR lower(terms_text) LIKE '%thank you for hauling with us%'
+         OR lower(terms_text) LIKE '%carrier is responsible for cargo%'
+         OR lower(terms_text) LIKE '%report exceptions at pickup%'
        THEN ''
        ELSE terms_text
      END`,
