@@ -65,6 +65,40 @@ a.hub-tab-active .hub-tab-label,
   color: #ffffff !important;
 }
 
+.driver-dest,
+a.driver-dest,
+a.driver-dest:hover,
+a.driver-dest .driver-dest-label {
+  display: block;
+  border-radius: 1rem;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #ffffff;
+  color: #122033 !important;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+.driver-dest-off {
+  display: block;
+  border-radius: 1rem;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.driver-app a.btn-secondary {
+  color: #1c2b3c !important;
+}
+
+.driver-app a.btn-primary {
+  color: #1a1403 !important;
+}
+
 input,
 select,
 textarea,
