@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useDismissable } from "@/components/use-dismissable";
 import { LoadEditProvider } from "@/components/load-edit-context";
 import {
   assignLoadDispatcherAction,
@@ -558,8 +559,11 @@ function ActionMenu({
   children: React.ReactNode;
 }) {
   const open = openMenu === label;
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpenMenu(null), rootRef);
   return (
     <div
+      ref={rootRef}
       className="relative"
       onMouseEnter={() => setOpenMenu(label)}
       onMouseLeave={() => setOpenMenu(null)}
@@ -567,11 +571,17 @@ function ActionMenu({
       <button
         type="button"
         className="btn load-action-btn"
+        aria-expanded={open}
+        aria-haspopup="menu"
         onClick={() => setOpenMenu(open ? null : label)}
       >
         {label}
       </button>
-      {open ? <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg">{children}</div> : null}
+      {open ? (
+        <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg" role="menu">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

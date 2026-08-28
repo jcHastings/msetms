@@ -280,6 +280,9 @@ async function main() {
   assert.match(workspaceSource, /openMenu === label/);
   assert.match(workspaceSource, /setOpenMenu\(label\)/);
   assert.match(workspaceSource, /setOpenMenu\(null\)/);
+  assert.match(workspaceSource, /useDismissable/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /Escape/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /pointerdown/);
   assert.match(workspaceSource, /tabNeedsServerPaint/);
   assert.match(workspaceSource, /history\.replaceState/);
   assert.doesNotMatch(workspaceSource, /<details/);
@@ -1012,6 +1015,8 @@ async function main() {
   const rowActions = fs.readFileSync(path.join(process.cwd(), "components/fleet-row-actions.tsx"), "utf8");
   assert.match(rowActions, /["']use client["']/);
   assert.match(rowActions, /from ["']@\/lib\/actions["']/);
+  assert.match(rowActions, /useDismissable/);
+  assert.doesNotMatch(rowActions, /<details/);
   assert.match(rowActions, /Edit/);
   assert.match(rowActions, /Update/);
   assert.match(rowActions, /Delete/);
@@ -7778,6 +7783,7 @@ Continuous reefer. Two load locks.
   assert.match(loadImportUi, /will import in this one/);
   assert.match(loadImportUi, /JSON\.stringify\(rows\)/);
   const assignUi = fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8");
+  assert.match(assignUi, /useDismissable/);
   assert.match(assignUi, /name="truck_id"[\s\S]*?\{item\.unit_number\}[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /name="truck_id"[\s\S]*?item\.type[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /dry van/i);

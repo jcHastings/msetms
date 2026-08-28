@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, type SyntheticEvent } from "react";
+import { useActionState, useRef, useState, type SyntheticEvent } from "react";
+import { useDismissable } from "@/components/use-dismissable";
 import {
   deleteDriverAction,
   deleteTrailerAction,
@@ -51,17 +52,24 @@ export function FleetRowActions({
   const error =
     (toggleState && !toggleState.ok ? toggleState.error : null) ??
     (deleteState && !deleteState.ok ? deleteState.error : null);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), rootRef);
 
   return (
-    <div className="relative" onClick={stopRowNav} onPointerDown={stopRowNav}>
-      <details className="relative">
-        <summary
-          className="row-actions-btn cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-          aria-label={`Actions for ${label}`}
-        >
-          ⋯
-        </summary>
-        <div className="load-action-menu absolute right-0 z-30 mt-1 min-w-52 rounded-lg py-1 shadow-lg">
+    <div ref={rootRef} className="relative" onClick={stopRowNav} onPointerDown={stopRowNav}>
+      <button
+        type="button"
+        className="row-actions-btn cursor-pointer"
+        aria-label={`Actions for ${label}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((current) => !current)}
+      >
+        ⋯
+      </button>
+      {open ? (
+        <div className="load-action-menu absolute right-0 z-30 mt-1 min-w-52 rounded-lg py-1 shadow-lg" role="menu">
           <Link href={href} className="menu-item block" onClick={stopRowNav}>
             Edit
           </Link>
@@ -101,7 +109,7 @@ export function FleetRowActions({
           ) : null}
           {error ? <p className="px-3 py-2 text-xs text-red-700">{error}</p> : null}
         </div>
-      </details>
+      ) : null}
     </div>
   );
 }

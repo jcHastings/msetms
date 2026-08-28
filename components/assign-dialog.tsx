@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useDismissable } from "@/components/use-dismissable";
 import { ComplianceList } from "@/components/compliance-badge";
 import { assignLoadAction } from "@/lib/actions";
 import {
@@ -42,6 +43,8 @@ export function AssignDialog({
   const [driverId, setDriverId] = useState("");
   const [ooPercent, setOoPercent] = useState(String(defaultOoPercent));
   const [confirmed, setConfirmed] = useState(false);
+  const panelRef = useRef<HTMLFormElement>(null);
+  useDismissable(open, () => setOpen(false), panelRef);
 
   const driver = drivers.find((item) => String(item.id) === driverId);
   const truck = trucks.find((item) => String(item.id) === truckId);
@@ -87,7 +90,7 @@ export function AssignDialog({
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6">
-          <form className="card w-full max-w-md p-5 shadow-xl" onSubmit={onSubmit}>
+          <form ref={panelRef} className="card w-full max-w-md p-5 shadow-xl" onSubmit={onSubmit}>
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Assign {loadNumber}</h2>
             </div>
