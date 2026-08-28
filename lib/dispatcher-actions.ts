@@ -724,6 +724,52 @@ export async function saveQboCustomerMapAction(formData: FormData): Promise<Acti
   });
 }
 
+export async function sendLoadMailAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const kind = String(formData.get("kind") ?? "");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      const { customerMailBlockReason, driverMailBlockReason, sendCustomerUpdateMail, sendDriverLoadMail } =
+        await import("./load-mail");
+      const { MAIL_MISSING } = await import("./mail-shared");
+      const { mailConfigured } = await import("./integrations/mail");
+      if (kind === "driver_load") {
+        const blocked = driverMailBlockReason(load);
+        if (blocked) throw new Error(blocked);
+      } else if (kind === "customer_update") {
+        const blocked = customerMailBlockReason(load);
+        if (blocked) throw new Error(blocked);
+      } else {
+        throw new Error("Pick Email driver load or Email customer update.");
+      }
+      if (!mailConfigured()) throw new Error(MAIL_MISSING);
+      await requireCapability(canSendSms, "Email send is for Administrator and Standard.");
+      const sent =
+        kind === "driver_load" ? await sendDriverLoadMail(loadId) : await sendCustomerUpdateMail(loadId);
+      recordLoadAudit({
+        loadId,
+        action: "email",
+        field: kind,
+        newValue: sent.to,
+      });
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message:
+          kind === "driver_load"
+            ? `Load information emailed to ${sent.to}.`
+            : `Tracking update emailed to ${sent.to}.`,
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function sendLoadSmsAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {

@@ -15,6 +15,7 @@ import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { CopyTripNumber } from "@/components/copy-trip-number";
+import { LoadMailPanel } from "@/components/load-mail-panel";
 import { LoadMoneyBox } from "@/components/load-money-box";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
@@ -34,11 +35,13 @@ import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
-import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
+import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { routeGuideFromLoad } from "@/lib/routing-shared";
+import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
+import { formatDateTime } from "@/lib/format";
 import { formatRelayLane } from "@/lib/relays";
 import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
@@ -139,7 +142,8 @@ export async function LoadEditor({
         watched={Boolean(load.watched)}
         loadNumber={load.load_number}
         customerName={load.customer_name}
-        contactEmail={load.contact_email}
+        contactEmail={resolveLoadCustomerEmail(load)}
+        driverEmail={resolveLoadDriverEmail(load)}
         readyToInvoice={Boolean(load.ready_to_invoice)}
         nonRevenue={Boolean(load.non_revenue)}
         accountingDesk={load.accounting_desk}
@@ -153,6 +157,23 @@ export async function LoadEditor({
             </p>
           ) : null}
           <LoadMoneyBox load={load} />
+          {canSendSms(role) ? (
+            <LoadMailPanel
+              loadId={load.id}
+              loadNumber={load.load_number}
+              driverEmail={resolveLoadDriverEmail(load)}
+              customerEmail={resolveLoadCustomerEmail(load)}
+              driverAssigned={Boolean(load.driver_id)}
+              lastDriverSent={(() => {
+                const row = lastLoadMail(load.id, "driver_load");
+                return row ? formatDateTime(row.created_at) : "";
+              })()}
+              lastCustomerSent={(() => {
+                const row = lastLoadMail(load.id, "customer_update");
+                return row ? formatDateTime(row.created_at) : "";
+              })()}
+            />
+          ) : null}
           <LoadForm
             customers={customers}
             trucks={trucks}

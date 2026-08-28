@@ -376,6 +376,43 @@ export function isWhatsAppConfigured(): boolean {
   return twilioReady || metaReady;
 }
 
+export function getSmtpHost(): string | undefined {
+  return readSecret("SMTP_HOST");
+}
+
+export function getSmtpPort(): number {
+  const raw = Number.parseInt(readSecret("SMTP_PORT") ?? "", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 587;
+}
+
+export function getSmtpUser(): string | undefined {
+  return readSecret("SMTP_USER");
+}
+
+export function getSmtpPass(): string | undefined {
+  return readSecret("SMTP_PASS");
+}
+
+export function getSendgridApiKey(): string | undefined {
+  return readSecret("SENDGRID_API_KEY");
+}
+
+export function getSmtpFrom(): string {
+  return readSecret("SMTP_FROM") ?? readSecret("MAIL_FROM") ?? "info@msloads.com";
+}
+
+export function isSmtpConfigured(): boolean {
+  return Boolean(getSmtpHost());
+}
+
+export function isSendgridConfigured(): boolean {
+  return Boolean(getSendgridApiKey());
+}
+
+export function isMailConfigured(): boolean {
+  return isSmtpConfigured() || isSendgridConfigured();
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&

@@ -9,10 +9,12 @@ import {
   requestDriverDocumentsAction,
   requestPodAction,
   saveTemplateAction,
+  sendLoadMailAction,
   sendLoadSmsAction,
   sendLoadWhatsAppAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
+import { LoadMailMenuItems } from "@/components/load-mail-panel";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
@@ -45,6 +47,7 @@ export function LoadWorkspace({
   loadNumber = "",
   customerName = "",
   contactEmail = "",
+  driverEmail = "",
   readyToInvoice = false,
   nonRevenue = false,
   accountingDesk = "operations",
@@ -70,6 +73,7 @@ export function LoadWorkspace({
   loadNumber?: string;
   customerName?: string;
   contactEmail?: string;
+  driverEmail?: string;
   readyToInvoice?: boolean;
   nonRevenue?: boolean;
   accountingDesk?: string;
@@ -343,6 +347,16 @@ export function LoadWorkspace({
           ) : (
             <span className="menu-item text-slate-400">Request Detention email (add customer email)</span>
           )}
+          {loadId && canSendSms(role) ? (
+            <LoadMailMenuItems
+              loadId={loadId}
+              loadNumber={loadNumber}
+              driverEmail={driverEmail}
+              customerEmail={contactEmail}
+              driverAssigned={driverAssigned}
+              onNotice={setSmsNotice}
+            />
+          ) : null}
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
@@ -479,6 +493,33 @@ export function LoadWorkspace({
                 }}
               >
                 {smsPending ? "Sending…" : "Send WhatsApp"}
+              </button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={smsPending}
+                onClick={async () => {
+                  if (!driverEmail.trim()) {
+                    setSmsNotice({ tone: "error", text: "This driver has no email on the driver record." });
+                    return;
+                  }
+                  if (!window.confirm(`Send load information to ${driverEmail}?`)) return;
+                  setSmsPending(true);
+                  const form = new FormData();
+                  form.set("load_id", String(loadId));
+                  form.set("kind", "driver_load");
+                  const result = await sendLoadMailAction(form);
+                  setSmsPending(false);
+                  if (!result.ok) {
+                    setSmsNotice({ tone: "error", text: result.error });
+                    return;
+                  }
+                  setSmsNotice({ tone: "ok", text: result.message ?? "Sent." });
+                  setDispatchOpen(false);
+                  router.refresh();
+                }}
+              >
+                {smsPending ? "Sending…" : "Email driver load"}
               </button>
             </div>
           </div>

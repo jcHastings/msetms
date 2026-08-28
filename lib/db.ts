@@ -740,6 +740,17 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_truck_odometer_truck_time
       ON truck_odometer_readings(truck_id, recorded_at);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sent_mail (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sent_mail_load ON sent_mail(load_id, kind, id);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

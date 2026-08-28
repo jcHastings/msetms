@@ -250,6 +250,13 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
+  assert.match(workspaceSource, /Email driver load/);
+  const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
+  assert.match(mailPanelSource, /data-load-mail/);
+  assert.match(mailPanelSource, /Email customer update/);
+  assert.match(mailPanelSource, /Send load information/);
+  assert.doesNotMatch(workspaceSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);
+  assert.doesNotMatch(mailPanelSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);
   assert.match(workspaceSource, /View Accountability Log/);
   assert.match(workspaceSource, /Copy This Load/);
   assert.match(workspaceSource, /Archive This Load/);
@@ -766,6 +773,9 @@ async function main() {
   const envExample = fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8");
   assert.match(envExample, /npm start/);
   assert.match(envExample, /GOOGLE_MAPS_API_KEY=/);
+  assert.match(envExample, /SMTP_HOST=/);
+  assert.match(envExample, /SMTP_FROM=info@msloads.com/);
+  assert.match(envExample, /SENDGRID_API_KEY=/);
   for (const file of [
     "app/fleet/layout.tsx",
     "app/fleet/trucks/new/page.tsx",
@@ -1796,6 +1806,195 @@ async function main() {
     if (value == null) delete process.env[key];
     else process.env[key] = value;
   }
+
+  const mailEnvKeys = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "SENDGRID_API_KEY"] as const;
+  const previousMail = Object.fromEntries(mailEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of mailEnvKeys) delete process.env[key];
+  const mailer = await import("../lib/integrations/mail");
+  const { MAIL_MISSING } = await import("../lib/mail-shared");
+  const loadMail = await import("../lib/load-mail");
+  assert.equal(mailer.mailConfigured(), false);
+  assert.equal(mailer.mailTransport(), "none");
+  await assert.rejects(
+    () => mailer.sendMail({ to: "x@msloads.com", subject: "Hi", text: "Body" }),
+    (error: unknown) => {
+      assert.equal(error instanceof Error && error.message, MAIL_MISSING);
+      return true;
+    },
+  );
+  const companyDraft = loadMail.composeDriverLoadEmail({
+    loadNumber: "MSE-MAIL",
+    stops: [
+      {
+        title: "Pickup 1",
+        address: "600 E 39th St, Hastings, NE 68901",
+        window: "08/28/26 8:00 AM – 08/28/26 12:00 PM",
+        appointment: "Dock 2",
+        reference: "PU-1",
+      },
+      {
+        title: "Delivery 1",
+        address: "Birmingham, AL",
+        window: "08/29/26 8:00 AM – 08/29/26 4:00 PM",
+        appointment: "",
+        reference: "",
+      },
+    ],
+    refs: "RC-SMOKE · PO-SMOKE",
+    commodity: "Paper rolls",
+    trailer: "TR-12",
+    reefer: "34°F · Continuous",
+    specialInstructions: "Call receiver.",
+    settlement: "",
+  });
+  assert.match(companyDraft.subject, /MSE-MAIL/);
+  assert.match(companyDraft.text, /Pickup 1/);
+  assert.match(companyDraft.text, /Delivery 1/);
+  assert.match(companyDraft.text, /34°F · Continuous/);
+  assert.match(companyDraft.text, /M & S Loads LLC/);
+  assert.doesNotMatch(companyDraft.text, /\$|USD|1,400|1400/);
+  const customerDraft = loadMail.composeCustomerUpdateEmail({
+    loadNumber: "MSE-MAIL",
+    customerRef: "RC-SMOKE",
+    status: "In transit",
+    truck: "112",
+    trailer: "TR-12",
+    lastLocation: "Memphis, TN",
+    eta: "412 mi on file · 08/28/26",
+    nextStop: "Delivery 1 · Birmingham, AL",
+  });
+  assert.match(customerDraft.text, /Truck 112/);
+  assert.match(customerDraft.text, /Memphis, TN/);
+  assert.match(customerDraft.text, /412 mi on file/);
+  assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
+  const mailDriverId = queries.createDriver({
+    name: "Pat Mail",
+    phone: "555-0188",
+    email: "pat.mail@msloads.com",
+    license: "NE-MAIL",
+    pin: "1888",
+    truck_id: null,
+    status: "available",
+  });
+  const mailLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Birmingham, AL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 32000,
+    commodity: "Frozen beef",
+    rate: 2200,
+    notes: "internal only",
+    special_instructions: "Keep continuous.",
+    appointment_notes: "",
+    reference_number: "RC-MAIL",
+    po_number: "PO-MAIL",
+    reefer_setpoint_f: 10,
+    trailer_number: "TR-MAIL",
+    status: "in_transit",
+    truck_id: null,
+    driver_id: mailDriverId,
+  });
+  getDb().prepare("UPDATE loads SET contact_email = ? WHERE id = ?").run("ap.mail@customer.example", mailLoadId);
+  const { ensureDefaultStops } = await import("../lib/stops");
+  ensureDefaultStops(mailLoadId);
+  const mailLoad = queries.getLoad(mailLoadId);
+  assert.ok(mailLoad);
+  assert.equal(loadMail.resolveLoadDriverEmail(mailLoad), "pat.mail@msloads.com");
+  assert.equal(loadMail.resolveLoadCustomerEmail(mailLoad), "ap.mail@customer.example");
+  const builtDriver = loadMail.buildDriverLoadDraft(mailLoad);
+  assert.match(builtDriver.text, /Pickup 1|Delivery 1/);
+  assert.doesNotMatch(builtDriver.text, /\$2|2200|USD/);
+  const { sendLoadMailAction } = await import("../lib/dispatcher-actions");
+  const missingMail = new FormData();
+  missingMail.set("load_id", String(mailLoadId));
+  missingMail.set("kind", "driver_load");
+  const missingMailResult = await sendLoadMailAction(missingMail);
+  assert.equal(missingMailResult.ok, false);
+  if (!missingMailResult.ok) assert.equal(missingMailResult.error, MAIL_MISSING);
+  const silentCustomerId = queries.createCustomer({
+    name: "No Email Shipper",
+    billing_notes: "",
+    contacts: [],
+  });
+  const noEmailLoadId = queries.createLoad({
+    customer_id: silentCustomerId,
+    origin: "Hastings, NE",
+    destination: "Birmingham, AL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 1000,
+    commodity: "Frozen",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const noDriverMail = new FormData();
+  noDriverMail.set("load_id", String(noEmailLoadId));
+  noDriverMail.set("kind", "driver_load");
+  const noDriverResult = await sendLoadMailAction(noDriverMail);
+  assert.equal(noDriverResult.ok, false);
+  if (!noDriverResult.ok) assert.match(noDriverResult.error, /Assign a driver first/);
+  const noCustomerMail = new FormData();
+  noCustomerMail.set("load_id", String(noEmailLoadId));
+  noCustomerMail.set("kind", "customer_update");
+  const noCustomerResult = await sendLoadMailAction(noCustomerMail);
+  assert.equal(noCustomerResult.ok, false);
+  if (!noCustomerResult.ok) assert.match(noCustomerResult.error, /no customer email/);
+  process.env.SENDGRID_API_KEY = "SG.test-secret-do-not-log";
+  process.env.SMTP_FROM = "info@msloads.com";
+  assert.equal(mailer.mailTransport(), "sendgrid");
+  await assert.rejects(
+    () =>
+      mailer.sendMail({ to: "x@msloads.com", subject: "Hi", text: "Body" }, (async () =>
+        new Response(JSON.stringify({ errors: [{ message: "bad SG.test-secret-do-not-log" }] }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        })) as typeof fetch),
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : "";
+      assert.doesNotMatch(message, /SG\.test-secret-do-not-log/);
+      assert.match(message, /redacted|SendGrid/);
+      return true;
+    },
+  );
+  let sentMailTo = "";
+  let sentMailSubject = "";
+  let sentMailHasPdf = false;
+  await loadMail.sendDriverLoadMail(mailLoadId, async (input) => {
+    sentMailTo = input.to;
+    sentMailSubject = input.subject;
+    sentMailHasPdf = Boolean(input.attachments?.some((file) => file.filename.endsWith("-driver-packet.pdf")));
+  });
+  assert.equal(sentMailTo, "pat.mail@msloads.com");
+  assert.match(sentMailSubject, /MSE-/);
+  assert.equal(sentMailHasPdf, true);
+  assert.equal(loadMail.lastLoadMail(mailLoadId, "driver_load")?.to_email, "pat.mail@msloads.com");
+  await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
+    assert.equal(input.to, "ap.mail@customer.example");
+    assert.doesNotMatch(input.text, /\$|2200|settlement/i);
+    assert.match(input.text, /Truck|Last location/);
+  });
+  assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
+  for (const key of mailEnvKeys) {
+    const value = previousMail[key];
+    if (value == null) delete process.env[key];
+    else process.env[key] = value;
+  }
+
   assert.ok(history.every((row) => !/4020|1125|password|api[_-]?key/i.test(`${row.old_value} ${row.new_value} ${row.actor}`)));
   assert.equal(history[0].id > history[history.length - 1].id, true, "newest first");
   const company = audit.listCompanyAudit({ loadNumber: created.load_number, actor: "MS Test" });
