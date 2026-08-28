@@ -96,6 +96,7 @@ export function FleetRowActions({
         aria-label={`Actions for ${label}`}
         aria-expanded={open}
         aria-haspopup="menu"
+        data-row-overflow-trigger=""
         onClick={() => setOpen((current) => !current)}
       >
         ⋯

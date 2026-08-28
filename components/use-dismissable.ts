@@ -20,6 +20,20 @@ function isMenuControl(target: Node | null): boolean {
   return Boolean(el?.closest(MENU_CONTROL));
 }
 
+function swallowNextClick(): void {
+  function suppressClick(click: MouseEvent) {
+    click.stopPropagation();
+    click.preventDefault();
+    cleanup();
+  }
+  function cleanup() {
+    document.removeEventListener("click", suppressClick, true);
+    window.clearTimeout(timer);
+  }
+  const timer = window.setTimeout(cleanup, 400);
+  document.addEventListener("click", suppressClick, true);
+}
+
 /** Close a menu or popover on outside pointer or Escape. Clicks on controls inside stay. */
 export function useDismissable(
   open: boolean,
@@ -41,6 +55,10 @@ export function useDismissable(
       const extra = extraRefHeld.current?.current;
       if (target && extra?.contains(target) && isMenuControl(target)) return;
       onCloseRef.current();
+      const el = target instanceof Element ? target : target?.parentElement;
+      if (el?.closest("[data-row-overflow-trigger], .row-actions-btn")) return;
+      event.stopPropagation();
+      swallowNextClick();
     }
 
     function onKeyDown(event: KeyboardEvent) {
