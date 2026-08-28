@@ -6,7 +6,7 @@ import { getLoad } from "@/lib/queries";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(
+async function serveGeneratedInvoice(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -32,4 +32,18 @@ export async function POST(
     const message = error instanceof Error ? error.message : "Could not create invoice.";
     return Response.json({ error: message }, { status: 400 });
   }
+}
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  return serveGeneratedInvoice(request, context);
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  return serveGeneratedInvoice(request, context);
 }

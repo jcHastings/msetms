@@ -22,7 +22,6 @@ import {
 } from "@/lib/accounting";
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { formatMdYDisplay, formatMoney } from "@/lib/format";
-import { listAttachments } from "@/lib/files";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCompanySettings, taxOnAmount } from "@/lib/settings";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -195,7 +194,6 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
             rows.map((row) => {
               const tax = taxOnAmount(row.rate);
               const total = (row.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
-              const invoice = listAttachments(row.id).find((file) => file.kind === "invoice");
               const email = row.contact_email.trim();
               return (
                 <tr key={row.id}>
@@ -224,11 +222,9 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
                     </form>
                   </td>
                   <HubActions>
-                    {invoice ? (
-                      <a className="btn btn-secondary" href={`/api/attachments/${invoice.id}`}>
-                        Invoice PDF
-                      </a>
-                    ) : null}
+                    <a className="btn btn-secondary" href={`/api/loads/${row.id}/invoice`}>
+                      Invoice PDF
+                    </a>
                     {email ? (
                       <a
                         className="btn btn-secondary"

@@ -140,6 +140,12 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /color: #ffffff !important/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
+  const attachmentRoute = fs.readFileSync(path.join(process.cwd(), "app/api/attachments/[id]/route.ts"), "utf8");
+  assert.match(attachmentRoute, /regenerateMissingAttachment/);
+  assert.match(attachmentRoute, /This file is no longer on this computer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/regenerate-attachment.ts"), "utf8"), /buildTmsInvoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /export async function GET/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Reconcile and Archive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Search Archived Loads/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
@@ -488,6 +494,8 @@ async function main() {
   assert.match(payPageSource, /tab=pay/);
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
   assert.match(hubSource, /hubTabClass/);
+  assert.match(hubSource, /\/api\/loads\/\$\{row\.id\}\/invoice/);
+  assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /overflow-x-auto/);
@@ -7401,6 +7409,28 @@ Continuous reefer. Two load locks.
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
   assert.equal((await PDFDocument.load(made.buffer)).getPageCount(), 1);
+  const { regenerateMissingAttachment } = await import("../lib/regenerate-attachment");
+  const storedInvoice = getAttachment(made.attachmentId);
+  assert.ok(storedInvoice);
+  const missingInvoicePath = getAttachmentPath(storedInvoice);
+  fs.unlinkSync(missingInvoicePath);
+  assert.equal(fs.existsSync(missingInvoicePath), false);
+  const recoveredInvoice = await regenerateMissingAttachment(storedInvoice);
+  assert.ok(recoveredInvoice);
+  assert.equal(recoveredInvoice.buffer.subarray(0, 4).toString(), "%PDF");
+  const restoredInvoice = getAttachment(made.attachmentId);
+  assert.ok(restoredInvoice);
+  assert.equal(fs.existsSync(getAttachmentPath(restoredInvoice)), true);
+  const missingPhoto = addAttachment({
+    loadId: invoiceLoadId,
+    kind: "photo_trailer",
+    originalName: "gone-photo.jpg",
+    buffer: Buffer.from("jpg"),
+    mimeType: "image/jpeg",
+    uploadedBy: "dispatcher",
+  });
+  fs.unlinkSync(getAttachmentPath(missingPhoto));
+  assert.equal(await regenerateMissingAttachment(missingPhoto), null);
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);

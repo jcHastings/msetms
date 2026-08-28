@@ -23,14 +23,15 @@ export function ViewInvoiceButton({
     const preview = window.open("about:blank", "_blank");
     try {
       if (attachmentId) {
-        const response = await fetch(`/api/attachments/${attachmentId}`);
-        if (!response.ok) throw new Error("Invoice file could not be opened.");
-        const blob = await response.blob();
-        downloadAndOpenPdf(blob, "invoice.pdf", preview, {
-          openUrl: `/api/attachments/${attachmentId}`,
-          downloadUrl: `/api/attachments/${attachmentId}?download=1`,
-        });
-        return;
+        const stored = await fetch(`/api/attachments/${attachmentId}`);
+        if (stored.ok) {
+          const blob = await stored.blob();
+          downloadAndOpenPdf(blob, "invoice.pdf", preview, {
+            openUrl: `/api/attachments/${attachmentId}`,
+            downloadUrl: `/api/attachments/${attachmentId}?download=1`,
+          });
+          return;
+        }
       }
       const response = await fetch(`/api/loads/${loadId}/invoice`, { method: "POST" });
       if (!response.ok) {
