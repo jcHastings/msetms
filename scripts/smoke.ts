@@ -7634,6 +7634,38 @@ Continuous reefer. Two load locks.
     capacity_lbs: 44000,
     status: "available",
   });
+  const fleetMap41Id = queries.createTruck({
+    unit_number: "41",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "sam-fm-41",
+  });
+  queries.saveTruckGps(fleetMap41Id, {
+    latitude: 37.9289,
+    longitude: -100.9857,
+    address: "Holcomb, KS",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+    speedMph: 0,
+    headingDeg: 15,
+  });
+  const fleetMap42Id = queries.createTruck({
+    unit_number: "42",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "sam-fm-42",
+  });
+  queries.saveTruckGps(fleetMap42Id, {
+    latitude: 41.2565,
+    longitude: -95.9345,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+    speedMph: 54,
+    headingDeg: 120,
+  });
   const samsaraFleetMap = await fleetMap.buildSamsaraFleetMap();
   const liveTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-1");
   assert.ok(liveTruckPin, "active truck with stored Samsara GPS must plot");
@@ -7804,8 +7836,16 @@ Continuous reefer. Two load locks.
   ]);
   assert.equal(fortyOneFortyTwo.get("truck-41"), 0);
   assert.equal(fortyOneFortyTwo.get("truck-42"), 0);
-  assert.equal(samsaraFleetMap.pins.filter((pin) => pin.label === "41").length <= 1, true);
-  assert.equal(samsaraFleetMap.pins.filter((pin) => pin.label === "42").length <= 1, true);
+  const pin41 = samsaraFleetMap.pins.filter((pin) => pin.label === "41");
+  const pin42 = samsaraFleetMap.pins.filter((pin) => pin.label === "42");
+  assert.equal(pin41.length, 1, "truck 41 plots once");
+  assert.equal(pin42.length, 1, "truck 42 plots once");
+  assert.notEqual(pin41[0]?.id, pin42[0]?.id);
+  assert.notEqual(pin41[0]?.lat, pin42[0]?.lat);
+  assert.equal(pin41[0]?.pinColor, SAMSARA_TRUCK_PIN_COLOR);
+  assert.equal(pin42[0]?.pinColor, SAMSARA_TRUCK_PIN_COLOR);
+  assert.equal(pin41[0]?.pinShape, "circle");
+  assert.equal(pin42[0]?.pinShape, "arrow");
   const samsaraLabels = fleetMapDisplayPoints(samsaraFleetMap.pins);
   const labeledLiveTruck = samsaraLabels.find((pin) => pin.label === "FM-SAM-1");
   assert.equal(labeledLiveTruck?.markerText, "FM-SAM-1");
