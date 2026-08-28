@@ -261,9 +261,10 @@ function confirmationStopFromParty(
   load: LoadView,
   fallbackLocationId: number | null,
   laneFallback: string,
+  kindHint: "pickup" | "delivery" = "pickup",
 ): ConfirmationStop {
   const party = confirmationParty(stop, fallbackLocationId, laneFallback, load.customer_name);
-  const kind = stop?.kind ?? (fallbackLocationId === load.consignee_location_id ? "delivery" : "pickup");
+  const kind = stop?.kind ?? kindHint;
   const isPickup = kind === "pickup";
   return {
     title: confirmationStopTitle(kind, stop ? stopTypeNumber(all, stop.id) : 1),
@@ -311,19 +312,34 @@ export function buildConfirmationModel(
           load,
           isFirstPickup ? load.shipper_location_id : isLastDelivery ? load.consignee_location_id : stop.location_id,
           isFirstPickup ? load.origin : isLastDelivery ? load.destination : "",
+          stop.kind,
         );
       })
     : [
-        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin),
-        confirmationStopFromParty(lastDelivery, stops, load, load.consignee_location_id, load.destination),
+        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup"),
+        confirmationStopFromParty(
+          lastDelivery,
+          stops,
+          load,
+          load.consignee_location_id,
+          load.destination,
+          "delivery",
+        ),
       ];
   const shipper =
     listedStops.find((stop) => stop.title.startsWith("Shipper")) ??
-    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin);
+    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup");
   const consignee =
     listedStops.find((stop) => stop.title === "Consignee 1") ??
     listedStops.find((stop) => stop.title.startsWith("Consignee")) ??
-    confirmationStopFromParty(firstDelivery, stops, load, load.consignee_location_id, load.destination);
+    confirmationStopFromParty(
+      firstDelivery,
+      stops,
+      load,
+      load.consignee_location_id,
+      load.destination,
+      "delivery",
+    );
   const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
     load.public_notes,
