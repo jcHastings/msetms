@@ -108,7 +108,11 @@ export function LoadForm({
       <input type="hidden" name="return_to" value={load ? `/loads/${load.id}` : returnTo} />
       {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
 
-      <div hidden={resolvedScreen !== "basics" && resolvedScreen !== "all"}>
+      <div
+        hidden={resolvedScreen !== "basics" && resolvedScreen !== "all"}
+        className={resolvedScreen === "basics" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-load-screen="basics"
+      >
         <LoadBasicsScreen
           load={load}
           defaults={extraDefaults}
@@ -119,10 +123,19 @@ export function LoadForm({
           card={card}
         />
       </div>
-      <div hidden={resolvedScreen !== "customer" && resolvedScreen !== "all"}>
+      <div
+        hidden={resolvedScreen !== "customer" && resolvedScreen !== "all"}
+        className={resolvedScreen === "customer" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-load-screen="customer"
+      >
         <LoadCustomerScreen customers={customers} load={load} defaults={extraDefaults} card={card} />
       </div>
-      <div hidden={resolvedScreen !== "assets" && resolvedScreen !== "all"} data-assign-fields="">
+      <div
+        hidden={resolvedScreen !== "assets" && resolvedScreen !== "all"}
+        className={resolvedScreen === "assets" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-assign-fields=""
+        data-load-screen="assets"
+      >
         <LoadCarrierScreen
           drivers={drivers}
           trucks={trucks}

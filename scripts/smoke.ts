@@ -330,6 +330,8 @@ async function main() {
   assert.match(loadFormSource, /LoadCarrierScreen/);
   assert.match(loadFormSource, /data-assign-fields/);
   assert.match(loadFormSource, /hidden=\{resolvedScreen !== "assets"/);
+  assert.match(loadFormSource, /data-load-screen="customer"/);
+  assert.match(loadFormSource, /data-load-screen="assets"/);
   assert.match(loadFormSource, /stay_on_load/);
   assert.match(loadFormSource, /preventDefault/);
   assert.match(loadFormSource, /startTransition/);
