@@ -1,5 +1,5 @@
 import { getGoogleMapsApiKey } from "./env";
-import type { PlaceDetails, PlaceSuggestion } from "./places-shared";
+import { applyNyBoroughState, type PlaceDetails, type PlaceSuggestion } from "./places-shared";
 
 export type { PlaceDetails, PlaceSuggestion } from "./places-shared";
 
@@ -59,12 +59,14 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails> {
     "";
   const streetNumber = pick("street_number");
   const route = components.find((item) => item.types.includes("route"))?.long_name ?? "";
+  const city = pick("locality") || pick("sublocality") || pick("administrative_area_level_3");
+  const rawState = pick("administrative_area_level_1");
   return {
     placeId,
     name: payload.result.name ?? "",
     street: [streetNumber, route].filter(Boolean).join(" "),
-    city: pick("locality") || pick("sublocality") || pick("administrative_area_level_3"),
-    state: pick("administrative_area_level_1"),
+    city,
+    state: applyNyBoroughState(city, rawState),
     zip: pick("postal_code"),
     formatted: payload.result.formatted_address ?? "",
     latitude: payload.result.geometry?.location?.lat ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LoadMapPathPoint, LoadMapPoint } from "@/lib/load-map-shared";
 
 type GoogleMaps = {
@@ -18,6 +18,7 @@ type GoogleMaps = {
 declare global {
   interface Window {
     google?: { maps: GoogleMaps };
+    gm_authFailure?: () => void;
   }
 }
 
@@ -74,11 +75,16 @@ export function LoadMapCanvas({
   const host = useRef<HTMLDivElement>(null);
   const route = path ?? [];
   const hasMap = points.length > 0 || route.length > 0;
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     const el = host.current;
     if (!el || !apiKey || !hasMap) return;
     let cancelled = false;
+    const previousAuth = window.gm_authFailure;
+    window.gm_authFailure = () => {
+      if (!cancelled) setFailed(true);
+    };
     void loadMapsScript(apiKey)
       .then((maps) => {
         if (cancelled || !host.current) return;
@@ -107,15 +113,14 @@ export function LoadMapCanvas({
             map,
             position,
             title: [point.label, point.detail].filter(Boolean).join(" — "),
-            label:
-              point.kind === "track"
-                ? undefined
-                : {
-                    text: point.label,
-                    color: "#0f172a",
-                    fontSize: "11px",
-                    fontWeight: "700",
-                  },
+            label: point.markerText
+              ? {
+                  text: point.markerText,
+                  color: "#0f172a",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                }
+              : undefined,
             icon: {
               path: maps.SymbolPath.CIRCLE,
               scale: point.kind === "track" ? 4 : 8,
@@ -135,15 +140,18 @@ export function LoadMapCanvas({
         }
         if (points.length + route.length > 1) map.fitBounds(bounds);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
     return () => {
       cancelled = true;
+      window.gm_authFailure = previousAuth;
     };
   }, [apiKey, hasMap, points, route]);
 
-  if (!apiKey) {
+  if (!apiKey || failed) {
     return (
-      <p className="px-4 py-8 text-sm text-slate-600">
+      <p className="px-4 py-8 text-sm text-slate-600" data-map-off="">
         {missingKeyMessage ?? "Map is off."}
       </p>
     );

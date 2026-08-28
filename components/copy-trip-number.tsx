@@ -8,7 +8,7 @@ export function CopyTripNumber({ value }: { value: string }) {
   return (
     <button
       type="button"
-      className="btn btn-ghost text-xs"
+      className="btn btn-secondary text-xs"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(value);

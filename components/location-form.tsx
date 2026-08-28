@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { PlaceSearch } from "@/components/place-search";
 import { US_STATES } from "@/lib/locations";
+import { applyNyBoroughState, nyBoroughStateError } from "@/lib/places-shared";
 import {
   LOCATION_ROLES,
   SCHEDULING_TYPES,
@@ -58,7 +59,7 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
             if (place.name) setName(place.name);
             if (place.street) setStreet(place.street);
             if (place.city) setCity(place.city);
-            if (place.state) setRegion(place.state);
+            if (place.city || place.state) setRegion(applyNyBoroughState(place.city || city, place.state || region));
             if (place.zip) setZip(place.zip);
             if (place.latitude != null) setLatitude(String(place.latitude));
             if (place.longitude != null) setLongitude(String(place.longitude));
@@ -86,6 +87,11 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
               </option>
             ))}
           </select>
+          {nyBoroughStateError(city, region) ? (
+            <p className="text-sm text-rose-700" data-ny-borough-warning="">
+              {nyBoroughStateError(city, region)}
+            </p>
+          ) : null}
         </div>
         <div className="field">
           <label htmlFor="zip">ZIP</label>

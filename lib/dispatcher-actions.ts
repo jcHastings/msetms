@@ -10,6 +10,7 @@ import {
   parseOptionalInt,
   requiredString,
 } from "./format";
+import { assertNyBoroughState } from "./places-shared";
 import {
   authenticateDispatcher,
   clearDispatcherSession,
@@ -271,12 +272,17 @@ function parseStopInput(formData: FormData) {
   const windowEnd = String(formData.get("window_end") ?? "").trim();
   const scheduleType = String(formData.get("schedule_type") ?? "").trim();
   const appt = isAppointmentSchedule(scheduleType);
+  const city = String(formData.get("city") ?? "").trim();
+  const state = String(formData.get("state") ?? "").trim();
+  if (!parseOptionalInt(formData.get("location_id"))) {
+    assertNyBoroughState(city, state);
+  }
   return {
     kind: parseStopKindFromForm(formData),
     name: requiredString(formData.get("name"), "Stop name"),
     street: String(formData.get("street") ?? "").trim(),
-    city: String(formData.get("city") ?? "").trim(),
-    state: String(formData.get("state") ?? "").trim(),
+    city,
+    state,
     zip: String(formData.get("zip") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim(),
     window_start: windowStart ? fromInputDateTime(windowStart) : "",

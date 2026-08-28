@@ -11,6 +11,7 @@ import {
   type LoadTrackingEvent,
 } from "./load-map-shared";
 import { decodePolyline, usableRouteStops } from "./routing";
+import { stopMapMarkerText, stopTypeLabel, stopTypeNumber } from "./stops-shared";
 import { isOfficialDrivingRoute } from "./routing-shared";
 import {
   getLoad,
@@ -87,7 +88,7 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
   const points: LoadMapPoint[] = [];
   const stops = listStops(loadId);
 
-  for (const [index, stop] of stops.entries()) {
+  for (const stop of stops) {
     const linked = stop.location_id ? getLocation(stop.location_id) : null;
     let lat = linked?.latitude ?? null;
     let lng = linked?.longitude ?? null;
@@ -103,10 +104,13 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
       lng = geocoded?.longitude ?? null;
     }
     if (!validPoint(lat, lng)) continue;
+    const typeNumber = stopTypeNumber(stops, stop.id);
+    const typeLabel = stopTypeLabel(stop.kind, typeNumber);
     points.push({
       id: `stop-${stop.id}`,
       kind: stop.kind === "delivery" ? "delivery" : "pickup",
-      label: `${index + 1}. ${stop.name || stop.city || stop.kind}`,
+      label: `${typeLabel} · ${stop.name || stop.city || stop.kind}`,
+      markerText: stopMapMarkerText(stop.kind, typeNumber),
       lat: lat as number,
       lng: lng as number,
       detail: stopAddressLine(stop) || undefined,

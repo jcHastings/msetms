@@ -92,6 +92,18 @@ export function customerInvoicePayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId, "income").filter((item) => item.bill_to === "customer");
 }
 
+/** Billed customer rate already on the load or on customer invoice lines. Never invents a number. */
+export function billedCustomerRate(load: { id: number; rate?: number | null }): number | null {
+  if (load.rate != null && !Number.isNaN(load.rate)) return load.rate;
+  const income = customerInvoicePayItems(load.id);
+  const linehaul = income
+    .filter((item) => item.category === "flat_rate")
+    .reduce((sum, item) => sum + (item.total ?? item.rate ?? 0), 0);
+  if (linehaul > 0) return linehaul;
+  const billed = income.reduce((sum, item) => sum + (item.total ?? 0), 0);
+  return billed > 0 ? billed : null;
+}
+
 export function driverPayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId).filter((item) => item.bill_to === "driver");
 }

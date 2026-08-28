@@ -3,6 +3,40 @@ export type PlaceSuggestion = {
   label: string;
 };
 
+const NY_BOROUGH_CITIES = new Set([
+  "bronx",
+  "the bronx",
+  "brooklyn",
+  "manhattan",
+  "queens",
+  "staten island",
+]);
+
+function normalizeCityName(city: string): string {
+  return city.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function isNyBoroughCity(city: string): boolean {
+  return NY_BOROUGH_CITIES.has(normalizeCityName(city));
+}
+
+/** Bronx / Brooklyn / Manhattan / Queens / Staten Island are NY. Do not invent a city. */
+export function nyBoroughStateError(city: string, state: string): string | null {
+  if (!isNyBoroughCity(city)) return null;
+  const region = state.trim().toUpperCase();
+  if (!region || region === "NY") return null;
+  return `${city.trim()} is in New York. Use NY, not ${region}.`;
+}
+
+export function applyNyBoroughState(city: string, state: string): string {
+  return isNyBoroughCity(city) ? "NY" : state;
+}
+
+export function assertNyBoroughState(city: string, state: string): void {
+  const error = nyBoroughStateError(city, state);
+  if (error) throw new Error(error);
+}
+
 export type PlaceDetails = {
   placeId: string;
   name: string;

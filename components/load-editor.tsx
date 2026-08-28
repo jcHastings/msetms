@@ -44,6 +44,7 @@ import { usableRouteStops } from "@/lib/routing";
 import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatDateTime } from "@/lib/format";
+import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
 import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
@@ -101,7 +102,7 @@ export async function LoadEditor({
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
       <PageHeader
         title={load.load_number}
-        subtitle={`${load.origin} → ${load.destination}`}
+        subtitle={formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`}
         actions={
           <div className="flex items-center gap-3">
             <CopyTripNumber value={load.load_number} />

@@ -50,8 +50,7 @@ export default async function BoardPage({
   const assignableTrailers = listAssignableTrailers();
   const assignableDrivers = listAssignableDrivers();
   const relayLabels = extraRelayLabelsByLoad(loads);
-  const reefers = await getReeferSnapshots();
-  const fleet = await getSamsaraFleet();
+  const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     const live = reefers.readings.find((reading) => reading.loadId === load.id);
@@ -102,7 +101,7 @@ export default async function BoardPage({
                   <th>Reefer</th>
                   <th>Rate</th>
                   <th>Move</th>
-                  <th></th>
+                  <th className="board-edit-head"></th>
                 </tr>
               </thead>
               <tbody>
@@ -126,7 +125,7 @@ export default async function BoardPage({
                       .join(" ")
                       .toLowerCase()}
                   >
-                    <td className="leading-tight">
+                    <td className="max-w-[13rem] leading-tight">
                       <OverlayOpenLink
                         href={overlayHref("/board", load.id, current)}
                         className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
@@ -134,7 +133,10 @@ export default async function BoardPage({
                       >
                         {load.load_number}
                       </OverlayOpenLink>
-                      <div className="text-xs">
+                      <div
+                        className="truncate whitespace-nowrap text-xs"
+                        title={`${load.origin} → ${load.destination}`}
+                      >
                         {load.origin}
                         <span className="mx-1 text-slate-400">→</span>
                         {load.destination}
@@ -206,7 +208,7 @@ export default async function BoardPage({
                         extraStatuses={customLoadStatuses()}
                       />
                     </td>
-                    <td className="whitespace-nowrap">
+                    <td className="board-edit-cell whitespace-nowrap">
                       <div className="flex justify-end gap-2">
                         {!isClosedStatus(load.status) ? (
                           <AssignDialog

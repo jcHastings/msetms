@@ -52,6 +52,49 @@ export function formatLocationAddress(location: Pick<Location, "street" | "city"
   return [location.street.trim(), cityZip].filter(Boolean).join(", ");
 }
 
+export function formatStopCityState(
+  stop: { city?: string | null; state?: string | null; name?: string | null },
+  location?: { city?: string | null; state?: string | null; name?: string | null } | null,
+): string {
+  const city = String(stop.city || location?.city || "").trim();
+  const state = String(stop.state || location?.state || "").trim();
+  const cityState = [city, state].filter(Boolean).join(", ");
+  return cityState || String(stop.name || location?.name || "").trim();
+}
+
+export function formatLoadLaneFromStops(
+  stops: Array<{
+    kind: string;
+    city?: string | null;
+    state?: string | null;
+    name?: string | null;
+    location_id?: number | null;
+  }>,
+  locations: Array<{ id: number; city: string; state: string; name: string }> = [],
+): string {
+  if (!stops.length) return "";
+  const pickup = stops.find((item) => item.kind === "pickup") ?? stops[0];
+  const delivery = [...stops].reverse().find((item) => item.kind === "delivery") ?? stops[stops.length - 1];
+  const locFor = (id?: number | null) => (id != null ? locations.find((row) => row.id === id) ?? null : null);
+  const origin = formatStopCityState(pickup, locFor(pickup.location_id));
+  const destination = formatStopCityState(delivery, locFor(delivery.location_id));
+  if (origin && destination) return `${origin} → ${destination}`;
+  return origin || destination;
+}
+
+/** Street from the linked location when the stop row left it blank. Does not invent a city. */
+export function formatStopRowAddress(
+  stop: Pick<Location, "street" | "city" | "state" | "zip">,
+  location?: Pick<Location, "street" | "city" | "state" | "zip"> | null,
+): string {
+  return formatLocationAddress({
+    street: stop.street.trim() || location?.street || "",
+    city: stop.city.trim() || location?.city || "",
+    state: stop.state.trim() || location?.state || "",
+    zip: stop.zip.trim() || location?.zip || "",
+  });
+}
+
 export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip">;
 
 export function locationSearchHaystack(location: LocationPickerRow): string {

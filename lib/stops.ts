@@ -5,7 +5,7 @@ import { getLoad, getLocation, listLocations } from "./queries";
 import { stopDeliveredFlag, type LoadStopKind, type LoadStop, type StopInput } from "./stops-shared";
 
 export type { LoadStopKind, LoadStop, StopInput };
-export { stopTypeNumber, stopTypeLabel, stopIsDelivered, stopDeliveredFlag } from "./stops-shared";
+export { stopTypeNumber, stopTypeLabel, stopMapMarkerText, stopIsDelivered, stopDeliveredFlag } from "./stops-shared";
 
 
 function asStopKind(value: string): LoadStopKind {

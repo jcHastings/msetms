@@ -12,8 +12,8 @@ import {
 import { LocationPicker } from "@/components/location-picker";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
-import { applyLocationToStop, formatLocationAddress, matchLocationForStop, US_STATES } from "@/lib/locations";
-import type { PlaceDetails } from "@/lib/places-shared";
+import { applyLocationToStop, formatLocationAddress, formatStopRowAddress, matchLocationForStop, US_STATES } from "@/lib/locations";
+import { applyNyBoroughState, nyBoroughStateError, type PlaceDetails } from "@/lib/places-shared";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
@@ -216,7 +216,8 @@ function emptyDraft(kind: "pickup" | "delivery"): StopDraft {
 }
 
 function stopPrivateNotes(draft: StopDraft, location: Location | null | undefined): string {
-  const schedule = draft.scheduleType === "fcfs" ? "FCFS" : draft.scheduleType === "appointment" ? "APPT" : "";
+  const raw = draft.scheduleType || location?.scheduling_type || "";
+  const schedule = raw === "fcfs" ? "FCFS" : raw === "appointment" ? "APPT" : "";
   return [schedule, location?.hours?.trim(), location?.scheduling_notes?.trim(), draft.instructions.trim()]
     .filter(Boolean)
     .join(" · ");
@@ -243,7 +244,7 @@ function applyPlaceToDraft(draft: StopDraft, place: PlaceDetails): StopDraft {
     name: place.name || draft.name,
     street: place.street || draft.street,
     city: place.city || draft.city,
-    state: place.state || draft.state,
+    state: applyNyBoroughState(place.city || draft.city, place.state || draft.state),
     zip: place.zip || draft.zip,
   };
 }
@@ -286,6 +287,8 @@ function StopDialog({
     setSaving(true);
     setError(null);
     try {
+      const boroughError = nyBoroughStateError(draft.city, draft.state);
+      if (boroughError && !draft.locationId) throw new Error(boroughError);
       formData.set("kind", draft.kind);
       if (mode === "add") {
         formData.set("load_id", String(loadId));
@@ -387,6 +390,11 @@ function StopDialog({
                 ))}
               </select>
             </div>
+            {nyBoroughStateError(draft.city, draft.state) ? (
+              <p className="sm:col-span-2 text-sm text-rose-700" data-ny-borough-warning="">
+                {nyBoroughStateError(draft.city, draft.state)}
+              </p>
+            ) : null}
             <div className="field">
               <label htmlFor="stop-zip">ZIP</label>
               <input
@@ -579,7 +587,6 @@ function StopGridBlock({
   const pickup = draft.kind === "pickup";
   const windowLabel = formatStopWindow(stop.window_start, stop.window_end, draft.scheduleType || stop.schedule_type);
   const appt = isAppointmentSchedule(draft.scheduleType || stop.schedule_type);
-  const address = formatLocationAddress(draft);
   const location =
     locations.find((item) => String(item.id) === draft.locationId) ??
     matchLocationForStop(locations, {
@@ -588,6 +595,7 @@ function StopGridBlock({
       city: draft.city,
       state: draft.state,
     });
+  const address = formatStopRowAddress(draft, location) || formatLocationAddress(draft);
   const rules = locationRuleLabels(location);
   const notes = stopPrivateNotes(draft, location);
   const typeLabel = stopTypeLabel(draft.kind, typeNumber);
@@ -696,7 +704,7 @@ function StopGridBlock({
         </td>
         <td className="stop-front-cargo">{stop.cargo || "—"}</td>
         <td className="stop-front-ref">{draft.reference || "—"}</td>
-        <td className="whitespace-nowrap">
+        <td className="stop-front-actions">
           <button type="button" className="btn btn-ghost px-2 py-1 text-xs" onClick={onEdit}>
             Edit
           </button>

@@ -84,3 +84,8 @@ export function stopTypeLabel(kind: string, typeNumber: number): string {
   const name = kind === "delivery" ? "Delivery" : "Pickup";
   return `${name} ${typeNumber > 0 ? typeNumber : 1}`;
 }
+
+export function stopMapMarkerText(kind: string, typeNumber: number): string {
+  const n = typeNumber > 0 ? typeNumber : 1;
+  return `${kind === "delivery" ? "D" : "P"}${n}`;
+}

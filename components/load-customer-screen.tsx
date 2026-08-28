@@ -30,6 +30,8 @@ export function LoadCustomerScreen({
   const customerMatches = customers.filter((customer) =>
     customer.name.toLowerCase().includes(customerQuery.trim().toLowerCase()),
   );
+  const customerField = customerQuery || selectedCustomer?.name || "";
+  const showMatches = Boolean(customerQuery.trim());
 
   return (
     <section data-load-tab="customer" className={card ? "card overflow-hidden" : undefined}>
@@ -40,34 +42,49 @@ export function LoadCustomerScreen({
       ) : null}
       <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
       <input type="hidden" name="customer_name" value={customerId ? "" : createName} />
-      <div className="field md:col-span-2">
+      <input type="hidden" id="customer_id" name="customer_id" value={customerId} required={!createName} />
+      <div className="field md:col-span-2" data-customer-picker="">
         <label htmlFor="customer_search">Customer</label>
         <input
           id="customer_search"
-          value={customerQuery}
-          onChange={(event) => setCustomerQuery(event.target.value)}
-          placeholder="Search existing customers"
-        />
-        <select
-          id="customer_id"
-          name="customer_id"
-          required={!createName}
-          value={customerId}
-          data-first-assign={load?.customer_id ? undefined : ""}
+          value={customerField}
           onChange={(event) => {
             const next = event.target.value;
-            setCustomerId(next);
-            if (next) setCreateName("");
-            if (load) handleAssign(load.customer_id, next, "customer_id", event);
+            setCustomerQuery(next);
+            if (!next) {
+              setCustomerId("");
+            } else if (selectedCustomer && next !== selectedCustomer.name) {
+              setCustomerId("");
+            }
           }}
-        >
-          <option value="">{createName ? `Create “${createName}”` : "Select customer"}</option>
-          {(customerQuery.trim() ? customerMatches : customers).map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+          placeholder="Search existing customers"
+          autoComplete="off"
+        />
+        {showMatches ? (
+          <ul className="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white" role="listbox">
+            {customerMatches.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-slate-500">No match</li>
+            ) : (
+              customerMatches.map((customer) => (
+                <li key={customer.id}>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    onClick={() => {
+                      const next = String(customer.id);
+                      setCustomerId(next);
+                      setCustomerQuery("");
+                      setCreateName("");
+                      if (load) handleAssign(load.customer_id, next, "customer_id");
+                    }}
+                  >
+                    {customer.name}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="new_customer_name">Or create customer</label>
@@ -77,7 +94,10 @@ export function LoadCustomerScreen({
             value={createName}
             onChange={(event) => {
               setCreateName(event.target.value);
-              if (event.target.value) setCustomerId("");
+              if (event.target.value) {
+                setCustomerId("");
+                setCustomerQuery("");
+              }
             }}
             placeholder="New customer name"
           />
@@ -94,11 +114,6 @@ export function LoadCustomerScreen({
           </button>
         </div>
       </div>
-      {selectedCustomer ? (
-        <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-          <div className="font-medium">{selectedCustomer.name}</div>
-        </div>
-      ) : null}
       <div className="field">
         <label htmlFor="contact_name">Contact name</label>
         <input id="contact_name" name="contact_name" defaultValue={load?.contact_name ?? ""} />

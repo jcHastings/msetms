@@ -159,6 +159,27 @@ button {
   line-height: 1.2;
 }
 
+.table-grid-board .board-edit-head,
+.table-grid-board .board-edit-cell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-width: 9.5rem;
+  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
+}
+
+.table-grid-board .board-edit-head {
+  background: #f8fafc;
+}
+
+.table-grid-board .board-edit-cell {
+  background: #fff;
+}
+
+.table-grid tbody tr:hover td.board-edit-cell {
+  background: #f4f8fc;
+}
+
 .table-grid tbody tr:hover td {
   background: #f4f8fc;
 }
@@ -507,6 +528,31 @@ button {
   line-height: 1.2;
 }
 
+.table-grid-stops .stop-front-actions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-width: 8rem;
+  white-space: nowrap;
+  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
+}
+
+.table-grid tbody tr.stop-row-pickup td.stop-front-actions {
+  background: #ecfdf5;
+}
+
+.table-grid tbody tr.stop-row-pickup:hover td.stop-front-actions {
+  background: #d1fae5;
+}
+
+.table-grid tbody tr.stop-row-delivery td.stop-front-actions {
+  background: #fff1f2;
+}
+
+.table-grid tbody tr.stop-row-delivery:hover td.stop-front-actions {
+  background: #ffe4e6;
+}
+
 .table-grid-stops .stop-time-input {
   width: 10.4rem;
   max-width: 100%;
@@ -590,13 +636,13 @@ button {
 }
 
 .load-actions {
-  background: #e4e6d4;
-  border: 1px solid #8a9a4a;
+  background: #f4f6e8;
+  border: 1px solid #0b1f3a;
   border-radius: 0.75rem;
 }
 
 .load-actions-label {
-  color: #3f6212;
+  color: #0b1f3a;
 }
 
 button.btn.load-action-btn,

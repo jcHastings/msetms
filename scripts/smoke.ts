@@ -90,6 +90,11 @@ async function main() {
   assert.match(boardUi, /loadShowsOnDispatchBoard/);
   assert.match(boardUi, /data-dispatch-board/);
   assert.match(boardUi, /table-grid-board/);
+  assert.match(boardUi, /board-edit-cell/);
+  assert.match(boardUi, /Promise\.all\(\[getReeferSnapshots\(\), getSamsaraFleet\(\)\]\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/loading.tsx"), "utf8"), /data-board-loading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-edit-cell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /truncate whitespace-nowrap/);
   assert.match(boardUi, />Tractor</);
   assert.match(boardUi, />Trailer</);
   assert.match(boardUi, />HOS</);
@@ -420,6 +425,9 @@ async function main() {
   assert.match(stopsSource, /stop-front-window/);
   assert.match(stopsSource, /formatStopWindow/);
   assert.match(stopsSource, /formatLocationAddress/);
+  assert.match(stopsSource, /formatStopRowAddress/);
+  assert.match(stopsSource, /stop-front-actions/);
+  assert.match(stopsSource, /nyBoroughStateError/);
   assert.match(stopsSource, /stopTypeNumber/);
   assert.match(stopsSource, /stopTypeLabel/);
   assert.match(stopsSource, /data-stop-kind/);
@@ -486,6 +494,10 @@ async function main() {
   assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
   assert.match(mapCanvasSource, /point\.href/);
   assert.match(mapCanvasSource, /Polyline/);
+  assert.match(mapCanvasSource, /markerText/);
+  assert.match(mapCanvasSource, /gm_authFailure|data-map-off/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /stopTypeLabel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /stopMapMarkerText/);
   const stopsMapUi = fs.readFileSync(path.join(process.cwd(), "components/load-stops-map.tsx"), "utf8");
   assert.match(stopsMapUi, /data-stops-map/);
   assert.match(stopsMapUi, /Map is off/);
@@ -1216,6 +1228,32 @@ async function main() {
     }),
     null,
   );
+  const placesShared = await import("../lib/places-shared");
+  assert.equal(placesShared.nyBoroughStateError("Bronx", "NJ"), "Bronx is in New York. Use NY, not NJ.");
+  assert.equal(placesShared.nyBoroughStateError("Brooklyn", "NY"), null);
+  assert.equal(placesShared.nyBoroughStateError("Hastings", "NE"), null);
+  assert.equal(placesShared.applyNyBoroughState("Bronx", "NJ"), "NY");
+  const locFormat = await import("../lib/locations");
+  assert.equal(
+    locFormat.formatLoadLaneFromStops(
+      [
+        { kind: "pickup", city: "Hastings", state: "NE" },
+        { kind: "delivery", city: "Brooklyn", state: "NY" },
+        { kind: "delivery", city: "Bayonne", state: "NJ" },
+      ],
+    ),
+    "Hastings, NE → Bayonne, NJ",
+  );
+  assert.equal(
+    locFormat.formatStopRowAddress(
+      { street: "", city: "Hastings", state: "NE", zip: "68901" },
+      { street: "4100 Industrial Rd", city: "Hastings", state: "NE", zip: "68901" },
+    ),
+    "4100 Industrial Rd, Hastings, NE 68901",
+  );
+  const { stopMapMarkerText } = await import("../lib/stops-shared");
+  assert.equal(stopMapMarkerText("pickup", 1), "P1");
+  assert.equal(stopMapMarkerText("delivery", 2), "D2");
   const savedMapsKey = process.env.GOOGLE_MAPS_API_KEY;
   const savedPlacesKey = process.env.GOOGLE_PLACES_API_KEY;
   const { searchPlaces } = await import("../lib/places");
@@ -6620,6 +6658,8 @@ Continuous reefer. Two load locks.
   assert.equal(loadStops.stopTypeNumber(typeOrder, 4), 3);
   assert.equal(loadStops.stopTypeLabel("delivery", 1), "Delivery 1");
   assert.equal(loadStops.stopTypeLabel("pickup", 2), "Pickup 2");
+  assert.equal(loadStops.stopMapMarkerText("pickup", 1), "P1");
+  assert.equal(loadStops.stopMapMarkerText("delivery", 5), "D5");
   const defaultStops = loadStops.ensureDefaultStops(clonedId);
   assert.ok(defaultStops.length >= 2);
   loadStops.addStop(clonedId, {
@@ -6958,6 +6998,8 @@ Continuous reefer. Two load locks.
   const stopOnlyPoints = await mapLib.buildLoadMapPoints(mapLoadId);
   assert.ok(stopOnlyPoints.some((point) => point.kind === "pickup" && point.lat === 36.1627));
   assert.ok(stopOnlyPoints.some((point) => point.kind === "delivery" && point.lat === 32.7767));
+  assert.ok(stopOnlyPoints.some((point) => point.kind === "pickup" && point.markerText === "P1" && /Pickup 1/.test(point.label)));
+  assert.ok(stopOnlyPoints.some((point) => point.kind === "delivery" && point.markerText === "D1" && /Delivery 1/.test(point.label)));
   assert.equal(stopOnlyPoints.some((point) => point.kind === "truck"), false);
   const mapTruckId = queries.createTruck({
     unit_number: "MAP-77",
@@ -9972,7 +10014,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(componentCopy, /subtitle="[^"]+"/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"),
-    /subtitle=\{\`\$\{load\.origin\} → \$\{load\.destination\}\`\}/,
+    /formatLoadLaneFromStops/,
   );
   const lectureCopy = /Official IFTA|Official truck IFTA|Credentials stay|Keys stay|<code>\.env|in \.env|to \.env|Ascend driver|Ascend load|Ascend\/legacy|JC.?s Ascend|first-class|Never lumped|append-only|not a live|demo-safe|SAMSARA_API_TOKEN|ORBCOMM_\*|QBO_CLIENT_ID|GOOGLE_MAPS_API_KEY|gpt-4o-mini|sample data off|Trucks from Samsara|Internal handoff|Never printed|Prints on the driver|Prints on confirmation|Prints on customer|Customer invoices only|Realm and refresh tokens|Set \(hidden\)|Demo GPS|Demo invoice preview|Samsara miles for this load|Estimate for this load|Match a driver photo|HOS stays on this board|token is set|default MS Express mark|Same list as the Users tab|Driver PIN is unchanged|Driver PIN login is not affected|office PC|Not Samsara IFTA|not for tax filing|QBO invoices customer|Review pairings|app keys set|demo mode, no secrets|Product name stays|CDL endorsements only|Do not invent one|Pick one so the row|Imported fuel and stored load miles|This load only|Check calls and stored GPS|Customer invoice\.|Windows does not drop|What's on fire|on fire for the next|Fuel card file|Company drivers and|Four first-class|Upload a spreadsheet|Upload a fuel file/i;
   assert.doesNotMatch(pageSubtitles, lectureCopy);
@@ -10618,6 +10660,12 @@ Continuous reefer. Two load locks.
   assert.match(newLoadPage, /RateConImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /Assign & Dispatch/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /billedCustomerRate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/copy-trip-number.tsx"), "utf8"), /btn-secondary/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-customer-picker/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /<select[\s\S]*customer_id/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/places-shared.ts"), "utf8"), /nyBoroughStateError/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /assertNyBoroughState/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Imported fuel and stored load miles/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /maps\.google\.com/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /LoadTiedFuelReceipts/);

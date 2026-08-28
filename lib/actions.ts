@@ -61,6 +61,7 @@ import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
+import { assertNyBoroughState } from "./places-shared";
 import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
 import {
@@ -1044,11 +1045,14 @@ function parseSchedulingType(value: FormDataEntryValue | null): SchedulingType {
 }
 
 function parseLocationInput(formData: FormData) {
+  const city = requiredString(formData.get("city"), "City");
+  const state = requiredString(formData.get("state"), "State").toUpperCase();
+  assertNyBoroughState(city, state);
   return {
     name: requiredString(formData.get("name"), "Location name"),
     street: String(formData.get("street") ?? "").trim(),
-    city: requiredString(formData.get("city"), "City"),
-    state: requiredString(formData.get("state"), "State").toUpperCase(),
+    city,
+    state,
     zip: String(formData.get("zip") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim(),
     notes: String(formData.get("notes") ?? "").trim(),

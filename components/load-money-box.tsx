@@ -1,5 +1,5 @@
 import { formatMoney } from "@/lib/format";
-import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
+import { billedCustomerRate, customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { driverFacingPay } from "@/lib/settlement";
 import type { LoadView } from "@/lib/types";
 
@@ -10,6 +10,7 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
     .reduce((sum, item) => sum + (item.total ?? 0), 0);
   const driverItems = driverPayItems(load.id).reduce((sum, item) => sum + (item.total ?? 0), 0);
   const driverPay = driverFacingPay(load) ?? (driverItems > 0 ? driverItems : null);
+  const customerRate = billedCustomerRate(load);
 
   return (
     <section className="card mb-4 p-5" data-money-box="">
@@ -27,7 +28,7 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
         ) : null}
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <MoneyStat label="Customer rate" value={formatMoney(load.rate)} />
+        <MoneyStat label="Customer rate" value={formatMoney(customerRate)} />
         <MoneyStat label="Accessorials" value={formatMoney(accessorials)} />
         <MoneyStat label="Driver pay" value={driverPay != null ? formatMoney(driverPay) : "—"} />
       </div>
