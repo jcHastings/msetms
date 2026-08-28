@@ -9715,8 +9715,9 @@ Continuous reefer. Two load locks.
     driver_id: null,
   });
   getDb()
-    .prepare("UPDATE loads SET route_state_miles = ?, pickup_start = ?, delivery_end = ? WHERE id = ?")
+    .prepare("UPDATE loads SET route_miles = ?, route_source = 'manual', route_state_miles = ?, pickup_start = ?, delivery_end = ? WHERE id = ?")
     .run(
+      120,
       serializeRouteStateMiles([
         { state: "NE", name: "Nebraska", miles: 40 },
         { state: "IA", name: "Iowa", miles: 80 },
