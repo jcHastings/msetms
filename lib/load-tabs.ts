@@ -54,6 +54,11 @@ export function isSaveTab(tab: LoadTab): boolean {
   return isFormTab(tab) || tab === "stops" || tab === "financials";
 }
 
+/** Stops map and live GPS/HOS only render after a server paint for that tab. */
+export function tabNeedsServerPaint(tab: LoadTab): boolean {
+  return tab === "stops" || tab === "log";
+}
+
 export function loadFormTabsForRole(role: string) {
   return LOAD_TABS.filter((tab) => tab.value !== "financials" || canViewLoadFinancials(role));
 }

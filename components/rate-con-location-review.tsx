@@ -6,6 +6,7 @@ import { LocationPicker } from "@/components/location-picker";
 import { saveRateConLocationAction } from "@/lib/actions";
 import { formatLocationAddress, US_STATES } from "@/lib/locations";
 import {
+  customerRefFromRateCon,
   formatParsedStop,
   parsedStopHasDetails,
   type ParsedRateCon,
@@ -38,6 +39,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
     formKey: `${shipperId}-${consigneeId}`,
     defaults: {
       ...parsed,
+      customer_reference: customerRefFromRateCon(parsed),
       shipper_location_id: shipperId ? Number(shipperId) : null,
       consignee_location_id: consigneeId ? Number(consigneeId) : null,
     },

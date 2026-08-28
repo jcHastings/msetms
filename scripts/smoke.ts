@@ -280,6 +280,8 @@ async function main() {
   assert.match(workspaceSource, /openMenu === label/);
   assert.match(workspaceSource, /setOpenMenu\(label\)/);
   assert.match(workspaceSource, /setOpenMenu\(null\)/);
+  assert.match(workspaceSource, /tabNeedsServerPaint/);
+  assert.match(workspaceSource, /history\.replaceState/);
   assert.doesNotMatch(workspaceSource, /<details/);
   assert.doesNotMatch(workspaceSource, /Delete This Load/);
   const loadFormSource = fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8");
@@ -535,7 +537,15 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/routing-shared.ts"), "utf8"), /officialEmptyMiles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /OverlayOpenLink/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /Opening/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Encoding.*identity/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /no-transform/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8"), /defaultMaxListeners/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /customerRefFromRateCon/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /officialEmptyMiles/);
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
@@ -1985,6 +1995,50 @@ async function main() {
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
   assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
+  assert.equal(
+    loadMail.customerFacingLoadNumber({
+      load_number: "MSE-1055",
+      customer_reference: "45090",
+      po_number: "",
+      reference_number: "45090",
+    }),
+    "45090",
+  );
+  assert.equal(
+    loadMail.customerFacingLoadNumber({
+      load_number: "MSE-1055",
+      customer_reference: "",
+      po_number: "",
+      reference_number: "",
+    }),
+    "",
+  );
+  const customerByRef = loadMail.composeCustomerUpdateEmail({
+    loadNumber: "45090",
+    customerRef: "45090",
+    status: "In transit",
+    truck: "112",
+    trailer: "TR-12",
+    lastLocation: "Memphis, TN",
+    eta: "",
+    nextStop: "",
+  });
+  assert.match(customerByRef.subject, /45090/);
+  assert.match(customerByRef.text, /Load 45090/);
+  assert.doesNotMatch(customerByRef.subject, /MSE-/);
+  assert.doesNotMatch(customerByRef.text, /MSE-/);
+  const customerNoRef = loadMail.composeCustomerUpdateEmail({
+    loadNumber: "",
+    customerRef: "",
+    status: "In transit",
+    truck: "112",
+    trailer: "",
+    lastLocation: "Memphis, TN",
+    eta: "",
+    nextStop: "",
+  });
+  assert.equal(customerNoRef.subject, "Tracking update");
+  assert.doesNotMatch(customerNoRef.text, /MSE-|1006150/);
   const mailDriverId = queries.createDriver({
     name: "Pat Mail",
     phone: "555-0188",
@@ -2128,6 +2182,9 @@ async function main() {
     assert.match(input.text, /Do not reply/);
     assert.match(input.text, /not monitored/);
     assert.match(input.text, /Truck|Last location/);
+    assert.match(input.subject, /PO-MAIL|RC-MAIL/);
+    assert.doesNotMatch(input.subject, /MSE-/);
+    assert.doesNotMatch(input.text, /Load MSE-/);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
   for (const key of mailEnvKeys) {
@@ -2202,6 +2259,7 @@ Send bills to billing@msloads.com
   const ascend = parseRateConText(ascendText);
   assert.equal(ascend.load_number_hint, "45090");
   assert.equal(ascend.reference_number, "45090");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(ascend), "45090");
   assert.equal(ascend.weight, 42500);
   assert.notEqual(ascend.weight, 45090);
   assert.match(ascend.commodity, /FROZEN BEEF/i);
@@ -8214,7 +8272,8 @@ Continuous reefer. Two load locks.
   assert.match(invoicePanel, /\/api\/attachments\/\$\{attachmentId\}\?download=1/);
   assert.match(invoicePanel, /setTab\("financials"\)/);
   assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /Content-Disposition.*attachment/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /pdfResponseHeaders/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Disposition.*attachment/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8"), /createObjectURL/);
   assert.match(renderInvoicesCsv([

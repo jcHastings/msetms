@@ -19,7 +19,7 @@ import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
 import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
-import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
+import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, tabNeedsServerPaint, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
   canLogCheckCall,
@@ -108,9 +108,12 @@ export function LoadWorkspace({
       const url = new URL(window.location.href);
       url.searchParams.set("tab", next);
       url.hash = hash ? hash.replace(/^#/, "") : "";
-      router.replace(`${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`, {
-        scroll: false,
-      });
+      const href = `${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`;
+      if (tabNeedsServerPaint(next)) {
+        router.replace(href, { scroll: false });
+      } else {
+        window.history.replaceState(window.history.state, "", href);
+      }
       if (hash) {
         window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
       }
@@ -561,7 +564,11 @@ function ActionMenu({
       onMouseEnter={() => setOpenMenu(label)}
       onMouseLeave={() => setOpenMenu(null)}
     >
-      <button type="button" className="btn load-action-btn">
+      <button
+        type="button"
+        className="btn load-action-btn"
+        onClick={() => setOpenMenu(open ? null : label)}
+      >
         {label}
       </button>
       {open ? <div className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg">{children}</div> : null}

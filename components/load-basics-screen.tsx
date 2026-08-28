@@ -25,6 +25,8 @@ export type LoadFormDefaults = Partial<{
   special_instructions: string;
   appointment_notes: string;
   reference_number: string;
+  customer_reference: string;
+  load_number_hint: string;
   po_number: string;
   reefer_setpoint_f: number | null;
   reefer_mode: string;

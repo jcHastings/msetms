@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { LoadOverlayFallback } from "@/components/load-overlay-fallback";
 
 export function OverlayOpenLink({
   href,
@@ -17,6 +19,10 @@ export function OverlayOpenLink({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <>
@@ -36,11 +42,9 @@ export function OverlayOpenLink({
       >
         {children}
       </Link>
-      {pending ? (
-        <div className="load-overlay-backdrop" role="status" aria-live="polite" aria-label="Opening load">
-          <div className="load-overlay-panel px-5 py-6 text-sm text-slate-700">Opening…</div>
-        </div>
-      ) : null}
+      {pending && mounted
+        ? createPortal(<LoadOverlayFallback label="Opening load" />, document.body)
+        : null}
     </>
   );
 }

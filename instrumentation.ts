@@ -6,4 +6,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
   const { loadLocalEnv } = await import("./lib/env");
   loadLocalEnv({ force: true });
+  const { EventEmitter } = await import("node:events");
+  if (EventEmitter.defaultMaxListeners < 32) {
+    EventEmitter.defaultMaxListeners = 32;
+  }
 }

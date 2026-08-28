@@ -1,6 +1,7 @@
+import { Suspense } from "react";
 import { LoadEditor } from "@/components/load-editor";
 
-export async function LoadOverlay({
+export function LoadOverlay({
   loadId,
   returnTo,
   initialTab,
@@ -12,7 +13,9 @@ export async function LoadOverlay({
   return (
     <div className="load-overlay-backdrop" role="dialog" aria-label="Edit load">
       <div className="load-overlay-panel">
-        <LoadEditor loadId={loadId} returnTo={returnTo} variant="overlay" initialTab={initialTab} />
+        <Suspense fallback={<p className="px-5 py-6 text-sm text-slate-700">Opening…</p>}>
+          <LoadEditor loadId={loadId} returnTo={returnTo} variant="overlay" initialTab={initialTab} />
+        </Suspense>
       </div>
     </div>
   );

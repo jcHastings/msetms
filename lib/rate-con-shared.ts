@@ -53,6 +53,13 @@ export function emptyParsedStop(): ParsedStop {
   return { name: "", street: "", city: "", state: "", zip: "", phone: "" };
 }
 
+/** Rate-con "Load #" is the customer's reference, not the TMS MSE number. */
+export function customerRefFromRateCon(
+  parsed: Pick<ParsedRateCon, "load_number_hint" | "reference_number">,
+): string {
+  return (parsed.load_number_hint || parsed.reference_number || "").trim();
+}
+
 export function emptyParsedRateCon(): ParsedRateCon {
   return {
     customer_name: "",

@@ -74,7 +74,7 @@ export async function LoadEditor({
   const requestedTab = parseLoadTab(initialTab);
   const tab = requestedTab === "financials" && !showFinancials ? "basics" : requestedTab;
   const boundAction = updateLoadAction.bind(null, load.id);
-  await ensureDemoIfta(load);
+  if (tab === "log") await ensureDemoIfta(load);
   const ifta = getIftaPanel(load);
   const attachments = listAttachments(load.id);
   const checklist = requiredDocumentsForLoad(load);
@@ -89,8 +89,8 @@ export async function LoadEditor({
   const claims = listClaims(load.id);
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
   const relays = listRelays(load.id);
-  const tractorLocation = await getLocationForLoad(load.id);
-  const driverHos = await getHosForLoad(load.id);
+  const tractorLocation = tab === "log" ? await getLocationForLoad(load.id) : null;
+  const driverHos = tab === "log" ? await getHosForLoad(load.id) : null;
   const stops = ensureDefaultStops(load.id);
   applyGeofenceArrivals(load.id);
   scheduleLoadOpenWork(load.id);

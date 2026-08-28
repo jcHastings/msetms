@@ -10,6 +10,7 @@ function fileResponse(buffer: Buffer, filename: string, mimeType: string, downlo
       "Content-Type": mimeType || "application/octet-stream",
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${sanitizeName(filename)}"`,
       "Content-Encoding": "identity",
+      "Cache-Control": "private, no-transform",
     },
   });
 }

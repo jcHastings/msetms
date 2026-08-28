@@ -107,6 +107,19 @@ export function composeDriverLoadEmail(input: {
   };
 }
 
+export function customerFacingLoadNumber(load: {
+  load_number: string;
+  customer_reference?: string | null;
+  po_number?: string | null;
+  reference_number?: string | null;
+}): string {
+  const internal = load.load_number.trim();
+  const picks = [load.customer_reference, load.po_number, load.reference_number]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  return picks.find((value) => value !== internal) || picks.find((value) => value === internal) || "";
+}
+
 export function composeCustomerUpdateEmail(input: {
   loadNumber: string;
   customerRef: string;
@@ -118,9 +131,11 @@ export function composeCustomerUpdateEmail(input: {
   nextStop: string;
   officePhone?: string;
 }): CustomerUpdateMailDraft {
+  const shown = input.loadNumber.trim();
+  const extraRef = input.customerRef.trim();
   const lines = [
-    `Load ${input.loadNumber}`,
-    input.customerRef ? `Your ref ${input.customerRef}` : "",
+    shown ? `Load ${shown}` : "Tracking update",
+    extraRef && extraRef !== shown ? `Your ref ${extraRef}` : "",
     input.status ? `Status ${input.status}` : "",
     input.truck ? `Truck ${input.truck}` : "",
     input.trailer ? `Trailer ${input.trailer}` : "",
@@ -134,7 +149,7 @@ export function composeCustomerUpdateEmail(input: {
   ].filter(Boolean);
   return {
     to: "",
-    subject: `Load ${input.loadNumber} — tracking update`,
+    subject: shown ? `Load ${shown} — tracking update` : "Tracking update",
     text: lines.join("\n").trim() + "\n",
     replyTo: MAIL_NOREPLY,
   };
@@ -176,9 +191,10 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
           guide.calculatedAt ? ` · ${formatMdYDisplay(guide.calculatedAt)}` : ""
         }`
       : "";
+  const shown = customerFacingLoadNumber(load);
   const draft = composeCustomerUpdateEmail({
-    loadNumber: load.load_number,
-    customerRef: (load.customer_reference || load.po_number || load.reference_number || "").trim(),
+    loadNumber: shown,
+    customerRef: shown,
     status: labelForLoadStatus(load.status),
     truck: (load.truck_unit || "").trim(),
     trailer: (load.trailer_unit || load.trailer_number || "").trim(),

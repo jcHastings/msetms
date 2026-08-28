@@ -6,7 +6,7 @@ import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
-import type { ParsedRateCon } from "@/lib/rate-con-shared";
+import { customerRefFromRateCon, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
@@ -181,6 +181,7 @@ function RateConAppliedLoad({
           special_instructions: parsed.special_instructions || load.special_instructions,
           appointment_notes: parsed.appointment_notes || load.appointment_notes,
           reference_number: parsed.reference_number || load.reference_number,
+          customer_reference: customerRefFromRateCon(parsed) || load.customer_reference,
           po_number: parsed.po_number || load.po_number,
           reefer_setpoint_f: parsed.reefer_setpoint_f ?? load.reefer_setpoint_f,
           shipper_location_id: book.defaults.shipper_location_id ?? load.shipper_location_id,
