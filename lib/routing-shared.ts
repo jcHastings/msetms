@@ -109,7 +109,7 @@ export function expectedRouteLegCount(stopCount: number | null | undefined): num
 
 export function minDrivingPolylinePoints(stopCount?: number | null): number {
   const stops = stopCount != null && stopCount > 0 ? stopCount : 2;
-  return Math.max(8, stops * 3);
+  return Math.max(20, stops * 6);
 }
 
 /** True only for a dense Directions overview path, not a stop-to-stop air line. */

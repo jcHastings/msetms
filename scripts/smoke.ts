@@ -241,6 +241,8 @@ async function main() {
   assert.match(shellSource, /w-60/);
   assert.match(shellSource, /overflow-x-hidden/);
   assert.doesNotMatch(shellSource, /w-\[4\.75rem\]/);
+  assert.doesNotMatch(shellSource, /Set up 2-step/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /fixed right-6 bottom-6/);
   assert.match(navSource, /whitespace-nowrap/);
   assert.match(navSource, /\+ New/);
   assert.match(workspaceSource, /Load Log/);
@@ -5446,9 +5448,9 @@ Continuous reefer. Two load locks.
     assert.match(url.pathname, /\/maps\/api\/directions\//);
     assert.doesNotMatch(url.hostname, /maps\.google\.com/);
     const points = routing.encodePolyline(
-      Array.from({ length: 12 }, (_, index) => ({
-        lat: 40.71 + index * 0.1,
-        lng: -74.0 - index * 1.2,
+      Array.from({ length: 24 }, (_, index) => ({
+        lat: 40.71 + index * 0.05,
+        lng: -74.0 - index * 0.6,
       })),
     );
     return new Response(
@@ -5484,9 +5486,9 @@ Continuous reefer. Two load locks.
     null,
   );
   const drivingPoly = routing.encodePolyline(
-    Array.from({ length: 12 }, (_, index) => ({
-      lat: 40.71 + index * 0.1,
-      lng: -74.0 - index * 1.2,
+    Array.from({ length: 24 }, (_, index) => ({
+      lat: 40.71 + index * 0.05,
+      lng: -74.0 - index * 0.6,
     })),
   );
   const airStopPoly = routing.encodePolyline([

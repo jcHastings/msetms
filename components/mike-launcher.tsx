@@ -16,19 +16,16 @@ export function MikeLauncher({
   return (
     <>
       <div className="mb-4 flex justify-end">
-        <button className="btn btn-primary" type="button" onClick={() => setOpen(true)}>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+        >
           Mike
         </button>
       </div>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn btn-primary fixed right-6 bottom-6 z-40 shadow-lg"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-      >
-        Mike
-      </button>
       {open ? (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" role="presentation">
           <button

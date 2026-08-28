@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
@@ -12,7 +11,6 @@ import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
 export function AppShell({
   children,
   dispatcher,
-  requireTwoFactor = false,
   mikeConfigured = false,
   mikeMessages = [],
 }: {
@@ -22,8 +20,6 @@ export function AppShell({
   mikeConfigured?: boolean;
   mikeMessages?: MikeMessage[];
 }) {
-  const pathname = usePathname();
-  const showSetupPrompt = !dispatcher.totp_enrolled && !requireTwoFactor && pathname !== "/settings/security";
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-x-hidden" data-desk-chrome="">
@@ -50,13 +46,6 @@ export function AppShell({
           <div data-desk-chrome="">
           <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
           </div>
-          {showSetupPrompt ? (
-            <div className="mb-4 flex flex-wrap items-center justify-end gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" data-desk-chrome="">
-              <Link href="/settings/security" className="btn btn-secondary">
-                Set up 2-step
-              </Link>
-            </div>
-          ) : null}
           {children}
         </div>
       </div>
