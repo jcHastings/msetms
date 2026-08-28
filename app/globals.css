@@ -159,6 +159,19 @@ button {
   line-height: 1.2;
 }
 
+.table-grid-board .board-place-cell {
+  max-width: 9.5rem;
+  overflow: hidden;
+}
+
+.board-place,
+.board-place-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+}
+
 .table-grid-board .board-edit-head,
 .table-grid-board .board-edit-cell {
   position: sticky;

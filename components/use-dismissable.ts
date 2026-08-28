@@ -66,6 +66,10 @@ export function useDismissable(
       onCloseRef.current();
       const el = target instanceof Element ? target : target?.parentElement;
       if (el?.closest("[data-row-overflow-trigger], .row-actions-btn")) return;
+      if (isMenuControl(target)) {
+        markOverflowDismissed();
+        return;
+      }
       event.stopPropagation();
       markOverflowDismissed();
       swallowNextClick();

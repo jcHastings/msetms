@@ -47,6 +47,7 @@ export function useLoadAssignPersist(loadId?: number) {
     }
     const formData = new FormData();
     formData.set("stay_on_load", "1");
+    formData.set("skip_route_refresh", "1");
     for (const [key, value] of Object.entries(fields)) formData.set(key, value);
     const result = await updateLoadAction(loadId, null, formData);
     if (result && !result.ok) {

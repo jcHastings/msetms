@@ -210,6 +210,7 @@ async function BoardLiveSection({
                       )}
                     </td>
                     <td
+                      className="board-place-cell"
                       title={samsaraGpsEmptyState({
                         truckAssigned: Boolean(load.truck_id),
                         samsaraVehicleId: load.truck_samsara_id,
@@ -218,7 +219,7 @@ async function BoardLiveSection({
                     >
                       <LocationBadge location={tractorLocation} empty="—" />
                     </td>
-                    <td>
+                    <td className="board-place-cell">
                       <TrailerLocationBadge
                         location={
                           reefers.readings

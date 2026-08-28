@@ -101,33 +101,41 @@ export function LoadWorkspace({
     setPending(state.pending);
   }, []);
 
-  const flushEverydayFields = useCallback(async () => {
-    if (!loadId) return true;
+  const captureEverydayFields = useCallback((): Record<string, string> => {
     const form = document.getElementById(formId);
-    if (!(form instanceof HTMLFormElement)) return true;
-    const fields = everydayFieldsFromForm(form);
-    if (!Object.keys(fields).length) return true;
-    const formData = new FormData();
-    formData.set("stay_on_load", "1");
-    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
-    const result = await updateLoadAction(loadId, null, formData);
-    if (result && !result.ok) {
-      window.alert(result.error);
-      return false;
-    }
-    return true;
-  }, [formId, loadId]);
+    if (!(form instanceof HTMLFormElement)) return {};
+    return everydayFieldsFromForm(form);
+  }, [formId]);
+
+  const persistEverydayFields = useCallback(
+    async (fields: Record<string, string>) => {
+      if (!loadId || !Object.keys(fields).length) return true;
+      const formData = new FormData();
+      formData.set("stay_on_load", "1");
+      formData.set("skip_route_refresh", "1");
+      for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+      const result = await updateLoadAction(loadId, null, formData);
+      if (result && !result.ok) {
+        window.alert(result.error);
+        return false;
+      }
+      return true;
+    },
+    [loadId],
+  );
+
+  const flushEverydayFields = useCallback(async () => {
+    return persistEverydayFields(captureEverydayFields());
+  }, [captureEverydayFields, persistEverydayFields]);
 
   const setTab = useCallback(
     (next: LoadTab, hash?: string) => {
-      void (async () => {
       if (tab !== next) {
-        const saved = await flushEverydayFields();
-        if (!saved) return;
         if (dirty && isFormTab(tab)) {
           if (!window.confirm("You have unsaved changes on this screen. Switch anyway?")) return;
           setDirty(false);
         }
+        void flushEverydayFields();
       }
       setTabState(next);
       const url = new URL(window.location.href);
@@ -142,7 +150,6 @@ export function LoadWorkspace({
       if (hash) {
         window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
       }
-      })();
     },
     [dirty, flushEverydayFields, tab, router],
   );
@@ -166,21 +173,17 @@ export function LoadWorkspace({
   }, [dirty]);
 
   function confirmLeave(href: string) {
-    void (async () => {
-    const saved = await flushEverydayFields();
-    if (!saved) return;
     if (dirty && !window.confirm("You have unsaved load changes. Leave this page anyway?")) return;
+    const fields = captureEverydayFields();
     const embed = new URLSearchParams(window.location.search).get("embed") === "1";
     if (embed && window.parent !== window) {
       window.parent.postMessage({ type: "ms-close-load" }, window.location.origin);
-      return;
-    }
-    if (new URL(window.location.href).searchParams.has("open")) {
+    } else if (new URL(window.location.href).searchParams.has("open")) {
       closeLoadOverlay(href);
-      return;
+    } else {
+      router.push(href);
     }
-    router.push(href);
-    })();
+    void persistEverydayFields(fields);
   }
 
   useEffect(() => {

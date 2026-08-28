@@ -29,9 +29,9 @@ export function LocationBadge({
   const motion = gpsMotionLabel(location.speedMph);
   const title = [location.address, motion, formatDateTime(location.recordedAt)].filter(Boolean).join(" · ");
   return (
-    <div className="whitespace-nowrap text-left text-xs leading-tight" title={title}>
-      <div>{city}</div>
-      {motion ? <div className="text-slate-500">{motion}</div> : null}
+    <div className="board-place text-left text-xs leading-tight" title={title}>
+      <div className="board-place-line">{city}</div>
+      {motion ? <div className="board-place-line text-slate-500">{motion}</div> : null}
     </div>
   );
 }
@@ -42,8 +42,8 @@ export function TrailerLocationBadge({ location }: { location: TrailerLocation |
     shortPlaceLabel(location.address) || coordsLabel(location.latitude, location.longitude) || "—";
   const title = [location.address, formatDateTime(location.recordedAt)].filter(Boolean).join(" · ");
   return (
-    <div className="whitespace-nowrap text-left text-xs leading-tight" title={title}>
-      {city}
+    <div className="board-place text-left text-xs leading-tight" title={title}>
+      <div className="board-place-line">{city}</div>
     </div>
   );
 }

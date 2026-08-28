@@ -491,8 +491,10 @@ export async function updateLoadAction(
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
-      const { refreshLoadRouteQuiet } = await import("./routing");
-      await refreshLoadRouteQuiet(id);
+      if (String(formData.get("skip_route_refresh") ?? "") !== "1") {
+        const { refreshLoadRouteQuiet } = await import("./routing");
+        await refreshLoadRouteQuiet(id);
+      }
       refresh();
       // Existing-load Save must stay on this load/tab. Close is what leaves.
       return { ok: true, id };

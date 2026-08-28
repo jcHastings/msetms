@@ -96,7 +96,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/orbcomm/page.tsx"), "utf8"), /redirect\("\/fleet\/orbcomm"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/loading.tsx"), "utf8"), /data-board-loading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-edit-cell/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /whitespace-nowrap text-left/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /max-w-\[8\.5rem\]/);
   assert.match(boardUi, />Tractor</);
   assert.match(boardUi, />Trailer</);
@@ -313,6 +313,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /claimOverflowMenu/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /swallowNextClick/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /shouldIgnoreRowClick/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /isMenuControl\(target\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/clickable-row.tsx"), "utf8"), /shouldIgnoreRowClick/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /data-row-overflow-menu/);
   assert.match(workspaceSource, /tabNeedsServerPaint/);
@@ -336,6 +337,7 @@ async function main() {
   const actionsSource = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
   assert.match(actionsSource, /redirect\(`\/loads\/\$\{id\}`\)/);
   assert.match(actionsSource, /Existing-load Save must stay on this load/);
+  assert.match(actionsSource, /skip_route_refresh/);
   assert.doesNotMatch(
     actionsSource,
     /redirect\(safeReturnTo\(formData.get\("return_to"\), `\/loads\/\$\{id\}`\)\)/,
@@ -389,10 +391,15 @@ async function main() {
   assert.match(persistHook, /isAssignEdit/);
   assert.match(persistHook, /isLoadAutosaveField/);
   assert.match(persistHook, /isLoadCriticalField/);
+  assert.match(persistHook, /skip_route_refresh/);
   assert.match(persistHook, /updateLoadStatusAction/);
   assert.match(persistHook, /updateLoadTruckStatusAction/);
   assert.doesNotMatch(persistHook, /clearDirty\(\)/);
   assert.match(workspaceSource, /flushEverydayFields/);
+  assert.match(workspaceSource, /skip_route_refresh/);
+  assert.match(workspaceSource, /setTabState\(next\)/);
+  assert.doesNotMatch(workspaceSource, /await flushEverydayFields/);
+  assert.doesNotMatch(workspaceSource, /void \(async \(\) => \{/);
   assert.match(workspaceSource, /data-autosave/);
   const autosaveShared = fs.readFileSync(path.join(process.cwd(), "lib/load-autosave-shared.ts"), "utf8");
   assert.match(autosaveShared, /commodity/);
@@ -2293,6 +2300,10 @@ async function main() {
   assert.equal(
     loadMail.mailNoReplyLine("402-302-0097"),
     "Do not reply. This mailbox is not monitored. Call the office at 402-302-0097 if you need further assistance.",
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"),
+    /if you need something/,
   );
   assert.doesNotMatch(customerDraft.text, /275 Blair|600 E 39th|MSE-/);
   const deliveredDraft = loadMail.composeCustomerUpdateEmail({
@@ -10383,6 +10394,12 @@ Continuous reefer. Two load locks.
   assert.equal(shortPlaceLabel("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
   assert.equal(shortPlaceLabel("Dakota City, NE"), "Dakota City, NE");
   assert.equal(shortPlaceLabel("Holcomb, KS"), "Holcomb, KS");
+  assert.doesNotMatch(shortPlaceLabel("Holcomb, KS"), /LCOMB/);
+  assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-place-line/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /text-overflow: ellipsis/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /board-place-cell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   const { criteriaFromSearchParams } = await import("../lib/search");
   assert.equal(criteriaFromSearchParams({ q: "MSE-1055" }).q, "MSE-1055");
   assert.equal(criteriaFromSearchParams({ q: "  " }).q, "");
