@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
@@ -53,7 +54,7 @@ import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
-import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind } from "@/lib/types";
+import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind, type LoadView } from "@/lib/types";
 
 export async function LoadEditor({
   loadId,
@@ -74,8 +75,6 @@ export async function LoadEditor({
   const requestedTab = parseLoadTab(initialTab);
   const tab = requestedTab === "financials" && !showFinancials ? "basics" : requestedTab;
   const boundAction = updateLoadAction.bind(null, load.id);
-  if (tab === "log") await ensureDemoIfta(load);
-  const ifta = getIftaPanel(load);
   const attachments = listAttachments(load.id);
   const checklist = requiredDocumentsForLoad(load);
   const formSettings = loadFormSettings();
@@ -89,8 +88,6 @@ export async function LoadEditor({
   const claims = listClaims(load.id);
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
   const relays = listRelays(load.id);
-  const tractorLocation = tab === "log" ? await getLocationForLoad(load.id) : null;
-  const driverHos = tab === "log" ? await getHosForLoad(load.id) : null;
   const stops = ensureDefaultStops(load.id);
   scheduleLoadOpenWork(load.id);
   const routed = getLoad(load.id) ?? load;
@@ -209,9 +206,9 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
-          {tab === "stops" ? (
-            <>
-          <LoadStopsMap loadId={load.id} />
+          <Suspense fallback={<section className="card mb-4 px-5 py-10 text-sm text-slate-500">Opening route…</section>}>
+            <LoadStopsMap loadId={load.id} />
+          </Suspense>
           <LoadStopsPanel
             loadId={load.id}
             stops={stops}
@@ -226,10 +223,6 @@ export async function LoadEditor({
             emptyLane={routed.empty_from && routed.empty_to ? `${routed.empty_from} → ${routed.empty_to}` : ""}
             emptyStates={emptyStateMilesFromLoad(routed)}
           />
-            </>
-          ) : (
-            <p className="px-5 py-6 text-sm text-slate-500">Opening stops…</p>
-          )}
         </LoadTabPanel>
 
         <LoadTabPanel when="financials">
@@ -276,69 +269,14 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="log">
-          {tab === "log" ? (
           <div>
-          <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
-              <div className="mt-1">
-                <LocationBadge
-                  location={tractorLocation}
-                  empty={samsaraGpsEmptyState({
-                    truckAssigned: Boolean(load.truck_id),
-                    samsaraVehicleId: load.truck_samsara_id,
-                    location: tractorLocation,
-                  })}
-                />
-              </div>
-            </div>
-            <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
-              <div className="mt-1">
-                <HosBadge
-                  hos={driverHos}
-                  empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
-                />
-              </div>
-            </div>
-            <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trailer (Orbcomm)</div>
-              <div className="mt-1">
-                <TrailerLocationBadge location={await getTrailerLocationForLoad(load.id)} />
-              </div>
-            </div>
-            <div className="card p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (Orbcomm)</div>
-              <div className="mt-1">
-                <ReeferBadge
-                  setpoint={load.reefer_setpoint_f}
-                  mode={load.reefer_mode || (load.reefer_setpoint_f != null ? "continuous" : "")}
-                  reading={await getLatestReeferForLoad(load.id)}
-                />
-              </div>
-            </div>
-          </div>
-          {canViewIfta(role) &&
-          (load.status === "in_transit" ||
-            load.status === "picked_up" ||
-            load.status === "at_delivery" ||
-            load.status === "unloading" ||
-            load.status === "delivered" ||
-            load.status === "completed" ||
-            ifta.report) ? (
-            <IftaPanel
-              loadId={load.id}
-              report={ifta.report}
-              canRefresh={ifta.canRefresh}
-            />
-          ) : null}
+          <Suspense fallback={<p className="px-5 py-6 text-sm text-slate-500">Opening log…</p>}>
+            <LoadLogLiveCards load={load} role={role} />
+          </Suspense>
           <LoadExtraDetails load={load} claims={claims} />
           <LoadTrackingPanel loadId={load.id} />
           <LoadAuditSection loadId={load.id} />
           </div>
-          ) : (
-            <p className="px-5 py-6 text-sm text-slate-500">Opening log…</p>
-          )}
         </LoadTabPanel>
 
         <LoadTabPanel when="docs">
@@ -386,5 +324,66 @@ export async function LoadEditor({
         </LoadTabPanel>
       </LoadWorkspace>
     </div>
+  );
+}
+
+async function LoadLogLiveCards({ load, role }: { load: LoadView; role: string }) {
+  await ensureDemoIfta(load);
+  const ifta = getIftaPanel(load);
+  const tractorLocation = await getLocationForLoad(load.id);
+  const driverHos = await getHosForLoad(load.id);
+  return (
+    <>
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
+          <div className="mt-1">
+            <LocationBadge
+              location={tractorLocation}
+              empty={samsaraGpsEmptyState({
+                truckAssigned: Boolean(load.truck_id),
+                samsaraVehicleId: load.truck_samsara_id,
+                location: tractorLocation,
+              })}
+            />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Driver HOS (Samsara)</div>
+          <div className="mt-1">
+            <HosBadge
+              hos={driverHos}
+              empty={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+            />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trailer (Orbcomm)</div>
+          <div className="mt-1">
+            <TrailerLocationBadge location={await getTrailerLocationForLoad(load.id)} />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reefer (Orbcomm)</div>
+          <div className="mt-1">
+            <ReeferBadge
+              setpoint={load.reefer_setpoint_f}
+              mode={load.reefer_mode || (load.reefer_setpoint_f != null ? "continuous" : "")}
+              reading={await getLatestReeferForLoad(load.id)}
+            />
+          </div>
+        </div>
+      </div>
+      {canViewIfta(role) &&
+      (load.status === "in_transit" ||
+        load.status === "picked_up" ||
+        load.status === "at_delivery" ||
+        load.status === "unloading" ||
+        load.status === "delivered" ||
+        load.status === "completed" ||
+        ifta.report) ? (
+        <IftaPanel loadId={load.id} report={ifta.report} canRefresh={ifta.canRefresh} />
+      ) : null}
+    </>
   );
 }

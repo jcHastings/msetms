@@ -316,8 +316,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/use-dismissable.ts"), "utf8"), /isMenuControl\(target\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/clickable-row.tsx"), "utf8"), /shouldIgnoreRowClick/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /data-row-overflow-menu/);
-  assert.match(workspaceSource, /tabNeedsServerPaint/);
   assert.match(workspaceSource, /history\.replaceState/);
+  assert.doesNotMatch(workspaceSource, /tabNeedsServerPaint/);
+  assert.doesNotMatch(workspaceSource, /router\.replace/);
   assert.doesNotMatch(workspaceSource, /<details/);
   assert.doesNotMatch(workspaceSource, /Delete This Load/);
   const loadFormSource = fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8");
@@ -469,6 +470,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible && !keepMounted\) return null/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /keepMounted/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadLogLiveCards/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Suspense/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Opening stops/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8"), /isSaveTab/);
   const paySource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
   assert.match(paySource, /\+ Add Line Item/);

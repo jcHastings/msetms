@@ -54,9 +54,9 @@ export function isSaveTab(tab: LoadTab): boolean {
   return isFormTab(tab) || tab === "stops" || tab === "financials";
 }
 
-/** Stops map and live GPS/HOS only render after a server paint for that tab. */
-export function tabNeedsServerPaint(tab: LoadTab): boolean {
-  return tab === "stops" || tab === "log";
+/** Kept for older callers. Tab switches stay on the client so the editor does not remount. */
+export function tabNeedsServerPaint(_tab: LoadTab): boolean {
+  return false;
 }
 
 export function loadFormTabsForRole(role: string) {

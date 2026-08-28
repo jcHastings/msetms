@@ -22,7 +22,7 @@ import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
 import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
-import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, tabNeedsServerPaint, type LoadTab } from "@/lib/load-tabs";
+import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
   canLogCheckCall,
@@ -141,17 +141,16 @@ export function LoadWorkspace({
       const url = new URL(window.location.href);
       url.searchParams.set("tab", next);
       url.hash = hash ? hash.replace(/^#/, "") : "";
-      const href = `${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`;
-      if (tabNeedsServerPaint(next)) {
-        router.replace(href, { scroll: false });
-      } else {
-        window.history.replaceState(window.history.state, "", href);
-      }
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`,
+      );
       if (hash) {
         window.setTimeout(() => document.getElementById(hash.replace(/^#/, ""))?.scrollIntoView({ block: "start" }), 0);
       }
     },
-    [dirty, flushEverydayFields, tab, router],
+    [dirty, flushEverydayFields, tab],
   );
 
   useEffect(() => {
