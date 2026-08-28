@@ -10,6 +10,7 @@ export type LoadMapPoint = {
   lng: number;
   detail?: string;
   href?: string;
+  pinColor?: string;
 };
 
 export type LoadTrackingEvent = {

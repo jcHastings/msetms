@@ -119,7 +119,7 @@ export function LoadMapCanvas({
             icon: {
               path: maps.SymbolPath.CIRCLE,
               scale: point.kind === "track" ? 4 : 8,
-              fillColor: MARKER_COLOR[point.kind],
+              fillColor: point.pinColor || MARKER_COLOR[point.kind],
               fillOpacity: 0.95,
               strokeColor: "#ffffff",
               strokeWeight: 1,

@@ -3,11 +3,14 @@ import { canonicalFleetKey } from "./fleet-import-shared";
 import {
   isPlottableCoord,
   motionFromSpeedMph,
+  orbcommReeferPinColor,
   plottableCoord,
+  reeferPinStatusFromSnapshot,
   type FleetMapMissing,
   type FleetMapModel,
   type FleetMapPin,
   type FleetStatusRow,
+  type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getSamsaraFleet } from "./integrations/samsara";
@@ -71,6 +74,62 @@ function addPin(pins: FleetMapPin[], usedIds: Set<number>, pin: FleetMapPin, id:
   if (usedIds.has(id)) return;
   usedIds.add(id);
   pins.push(pin);
+}
+
+function snapshotForTrailer(
+  trailer: Trailer,
+  readings: Awaited<ReturnType<typeof getReeferSnapshots>>["readings"],
+) {
+  return (
+    readings.find(
+      (reading) =>
+        canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.unit_number) ||
+        canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.orbcomm_asset_id),
+    ) ?? latestReeferForTrailer(trailer)
+  );
+}
+
+function reeferStatusFromAny(snapshot: ReturnType<typeof snapshotForTrailer>): OrbcommReeferPinStatus {
+  if (!snapshot) return "unknown";
+  if ("operatingMode" in snapshot) {
+    return reeferPinStatusFromSnapshot({
+      operatingMode: snapshot.operatingMode,
+      powerOn: snapshot.powerOn,
+    });
+  }
+  return reeferPinStatusFromSnapshot({
+    operatingMode: "operating_mode" in snapshot ? snapshot.operating_mode : "",
+    powerOn: "powerOn" in snapshot ? snapshot.powerOn : null,
+  });
+}
+
+function powerLabel(status: OrbcommReeferPinStatus): string {
+  if (status === "running") return "On";
+  if (status === "off") return "Off";
+  if (status === "shutdown") return "Shutdown";
+  return "—";
+}
+
+function orbcommTrailerPin(input: {
+  trailer: Trailer;
+  lat: number;
+  lng: number;
+  href: string;
+  recordedAt?: string;
+  snapshot: ReturnType<typeof snapshotForTrailer>;
+}): FleetMapPin {
+  const reeferStatus = reeferStatusFromAny(input.snapshot);
+  return {
+    id: `trailer-${input.trailer.id}`,
+    label: input.trailer.unit_number,
+    kind: "trailer",
+    lat: input.lat,
+    lng: input.lng,
+    href: input.href,
+    recordedAt: input.recordedAt,
+    reeferStatus,
+    pinColor: orbcommReeferPinColor(reeferStatus),
+  };
 }
 
 export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
@@ -177,15 +236,14 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
     addPin(
       pins,
       usedTrailerIds,
-      {
-        id: `trailer-${trailer.id}`,
-        label: trailer.unit_number,
-        kind: "trailer",
+      orbcommTrailerPin({
+        trailer,
         lat: coord.lat,
         lng: coord.lng,
         href: trailerHref(trailer, loads),
         recordedAt: snapshot.recordedAt,
-      },
+        snapshot,
+      }),
       trailer.id,
     );
   }
@@ -199,15 +257,14 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
         addPin(
           pins,
           usedTrailerIds,
-          {
-            id: `trailer-${trailer.id}`,
-            label: trailer.unit_number,
-            kind: "trailer",
+          orbcommTrailerPin({
+            trailer,
             lat: readingCoord.lat,
             lng: readingCoord.lng,
             href: trailerHref(trailer, loads),
             recordedAt: reading.recorded_at,
-          },
+            snapshot: reading,
+          }),
           trailer.id,
         );
         continue;
@@ -220,15 +277,14 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
     addPin(
       pins,
       usedTrailerIds,
-      {
-        id: `trailer-${trailer.id}`,
-        label: trailer.unit_number,
-        kind: "trailer",
+      orbcommTrailerPin({
+        trailer,
         lat: coord.lat,
         lng: coord.lng,
         href: trailerHref(trailer, loads),
         recordedAt: stored.recordedAt,
-      },
+        snapshot: snapshotForTrailer(trailer, snapshots.readings),
+      }),
       trailer.id,
     );
   }
@@ -246,20 +302,8 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
     : "Last stored trailer GPS. Orbcomm is not connected.";
 
   const statusRows: FleetStatusRow[] = trailers.map((trailer) => {
-    const snapshot =
-      snapshots.readings.find(
-        (reading) =>
-          canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.unit_number) ||
-          canonicalFleetKey(reading.trailerId) === canonicalFleetKey(trailer.orbcomm_asset_id),
-      ) ?? latestReeferForTrailer(trailer);
-    const power =
-      snapshot && "powerOn" in snapshot
-        ? snapshot.powerOn === true
-          ? "On"
-          : snapshot.powerOn === false
-            ? "Off"
-            : "—"
-        : "—";
+    const snapshot = snapshotForTrailer(trailer, snapshots.readings);
+    const power = powerLabel(reeferStatusFromAny(snapshot));
     const temperatureF =
       snapshot && "temperatureF" in snapshot
         ? snapshot.temperatureF

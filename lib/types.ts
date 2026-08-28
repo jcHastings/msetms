@@ -571,6 +571,7 @@ export type ReeferReading = {
   supply_air_f: number | null;
   door_open: number | null;
   alarm: string;
+  operating_mode: string;
   latitude: number | null;
   longitude: number | null;
   address: string;

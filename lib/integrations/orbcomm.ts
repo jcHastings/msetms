@@ -11,6 +11,7 @@ import {
   orbcommAssetFromUnknown,
   type OrbcommAssetInput,
 } from "../fleet-import-shared";
+import { classifyOrbcommReeferMode } from "../fleet-map-shared";
 import { formatMdYDisplay } from "../format";
 import { listLoads, listTrailers, listTrucks } from "../queries";
 import type { ReeferReading, ReeferStatus } from "../types";
@@ -29,6 +30,7 @@ export type ReeferSnapshot = {
   supplyAirF: number | null;
   doorOpen: boolean | null;
   powerOn: boolean | null;
+  operatingMode: string;
   alarm: string;
   latitude: number | null;
   longitude: number | null;
@@ -68,6 +70,7 @@ export type OrbcommAssetReading = {
   returnAirF?: number | null;
   supplyAirF?: number | null;
   powerOn?: boolean | null;
+  operatingMode?: string;
   alarm?: string;
   recordedAt?: string;
   latitude?: number | null;
@@ -308,6 +311,7 @@ export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
     supply_air_f: snapshot.supplyAirF,
     door_open: snapshot.doorOpen == null ? null : snapshot.doorOpen ? 1 : 0,
     alarm: snapshot.alarm,
+    operating_mode: snapshot.operatingMode ?? "",
     latitude: snapshot.latitude,
     longitude: snapshot.longitude,
     address: snapshot.address,
@@ -327,7 +331,8 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
     returnAirF: row.return_air_f,
     supplyAirF: row.supply_air_f,
     doorOpen: row.door_open == null ? null : row.door_open === 1,
-    powerOn: null,
+    powerOn: powerOnFromOperatingMode(row.operating_mode),
+    operatingMode: row.operating_mode ?? "",
     alarm: row.alarm,
     latitude: row.latitude ?? null,
     longitude: row.longitude ?? null,
@@ -662,15 +667,39 @@ function liveTempF(item: Record<string, unknown>, keys: string[]): number | null
   return celsiusToF(value);
 }
 
+function parseReeferOperatingMode(item: Record<string, unknown>): string {
+  const parts = [
+    firstStringLoose(item, ["reeferState", "reefer_state", "Reefer State"]),
+    firstStringLoose(item, [
+      "operationMode",
+      "operatingMode",
+      "operating_mode",
+      "opMode",
+      "Operating Mode",
+      "Operation Mode",
+    ]),
+    firstStringLoose(item, [
+      "reeferPowerDesc",
+      "reeferPower1Desc",
+      "reeferPower",
+      "Reefer Power",
+      "power",
+      "Power",
+    ]),
+  ].filter(Boolean);
+  return parts.join(" ").trim();
+}
+
+function powerOnFromOperatingMode(raw: string | null | undefined): boolean | null {
+  const status = classifyOrbcommReeferMode(raw);
+  if (status === "running") return true;
+  if (status === "off" || status === "shutdown") return false;
+  return null;
+}
+
 function parseReeferPower(item: Record<string, unknown>): boolean | null {
-  const text = [
-    firstString(item, ["reeferPowerDesc", "reeferPower1Desc", "reeferState", "operationMode", "power", "Power"]),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  if (/power\s*off|\boff\b|shutdown|stopped/.test(text) && !/power\s*on/.test(text)) return false;
-  if (/power\s*on|\bon\b|continuous|start/.test(text)) return true;
+  const fromMode = powerOnFromOperatingMode(parseReeferOperatingMode(item));
+  if (fromMode != null) return fromMode;
   const controller = item.controllerOn ?? item.controller_on;
   if (controller === true || controller === 1 || controller === "1" || controller === "true") return true;
   if (controller === false || controller === 0 || controller === "0" || controller === "false") return false;
@@ -745,6 +774,7 @@ function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
     returnAirF: liveReturn ?? firstTempF(item, ["returnAirF", "return_air_f", "ReturnAir"]),
     supplyAirF: firstTempF(item, ["supplyAirF", "supply_air_f", "SupplyAir"]),
     powerOn: parseReeferPower(item),
+    operatingMode: parseReeferOperatingMode(item),
     alarm: liveAlarms(item) || firstString(item, ["alarm", "Alarm", "alarms"]) || "",
     recordedAt: newestMessageTime(row as Record<string, unknown>, item),
     latitude: firstNumber(item, ["latitude", "Latitude", "lat", "Lat", "LAT"]),
@@ -788,6 +818,7 @@ export function mapOrbcommReadingsToLoads(input: {
       supplyAirF: asset.supplyAirF ?? null,
       doorOpen: null,
       powerOn: asset.powerOn ?? null,
+      operatingMode: asset.operatingMode ?? "",
       alarm: asset.alarm ?? "",
       latitude: asset.latitude ?? null,
       longitude: asset.longitude ?? null,
@@ -813,7 +844,15 @@ export function snapshotsFromLiveAssets(input: {
     if (!trailerId || used.has(normalizeKey(trailerId))) continue;
     const temperatureF = asset.temperatureF ?? asset.returnAirF ?? asset.supplyAirF ?? null;
     const hasLocation = asset.latitude != null && asset.longitude != null;
-    if (temperatureF == null && asset.setpointF == null && !hasLocation && !asset.address && !asset.alarm && asset.powerOn == null) {
+    if (
+      temperatureF == null &&
+      asset.setpointF == null &&
+      !hasLocation &&
+      !asset.address &&
+      !asset.alarm &&
+      asset.powerOn == null &&
+      !asset.operatingMode
+    ) {
       continue;
     }
     extras.push({
@@ -827,6 +866,7 @@ export function snapshotsFromLiveAssets(input: {
       supplyAirF: asset.supplyAirF ?? null,
       doorOpen: null,
       powerOn: asset.powerOn ?? null,
+      operatingMode: asset.operatingMode ?? "",
       alarm: asset.alarm ?? "",
       latitude: asset.latitude ?? null,
       longitude: asset.longitude ?? null,
@@ -904,7 +944,7 @@ function splitCsvLine(line: string): string[] {
 }
 
 export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
-  const readings = mapOrbcommReadingsToLoads({
+  const readings = snapshotsFromLiveAssets({
     loads: mappingLoads(),
     trucks: mappingTrucks(),
     trailers: mappingTrailers(),
@@ -921,6 +961,7 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
       supply_air_f: reading.supplyAirF,
       door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
       alarm: reading.alarm,
+      operating_mode: reading.operatingMode ?? "",
       latitude: reading.latitude,
       longitude: reading.longitude,
       address: reading.address,
@@ -985,6 +1026,7 @@ function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedT
       supply_air_f: reading.supplyAirF,
       door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
       alarm: reading.alarm,
+      operating_mode: reading.operatingMode ?? "",
       latitude: reading.latitude,
       longitude: reading.longitude,
       address: reading.address,
@@ -998,8 +1040,8 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
   getDb()
     .prepare(
         `INSERT INTO reefer_readings (
-        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, latitude, longitude, address, source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, operating_mode, latitude, longitude, address, source, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.load_id,
@@ -1011,6 +1053,7 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
       input.supply_air_f ?? null,
       input.door_open,
       input.alarm,
+      input.operating_mode ?? "",
       input.latitude ?? null,
       input.longitude ?? null,
       input.address ?? "",
@@ -1027,6 +1070,19 @@ function firstString(item: Record<string, unknown>, keys: string[]): string | un
   for (const key of keys) {
     const value = asString(item[key]);
     if (value) return value;
+  }
+  return undefined;
+}
+
+function firstStringLoose(item: Record<string, unknown>, keys: string[]): string | undefined {
+  const exact = firstString(item, keys);
+  if (exact) return exact;
+  const wanted = new Set(keys.map(normalizeKey).filter(Boolean));
+  if (wanted.size === 0) return undefined;
+  for (const [key, value] of Object.entries(item)) {
+    if (!wanted.has(normalizeKey(key))) continue;
+    const text = asString(value);
+    if (text) return text;
   }
   return undefined;
 }

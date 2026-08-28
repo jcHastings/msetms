@@ -2937,6 +2937,29 @@ Continuous reefer. Two load locks.
   );
   assert.equal(parsedReport[0]?.trailerId, "TR-7742");
   assert.equal(parsedReport[0]?.latitude, 32.78);
+  const { classifyOrbcommReeferMode } = await import("../lib/fleet-map-shared");
+  assert.equal(classifyOrbcommReeferMode("Running"), "running");
+  assert.equal(classifyOrbcommReeferMode("Power On"), "running");
+  assert.equal(classifyOrbcommReeferMode("Continuous"), "running");
+  assert.equal(classifyOrbcommReeferMode("Off"), "off");
+  assert.equal(classifyOrbcommReeferMode("Power Off"), "off");
+  assert.equal(classifyOrbcommReeferMode("Shutdown"), "shutdown");
+  assert.equal(classifyOrbcommReeferMode("Unit Shutdown"), "shutdown");
+  assert.equal(classifyOrbcommReeferMode(""), "unknown");
+  assert.equal(classifyOrbcommReeferMode("defrost"), "unknown");
+  const modeReport = orbcomm.parseOrbcommReport(
+    "trailer_id,latitude,longitude,Operating Mode\nR-RUN,40.1,-96.1,Running\nR-OFF,40.2,-96.2,Off\nR-SD,40.3,-96.3,Shutdown\n",
+  );
+  assert.equal(classifyOrbcommReeferMode(modeReport.find((row) => row.trailerId === "R-RUN")?.operatingMode), "running");
+  assert.equal(classifyOrbcommReeferMode(modeReport.find((row) => row.trailerId === "R-OFF")?.operatingMode), "off");
+  assert.equal(classifyOrbcommReeferMode(modeReport.find((row) => row.trailerId === "R-SD")?.operatingMode), "shutdown");
+  const shutdownPayload = orbcomm.normalizeOrbcommPayload({
+    data: {
+      assets: [{ assetName: "SD1", reeferStatus: { reeferPowerDesc: "Shutdown" } }],
+    },
+  });
+  assert.equal(shutdownPayload[0]?.powerOn, false);
+  assert.equal(classifyOrbcommReeferMode(shutdownPayload[0]?.operatingMode), "shutdown");
 
   const trailerLocation = await orbcomm.getTrailerLocationForLoad(reeferLoad.id);
   assert.ok(trailerLocation, "demo ORBCOMM snapshot should include trailer location");
@@ -6765,7 +6788,7 @@ Continuous reefer. Two load locks.
   delete process.env.ORBCOMM_USERNAME;
   delete process.env.ORBCOMM_PASSWORD;
   const fleetMap = await import("../lib/fleet-map");
-  const { isPlottableCoord } = await import("../lib/fleet-map-shared");
+  const { isPlottableCoord, ORBCOMM_REEFER_PIN_COLOR } = await import("../lib/fleet-map-shared");
   assert.equal(isPlottableCoord(41.25, -95.93), true);
   assert.equal(isPlottableCoord(null, -95.93), false);
   assert.equal(isPlottableCoord(Number.NaN, -95.93), false);
@@ -6810,6 +6833,8 @@ Continuous reefer. Two load locks.
   assert.equal(liveTruckPin?.lat, 41.2565);
   assert.equal(liveTruckPin?.lng, -95.9345);
   assert.equal(liveTruckPin?.href, `/fleet/trucks/${fleetMapTruckId}`);
+  assert.equal(liveTruckPin?.reeferStatus, undefined);
+  assert.equal(liveTruckPin?.pinColor, undefined);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
@@ -6857,6 +6882,9 @@ Continuous reefer. Two load locks.
   assert.equal(reeferPin?.lng, -86.1581);
   assert.equal(reeferPin?.href, `/fleet/trailers/${fleetReeferId}`);
   assert.ok(reeferPin?.recordedAt, "pin list should carry the Orbcomm message time");
+  assert.equal(reeferPin?.reeferStatus, "unknown", "missing Orbcomm mode stays a default pin");
+  assert.equal(reeferPin?.pinColor, ORBCOMM_REEFER_PIN_COLOR.unknown);
+  assert.notEqual(reeferPin?.pinColor, ORBCOMM_REEFER_PIN_COLOR.running);
   const reeferStatus = orbcommFleetMap.statusRows?.find((row) => row.trailer === "FM-R1");
   assert.ok(reeferStatus?.messageAt, "status row should show the Orbcomm message time");
   const emptyStatus = orbcommFleetMap.statusRows?.find((row) => row.trailer === "FM-R0");
@@ -6864,6 +6892,44 @@ Continuous reefer. Two load locks.
   assert.equal(orbcommFleetMap.pins.some((pin) => pin.label === "FM-DRY"), false, "dry-van trailers stay off the reefer map");
   assert.ok(orbcommFleetMap.missing.some((item) => item.label === "FM-R0" && item.id === fleetEmptyReeferId));
   assert.match(orbcommFleetMap.sourceNote, /stored|not connected/i);
+  for (const row of [
+    { unit: "FM-RUN", lat: 40.586, lng: -98.39, mode: "Running", status: "running" as const },
+    { unit: "FM-OFF", lat: 40.587, lng: -98.391, mode: "Power Off", status: "off" as const },
+    { unit: "FM-SD", lat: 40.588, lng: -98.392, mode: "Shutdown", status: "shutdown" as const },
+  ]) {
+    queries.createTrailer({ unit_number: row.unit, type: "reefer" });
+    orbcomm.insertReeferReading({
+      load_id: null,
+      truck_id: null,
+      trailer_id: row.unit,
+      setpoint_f: 34,
+      temperature_f: 34,
+      return_air_f: 34,
+      supply_air_f: null,
+      door_open: 0,
+      alarm: "",
+      operating_mode: row.mode,
+      latitude: row.lat,
+      longitude: row.lng,
+      address: "Hastings, NE",
+      source: "orbcomm",
+      recorded_at: "2026-08-28T12:00:00Z",
+    });
+  }
+  const coloredOrbcommMap = await fleetMap.buildOrbcommFleetMap();
+  for (const row of [
+    { unit: "FM-RUN", status: "running" as const },
+    { unit: "FM-OFF", status: "off" as const },
+    { unit: "FM-SD", status: "shutdown" as const },
+  ]) {
+    const pin = coloredOrbcommMap.pins.find((item) => item.label === row.unit);
+    assert.equal(pin?.reeferStatus, row.status, `${row.unit} pin uses stored Orbcomm mode`);
+    assert.equal(pin?.pinColor, ORBCOMM_REEFER_PIN_COLOR[row.status]);
+    assert.equal(
+      coloredOrbcommMap.statusRows?.find((item) => item.trailer === row.unit)?.power,
+      row.status === "running" ? "On" : row.status === "off" ? "Off" : "Shutdown",
+    );
+  }
   queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId, fleetReeferId);
   const assignedOrbcommMap = await fleetMap.buildOrbcommFleetMap();
   assert.equal(assignedOrbcommMap.pins.find((pin) => pin.label === "FM-R1")?.href, `/loads/${mapLoadId}`);
@@ -8923,6 +8989,7 @@ Continuous reefer. Two load locks.
     supply_air_f: null,
     door_open: 0,
     alarm: "",
+    operating_mode: "",
     latitude: 41.2565,
     longitude: -95.9345,
     address: "Omaha, NE",
@@ -9711,6 +9778,10 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-live-note/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-reefer-pin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map-shared.ts"), "utf8"), /classifyOrbcommReeferMode/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /pinColor/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/orbcomm/page.tsx"), "utf8"), /buildOrbcommFleetMap/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /messageAt/);
   assert.match(orbcommAuth, /orbcomm_asset_id/);

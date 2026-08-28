@@ -1,8 +1,19 @@
 import Link from "next/link";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { PageHeader } from "@/components/page-header";
-import type { FleetMapModel } from "@/lib/fleet-map-shared";
+import {
+  ORBCOMM_REEFER_PIN_COLOR,
+  type FleetMapModel,
+  type OrbcommReeferPinStatus,
+} from "@/lib/fleet-map-shared";
 import { formatDateTime } from "@/lib/format";
+
+const REEFER_PIN_LABEL: Record<OrbcommReeferPinStatus, string> = {
+  running: "Running",
+  off: "Off",
+  shutdown: "Shutdown",
+  unknown: "No status",
+};
 
 function messageTime(iso: string | undefined): string {
   const raw = String(iso ?? "").trim();
@@ -29,6 +40,20 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
             missingKeyMessage="Map is off."
             emptyMessage="No GPS pins."
           />
+          {model.title === "Orbcomm" ? (
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-orbcomm-pin-legend="">
+              {(["running", "off", "shutdown", "unknown"] as const).map((status) => (
+                <li key={status} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ background: ORBCOMM_REEFER_PIN_COLOR[status] }}
+                    data-reefer-pin={status}
+                  />
+                  {REEFER_PIN_LABEL[status]}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
         <aside className="card p-4">
           <h2 className="text-sm font-semibold">On the map</h2>
@@ -38,9 +63,20 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
             <ul className="mt-2 divide-y divide-slate-100 text-sm">
               {model.pins.map((pin) => (
                 <li key={pin.id} className="py-1.5">
+                  {pin.reeferStatus ? (
+                    <span
+                      className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full align-middle"
+                      style={{ background: pin.pinColor || ORBCOMM_REEFER_PIN_COLOR[pin.reeferStatus] }}
+                      data-reefer-pin={pin.reeferStatus}
+                      title={REEFER_PIN_LABEL[pin.reeferStatus]}
+                    />
+                  ) : null}
                   <Link href={pin.href} className="font-semibold underline">
                     {pin.label}
                   </Link>
+                  {pin.reeferStatus ? (
+                    <span className="ml-2 text-xs text-slate-600">{REEFER_PIN_LABEL[pin.reeferStatus]}</span>
+                  ) : null}
                   {pin.motion ? (
                     <span className="ml-2 text-xs font-medium text-slate-600" data-fleet-motion={pin.motion}>
                       {pin.motion}
