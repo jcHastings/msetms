@@ -9,7 +9,7 @@ export function DriverFuelReceipt({ loadId }: { loadId: number }) {
 
   return (
     <form
-      className="mt-5 rounded-2xl bg-white p-4 shadow-sm"
+      className="driver-sheet mt-5 rounded-2xl bg-white p-4 shadow-sm"
       action={async (formData) => {
         setError(null);
         setOk(false);
@@ -18,7 +18,7 @@ export function DriverFuelReceipt({ loadId }: { loadId: number }) {
         else setOk(true);
       }}
     >
-      <h2 className="text-base font-semibold">Fuel receipt</h2>
+      <h2 className="driver-sheet-value text-base font-semibold">Fuel receipt</h2>
       <input type="hidden" name="load_id" value={loadId} />
       <input type="hidden" name="kind" value="fuel_receipt" />
       <div className="mt-3 field">

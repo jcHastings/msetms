@@ -8031,6 +8031,34 @@ Continuous reefer. Two load locks.
   assert.match(driverLoadPage, /id="upload"/);
   assert.match(driverLoadPage, /id="bol"/);
   assert.match(driverLoadPage, /packet=internal/);
+  assert.match(driverLoadPage, /driver-sheet-value/);
+  assert.match(driverLoadPage, /driverStopWhen/);
+  assert.doesNotMatch(driverLoadPage, /text-white\}>\{value\}/);
+  assert.match(driverCss, /\.driver-sheet[\s\S]*#122033 !important/);
+  assert.match(driverCss, /\.driver-sheet-value[\s\S]*#122033 !important/);
+  const { driverLaneEnds, driverStopWhen } = await import("../lib/driver-load-display");
+  const hastingsPickup = {
+    name: "Nebraska Cold Storage Inc",
+    city: "Hastings",
+    state: "NE",
+    window_start: "2026-08-25T12:00:00.000Z",
+    window_end: "2026-08-25T18:00:00.000Z",
+  };
+  const omahaDelivery = {
+    name: "Receiver",
+    city: "Omaha",
+    state: "NE",
+    window_start: "2026-08-26T14:00:00.000Z",
+    window_end: "",
+  };
+  const fromStops = driverStopWhen("", "", hastingsPickup);
+  assert.match(fromStops, /Hastings/);
+  assert.match(fromStops, /08\/25\/26/);
+  assert.doesNotMatch(driverStopWhen("2026-08-25T12:00:00.000Z", "2026-08-25T18:00:00.000Z", hastingsPickup), /Hastings/);
+  assert.equal(driverStopWhen("", "", null), "—");
+  assert.equal(driverLaneEnds("", "", hastingsPickup, omahaDelivery), "Hastings, NE → Omaha, NE");
+  assert.equal(driverLaneEnds("Lincoln, NE", "Chicago, IL", hastingsPickup, omahaDelivery), "Lincoln, NE → Chicago, IL");
+  assert.equal(driverLaneEnds("", "", null, null), "");
 
   const cabTruckId = queries.createTruck({
     unit_number: "CAB-1",

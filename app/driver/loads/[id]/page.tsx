@@ -4,6 +4,7 @@ import { DriverFuelReceipt } from "@/components/driver-fuel-receipt";
 import { DriverLoadActions } from "@/components/driver-load-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
+import { driverLaneEnds, driverStopWhen } from "@/lib/driver-load-display";
 import { formatDateTime, formatMoney, formatWeight } from "@/lib/format";
 import { driverFacingPay } from "@/lib/settlement";
 import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
@@ -37,6 +38,11 @@ export default async function DriverLoadPage({
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
   const stops = ensureDefaultStops(load.id);
+  const pickupStop = stops.find((stop) => stop.kind === "pickup") ?? null;
+  const deliveryStop = stops.find((stop) => stop.kind === "delivery") ?? null;
+  const lane = driverLaneEnds(load.origin, load.destination, pickupStop, deliveryStop);
+  const pickupWhen = driverStopWhen(load.pickup_start, load.pickup_end, pickupStop);
+  const deliveryWhen = driverStopWhen(load.delivery_start, load.delivery_end, deliveryStop);
   const requiredTemp =
     load.temp_low_f != null && load.temp_high_f != null
       ? `${load.temp_low_f}–${load.temp_high_f}°F`
@@ -56,19 +62,17 @@ export default async function DriverLoadPage({
         <h1 className="font-mono text-2xl font-semibold text-white">{load.load_number}</h1>
         <LoadStatusBadge status={load.status} />
       </div>
-      <p className="mt-1 text-lg font-medium text-white">
-        {load.origin} → {load.destination}
-      </p>
+      {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
       {yourLeg ? (
-        <p className="mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-800">
+        <p className="driver-sheet mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium">
           Your leg: {formatRelayLane(yourLeg.pickup, yourLeg.delivery)}
         </p>
       ) : null}
-      <p className="text-slate-500">{load.customer_name}</p>
+      <p className="text-slate-400">{load.customer_name}</p>
       {load.docs_requested ? (
-        <section className="mt-4 rounded-2xl bg-amber-50 p-4 text-amber-950">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Documents requested</div>
-          <p className="mt-1 text-base">
+        <section className="driver-sheet mt-4 rounded-2xl bg-amber-50 p-4">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Documents requested</div>
+          <p className="driver-sheet-value mt-1 text-base">
             Dispatch asked for BOL/POD/photos on this load. Upload them below.
           </p>
         </section>
@@ -88,9 +92,9 @@ export default async function DriverLoadPage({
         {attachments.every((file) => file.kind !== "bol") ? <span id="bol" className="sr-only">BOL</span> : null}
       </div>
 
-      <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
-        <Row label="Pickup" value={`${formatDateTime(load.pickup_start)} – ${formatDateTime(load.pickup_end)}`} />
-        <Row label="Delivery" value={`${formatDateTime(load.delivery_start)} – ${formatDateTime(load.delivery_end)}`} />
+      <section className="driver-sheet mt-5 rounded-2xl bg-white p-4 shadow-sm">
+        <Row label="Pickup" value={pickupWhen} />
+        <Row label="Delivery" value={deliveryWhen} />
         <Row label="Commodity" value={load.commodity || "—"} />
         <Row label="Weight" value={formatWeight(load.weight)} />
         {driverFacingPay(load) != null ? (
@@ -108,12 +112,12 @@ export default async function DriverLoadPage({
       </section>
 
       {hos ? (
-        <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hours of service</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">
+        <section className="driver-sheet mt-3 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Hours of service</div>
+          <div className="driver-sheet-value mt-1 text-2xl font-semibold tabular-nums">
             {formatDurationMs(hos.driveRemainingMs)} drive left
           </div>
-          <div className="text-sm text-slate-600">
+          <div className="driver-sheet-value text-sm">
             {formatDutyStatus(hos.dutyStatus)}
             {hos.source === "demo" ? " · demo" : " · Samsara"}
           </div>
@@ -121,23 +125,23 @@ export default async function DriverLoadPage({
       ) : null}
 
       {(reeferSpec.isReefer || reefer) && (
-        <section className="mt-3 rounded-2xl bg-sky-50 p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-sky-800">Reefer</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums text-sky-950">
+        <section className="driver-sheet mt-3 rounded-2xl bg-sky-50 p-4 shadow-sm">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Reefer</div>
+          <div className="driver-sheet-value mt-1 text-2xl font-semibold tabular-nums">
             {formatReeferSetpoint(reeferSpec.setpointF ?? reefer?.setpoint_f) || "—"}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-sky-950">
+          <div className="driver-sheet-value mt-2 grid grid-cols-2 gap-2 text-sm">
             <div>Setpoint · {formatReeferSetpoint(reeferSpec.setpointF ?? reefer?.setpoint_f) || "—"}</div>
             <div>Probe · {probe != null ? `${probe}°F` : "—"}</div>
             <div>Required · {requiredTemp}</div>
             <div>Trailer · {trailerStatus}</div>
             <div>Fuel · {fuelPercent != null ? `${fuelPercent}%` : "—"}</div>
           </div>
-          <div className="text-base font-medium text-sky-950">
+          <div className="driver-sheet-value text-base font-medium">
             Mode: {labelForReeferMode(reeferSpec.mode) || "Continuous"}
           </div>
           {reefer ? (
-            <div className="mt-1 text-sm text-sky-900">
+            <div className="driver-sheet-value mt-1 text-sm">
               Live {reefer.temperature_f ?? "—"}°F
               {reefer.source === "demo" ? " · demo reading" : reefer.source === "orbcomm" ? " · Orbcomm" : ""}
               {reefer.recorded_at ? ` · ${formatDateTime(reefer.recorded_at)}` : ""}
@@ -152,25 +156,25 @@ export default async function DriverLoadPage({
       <DriverSchedulingBlock title="Delivery scheduling" location={stopLocations.consignee} />
 
       {load.appointment_notes ? (
-        <section className="mt-3 rounded-2xl bg-amber-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Appointment</div>
-          <p className="mt-1 whitespace-pre-wrap text-base text-amber-950">{load.appointment_notes}</p>
+        <section className="driver-sheet mt-3 rounded-2xl bg-amber-50 p-4">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Appointment</div>
+          <p className="driver-sheet-value mt-1 whitespace-pre-wrap text-base">{load.appointment_notes}</p>
         </section>
       ) : null}
 
       {load.special_instructions ? (
-        <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <section className="driver-sheet mt-3 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">
             Special instructions
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-base">{load.special_instructions}</p>
+          <p className="driver-sheet-value mt-1 whitespace-pre-wrap text-base">{load.special_instructions}</p>
         </section>
       ) : null}
 
       {load.public_notes ? (
-        <section className="mt-3 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Notes</div>
-          <p className="mt-1 whitespace-pre-wrap">{load.public_notes}</p>
+        <section className="driver-sheet mt-3 rounded-2xl bg-white p-4 text-sm shadow-sm">
+          <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Notes</div>
+          <p className="driver-sheet-value mt-1 whitespace-pre-wrap">{load.public_notes}</p>
         </section>
       ) : null}
 
@@ -194,9 +198,9 @@ export default async function DriverLoadPage({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-b border-white/10 py-2 last:border-0">
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-base text-white">{value}</div>
+    <div className="border-b border-slate-100 py-2 last:border-0">
+      <div className="driver-sheet-label text-xs uppercase tracking-wide">{label}</div>
+      <div className="driver-sheet-value text-base">{value}</div>
     </div>
   );
 }

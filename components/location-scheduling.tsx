@@ -35,11 +35,11 @@ export function DriverSchedulingBlock({
 }) {
   if (!location) return null;
   return (
-    <section className="mt-3 rounded-2xl bg-amber-50 p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">{title}</div>
-      <div className="mt-1 font-medium text-amber-950">{location.name}</div>
-      <p className="text-sm text-amber-950">{formatLocationAddress(location)}</p>
-      <p className="mt-2 whitespace-pre-wrap text-base text-amber-950">{formatSchedulingSummary(location)}</p>
+    <section className="driver-sheet mt-3 rounded-2xl bg-amber-50 p-4">
+      <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">{title}</div>
+      <div className="driver-sheet-value mt-1 font-medium">{location.name}</div>
+      <p className="driver-sheet-value text-sm">{formatLocationAddress(location)}</p>
+      <p className="driver-sheet-value mt-2 whitespace-pre-wrap text-base">{formatSchedulingSummary(location)}</p>
     </section>
   );
 }

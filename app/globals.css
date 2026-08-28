@@ -103,6 +103,19 @@ a.driver-dest .driver-dest-label,
   color: #1a1403 !important;
 }
 
+.driver-sheet {
+  color: #122033 !important;
+}
+
+.driver-sheet .driver-sheet-value,
+.driver-sheet .driver-sheet-value a {
+  color: #122033 !important;
+}
+
+.driver-sheet .driver-sheet-label {
+  color: #64748b !important;
+}
+
 input,
 select,
 textarea,
