@@ -441,6 +441,22 @@ async function main() {
     "in_transit",
     "Close flush must read the named status field, not a colliding select id",
   );
+  assert.deepEqual(
+    everydayFieldsFromForm({
+      elements: {
+        namedItem: (name: string) =>
+          name === "status"
+            ? { name: "status", value: "in_transit" }
+            : name === "truck_status"
+              ? { name: "truck_status", value: "dispatched" }
+              : name === "weight"
+                ? { name: "weight", value: "40000" }
+                : null,
+      },
+    } as Pick<HTMLFormElement, "elements">),
+    { status: "in_transit", truck_status: "dispatched", weight: "40000" },
+    "tab leave must flush Load Status and Truck Status with other everyday fields",
+  );
   assert.doesNotMatch(assetsChunk, /Assigned truck|Trailer #|MC#|DOT|insurance|Reefer setpoint/);
   assert.match(workspaceSource, /Watch this load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
