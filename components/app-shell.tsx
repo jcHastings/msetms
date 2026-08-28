@@ -23,17 +23,17 @@ export function AppShell({
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-x-hidden" data-desk-chrome="">
-        <div className="desk-sidebar-brand border-b border-white/10 px-3 py-3">
-          <Link href="/" className="block">
+        <div className="desk-sidebar-brand shrink-0 border-b border-white/10 px-3 py-3">
+          <Link href="/" className="block w-fit max-w-full">
             <BrandMark variant="dark" size="sm" />
           </Link>
         </div>
         <NavLinks role={dispatcher.role} />
-        <div className="border-t border-white/10 px-3 py-3 text-xs text-slate-400">
-          <div className="truncate font-medium text-slate-200" title={dispatcher.name}>
+        <div className="desk-sidebar-user shrink-0 border-t border-white/10 px-3 py-3 text-xs text-slate-400">
+          <div className="font-medium text-slate-200" title={dispatcher.name}>
             {dispatcher.name}
           </div>
-          <div className="truncate">{roleLabel(dispatcher.role)}</div>
+          <div>{roleLabel(dispatcher.role)}</div>
           <form action={dispatcherLogoutAction} className="mt-2">
             <button className="btn btn-ghost w-full justify-start px-2 text-xs text-slate-300" type="submit">
               Sign out

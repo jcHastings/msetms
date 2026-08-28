@@ -240,6 +240,8 @@ async function main() {
   assert.match(shellSource, /desk-sidebar/);
   assert.match(shellSource, /w-60/);
   assert.match(shellSource, /overflow-x-hidden/);
+  assert.match(shellSource, /desk-sidebar-user/);
+  assert.match(cssSource, /min-width: 15rem/);
   assert.doesNotMatch(shellSource, /w-\[4\.75rem\]/);
   assert.doesNotMatch(shellSource, /Set up 2-step/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /fixed right-6 bottom-6/);

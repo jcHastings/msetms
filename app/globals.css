@@ -294,15 +294,23 @@ button {
 .desk-sidebar {
   background: #0b1f3a;
   color: #e8eef6;
+  overflow-x: hidden;
+  min-width: 15rem;
 }
 
 .desk-sidebar-brand .text-sm {
   display: block;
 }
 
-.desk-sidebar-brand img {
-  height: 2rem;
+.desk-sidebar-brand .rounded-md {
+  width: fit-content;
   max-width: 100%;
+}
+
+.desk-sidebar-brand img {
+  height: 1.75rem;
+  width: auto;
+  max-width: 9rem;
 }
 
 .desk-nav-icons {
