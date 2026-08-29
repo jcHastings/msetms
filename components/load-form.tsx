@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
 import { LoadBasicsScreen, type LoadFormDefaults } from "@/components/load-basics-screen";
 import { LoadCarrierScreen } from "@/components/load-carrier-screen";
+import { LoadCustomerPay } from "@/components/load-customer-pay";
 import { LoadCustomerScreen } from "@/components/load-customer-screen";
 import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
@@ -12,7 +13,7 @@ import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settin
 import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
 import { isOwnerOperator, type ActionResult, type Customer, type DriverWithTruck, type Load, type Location, type Trailer, type Truck } from "@/lib/types";
 
-export type LoadFormScreen = "basics" | "customer" | "assets" | "all";
+export type LoadFormScreen = "basics" | "customer" | "assets" | "financials" | "all";
 
 type Props = {
   customers: Customer[];
@@ -141,6 +142,17 @@ export function LoadForm({
           weightUnit={weightUnit}
           equipmentChoices={equipmentChoices}
           card={card}
+        />
+      </div>
+      <div
+        hidden={resolvedScreen !== "financials" && resolvedScreen !== "all"}
+        className={resolvedScreen === "financials" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-load-screen="financials"
+      >
+        <LoadCustomerPay
+          load={load}
+          defaults={extraDefaults}
+          card={card}
           ooPercent={liveOoPercent}
           onOoPercentChange={setLiveOoPercent}
         />
@@ -219,6 +231,6 @@ function resolveScreen(
 ): LoadFormScreen {
   if (screen) return screen;
   if (standalone) return "all";
-  if (tab === "basics" || tab === "customer" || tab === "assets") return tab;
+  if (tab === "basics" || tab === "customer" || tab === "assets" || tab === "financials") return tab;
   return "all";
 }
