@@ -106,7 +106,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/search/page.tsx"), "utf8"), /criteriaFromSearchParams/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /initialCriteria/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /truckUnitForDriver/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /motionFromSpeedMph\(location\.speedMph\) \|\| "Parked"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /samsaraTruckPinStyle\(\{ speedMph: location\.speedMph, engineOn: location\.engineOn \}\)/);
   assert.doesNotMatch(boardUi, /Find New Shippers|EDI \/ Tenders|Post\/Search Load Boards/);
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
