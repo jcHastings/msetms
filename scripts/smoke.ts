@@ -1218,6 +1218,8 @@ async function main() {
   assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
   assert.doesNotMatch(driverFormSrc, /Default settlement|Pay\/Recur|payroll tab/);
   assert.match(driverFormSrc, /name="pay_percent"/);
+  assert.match(driverFormSrc, /name="company_name"/);
+  assert.match(driverFormSrc, /data-oo-company/);
   assert.match(driverFormSrc, /data-oo-percent/);
   assert.match(driverFormSrc, /owner_operator/);
   const driverTypesSrc = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
@@ -1481,6 +1483,7 @@ async function main() {
     "lib/load-documents-shared.ts",
     "components/master-load-panel.tsx",
     "lib/master-load-shared.ts",
+    "lib/owner-operator-shared.ts",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
@@ -4048,6 +4051,7 @@ Continuous reefer. Two load locks.
   const cole = queries.listDrivers().find((driver) => driver.name === "Cole Brennan");
   assert.ok(cole);
   assert.equal(cole.driver_type, "owner_operator");
+  assert.equal(cole.company_name, "Brennan Trucking");
   assert.equal(cole.pay_percent, 75);
   const { computeOwnerOperatorPay } = await import("../lib/settlement");
   assert.equal(computeOwnerOperatorPay(2000, 75), 1500);
@@ -4271,6 +4275,8 @@ Continuous reefer. Two load locks.
   const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
   assert.equal(coleConfirm.packet, "customer");
   assert.equal(coleConfirm.style, "owner_operator");
+  assert.equal(coleConfirm.carrierName, "Brennan Trucking");
+  assert.equal(coleConfirm.driverName, "Cole Brennan");
   assert.equal(coleConfirm.loadNumber, coleLoad.load_number);
   assert.equal(coleConfirm.agreedAmount, null);
   assert.ok(coleConfirm.customerRate != null);
@@ -10920,6 +10926,19 @@ Continuous reefer. Two load locks.
   assert.equal(labelForDriverKind("single"), "Company driver");
   assert.equal(labelForDriverKind("company_driver"), "Company driver");
   assert.equal(labelForDriverKind("owner_operator"), "Owner-operator");
+  const { assignedLoadName } = await import("../lib/owner-operator-shared");
+  assert.equal(
+    assignedLoadName({ name: "Cole Brennan", driver_type: "owner_operator", company_name: "Brennan Trucking" }),
+    "Brennan Trucking",
+  );
+  assert.equal(
+    assignedLoadName({ driver_name: "Denise Ortega", driver_type: "company_driver", driver_company_name: "" }),
+    "Denise Ortega",
+  );
+  assert.equal(
+    assignedLoadName({ name: "Sam Keene", driver_type: "owner_operator", company_name: "" }),
+    "Sam Keene",
+  );
 
   const { motionFromSpeedMph } = await import("../lib/fleet-map-shared");
   assert.equal(motionFromSpeedMph(0), "Parked");

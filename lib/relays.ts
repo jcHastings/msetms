@@ -20,8 +20,10 @@ export type LoadRelay = {
 export type LoadRelayView = LoadRelay & {
   from_driver_name: string | null;
   from_driver_type: string | null;
+  from_driver_company_name: string | null;
   driver_name: string | null;
   driver_type: string | null;
+  driver_company_name: string | null;
   truck_unit: string | null;
   trailer_unit: string | null;
 };

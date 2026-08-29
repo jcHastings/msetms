@@ -18,6 +18,7 @@ import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
+import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
 import { cityStateOnly } from "./load-documents-shared";
@@ -409,7 +410,7 @@ export function buildConfirmationModel(
     loadNumber: load.load_number,
     shipDate: formatMdY(load.pickup_start),
     todayDate: formatMdY(new Date().toISOString()),
-    carrierName: load.driver_name ?? "",
+    carrierName: assignedLoadName(load),
     carrierPhone: load.driver_phone ?? "",
     driverName: load.driver_name ?? "",
     driverPhone: load.driver_phone ?? "",

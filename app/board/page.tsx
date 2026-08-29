@@ -28,6 +28,7 @@ import { PageOverlayHost } from "@/components/page-overlay-host";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 import { sortMasterFamilies } from "@/lib/master-load-shared";
+import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
@@ -211,7 +212,7 @@ async function BoardLiveSection({
                         <>
                           <div className="truncate">Unit {load.truck_unit}</div>
                           <div className="truncate text-slate-500">
-                            {load.driver_name}
+                            {assignedLoadName(load)}
                             {relayLabels.get(load.id) ? ` ${relayLabels.get(load.id)}` : ""}
                           </div>
                         </>

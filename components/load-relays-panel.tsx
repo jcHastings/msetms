@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { addRelayAction, deleteRelayAction } from "@/lib/dispatcher-actions";
 import { formatRelayHandoff, type LoadRelayView } from "@/lib/relays";
+import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { isOwnerOperator } from "@/lib/types";
 
 type RelayDriverOption = {
   id: number;
   name: string;
   driver_type: string;
+  company_name?: string;
 };
 
 export function LoadRelaysPanel({
@@ -44,7 +46,19 @@ export function LoadRelaysPanel({
             <li key={relay.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div>
                 <div className="font-medium">
-                  {formatRelayHandoff(relay.from_driver_name, relay.driver_name, relay.delivery || relay.pickup)}
+                  {formatRelayHandoff(
+                    assignedLoadName({
+                      name: relay.from_driver_name,
+                      driver_type: relay.from_driver_type,
+                      company_name: relay.from_driver_company_name,
+                    }),
+                    assignedLoadName({
+                      name: relay.driver_name,
+                      driver_type: relay.driver_type,
+                      company_name: relay.driver_company_name,
+                    }),
+                    relay.delivery || relay.pickup,
+                  )}
                 </div>
                 <div className="text-xs text-slate-500">
                   {driverKindLabel(relay.from_driver_type)} → {driverKindLabel(relay.driver_type)}
@@ -82,7 +96,8 @@ function driverKindLabel(type: string | null | undefined): string {
 }
 
 function driverOptionLabel(driver: RelayDriverOption): string {
-  return `${driver.name}${isOwnerOperator(driver.driver_type) ? " · OO" : " · Company"}`;
+  const label = assignedLoadName(driver);
+  return `${label}${isOwnerOperator(driver.driver_type) ? " · OO" : " · Company"}`;
 }
 
 function RelayDialog({

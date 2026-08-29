@@ -530,17 +530,17 @@ export function seedDatabase(db: Database): void {
 
     const patchDriver = db.prepare(
       `UPDATE drivers SET license_number = ?, license_state = ?, license_expires = ?,
-         medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?
+         medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?, company_name = ?
        WHERE name = ?`,
     );
-    patchDriver.run("772110", "TN", isoDate(25), isoDate(-200), isoDate(200), "company_driver", null, "Denise Ortega");
-    patchDriver.run("448291", "KY", isoDate(400), isoDate(-180), isoDate(300), "company_driver", null, "Marcus Hale");
-    patchDriver.run("190334", "MO", isoDate(400), isoDate(-160), isoDate(280), "company_driver", null, "James Whitaker");
-    patchDriver.run("551902", "TN", isoDate(400), isoDate(-140), isoDate(260), "owner_operator", 75, "Cole Brennan");
-    patchDriver.run("883441", "IN", isoDate(400), isoDate(-120), isoDate(240), "company_driver", null, "Priya Shah");
-    patchDriver.run("229817", "IL", isoDate(400), isoDate(-100), isoDate(220), "company_driver", null, "Angela Ruiz");
-    patchDriver.run("104552", "MS", isoDate(400), isoDate(-400), isoDate(-10), "company_driver", null, "Tyrell Brooks");
-    patchDriver.run("667320", "KS", isoDate(400), isoDate(-90), isoDate(210), "owner_operator", 80, "Sam Keene");
+    patchDriver.run("772110", "TN", isoDate(25), isoDate(-200), isoDate(200), "company_driver", null, "", "Denise Ortega");
+    patchDriver.run("448291", "KY", isoDate(400), isoDate(-180), isoDate(300), "company_driver", null, "", "Marcus Hale");
+    patchDriver.run("190334", "MO", isoDate(400), isoDate(-160), isoDate(280), "company_driver", null, "", "James Whitaker");
+    patchDriver.run("551902", "TN", isoDate(400), isoDate(-140), isoDate(260), "owner_operator", 75, "Brennan Trucking", "Cole Brennan");
+    patchDriver.run("883441", "IN", isoDate(400), isoDate(-120), isoDate(240), "company_driver", null, "", "Priya Shah");
+    patchDriver.run("229817", "IL", isoDate(400), isoDate(-100), isoDate(220), "company_driver", null, "", "Angela Ruiz");
+    patchDriver.run("104552", "MS", isoDate(400), isoDate(-400), isoDate(-10), "company_driver", null, "", "Tyrell Brooks");
+    patchDriver.run("667320", "KS", isoDate(400), isoDate(-90), isoDate(210), "owner_operator", 80, "Keene Transport", "Sam Keene");
 
     seedDemoLocations(db);
   });

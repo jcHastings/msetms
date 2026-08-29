@@ -83,6 +83,9 @@ export default async function DriversPage() {
                     <td>{driver.phone || "—"}</td>
                     <td>
                       <DriverKindBadge type={driver.driver_type} />
+                      {isOwnerOperator(driver.driver_type) && driver.company_name ? (
+                        <div className="text-xs text-slate-500">{driver.company_name}</div>
+                      ) : null}
                       {isOwnerOperator(driver.driver_type) && driver.pay_percent != null ? (
                         <div className="text-xs text-slate-500">{driver.pay_percent}% settlement</div>
                       ) : null}

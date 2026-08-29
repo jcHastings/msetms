@@ -5,6 +5,7 @@ import { ComplianceList } from "@/components/compliance-badge";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { collectAssignmentAlerts, driverComplianceAlerts } from "@/lib/compliance";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { isOwnerOperator, type DriverWithTruck, type Load, type Trailer, type Truck } from "@/lib/types";
 
 export function LoadCarrierScreen({
@@ -119,7 +120,7 @@ export function LoadCarrierScreen({
           <option value="">Unassigned</option>
           {filteredDrivers.map((driver) => (
             <option key={driver.id} value={driver.id}>
-              {driver.name}
+              {assignedLoadName(driver)}
               {driverNote(driver, alertWindows)}
             </option>
           ))}

@@ -400,6 +400,7 @@ export type Driver = {
   medical_issued: string;
   medical_expires: string;
   driver_type: DriverKind;
+  company_name: string;
   pay_percent: number | null;
   pin: string;
   samsara_driver_id: string;
@@ -544,6 +545,7 @@ export type LoadView = Load & {
   driver_name: string | null;
   driver_phone: string | null;
   driver_type: DriverKind | null;
+  driver_company_name: string | null;
   dispatcher_name: string | null;
 };
 

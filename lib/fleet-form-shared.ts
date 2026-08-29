@@ -82,6 +82,7 @@ export type DriverFormValues = {
   medical_issued: string;
   medical_expires: string;
   driver_type: string;
+  company_name: string;
   pay_percent: number | null;
   alt_phone: string;
   cell_phone: string;
@@ -185,6 +186,7 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     medical_issued: text(driver.medical_issued),
     medical_expires: text(driver.medical_expires),
     driver_type: normalizeDriverKind(text(driver.driver_type)),
+    company_name: text(driver.company_name),
     pay_percent: numOrNull(driver.pay_percent),
     alt_phone: text(driver.alt_phone),
     cell_phone: text(driver.cell_phone),

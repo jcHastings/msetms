@@ -1,4 +1,5 @@
 import { formatDateTime } from "./format";
+import { assignedLoadName } from "./owner-operator-shared";
 import type { SearchColumnKey } from "./search";
 import { labelForLoadStatus, type LoadView } from "./types";
 
@@ -59,7 +60,7 @@ export function searchExportCells(load: LoadView): Record<(typeof SEARCH_EXPORT_
     "Delivery window": [formatDateTime(load.delivery_start), formatDateTime(load.delivery_end)]
       .filter((value) => value && value !== "—")
       .join(" – "),
-    Driver: load.driver_name || "",
+    Driver: assignedLoadName(load),
     Truck: load.truck_unit || "",
     Trailer: load.trailer_unit || load.trailer_number || "",
     Rate: load.rate ?? "",
