@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { useDismissable } from "@/components/use-dismissable";
 import { sendToQuickbooksAction } from "@/lib/actions";
 import {
@@ -11,18 +10,17 @@ import {
   sendToAccountingAction,
 } from "@/lib/dispatcher-actions";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
-import { safeReturnTo } from "@/lib/load-page-shared";
 import { isBillableStatus } from "@/lib/types";
 
-function returnAfterAccounting(): void {
+export const ACCOUNTING_MANAGEMENT_HREF = "/accounting/invoices";
+
+function goToAccountingManagement(router: { push: (href: string) => void }): void {
   const params = new URLSearchParams(window.location.search);
   if (params.get("embed") === "1" && window.parent !== window) {
-    window.parent.postMessage({ type: "ms-close-load" }, window.location.origin);
+    window.parent.postMessage({ type: "ms-go", href: ACCOUNTING_MANAGEMENT_HREF }, window.location.origin);
     return;
   }
-  if (params.has("open")) {
-    closeLoadOverlay(safeReturnTo(params.get("from"), "/board"));
-  }
+  router.push(ACCOUNTING_MANAGEMENT_HREF);
 }
 
 export function SendToAccountingControls({
@@ -68,8 +66,7 @@ export function SendToAccountingControls({
       return;
     }
     setOpen(false);
-    returnAfterAccounting();
-    router.refresh();
+    goToAccountingManagement(router);
   }
 
   async function sendQuickbooks() {

@@ -301,8 +301,11 @@ async function main() {
   assert.match(sendBooksUi, /createPortal/);
   assert.match(sendBooksUi, /data-accounting-send-overlay/);
   assert.match(sendBooksUi, /data-accounting-send-close/);
-  assert.match(sendBooksUi, /ms-close-load/);
-  assert.match(sendBooksUi, /returnAfterAccounting/);
+  assert.match(sendBooksUi, /ms-go/);
+  assert.match(sendBooksUi, /\/accounting\/invoices/);
+  assert.match(sendBooksUi, /goToAccountingManagement/);
+  assert.doesNotMatch(sendBooksUi, /ms-close-load/);
+  assert.doesNotMatch(sendBooksUi, /returnAfterAccounting/);
   assert.doesNotMatch(sendBooksUi, /router\.push\("\/"\)/);
   assert.doesNotMatch(sendBooksUi, /href="\/"(?:\s|>)/);
   const sendActionSource = fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8");
@@ -776,6 +779,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /requestLoadOverlay/);
   const overlayHost = fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8");
   assert.match(overlayHost, /ms-open-load/);
+  assert.match(overlayHost, /ms-go/);
+  assert.match(overlayHost, /\/accounting/);
   assert.match(overlayHost, /data-overlay-close/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { parseOpenLoadId } from "@/lib/load-page-shared";
 
 const OPEN_EVENT = "ms-open-load";
@@ -30,6 +31,7 @@ export function PageOverlayHost({
   returnTo: string;
   serverOpenId?: number | null;
 }) {
+  const router = useRouter();
   const [openId, setOpenId] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -50,6 +52,13 @@ export function PageOverlayHost({
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "ms-go") {
+        const href = String(event.data.href ?? "");
+        if (href.startsWith("/accounting")) {
+          router.push(href);
+        }
+        return;
+      }
       if (event.data?.type !== "ms-close-load") return;
       closeLoadOverlay(returnTo);
     }
@@ -65,7 +74,7 @@ export function PageOverlayHost({
       window.removeEventListener("message", onMessage);
       window.removeEventListener("keydown", onKey);
     };
-  }, [returnTo, serverOpenId]);
+  }, [returnTo, router, serverOpenId]);
 
   const frameId = openId && openId !== serverOpenId ? openId : null;
   const src = frameId
