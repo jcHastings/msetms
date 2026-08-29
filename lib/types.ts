@@ -342,6 +342,9 @@ export type Truck = {
   gps_address: string;
   gps_recorded_at: string;
   gps_source: string;
+  gps_speed_mph: number | null;
+  gps_heading_deg: number | null;
+  gps_engine_on: number | null;
   division: FleetDivision;
   created_at: string;
   updated_at: string;

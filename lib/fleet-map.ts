@@ -2,12 +2,12 @@ import { isOrbcommConfigured } from "./env";
 import { canonicalFleetKey } from "./fleet-import-shared";
 import {
   isPlottableCoord,
-  motionFromSpeedMph,
   orbcommPinShape,
   orbcommReeferPinColor,
   orbcommTrailerMoving,
   plottableCoord,
   reeferPinStatusFromSnapshot,
+  samsaraTruckPinStyle,
   type FleetMapMissing,
   type FleetMapModel,
   type FleetMapPin,
@@ -15,7 +15,6 @@ import {
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
-import { SAMSARA_TRUCK_PIN_COLOR } from "./load-map-shared";
 import { getSamsaraFleet } from "./integrations/samsara";
 import {
   listLoads,
@@ -178,12 +177,10 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: truckHref(truck, loads),
-        motion: motionFromSpeedMph(location.speedMph) || "Parked",
+        ...samsaraTruckPinStyle({ speedMph: location.speedMph, engineOn: location.engineOn }),
         speedMph: location.speedMph,
         headingDeg: location.headingDeg,
-        pinShape: orbcommPinShape(location.speedMph),
         recordedAt: location.recordedAt,
-        pinColor: SAMSARA_TRUCK_PIN_COLOR,
       },
       truck.id,
     );
@@ -205,12 +202,10 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
         lat: coord.lat,
         lng: coord.lng,
         href: truckHref(truck, loads),
-        motion: motionFromSpeedMph(stored.speedMph) || "Parked",
+        ...samsaraTruckPinStyle({ speedMph: stored.speedMph, engineOn: stored.engineOn }),
         speedMph: stored.speedMph,
         headingDeg: stored.headingDeg,
-        pinShape: orbcommPinShape(stored.speedMph),
         recordedAt: stored.recordedAt,
-        pinColor: SAMSARA_TRUCK_PIN_COLOR,
       },
       truck.id,
     );

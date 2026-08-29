@@ -13,6 +13,10 @@ export const ORBCOMM_REEFER_PIN_COLOR: Record<OrbcommReeferPinStatus, string> = 
 
 export const ORBCOMM_MOVING_SPEED_MPH = 5;
 
+/** Samsara fleet map: on/moving are green; off is gray-black. */
+export const SAMSARA_TRUCK_ON_COLOR = "#22c55e";
+export const SAMSARA_TRUCK_OFF_COLOR = "#1f2937";
+
 export type FleetMapPinShape = "circle" | "arrow";
 
 export type FleetMapPin = {
@@ -104,6 +108,19 @@ export type FleetMapModel = {
 export function motionFromSpeedMph(speedMph: number | null | undefined): FleetMapMotion | "" {
   if (speedMph == null || Number.isNaN(speedMph)) return "";
   return Math.abs(speedMph) < 1 ? "Parked" : "Moving";
+}
+
+export function samsaraTruckPinStyle(input: {
+  speedMph?: number | null;
+  engineOn?: boolean | null;
+}): { pinColor: string; pinShape: FleetMapPinShape; motion: FleetMapMotion } {
+  if (motionFromSpeedMph(input.speedMph) === "Moving") {
+    return { pinColor: SAMSARA_TRUCK_ON_COLOR, pinShape: "arrow", motion: "Moving" };
+  }
+  if (input.engineOn === true) {
+    return { pinColor: SAMSARA_TRUCK_ON_COLOR, pinShape: "circle", motion: "Parked" };
+  }
+  return { pinColor: SAMSARA_TRUCK_OFF_COLOR, pinShape: "circle", motion: "Parked" };
 }
 
 export function orbcommTrailerMoving(speedMph: number | null | undefined): boolean {

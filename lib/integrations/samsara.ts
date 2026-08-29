@@ -42,6 +42,7 @@ export type VehicleLocation = {
   longitude: number | null;
   speedMph: number | null;
   headingDeg?: number | null;
+  engineOn?: boolean | null;
   address: string;
   recordedAt: string;
   source: "demo" | "samsara";
@@ -519,6 +520,34 @@ export function extractSamsaraGps(vehicle: Record<string, unknown>): {
   };
 }
 
+export function extractSamsaraEngineOn(vehicle: Record<string, unknown>): boolean | null {
+  const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+  const raw =
+    vehicle.engineStates ??
+    nested.engineStates ??
+    vehicle.engineState ??
+    nested.engineState ??
+    vehicle.ignition ??
+    nested.ignition;
+  const rec = Array.isArray(raw) ? raw[0] : raw;
+  let value = "";
+  if (typeof rec === "string" || typeof rec === "number" || typeof rec === "boolean") {
+    value = String(rec);
+  } else if (rec && typeof rec === "object") {
+    const row = rec as Record<string, unknown>;
+    value = String(row.value ?? row.state ?? row.engineState ?? row.status ?? "");
+  }
+  const text = value.trim().toLowerCase();
+  if (text === "on" || text === "idle" || text === "idling" || text === "true" || text === "1") return true;
+  if (text === "off" || text === "false" || text === "0") return false;
+  for (const key of ["ecuOn", "ignitionOn", "isEcuOn", "engineOn"] as const) {
+    const flag = vehicle[key] ?? nested[key];
+    if (flag === true) return true;
+    if (flag === false) return false;
+  }
+  return null;
+}
+
 function samsaraHeadingDeg(rec: Record<string, unknown>): number | null {
   const heading = asNumber(rec.headingDegrees ?? rec.headingDegree ?? rec.heading ?? rec.course);
   if (heading == null || !Number.isFinite(heading)) return null;
@@ -598,6 +627,7 @@ export function mapVehicleLocations(input: {
       longitude: gps.longitude,
       speedMph: gps.speedMph,
       headingDeg: gps.headingDeg,
+      engineOn: extractSamsaraEngineOn(vehicle),
       address: gps.address,
       recordedAt: gps.recordedAt || new Date().toISOString(),
       source: "samsara",
@@ -618,6 +648,7 @@ function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
       source: "samsara",
       speedMph: location.speedMph,
       headingDeg: location.headingDeg,
+      engineOn: location.engineOn,
     });
   }
   return locations;
@@ -927,9 +958,11 @@ async function fetchVehicleGpsHistory(
 async function fetchVehicleStats(): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {
   const withOdometer = await fetchFleetPages(
     "/fleet/vehicles/stats",
-    "gps,obdOdometerMeters,gpsOdometerMeters",
+    "gps,obdOdometerMeters,gpsOdometerMeters,engineStates",
   );
   if (withOdometer.items.length || !withOdometer.error) return withOdometer;
+  const withEngine = await fetchFleetPages("/fleet/vehicles/stats", "gps,engineStates");
+  if (withEngine.items.length || !withEngine.error) return withEngine;
   return fetchFleetPages("/fleet/vehicles/stats", "gps");
 }
 

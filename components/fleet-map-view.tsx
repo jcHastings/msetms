@@ -3,6 +3,8 @@ import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { PageHeader } from "@/components/page-header";
 import {
   ORBCOMM_REEFER_PIN_COLOR,
+  SAMSARA_TRUCK_OFF_COLOR,
+  SAMSARA_TRUCK_ON_COLOR,
   fleetMapDisplayPoints,
   type FleetMapModel,
   type OrbcommReeferPinStatus,
@@ -43,8 +45,9 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
           />
           {model.title === "Orbcomm" || model.title === "Samsara" ? (
             <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-2 text-xs text-slate-600" data-orbcomm-pin-legend={model.title === "Orbcomm" ? "" : undefined} data-samsara-pin-legend={model.title === "Samsara" ? "" : undefined}>
-              {model.title === "Orbcomm"
-                ? (["running", "off", "shutdown", "unknown"] as const).map((status) => (
+              {model.title === "Orbcomm" ? (
+                <>
+                  {(["running", "off", "shutdown", "unknown"] as const).map((status) => (
                     <li key={status} className="inline-flex items-center gap-1.5">
                       <span
                         className="inline-block h-2.5 w-2.5 rounded-full"
@@ -53,12 +56,35 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                       />
                       {REEFER_PIN_LABEL[status]}
                     </li>
-                  ))
-                : null}
-              <li data-orbcomm-pin-shape="arrow">Arrow = moving</li>
-              <li data-orbcomm-pin-shape="circle">
-                {model.title === "Samsara" ? "Dot = parked" : "Circle = stopped"}
-              </li>
+                  ))}
+                  <li data-orbcomm-pin-shape="arrow">Arrow = moving</li>
+                  <li data-orbcomm-pin-shape="circle">Circle = stopped</li>
+                </>
+              ) : (
+                <>
+                  <li className="inline-flex items-center gap-1.5" data-samsara-pin="on">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ background: SAMSARA_TRUCK_ON_COLOR }}
+                    />
+                    On
+                  </li>
+                  <li className="inline-flex items-center gap-1.5" data-samsara-pin="moving">
+                    <span
+                      className="inline-block h-0 w-0 border-b-[9px] border-l-[5px] border-r-[5px] border-l-transparent border-r-transparent"
+                      style={{ borderBottomColor: SAMSARA_TRUCK_ON_COLOR }}
+                    />
+                    Moving
+                  </li>
+                  <li className="inline-flex items-center gap-1.5" data-samsara-pin="off">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ background: SAMSARA_TRUCK_OFF_COLOR }}
+                    />
+                    Off
+                  </li>
+                </>
+              )}
             </ul>
           ) : null}
         </section>

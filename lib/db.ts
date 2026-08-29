@@ -203,6 +203,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trucks", "gps_source", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "gps_speed_mph", "REAL");
   ensureColumn(db, "trucks", "gps_heading_deg", "REAL");
+  ensureColumn(db, "trucks", "gps_engine_on", "INTEGER");
   ensureColumn(db, "trucks", "orbcomm_asset_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "trailer_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "pin", "TEXT NOT NULL DEFAULT ''");

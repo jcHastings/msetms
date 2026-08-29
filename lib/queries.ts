@@ -741,14 +741,26 @@ export function saveTruckGps(
     source: "samsara" | "demo";
     speedMph?: number | null;
     headingDeg?: number | null;
+    engineOn?: boolean | null;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
   if (input.source !== "samsara") return;
+  const previous = getDb()
+    .prepare("SELECT gps_engine_on FROM trucks WHERE id = ?")
+    .get(id) as { gps_engine_on: number | null } | undefined;
+  const engineOn =
+    input.engineOn === undefined
+      ? (previous?.gps_engine_on ?? null)
+      : input.engineOn == null
+        ? null
+        : input.engineOn
+          ? 1
+          : 0;
   getDb()
     .prepare(
       `UPDATE trucks
-       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, gps_speed_mph = ?, gps_heading_deg = ?, updated_at = ?
+       SET gps_latitude = ?, gps_longitude = ?, gps_address = ?, gps_recorded_at = ?, gps_source = ?, gps_speed_mph = ?, gps_heading_deg = ?, gps_engine_on = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -759,6 +771,7 @@ export function saveTruckGps(
       input.source,
       input.speedMph ?? null,
       input.headingDeg ?? null,
+      engineOn,
       now(),
       id,
     );
@@ -895,6 +908,7 @@ export function persistedTruckLocation(truck: {
   gps_source?: string;
   gps_speed_mph?: number | null;
   gps_heading_deg?: number | null;
+  gps_engine_on?: number | null;
 }): {
   truckId: number;
   loadId: number | null;
@@ -904,6 +918,7 @@ export function persistedTruckLocation(truck: {
   longitude: number | null;
   speedMph: number | null;
   headingDeg: number | null;
+  engineOn: boolean | null;
   address: string;
   recordedAt: string;
   source: "samsara";
@@ -921,6 +936,7 @@ export function persistedTruckLocation(truck: {
     longitude: truck.gps_longitude ?? null,
     speedMph: truck.gps_speed_mph ?? null,
     headingDeg: truck.gps_heading_deg ?? null,
+    engineOn: truck.gps_engine_on == null ? null : Boolean(truck.gps_engine_on),
     address: String(truck.gps_address ?? "").trim(),
     recordedAt: truck.gps_recorded_at || "",
     source: "samsara",
