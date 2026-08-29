@@ -332,7 +332,8 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
-  assert.match(workspaceSource, /Email driver load/);
+  assert.match(workspaceSource, /LoadMailMenuItems/);
+  assert.doesNotMatch(workspaceSource, /SendToAccountingControls/);
   assert.match(workspaceSource, /Spanish/);
   assert.match(workspaceSource, /driver-locale|driverLocale/);
   const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
@@ -559,7 +560,7 @@ async function main() {
   assert.match(paySource, /Other payee/);
   assert.match(paySource, /Total income/);
   assert.match(paySource, /Gross profit/);
-  assert.match(paySource, /ViewInvoiceButton/);
+  assert.doesNotMatch(paySource, /ViewInvoiceButton/);
   assert.doesNotMatch(paySource, /View Customer Confirmation/);
   assert.doesNotMatch(paySource, /View Carrier Confirmation/);
   const confirmationPoSource = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");

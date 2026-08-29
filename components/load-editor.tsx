@@ -168,11 +168,6 @@ export async function LoadEditor({
         customerName={load.customer_name}
         contactEmail={resolveLoadCustomerEmail(load)}
         driverEmail={resolveLoadDriverEmail(load)}
-        readyToInvoice={Boolean(load.ready_to_invoice)}
-        nonRevenue={Boolean(load.non_revenue)}
-        accountingDesk={load.accounting_desk}
-        canSendToAccounting={canEditLoads(role) && !load.non_revenue}
-        canReturnFromAccounting={canAccessAccounting(role)}
       >
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
           {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
@@ -277,8 +272,6 @@ export async function LoadEditor({
                 customerName={load.customer_name}
                 driverName={load.driver_name}
                 driverType={load.driver_type}
-                status={load.status}
-                invoiceAttachmentId={attachments.find((file) => file.kind === "invoice")?.id ?? null}
                 rateFallback={load.rate}
                 ooPay={load.oo_pay}
                 ownerOperators={drivers

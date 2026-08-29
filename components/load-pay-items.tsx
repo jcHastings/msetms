@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
-import { ViewInvoiceButton } from "@/components/view-invoice-button";
 import { formatMoney } from "@/lib/format";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
@@ -19,8 +18,6 @@ export function LoadPayItems({
   driverName,
   driverType,
   ownerOperators = [],
-  status = "",
-  invoiceAttachmentId = null,
   rateFallback = null,
   ooPay = null,
 }: {
@@ -30,8 +27,6 @@ export function LoadPayItems({
   driverName: string | null;
   driverType?: string | null;
   ownerOperators?: string[];
-  status?: string;
-  invoiceAttachmentId?: number | null;
   rateFallback?: number | null;
   ooPay?: number | null;
 }) {
@@ -81,7 +76,6 @@ export function LoadPayItems({
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
-        actions={<ViewInvoiceButton loadId={loadId} status={status} attachmentId={invoiceAttachmentId} />}
       />
       <PayItemGroup
         loadId={loadId}
