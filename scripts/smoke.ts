@@ -818,6 +818,25 @@ async function main() {
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
   const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
   assert.ok(fromColAt >= 0 && fromIdxAt > fromColAt, "add from_driver_id before indexing it");
+  const parentColAt = dbMigrateSource.indexOf('ensureColumn(db, "loads", "parent_load_id"');
+  const parentIdxAt = dbMigrateSource.indexOf("idx_loads_parent");
+  assert.ok(parentColAt >= 0 && parentIdxAt > parentColAt, "add parent_load_id before indexing it");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8"), /Master load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8"), /stop_ids/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Split as master load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /ms-open-load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/master-load.ts"), "utf8"), /createMasterChild/);
+  const { childLoadNumber, nextChildSuffix, sortMasterFamilies } = await import("../lib/master-load-shared");
+  assert.equal(childLoadNumber("MSE-12345", "a"), "MSE-12345-A");
+  assert.equal(nextChildSuffix(["A", "b"]), "C");
+  assert.equal(
+    sortMasterFamilies([
+      { id: 2, load_number: "MSE-12345-B", parent_load_id: 1 },
+      { id: 1, load_number: "MSE-12345", parent_load_id: null },
+      { id: 3, load_number: "MSE-12345-A", parent_load_id: 1 },
+    ]).map((row) => row.load_number).join(","),
+    "MSE-12345,MSE-12345-A,MSE-12345-B",
+  );
   assert.doesNotMatch(basicsChunk, /Routing guide|Refresh route|route_miles/);
   assert.doesNotMatch(paySource, /Routing guide|Refresh route|route_miles/);
   const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
@@ -1446,6 +1465,8 @@ async function main() {
     "components/document-preview.tsx",
     "components/open-attachment-link.tsx",
     "lib/load-documents-shared.ts",
+    "components/master-load-panel.tsx",
+    "lib/master-load-shared.ts",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
@@ -2024,6 +2045,64 @@ async function main() {
   );
 
   const { addPayItem, listPayItems } = await import("../lib/pay-items");
+  const masterOtherCustomerId = queries.createCustomer({
+    name: "Master Split Receiver",
+    billing_notes: "",
+    contacts: [],
+  });
+  const masterTripId = queries.createLoad({
+    customer_id: customerId,
+    load_number: "MSE-88801",
+    origin: "Hastings, NE",
+    destination: "Chicago, IL",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "FRESH BEEF",
+    rate: 2400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 26,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const masterStops = (await import("../lib/stops")).ensureDefaultStops(masterTripId);
+  const { createMasterChild, listChildLoads, listMasterFamily } = await import("../lib/master-load");
+  const splitA = createMasterChild({
+    parentId: masterTripId,
+    customerId,
+    stopIds: masterStops.map((stop) => stop.id),
+    rate: 2400,
+    copyFinancials: true,
+  });
+  assert.equal(splitA.load_number, "MSE-88801-A");
+  assert.equal(splitA.parent_load_id, masterTripId);
+  assert.equal(splitA.master_suffix, "A");
+  const masterDropStops = masterStops.filter((stop) => stop.kind === "delivery");
+  const splitB = createMasterChild({
+    parentId: masterTripId,
+    customerId: masterOtherCustomerId,
+    stopIds: (masterDropStops.length ? masterDropStops : masterStops).map((stop) => stop.id),
+    rate: 800,
+  });
+  assert.equal(splitB.load_number, "MSE-88801-B");
+  assert.equal(splitB.customer_name, "Master Split Receiver");
+  assert.equal(listChildLoads(masterTripId).length, 2);
+  assert.equal(listMasterFamily(splitB.id)[0]?.load_number, "MSE-88801");
+  assert.ok((await import("../lib/stops")).listStops(splitB.id).length >= 1);
+  try {
+    (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(masterTripId)!);
+    assert.fail("master trip should not invoice");
+  } catch (error) {
+    assert.match(String(error instanceof Error ? error.message : error), /customer splits|MSE-88801-A/);
+  }
   const payLoadId = queries.createLoad({
     customer_id: customerId,
     origin: "Atlanta, GA",
