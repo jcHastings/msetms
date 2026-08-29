@@ -157,9 +157,34 @@ export function normalizeBolDraft(value: unknown): BolDraft {
     deliveryDate: String(row.deliveryDate ?? "").trim(),
     reeferSetpoint: String(row.reeferSetpoint ?? "").trim(),
     reeferMode: reeferMode === "Start/Stop" || reeferMode === "start_stop" ? "Start/Stop" : "Continuous",
-    seals: String(row.seals ?? "").trim(),
+    seals: joinBolSeals(Array.isArray(row.seals) ? row.seals : splitBolSeals(String(row.seals ?? ""))),
     items,
   };
+}
+
+export function splitBolSeals(value: string | string[] | null | undefined): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : String(value ?? "");
+  const parts = raw
+    .split(/[,;\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts : [""];
+}
+
+export function joinBolSeals(values: Array<string | null | undefined>): string {
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+export function collectBolSealsFromForm(formData: FormData): string {
+  const listed = formData
+    .getAll("bol_seal")
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  if (listed.length > 0) return joinBolSeals(listed);
+  return joinBolSeals(splitBolSeals(String(formData.get("bol_seals") ?? "")));
 }
 
 export function parseBolItemsJson(raw: string): BolItemDraft[] {
@@ -200,7 +225,7 @@ export function parseBolDraftFromForm(formData: FormData | null | undefined): Bo
     deliveryDate: formData.get("bol_delivery_date"),
     reeferSetpoint: formData.get("bol_reefer_setpoint"),
     reeferMode: formData.get("bol_reefer_mode"),
-    seals: formData.get("bol_seals"),
+    seals: collectBolSealsFromForm(formData),
     items: parseBolItemsJson(String(formData.get("bol_items") ?? "")),
   });
 }

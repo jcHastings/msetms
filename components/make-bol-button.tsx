@@ -17,6 +17,8 @@ import {
   emptyBolItem,
   filledBolItems,
   formatBolTotal,
+  joinBolSeals,
+  splitBolSeals,
 } from "@/lib/bol-shared";
 import { formatDateTime } from "@/lib/format";
 import { labelForUploader, type Attachment } from "@/lib/types";
@@ -32,6 +34,7 @@ export function MakeBolPanel({
 }) {
   const [state, formAction, pending] = useActionState(makeBolAction.bind(null, loadId), null);
   const [draft, setDraft] = useState(prefill);
+  const [sealInputs, setSealInputs] = useState(() => splitBolSeals(prefill.seals));
   const [itemsOpen, setItemsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const itemsRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,7 @@ export function MakeBolPanel({
 
   useEffect(() => {
     setDraft(prefill);
+    setSealInputs(splitBolSeals(prefill.seals));
   }, [prefill]);
 
   const bols = attachments.filter((file) => file.kind === "bol");
@@ -56,6 +60,12 @@ export function MakeBolPanel({
 
   function patch<K extends keyof BolDraft>(key: K, value: BolDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSeals(next: string[]) {
+    const seals = next.length > 0 ? next : [""];
+    setSealInputs(seals);
+    patch("seals", joinBolSeals(seals));
   }
 
   return (
@@ -170,15 +180,45 @@ export function MakeBolPanel({
               onChange={(event) => patch("declaredValue", event.target.value)}
             />
           </Field>
-          <Field label="Seals">
-            <input
-              name="bol_seals"
-              value={draft.seals}
-              onChange={(event) => patch("seals", event.target.value)}
-              placeholder="One or more seal numbers"
-            />
-          </Field>
         </div>
+        <fieldset className="rounded-lg border border-slate-200 p-3" data-bol-seals>
+          <legend className="px-1 text-xs font-semibold text-slate-600">Seal numbers</legend>
+          <input type="hidden" name="bol_seals" value={joinBolSeals(sealInputs)} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {sealInputs.map((seal, index) => (
+              <Field key={index} label={index === 0 ? "Seal number" : `Seal number ${index + 1}`}>
+                <div className="flex gap-2">
+                  <input
+                    name="bol_seal"
+                    value={seal}
+                    onChange={(event) =>
+                      updateSeals(sealInputs.map((current, i) => (i === index ? event.target.value : current)))
+                    }
+                    placeholder="Seal #"
+                    data-bol-seal
+                  />
+                  {sealInputs.length > 1 ? (
+                    <button
+                      className="btn btn-ghost"
+                      type="button"
+                      onClick={() => updateSeals(sealInputs.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </Field>
+            ))}
+          </div>
+          <button
+            className="btn btn-secondary mt-3"
+            type="button"
+            data-bol-add-seal
+            onClick={() => updateSeals([...sealInputs, ""])}
+          >
+            Add seal
+          </button>
+        </fieldset>
         <div className="grid gap-3 lg:grid-cols-2">
           <fieldset className="rounded-lg border border-slate-200 p-3">
             <legend className="px-1 text-xs font-semibold text-slate-600">Origin</legend>

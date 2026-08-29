@@ -1433,6 +1433,8 @@ async function main() {
   assert.match(bolFormSource, /Print BOL/);
   assert.match(bolFormSource, /Reefer setpoint/);
   assert.match(bolFormSource, /bol_trailer/);
+  assert.match(bolFormSource, /name=["']bol_seal["']/);
+  assert.match(bolFormSource, /Add seal/);
   assert.match(bolFormSource, /from ["']@\/lib\/bol-shared["']/);
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
@@ -4486,15 +4488,16 @@ Continuous reefer. Two load locks.
   assert.match(bolText, /PO-55209/);
   assert.match(bolText, /RC-1045/);
   assert.match(bolText, /Trailer/);
+  assert.doesNotMatch(bolText, /Trailer TR-7742 PO-55209|Trailer 1527/);
   assert.doesNotMatch(bolText, /Internal legs|for carrier use|Relay/i);
   assert.doesNotMatch(bolText, /Thank you for hauling|Carrier is responsible for cargo/i);
 
   const bolMod = await import("../lib/bol");
-  const { writeBolDraftToForm } = await import("../lib/bol-shared");
-  const itsItemsForm = new FormData();
-  writeBolDraftToForm(itsItemsForm, {
+  const { parseBolDraftFromForm, writeBolDraftToForm } = await import("../lib/bol-shared");
+  const itsDraft = {
     ...bolMod.buildBolDraftFromLoad(deniseLoad),
     thirdParty: "M & S Loads LLC - MS Express",
+    seals: "S-441, S-442",
     items: [
       {
         pieces: "111",
@@ -4506,7 +4509,15 @@ Continuous reefer. Two load locks.
         classCode: "",
       },
     ],
-  });
+  };
+  const multiSealForm = new FormData();
+  writeBolDraftToForm(multiSealForm, { ...itsDraft, seals: "" });
+  multiSealForm.delete("bol_seals");
+  multiSealForm.append("bol_seal", "S-441");
+  multiSealForm.append("bol_seal", "S-442");
+  assert.equal(parseBolDraftFromForm(multiSealForm)?.seals, "S-441, S-442");
+  const itsItemsForm = new FormData();
+  writeBolDraftToForm(itsItemsForm, itsDraft);
   const madeItsBol = await (await import("../lib/actions")).makeBolAction(deniseLoad.id, null, itsItemsForm);
   assert.equal(madeItsBol.ok, true);
   const itsBols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
@@ -4519,6 +4530,11 @@ Continuous reefer. Two load locks.
   assert.match(itsBolText, /boxes/);
   assert.match(itsBolText, /Total Pieces/);
   assert.match(itsBolText, /Total Weight/);
+  assert.match(itsBolText, /S-441/);
+  assert.match(itsBolText, /S-442/);
+  assert.match(itsBolText, /TR-7742/);
+  assert.match(itsBolText, /PO-55209/);
+  assert.doesNotMatch(itsBolText, /Trailer TR-7742 PO-55209|Trailer 1527/);
   assert.doesNotMatch(itsBolText, /Chilled dairy/);
 
   const freshCompanyId = queries.createLoad({
