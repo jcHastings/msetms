@@ -16,6 +16,9 @@ export function LoadCarrierScreen({
   alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
   card = true,
   onExpiredChange,
+  onDriverIdChange,
+  ooPercent,
+  onOoPercentChange,
 }: {
   drivers: DriverWithTruck[];
   trucks: Truck[];
@@ -25,6 +28,9 @@ export function LoadCarrierScreen({
   alertWindows?: ComplianceWindows;
   card?: boolean;
   onExpiredChange?: (expired: boolean, confirmed: boolean) => void;
+  onDriverIdChange?: (driverId: string) => void;
+  ooPercent?: number | null;
+  onOoPercentChange?: (percent: number | null) => void;
 }) {
   const { handleAssign } = useLoadAssignPersist(load?.id);
   const initialDriver = load?.driver_id ? drivers.find((item) => item.id === load.driver_id) : null;
@@ -54,6 +60,10 @@ export function LoadCarrierScreen({
   useEffect(() => {
     onExpiredChange?.(expired, confirmed);
   }, [expired, confirmed, onExpiredChange]);
+
+  useEffect(() => {
+    onDriverIdChange?.(driverId);
+  }, [driverId, onDriverIdChange]);
 
   function syncConfirm(nextConfirmed: boolean) {
     setConfirmed(nextConfirmed);
@@ -180,11 +190,21 @@ export function LoadCarrierScreen({
         </label>
       ) : null}
       {selectedDriver && isOwnerOperator(selectedDriver.driver_type) ? (
-        <input
-          type="hidden"
-          name="oo_percent"
-          value={String(load?.oo_percent ?? selectedDriver.pay_percent ?? defaultOoPercent)}
-        />
+        <div className="field" data-oo-percent="">
+          <label htmlFor="oo_percent">OO percent</label>
+          <input
+            id="assets_oo_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            value={String(ooPercent ?? load?.oo_percent ?? selectedDriver.pay_percent ?? defaultOoPercent)}
+            onChange={(event) => {
+              const live = Number(event.target.value);
+              onOoPercentChange?.(Number.isFinite(live) ? live : null);
+            }}
+          />
+        </div>
       ) : null}
       </div>
     </section>

@@ -97,8 +97,19 @@ function listFenceStops(loadId: number): StopFenceRow[] {
     .all(loadId) as StopFenceRow[];
 }
 
-function coordsForStop(stop: StopFenceRow, extra?: Map<number, GpsPoint>): GpsPoint | null {
-  const extraPoint = extra?.get(stop.id);
+export function coordsForStop(
+  stop: {
+    id?: number;
+    location_id?: number | null;
+    name?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  },
+  extra?: Map<number, GpsPoint>,
+): GpsPoint | null {
+  const extraPoint = stop.id != null ? extra?.get(stop.id) : undefined;
   if (extraPoint) return extraPoint;
   if (stop.location_id) {
     const location = getLocation(stop.location_id);
@@ -109,10 +120,10 @@ function coordsForStop(stop: StopFenceRow, extra?: Map<number, GpsPoint>): GpsPo
     }
   }
   const matched = matchLocationForStop(listLocations(), {
-    name: stop.name,
-    street: stop.street,
-    city: stop.city,
-    state: stop.state,
+    name: stop.name ?? "",
+    street: stop.street ?? "",
+    city: stop.city ?? "",
+    state: stop.state ?? "",
   });
   if (matched?.latitude != null && matched.longitude != null) {
     if (Number.isFinite(matched.latitude) && Number.isFinite(matched.longitude)) {
@@ -176,6 +187,26 @@ export async function applyGeofenceArrivalsWithGeocode(loadId: number, now = new
     if (stop.location_id) saveLocationCoords(stop.location_id, geo.latitude, geo.longitude);
   }
   return applyGeofenceArrivals(loadId, now, extra);
+}
+
+export function stillInsideGeofenceAt(
+  dest: GpsPoint,
+  pings: GpsPing[],
+  mark: Date,
+  departedAt?: string | null,
+): boolean {
+  const departed = String(departedAt ?? "").trim();
+  if (departed) {
+    const left = new Date(departed);
+    if (!Number.isNaN(left.getTime()) && left.getTime() <= mark.getTime()) return false;
+  }
+  const atOrAfter = pings.filter((ping) => {
+    const at = new Date(ping.recordedAt);
+    return !Number.isNaN(at.getTime()) && at.getTime() >= mark.getTime();
+  });
+  const sample = atOrAfter[0] ?? pings[pings.length - 1];
+  if (!sample) return !departed;
+  return milesBetween(sample, dest) <= GEOFENCE_MILES;
 }
 
 export function applyGeofenceArrivalsForTruck(truckId: number, now = new Date()): number {

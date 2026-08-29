@@ -64,10 +64,6 @@ export function LoadLaneFields({
         />
       </div>
       <div className="field">
-        <label htmlFor="rate">Rate</label>
-        <input id="rate" name="rate" type="number" min={0} step="0.01" defaultValue={load?.rate ?? defaults.rate ?? ""} />
-      </div>
-      <div className="field">
         <label htmlFor="shipper_location_id-search">Shipper location</label>
         <LocationPicker
           id="shipper_location_id-search"

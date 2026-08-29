@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { isPayItemCategory, type PayItemBillTo, type PayItemSide } from "./load-page-shared";
+import { computeOwnerOperatorPay, isAutoOwnerOperatorPay } from "./settlement";
 
 export type LoadPayItem = {
   id: number;
@@ -92,16 +93,20 @@ export function customerInvoicePayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId, "income").filter((item) => item.bill_to === "customer");
 }
 
+/** Flat customer freight only. Detention, fuel, layover, and other accessories stay out. */
+export function flatCustomerRate(load: { id: number; rate?: number | null }): number | null {
+  const linehaul = customerInvoicePayItems(load.id)
+    .filter((item) => item.category === "flat_rate")
+    .reduce((sum, item) => sum + (item.total ?? item.rate ?? 0), 0);
+  if (linehaul > 0) return Math.round(linehaul * 100) / 100;
+  if (load.rate != null && !Number.isNaN(load.rate)) return load.rate;
+  return null;
+}
+
 /** Billed customer rate already on the load or on customer invoice lines. Never invents a number. */
 export function billedCustomerRate(load: { id: number; rate?: number | null }): number | null {
   if (load.rate != null && !Number.isNaN(load.rate)) return load.rate;
-  const income = customerInvoicePayItems(load.id);
-  const linehaul = income
-    .filter((item) => item.category === "flat_rate")
-    .reduce((sum, item) => sum + (item.total ?? item.rate ?? 0), 0);
-  if (linehaul > 0) return linehaul;
-  const billed = income.reduce((sum, item) => sum + (item.total ?? 0), 0);
-  return billed > 0 ? billed : null;
+  return flatCustomerRate(load);
 }
 
 export function driverPayItems(loadId: number): LoadPayItem[] {
@@ -109,8 +114,18 @@ export function driverPayItems(loadId: number): LoadPayItem[] {
 }
 
 export function syncCustomerRateFromPayItems(loadId: number): void {
-  const items = customerInvoicePayItems(loadId);
-  if (!items.length) return;
-  const total = items.reduce((sum, item) => sum + (item.total ?? 0), 0);
-  getDb().prepare("UPDATE loads SET rate = ?, updated_at = ? WHERE id = ?").run(total, new Date().toISOString(), loadId);
+  const flats = customerInvoicePayItems(loadId).filter((item) => item.category === "flat_rate");
+  if (!flats.length) return;
+  const nextRate = Math.round(flats.reduce((sum, item) => sum + (item.total ?? 0), 0) * 100) / 100;
+  const load = getDb()
+    .prepare("SELECT rate, oo_percent, oo_pay FROM loads WHERE id = ?")
+    .get(loadId) as { rate: number | null; oo_percent: number | null; oo_pay: number | null } | undefined;
+  if (!load) return;
+  const nextOoPay = isAutoOwnerOperatorPay(load.oo_pay, load.rate, load.oo_percent)
+    ? computeOwnerOperatorPay(nextRate, load.oo_percent)
+    : load.oo_pay;
+  if (nextRate === load.rate && nextOoPay === load.oo_pay) return;
+  getDb()
+    .prepare("UPDATE loads SET rate = ?, oo_pay = ?, updated_at = ? WHERE id = ?")
+    .run(nextRate, nextOoPay, new Date().toISOString(), loadId);
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { computeOwnerOperatorPay } from "@/lib/settlement";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
@@ -47,6 +48,8 @@ export function LoadBasicsScreen({
   weightUnit = "lb",
   equipmentChoices = [],
   card = true,
+  ooPercent = null,
+  onOoPercentChange,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -55,10 +58,18 @@ export function LoadBasicsScreen({
   weightUnit?: string;
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
+  ooPercent?: number | null;
+  onOoPercentChange?: (percent: number | null) => void;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
   const [status, setStatus] = useState<string>(load?.status ?? "available");
   const [truckStatus, setTruckStatus] = useState(load?.truck_status ?? "");
+  const [rate, setRate] = useState(
+    load?.rate != null ? String(load.rate) : defaults.rate != null ? String(defaults.rate) : "",
+  );
+  const [ooPay, setOoPay] = useState(load?.oo_pay != null ? String(load.oo_pay) : "");
+  const [percent, setPercent] = useState(ooPercent != null ? String(ooPercent) : "");
+  const lastOoPercent = useRef(ooPercent);
   const looksReefer = Boolean(
     load?.reefer_mode ||
       defaults.reefer_mode ||
@@ -67,6 +78,18 @@ export function LoadBasicsScreen({
       defaults.reefer_setpoint_f != null ||
       /reefer/i.test(load?.equipment ?? DEFAULT_LOAD_EQUIPMENT),
   );
+  useEffect(() => {
+    if (ooPercent === lastOoPercent.current) return;
+    lastOoPercent.current = ooPercent;
+    if (ooPercent == null) {
+      setPercent("");
+      setOoPay("");
+      return;
+    }
+    setPercent(String(ooPercent));
+    const pay = computeOwnerOperatorPay(rate === "" ? null : Number(rate), ooPercent);
+    setOoPay(pay != null ? String(pay) : "");
+  }, [ooPercent, rate]);
   return (
     <section data-load-tab="basics" className={card ? "card overflow-hidden" : undefined}>
       {card ? (
@@ -154,6 +177,74 @@ export function LoadBasicsScreen({
           </datalist>
         ) : null}
       </div>
+      <div className="field">
+        <label htmlFor="rate">Customer rate</label>
+        <input
+          id="rate"
+          name="rate"
+          type="number"
+          min={0}
+          step="0.01"
+          data-critical-save=""
+          value={rate}
+          onChange={(event) => {
+            const next = event.target.value;
+            setRate(next);
+            if (ooPercent != null) {
+              const live = Number(percent);
+              const pay = computeOwnerOperatorPay(
+                next === "" ? null : Number(next),
+                Number.isFinite(live) ? live : ooPercent,
+              );
+              setOoPay(pay != null ? String(pay) : "");
+            }
+            if (load) handleAssign(load.rate, next, "rate", event);
+          }}
+        />
+      </div>
+      {ooPercent != null ? (
+        <>
+          <div className="field" data-oo-percent="">
+            <label htmlFor="oo_percent">OO percent</label>
+            <input
+              id="oo_percent"
+              name="oo_percent"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              data-critical-save=""
+              value={percent}
+              onChange={(event) => {
+                const next = event.target.value;
+                setPercent(next);
+                const live = Number(next);
+                const nextPercent = Number.isFinite(live) ? live : null;
+                onOoPercentChange?.(nextPercent);
+                const pay = computeOwnerOperatorPay(rate === "" ? null : Number(rate), nextPercent);
+                setOoPay(pay != null ? String(pay) : "");
+                if (load) handleAssign(load.oo_percent, next, "oo_percent", event);
+              }}
+            />
+          </div>
+          <div className="field" data-oo-pay="">
+            <label htmlFor="oo_pay">OO pay</label>
+            <input
+              id="oo_pay"
+              name="oo_pay"
+              type="number"
+              min={0}
+              step="0.01"
+              data-critical-save=""
+              value={ooPay}
+              onChange={(event) => {
+                setOoPay(event.target.value);
+                if (load) handleAssign(load.oo_pay, event.target.value, "oo_pay", event);
+              }}
+            />
+          </div>
+        </>
+      ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>
         <input

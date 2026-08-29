@@ -48,6 +48,7 @@ import {
   DRIVER_TYPES,
   TRUCK_STATUSES,
   isLocationRole,
+  isOwnerOperator,
   isSchedulingType,
   parseCdlEndorsements,
   type ActionResult,
@@ -163,6 +164,17 @@ function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
     throw new Error("Pick a driver type.");
   }
   return type as DriverKind;
+}
+
+function parsePayPercent(formData: FormData, driverType: DriverKind): number | null {
+  if (!isOwnerOperator(driverType)) return null;
+  const raw = String(formData.get("pay_percent") ?? "").trim();
+  if (!raw) throw new Error("Owner-operator percent is required.");
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error("Owner-operator percent must be 0 to 100.");
+  }
+  return value;
 }
 
 function parseDateField(value: FormDataEntryValue | null): string {
@@ -329,6 +341,7 @@ export async function createDriverAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const driverType = parseDriverKind(formData.get("driver_type"));
     const id = createDriver({
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -340,7 +353,8 @@ export async function createDriverAction(
       license_expires: parseDateField(formData.get("license_expires")),
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
-      driver_type: parseDriverKind(formData.get("driver_type")),
+      driver_type: driverType,
+      pay_percent: parsePayPercent(formData, driverType),
       truck_id: null,
       status: "available",
       alt_phone: String(formData.get("alt_phone") ?? "").trim(),
@@ -378,6 +392,7 @@ export async function updateDriverAction(
     if (id == null) throw new Error("Driver not found.");
     const current = getDriver(id);
     if (!current) throw new Error("Driver not found.");
+    const driverType = parseDriverKind(formData.get("driver_type"));
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -392,8 +407,8 @@ export async function updateDriverAction(
       license_expires: parseDateField(formData.get("license_expires")),
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
-      driver_type: parseDriverKind(formData.get("driver_type")),
-      pay_percent: current.pay_percent,
+      driver_type: driverType,
+      pay_percent: parsePayPercent(formData, driverType),
       truck_id: current.truck_id,
       status: current.status,
       alt_phone: String(formData.get("alt_phone") ?? "").trim(),

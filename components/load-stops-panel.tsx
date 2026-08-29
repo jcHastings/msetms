@@ -15,7 +15,8 @@ import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { applyLocationToStop, formatLocationAddress, formatStopRowAddress, matchLocationForStop, US_STATES } from "@/lib/locations";
 import { applyNyBoroughState, nyBoroughStateError, type PlaceDetails } from "@/lib/places-shared";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
-import { formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
+import { detentionTwoHourMark } from "@/lib/detention-clock";
+import { formatDateTime, formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
 import type { Location } from "@/lib/types";
@@ -599,6 +600,12 @@ function StopGridBlock({
   const rules = locationRuleLabels(location);
   const notes = stopPrivateNotes(draft, location);
   const typeLabel = stopTypeLabel(draft.kind, typeNumber);
+  const detentionMark = detentionTwoHourMark({
+    scheduleType: draft.scheduleType || stop.schedule_type,
+    arrivedAt: stop.arrived_at,
+    windowStart: stop.window_start,
+    windowEnd: stop.window_end,
+  });
 
   function commitTime(field: "windowStart" | "windowEnd" | "arrivedAt" | "departedAt", value: string) {
     const next = { ...draft, [field]: value };
@@ -688,6 +695,11 @@ function StopGridBlock({
             onChange={(event) => setDraft((current) => ({ ...current, arrivedAt: event.target.value }))}
             onBlur={(event) => commitTime("arrivedAt", event.target.value)}
           />
+          {detentionMark ? (
+            <div className="mt-1 text-[11px] font-semibold text-amber-800" data-detention-mark="">
+              Detention {formatDateTime(detentionMark.toISOString())}
+            </div>
+          ) : null}
         </td>
         <td>
           <input

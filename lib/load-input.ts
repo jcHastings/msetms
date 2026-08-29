@@ -3,7 +3,7 @@ import { placeholderLane } from "./load-page-shared";
 import { findOrCreateCustomer, getDriver, type LoadInput } from "./queries";
 import { isReeferMode } from "./reefer-shared";
 import { DEFAULT_LOAD_EQUIPMENT, isOwnerOperator } from "./types";
-import { computeOwnerOperatorPay } from "./settlement";
+import { resolveOwnerOperatorPay } from "./settlement";
 import { defaultOoPercent, isKnownLoadStatus } from "./settings";
 
 export type ExistingLoadFields = {
@@ -234,7 +234,17 @@ export function parseLoadInput(
   if (driver && isOwnerOperator(driver.driver_type)) {
     const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
     parsed.oo_percent = percent;
-    parsed.oo_pay = computeOwnerOperatorPay(parsed.rate, percent);
+    const submittedPay = formData.has("oo_pay") ? parseOptionalFloat(formData.get("oo_pay")) : undefined;
+    parsed.oo_pay = resolveOwnerOperatorPay({
+      rate: parsed.rate,
+      percent,
+      submittedPay,
+      existingPay: existing?.oo_pay ?? null,
+      existingRate: existing?.rate ?? null,
+      existingPercent: existing?.oo_percent ?? null,
+      existingDriverId: existing?.driver_id ?? null,
+      driverId,
+    });
   } else {
     parsed.oo_percent = null;
     parsed.oo_pay = null;

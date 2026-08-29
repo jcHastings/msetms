@@ -10,7 +10,7 @@ import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
-import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
+import { isOwnerOperator, type ActionResult, type Customer, type DriverWithTruck, type Load, type Location, type Trailer, type Truck } from "@/lib/types";
 
 export type LoadFormScreen = "basics" | "customer" | "assets" | "all";
 
@@ -70,10 +70,26 @@ export function LoadForm({
   const [state, formAction, pending] = useActionState(action, null);
   const extraDefaults = defaults ?? {};
   const [blockExpired, setBlockExpired] = useState(false);
+  const [liveOoPercent, setLiveOoPercent] = useState<number | null>(() => {
+    const driver = drivers.find((item) => String(item.id) === (load?.driver_id ? String(load.driver_id) : ""));
+    if (!driver || !isOwnerOperator(driver.driver_type)) return null;
+    return driver.pay_percent ?? load?.oo_percent ?? defaultOoPercent;
+  });
   const canSubmit = !pending && !blockExpired;
   const onExpiredChange = useCallback((expired: boolean, confirmed: boolean) => {
     setBlockExpired(expired && !confirmed);
   }, []);
+  const onDriverIdChange = useCallback(
+    (nextId: string) => {
+      const driver = drivers.find((item) => String(item.id) === nextId);
+      if (!driver || !isOwnerOperator(driver.driver_type)) {
+        setLiveOoPercent(null);
+        return;
+      }
+      setLiveOoPercent(driver.pay_percent ?? defaultOoPercent);
+    },
+    [drivers, defaultOoPercent],
+  );
   const card = Boolean(workspace);
 
   useEffect(() => {
@@ -121,6 +137,8 @@ export function LoadForm({
           weightUnit={weightUnit}
           equipmentChoices={equipmentChoices}
           card={card}
+          ooPercent={liveOoPercent}
+          onOoPercentChange={setLiveOoPercent}
         />
       </div>
       <div
@@ -145,6 +163,9 @@ export function LoadForm({
           alertWindows={alertWindows}
           card={card}
           onExpiredChange={onExpiredChange}
+          onDriverIdChange={onDriverIdChange}
+          ooPercent={liveOoPercent}
+          onOoPercentChange={setLiveOoPercent}
         />
       </div>
       {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}

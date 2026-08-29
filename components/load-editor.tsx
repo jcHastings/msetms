@@ -252,6 +252,7 @@ export async function LoadEditor({
                 status={load.status}
                 invoiceAttachmentId={attachments.find((file) => file.kind === "invoice")?.id ?? null}
                 rateFallback={load.rate}
+                ooPay={load.oo_pay}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => driver.name)}

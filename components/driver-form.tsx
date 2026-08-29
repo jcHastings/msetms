@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createDriverAction, updateDriverAction } from "@/lib/actions";
 import type { DriverFormValues } from "@/lib/fleet-form-shared";
@@ -14,6 +14,7 @@ type Props = {
 
 export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
   const [state, formAction, pending] = useActionState(driver ? updateDriverAction : createDriverAction, null);
+  const [driverKind, setDriverKind] = useState(driver ? normalizeDriverKind(driver.driver_type) : "");
 
   return (
     <form action={formAction} className="card grid max-w-3xl gap-4 p-6 md:grid-cols-2">
@@ -35,13 +36,30 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
                 name="driver_type"
                 value={type.value}
                 required
-                defaultChecked={driver ? normalizeDriverKind(driver.driver_type) === type.value : false}
+                checked={driverKind === type.value}
+                onChange={() => setDriverKind(type.value)}
               />
               <span className="font-semibold text-slate-900">{type.label}</span>
             </label>
           ))}
         </div>
       </fieldset>
+      {driverKind === "owner_operator" ? (
+        <div className="field" data-oo-percent="">
+          <label htmlFor="pay_percent">OO percent *</label>
+          <input
+            id="pay_percent"
+            name="pay_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            required
+            defaultValue={driver?.pay_percent ?? ""}
+            placeholder="85"
+          />
+        </div>
+      ) : null}
       <div className="field">
         <label htmlFor="name">Name *</label>
         <input id="name" name="name" required defaultValue={driver?.name} />

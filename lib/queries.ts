@@ -17,6 +17,7 @@ import { getDb } from "./db";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
 import { driverAssignedToLoad } from "./relay-store";
+import { flatCustomerRate } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
@@ -1625,7 +1626,7 @@ export function assignLoad(
     isOwnerOperator(driver.driver_type)
       ? settlement?.oo_percent ?? driver.pay_percent ?? defaultOoPercent()
       : null;
-  const ooPay = computeOwnerOperatorPay(load.rate, ooPercent);
+  const ooPay = computeOwnerOperatorPay(flatCustomerRate(load), ooPercent);
   const assignedStatus = settlement?.dispatch ? "dispatched" : "assigned";
 
   const db = getDb();

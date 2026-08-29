@@ -22,6 +22,7 @@ export function LoadPayItems({
   status = "",
   invoiceAttachmentId = null,
   rateFallback = null,
+  ooPay = null,
 }: {
   loadId: number;
   items: LoadPayItem[];
@@ -32,6 +33,7 @@ export function LoadPayItems({
   status?: string;
   invoiceAttachmentId?: number | null;
   rateFallback?: number | null;
+  ooPay?: number | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
@@ -55,6 +57,12 @@ export function LoadPayItems({
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
           <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(profit)}</div>
         </div>
+        {ownerOperator && ooPay != null ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-oo-pay="">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">OO pay</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(ooPay)}</div>
+          </div>
+        ) : null}
       </div>
       <PayItemGroup
         loadId={loadId}

@@ -367,6 +367,12 @@ async function main() {
   assert.match(basicsChunk, /truckStatusOptions/);
   assert.match(basicsChunk, /data-autosave/);
   assert.match(basicsChunk, /blurPersist/);
+  assert.match(basicsChunk, /htmlFor="rate"/);
+  assert.match(basicsChunk, /Customer rate/);
+  assert.match(basicsChunk, /name="oo_percent"/);
+  assert.match(basicsChunk, /name="oo_pay"/);
+  assert.match(basicsChunk, /data-oo-percent/);
+  assert.match(basicsChunk, /data-oo-pay/);
   assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
@@ -655,6 +661,11 @@ async function main() {
   assert.match(stopsPanelUi, /FCFS/);
   assert.match(stopsPanelUi, /Appointment time/);
   assert.match(stopsPanelUi, /isAppointmentSchedule/);
+  assert.match(stopsPanelUi, /data-detention-mark/);
+  assert.match(stopsPanelUi, /detentionTwoHourMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /windowStart && arrived\.getTime\(\) < windowStart\.getTime\(\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule === "appointment"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /AND \$\{field\} = ''/);
   assert.match(stopsPanelUi, /Add Pickup/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /applyGeofenceArrivalsForTruck/);
@@ -1098,7 +1109,10 @@ async function main() {
   assert.doesNotMatch(driverFormSrc, /Passport Expiry|Fast Card|passport_expiry|fast_card|hazmat_expiry/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /Hazmat \(H\)/);
   assert.doesNotMatch(driverFormSrc, /Recur \+|Recur -/);
-  assert.doesNotMatch(driverFormSrc, /Default settlement|pay_percent/);
+  assert.doesNotMatch(driverFormSrc, /Default settlement|Pay\/Recur|payroll tab/);
+  assert.match(driverFormSrc, /name="pay_percent"/);
+  assert.match(driverFormSrc, /data-oo-percent/);
+  assert.match(driverFormSrc, /owner_operator/);
   const driverTypesSrc = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
   assert.match(driverTypesSrc, /value: "company_driver"/);
   assert.match(driverTypesSrc, /label: "Company driver"/);
@@ -3562,6 +3576,97 @@ Continuous reefer. Two load locks.
   assert.equal(afterCompany?.oo_percent, null);
   assert.equal(afterCompany?.oo_pay, null);
   queries.assignLoad(coleLoad.id, coleLoad.truck_id, cole.id, coleLoad.trailer_id);
+  assert.equal(computeOwnerOperatorPay(1000, 85), 850);
+  const kelvinTruckId = queries.createTruck({
+    unit_number: "KELVIN-OO",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const kelvinId = queries.createDriver({
+    name: "Kelvin OO Pay",
+    phone: "555-0085",
+    license: "TN-CDL-KELVIN-OO",
+    pin: "8585",
+    truck_id: kelvinTruckId,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 85,
+  });
+  assert.equal(queries.getDriver(kelvinId)?.pay_percent, 85);
+  const kelvinLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Kansas City, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.assignLoad(kelvinLoadId, kelvinTruckId, kelvinId);
+  const kelvinAssigned = queries.getLoad(kelvinLoadId);
+  assert.equal(kelvinAssigned?.oo_percent, 85);
+  assert.equal(kelvinAssigned?.oo_pay, 850);
+  addPayItem(kelvinLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Kelvin Customer",
+    category: "detention",
+    rate: 200,
+    qty: 1,
+    total: 200,
+    notes: "",
+  });
+  addPayItem(kelvinLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Kelvin Customer",
+    category: "layover",
+    rate: 50,
+    qty: 1,
+    total: 50,
+    notes: "",
+  });
+  const kelvinAfterAccessories = queries.getLoad(kelvinLoadId);
+  assert.equal(kelvinAfterAccessories?.rate, 1000, "accessories must not change the flat customer rate");
+  assert.equal(kelvinAfterAccessories?.oo_pay, 850, "OO pay is flat rate × percent only");
+  addPayItem(kelvinLoadId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Kelvin Customer",
+    category: "flat_rate",
+    rate: 1000,
+    qty: 1,
+    total: 1000,
+    notes: "",
+  });
+  queries.updateLoadStatus(kelvinLoadId, "delivered");
+  const kelvinInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(kelvinLoadId)!);
+  assert.equal(kelvinInvoice.lines.some((line) => /owner-operator|oo pay|relay/i.test(line.name)), false);
+  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Flat Rate" && line.amount === 1000));
+  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Detention" && line.amount === 200));
+  assert.equal(kelvinInvoice.lines.some((line) => line.amount === 850), false);
+  const handTyped = new FormData();
+  handTyped.set("oo_pay", "900");
+  const keptHand = parseLoadInput(handTyped, true, queries.getLoad(kelvinLoadId)!);
+  assert.equal(keptHand.oo_pay, 900, "hand-typed OO pay stays when rate and OO do not change");
+  const rateChange = new FormData();
+  rateChange.set("rate", "2000");
+  const recaled = parseLoadInput(rateChange, true, { ...queries.getLoad(kelvinLoadId)!, oo_pay: 850 });
+  assert.equal(recaled.oo_pay, 1700, "flat rate change recals auto OO pay");
   const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrell);
   const { collectAssignmentAlerts, requireAssignmentOverride, trailerComplianceAlerts, truckComplianceAlerts } =
@@ -11170,6 +11275,8 @@ Continuous reefer. Two load locks.
   assert.equal(attentionLabel({ kind: "reefer", severity: "CRITICAL", title: "Temperature discrepancy" }), "Critical");
   assert.equal(attentionLabel({ kind: "unassigned", severity: "LOW", title: "Unassigned" }), "Caution");
   assert.equal(attentionLabel({ kind: "missing_pod", severity: "HIGH", title: "Missing POD" }), "Important");
+  assert.equal(attentionLabel({ kind: "detention", severity: "HIGH", title: "Detention — Dock" }), "Detention");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
 
   const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
   assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
@@ -11653,6 +11760,121 @@ Continuous reefer. Two load locks.
     source: "samsara",
   });
   assert.equal(loadStops.getStop(fenceStopId)?.departed_at, keptDeparted);
+  const typedArrival = "2026-08-27T15:05:00.000Z";
+  const typedDeparted = "2026-08-27T16:10:00.000Z";
+  loadStops.stampStopTime(fenceStopId, "arrived_at", typedArrival);
+  loadStops.stampStopTime(fenceStopId, "departed_at", typedDeparted);
+  queries.saveTruckGps(fenceTruckId, {
+    latitude: 40.586,
+    longitude: -98.39,
+    address: "Hastings, NE",
+    recordedAt: new Date(Date.now() + 180_000).toISOString(),
+    source: "samsara",
+  });
+  applyGeofenceArrivals(fenceLoadId);
+  assert.equal(loadStops.getStop(fenceStopId)?.arrived_at, typedArrival, "dispatcher-typed arrival stays");
+  assert.equal(loadStops.getStop(fenceStopId)?.departed_at, typedDeparted, "dispatcher-typed departed stays");
+
+  const {
+    detentionClockStart,
+    detentionTwoHourMark,
+    detentionStillInsideAtMark,
+  } = await import("../lib/detention-clock");
+  const fcfsWindow = {
+    scheduleType: "fcfs",
+    windowStart: "2026-08-29T08:00:00.000-05:00",
+    windowEnd: "2026-08-29T17:00:00.000-05:00",
+  };
+  const midnightArrival = detentionTwoHourMark({
+    ...fcfsWindow,
+    arrivedAt: "2026-08-29T00:00:00.000-05:00",
+  });
+  assert.equal(midnightArrival?.toISOString(), new Date("2026-08-29T10:00:00.000-05:00").toISOString());
+  assert.equal(
+    detentionClockStart({
+      ...fcfsWindow,
+      arrivedAt: "2026-08-29T00:00:00.000-05:00",
+    })?.toISOString(),
+    new Date("2026-08-29T08:00:00.000-05:00").toISOString(),
+    "early FCFS arrival waits for window start, not 2 AM",
+  );
+  const insideArrival = detentionTwoHourMark({
+    ...fcfsWindow,
+    arrivedAt: "2026-08-29T10:00:00.000-05:00",
+  });
+  assert.equal(insideArrival?.toISOString(), new Date("2026-08-29T12:00:00.000-05:00").toISOString());
+  const apptMark = detentionTwoHourMark({
+    scheduleType: "appointment",
+    windowStart: "2026-08-29T08:00:00.000-05:00",
+    arrivedAt: "2026-08-29T00:00:00.000-05:00",
+  });
+  assert.equal(apptMark?.toISOString(), new Date("2026-08-29T10:00:00.000-05:00").toISOString());
+  assert.equal(
+    detentionStillInsideAtMark({
+      arrivedAt: "2026-08-29T00:00:00.000-05:00",
+      twoHourMark: midnightArrival!,
+      now: new Date("2026-08-29T10:00:00.000-05:00"),
+    }),
+    true,
+  );
+  assert.equal(
+    detentionStillInsideAtMark({
+      arrivedAt: "2026-08-29T00:00:00.000-05:00",
+      departedAt: "2026-08-29T09:30:00.000-05:00",
+      twoHourMark: midnightArrival!,
+      now: new Date("2026-08-29T10:00:00.000-05:00"),
+    }),
+    false,
+  );
+  const clockLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Holdrege, NE",
+    destination: "Holdrege, NE",
+    pickup_start: "2026-08-29T13:00:00.000Z",
+    pickup_end: "2026-08-29T22:00:00.000Z",
+    delivery_start: "2026-08-29T22:00:00.000Z",
+    delivery_end: "2026-08-29T23:00:00.000Z",
+    weight: 1,
+    commodity: "Beef",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  const detentionShipperId = loadStops.addStop(clockLoadId, {
+    kind: "pickup",
+    name: "FCFS Shipper Clock",
+    city: "Holdrege",
+    state: "NE",
+    schedule_type: "fcfs",
+    window_start: "2026-08-29T08:00:00.000-05:00",
+    window_end: "2026-08-29T17:00:00.000-05:00",
+    arrived_at: "2026-08-29T00:00:00.000-05:00",
+  });
+  const detentionNow = new Date("2026-08-29T10:05:00.000-05:00");
+  const detentionInbox = (await import("../lib/exceptions")).listExceptionInbox(detentionNow);
+  assert.ok(
+    detentionInbox.items.some(
+      (item) => item.kind === "detention" && item.loadId === clockLoadId && /FCFS Shipper Clock/.test(item.title),
+    ),
+    "FCFS shipper still inside at window start + 2 hours",
+  );
+  loadStops.stampStopTime(detentionShipperId, "departed_at", "2026-08-29T09:15:00.000-05:00");
+  const leftOnTime = (await import("../lib/exceptions")).listExceptionInbox(detentionNow);
+  assert.equal(
+    leftOnTime.items.some(
+      (item) => item.kind === "detention" && item.loadId === clockLoadId && /FCFS Shipper Clock/.test(item.title),
+    ),
+    false,
+    "no detention after leaving before the two-hour mark",
+  );
   const farLoadId = queries.createLoad({
     customer_id: customerId,
     origin: "Hastings, NE",

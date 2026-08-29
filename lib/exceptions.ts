@@ -1,14 +1,17 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
+import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
+import { coordsForStop, gpsPingsForLoad, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
+import { listStops } from "./stops";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
 
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
 
-export const EXCEPTION_KINDS = ["reefer", "late", "gps_quiet", "missing_pod", "compliance", "unassigned"] as const;
+export const EXCEPTION_KINDS = ["reefer", "late", "detention", "gps_quiet", "missing_pod", "compliance", "unassigned"] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export type InboxException = {
@@ -51,10 +54,11 @@ const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
 const KIND_RANK: Record<ExceptionKind, number> = {
   reefer: 0,
   late: 1,
-  gps_quiet: 2,
-  missing_pod: 3,
-  compliance: 4,
-  unassigned: 5,
+  detention: 2,
+  gps_quiet: 3,
+  missing_pod: 4,
+  compliance: 5,
+  unassigned: 6,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -110,9 +114,10 @@ function withLoad(
   title: string,
   detail: string,
   demo = false,
+  extraId?: string,
 ): InboxException {
   return {
-    id: `${load.id}:${kind}`,
+    id: extraId ? `${load.id}:${kind}:${extraId}` : `${load.id}:${kind}`,
     loadId: load.id,
     loadNumber: load.load_number,
     customerName: load.customer_name,
@@ -227,6 +232,7 @@ export function groupInboxExceptions(items: InboxException[]): InboxExceptionGro
 }
 
 export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {
+  if (item.kind === "detention") return "Detention";
   if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
   if (item.severity === "CRITICAL") return "Critical";
   if (item.severity === "HIGH") return "Important";
@@ -403,6 +409,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     items.push(...gpsQuietExceptions(load, now, quietHours));
     items.push(...complianceExceptions(load));
     items.push(...unassignedExceptions(load, now));
+    items.push(...detentionExceptions(load, now));
   }
 
   for (const load of delivered) {
@@ -448,5 +455,45 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Compliance";
     case "unassigned":
       return "Unassigned";
+    case "detention":
+      return "Detention";
   }
+}
+
+function detentionExceptions(load: LoadView, now: Date): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  const pings = gpsPingsForLoad(load.id);
+  const items: InboxException[] = [];
+  for (const stop of listStops(load.id)) {
+    const mark = detentionTwoHourMark({
+      scheduleType: stop.schedule_type,
+      arrivedAt: stop.arrived_at,
+      windowStart: stop.window_start,
+      windowEnd: stop.window_end,
+    });
+    if (!mark) continue;
+    if (!detentionStillInsideAtMark({
+      arrivedAt: stop.arrived_at,
+      departedAt: stop.departed_at,
+      twoHourMark: mark,
+      now,
+    })) {
+      continue;
+    }
+    const dest = coordsForStop(stop);
+    if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
+    const place = stop.name || (stop.kind === "delivery" ? "Receiver" : "Shipper");
+    items.push(
+      withLoad(
+        load,
+        "detention",
+        "HIGH",
+        `Detention — ${place}`,
+        `Two-hour mark ${formatDateTime(mark.toISOString())}. Still inside the 2-mile geofence.`,
+        false,
+        String(stop.id),
+      ),
+    );
+  }
+  return items;
 }
