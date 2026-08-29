@@ -668,9 +668,9 @@ async function main() {
   assert.match(stopsPanelUi, /isAppointmentSchedule/);
   assert.match(stopsPanelUi, /data-detention-mark/);
   assert.match(stopsPanelUi, /detentionTwoHourMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /APPT = the single appointment time/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /FCFS = the window start/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule !== "appointment" && schedule !== "fcfs"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /windowStart && arrived\.getTime\(\) < windowStart\.getTime\(\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule === "appointment"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /return arrived/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /AND \$\{field\} = ''/);
   assert.match(stopsPanelUi, /Add Pickup/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
@@ -11848,7 +11848,7 @@ Continuous reefer. Two load locks.
       arrivedAt: "2026-08-29T00:00:00.000-05:00",
     })?.toISOString(),
     new Date("2026-08-29T08:00:00.000-05:00").toISOString(),
-    "FCFS clock starts at window start, not midnight arrival",
+    "early FCFS arrival waits for window start, not 2 AM",
   );
   const insideArrival = detentionTwoHourMark({
     ...fcfsWindow,
@@ -11856,8 +11856,15 @@ Continuous reefer. Two load locks.
   });
   assert.equal(
     insideArrival?.toISOString(),
+    new Date("2026-08-29T12:00:00.000-05:00").toISOString(),
+    "FCFS in-window arrival marks at arrival + 2 hours (12 PM), not 10 AM",
+  );
+  assert.equal(
+    detentionClockStart({
+      ...fcfsWindow,
+      arrivedAt: "2026-08-29T10:00:00.000-05:00",
+    })?.toISOString(),
     new Date("2026-08-29T10:00:00.000-05:00").toISOString(),
-    "FCFS two-hour mark is window start + 2 hours, not arrival + 2",
   );
   const apptMark = detentionTwoHourMark({
     scheduleType: "appointment",

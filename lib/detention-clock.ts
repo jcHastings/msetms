@@ -23,8 +23,9 @@ export function resolveDetentionSchedule(
 }
 
 /**
- * Clock starts at the stop appointment, not at arrival.
- * APPT = the single appointment time. FCFS = the window start.
+ * FCFS 8 AM–5 PM: midnight arrival → clock at 8 AM (mark 10 AM).
+ * FCFS 8 AM–5 PM: 10 AM arrival → clock at 10 AM (mark 12 PM).
+ * APPT: clock starts at the appointment time, not arrival.
  */
 export function detentionClockStart(input: {
   scheduleType?: string | null;
@@ -37,8 +38,12 @@ export function detentionClockStart(input: {
     input.windowStart instanceof Date ? input.windowStart.toISOString() : input.windowStart,
     input.windowEnd instanceof Date ? input.windowEnd.toISOString() : input.windowEnd,
   );
-  if (schedule !== "appointment" && schedule !== "fcfs") return null;
-  return asDetentionDate(input.windowStart);
+  const arrived = asDetentionDate(input.arrivedAt);
+  const windowStart = asDetentionDate(input.windowStart);
+  if (schedule === "appointment") return windowStart;
+  if (schedule !== "fcfs" || !arrived) return null;
+  if (windowStart && arrived.getTime() < windowStart.getTime()) return windowStart;
+  return arrived;
 }
 
 export function detentionTwoHourMark(input: {
