@@ -668,8 +668,9 @@ async function main() {
   assert.match(stopsPanelUi, /isAppointmentSchedule/);
   assert.match(stopsPanelUi, /data-detention-mark/);
   assert.match(stopsPanelUi, /detentionTwoHourMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /windowStart && arrived\.getTime\(\) < windowStart\.getTime\(\)/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule === "appointment"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /APPT = the single appointment time/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /FCFS = the window start/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule !== "appointment" && schedule !== "fcfs"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /AND \$\{field\} = ''/);
   assert.match(stopsPanelUi, /Add Pickup/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
@@ -11325,8 +11326,9 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"),
-    /Possible detention — still at \$\{role\} 2\+ hours past appointment/,
+    /Possible detention — still at shipper 2\+ hours past appointment/,
   );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /stop\.kind !== "pickup"/);
 
   const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
   assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
@@ -11846,13 +11848,17 @@ Continuous reefer. Two load locks.
       arrivedAt: "2026-08-29T00:00:00.000-05:00",
     })?.toISOString(),
     new Date("2026-08-29T08:00:00.000-05:00").toISOString(),
-    "early FCFS arrival waits for window start, not 2 AM",
+    "FCFS clock starts at window start, not midnight arrival",
   );
   const insideArrival = detentionTwoHourMark({
     ...fcfsWindow,
     arrivedAt: "2026-08-29T10:00:00.000-05:00",
   });
-  assert.equal(insideArrival?.toISOString(), new Date("2026-08-29T12:00:00.000-05:00").toISOString());
+  assert.equal(
+    insideArrival?.toISOString(),
+    new Date("2026-08-29T10:00:00.000-05:00").toISOString(),
+    "FCFS two-hour mark is window start + 2 hours, not arrival + 2",
+  );
   const apptMark = detentionTwoHourMark({
     scheduleType: "appointment",
     windowStart: "2026-08-29T08:00:00.000-05:00",
@@ -11927,6 +11933,81 @@ Continuous reefer. Two load locks.
     leftOnTime.items.some((item) => item.kind === "detention" && item.loadId === clockLoadId),
     false,
     "no detention after leaving before the two-hour mark",
+  );
+  const waitingLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Holdrege, NE",
+    destination: "Holdrege, NE",
+    pickup_start: "2026-08-29T13:00:00.000Z",
+    pickup_end: "2026-08-29T22:00:00.000Z",
+    delivery_start: "2026-08-29T22:00:00.000Z",
+    delivery_end: "2026-08-29T23:00:00.000Z",
+    weight: 1,
+    commodity: "Beef",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  loadStops.addStop(waitingLoadId, {
+    kind: "pickup",
+    name: "Not Arrived Shipper",
+    city: "Holdrege",
+    state: "NE",
+    schedule_type: "appointment",
+    window_start: "2026-08-29T08:00:00.000-05:00",
+  });
+  assert.equal(
+    (await import("../lib/exceptions")).listExceptionInbox(detentionNow).items.some(
+      (item) => item.kind === "detention" && item.loadId === waitingLoadId,
+    ),
+    false,
+    "no detention until the truck has arrived",
+  );
+  const receiverOnlyId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Holdrege, NE",
+    destination: "Holdrege, NE",
+    pickup_start: "2026-08-29T13:00:00.000Z",
+    pickup_end: "2026-08-29T22:00:00.000Z",
+    delivery_start: "2026-08-29T22:00:00.000Z",
+    delivery_end: "2026-08-29T23:00:00.000Z",
+    weight: 1,
+    commodity: "Beef",
+    rate: 100,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  loadStops.addStop(receiverOnlyId, {
+    kind: "delivery",
+    name: "Receiver Clock",
+    city: "Holdrege",
+    state: "NE",
+    schedule_type: "appointment",
+    window_start: "2026-08-29T08:00:00.000-05:00",
+    arrived_at: "2026-08-29T00:00:00.000-05:00",
+  });
+  assert.equal(
+    (await import("../lib/exceptions")).listExceptionInbox(detentionNow).items.some(
+      (item) => item.kind === "detention" && item.loadId === receiverOnlyId,
+    ),
+    false,
+    "this alert is shipper / loading only",
   );
   const farLoadId = queries.createLoad({
     customer_id: customerId,
