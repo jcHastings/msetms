@@ -164,30 +164,50 @@ export function buildBolModel(load: LoadView, draft?: BolDraft | null): BolModel
   };
 }
 
+export type GenerateBolPdfOptions = {
+  persistDraft?: boolean;
+  keepAllPages?: boolean;
+  filename?: string;
+  extraStops?: Array<{ name: string; kind: string; city: string; state: string }>;
+};
+
 export async function generateBolPdf(
   loadId: number,
   draft?: BolDraft | null,
+  options: GenerateBolPdfOptions = {},
 ): Promise<{ buffer: Buffer; filename: string; model: BolModel }> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   const resolved = draft ?? bolPrefillForLoad(load);
-  if (draft) saveLoadBolDraft(loadId, resolved);
-  else if (!readSavedBolDraft(load)) saveLoadBolDraft(loadId, resolved);
+  if (options.persistDraft !== false) {
+    if (draft) saveLoadBolDraft(loadId, resolved);
+    else if (!readSavedBolDraft(load)) saveLoadBolDraft(loadId, resolved);
+  }
   const model = buildBolModel(load, resolved);
-  const buffer = await renderBolPdf(model);
-  return { buffer, filename: `${load.load_number}-BOL.pdf`, model };
+  const buffer = await renderBolPdf(model, {
+    keepAllPages: options.keepAllPages,
+    extraStops: options.extraStops,
+  });
+  return { buffer, filename: options.filename || `${load.load_number}-BOL.pdf`, model };
 }
 
-export async function renderBolPdf(model: BolModel): Promise<Buffer> {
+export async function renderBolPdf(
+  model: BolModel,
+  options: { keepAllPages?: boolean; extraStops?: Array<{ name: string; kind: string; city: string; state: string }> } = {},
+): Promise<Buffer> {
+  const extra = options.extraStops ?? [];
+  const pages = extra.length ? 2 : 1;
   const raw = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 28, bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    drawItsBol(doc, model);
+    drawItsBol(doc, model, pages);
+    if (extra.length) drawStopSignaturePage(doc, extra);
     doc.end();
   });
+  if (options.keepAllPages || extra.length) return raw;
   return keepFirstPage(raw);
 }
 
@@ -206,7 +226,7 @@ const HEADER_FILL = "#d8d8d8";
 const LEFT = 28;
 const WIDTH = 556;
 
-function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel): void {
+function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel, pageCount = 1): void {
   doc.font("Helvetica-Bold").fontSize(16).fillColor(INK);
   doc.text("Bill Of Lading", LEFT, 24, { width: WIDTH, align: "center", lineBreak: false });
   drawMsExpressLogo(doc, LEFT, 50);
@@ -238,7 +258,42 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel): void {
   y = drawNotesAndMoney(doc, LEFT, y + 4, WIDTH, model);
   drawSignatures(doc, LEFT, y + 4, WIDTH);
   doc.font("Helvetica").fontSize(8).fillColor(INK);
-  doc.text("Page 1 of 1", LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
+  doc.text(`Page 1 of ${pageCount}`, LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
+}
+
+function drawStopSignaturePage(
+  doc: PDFKit.PDFDocument,
+  stops: Array<{ name: string; kind: string; city: string; state: string }>,
+): void {
+  doc.addPage();
+  doc.font("Helvetica-Bold").fontSize(14).fillColor(INK);
+  doc.text("Signatures per stop", LEFT, 36, { width: WIDTH, lineBreak: false });
+  doc.font("Helvetica").fontSize(9);
+  doc.text("Shipper, consignee, and driver sign at each stop.", LEFT, 56, { width: WIDTH });
+  let y = 80;
+  for (const stop of stops) {
+    const place = [stop.city, stop.state].filter(Boolean).join(", ");
+    const label = `${stop.kind === "delivery" ? "Delivery" : "Pickup"} · ${stop.name}${place ? ` · ${place}` : ""}`;
+    doc.rect(LEFT, y, WIDTH, 72).strokeColor(RULE).lineWidth(0.6).stroke();
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(INK);
+    doc.text(label, LEFT + 8, y + 8, { width: WIDTH - 16, lineBreak: false });
+    const cols = [
+      { title: "Shipper / consignee", x: LEFT + 8 },
+      { title: "Carrier / driver", x: LEFT + 196 },
+      { title: "Date", x: LEFT + 384 },
+    ];
+    for (const col of cols) {
+      doc.font("Helvetica").fontSize(7);
+      doc.text(col.title, col.x, y + 28, { width: 160, lineBreak: false });
+      doc.moveTo(col.x, y + 58).lineTo(col.x + 150, y + 58).strokeColor(RULE).lineWidth(0.6).stroke();
+    }
+    y += 84;
+    if (y > 700) {
+      doc.font("Helvetica").fontSize(8).text("Page 2 of 2", LEFT, 748, { width: WIDTH, align: "right" });
+      return;
+    }
+  }
+  doc.font("Helvetica").fontSize(8).text("Page 2 of 2", LEFT, 748, { width: WIDTH, align: "right" });
 }
 
 function formatReeferLine(setpoint: string, mode: string): string {

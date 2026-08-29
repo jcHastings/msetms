@@ -210,11 +210,11 @@ function invoiceDate(load: LoadView): string {
   return printed === "—" ? formatMdYDisplay(new Date().toISOString()) : printed;
 }
 
-export function buildTmsInvoice(load: LoadView): TmsInvoiceModel {
+export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean } = {}): TmsInvoiceModel {
   if (load.non_revenue) {
     throw new Error("Empty move — no customer invoice.");
   }
-  if (!isBillableStatus(load.status)) {
+  if (!options.allowDraft && !isBillableStatus(load.status)) {
     throw new Error("Mark the load Delivered before invoicing.");
   }
   const lines = tmsCustomerInvoiceLines(load);

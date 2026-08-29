@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { DocumentPreviewProvider } from "@/components/document-preview";
 import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { LoadEditProvider } from "@/components/load-edit-context";
 import {
@@ -270,6 +271,7 @@ export function LoadWorkspace({
     <LoadEditProvider
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
+    <DocumentPreviewProvider>
       {header}
       <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
         {create ? (
@@ -397,6 +399,9 @@ export function LoadWorkspace({
           ) : null}
         </ActionMenu>
         <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+          <button type="button" className="menu-item" onClick={() => setTab("docs", "defaulted-documents")}>
+            Your defaulted documents
+          </button>
           <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
             View load docs
           </button>
@@ -652,6 +657,7 @@ export function LoadWorkspace({
       >
         {children}
       </div>
+    </DocumentPreviewProvider>
     </LoadEditProvider>
   );
 }

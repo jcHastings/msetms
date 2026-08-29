@@ -20,6 +20,7 @@ import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./r
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
+import { cityStateOnly } from "./load-documents-shared";
 
 export type ConfirmationStop = {
   title: string;
@@ -469,6 +470,23 @@ export function buildConfirmationForLoad(
     };
   }
   return { ...model, internalLegs: lines.join("\n"), locale };
+}
+
+export function applyBlindConfirmation(model: ConfirmationModel): ConfirmationModel {
+  const blindStop = (stop: ConfirmationStop): ConfirmationStop => ({
+    ...stop,
+    address: cityStateOnly(stop.address),
+    phone: "",
+  });
+  return {
+    ...model,
+    shipper: blindStop(model.shipper),
+    consignee: blindStop(model.consignee),
+    stops: model.stops.map(blindStop),
+    customerBilling: cityStateOnly(model.customerBilling),
+    customerPhone: "",
+    customerEmail: "",
+  };
 }
 
 export async function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {

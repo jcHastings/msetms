@@ -21,8 +21,10 @@ import { LoadMoneyBox } from "@/components/load-money-box";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
+import { DefaultedDocuments } from "@/components/defaulted-documents";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
+import { listDefaultedDocuments } from "@/lib/load-documents";
 import { RateConApply } from "@/components/rate-con-apply";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
@@ -302,8 +304,15 @@ export async function LoadEditor({
             <div className="load-actions-label mb-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
               Document actions
             </div>
-            <p className="text-sm text-slate-700">Upload, checklist, and generated PDFs for this load.</p>
+            <p className="text-sm text-slate-700">
+              Defaulted documents stay on this load. Print / view opens the preview — it does not close the load.
+            </p>
           </div>
+          <DefaultedDocuments
+            loadId={load.id}
+            loadNumber={load.load_number}
+            documents={listDefaultedDocuments(load.id)}
+          />
           <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
           <RateConApply
             load={load}

@@ -1442,6 +1442,10 @@ async function main() {
     "lib/rate-con-shared.ts",
     "lib/reefer-shared.ts",
     "components/make-bol-button.tsx",
+    "components/defaulted-documents.tsx",
+    "components/document-preview.tsx",
+    "components/open-attachment-link.tsx",
+    "lib/load-documents-shared.ts",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
@@ -1462,6 +1466,21 @@ async function main() {
   assert.match(bolFormSource, /OpenAttachmentLink/);
   assert.match(bolFormSource, /type="button"/);
   assert.doesNotMatch(bolFormSource, /<a[^>]+href=\{`\/api\/attachments/);
+  const defaultedUi = fs.readFileSync(path.join(process.cwd(), "components/defaulted-documents.tsx"), "utf8");
+  assert.match(defaultedUi, /Your defaulted documents/);
+  assert.match(defaultedUi, /data-defaulted-documents/);
+  assert.match(defaultedUi, /Generate missing/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/document-preview.tsx"), "utf8"), /Document Preview \/ Edit/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/document-preview.tsx"), "utf8"), /data-document-preview/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /DocumentPreviewProvider/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Your defaulted documents/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /DefaultedDocuments/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/open-attachment-link.tsx"), "utf8"), /useDocumentPreview/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /bol_third_party/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /generateDefaultedDocument/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/documents/route.ts"), "utf8"), /generateDefaultedDocument/);
+  const { cityStateOnly } = await import("../lib/load-documents-shared");
+  assert.equal(cityStateOnly("275 Blair rd, Avenel, NJ 07001"), "Avenel, NJ 07001");
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [
@@ -4531,6 +4550,28 @@ Continuous reefer. Two load locks.
   assert.match(bolText, /Declared Value/);
   assert.match(bolText, /Number Of Pieces Received/);
   assert.match(bolText, /Page 1 of 1/);
+  const { listDefaultedDocuments, generateDefaultedDocument } = await import("../lib/load-documents");
+  const defaulted = listDefaultedDocuments(deniseLoad.id);
+  assert.ok(defaulted.some((row) => row.key === "bol" && row.status === "generated"));
+  assert.ok(defaulted.some((row) => row.key === "bol_third_party"));
+  assert.ok(defaulted.some((row) => row.title === "Customer confirmation"));
+  const blindBol = await generateDefaultedDocument(deniseLoad.id, "bol_blind");
+  const blindBolText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(blindBol))), { mergePages: true })).text ?? "",
+  );
+  assert.match(blindBolText, /Bill Of Lading/);
+  assert.doesNotMatch(blindBolText, /AscendTMS|Powered by|Nanuet/);
+  const signedBol = await generateDefaultedDocument(deniseLoad.id, "bol_signatures");
+  assert.equal((await PDFDocument.load(fs.readFileSync(filesMod.getAttachmentPath(signedBol)))).getPageCount(), 2);
+  const signedBolText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(signedBol))), { mergePages: true })).text ?? "",
+  );
+  assert.match(signedBolText, /Signatures per stop/);
+  const customerConf = await generateDefaultedDocument(deniseLoad.id, "customer_confirmation");
+  const customerConfText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(customerConf))), { mergePages: true })).text ?? "",
+  );
+  assert.doesNotMatch(customerConfText, /AscendTMS|Powered by/);
   assert.match(bolText, /River City Nashville Cooler/);
   assert.match(bolText, /700 Cowan/);
   assert.match(bolText, /\(615\) 555-0144/);
@@ -4580,7 +4621,7 @@ Continuous reefer. Two load locks.
   const madeItsBol = await (await import("../lib/actions")).makeBolAction(deniseLoad.id, null, itsItemsForm);
   assert.equal(madeItsBol.ok, true);
   const itsBols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
-  assert.equal(itsBols.length, 2);
+  assert.equal(itsBols.length, 4);
   const itsBolBuf = fs.readFileSync(filesMod.getAttachmentPath(itsBols[0]));
   const itsBolText = String((await extractText(new Uint8Array(itsBolBuf), { mergePages: true })).text ?? "");
   assert.match(itsBolText, /fresh beef/);
