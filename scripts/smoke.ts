@@ -11326,9 +11326,9 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"),
-    /Possible detention — still at shipper 2\+ hours past appointment/,
+    /Possible detention — still at \$\{role\} \(\$\{stopLabel\}\) 2\+ hours past appointment/,
   );
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /stop\.kind !== "pickup"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /stop\.kind !== "pickup"/);
 
   const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
   assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
@@ -11921,7 +11921,7 @@ Continuous reefer. Two load locks.
       (item) =>
         item.kind === "detention" &&
         item.loadId === clockLoadId &&
-        /still at shipper/.test(item.title) &&
+        /still at shipper \(pickup\)/.test(item.title) &&
         /FCFS Shipper Clock/.test(item.detail),
     ),
     "FCFS shipper still inside at window start + 2 hours",
@@ -12002,12 +12002,20 @@ Continuous reefer. Two load locks.
     window_start: "2026-08-29T08:00:00.000-05:00",
     arrived_at: "2026-08-29T00:00:00.000-05:00",
   });
-  assert.equal(
-    (await import("../lib/exceptions")).listExceptionInbox(detentionNow).items.some(
-      (item) => item.kind === "detention" && item.loadId === receiverOnlyId,
+  const receiverInbox = (await import("../lib/exceptions")).listExceptionInbox(detentionNow);
+  assert.ok(
+    receiverInbox.items.some(
+      (item) =>
+        item.kind === "detention" &&
+        item.loadId === receiverOnlyId &&
+        /still at receiver \(delivery\)/.test(item.title) &&
+        /Receiver Clock/.test(item.detail),
     ),
-    false,
-    "this alert is shipper / loading only",
+    "receiver / delivery dwell also raises detention",
+  );
+  assert.equal(
+    receiverInbox.items.filter((item) => item.kind === "detention" && item.loadId === receiverOnlyId).length,
+    1,
   );
   const farLoadId = queries.createLoad({
     customer_id: customerId,
