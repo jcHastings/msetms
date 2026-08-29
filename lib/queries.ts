@@ -119,6 +119,8 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
     bol_json: row.bol_json || "",
+    parent_load_id: row.parent_load_id ?? null,
+    master_suffix: row.master_suffix || "",
   };
 }
 
