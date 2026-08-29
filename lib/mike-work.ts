@@ -7,6 +7,7 @@ import { MIKE_MISSING_KEY_MESSAGE, type MikeProposal, type MikeProposalKind } fr
 import { createLoad, getLoad, listCustomers, listLoads, updateLoadStatus } from "./queries";
 import { formatRelayLane } from "./relays";
 import { relayForDriver } from "./relay-store";
+import { listStops } from "./stops";
 import { isLoadStatus, type AttachmentKind } from "./types";
 
 const STATUS_WORDS: Record<string, string> = {
@@ -102,6 +103,7 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
       extractQuoted(q) ||
       formatLoadSummary({
         ...load,
+        stops: listStops(load.id),
         your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
       });
     proposals.push(

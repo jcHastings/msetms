@@ -46,6 +46,7 @@ import {
   addStop,
   deleteStop,
   getStop,
+  listStops,
   moveStop,
   reorderStops,
   setStopDelivered,
@@ -847,6 +848,7 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
         kind === "load_info"
           ? formatLoadSummary({
               ...load,
+              stops: listStops(load.id),
               your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
             })
           : requiredString(formData.get("body"), "Message");
@@ -893,6 +895,7 @@ export async function sendLoadWhatsAppAction(formData: FormData): Promise<Action
         kind === "load_info"
           ? formatLoadSummary({
               ...load,
+              stops: listStops(load.id),
               your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
             })
           : requiredString(formData.get("body"), "Message");

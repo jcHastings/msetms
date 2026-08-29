@@ -131,6 +131,7 @@ export async function LoadEditor({
         initialTab={tab}
         loadSummary={formatLoadSummary({
           ...load,
+          stops,
           your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
         })}
         driverAssigned={Boolean(load.driver_id)}

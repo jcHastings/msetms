@@ -168,6 +168,50 @@ export function formatStopWindow(start: string, end: string, scheduleType?: stri
   return "";
 }
 
+function formatSmsClock(iso: string): { date: string; time: string } | null {
+  const raw = String(iso ?? "").trim();
+  if (!raw) return null;
+  const dateOnly = dateOnlyParts(raw);
+  if (dateOnly) return { date: `${pad2(dateOnly.month)}/${pad2(dateOnly.day)}`, time: "" };
+  const date = parseDisplayDate(raw);
+  if (!date) return null;
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const month = bits.find((part) => part.type === "month")?.value ?? "";
+  const day = bits.find((part) => part.type === "day")?.value ?? "";
+  if (!month || !day) return null;
+  const time = date.toLocaleTimeString("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return { date: `${month}/${day}`, time };
+}
+
+function smsClockLine(clock: { date: string; time: string }): string {
+  return clock.time ? `${clock.date} ${clock.time}` : clock.date;
+}
+
+export function formatSmsStopWindow(start: string, end: string, scheduleType?: string | null): string {
+  const from = start.trim() ? formatSmsClock(start) : null;
+  const to = end.trim() ? formatSmsClock(end) : null;
+  if (isAppointmentSchedule(scheduleType)) return from ? smsClockLine(from) : "";
+  const useWindow =
+    isFcfsSchedule(scheduleType) ||
+    Boolean(to && from && (from.date !== to.date || from.time !== to.time));
+  if (!useWindow) return from ? smsClockLine(from) : to ? smsClockLine(to) : "";
+  if (from && to) {
+    if (from.date === to.date && from.time && to.time) return `${from.date} ${from.time}–${to.time}`;
+    return `${smsClockLine(from)}–${smsClockLine(to)}`;
+  }
+  if (from) return smsClockLine(from);
+  if (to) return smsClockLine(to);
+  return "";
+}
+
 export function formatInvoiceMoney(value: number | null | undefined, currency = "USD"): string {
   if (value == null || Number.isNaN(value)) return "";
   return value.toLocaleString("en-US", {

@@ -759,6 +759,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /customerRefFromRateCon/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-summary.ts"), "utf8"), /driverFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /cityStateFromAddress/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /MAIL_FROM_DEFAULT/);
@@ -2124,12 +2125,14 @@ async function main() {
     oo_pay: null,
   });
   assert.match(companySummary, /MSE-TEST/);
-  assert.match(companySummary, /Shipper A/);
-  assert.match(companySummary, /Receiver B/);
+  assert.match(companySummary, /Shipper\nA\nPickup /);
+  assert.match(companySummary, /Receiver\nB\nDelivery /);
   assert.match(companySummary, /34\s*°F|34°F/);
   assert.match(companySummary, /Continuous/);
-  assert.match(companySummary, /localhost:3000\/driver/);
+  assert.doesNotMatch(companySummary, /localhost|Driver app:/);
   assert.doesNotMatch(companySummary, /2150|\$2/);
+  assert.match(companySummary, /\n\nShipper\n/);
+  assert.match(companySummary, /\n\nReceiver\n/);
   const ooSummary = formatLoadSummary({
     ...{
       load_number: "MSE-OO",
@@ -2175,14 +2178,138 @@ async function main() {
     trailer_number: "TR-7742",
     your_leg: "Nashville, TN → Memphis, TN",
   });
-  assert.match(dispatchSummary, /Truck 112/);
-  assert.match(dispatchSummary, /Trailer TR-7742/);
+  assert.match(dispatchSummary, /Truck 112 · Trailer TR-7742/);
   assert.match(dispatchSummary, /34°F/);
   assert.match(dispatchSummary, /Continuous/);
   assert.match(dispatchSummary, /Your leg: Nashville, TN → Memphis, TN/);
   assert.match(dispatchSummary, /Scale ticket/);
   assert.doesNotMatch(dispatchSummary, /INTERNAL/);
   assert.doesNotMatch(dispatchSummary, /3100|\$3/);
+  const { driverFacingLoadNumber } = await import("../lib/load-summary");
+  assert.equal(driverFacingLoadNumber({ load_number: "MSE-1042", customer_reference: "1006153" }), "MSE-1042");
+  assert.equal(driverFacingLoadNumber({ load_number: "1006153", customer_reference: "1006153" }), "");
+  assert.equal(driverFacingLoadNumber({ load_number: "1006153" }), "");
+  const phoneSms = formatLoadSummary({
+    load_number: "MSE-1042",
+    customer_reference: "1006153",
+    po_number: "1006153",
+    origin: "Hastings, NE",
+    destination: "Bronx, NY",
+    pickup_start: "2026-08-23T08:00:00.000-04:00",
+    pickup_end: "2026-08-23T17:00:00.000-04:00",
+    delivery_start: "2026-08-25T08:00:00.000-04:00",
+    delivery_end: "2026-08-25T17:00:00.000-04:00",
+    commodity: "Beef",
+    reefer_setpoint_f: 26,
+    reefer_mode: "continuous",
+    special_instructions: "",
+    appointment_notes: "",
+    driver_name: "Denise Ortega",
+    driver_phone: "555-0100",
+    driver_type: "company_driver",
+    rate: 3100,
+    oo_pay: null,
+    truck_unit: "26",
+    trailer_number: "MS1519",
+    stops: [
+      {
+        kind: "pickup",
+        city: "Hastings",
+        state: "NE",
+        window_start: "2026-08-23T08:00:00.000-04:00",
+        window_end: "2026-08-23T17:00:00.000-04:00",
+        schedule_type: "fcfs",
+      },
+      {
+        kind: "delivery",
+        city: "Bronx",
+        state: "NY",
+        window_start: "2026-08-25T08:00:00.000-04:00",
+        window_end: "2026-08-25T17:00:00.000-04:00",
+        schedule_type: "fcfs",
+      },
+    ],
+  });
+  assert.equal(
+    phoneSms,
+    [
+      "Load MSE-1042",
+      "Shipper\nHastings, NE\nPickup 08/23 8:00 AM–5:00 PM",
+      "Receiver\nBronx, NY\nDelivery 08/25 8:00 AM–5:00 PM",
+      "Truck 26 · Trailer MS1519\nReefer 26°F Continuous",
+    ].join("\n\n"),
+  );
+  assert.doesNotMatch(phoneSms, /1006153|localhost|Do not reply|M & S Loads LLC/);
+  const apptSms = formatLoadSummary({
+    load_number: "MSE-1043",
+    origin: "Hastings, NE",
+    destination: "Bronx, NY",
+    pickup_start: "2026-08-23T08:00:00.000-04:00",
+    pickup_end: "2026-08-23T17:00:00.000-04:00",
+    delivery_start: "2026-08-25T08:00:00.000-04:00",
+    delivery_end: "2026-08-25T17:00:00.000-04:00",
+    commodity: "Beef",
+    reefer_setpoint_f: 26,
+    special_instructions: "",
+    appointment_notes: "",
+    driver_name: "Denise Ortega",
+    driver_phone: "555-0100",
+    driver_type: "company_driver",
+    rate: 0,
+    oo_pay: null,
+    stops: [
+      {
+        kind: "pickup",
+        city: "Hastings",
+        state: "NE",
+        window_start: "2026-08-23T08:00:00.000-04:00",
+        window_end: "2026-08-23T17:00:00.000-04:00",
+        schedule_type: "appointment",
+      },
+      {
+        kind: "delivery",
+        city: "Bronx",
+        state: "NY",
+        window_start: "2026-08-25T08:00:00.000-04:00",
+        window_end: "",
+        schedule_type: "appointment",
+      },
+    ],
+  });
+  assert.match(apptSms, /Pickup 08\/23 8:00 AM(?:\n|$)/);
+  assert.match(apptSms, /Delivery 08\/25 8:00 AM(?:\n|$)/);
+  assert.doesNotMatch(apptSms, /8:00 AM–5:00 PM/);
+  const multiSms = formatLoadSummary({
+    load_number: "MSE-1044",
+    origin: "Hastings, NE",
+    destination: "Bronx, NY",
+    pickup_start: "2026-08-23T08:00:00.000-04:00",
+    pickup_end: "2026-08-23T17:00:00.000-04:00",
+    delivery_start: "2026-08-25T08:00:00.000-04:00",
+    delivery_end: "2026-08-25T17:00:00.000-04:00",
+    commodity: "Beef",
+    reefer_setpoint_f: null,
+    special_instructions: "",
+    appointment_notes: "",
+    driver_name: "Denise Ortega",
+    driver_phone: "555-0100",
+    driver_type: "company_driver",
+    rate: 0,
+    oo_pay: null,
+    stops: [
+      { kind: "pickup", city: "Hastings", state: "NE", window_start: "2026-08-23T08:00:00.000-04:00", window_end: "2026-08-23T17:00:00.000-04:00", schedule_type: "fcfs" },
+      { kind: "delivery", city: "Bronx", state: "NY", window_start: "2026-08-25T08:00:00.000-04:00", window_end: "2026-08-25T17:00:00.000-04:00", schedule_type: "fcfs" },
+      { kind: "delivery", city: "Bayonne", state: "NJ", window_start: "2026-08-26T09:00:00.000-04:00", window_end: "", schedule_type: "appointment" },
+    ],
+  });
+  assert.match(multiSms, /Receiver\nBronx, NY\nDelivery 08\/25 8:00 AM–5:00 PM\n\nReceiver\nBayonne, NJ\nDelivery 08\/26 9:00 AM/);
+  const summarySrc = fs.readFileSync(path.join(process.cwd(), "lib/load-summary.ts"), "utf8");
+  assert.match(summarySrc, /driverFacingLoadNumber/);
+  assert.match(summarySrc, /formatSmsStopWindow/);
+  assert.match(summarySrc, /blocks\.join\("\\n\\n"\)/);
+  assert.doesNotMatch(summarySrc, /localhost:3000\/driver|shop LAN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /formatSmsStopWindow/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /stops: listStops\(load\.id\)/);
   const { listDispatcherUsers } = await import("../lib/settings");
   const dispatcher = listDispatcherUsers(false)[0];
   assert.ok(dispatcher);
@@ -4730,8 +4857,8 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(JSON.stringify(invoiceAfterSplit.stops), /Memphis/);
   assert.doesNotMatch(invoiceAfterSplit.lines.map((line) => line.name).join(" "), /relay/i);
   const relaySms = formatLoadSummary(queries.getLoad(relayLoadId)!);
-  assert.match(relaySms, /Shipper New York, NY/);
-  assert.match(relaySms, /Receiver Denver, CO/);
+  assert.match(relaySms, /Shipper\nNew York, NY/);
+  assert.match(relaySms, /Receiver\nDenver, CO/);
   assert.doesNotMatch(relaySms, /Chicago|internal \$900|Relay Bravo/);
   const relayAudit = audit.listLoadAudit(relayLoadId);
   assert.ok(relayAudit.some((row) => row.action === "relay" && row.actor));
