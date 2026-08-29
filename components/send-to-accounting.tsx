@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { useDismissable } from "@/components/use-dismissable";
+import { sendToQuickbooksAction } from "@/lib/actions";
 import {
   returnLoadToOperationsAction,
   sendToAccountingAction,
@@ -71,6 +72,28 @@ export function SendToAccountingControls({
     router.refresh();
   }
 
+  async function sendQuickbooks() {
+    setPending(true);
+    setError("");
+    const form = new FormData();
+    form.set("load_id", String(loadId));
+    let result = await sendToQuickbooksAction(null, form);
+    if (!result.ok && /already|again/i.test(result.error)) {
+      if (!window.confirm("This load already has a QuickBooks invoice. Send again?")) {
+        setPending(false);
+        return;
+      }
+      form.set("confirm_resend", "1");
+      result = await sendToQuickbooksAction(null, form);
+    }
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    router.refresh();
+  }
+
   async function sendBack() {
     setPending(true);
     setError("");
@@ -87,6 +110,32 @@ export function SendToAccountingControls({
 
   if (onDesk && !archived) {
     if (variant === "header") return null;
+    if (variant === "menu") {
+      return (
+        <>
+          <button
+            type="button"
+            className="menu-item w-full text-left"
+            data-qbo-menu-send=""
+            disabled={pending}
+            onClick={() => void sendQuickbooks()}
+          >
+            {pending ? "Sending…" : "Send to QuickBooks"}
+          </button>
+          {canReturn ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              disabled={pending}
+              onClick={() => void sendBack()}
+            >
+              {pending ? "Sending…" : "Send back to Load Management"}
+            </button>
+          ) : null}
+          {error ? <p className="px-3 py-1 text-sm text-rose-700">{error}</p> : null}
+        </>
+      );
+    }
     return (
       <div className="space-y-2" data-accounting-sent="">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
@@ -118,7 +167,8 @@ export function SendToAccountingControls({
     );
   }
 
-  if (!canSend || !isBillableStatus(status)) return null;
+  if (!canSend) return null;
+  if (variant !== "menu" && !isBillableStatus(status)) return null;
 
   const confirm = (
     <div
@@ -152,8 +202,8 @@ export function SendToAccountingControls({
   return (
     <div>
       {variant === "menu" ? (
-        <button type="button" className="menu-item w-full text-left" onClick={() => setOpen(true)}>
-          Send to Accounting Management
+        <button type="button" className="menu-item w-full text-left" data-accounting-menu-send="" onClick={() => setOpen(true)}>
+          Send to Accounting Manager
         </button>
       ) : (
         <button className="btn btn-primary bg-slate-900" type="button" onClick={() => setOpen(true)}>

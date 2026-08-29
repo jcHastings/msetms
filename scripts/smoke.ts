@@ -278,6 +278,8 @@ async function main() {
   assert.match(workspaceSource, /Load Documents/);
   assert.match(workspaceSource, /Copy \/ Cancel \/ Archive/);
   assert.match(workspaceSource, /Admin \/ Financials/);
+  assert.match(workspaceSource, /pt-1/);
+  assert.doesNotMatch(workspaceSource, /load-action-menu absolute z-20 mt-1/);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
@@ -291,6 +293,11 @@ async function main() {
   assert.match(workspaceSource, /Request Documents From Driver/);
   const sendBooksUi = fs.readFileSync(path.join(process.cwd(), "components/send-to-accounting.tsx"), "utf8");
   assert.match(sendBooksUi, /Send to Accounting Management/);
+  assert.match(sendBooksUi, /Send to Accounting Manager/);
+  assert.match(sendBooksUi, /data-accounting-menu-send/);
+  assert.match(sendBooksUi, /data-qbo-menu-send/);
+  assert.match(sendBooksUi, /Send to QuickBooks/);
+  assert.match(sendBooksUi, /variant !== "menu"/);
   assert.match(sendBooksUi, /createPortal/);
   assert.match(sendBooksUi, /data-accounting-send-overlay/);
   assert.match(sendBooksUi, /data-accounting-send-close/);

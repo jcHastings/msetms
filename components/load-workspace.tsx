@@ -687,10 +687,10 @@ function ActionMenu({
       {open ? (
         <div
           ref={menuRef}
-          className="load-action-menu absolute z-20 mt-1 min-w-56 rounded-lg py-1 shadow-lg"
+          className="absolute z-20 min-w-56 pt-1"
           role="menu"
         >
-          {children}
+          <div className="load-action-menu rounded-lg py-1 shadow-lg">{children}</div>
         </div>
       ) : null}
     </div>
