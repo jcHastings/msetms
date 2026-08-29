@@ -5,7 +5,7 @@ import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { computeOwnerOperatorPay } from "@/lib/settlement";
+import { computeOwnerOperatorPay, impliedOwnerOperatorPercent } from "@/lib/settlement";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
@@ -238,8 +238,19 @@ export function LoadBasicsScreen({
               data-critical-save=""
               value={ooPay}
               onChange={(event) => {
-                setOoPay(event.target.value);
-                if (load) handleAssign(load.oo_pay, event.target.value, "oo_pay", event);
+                const next = event.target.value;
+                setOoPay(next);
+                const livePay = Number(next);
+                const liveRate = Number(rate);
+                const implied = impliedOwnerOperatorPercent(
+                  Number.isFinite(livePay) ? livePay : null,
+                  Number.isFinite(liveRate) ? liveRate : null,
+                );
+                if (implied != null) {
+                  setPercent(String(implied));
+                  onOoPercentChange?.(implied);
+                }
+                if (load) handleAssign(load.oo_pay, next, "oo_pay", event);
               }}
             />
           </div>

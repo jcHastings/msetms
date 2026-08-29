@@ -463,8 +463,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
 function detentionExceptions(load: LoadView, now: Date): InboxException[] {
   if (isClosedStatus(load.status)) return [];
   const pings = gpsPingsForLoad(load.id);
-  const items: InboxException[] = [];
   for (const stop of listStops(load.id)) {
+    if (!String(stop.arrived_at ?? "").trim()) continue;
     const mark = detentionTwoHourMark({
       scheduleType: stop.schedule_type,
       arrivedAt: stop.arrived_at,
@@ -482,18 +482,16 @@ function detentionExceptions(load: LoadView, now: Date): InboxException[] {
     }
     const dest = coordsForStop(stop);
     if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
-    const place = stop.name || (stop.kind === "delivery" ? "Receiver" : "Shipper");
-    items.push(
+    const role = stop.kind === "delivery" ? "receiver" : "shipper";
+    return [
       withLoad(
         load,
         "detention",
         "HIGH",
-        `Detention — ${place}`,
-        `Two-hour mark ${formatDateTime(mark.toISOString())}. Still inside the 2-mile geofence.`,
-        false,
-        String(stop.id),
+        `Possible detention — still at ${role} 2+ hours past appointment`,
+        `${stop.name || (stop.kind === "delivery" ? "Delivery" : "Pickup")} · mark ${formatDateTime(mark.toISOString())}`,
       ),
-    );
+    ];
   }
-  return items;
+  return [];
 }

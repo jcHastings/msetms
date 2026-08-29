@@ -3,7 +3,7 @@ import { placeholderLane } from "./load-page-shared";
 import { findOrCreateCustomer, getDriver, type LoadInput } from "./queries";
 import { isReeferMode } from "./reefer-shared";
 import { DEFAULT_LOAD_EQUIPMENT, isOwnerOperator } from "./types";
-import { resolveOwnerOperatorPay } from "./settlement";
+import { resolveOwnerOperatorSettlement } from "./settlement";
 import { defaultOoPercent, isKnownLoadStatus } from "./settings";
 
 export type ExistingLoadFields = {
@@ -232,19 +232,19 @@ export function parseLoadInput(
   };
   const driver = driverId ? getDriver(driverId) : null;
   if (driver && isOwnerOperator(driver.driver_type)) {
-    const percent = parsed.oo_percent ?? driver.pay_percent ?? defaultOoPercent();
-    parsed.oo_percent = percent;
-    const submittedPay = formData.has("oo_pay") ? parseOptionalFloat(formData.get("oo_pay")) : undefined;
-    parsed.oo_pay = resolveOwnerOperatorPay({
+    const settled = resolveOwnerOperatorSettlement({
       rate: parsed.rate,
-      percent,
-      submittedPay,
+      percent: parsed.oo_percent ?? existing?.oo_percent ?? driver.pay_percent ?? defaultOoPercent(),
+      driverPercent: driver.pay_percent ?? defaultOoPercent(),
+      submittedPay: formData.has("oo_pay") ? parseOptionalFloat(formData.get("oo_pay")) : undefined,
       existingPay: existing?.oo_pay ?? null,
       existingRate: existing?.rate ?? null,
       existingPercent: existing?.oo_percent ?? null,
       existingDriverId: existing?.driver_id ?? null,
       driverId,
     });
+    parsed.oo_percent = settled.oo_percent;
+    parsed.oo_pay = settled.oo_pay;
   } else {
     parsed.oo_percent = null;
     parsed.oo_pay = null;

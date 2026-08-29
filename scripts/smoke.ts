@@ -373,6 +373,7 @@ async function main() {
   assert.match(basicsChunk, /name="oo_pay"/);
   assert.match(basicsChunk, /data-oo-percent/);
   assert.match(basicsChunk, /data-oo-pay/);
+  assert.match(basicsChunk, /impliedOwnerOperatorPercent/);
   assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
@@ -3659,14 +3660,47 @@ Continuous reefer. Two load locks.
   assert.ok(kelvinInvoice.lines.some((line) => line.name === "Flat Rate" && line.amount === 1000));
   assert.ok(kelvinInvoice.lines.some((line) => line.name === "Detention" && line.amount === 200));
   assert.equal(kelvinInvoice.lines.some((line) => line.amount === 850), false);
+  const { impliedOwnerOperatorPercent, resolveOwnerOperatorSettlement } = await import("../lib/settlement");
+  assert.equal(impliedOwnerOperatorPercent(800, 1000), 80);
+  const typedDollars = resolveOwnerOperatorSettlement({
+    rate: 1000,
+    percent: 85,
+    driverPercent: 85,
+    submittedPay: 800,
+    existingPay: 850,
+    existingRate: 1000,
+    existingPercent: 85,
+    existingDriverId: kelvinId,
+    driverId: kelvinId,
+  });
+  assert.equal(typedDollars.oo_pay, 800);
+  assert.equal(typedDollars.oo_percent, 80);
+  const typedPercent = resolveOwnerOperatorSettlement({
+    rate: 1000,
+    percent: 80,
+    driverPercent: 85,
+    existingPay: 850,
+    existingRate: 1000,
+    existingPercent: 85,
+    existingDriverId: kelvinId,
+    driverId: kelvinId,
+  });
+  assert.equal(typedPercent.oo_pay, 800);
+  assert.equal(typedPercent.oo_percent, 80);
   const handTyped = new FormData();
-  handTyped.set("oo_pay", "900");
+  handTyped.set("oo_pay", "800");
   const keptHand = parseLoadInput(handTyped, true, queries.getLoad(kelvinLoadId)!);
-  assert.equal(keptHand.oo_pay, 900, "hand-typed OO pay stays when rate and OO do not change");
+  assert.equal(keptHand.oo_pay, 800);
+  assert.equal(keptHand.oo_percent, 80);
   const rateChange = new FormData();
   rateChange.set("rate", "2000");
-  const recaled = parseLoadInput(rateChange, true, { ...queries.getLoad(kelvinLoadId)!, oo_pay: 850 });
-  assert.equal(recaled.oo_pay, 1700, "flat rate change recals auto OO pay");
+  const recaled = parseLoadInput(rateChange, true, {
+    ...queries.getLoad(kelvinLoadId)!,
+    oo_pay: 800,
+    oo_percent: 80,
+  });
+  assert.equal(recaled.oo_pay, 1600);
+  assert.equal(recaled.oo_percent, 80);
   const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrell);
   const { collectAssignmentAlerts, requireAssignmentOverride, trailerComplianceAlerts, truckComplianceAlerts } =
@@ -11277,6 +11311,10 @@ Continuous reefer. Two load locks.
   assert.equal(attentionLabel({ kind: "missing_pod", severity: "HIGH", title: "Missing POD" }), "Important");
   assert.equal(attentionLabel({ kind: "detention", severity: "HIGH", title: "Detention — Dock" }), "Detention");
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"),
+    /Possible detention — still at \$\{role\} 2\+ hours past appointment/,
+  );
 
   const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
   assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
@@ -11862,16 +11900,19 @@ Continuous reefer. Two load locks.
   const detentionInbox = (await import("../lib/exceptions")).listExceptionInbox(detentionNow);
   assert.ok(
     detentionInbox.items.some(
-      (item) => item.kind === "detention" && item.loadId === clockLoadId && /FCFS Shipper Clock/.test(item.title),
+      (item) =>
+        item.kind === "detention" &&
+        item.loadId === clockLoadId &&
+        /still at shipper/.test(item.title) &&
+        /FCFS Shipper Clock/.test(item.detail),
     ),
     "FCFS shipper still inside at window start + 2 hours",
   );
+  assert.equal(detentionInbox.items.filter((item) => item.kind === "detention" && item.loadId === clockLoadId).length, 1);
   loadStops.stampStopTime(detentionShipperId, "departed_at", "2026-08-29T09:15:00.000-05:00");
   const leftOnTime = (await import("../lib/exceptions")).listExceptionInbox(detentionNow);
   assert.equal(
-    leftOnTime.items.some(
-      (item) => item.kind === "detention" && item.loadId === clockLoadId && /FCFS Shipper Clock/.test(item.title),
-    ),
+    leftOnTime.items.some((item) => item.kind === "detention" && item.loadId === clockLoadId),
     false,
     "no detention after leaving before the two-hour mark",
   );

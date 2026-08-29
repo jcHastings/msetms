@@ -24,26 +24,47 @@ export function isAutoOwnerOperatorPay(
   return sameMoney(ooPay, computeOwnerOperatorPay(rate, percent));
 }
 
-/** Recalc when the flat rate or assigned OO changes. Keep a hand-typed amount otherwise. */
-export function resolveOwnerOperatorPay(input: {
+export function impliedOwnerOperatorPercent(
+  pay: number | null | undefined,
+  rate: number | null | undefined,
+): number | null {
+  if (pay == null || rate == null || Number.isNaN(pay) || Number.isNaN(rate) || rate === 0) return null;
+  return Math.round((pay / rate) * 1000) / 10;
+}
+
+/** Driver percent is the default. After a load edit, keep that load's $ and implied %. */
+export function resolveOwnerOperatorSettlement(input: {
   rate: number | null | undefined;
   percent: number | null | undefined;
+  driverPercent?: number | null;
   submittedPay?: number | null;
   existingPay?: number | null;
   existingRate?: number | null;
   existingPercent?: number | null;
   existingDriverId?: number | null;
   driverId?: number | null;
-}): number | null {
-  const auto = computeOwnerOperatorPay(input.rate, input.percent);
-  const rateChanged = !sameMoney(input.existingRate, input.rate);
-  const percentChanged = (input.existingPercent ?? null) !== (input.percent ?? null);
+}): { oo_pay: number | null; oo_percent: number | null } {
   const driverChanged = (input.existingDriverId ?? null) !== (input.driverId ?? null);
-  if (rateChanged || driverChanged || percentChanged || input.existingPay == null) {
-    return auto;
+  const firstRate = (input.existingRate == null || input.existingRate === 0) && input.rate != null && input.rate > 0;
+  if (driverChanged || input.existingPay == null || firstRate) {
+    const percent = input.driverPercent ?? input.percent ?? input.existingPercent ?? null;
+    return { oo_percent: percent, oo_pay: computeOwnerOperatorPay(input.rate, percent) };
   }
-  if (input.submittedPay != null) return input.submittedPay;
-  return input.existingPay;
+  const submittedPay = input.submittedPay;
+  const payChanged = submittedPay != null && !sameMoney(submittedPay, input.existingPay);
+  if (payChanged) {
+    return {
+      oo_pay: submittedPay,
+      oo_percent: impliedOwnerOperatorPercent(submittedPay, input.rate) ?? input.percent ?? input.existingPercent ?? null,
+    };
+  }
+  const percent = input.percent ?? input.existingPercent ?? null;
+  const percentChanged = (input.existingPercent ?? null) !== percent;
+  const rateChanged = !sameMoney(input.existingRate, input.rate);
+  if (percentChanged || rateChanged) {
+    return { oo_percent: percent, oo_pay: computeOwnerOperatorPay(input.rate, percent) };
+  }
+  return { oo_pay: input.existingPay, oo_percent: input.existingPercent ?? percent };
 }
 
 /** What a signed-in driver may see. Company drivers never see a customer rate. */
