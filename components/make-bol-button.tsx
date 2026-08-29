@@ -72,8 +72,8 @@ export function MakeBolPanel({
     <section className="card mb-4 p-5" data-bol-panel>
       <h2 className="text-sm font-semibold">Bill of lading</h2>
       <p className="mt-1 text-sm text-slate-600">
-        ITS-style BOL. Prefills from the load. Add freight lines, then print. Trailer stays its own field — not in P.O.
-        Number.
+        ITS-style BOL. Prefills from the load. Add freight lines, then print. Reefer, seals, and trailer stay their own
+        fields — trailer is not stuffed into P.O. Number.
       </p>
       <FormBanner result={state} />
       <form action={formAction} className="mt-4 space-y-4">
