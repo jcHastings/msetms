@@ -491,6 +491,9 @@ export function LoadWorkspace({
         </ActionMenu>
         ) : null}
         <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("basics", "master-load")}>
+            Split as master load
+          </button>
           <form action={cloneLoadAction}>
             <input type="hidden" name="load_id" value={loadId} />
             <button className="menu-item w-full text-left" type="submit">

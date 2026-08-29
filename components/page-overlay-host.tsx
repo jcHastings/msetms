@@ -59,6 +59,15 @@ export function PageOverlayHost({
         }
         return;
       }
+      if (event.data?.type === "ms-open-load") {
+        const loadId = Number(event.data.loadId);
+        if (Number.isFinite(loadId) && loadId > 0) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("open", String(loadId));
+          requestLoadOverlay(`${url.pathname}?${url.searchParams.toString()}`);
+        }
+        return;
+      }
       if (event.data?.type !== "ms-close-load") return;
       closeLoadOverlay(returnTo);
     }

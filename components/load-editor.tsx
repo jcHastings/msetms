@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
 import { DefaultedDocuments } from "@/components/defaulted-documents";
+import { MasterLoadPanel } from "@/components/master-load-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
 import { listDefaultedDocuments } from "@/lib/load-documents";
@@ -52,6 +53,7 @@ import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
 import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
+import { listMasterFamily } from "@/lib/master-load";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
@@ -97,6 +99,9 @@ export async function LoadEditor({
   const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
   const payItems = listPayItems(load.id);
   const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
+  const family = listMasterFamily(load.id);
+  const masterRow = family.find((row) => !row.parent_load_id) ?? family[0];
+  const childRows = family.filter((row) => row.parent_load_id);
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
@@ -104,7 +109,12 @@ export async function LoadEditor({
         header={
           <PageHeader
             title={load.load_number}
-            subtitle={formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`}
+            subtitle={[
+              load.parent_load_id ? `Child of master ${masterRow?.load_number ?? ""}` : childRows.length ? `Master load · ${childRows.map((row) => row.load_number).join(", ")}` : "",
+              formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
             actions={
               <div className="flex items-center gap-3">
                 <CopyTripNumber value={load.load_number} />
@@ -167,6 +177,22 @@ export async function LoadEditor({
         canReturnFromAccounting={canAccessAccounting(role)}
       >
         <LoadTabPanel when="basics">
+          <MasterLoadPanel
+            loadId={load.id}
+            loadNumber={load.load_number}
+            isChild={Boolean(load.parent_load_id)}
+            masterNumber={masterRow?.load_number ?? load.load_number}
+            family={family}
+            customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
+            stops={stops.map((stop) => ({
+              id: stop.id,
+              kind: stop.kind,
+              name: stop.name,
+              city: stop.city,
+              state: stop.state,
+            }))}
+            defaultCustomerId={load.customer_id}
+          />
           <LoadMoneyBox load={load} />
           {canSendSms(role) ? (
             <LoadMailPanel
@@ -221,6 +247,22 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="stops">
+          <MasterLoadPanel
+            loadId={load.id}
+            loadNumber={load.load_number}
+            isChild={Boolean(load.parent_load_id)}
+            masterNumber={masterRow?.load_number ?? load.load_number}
+            family={family}
+            customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
+            stops={(load.parent_load_id ? [] : stops).map((stop) => ({
+              id: stop.id,
+              kind: stop.kind,
+              name: stop.name,
+              city: stop.city,
+              state: stop.state,
+            }))}
+            defaultCustomerId={load.customer_id}
+          />
           <Suspense fallback={<section className="card mb-4 px-5 py-10 text-sm text-slate-500">Opening route…</section>}>
             <LoadStopsMap loadId={load.id} />
           </Suspense>
@@ -243,6 +285,12 @@ export async function LoadEditor({
         <LoadTabPanel when="financials">
           {showFinancials ? (
             <>
+              {childRows.length ? (
+                <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  This is the master trip. Invoice {childRows.map((row) => row.load_number).join(", ")} — each
+                  customer split has its own rate and paperwork.
+                </p>
+              ) : null}
               <div className="mb-4">
                 <SendToAccountingControls
                   loadId={load.id}

@@ -5,6 +5,7 @@ import { formatInvoiceMoney, formatMdYDisplay, formatStopWindow, formatWeight } 
 import { labelForPayCategory } from "./load-page-shared";
 import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } from "./locations";
 import { customerInvoicePayItems } from "./pay-items";
+import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import { routeGuideFromLoad } from "./routing-shared";
@@ -213,6 +214,14 @@ function invoiceDate(load: LoadView): string {
 export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean } = {}): TmsInvoiceModel {
   if (load.non_revenue) {
     throw new Error("Empty move — no customer invoice.");
+  }
+  if (!options.allowDraft) {
+    const children = listChildLoads(load.id);
+    if (children.length) {
+      throw new Error(
+        `Invoice the customer splits (${children.map((child) => child.load_number).join(", ")}) — this master is the trip.`,
+      );
+    }
   }
   if (!options.allowDraft && !isBillableStatus(load.status)) {
     throw new Error("Mark the load Delivered before invoicing.");

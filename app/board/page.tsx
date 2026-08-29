@@ -27,6 +27,7 @@ import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
+import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
@@ -46,7 +47,9 @@ export default async function BoardPage({
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
   const current = { status, date };
-  const loads = listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status));
+  const loads = sortMasterFamilies(
+    listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status)),
+  );
   const assignableTrucks = listAssignableTrucks();
   const assignableTrailers = listAssignableTrailers();
   const assignableDrivers = listAssignableDrivers();
@@ -170,6 +173,13 @@ async function BoardLiveSection({
                       >
                         {load.load_number}
                       </OverlayOpenLink>
+                      {load.parent_load_id ? (
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          Child {load.master_suffix || ""}
+                        </div>
+                      ) : loads.some((row) => row.parent_load_id === load.id) ? (
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Master</div>
+                      ) : null}
                       <div
                         className="truncate whitespace-nowrap text-xs"
                         title={`${load.origin} → ${load.destination}`}

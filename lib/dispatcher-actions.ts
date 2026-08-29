@@ -127,6 +127,39 @@ export async function cloneLoadAction(formData: FormData): Promise<void> {
   });
 }
 
+export async function addMasterChildAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const parentId = parseOptionalInt(formData.get("parent_load_id"));
+      const customerId = parseOptionalInt(formData.get("customer_id"));
+      if (!parentId) throw new Error("Load is missing.");
+      if (!customerId) throw new Error("Pick a customer.");
+      const stopIds = formData
+        .getAll("stop_ids")
+        .map((value) => Number.parseInt(String(value), 10))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      const rate = parseOptionalFloat(formData.get("rate"));
+      const { createMasterChild } = await import("./master-load");
+      const child = createMasterChild({
+        parentId,
+        customerId,
+        stopIds,
+        rate,
+        copyFinancials: formData.get("copy_financials") === "1",
+      });
+      writeAudit("update", "master_load", parentId, child.load_number);
+      refresh();
+      return { ok: true, id: child.id, message: `${child.load_number} added for ${child.customer_name}.` };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function saveTemplateAction(formData: FormData): Promise<void> {
   await requireLoadEditor();
   const id = parseOptionalInt(formData.get("load_id"));
