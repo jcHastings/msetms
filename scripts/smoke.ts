@@ -304,6 +304,11 @@ async function main() {
   assert.match(sendBooksUi, /ms-go/);
   assert.match(sendBooksUi, /\/accounting\/invoices/);
   assert.match(sendBooksUi, /goToAccountingManagement/);
+  assert.match(sendBooksUi, /data-accounting-sent/);
+  assert.match(sendBooksUi, /Manage Invoices/);
+  assert.match(sendBooksUi, /Manage Bills/);
+  assert.match(sendBooksUi, /setSentHere\(true\)/);
+  assert.match(sendBooksUi, /router\.refresh\(\)/);
   assert.doesNotMatch(sendBooksUi, /ms-close-load/);
   assert.doesNotMatch(sendBooksUi, /returnAfterAccounting/);
   assert.doesNotMatch(sendBooksUi, /router\.push\("\/"\)/);

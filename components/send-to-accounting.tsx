@@ -14,13 +14,13 @@ import { isBillableStatus } from "@/lib/types";
 
 export const ACCOUNTING_MANAGEMENT_HREF = "/accounting/invoices";
 
-function goToAccountingManagement(router: { push: (href: string) => void }): void {
+function goToAccountingManagement(router: { push: (href: string) => void }, href = ACCOUNTING_MANAGEMENT_HREF): void {
   const params = new URLSearchParams(window.location.search);
   if (params.get("embed") === "1" && window.parent !== window) {
-    window.parent.postMessage({ type: "ms-go", href: ACCOUNTING_MANAGEMENT_HREF }, window.location.origin);
+    window.parent.postMessage({ type: "ms-go", href }, window.location.origin);
     return;
   }
-  router.push(ACCOUNTING_MANAGEMENT_HREF);
+  router.push(href);
 }
 
 export function SendToAccountingControls({
@@ -40,13 +40,14 @@ export function SendToAccountingControls({
   canReturn: boolean;
   variant?: "button" | "menu" | "header";
 }) {
-  const onDesk = loadIsOnAccountingDesk({ accounting_desk: desk, status });
-  const archived = desk === "archived";
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [sentHere, setSentHere] = useState(false);
+  const onDesk = sentHere || loadIsOnAccountingDesk({ accounting_desk: desk, status });
+  const archived = desk === "archived";
   const panelRef = useRef<HTMLDivElement>(null);
   useDismissable(open, () => setOpen(false), panelRef);
 
@@ -66,7 +67,8 @@ export function SendToAccountingControls({
       return;
     }
     setOpen(false);
-    goToAccountingManagement(router);
+    setSentHere(true);
+    router.refresh();
   }
 
   async function sendQuickbooks() {
@@ -139,12 +141,22 @@ export function SendToAccountingControls({
           Load has been Sent to Accounting Management
         </div>
         <div className="flex flex-wrap gap-2">
-          <a className="btn btn-secondary" href="/accounting/invoices">
+          <button
+            className="btn btn-secondary"
+            type="button"
+            data-accounting-manage-invoices=""
+            onClick={() => goToAccountingManagement(router, ACCOUNTING_MANAGEMENT_HREF)}
+          >
             Manage Invoices
-          </a>
-          <a className="btn btn-secondary" href="/accounting/invoices?tab=bills">
+          </button>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            data-accounting-manage-bills=""
+            onClick={() => goToAccountingManagement(router, `${ACCOUNTING_MANAGEMENT_HREF}?tab=bills`)}
+          >
             Manage Bills
-          </a>
+          </button>
           {canReturn ? (
             <button className="btn btn-secondary" type="button" onClick={sendBack} disabled={pending}>
               {pending ? "Sending…" : "Send back to Load Management"}
@@ -174,14 +186,15 @@ export function SendToAccountingControls({
     >
       <div ref={panelRef} className="card mx-auto my-3 w-full max-w-md p-5 shadow-xl sm:my-0">
         <div className="mb-2 flex items-start justify-between gap-3">
-          <h2 className="text-base font-semibold text-slate-900">Send to Accounting Management</h2>
+          <h2 className="text-base font-semibold text-slate-900">Are you sure?</h2>
           <button className="btn btn-secondary" type="button" data-accounting-send-close="" onClick={() => setOpen(false)} disabled={pending}>
             Close
           </button>
         </div>
         <p className="mt-2 text-sm text-slate-600">
-          This load is ready for invoicing and billing. It will leave Active loads and appear in
-          Accounting Management.
+          Send Load #{loadNumber} from Load Management to Accounting Management. It is ready for
+          invoicing and billing, leaves Active loads, and shows in Accounting Management. To undo
+          later, use Send back to Load Management from Admin / Financials.
         </p>
         {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
         <div className="mt-4 flex flex-wrap justify-end gap-2">
