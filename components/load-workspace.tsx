@@ -12,13 +12,11 @@ import {
   requestDriverDocumentsAction,
   requestPodAction,
   saveTemplateAction,
-  sendLoadMailAction,
   sendLoadSmsAction,
   sendLoadWhatsAppAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
 import { LoadMailMenuItems } from "@/components/load-mail-panel";
-import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
@@ -55,11 +53,6 @@ export function LoadWorkspace({
   customerName = "",
   contactEmail = "",
   driverEmail = "",
-  readyToInvoice = false,
-  nonRevenue = false,
-  accountingDesk = "operations",
-  canSendToAccounting = false,
-  canReturnFromAccounting = false,
   header,
   children,
 }: {
@@ -84,11 +77,6 @@ export function LoadWorkspace({
   customerName?: string;
   contactEmail?: string;
   driverEmail?: string;
-  readyToInvoice?: boolean;
-  nonRevenue?: boolean;
-  accountingDesk?: string;
-  canSendToAccounting?: boolean;
-  canReturnFromAccounting?: boolean;
   header?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -403,9 +391,6 @@ export function LoadWorkspace({
             Your defaulted documents
           </button>
           <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
-            View load docs
-          </button>
-          <button type="button" className="menu-item" onClick={() => setTab("docs", "load-documents")}>
             Upload a Document
           </button>
           <MenuAction
@@ -449,17 +434,6 @@ export function LoadWorkspace({
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          {loadId && (canSendToAccounting || canReturnFromAccounting) ? (
-            <SendToAccountingControls
-              loadId={loadId}
-              loadNumber={loadNumber}
-              status={status}
-              desk={accountingDesk}
-              canSend={canSendToAccounting && !nonRevenue}
-              canReturn={canReturnFromAccounting}
-              variant="menu"
-            />
-          ) : null}
           {canViewAudit(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
               View Accountability Log
@@ -491,7 +465,7 @@ export function LoadWorkspace({
         </ActionMenu>
         ) : null}
         <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("basics", "master-load")}>
+          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("stops", "master-load")}>
             Split as master load
           </button>
           <form action={cloneLoadAction}>
@@ -610,34 +584,6 @@ export function LoadWorkspace({
                 {smsPending ? "Sending…" : "Send WhatsApp"}
               </button>
               ) : null}
-              <button
-                className="btn btn-secondary"
-                type="button"
-                disabled={smsPending}
-                onClick={async () => {
-                  if (!driverEmail.trim()) {
-                    setSmsNotice({ tone: "error", text: "This driver has no email on the driver record." });
-                    return;
-                  }
-                  if (!window.confirm(`Send load information to ${driverEmail}?`)) return;
-                  setSmsPending(true);
-                  const form = new FormData();
-                  form.set("load_id", String(loadId));
-                  form.set("kind", "driver_load");
-                  form.set("locale", driverLocale);
-                  const result = await sendLoadMailAction(form);
-                  setSmsPending(false);
-                  if (!result.ok) {
-                    setSmsNotice({ tone: "error", text: result.error });
-                    return;
-                  }
-                  setSmsNotice({ tone: "ok", text: result.message ?? "Sent." });
-                  setDispatchOpen(false);
-                  router.refresh();
-                }}
-              >
-                {smsPending ? "Sending…" : "Email driver load"}
-              </button>
             </div>
           </div>
         </div>

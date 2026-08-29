@@ -266,16 +266,16 @@ export function canAccessAccounting(role: string): boolean {
   return isAdminRole(role) || isAccountingRole(role);
 }
 
-export function canViewLoadFinancials(role: string): boolean {
-  return canAccessAccounting(role);
-}
-
 export function canConnectQuickbooks(role: string): boolean {
   return isAdminRole(role);
 }
 
 export function canEditLoads(role: string): boolean {
   return canWriteDesk(role);
+}
+
+export function canViewLoadFinancials(role: string): boolean {
+  return canEditLoads(role);
 }
 
 export function canAssignLoads(role: string): boolean {

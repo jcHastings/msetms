@@ -168,8 +168,6 @@ export function LoadForm({
           card={card}
           onExpiredChange={onExpiredChange}
           onDriverIdChange={onDriverIdChange}
-          ooPercent={liveOoPercent}
-          onOoPercentChange={setLiveOoPercent}
         />
       </div>
       {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}

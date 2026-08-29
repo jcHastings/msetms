@@ -332,7 +332,8 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
-  assert.match(workspaceSource, /Email driver load/);
+  assert.match(workspaceSource, /LoadMailMenuItems/);
+  assert.doesNotMatch(workspaceSource, /SendToAccountingControls/);
   assert.match(workspaceSource, /Spanish/);
   assert.match(workspaceSource, /driver-locale|driverLocale/);
   const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
@@ -374,6 +375,8 @@ async function main() {
   const basicsChunk = fs.readFileSync(path.join(process.cwd(), "components/load-basics-screen.tsx"), "utf8");
   const customerChunk = fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8");
   const assetsChunk = fs.readFileSync(path.join(process.cwd(), "components/load-carrier-screen.tsx"), "utf8");
+  const rateFieldsSource = fs.readFileSync(path.join(process.cwd(), "components/load-rate-fields.tsx"), "utf8");
+  const financialsRateSource = fs.readFileSync(path.join(process.cwd(), "components/load-financials-rate.tsx"), "utf8");
   assert.match(loadFormSource, /LoadBasicsScreen/);
   assert.match(loadFormSource, /LoadCustomerScreen/);
   assert.match(loadFormSource, /LoadCarrierScreen/);
@@ -409,16 +412,21 @@ async function main() {
   assert.match(basicsChunk, /truckStatusOptions/);
   assert.match(basicsChunk, /data-autosave/);
   assert.match(basicsChunk, /blurPersist/);
-  assert.match(basicsChunk, /htmlFor="rate"/);
-  assert.match(basicsChunk, /Customer rate/);
-  assert.match(basicsChunk, /name="oo_percent"/);
-  assert.match(basicsChunk, /name="oo_pay"/);
-  assert.match(basicsChunk, /data-oo-percent/);
-  assert.match(basicsChunk, /data-oo-pay/);
-  assert.match(basicsChunk, /data-oo-pay-pair/);
-  assert.match(basicsChunk, /impliedOwnerOperatorPercent/);
-  assert.match(basicsChunk, /Dollars/);
-  assert.match(basicsChunk, /Percent of flat rate/);
+  assert.match(basicsChunk, /LoadRateFields/);
+  assert.match(basicsChunk, /\{!load \? \(/);
+  assert.doesNotMatch(basicsChunk, /htmlFor="rate"|id="rate"/);
+  assert.match(rateFieldsSource, /htmlFor="rate"/);
+  assert.match(rateFieldsSource, /Customer rate/);
+  assert.match(rateFieldsSource, /name="oo_percent"/);
+  assert.match(rateFieldsSource, /name="oo_pay"/);
+  assert.match(rateFieldsSource, /data-oo-percent/);
+  assert.match(rateFieldsSource, /data-oo-pay/);
+  assert.match(rateFieldsSource, /data-oo-pay-pair/);
+  assert.match(rateFieldsSource, /impliedOwnerOperatorPercent/);
+  assert.match(rateFieldsSource, /Dollars/);
+  assert.match(rateFieldsSource, /Percent of flat rate/);
+  assert.match(financialsRateSource, /LoadRateFields/);
+  assert.match(financialsRateSource, /data-financials-rate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8"), /load\?\.oo_percent \?\? driver\.pay_percent/);
   assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
@@ -438,8 +446,8 @@ async function main() {
   assert.match(customerChunk, /blurPersist/);
   assert.match(customerChunk, /useLoadAssignPersist/);
   assert.match(customerChunk, /Customer reference/);
-  assert.match(customerChunk, /load\?\.po_number/);
-  assert.match(customerChunk, /load\?\.reference_number/);
+  assert.match(customerChunk, /load\?\.customer_reference/);
+  assert.doesNotMatch(customerChunk, /load\?\.po_number|load\?\.reference_number/);
   assert.doesNotMatch(customerChunk, /defaults\.load_number_hint/);
   assert.doesNotMatch(customerChunk, /credit_hold|MC#|EDI/);
   assert.match(assetsChunk, /Company driver/);
@@ -532,8 +540,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /keepMounted/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible && !keepMounted\) return null/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /keepMounted/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /when="basics"/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadMoneyBox/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /when=\{\["basics", "customer", "assets"\]\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadFinancialsRate/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadMoneyBox|LoadMailPanel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadLogLiveCards/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Suspense/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Opening stops/);
@@ -551,9 +560,9 @@ async function main() {
   assert.match(paySource, /Other payee/);
   assert.match(paySource, /Total income/);
   assert.match(paySource, /Gross profit/);
-  assert.match(paySource, /ViewInvoiceButton/);
-  assert.match(paySource, /View Customer Confirmation/);
-  assert.match(paySource, /View Carrier Confirmation/);
+  assert.doesNotMatch(paySource, /ViewInvoiceButton/);
+  assert.doesNotMatch(paySource, /View Customer Confirmation/);
+  assert.doesNotMatch(paySource, /View Carrier Confirmation/);
   const confirmationPoSource = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");
   assert.match(confirmationPoSource, /driverFacingStopPo/);
   assert.match(confirmationPoSource, /driverFacingStopConfirmation/);
@@ -567,11 +576,14 @@ async function main() {
     fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"),
     /refs: \[load\.reference_number, load\.po_number, load\.customer_reference\]/,
   );
-  assert.match(paySource, /data-carrier-confirmation-off/);
-  assert.match(paySource, /pointer-events-none/);
-  assert.match(paySource, /Assign a driver first/);
-  assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation`/);
-  assert.match(paySource, /\/api\/loads\/\$\{loadId\}\/confirmation\?packet=internal/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/load-confirmation-link.tsx"), "utf8"),
+    /\/api\/loads\/\$\{loadId\}\/confirmation/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/load-confirmation-link.tsx"), "utf8"),
+    /packet=internal/,
+  );
   const confirmationRouteSource = fs.readFileSync(
     path.join(process.cwd(), "app/api/loads/[id]/confirmation/route.ts"),
     "utf8",
@@ -1455,6 +1467,8 @@ async function main() {
     "components/rate-con-location-review.tsx",
     "components/load-form.tsx",
     "components/load-basics-screen.tsx",
+    "components/load-rate-fields.tsx",
+    "components/load-financials-rate.tsx",
     "components/load-customer-screen.tsx",
     "components/load-carrier-screen.tsx",
     "components/load-lane-fields.tsx",
@@ -9142,7 +9156,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canEditSettings("manager"), true);
   assert.equal(settings.canImportLocations("dispatcher"), false);
   assert.equal(settings.canImportLocations("manager"), true);
-  assert.equal(settings.canViewLoadFinancials("dispatcher"), false);
+  assert.equal(settings.canViewLoadFinancials("dispatcher"), true);
   assert.equal(settings.canViewLoadFinancials("accounting"), true);
   assert.equal(settings.canViewAudit("dispatcher"), false);
   assert.equal(settings.canViewAudit("accounting"), true);
