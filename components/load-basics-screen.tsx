@@ -68,7 +68,9 @@ export function LoadBasicsScreen({
     load?.rate != null ? String(load.rate) : defaults.rate != null ? String(defaults.rate) : "",
   );
   const [ooPay, setOoPay] = useState(load?.oo_pay != null ? String(load.oo_pay) : "");
-  const [percent, setPercent] = useState(ooPercent != null ? String(ooPercent) : "");
+  const [percent, setPercent] = useState(
+    load?.oo_percent != null ? String(load.oo_percent) : ooPercent != null ? String(ooPercent) : "",
+  );
   const lastOoPercent = useRef(ooPercent);
   const looksReefer = Boolean(
     load?.reefer_mode ||
@@ -203,58 +205,61 @@ export function LoadBasicsScreen({
         />
       </div>
       {ooPercent != null ? (
-        <>
-          <div className="field" data-oo-percent="">
-            <label htmlFor="oo_percent">OO percent</label>
-            <input
-              id="oo_percent"
-              name="oo_percent"
-              type="number"
-              min={0}
-              max={100}
-              step="0.1"
-              data-critical-save=""
-              value={percent}
-              onChange={(event) => {
-                const next = event.target.value;
-                setPercent(next);
-                const live = Number(next);
-                const nextPercent = Number.isFinite(live) ? live : null;
-                onOoPercentChange?.(nextPercent);
-                const pay = computeOwnerOperatorPay(rate === "" ? null : Number(rate), nextPercent);
-                setOoPay(pay != null ? String(pay) : "");
-                if (load) handleAssign(load.oo_percent, next, "oo_percent", event);
-              }}
-            />
+        <div className="field md:col-span-2" data-oo-pay-pair="">
+          <div className="mb-1 text-sm font-semibold text-slate-900">OO pay</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="field" data-oo-pay="">
+              <label htmlFor="oo_pay">Dollars</label>
+              <input
+                id="oo_pay"
+                name="oo_pay"
+                type="number"
+                min={0}
+                step="0.01"
+                data-critical-save=""
+                value={ooPay}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setOoPay(next);
+                  const livePay = Number(next);
+                  const liveRate = Number(rate);
+                  const implied = impliedOwnerOperatorPercent(
+                    Number.isFinite(livePay) ? livePay : null,
+                    Number.isFinite(liveRate) ? liveRate : null,
+                  );
+                  if (implied != null) {
+                    setPercent(String(implied));
+                    onOoPercentChange?.(implied);
+                  }
+                  if (load) handleAssign(load.oo_pay, next, "oo_pay", event);
+                }}
+              />
+            </div>
+            <div className="field" data-oo-percent="">
+              <label htmlFor="oo_percent">Percent of flat rate</label>
+              <input
+                id="oo_percent"
+                name="oo_percent"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                data-critical-save=""
+                value={percent}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setPercent(next);
+                  const live = Number(next);
+                  const nextPercent = Number.isFinite(live) ? live : null;
+                  onOoPercentChange?.(nextPercent);
+                  const pay = computeOwnerOperatorPay(rate === "" ? null : Number(rate), nextPercent);
+                  setOoPay(pay != null ? String(pay) : "");
+                  if (load) handleAssign(load.oo_percent, next, "oo_percent", event);
+                }}
+              />
+            </div>
           </div>
-          <div className="field" data-oo-pay="">
-            <label htmlFor="oo_pay">OO pay</label>
-            <input
-              id="oo_pay"
-              name="oo_pay"
-              type="number"
-              min={0}
-              step="0.01"
-              data-critical-save=""
-              value={ooPay}
-              onChange={(event) => {
-                const next = event.target.value;
-                setOoPay(next);
-                const livePay = Number(next);
-                const liveRate = Number(rate);
-                const implied = impliedOwnerOperatorPercent(
-                  Number.isFinite(livePay) ? livePay : null,
-                  Number.isFinite(liveRate) ? liveRate : null,
-                );
-                if (implied != null) {
-                  setPercent(String(implied));
-                  onOoPercentChange?.(implied);
-                }
-                if (load) handleAssign(load.oo_pay, next, "oo_pay", event);
-              }}
-            />
-          </div>
-        </>
+        </div>
       ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>

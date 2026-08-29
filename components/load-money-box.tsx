@@ -1,6 +1,6 @@
 import { formatMoney } from "@/lib/format";
 import { billedCustomerRate, customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
-import { driverFacingPay } from "@/lib/settlement";
+import { driverFacingPay, impliedOwnerOperatorPercent } from "@/lib/settlement";
 import type { LoadView } from "@/lib/types";
 
 export function LoadMoneyBox({ load }: { load: LoadView }) {
@@ -30,7 +30,20 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <MoneyStat label="Customer rate" value={formatMoney(customerRate)} />
         <MoneyStat label="Accessorials" value={formatMoney(accessorials)} />
-        <MoneyStat label="Driver pay" value={driverPay != null ? formatMoney(driverPay) : "—"} />
+        <MoneyStat
+          label="Driver pay"
+          value={
+            driverPay != null
+              ? `${formatMoney(driverPay)}${
+                  load.oo_percent != null
+                    ? ` · ${load.oo_percent}%`
+                    : impliedOwnerOperatorPercent(driverPay, customerRate) != null
+                      ? ` · ${impliedOwnerOperatorPercent(driverPay, customerRate)}%`
+                      : ""
+                }`
+              : "—"
+          }
+        />
       </div>
     </section>
   );

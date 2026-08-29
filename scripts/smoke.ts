@@ -373,7 +373,11 @@ async function main() {
   assert.match(basicsChunk, /name="oo_pay"/);
   assert.match(basicsChunk, /data-oo-percent/);
   assert.match(basicsChunk, /data-oo-pay/);
+  assert.match(basicsChunk, /data-oo-pay-pair/);
   assert.match(basicsChunk, /impliedOwnerOperatorPercent/);
+  assert.match(basicsChunk, /Dollars/);
+  assert.match(basicsChunk, /Percent of flat rate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8"), /load\?\.oo_percent \?\? driver\.pay_percent/);
   assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
   assert.match(basicsChunk, /Load Status/);
@@ -3654,12 +3658,6 @@ Continuous reefer. Two load locks.
     total: 1000,
     notes: "",
   });
-  queries.updateLoadStatus(kelvinLoadId, "delivered");
-  const kelvinInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(kelvinLoadId)!);
-  assert.equal(kelvinInvoice.lines.some((line) => /owner-operator|oo pay|relay/i.test(line.name)), false);
-  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Flat Rate" && line.amount === 1000));
-  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Detention" && line.amount === 200));
-  assert.equal(kelvinInvoice.lines.some((line) => line.amount === 850), false);
   const { impliedOwnerOperatorPercent, resolveOwnerOperatorSettlement } = await import("../lib/settlement");
   assert.equal(impliedOwnerOperatorPercent(800, 1000), 80);
   const typedDollars = resolveOwnerOperatorSettlement({
@@ -3701,6 +3699,20 @@ Continuous reefer. Two load locks.
   });
   assert.equal(recaled.oo_pay, 1600);
   assert.equal(recaled.oo_percent, 80);
+  queries.updateLoad(kelvinLoadId, recaled);
+  queries.assignLoad(kelvinLoadId, kelvinTruckId, kelvinId);
+  const kelvinKept = queries.getLoad(kelvinLoadId);
+  assert.equal(kelvinKept?.oo_pay, 1600, "re-assigning the same OO must not snap back to 85%");
+  assert.equal(kelvinKept?.oo_percent, 80);
+  const reopen = parseLoadInput(new FormData(), true, kelvinKept!);
+  assert.equal(reopen.oo_pay, 1600);
+  assert.equal(reopen.oo_percent, 80);
+  queries.updateLoadStatus(kelvinLoadId, "delivered");
+  const kelvinInvoice = (await import("../lib/invoice")).buildTmsInvoice(queries.getLoad(kelvinLoadId)!);
+  assert.equal(kelvinInvoice.lines.some((line) => /owner-operator|oo pay|relay/i.test(line.name)), false);
+  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Flat Rate" && line.amount === 1000));
+  assert.ok(kelvinInvoice.lines.some((line) => line.name === "Detention" && line.amount === 200));
+  assert.equal(kelvinInvoice.lines.some((line) => line.amount === 1600 || line.amount === 850), false);
   const tyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrell);
   const { collectAssignmentAlerts, requireAssignmentOverride, trailerComplianceAlerts, truckComplianceAlerts } =

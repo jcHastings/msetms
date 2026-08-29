@@ -73,7 +73,7 @@ export function LoadForm({
   const [liveOoPercent, setLiveOoPercent] = useState<number | null>(() => {
     const driver = drivers.find((item) => String(item.id) === (load?.driver_id ? String(load.driver_id) : ""));
     if (!driver || !isOwnerOperator(driver.driver_type)) return null;
-    return driver.pay_percent ?? load?.oo_percent ?? defaultOoPercent;
+    return load?.oo_percent ?? driver.pay_percent ?? defaultOoPercent;
   });
   const canSubmit = !pending && !blockExpired;
   const onExpiredChange = useCallback((expired: boolean, confirmed: boolean) => {
@@ -86,9 +86,13 @@ export function LoadForm({
         setLiveOoPercent(null);
         return;
       }
+      if (load?.driver_id === driver.id && load.oo_percent != null) {
+        setLiveOoPercent(load.oo_percent);
+        return;
+      }
       setLiveOoPercent(driver.pay_percent ?? defaultOoPercent);
     },
-    [drivers, defaultOoPercent],
+    [drivers, defaultOoPercent, load],
   );
   const card = Boolean(workspace);
 

@@ -1622,11 +1622,19 @@ export function assignLoad(
   }
   assertAssetFree(truckId, driverId, loadId, resolvedTrailerId ?? null);
 
-  const ooPercent =
-    isOwnerOperator(driver.driver_type)
-      ? settlement?.oo_percent ?? driver.pay_percent ?? defaultOoPercent()
-      : null;
-  const ooPay = computeOwnerOperatorPay(flatCustomerRate(load), ooPercent);
+  const sameOo = load.driver_id === driverId && isOwnerOperator(driver.driver_type);
+  const dialogPercent = settlement?.oo_percent;
+  const ooPercent = isOwnerOperator(driver.driver_type)
+    ? sameOo && load.oo_percent != null && (dialogPercent == null || dialogPercent === load.oo_percent)
+      ? load.oo_percent
+      : dialogPercent ?? (sameOo ? load.oo_percent : null) ?? driver.pay_percent ?? defaultOoPercent()
+    : null;
+  const ooPay =
+    sameOo &&
+    load.oo_pay != null &&
+    (dialogPercent == null || dialogPercent === load.oo_percent)
+      ? load.oo_pay
+      : computeOwnerOperatorPay(flatCustomerRate(load), ooPercent);
   const assignedStatus = settlement?.dispatch ? "dispatched" : "assigned";
 
   const db = getDb();

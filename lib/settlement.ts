@@ -44,27 +44,30 @@ export function resolveOwnerOperatorSettlement(input: {
   existingDriverId?: number | null;
   driverId?: number | null;
 }): { oo_pay: number | null; oo_percent: number | null } {
+  const driverDefault = input.driverPercent ?? input.percent ?? null;
   const driverChanged = (input.existingDriverId ?? null) !== (input.driverId ?? null);
-  const firstRate = (input.existingRate == null || input.existingRate === 0) && input.rate != null && input.rate > 0;
-  if (driverChanged || input.existingPay == null || firstRate) {
-    const percent = input.driverPercent ?? input.percent ?? input.existingPercent ?? null;
-    return { oo_percent: percent, oo_pay: computeOwnerOperatorPay(input.rate, percent) };
+  if (driverChanged) {
+    return { oo_percent: driverDefault, oo_pay: computeOwnerOperatorPay(input.rate, driverDefault) };
   }
+  const loadPercent = input.percent ?? input.existingPercent ?? driverDefault;
+  const defaultPay = computeOwnerOperatorPay(input.rate, loadPercent);
   const submittedPay = input.submittedPay;
-  const payChanged = submittedPay != null && !sameMoney(submittedPay, input.existingPay);
+  const payChanged =
+    submittedPay != null && !sameMoney(submittedPay, input.existingPay ?? defaultPay);
   if (payChanged) {
     return {
       oo_pay: submittedPay,
-      oo_percent: impliedOwnerOperatorPercent(submittedPay, input.rate) ?? input.percent ?? input.existingPercent ?? null,
+      oo_percent: impliedOwnerOperatorPercent(submittedPay, input.rate) ?? loadPercent,
     };
   }
-  const percent = input.percent ?? input.existingPercent ?? null;
-  const percentChanged = (input.existingPercent ?? null) !== percent;
+  const percentChanged = input.percent != null && (input.existingPercent ?? null) !== input.percent;
+  const firstRate = (input.existingRate == null || input.existingRate === 0) && input.rate != null && input.rate > 0;
   const rateChanged = !sameMoney(input.existingRate, input.rate);
-  if (percentChanged || rateChanged) {
-    return { oo_percent: percent, oo_pay: computeOwnerOperatorPay(input.rate, percent) };
+  if (percentChanged || firstRate || rateChanged || input.existingPay == null) {
+    const percent = percentChanged ? input.percent : (input.existingPercent ?? driverDefault);
+    return { oo_percent: percent ?? null, oo_pay: computeOwnerOperatorPay(input.rate, percent) };
   }
-  return { oo_pay: input.existingPay, oo_percent: input.existingPercent ?? percent };
+  return { oo_pay: input.existingPay, oo_percent: input.existingPercent ?? loadPercent };
 }
 
 /** What a signed-in driver may see. Company drivers never see a customer rate. */

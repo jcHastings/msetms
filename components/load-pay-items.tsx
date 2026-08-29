@@ -60,7 +60,12 @@ export function LoadPayItems({
         {ownerOperator && ooPay != null ? (
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-oo-pay="">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">OO pay</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(ooPay)}</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">
+              {formatMoney(ooPay)}
+              {rateFallback != null && rateFallback > 0
+                ? ` · ${Math.round((ooPay / rateFallback) * 1000) / 10}%`
+                : ""}
+            </div>
           </div>
         ) : null}
       </div>
