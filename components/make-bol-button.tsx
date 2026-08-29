@@ -69,7 +69,7 @@ export function MakeBolPanel({
   }
 
   return (
-    <section className="card mb-4 p-5" data-bol-panel>
+    <section className="card mb-4 p-5" data-bol-panel="" data-ignore-dirty="">
       <h2 className="text-sm font-semibold">Bill of lading</h2>
       <p className="mt-1 text-sm text-slate-600">
         ITS-style BOL. Prefills from the load. Add freight lines, then print. Reefer, seals, and trailer stay their own
@@ -291,7 +291,7 @@ export function MakeBolPanel({
       </form>
       {itemsOpen && mounted
         ? createPortal(
-            <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4" data-bol-items-overlay>
+            <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4" data-bol-items-overlay="" data-ignore-dirty="">
               <div ref={itemsRef} className="card mt-8 w-full max-w-5xl p-5" role="dialog" aria-label="BOL Items">
                 <h3 className="text-base font-semibold">BOL Items</h3>
                 <div className="mt-3 overflow-x-auto">
@@ -412,7 +412,13 @@ export function MakeBolPanel({
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
+                <a
+                  className="btn btn-secondary"
+                  href={`/api/attachments/${file.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-bol-print-view=""
+                >
                   Print / view
                 </a>
                 <a className="btn btn-ghost" href={`/api/attachments/${file.id}?download=1`}>

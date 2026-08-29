@@ -203,14 +203,13 @@ async function keepFirstPage(buffer: Buffer): Promise<Buffer> {
 const INK = "#111111";
 const RULE = "#222222";
 const HEADER_FILL = "#d8d8d8";
-const PAGE_W = 612;
 const LEFT = 28;
 const WIDTH = 556;
 
 function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel): void {
-  drawMsExpressLogo(doc, LEFT, 30);
   doc.font("Helvetica-Bold").fontSize(16).fillColor(INK);
-  doc.text("Bill Of Lading", 0, 34, { width: PAGE_W, align: "center", lineBreak: false });
+  doc.text("Bill Of Lading", LEFT, 24, { width: WIDTH, align: "center", lineBreak: false });
+  drawMsExpressLogo(doc, LEFT, 50);
 
   const meta = [
     ["Load Number", model.loadNumber],
@@ -225,13 +224,13 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel): void {
   const metaX = 352;
   const metaW = 232;
   const rowH = 14;
-  let metaY = 28;
+  let metaY = 46;
   for (const [label, value] of meta) {
     drawMetaRow(doc, metaX, metaY, metaW, rowH, label, value);
     metaY += rowH;
   }
 
-  let y = Math.max(148, metaY + 8);
+  let y = Math.max(166, metaY + 8);
   y = drawPartyGrid(doc, LEFT, y, WIDTH, model);
 
   y = drawItemsTable(doc, LEFT, y + 6, WIDTH, model.items);
