@@ -743,6 +743,13 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trucks", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trailers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "drivers", "last_trailer_id", "INTEGER");
+  ensureColumn(db, "drivers", "company_name", "TEXT NOT NULL DEFAULT ''");
+  db.prepare(
+    "UPDATE drivers SET company_name = 'Brennan Trucking' WHERE name = 'Cole Brennan' AND driver_type = 'owner_operator' AND company_name = ''",
+  ).run();
+  db.prepare(
+    "UPDATE drivers SET company_name = 'Keene Transport' WHERE name = 'Sam Keene' AND driver_type = 'owner_operator' AND company_name = ''",
+  ).run();
   ensureColumn(db, "load_stops", "arrived_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_stops", "departed_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_stops", "schedule_type", "TEXT NOT NULL DEFAULT ''");

@@ -45,6 +45,18 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
         </div>
       </fieldset>
       {driverKind === "owner_operator" ? (
+        <div className="field md:col-span-2" data-oo-company="">
+          <label htmlFor="company_name">Company name *</label>
+          <input
+            id="company_name"
+            name="company_name"
+            required
+            defaultValue={driver?.company_name ?? ""}
+            placeholder="The LLC the load is under"
+          />
+        </div>
+      ) : null}
+      {driverKind === "owner_operator" ? (
         <div className="field" data-oo-percent="">
           <label htmlFor="pay_percent">OO percent *</label>
           <input

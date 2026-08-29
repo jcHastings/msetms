@@ -167,6 +167,13 @@ function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
   return type as DriverKind;
 }
 
+function parseOwnerOperatorCompany(formData: FormData, driverType: DriverKind): string {
+  if (!isOwnerOperator(driverType)) return "";
+  const name = String(formData.get("company_name") ?? "").trim();
+  if (!name) throw new Error("Owner-operator company name is required.");
+  return name;
+}
+
 function parsePayPercent(formData: FormData, driverType: DriverKind): number | null {
   if (!isOwnerOperator(driverType)) return null;
   const raw = String(formData.get("pay_percent") ?? "").trim();
@@ -357,6 +364,7 @@ export async function createDriverAction(
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
       driver_type: driverType,
+      company_name: parseOwnerOperatorCompany(formData, driverType),
       pay_percent: parsePayPercent(formData, driverType),
       truck_id: null,
       status: "available",
@@ -412,6 +420,7 @@ export async function updateDriverAction(
       medical_issued: parseDateField(formData.get("medical_issued")),
       medical_expires: parseDateField(formData.get("medical_expires")),
       driver_type: driverType,
+      company_name: parseOwnerOperatorCompany(formData, driverType),
       pay_percent: parsePayPercent(formData, driverType),
       truck_id: current.truck_id,
       status: current.status,

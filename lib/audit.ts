@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getDb } from "./db";
+import { assignedLoadName } from "./owner-operator-shared";
 
 export type AuditActorKind = "dispatcher" | "driver" | "system";
 
@@ -183,8 +184,11 @@ export function customerName(id: number | null | undefined): string {
 
 export function driverName(id: number | null | undefined): string {
   if (id == null) return "";
-  const row = getDb().prepare("SELECT name FROM drivers WHERE id = ?").get(id) as { name: string } | undefined;
-  return row?.name ?? String(id);
+  const row = getDb()
+    .prepare("SELECT name, driver_type, company_name FROM drivers WHERE id = ?")
+    .get(id) as { name: string; driver_type: string; company_name: string } | undefined;
+  if (!row) return String(id);
+  return assignedLoadName(row);
 }
 
 export function truckUnit(id: number | null | undefined): string {

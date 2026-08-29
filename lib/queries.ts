@@ -88,6 +88,7 @@ const LOAD_SELECT = `
     drivers.name AS driver_name,
     drivers.phone AS driver_phone,
     drivers.driver_type AS driver_type,
+    drivers.company_name AS driver_company_name,
     dispatchers.name AS dispatcher_name
   FROM loads
   JOIN customers ON customers.id = loads.customer_id
@@ -1001,6 +1002,7 @@ export function createDriver(input: {
   medical_issued?: string;
   medical_expires?: string;
   driver_type?: DriverKind;
+  company_name?: string;
   pay_percent?: number | null;
   truck_id: number | null;
   status: DriverStatus;
@@ -1028,12 +1030,12 @@ export function createDriver(input: {
     .prepare(
       `INSERT INTO drivers (
         name, phone, email, notes, active, license, license_number, license_state, license_expires,
-        medical_issued, medical_expires, driver_type, pay_percent,
+        medical_issued, medical_expires, driver_type, company_name, pay_percent,
         pin, samsara_driver_id, truck_id, status,
         alt_phone, cell_phone, pager, address, country, city, state, postal_zip,
         date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date, cdl_endorsements,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -1048,6 +1050,7 @@ export function createDriver(input: {
       cleanDateInput(input.medical_issued),
       cleanDateInput(input.medical_expires),
       normalizeDriverKind(input.driver_type),
+      isOwnerOperator(input.driver_type) ? String(input.company_name ?? "").trim() : "",
       input.pay_percent ?? null,
       input.pin ?? "",
       input.samsara_driver_id ?? "",
@@ -1093,6 +1096,7 @@ export function updateDriver(
     medical_issued?: string;
     medical_expires?: string;
     driver_type?: DriverKind;
+    company_name?: string;
     pay_percent?: number | null;
     truck_id: number | null;
     status: DriverStatus;
@@ -1123,7 +1127,7 @@ export function updateDriver(
     .prepare(
       `UPDATE drivers
        SET name = ?, phone = ?, email = ?, notes = ?, active = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
-           medical_issued = ?, medical_expires = ?, driver_type = ?, pay_percent = ?,
+           medical_issued = ?, medical_expires = ?, driver_type = ?, company_name = ?, pay_percent = ?,
            pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?,
            alt_phone = ?, cell_phone = ?, pager = ?, address = ?, country = ?, city = ?, state = ?, postal_zip = ?,
            date_of_birth = ?, date_of_hire = ?, drug_test_last = ?, drug_test_next = ?, termination_date = ?,
@@ -1144,6 +1148,9 @@ export function updateDriver(
       cleanDateInput(input.medical_issued ?? current.medical_issued),
       cleanDateInput(input.medical_expires ?? current.medical_expires),
       normalizeDriverKind(input.driver_type ?? current.driver_type),
+      isOwnerOperator(input.driver_type ?? current.driver_type)
+        ? String(input.company_name ?? current.company_name ?? "").trim()
+        : "",
       input.pay_percent === undefined ? current.pay_percent : input.pay_percent,
       pin,
       input.samsara_driver_id ?? current.samsara_driver_id,

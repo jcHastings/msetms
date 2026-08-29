@@ -11,8 +11,10 @@ import { computeOwnerOperatorPay } from "./settlement";
 const RELAY_SELECT = `SELECT load_relays.*,
   from_drivers.name AS from_driver_name,
   from_drivers.driver_type AS from_driver_type,
+  from_drivers.company_name AS from_driver_company_name,
   drivers.name AS driver_name,
   drivers.driver_type AS driver_type,
+  drivers.company_name AS driver_company_name,
   trucks.unit_number AS truck_unit,
   trailers.unit_number AS trailer_unit
   FROM load_relays

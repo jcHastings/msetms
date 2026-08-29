@@ -57,6 +57,7 @@ import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
+import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { EQUIPMENT_REQUIRED, isOwnerOperator, labelForAttachmentKind, type LoadView } from "@/lib/types";
 
 export async function LoadEditor({
@@ -198,6 +199,7 @@ export async function LoadEditor({
               id: driver.id,
               name: driver.name,
               driver_type: driver.driver_type,
+              company_name: driver.company_name,
             }))}
             primaryDriverId={load.driver_id}
           />
@@ -270,13 +272,13 @@ export async function LoadEditor({
                 loadId={load.id}
                 items={payItems}
                 customerName={load.customer_name}
-                driverName={load.driver_name}
+                driverName={assignedLoadName(load)}
                 driverType={load.driver_type}
                 rateFallback={load.rate}
                 ooPay={load.oo_pay}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
-                  .map((driver) => driver.name)}
+                  .map((driver) => assignedLoadName(driver))}
               />
               {loadIsOnAccountingDesk(load) ? (
                 <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />

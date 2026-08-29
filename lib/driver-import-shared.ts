@@ -25,6 +25,7 @@ export type DriverImportValues = {
   notes: string;
   termination_date: string;
   driver_type: DriverKind;
+  company_name: string;
   active: number;
 };
 
@@ -57,6 +58,7 @@ const DATE_FIELDS = [
 
 const COLUMN_ALIASES: Record<keyof Omit<DriverImportValues, "driver_type" | "active">, string[]> = {
   name: ["name"],
+  company_name: ["company", "company name", "oo company"],
   phone: ["telephone", "phone", "tel"],
   alt_phone: ["alternate telephone", "alt tel", "alt tel#", "alt - tel#", "alternate phone"],
   cell_phone: ["cell", "cell phone", "cellphone", "mobile"],
@@ -152,6 +154,7 @@ export function mapDriverRecord(record: Record<string, unknown>): DriverImportVa
     notes: get(COLUMN_ALIASES.notes),
     termination_date: "",
     driver_type: parseImportedDriverType(pickDriverHeader(record, ["team", "driver type", "drivertype"])),
+    company_name: get(COLUMN_ALIASES.company_name),
     active: parseImportedActive(pickDriverHeader(record, ["status"])),
   };
   for (const field of DATE_FIELDS) {

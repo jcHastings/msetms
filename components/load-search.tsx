@@ -24,6 +24,7 @@ import {
   type SavedReport,
   type SearchColumnKey,
 } from "@/lib/search";
+import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { LOAD_STATUSES, labelForLoadStatus, type ActionResult, type Customer, type DriverWithTruck, type LoadView, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
@@ -266,7 +267,7 @@ export function LoadSearch({
               <option value="">Any</option>
               {drivers.map((driver) => (
                 <option key={driver.id} value={driver.id}>
-                  {driver.name}
+                  {assignedLoadName(driver)}
                 </option>
               ))}
             </select>
@@ -472,7 +473,7 @@ export function LoadSearch({
                     </td>
                   ) : null}
                   {visible.has("customer") ? <td>{load.customer_name}</td> : null}
-                  {visible.has("driver") ? <td>{load.driver_name || "—"}</td> : null}
+                  {visible.has("driver") ? <td>{assignedLoadName(load) || "—"}</td> : null}
                   {visible.has("truck") ? <td>{load.truck_unit || "—"}</td> : null}
                   {visible.has("trailer") ? <td>{load.trailer_unit || load.trailer_number || "—"}</td> : null}
                   {visible.has("refs") ? (
