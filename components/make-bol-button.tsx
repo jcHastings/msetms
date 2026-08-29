@@ -20,8 +20,8 @@ import {
   joinBolSeals,
   splitBolSeals,
 } from "@/lib/bol-shared";
+import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { formatDateTime } from "@/lib/format";
-import { openPdfInNewTab } from "@/lib/open-generated-pdf";
 import { labelForUploader, type Attachment } from "@/lib/types";
 
 export function MakeBolPanel({
@@ -405,29 +405,28 @@ export function MakeBolPanel({
           {bols.map((file) => (
             <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div>
-                <button
-                  type="button"
-                  className="font-medium hover:underline"
-                  onClick={() => openPdfInNewTab(`/api/attachments/${file.id}`)}
-                >
+                <OpenAttachmentLink className="font-medium hover:underline" href={`/api/attachments/${file.id}`}>
                   {file.original_name}
-                </button>
+                </OpenAttachmentLink>
                 <div className="text-xs text-slate-500">
                   BOL · {labelForUploader(file.uploaded_by)} · {formatDateTime(file.created_at)}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
+                <OpenAttachmentLink
                   className="btn btn-secondary"
-                  type="button"
+                  href={`/api/attachments/${file.id}`}
                   data-bol-print-view=""
-                  onClick={() => openPdfInNewTab(`/api/attachments/${file.id}`)}
                 >
                   Print / view
-                </button>
-                <a className="btn btn-ghost" href={`/api/attachments/${file.id}?download=1`}>
+                </OpenAttachmentLink>
+                <OpenAttachmentLink
+                  className="btn btn-ghost"
+                  href={`/api/attachments/${file.id}?download=1`}
+                  download
+                >
                   Download
-                </a>
+                </OpenAttachmentLink>
               </div>
             </li>
           ))}

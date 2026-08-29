@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { refreshIftaAction } from "@/lib/actions";
 import { formatDateTime } from "@/lib/format";
 import type { ActionResult, IftaReport } from "@/lib/types";
@@ -76,9 +77,9 @@ export function IftaPanel({
           </table>
           {report.attachment_id ? (
             <p className="mt-3 text-sm">
-              <a className="font-medium underline" href={`/api/attachments/${report.attachment_id}`}>
+              <OpenAttachmentLink className="font-medium underline" href={`/api/attachments/${report.attachment_id}`} download>
                 Download IFTA report
-              </a>
+              </OpenAttachmentLink>
             </p>
           ) : null}
         </>

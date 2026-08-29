@@ -798,7 +798,8 @@ async function main() {
   assert.match(overlayHost, /data-overlay-close/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
-  assert.match(overlayHost, /!path\.startsWith\("\/api\/"\)/);
+  assert.match(overlayHost, /path.startsWith\("\/api\/"\)/);
+  assert.match(overlayHost, /protocol === "blob:"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
@@ -1458,8 +1459,9 @@ async function main() {
   assert.match(bolFormSource, /from ["']@\/lib\/bol-shared["']/);
   assert.match(bolFormSource, /data-ignore-dirty/);
   assert.match(bolFormSource, /data-bol-print-view/);
-  assert.match(bolFormSource, /openPdfInNewTab/);
+  assert.match(bolFormSource, /OpenAttachmentLink/);
   assert.match(bolFormSource, /type="button"/);
+  assert.doesNotMatch(bolFormSource, /<a[^>]+href=\{`\/api\/attachments/);
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [
@@ -2197,8 +2199,10 @@ async function main() {
   const docsPanel = fs.readFileSync(path.join(process.cwd(), "components/attachments-panel.tsx"), "utf8");
   assert.match(docsPanel, /LOAD_DOCUMENT_KINDS/);
   assert.match(docsPanel, /download=1/);
+  assert.match(docsPanel, /OpenAttachmentLink/);
   assert.match(docsPanel, /Replace/);
   assert.match(docsPanel, /Load documents/);
+  assert.doesNotMatch(docsPanel, /<a[^>]+href=\{`\/api\/attachments/);
   const kindsSource = fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8");
   assert.match(kindsSource, /Invoice \(customer\)/);
   assert.match(kindsSource, /Bill \/ carrier invoice/);
@@ -10025,8 +10029,14 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /pdfResponseHeaders/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Disposition.*attachment/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8"), /createObjectURL/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8"), /openPdfInNewTab/);
+  const openPdf = fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8");
+  assert.match(openPdf, /createObjectURL/);
+  assert.match(openPdf, /openPdfInNewTab/);
+  assert.match(openPdf, /isSamePageWindow/);
+  assert.match(openPdf, /window\.top/);
+  assert.doesNotMatch(openPdf, /window\.location\.href\s*=/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /protocol === "blob:"/);
+  assert.match(invoicePanel, /OpenAttachmentLink/);
   assert.match(renderInvoicesCsv([
     {
       invoiceNumber: "INV-1005911",

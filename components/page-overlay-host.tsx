@@ -105,8 +105,13 @@ export function PageOverlayHost({
               onLoad={(event) => {
                 setLoaded(true);
                 try {
-                  const path = event.currentTarget.contentWindow?.location.pathname ?? "";
-                  if (path && path !== `/loads/${frameId}` && !path.startsWith("/api/")) {
+                  const loc = event.currentTarget.contentWindow?.location;
+                  const path = loc?.pathname ?? "";
+                  const protocol = loc?.protocol ?? "";
+                  if (protocol === "blob:" || protocol === "about:" || path.startsWith("/api/")) {
+                    return;
+                  }
+                  if (path && path !== `/loads/${frameId}`) {
                     closeLoadOverlay(returnTo);
                   }
                 } catch {

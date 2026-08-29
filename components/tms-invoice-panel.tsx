@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useLoadEdit } from "@/components/load-edit-context";
+import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
@@ -135,20 +136,24 @@ export function TmsInvoicePanel({
           {invoices.map((file) => (
             <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div>
-                <a href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
+                <OpenAttachmentLink href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
                   {file.original_name}
-                </a>
+                </OpenAttachmentLink>
                 <div className="text-xs text-slate-500">
                   Invoice · {labelForUploader(file.uploaded_by)} · {formatDateTime(file.created_at)}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
+                <OpenAttachmentLink className="btn btn-secondary" href={`/api/attachments/${file.id}`}>
                   Open
-                </a>
-                <a className="btn btn-ghost" href={`/api/attachments/${file.id}?download=1`}>
+                </OpenAttachmentLink>
+                <OpenAttachmentLink
+                  className="btn btn-ghost"
+                  href={`/api/attachments/${file.id}?download=1`}
+                  download
+                >
                   Download
-                </a>
+                </OpenAttachmentLink>
               </div>
             </li>
           ))}

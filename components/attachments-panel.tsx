@@ -1,3 +1,4 @@
+import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { formatDateTime } from "@/lib/format";
 import {
   ATTACHMENT_KINDS,
@@ -64,18 +65,22 @@ export function AttachmentsPanel({
           {attachments.map((file) => (
             <li key={file.id} className="flex flex-wrap items-start justify-between gap-3 py-3 text-sm">
               <div className="min-w-0">
-                <a href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
+                <OpenAttachmentLink href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
                   {file.original_name}
-                </a>
+                </OpenAttachmentLink>
                 <div className="text-xs text-slate-500">
                   {labelForAttachmentKind(file.kind)} · {labelForUploader(file.uploaded_by)} ·{" "}
                   {formatDateTime(file.created_at)}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <a href={`/api/attachments/${file.id}?download=1`} className="btn btn-ghost">
+                <OpenAttachmentLink
+                  href={`/api/attachments/${file.id}?download=1`}
+                  className="btn btn-ghost"
+                  download
+                >
                   Download
-                </a>
+                </OpenAttachmentLink>
                 <form action={replaceAttachmentFormAction} className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="attachment_id" value={file.id} />
                   <input name="file" type="file" required className="max-w-44 text-xs" />
