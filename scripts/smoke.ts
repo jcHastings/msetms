@@ -4511,7 +4511,7 @@ Continuous reefer. Two load locks.
   assert.equal(madeItsBol.ok, true);
   const itsBols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
   assert.equal(itsBols.length, 2);
-  const itsBolBuf = fs.readFileSync(filesMod.getAttachmentPath(itsBols[itsBols.length - 1]));
+  const itsBolBuf = fs.readFileSync(filesMod.getAttachmentPath(itsBols[0]));
   const itsBolText = String((await extractText(new Uint8Array(itsBolBuf), { mergePages: true })).text ?? "");
   assert.match(itsBolText, /fresh beef/);
   assert.match(itsBolText, /111/);

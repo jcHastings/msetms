@@ -239,7 +239,7 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel): void {
   y = drawNotesAndMoney(doc, LEFT, y + 4, WIDTH, model);
   drawSignatures(doc, LEFT, y + 4, WIDTH);
   doc.font("Helvetica").fontSize(8).fillColor(INK);
-  doc.text("Page 1 of 1", LEFT, 772, { width: WIDTH, align: "right", lineBreak: false });
+  doc.text("Page 1 of 1", LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
 }
 
 function formatReeferLine(setpoint: string, mode: string): string {
@@ -305,6 +305,7 @@ function drawPartyBox(
   name: string,
   address: string,
   phone: string,
+  extra = "",
 ): void {
   const head = 14;
   drawHeaderBar(doc, x, y, width, head, title);
@@ -312,9 +313,10 @@ function drawPartyBox(
   doc.font("Helvetica-Bold").fontSize(9).fillColor(INK);
   doc.text(name || " ", x + 5, y + head + 5, { width: width - 10, height: 12, lineBreak: false });
   doc.font("Helvetica").fontSize(8);
-  doc.text(address || " ", x + 5, y + head + 18, { width: width - 10, height: 24, lineBreak: true });
-  if (phone.trim()) {
-    doc.text(`Tel: ${phone.trim()}`, x + 5, y + height - 14, { width: width - 10, lineBreak: false });
+  doc.text(address || " ", x + 5, y + head + 18, { width: width - 10, height: extra ? 18 : 24, lineBreak: true });
+  const lines = [phone.trim() ? `Tel: ${phone.trim()}` : "", extra].filter(Boolean);
+  if (lines.length) {
+    doc.text(lines.join("   "), x + 5, y + height - 14, { width: width - 10, lineBreak: false });
   }
 }
 
@@ -345,6 +347,7 @@ function drawPartyGrid(doc: PDFKit.PDFDocument, x: number, y: number, width: num
     model.carrierName,
     model.carrierAddress,
     model.carrierPhone,
+    model.driverName ? `Driver: ${model.driverName}` : "",
   );
   return y + height * 2;
 }
