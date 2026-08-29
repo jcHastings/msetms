@@ -26,7 +26,7 @@ export function QuickbooksInvoicePanel({
       : "Send to QuickBooks";
 
   return (
-    <section className="card mb-4 p-5">
+    <section className="card mb-4 p-5" data-qbo-invoice="">
       <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">

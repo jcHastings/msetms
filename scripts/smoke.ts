@@ -141,6 +141,7 @@ async function main() {
   assert.match(qboSettingsPage, /Connect QuickBooks/);
   assert.match(qboSettingsPage, /Not connected/);
   assert.doesNotMatch(qboSettingsPage, /QBO_CLIENT_ID|Setup steps|<code>\.env/);
+  assert.doesNotMatch(qboSettingsPage, /Send to QuickBooks|Record demo invoice/);
   const qboAccountingPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
   assert.match(qboAccountingPage, /Needs QBO customer/);
   assert.match(qboAccountingPage, /Map Pay Items/);
@@ -792,6 +793,18 @@ async function main() {
   const docsPage = fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8");
   assert.match(docsPage, /AttachmentsPanel/);
   assert.match(docsPage, /when="docs"/);
+  const docsTabAt = docsPage.indexOf('when="docs"');
+  const docsTab = docsTabAt >= 0 ? docsPage.slice(docsTabAt) : "";
+  assert.doesNotMatch(docsTab, /QuickbooksInvoicePanel|Send to QuickBooks|Record demo invoice/);
+  const financialsAt = docsPage.indexOf('when="financials"');
+  const financialsTab = financialsAt >= 0 ? docsPage.slice(financialsAt, docsTabAt > financialsAt ? docsTabAt : undefined) : "";
+  assert.match(financialsTab, /QuickbooksInvoicePanel/);
+  assert.match(financialsTab, /loadIsOnAccountingDesk/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/quickbooks-invoice-panel.tsx"), "utf8"), /data-qbo-invoice/);
+  const invoicesHubUi = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(invoicesHubUi, /Send to QuickBooks/);
+  assert.match(invoicesHubUi, /Record demo invoice/);
+  assert.doesNotMatch(invoicesHubUi, /Export to QBO|Resend QBO/);
   assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
   assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
   assert.match(docsPage, /when="assets"/);

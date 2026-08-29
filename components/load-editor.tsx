@@ -54,7 +54,7 @@ import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
-import { EQUIPMENT_REQUIRED, isBillableStatus, isOwnerOperator, labelForAttachmentKind, type LoadView } from "@/lib/types";
+import { EQUIPMENT_REQUIRED, isOwnerOperator, labelForAttachmentKind, type LoadView } from "@/lib/types";
 
 export async function LoadEditor({
   loadId,
@@ -268,6 +268,9 @@ export async function LoadEditor({
                   canReturn={canAccessAccounting(role)}
                 />
               </div>
+              {loadIsOnAccountingDesk(load) ? (
+                <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
+              ) : null}
             </>
           ) : null}
         </LoadTabPanel>
@@ -319,9 +322,6 @@ export async function LoadEditor({
               })}
             </ul>
           </section>
-          {showFinancials && isBillableStatus(load.status) && load.rate != null ? (
-            <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
-          ) : null}
           <MakeBolPanel loadId={load.id} attachments={attachments} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
           </div>

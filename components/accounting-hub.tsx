@@ -22,6 +22,7 @@ import {
 } from "@/lib/accounting";
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { formatMdYDisplay, formatMoney } from "@/lib/format";
+import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCompanySettings, taxOnAmount } from "@/lib/settings";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -164,6 +165,7 @@ function SearchBox({
 
 function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const settings = getCompanySettings();
+  const qboConnected = hasQuickbooksSession();
   const rows = listReceivables().filter((row) => matchesQuery(row, q) && matchesBranch(row, branch));
   return (
     <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
@@ -216,8 +218,12 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
                     <form action={sendToQuickbooksFormAction}>
                       <input type="hidden" name="load_id" value={row.id} />
                       {row.qbo_invoice_id ? <input type="hidden" name="confirm_resend" value="1" /> : null}
-                      <button className="btn btn-secondary" type="submit">
-                        {row.qbo_invoice_id ? "Resend QBO" : "Export to QBO"}
+                      <button className="btn btn-secondary" type="submit" data-qbo-send="">
+                        {row.qbo_invoice_id
+                          ? "Send again to QuickBooks"
+                          : qboConnected
+                            ? "Send to QuickBooks"
+                            : "Record demo invoice"}
                       </button>
                     </form>
                   </td>
