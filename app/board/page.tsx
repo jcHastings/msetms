@@ -127,11 +127,11 @@ async function BoardLiveSection({
             <table className="table-grid table-grid-board" data-dispatch-board="">
               <thead>
                 <tr>
-                  <th>Load</th>
+                  <th className="board-load-cell">Load</th>
                   <th>Status</th>
                   <th>Pickup</th>
                   <th>Delivery</th>
-                  <th>Unit</th>
+                  <th className="board-unit-cell">Unit</th>
                   <th className="board-place-cell">Tractor</th>
                   <th className="board-place-cell">Trailer</th>
                   <th>HOS</th>
@@ -162,7 +162,7 @@ async function BoardLiveSection({
                       .join(" ")
                       .toLowerCase()}
                   >
-                    <td className="max-w-[13rem] leading-tight">
+                    <td className="board-load-cell leading-tight">
                       <OverlayOpenLink
                         href={overlayHref("/board", load.id, current)}
                         className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
@@ -189,7 +189,7 @@ async function BoardLiveSection({
                       {formatDateTime(load.delivery_start)}
                     </td>
                     <td
-                      className="leading-tight text-xs"
+                      className="board-unit-cell leading-tight text-xs"
                       title={[
                         load.trailer_unit || load.trailer_number ? `Trailer ${load.trailer_unit || load.trailer_number}` : "",
                         load.driver_progress ? labelForDriverProgress(load.driver_progress) : "",
@@ -199,8 +199,8 @@ async function BoardLiveSection({
                     >
                       {load.truck_unit ? (
                         <>
-                          <div>Unit {load.truck_unit}</div>
-                          <div className="text-slate-500">
+                          <div className="truncate">Unit {load.truck_unit}</div>
+                          <div className="truncate text-slate-500">
                             {load.driver_name}
                             {relayLabels.get(load.id) ? ` ${relayLabels.get(load.id)}` : ""}
                           </div>

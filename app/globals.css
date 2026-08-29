@@ -148,6 +148,11 @@ button {
   font-size: 0.9rem;
 }
 
+.table-grid.table-grid-board {
+  table-layout: fixed;
+  width: max(100%, 86rem);
+}
+
 .table-grid-board th {
   padding: 0.3rem 0.5rem;
 }
@@ -159,15 +164,22 @@ button {
   line-height: 1.2;
 }
 
-/* Clip city labels at the END only. Never slice the start
-   (Holcomb must not read as LCOMB; Hastings must not read as STINGS).
-   overflow on <td> is ignored under auto table-layout, so clip the inner block
-   to the cell content box — a max-width equal to the td still spills through
-   horizontal padding and covers the next cell's first letters. */
+/* Fixed layout makes overflow:hidden on <td> actually clip. Auto layout
+   let Unit/Tractor text paint over Trailer and hide Hastings / Melbourne. */
+.table-grid-board .board-load-cell {
+  width: 13rem;
+  overflow: hidden;
+}
+
+.table-grid-board .board-unit-cell {
+  width: 8.75rem;
+  overflow: hidden;
+}
+
 .table-grid-board .board-place-cell {
-  width: 9.5rem;
-  min-width: 9.5rem;
-  max-width: 9.5rem;
+  width: 10.5rem;
+  min-width: 10.5rem;
+  max-width: 10.5rem;
   overflow: hidden;
 }
 
@@ -175,7 +187,7 @@ button {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  max-width: 8.5rem;
+  max-width: 100%;
   overflow: hidden;
 }
 
