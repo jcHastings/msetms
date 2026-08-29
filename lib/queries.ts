@@ -106,6 +106,7 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     accounting_desk: row.accounting_desk || "operations",
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
+    bol_json: row.bol_json || "",
   };
 }
 

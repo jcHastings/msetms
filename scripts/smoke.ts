@@ -1413,6 +1413,14 @@ async function main() {
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
     assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places|bol)["']/, `${file} must stay client-safe`);
   }
+  const bolFormSource = fs.readFileSync(path.join(process.cwd(), "components/make-bol-button.tsx"), "utf8");
+  assert.match(bolFormSource, /ITEMS/);
+  assert.match(bolFormSource, /BOL Items/);
+  assert.match(bolFormSource, /Freight Charges/);
+  assert.match(bolFormSource, /Print BOL/);
+  assert.match(bolFormSource, /Reefer setpoint/);
+  assert.match(bolFormSource, /bol_trailer/);
+  assert.match(bolFormSource, /from ["']@\/lib\/bol-shared["']/);
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [
@@ -4005,6 +4013,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(deniseDriverText, /Report exceptions at pickup/);
   assert.doesNotMatch(deniseDriverText, /Customer Rate|^Rate$/m);
   assert.doesNotMatch(deniseDriverText, /3,100/);
+  assert.doesNotMatch(deniseDriverText, /RC-1045/, "customer / rate-con load # must not appear on the driver sheet");
   assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
   assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
   assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
@@ -4301,7 +4310,21 @@ Continuous reefer. Two load locks.
   assert.equal(bolBuf.subarray(0, 4).toString(), "%PDF");
   assert.equal((await PDFDocument.load(bolBuf)).getPageCount(), 1, "BOL must be one page");
   const bolText = String((await extractText(new Uint8Array(bolBuf), { mergePages: true })).text ?? "");
-  assert.match(bolText, /Smoke Bill of Lading/);
+  assert.match(bolText, /Bill Of Lading/);
+  assert.doesNotMatch(bolText, /Smoke Bill of Lading/);
+  assert.doesNotMatch(bolText, /Smoke BOL footer|Smoke BOL terms/);
+  assert.match(bolText, /# of pieces|of pieces/);
+  assert.match(bolText, /Description of the goods/);
+  assert.match(bolText, /Weight in LBS/);
+  assert.match(bolText, /NMFC/);
+  assert.match(bolText, /M & S Loads LLC - MS Express/);
+  assert.match(bolText, /Transportation Company/);
+  assert.match(bolText, /3rd Party Billing/);
+  assert.match(bolText, /Emergency Response Phone/);
+  assert.match(bolText, /C\.O\.D\. Amount/);
+  assert.match(bolText, /Declared Value/);
+  assert.match(bolText, /Number Of Pieces Received/);
+  assert.match(bolText, /Page 1 of 1/);
   assert.match(bolText, /River City Nashville Cooler/);
   assert.match(bolText, /700 Cowan/);
   assert.match(bolText, /\(615\) 555-0144/);
@@ -4317,8 +4340,41 @@ Continuous reefer. Two load locks.
   assert.match(bolText, /Continuous/);
   assert.match(bolText, /PO-55209/);
   assert.match(bolText, /RC-1045/);
-  assert.match(bolText, /Smoke BOL footer|Smoke BOL terms/);
+  assert.match(bolText, /Trailer/);
   assert.doesNotMatch(bolText, /Internal legs|for carrier use|Relay/i);
+  assert.doesNotMatch(bolText, /Thank you for hauling|Carrier is responsible for cargo/i);
+
+  const bolMod = await import("../lib/bol");
+  const { writeBolDraftToForm } = await import("../lib/bol-shared");
+  const itsItemsForm = new FormData();
+  writeBolDraftToForm(itsItemsForm, {
+    ...bolMod.buildBolDraftFromLoad(deniseLoad),
+    thirdParty: "M & S Loads LLC - MS Express",
+    items: [
+      {
+        pieces: "111",
+        description: "fresh beef",
+        weightLbs: "1000",
+        type: "boxes",
+        nmfc: "",
+        hm: "No",
+        classCode: "",
+      },
+    ],
+  });
+  const madeItsBol = await (await import("../lib/actions")).makeBolAction(deniseLoad.id, null, itsItemsForm);
+  assert.equal(madeItsBol.ok, true);
+  const itsBols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
+  assert.equal(itsBols.length, 2);
+  const itsBolBuf = fs.readFileSync(filesMod.getAttachmentPath(itsBols[itsBols.length - 1]));
+  const itsBolText = String((await extractText(new Uint8Array(itsBolBuf), { mergePages: true })).text ?? "");
+  assert.match(itsBolText, /fresh beef/);
+  assert.match(itsBolText, /111/);
+  assert.match(itsBolText, /1000/);
+  assert.match(itsBolText, /boxes/);
+  assert.match(itsBolText, /Total Pieces/);
+  assert.match(itsBolText, /Total Weight/);
+  assert.doesNotMatch(itsBolText, /Chilled dairy/);
 
   const freshCompanyId = queries.createLoad({
     customer_id: customerId,

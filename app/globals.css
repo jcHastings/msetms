@@ -1034,3 +1034,12 @@ html:has([data-load-embed]) body {
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
   line-height: 1.2;
 }
+
+[data-bol-items-overlay] .table-grid input,
+[data-bol-items-overlay] .table-grid select {
+  width: 100%;
+  min-width: 4rem;
+  border: 1px solid #cfd8e3;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.45rem;
+}

@@ -507,6 +507,7 @@ export type Load = {
   tms_invoice_number: string;
   tms_invoice_at: string;
   non_revenue: number;
+  bol_json: string;
   created_at: string;
   updated_at: string;
 };

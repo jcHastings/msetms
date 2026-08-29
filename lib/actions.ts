@@ -727,15 +727,16 @@ export async function parseRateConAction(
 export async function makeBolAction(
   loadId: number,
   _prev: ActionResult | null,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
       await requireLoadEditor();
       if (!loadId) throw new Error("Load is missing.");
       const { generateBolPdf } = await import("./bol");
+      const { parseBolDraftFromForm } = await import("./bol-shared");
       const { addAttachment } = await import("./files");
-      const { buffer, filename } = await generateBolPdf(loadId);
+      const { buffer, filename } = await generateBolPdf(loadId, parseBolDraftFromForm(formData));
       const attachment = addAttachment({
         loadId,
         kind: "bol",

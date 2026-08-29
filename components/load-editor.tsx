@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
+import { bolPrefillForLoad } from "@/lib/bol";
 import { RateConApply } from "@/components/rate-con-apply";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
@@ -322,7 +323,7 @@ export async function LoadEditor({
               })}
             </ul>
           </section>
-          <MakeBolPanel loadId={load.id} attachments={attachments} />
+          <MakeBolPanel loadId={load.id} attachments={attachments} prefill={bolPrefillForLoad(load)} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
           </div>
         </LoadTabPanel>
