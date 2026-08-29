@@ -4,10 +4,19 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return;
-  const { loadLocalEnv } = await import("./lib/env");
-  loadLocalEnv({ force: true });
-  const { EventEmitter } = await import("node:events");
-  if (EventEmitter.defaultMaxListeners < 32) {
-    EventEmitter.defaultMaxListeners = 32;
+  try {
+    const { loadLocalEnv } = await import(/* webpackIgnore: true */ "./lib/env");
+    loadLocalEnv({ force: true });
+  } catch {
+    /* keep the desk up if webpack cannot bundle dotenv */
+  }
+  try {
+    const events = await import(/* webpackIgnore: true */ "node:events");
+    const EventEmitter = events.EventEmitter ?? events.default;
+    if (EventEmitter && EventEmitter.defaultMaxListeners < 32) {
+      EventEmitter.defaultMaxListeners = 32;
+    }
+  } catch {
+    /* keep the desk up */
   }
 }
