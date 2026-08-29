@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PlaceSearch } from "@/components/place-search";
 import { US_STATES } from "@/lib/locations";
+import { applyNyBoroughState, nyBoroughStateError } from "@/lib/places-shared";
 import {
   LOCATION_ROLES,
   SCHEDULING_TYPES,
@@ -14,30 +16,70 @@ type Props = {
   location?: Location;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
+  placesEnabled?: boolean;
 };
 
-export function LocationForm({ location, action, submitLabel }: Props) {
+export function LocationForm({ location, action, submitLabel, placesEnabled = false }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
+  const [name, setName] = useState(location?.name ?? "");
+  const [street, setStreet] = useState(location?.street ?? "");
+  const [city, setCity] = useState(location?.city ?? "");
+  const [region, setRegion] = useState(location?.state ?? "");
+  const [zip, setZip] = useState(location?.zip ?? "");
+  const [latitude, setLatitude] = useState(location?.latitude != null ? String(location.latitude) : "");
+  const [longitude, setLongitude] = useState(location?.longitude != null ? String(location.longitude) : "");
+  const [placeId, setPlaceId] = useState(location?.google_place_id ?? "");
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
-      <FormBanner result={state} />
+      {state && !state.ok && state.duplicate ? (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="font-medium">Location already exists.</p>
+          <p className="mt-1">Create a second copy, or keep the one already on file.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn btn-secondary" type="submit" name="confirm_duplicate" value="1">
+              Create anyway
+            </button>
+            {state.existingId ? (
+              <a className="btn btn-ghost" href={`/locations/${state.existingId}`}>
+                Keep existing
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <FormBanner result={state} />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
+        <PlaceSearch
+          enabled={placesEnabled}
+          placeholder="Search a shipper or receiver address"
+          onPick={(place) => {
+            if (place.placeId) setPlaceId(place.placeId);
+            if (place.name) setName(place.name);
+            if (place.street) setStreet(place.street);
+            if (place.city) setCity(place.city);
+            if (place.city || place.state) setRegion(applyNyBoroughState(place.city || city, place.state || region));
+            if (place.zip) setZip(place.zip);
+            if (place.latitude != null) setLatitude(String(place.latitude));
+            if (place.longitude != null) setLongitude(String(place.longitude));
+          }}
+        />
         <div className="field md:col-span-2">
           <label htmlFor="name">Name</label>
-          <input id="name" name="name" required defaultValue={location?.name} placeholder="Warehouse or DC name" />
+          <input id="name" name="name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Warehouse or DC name" />
         </div>
         <div className="field md:col-span-2">
           <label htmlFor="street">Street</label>
-          <input id="street" name="street" defaultValue={location?.street} />
+          <input id="street" name="street" value={street} onChange={(event) => setStreet(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="city">City</label>
-          <input id="city" name="city" required defaultValue={location?.city} />
+          <input id="city" name="city" required value={city} onChange={(event) => setCity(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="state">State</label>
-          <select id="state" name="state" required defaultValue={location?.state ?? ""}>
+          <select id="state" name="state" required value={region} onChange={(event) => setRegion(event.target.value)}>
             <option value="">Select state</option>
             {US_STATES.map((state) => (
               <option key={state} value={state}>
@@ -45,11 +87,19 @@ export function LocationForm({ location, action, submitLabel }: Props) {
               </option>
             ))}
           </select>
+          {nyBoroughStateError(city, region) ? (
+            <p className="text-sm text-rose-700" data-ny-borough-warning="">
+              {nyBoroughStateError(city, region)}
+            </p>
+          ) : null}
         </div>
         <div className="field">
           <label htmlFor="zip">ZIP</label>
-          <input id="zip" name="zip" defaultValue={location?.zip} />
+          <input id="zip" name="zip" value={zip} onChange={(event) => setZip(event.target.value)} />
         </div>
+        <input type="hidden" name="latitude" value={latitude} />
+        <input type="hidden" name="longitude" value={longitude} />
+        <input type="hidden" name="google_place_id" value={placeId} />
         <div className="field">
           <label htmlFor="phone">Phone</label>
           <input id="phone" name="phone" defaultValue={location?.phone} />
@@ -84,7 +134,13 @@ export function LocationForm({ location, action, submitLabel }: Props) {
           />
         </div>
         <div className="field md:col-span-2">
-          <label htmlFor="scheduling_notes">Scheduling notes</label>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" name="call_before" value="1" defaultChecked={Boolean(location?.call_before)} />
+            Call before pickup/delivery
+          </label>
+        </div>
+        <div className="field md:col-span-2 note-public">
+          <label htmlFor="scheduling_notes">Public scheduling notes</label>
           <textarea
             id="scheduling_notes"
             name="scheduling_notes"
@@ -93,8 +149,8 @@ export function LocationForm({ location, action, submitLabel }: Props) {
             placeholder="Appointment window, dock numbers, gate instructions"
           />
         </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="notes">Notes</label>
+        <div className="field md:col-span-2 note-private">
+          <label htmlFor="notes">Private notes</label>
           <textarea id="notes" name="notes" rows={3} defaultValue={location?.notes} />
         </div>
       </div>

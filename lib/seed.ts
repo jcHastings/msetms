@@ -18,6 +18,8 @@ function isoDate(offsetDays: number): string {
 }
 
 export function seedDatabase(db: Database): void {
+  const driverCount = (db.prepare("SELECT COUNT(*) as count FROM drivers").get() as { count: number }).count;
+  if (driverCount > 0) return;
   const created = now();
 
   const insertCustomer = db.prepare(
@@ -124,14 +126,14 @@ export function seedDatabase(db: Database): void {
       created,
     );
 
-    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
-    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
-    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
-    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
-    insertTruck.run("301", "box", 26000, "available", "", "", "", "", created, created);
+    const t101 = Number(insertTruck.run("101", "sleeper", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
+    const t102 = Number(insertTruck.run("102", "sleeper", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t108 = Number(insertTruck.run("108", "sleeper", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
+    const t112 = Number(insertTruck.run("112", "day_cab", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
+    const t118 = Number(insertTruck.run("118", "sleeper", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t205 = Number(insertTruck.run("205", "sleeper", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t210 = Number(insertTruck.run("210", "day_cab", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
+    insertTruck.run("301", "day_cab", 26000, "available", "", "", "", "", created, created);
 
     const insertTrailer = db.prepare(
       `INSERT INTO trailers (
@@ -189,6 +191,13 @@ export function seedDatabase(db: Database): void {
     db.prepare(
       `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
     ).run(isoDate(-180), isoDate(220), isoDate(-90), isoDate(200), "112");
+    const patchTruck = db.prepare(
+      `UPDATE trucks SET year = ?, make = ?, model = ?, plate = ?, vin = ? WHERE unit_number = ?`,
+    );
+    patchTruck.run("2020", "Volvo", "VNL 760", "KY-102", "4V4NC9EH5LN102001", "102");
+    patchTruck.run("2019", "Kenworth", "T680", "TN-108", "1XKYD49X5KJ108001", "108");
+    patchTruck.run("2021", "Freightliner", "Cascadia", "TN-112", "3AKJHHDR8MSLJ1120", "112");
+    patchTruck.run("2018", "Peterbilt", "579", "TN-210", "1XPBD49X5JD210001", "210");
 
     const marcus = Number(
       insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", "samsara-drv-marcus", t102, "on_duty", created, created)
@@ -443,7 +452,7 @@ export function seedDatabase(db: Database): void {
     const extras = db.prepare(
       `UPDATE loads SET
         special_instructions = ?, appointment_notes = ?, reference_number = ?, po_number = ?,
-        reefer_setpoint_f = ?, trailer_number = ?, driver_progress = ?
+        reefer_setpoint_f = ?, reefer_mode = ?, trailer_number = ?, driver_progress = ?
        WHERE load_number = ?`,
     );
     extras.run(
@@ -452,6 +461,7 @@ export function seedDatabase(db: Database): void {
       "RC-1043",
       "PO-44118",
       36,
+      "continuous",
       "TR-8801",
       "",
       "MSE-1043",
@@ -462,6 +472,7 @@ export function seedDatabase(db: Database): void {
       "RC-1045",
       "PO-55209",
       34,
+      "continuous",
       "TR-7742",
       "en_route_delivery",
       "MSE-1045",
@@ -475,16 +486,18 @@ export function seedDatabase(db: Database): void {
       "",
       null,
       "",
+      "",
       "en_route_delivery",
       "MSE-1046",
     );
-    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "MSE-1044");
+    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "", "MSE-1044");
     extras.run(
       "Flatbed. 4-foot tarps. Chains in the box.",
       "",
       "RC-1051",
       "",
       null,
+      "",
       "",
       "",
       "MSE-1051",

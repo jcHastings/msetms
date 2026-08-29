@@ -1,18 +1,23 @@
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { ComplianceList } from "@/components/compliance-badge";
 import { PageHeader } from "@/components/page-header";
+import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { listDrivers, listTrailers, listTrucks, listUpcomingCompliance } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function CompliancePage() {
+export default async function CompliancePage() {
+  const dispatcher = await getPageAccess(canEditFleet);
+  if (!dispatcher) {
+    return <AccessDenied message="Compliance is for Administrator and Standard." />;
+  }
   const alerts = listUpcomingCompliance();
   const expired = alerts.filter((alert) => alert.severity === "expired");
   return (
     <>
       <PageHeader
         title="Compliance"
-        subtitle="Driver license / medical card (30 days), truck and trailer registration (60 days), DOT inspection (30 days). Same windows as assign-time alerts."
         actions={
           <Link href="/fleet" className="btn btn-secondary">
             Open fleet

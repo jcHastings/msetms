@@ -1,16 +1,21 @@
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
-import { dailyRecap, listAudit, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { canExportCsv, canViewReports, getPageAccess } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 import { listLoads } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const dispatcher = await getPageAccess(canViewReports);
+  if (!dispatcher) {
+    return <AccessDenied message="Reports are for Administrator." />;
+  }
   const recap = dailyRecap();
   const onTime = onTimeReport();
   const revenue = revenueByCustomer();
-  const audit = listAudit(20);
   const csv = listLoads({ status: "all" })
     .map((load) =>
       [
@@ -33,11 +38,20 @@ export default function ReportsPage() {
     <>
       <PageHeader
         title="Reports"
-        subtitle="On-time, revenue by customer, daily recap, audit, and a loads CSV. Local numbers only."
         actions={
-          <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
-            Download loads CSV
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/reports/manage" className="btn btn-secondary">
+              Manage reports
+            </Link>
+            <Link href="/reports/statistics" className="btn btn-secondary">
+              Statistics
+            </Link>
+            {canExportCsv(dispatcher.role) ? (
+              <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
+                Download loads CSV
+              </a>
+            ) : null}
+          </div>
         }
       />
       <div className="mb-4 grid gap-4 md:grid-cols-4">
@@ -92,19 +106,14 @@ export default function ReportsPage() {
           </table>
         </section>
         <section className="card overflow-hidden xl:col-span-2">
-          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Audit log</header>
-          {audit.length === 0 ? (
-            <p className="p-5 text-sm text-slate-500">No audited actions yet (clone, etc.).</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {audit.map((row) => (
-                <li key={row.id} className="px-5 py-2">
-                  <span className="font-medium">{row.action}</span> {row.entity} {row.entity_id}{" "}
-                  <span className="text-slate-500">{row.detail}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Accountability</header>
+          <p className="p-5 text-sm text-slate-600">
+            Load changes are on the{" "}
+            <Link href="/audit" className="font-medium text-navy hover:underline">
+              Audit
+            </Link>{" "}
+            page (filter by load #, user, and date). Each load also has a History section.
+          </p>
         </section>
       </div>
     </>

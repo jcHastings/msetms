@@ -1,6 +1,8 @@
 /**
  * Run the Next CLI with stdin detached and the keep-alive preload.
- * Used for `npm run dev`. Prefer `npm start` (standalone) on the Linux box.
+ * Used for `npm run dev`. `start` delegates to start-standalone.mjs so
+ * `next start` does not skip the project-root `.env` (dotenv 17
+ * `injected env (0)`). Prefer `npm start`. Never logs secret values.
  * Prefer process.execPath (not PATH `node`) so Node 24 in Program Files wins
  * over an older 20.x still first on PATH.
  */
@@ -17,7 +19,9 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
+const { loadProjectEnv } = require("./project-env.cjs");
 require("./next-keep-alive.cjs");
+loadProjectEnv({ cwd: root });
 
 const resolvedNode = resolveNodeExecutable();
 if (resolvedNode.unsupported) {
@@ -43,16 +47,24 @@ if (args.length === 0) {
 }
 
 const preload = join(root, "scripts", "next-keep-alive.cjs");
-const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
-  .filter(Boolean)
-  .join(" ");
+const startStandalone = join(root, "scripts", "start-standalone.mjs");
+const childArgs =
+  args[0] === "start"
+    ? [startStandalone]
+    : [nextBin, ...args];
 
-const child = spawn(resolvedNode.execPath, [nextBin, ...args], {
+if (args[0] === "start") {
+  console.log(
+    "Using npm start (standalone). next start skips the project .env on this app.",
+  );
+}
+
+const child = spawn(resolvedNode.execPath, ["--require", preload, ...childArgs], {
   cwd: root,
   env: {
     ...process.env,
     HOSTNAME: listenAddress(),
-    NODE_OPTIONS: nodeOptions,
+    DOTENV_CONFIG_QUIET: "true",
   },
   stdio: ["ignore", "inherit", "inherit"],
 });

@@ -1,4 +1,4 @@
-import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import { addAttachment } from "../files";
 import { getIftaReport, getLoad, getTruck, saveIftaReport } from "../queries";
 import { isIftaEligibleStatus, type IftaJurisdictionRow, type IftaReport, type LoadView } from "../types";
@@ -171,6 +171,7 @@ export async function ensureDemoIfta(load: LoadView): Promise<IftaReport | null>
 }
 
 export async function refreshIftaForLoad(loadId: number): Promise<IftaReport> {
+  await loadRuntimeEnv();
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   if (!isIftaEligibleStatus(load.status)) {
@@ -494,7 +495,7 @@ function isAuthError(error: unknown): boolean {
 
 function iftaStatusMessage(status: number, context: string): string {
   if (status === 401 || status === 403) {
-    return `Samsara ${context} failed (HTTP ${status}). Check SAMSARA_API_TOKEN and the Read IFTA (US) / Write IFTA (US) scopes.`;
+    return `Samsara ${context} failed (HTTP ${status}).`;
   }
   if (status === 429) return `Samsara rate-limited the ${context} request.`;
   return `Samsara ${context} failed (HTTP ${status}).`;

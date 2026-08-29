@@ -2,13 +2,16 @@
  * Run the Next standalone server and do not exit after Ready.
  *
  * `next start` is not supported with `output: 'standalone'` (Next prints a
- * warning and can tear down). Official path: `node .next/standalone/server.js`.
+ * warning and can miss the project `.env`). JC should run `npm start`.
+ * That loads repo-root `.env` / `.env.local` then `node .next/standalone/server.js`.
  *
  * Bind 0.0.0.0 unless HOST / LISTEN_HOST / BIND_HOST is an explicit IP.
  * Never use OS HOSTNAME (machine name, e.g. "cursor"). Does not require
  * Vercel. Never prints secret values.
  *
  * Windows: copy or mkdir project `data` / copy `.env` — never symlink (EPERM).
+ * Also copy `public` and `.next/static` into standalone (no symlink) so CSS loads
+ * even if someone runs `node .next/standalone/server.js` after `npm run build`.
  * Node: prefer process.execPath; if PATH is 20.x, try Program Files 22/24.
  */
 import { spawn } from "node:child_process";
@@ -16,9 +19,8 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { config as loadEnv } from "dotenv";
 import { listenAddress } from "./listen-address.mjs";
-import { mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
+import { copyStandaloneWebAssets, mirrorIntoStandalone, removeStandaloneDest } from "./standalone-link.mjs";
 import {
   resolveNodeExecutable,
   unsupportedNodeMessage,
@@ -26,7 +28,9 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
+const { loadProjectEnv } = require("./project-env.cjs");
 require("./next-keep-alive.cjs");
+loadProjectEnv({ cwd: root });
 
 const resolvedNode = resolveNodeExecutable();
 if (resolvedNode.unsupported) {
@@ -39,9 +43,6 @@ if (resolvedNode.switched) {
   );
 }
 
-loadEnv({ path: join(root, ".env") });
-loadEnv({ path: join(root, ".env.local"), override: true });
-
 const standaloneDir = join(root, ".next", "standalone");
 const serverJs = join(standaloneDir, "server.js");
 
@@ -52,13 +53,15 @@ if (!existsSync(serverJs)) {
   process.exit(1);
 }
 
-function copyPublicAssets(from, to) {
-  if (!existsSync(from)) return;
-  mirrorIntoStandalone(from, to);
+const stagedAssets = copyStandaloneWebAssets(root);
+if (stagedAssets.public.method === "copy" || stagedAssets.static.method === "copy") {
+  console.log("Copied public and .next/static into .next/standalone (no symlink).");
 }
-
-copyPublicAssets(join(root, "public"), join(standaloneDir, "public"));
-copyPublicAssets(join(root, ".next", "static"), join(standaloneDir, ".next", "static"));
+if (stagedAssets.static.method === "skip" && !existsSync(join(standaloneDir, ".next", "static"))) {
+  console.warn(
+    "Missing .next/standalone/.next/static. After npm run build, styles must load on standalone; without this folder the UI is unstyled raw HTML (default blue links).",
+  );
+}
 
 // server.js chdir()s into standalone. Keep SQLite, uploads, and gitignored
 // env files on the project paths the rest of the app already uses.
@@ -99,20 +102,20 @@ function stageIntoStandalone(from, to, { mkdirIfMissing = false } = {}) {
 const port = process.env.PORT || "3000";
 const hostname = listenAddress();
 const preload = join(root, "scripts", "next-keep-alive.cjs");
-const nodeOptions = [process.env.NODE_OPTIONS, `--require ${preload}`]
-  .filter(Boolean)
-  .join(" ");
 
 console.log(`Starting MSE TMS (standalone) on http://${hostname}:${port}`);
 
-const child = spawn(resolvedNode.execPath, [serverJs], {
+// Pass --require as argv, not NODE_OPTIONS. Windows splits NODE_OPTIONS on
+// spaces, so `C:\...\msetms-cursor-settings-hub-ce38 (1)\scripts\...` preloads
+// the folder name and crashes MODULE_NOT_FOUND. spawn() keeps the path one arg.
+const child = spawn(resolvedNode.execPath, ["--require", preload, serverJs], {
   cwd: standaloneDir,
   env: {
     ...process.env,
     PORT: String(port),
     HOSTNAME: hostname,
     NODE_ENV: "production",
-    NODE_OPTIONS: nodeOptions,
+    DOTENV_CONFIG_QUIET: "true",
     TMS_DB_PATH: join(projectData, "tms.db"),
     TMS_DATA_DIR: projectData,
   },

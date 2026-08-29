@@ -10,7 +10,6 @@ export default function ClaimsPage() {
     <>
       <PageHeader
         title="Claims / OS&D"
-        subtitle="Open a claim from a load. Evidence stays on the load documents. Demo-safe — no live insurance feed."
       />
       <div className="card overflow-hidden">
         {claims.length === 0 ? (

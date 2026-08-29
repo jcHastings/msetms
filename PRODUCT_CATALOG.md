@@ -87,7 +87,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 40. [v1] Status reason codes (wait, breakdown, rejected, rolled).
 41. [v1] Multi-stop loads (more than PU + DEL).
 42. [v1] Stop sequence reorder.
-43. Split / relay (hook and drop, second driver).
+43. [v1] Split / relay (hook and drop, second driver). Internal legs only — not on the customer invoice or customer confirmation.
 44. [v1] Team vs solo flag.
 45. [v1] Load templates by customer / lane.
 46. [v1] Duplicate a load.
@@ -159,7 +159,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 106–130 · Fleet: trucks and trailers
 
-106. [v1] Trucks: unit #, type, capacity, status.
+106. [v1] Trucks: unit #, type, capacity, status, assigned driver, notes, active.
 107. [v1] Truck types: dry van, reefer, flatbed, box, power only.
 108. [v1] Truck status: available, in use, maintenance, out of service.
 109. [v1] Samsara vehicle ID on the truck.
@@ -170,15 +170,15 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 114. [v1] Trailer registration issued / expires (60-day window).
 115. [v1] DOT inspection completed / expires (30-day window).
 116. [v1] Fleet document uploads (registration, DOT, insurance).
-117. [v1] VIN, plate, year, make on the truck.
-118. Trailer VIN / plate.
+117. [v1] VIN, plate, year, make, model on the truck.
+118. [v1] Trailer VIN / plate.
 119. Next PM due (miles or date).
 120. Out-of-service reason.
 121. Trailer pool / yard location.
 122. Trailer inventory independent of power.
 123. Reefer hour meter.
 124. Trailer loaded / empty / dropped status.
-125. Hooked-to truck (current pairing).
+125. [v1] Hooked-to truck (current pairing).
 126. Ownership: company vs leased vs OO trailer.
 127. IFTA qualified vehicle flag.
 128. Fuel type / tank size.
@@ -187,7 +187,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 131–155 · Drivers, HOS, compliance
 
-131. [v1] Drivers: name, phone, license text, assigned truck, status.
+131. [v1] Drivers: name, phone, email, license, assigned truck, notes, active, status.
 132. [v1] Driver PIN login for the driver app.
 133. [v1] Samsara driver ID.
 134. [v1] License number, state, expiration (30-day window).
@@ -358,13 +358,13 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 
 ## 281–300 · Admin, users, reporting
 
-281. [v1] Single-tenant local; dispatcher PIN login (demo: Ana G / 4020).
-282. [v1] Dispatcher vs manager roles (stored; manager seeded).
+281. [v1] Single-tenant local; dispatcher PIN login (demo: MS Test / 4020). Optional TOTP 2-step after PIN.
+282. [v1] Administrator / Standard / Accounting roles (MS Test seeded as Administrator via manager).
 283. [v1] Audit log: clone and desk actions (local).
-284. Company profile (name, dispatcher, phone, email, fax) — [v1] for confirmations.
+284. [v1] Company profile (name, dispatcher, phone, email, fax, address, logo) for confirmations.
 285. Terminal / yard list.
-286. User invite / deactivate.
-287. Permissions: dispatch, billing, safety, driver-only.
+286. [v1] User add / deactivate (local PIN; no invite email).
+287. [v1] Roles Administrator / Standard / Accounting (legacy manager and read-only still valid). Users tab + Settings → Users share the same records.
 288. [v1] Data export (loads CSV).
 289. [v1] On-time report.
 290. [v1] Revenue by customer / lane.
@@ -374,7 +374,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 294. IFTA packet by quarter (all loads).
 295. Backup / restore of SQLite + uploads.
 296. Environment / demo reset.
-297. Localization / units (mi, °F).
+297. [v1] Currency (USD/CAD) and weight units (lb/kg).
 298. Mobile dispatcher layout (tablet).
 299. Help / how-we-dispatch short guide.
 300. Catalog + roadmap stay the source of truth; new work is a slice, not “build 300.”
@@ -397,7 +397,7 @@ These sit **on top of** the core 300. Do not start them until the ROADMAP phase 
 - OO settlement is **not** a QBO bill unless a later slice says so.
 - Sync payments back from QBO.
 - Multi-entity / multiple QBO realms — not v1.
-- Credentials only via env; no in-app fake OAuth. [v1]
+- Credentials only via env; in-app QuickBooks Online OAuth stores realm/refresh on the server. [v1]
 
 ### Fuel
 

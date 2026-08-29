@@ -96,7 +96,11 @@ export function listLiveExceptionInbox(filters?: {
     }
     return true;
   });
-  return { ...inbox, items: filtered, attentionCount: filtered.length };
+  return {
+    ...inbox,
+    items: filtered,
+    attentionCount: new Set(filtered.map((item) => item.loadId)).size,
+  };
 }
 
 export function exceptionStateFor(item: InboxException): ExceptionState | null {
@@ -195,7 +199,9 @@ export function revenueByCustomer(): Array<{ customer: string; loads: number; re
 export function requiredDocumentsForLoad(load: LoadView): Array<{ kind: string; label: string; required: boolean }> {
   const docs = [
     { kind: "rate_con", label: "Rate confirmation", required: true },
-    { kind: "bol", label: "BOL", required: true },
+    { kind: "invoice", label: "Invoice (customer)", required: false },
+    { kind: "carrier_invoice", label: "Bill / carrier invoice", required: false },
+    { kind: "bol", label: "BOL", required: false },
     { kind: "pod", label: "POD", required: load.status === "delivered" || load.status === "completed" },
     { kind: "temp_log", label: "Temp log", required: load.reefer_setpoint_f != null },
   ];

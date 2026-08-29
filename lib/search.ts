@@ -62,6 +62,14 @@ export function defaultSearchCriteria(): LoadSearchCriteria {
   };
 }
 
+export function criteriaFromSearchParams(params: { q?: string | string[] | null }): LoadSearchCriteria {
+  const raw = Array.isArray(params.q) ? params.q[0] : params.q;
+  return {
+    ...defaultSearchCriteria(),
+    q: String(raw ?? "").trim(),
+  };
+}
+
 function ymd(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

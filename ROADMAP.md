@@ -22,6 +22,7 @@ Working screens in [SHIPPED.md](./SHIPPED.md). Catalog marks in [PRODUCT_CATALOG
 - Loads: create, edit, richer statuses, multi-stop, clone, templates, board filters, assign / reassign
 - **Locations** and **Search** in the dispatcher nav
 - **Accounting** nav: AR, AP, driver pay, commissions, QuickBooks stub
+- **Settings hub**: company, insurance, lists, units, tax, alerts, routing, pay/margin, documents, load numbers, users, integrations
 - Rate-con ingest, load confirmation PDFs, compliance page, claims, reports CSV
 - QBO / Samsara / ORBCOMM / IFTA stubs (live only when env credentials work)
 

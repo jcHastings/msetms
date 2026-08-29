@@ -1,13 +1,17 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
+import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
+import { coordsForStop, gpsPingsForLoad, stillInsideGeofenceAt } from "./geofence";
+import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
+import { listStops } from "./stops";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
 
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
 
-export const EXCEPTION_KINDS = ["reefer", "late", "missing_pod", "compliance", "unassigned"] as const;
+export const EXCEPTION_KINDS = ["reefer", "late", "detention", "gps_quiet", "missing_pod", "compliance", "unassigned"] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export type InboxException = {
@@ -30,6 +34,16 @@ export type ExceptionInbox = {
   items: InboxException[];
 };
 
+export type InboxExceptionGroup = {
+  loadId: number;
+  loadNumber: string;
+  customerName: string;
+  origin: string;
+  destination: string;
+  severity: ExceptionSeverity;
+  items: InboxException[];
+};
+
 const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
   CRITICAL: 0,
   HIGH: 1,
@@ -40,9 +54,11 @@ const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
 const KIND_RANK: Record<ExceptionKind, number> = {
   reefer: 0,
   late: 1,
-  missing_pod: 2,
-  compliance: 3,
-  unassigned: 4,
+  detention: 2,
+  gps_quiet: 3,
+  missing_pod: 4,
+  compliance: 5,
+  unassigned: 6,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -98,9 +114,10 @@ function withLoad(
   title: string,
   detail: string,
   demo = false,
+  extraId?: string,
 ): InboxException {
   return {
-    id: `${load.id}:${kind}`,
+    id: extraId ? `${load.id}:${kind}:${extraId}` : `${load.id}:${kind}`,
     loadId: load.id,
     loadNumber: load.load_number,
     customerName: load.customer_name,
@@ -114,12 +131,30 @@ function withLoad(
   };
 }
 
+function requiredTempTarget(load: LoadView): { value: number; label: string } | null {
+  if (load.temp_low_f != null && load.temp_high_f != null) {
+    return { value: (load.temp_low_f + load.temp_high_f) / 2, label: `${load.temp_low_f}–${load.temp_high_f}°F` };
+  }
+  if (load.temperature_f != null) return { value: load.temperature_f, label: `req ${load.temperature_f}°F` };
+  if (load.temp_low_f != null) return { value: load.temp_low_f, label: `req ${load.temp_low_f}°F` };
+  if (load.temp_high_f != null) return { value: load.temp_high_f, label: `req ${load.temp_high_f}°F` };
+  return null;
+}
+
+function outsideRequiredRange(load: LoadView, temp: number): boolean {
+  if (load.temp_low_f != null && temp < load.temp_low_f - 0.5) return true;
+  if (load.temp_high_f != null && temp > load.temp_high_f + 0.5) return true;
+  if (load.temperature_f != null && Math.abs(temp - load.temperature_f) >= 2) return true;
+  return false;
+}
+
 function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxException[] {
   if (isClosedStatus(load.status)) return [];
   const setpoint = load.reefer_setpoint_f ?? reading?.setpoint_f ?? null;
+  const required = requiredTempTarget(load);
   const temp = reading?.temperature_f ?? null;
   const alarm = reading?.alarm?.trim() ?? "";
-  if (setpoint == null || temp == null) {
+  if (temp == null) {
     if (alarm) {
       return [
         withLoad(
@@ -135,21 +170,83 @@ function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxE
     return [];
   }
 
-  const delta = Math.abs(temp - setpoint);
+  const vsSetpoint = setpoint != null ? Math.abs(temp - setpoint) : 0;
+  const vsRequired = required ? Math.abs(temp - required.value) : 0;
+  const requiredMiss = outsideRequiredRange(load, temp);
+  const delta = Math.max(vsSetpoint, requiredMiss ? vsRequired : 0);
   let severity: ExceptionSeverity | null = null;
   if (delta >= 8 || (alarm && delta >= 5)) severity = "CRITICAL";
-  else if (delta >= 3 || alarm) severity = "HIGH";
+  else if (delta >= 3 || alarm || requiredMiss) severity = "HIGH";
   else if (delta >= 2) severity = "MEDIUM";
   if (!severity) return [];
 
-  const title = alarm && delta >= 3 ? "Reefer alarm / off setpoint" : "Reefer off setpoint";
+  const title =
+    requiredMiss && (setpoint == null || vsRequired >= vsSetpoint)
+      ? "Temperature discrepancy"
+      : alarm && delta >= 3
+        ? "Reefer alarm / off setpoint"
+        : "Reefer off setpoint";
   const detail = [
-    `${temp}°F vs set ${setpoint}°F (${delta.toFixed(1)}° off)`,
+    `${temp}°F`,
+    setpoint != null ? `set ${setpoint}°F` : null,
+    required ? required.label : null,
+    ` (${delta.toFixed(1)}° off)`,
     alarm ? alarm : null,
   ]
     .filter(Boolean)
     .join(" · ");
   return [withLoad(load, "reefer", severity, title, detail, reading?.source !== "orbcomm")];
+}
+
+export function groupInboxExceptions(items: InboxException[]): InboxExceptionGroup[] {
+  const groups = new Map<number, InboxExceptionGroup>();
+  for (const item of items) {
+    const current = groups.get(item.loadId);
+    if (!current) {
+      groups.set(item.loadId, {
+        loadId: item.loadId,
+        loadNumber: item.loadNumber,
+        customerName: item.customerName,
+        origin: item.origin,
+        destination: item.destination,
+        severity: item.severity,
+        items: [item],
+      });
+      continue;
+    }
+    current.items.push(item);
+    if (SEVERITY_RANK[item.severity] < SEVERITY_RANK[current.severity]) current.severity = item.severity;
+  }
+  for (const group of groups.values()) {
+    group.items.sort((a, b) => {
+      const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+      if (severity !== 0) return severity;
+      return KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.title.localeCompare(b.title);
+    });
+  }
+  return [...groups.values()].sort((a, b) => {
+    const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+    if (severity !== 0) return severity;
+    return a.loadNumber.localeCompare(b.loadNumber);
+  });
+}
+
+export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {
+  if (item.kind === "detention") return "Detention";
+  if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
+  if (item.severity === "CRITICAL") return "Critical";
+  if (item.severity === "HIGH") return "Important";
+  return "Caution";
+}
+
+export function loadNeedsCriticalTag(
+  loadId: number,
+  items?: Array<Pick<InboxException, "loadId" | "kind" | "severity">>,
+): boolean {
+  const rows = items ?? listExceptionInbox().items;
+  return rows.some(
+    (item) => item.loadId === loadId && (item.severity === "CRITICAL" || item.kind === "late"),
+  );
 }
 
 function lateExceptions(load: LoadView, now: Date): InboxException[] {
@@ -220,11 +317,14 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
 
 function complianceExceptions(load: LoadView): InboxException[] {
   if (!statusNeedsAssets(load.status)) return [];
-  const alerts = collectAssignmentAlerts({
-    driver: load.driver_id ? getDriver(load.driver_id) : null,
-    truck: load.truck_id ? getTruck(load.truck_id) : null,
-    trailer: load.trailer_id ? getTrailer(load.trailer_id) : null,
-  });
+  const alerts = collectAssignmentAlerts(
+    {
+      driver: load.driver_id ? getDriver(load.driver_id) : null,
+      truck: load.truck_id ? getTruck(load.truck_id) : null,
+      trailer: load.trailer_id ? getTrailer(load.trailer_id) : null,
+    },
+    complianceWindows(),
+  );
   if (alerts.length === 0) return [];
   const expired = alerts.filter((alert) => alert.severity === "expired");
   return [
@@ -235,6 +335,29 @@ function complianceExceptions(load: LoadView): InboxException[] {
       expired.length > 0 ? "Expired documents" : "Compliance expiring",
       alerts.map((alert) => alert.message).join(" "),
       true,
+    ),
+  ];
+}
+
+function gpsQuietExceptions(load: LoadView, now: Date, quietHours: number): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  if (!load.truck_id) return [];
+  const truck = getTruck(load.truck_id);
+  const recordedAt = truck?.gps_recorded_at?.trim() ?? "";
+  if (!recordedAt || !truck?.gps_latitude || !truck?.gps_longitude) return [];
+  const ping = new Date(recordedAt);
+  if (Number.isNaN(ping.getTime())) return [];
+  const silentHours = (now.getTime() - ping.getTime()) / 3_600_000;
+  if (silentHours < quietHours) return [];
+  const hours = Math.round(silentHours * 10) / 10;
+  return [
+    withLoad(
+      load,
+      "gps_quiet",
+      hours >= quietHours * 2 ? "HIGH" : "MEDIUM",
+      "GPS gone quiet",
+      `Last Samsara ping ${formatDateTime(recordedAt)} (${hours}h ago). Window ${quietHours}h.`,
+      truck.gps_source !== "samsara",
     ),
   ];
 }
@@ -276,14 +399,17 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const delivered = listLoads({ status: "all" }).filter((load) => isBillableStatus(load.status));
   const pods = loadIdsWithPod();
   const readings = latestReadingByLoad();
+  const quietHours = getCompanySettings().alert_gps_quiet_hours || 2;
   const items: InboxException[] = [];
 
   for (const load of active) {
     const reading = readings.get(load.id) ?? null;
     items.push(...reeferExceptions(load, reading));
     items.push(...lateExceptions(load, now));
+    items.push(...gpsQuietExceptions(load, now, quietHours));
     items.push(...complianceExceptions(load));
     items.push(...unassignedExceptions(load, now));
+    items.push(...detentionExceptions(load, now));
   }
 
   for (const load of delivered) {
@@ -321,11 +447,52 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Reefer";
     case "late":
       return "Late";
+    case "gps_quiet":
+      return "GPS quiet";
     case "missing_pod":
       return "POD";
     case "compliance":
       return "Compliance";
     case "unassigned":
       return "Unassigned";
+    case "detention":
+      return "Detention";
   }
+}
+
+function detentionExceptions(load: LoadView, now: Date): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  const pings = gpsPingsForLoad(load.id);
+  for (const stop of listStops(load.id)) {
+    if (!String(stop.arrived_at ?? "").trim()) continue;
+    const mark = detentionTwoHourMark({
+      scheduleType: stop.schedule_type,
+      arrivedAt: stop.arrived_at,
+      windowStart: stop.window_start,
+      windowEnd: stop.window_end,
+    });
+    if (!mark) continue;
+    if (!detentionStillInsideAtMark({
+      arrivedAt: stop.arrived_at,
+      departedAt: stop.departed_at,
+      twoHourMark: mark,
+      now,
+    })) {
+      continue;
+    }
+    const dest = coordsForStop(stop);
+    if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
+    const role = stop.kind === "delivery" ? "receiver" : "shipper";
+    const stopLabel = stop.kind === "delivery" ? "delivery" : "pickup";
+    return [
+      withLoad(
+        load,
+        "detention",
+        "HIGH",
+        `Possible detention — still at ${role} (${stopLabel}) 2+ hours past appointment`,
+        `${stop.name || (stop.kind === "delivery" ? "Delivery" : "Pickup")} · mark ${formatDateTime(mark.toISOString())}`,
+      ),
+    ];
+  }
+  return [];
 }

@@ -9,6 +9,9 @@ import { deleteSearchReportFormAction, saveSearchReportAction } from "@/lib/acti
 import { formatDateTime } from "@/lib/format";
 import { US_STATES } from "@/lib/locations";
 import { searchLoadsAction } from "@/lib/search-actions";
+import { overlayHref } from "@/lib/load-page-shared";
+import { buildSearchExportGrid } from "@/lib/search-export";
+import { buildXlsxFromGrid } from "@/lib/xlsx-first-sheet";
 import {
   SEARCH_COLUMNS,
   defaultSearchColumns,
@@ -29,14 +32,57 @@ type Props = {
   trucks: Truck[];
   trailers: Trailer[];
   reports: SavedReport[];
+  initialCriteria?: LoadSearchCriteria;
   initialResults: LoadView[];
 };
 
-export function LoadSearch({ customers, drivers, trucks, trailers, reports, initialResults }: Props) {
-  const [criteria, setCriteria] = useState<LoadSearchCriteria>(defaultSearchCriteria());
+const SEARCH_STATE_KEY = "msetms-search-state";
+
+export function LoadSearch({
+  customers,
+  drivers,
+  trucks,
+  trailers,
+  reports,
+  initialCriteria,
+  initialResults,
+}: Props) {
+  const seed = initialCriteria ?? defaultSearchCriteria();
+  const [criteria, setCriteria] = useState<LoadSearchCriteria>(seed);
   const [columns, setColumns] = useState<SearchColumnKey[]>(defaultSearchColumns());
   const [results, setResults] = useState<LoadView[]>(initialResults);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(Boolean(seed.q.trim()));
+
+  useEffect(() => {
+    if (seed.q.trim()) return;
+    try {
+      const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        criteria?: LoadSearchCriteria;
+        columns?: SearchColumnKey[];
+        results?: LoadView[];
+        searched?: boolean;
+      };
+      if (saved.criteria) setCriteria(saved.criteria);
+      if (saved.columns?.length) setColumns(saved.columns);
+      if (saved.results) setResults(saved.results);
+      if (saved.searched) setSearched(true);
+    } catch {
+      // ignore a bad saved search
+    }
+  }, [seed.q]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        SEARCH_STATE_KEY,
+        JSON.stringify({ criteria, columns, results, searched }),
+      );
+    } catch {
+      // ignore quota
+    }
+  }, [criteria, columns, results, searched]);
   const [reportName, setReportName] = useState("");
   const [selectedReport, setSelectedReport] = useState("");
   const [saveState, saveAction, savePending] = useActionState(saveSearchReportAction, null);
@@ -89,9 +135,6 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">Search criteria</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Filter live loads by first pickup date. Open a saved report or save the current view.
-            </p>
           </div>
           <div className="field min-w-56">
             <label htmlFor="saved_report">Saved reports</label>
@@ -377,9 +420,19 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
       </form>
 
       <div className="card overflow-x-auto">
-        <div className="border-b border-slate-100 px-4 py-3 text-sm text-slate-500">
-          {results.length} load{results.length === 1 ? "" : "s"}
-          {searched ? "" : " (live, default)"}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-sm text-slate-500">
+          <span>
+            {results.length} load{results.length === 1 ? "" : "s"}
+            {searched ? "" : " (live, default)"}
+          </span>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={results.length === 0}
+            onClick={() => downloadSearchSpreadsheet(results, columns)}
+          >
+            Download spreadsheet
+          </button>
         </div>
         {results.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">No loads match these criteria.</p>
@@ -397,7 +450,7 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
                 <tr key={load.id}>
                   {visible.has("load_id") ? (
                     <td>
-                      <Link href={`/loads/${load.id}`} className="font-mono font-semibold underline">
+                      <Link href={overlayHref("/search", load.id)} className="font-mono font-semibold underline">
                         {load.load_number}
                       </Link>
                     </td>
@@ -449,4 +502,20 @@ export function LoadSearch({ customers, drivers, trucks, trailers, reports, init
 
 async function runSearch(criteria: LoadSearchCriteria): Promise<LoadView[]> {
   return searchLoadsAction(criteria);
+}
+
+function downloadSearchSpreadsheet(loads: LoadView[], columns: SearchColumnKey[]): void {
+  const bytes = buildXlsxFromGrid(buildSearchExportGrid(loads, columns));
+  const copy = Uint8Array.from(bytes);
+  const blob = new Blob([copy], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ms-express-search.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

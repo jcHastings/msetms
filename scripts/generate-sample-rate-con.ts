@@ -50,9 +50,73 @@ function main() {
   });
 }
 
+const ascendOut = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
+
+function writeAscendSample(): Promise<void> {
+  const ascend = new PDFDocument({ size: "LETTER", margin: 40 });
+  const ascendStream = fs.createWriteStream(ascendOut);
+  ascend.pipe(ascendStream);
+  ascend.fontSize(16).text("LOAD CONFIRMATION");
+  ascend.fontSize(9).text("Powered by AscendTMS.com");
+  ascend.moveDown(0.4);
+  ascend.fontSize(11);
+  ascend.text("Load #");
+  ascend.text("45090");
+  ascend.text("Date");
+  ascend.text("08/23/2026");
+  ascend.text("Equipment");
+  ascend.text("Reefer");
+  ascend.text("Equipment Length");
+  ascend.text("53'");
+  ascend.text("Weight");
+  ascend.text("42500 lbs");
+  ascend.text("Commodity");
+  ascend.text("FROZEN BEEF");
+  ascend.moveDown(0.3);
+  ascend.text("Carrier");
+  ascend.text("MS EXPRESS");
+  ascend.moveDown(0.4);
+  ascend.text("Stops / Actions");
+  ascend.text("#  Action    Date/Time  Location  Contact");
+  ascend.text("1");
+  ascend.text("Pickup");
+  ascend.text("03/03/25");
+  ascend.text("Lineage Logistics - Avenel");
+  ascend.text("275 Blair rd");
+  ascend.text("Avenel, NJ 07001");
+  ascend.text("2");
+  ascend.text("Delivery");
+  ascend.text("03/05/25");
+  ascend.text("Nebraska Cold Storage");
+  ascend.text("600 E 39th St");
+  ascend.text("Hastings, NE 68901");
+  ascend.moveDown(0.4);
+  ascend.text("Pay Items");
+  ascend.text("Description  Notes  Quantity  Rate  Amount");
+  ascend.text("Flat Rate");
+  ascend.text("1");
+  ascend.text("3200.00");
+  ascend.text("$ 3,200.00");
+  ascend.text("Total");
+  ascend.text("$ 3,200.00");
+  ascend.moveDown(0.4);
+  ascend.text("Terms of Load");
+  ascend.text("Please email invoices to billing@msloads.com with the load number in the subject line.");
+  ascend.text("Temperature controlled loads must always run on continuous mode. Never start and stop.");
+  ascend.text("Two load locks. Seal required.");
+  ascend.fontSize(8).text("Page 1 out of 2    Load #45090 | Powered by AscendTMS.com");
+  ascend.end();
+  return new Promise((resolve, reject) => {
+    ascendStream.on("finish", () => resolve());
+    ascendStream.on("error", reject);
+  });
+}
+
 main()
+  .then(() => writeAscendSample())
   .then(() => {
     console.log(`Wrote ${out}`);
+    console.log(`Wrote ${ascendOut}`);
   })
   .catch((error) => {
     console.error(error);
