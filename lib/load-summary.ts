@@ -12,6 +12,10 @@ export type LoadSummaryStop = {
   schedule_type?: string | null;
 };
 
+export type DriverMessageLocale = "en" | "es";
+
+export const OFFICE_TIME_ZONE = "America/Chicago";
+
 export type LoadSummaryInput = {
   load_number: string;
   origin: string;
@@ -44,7 +48,47 @@ export type LoadSummaryInput = {
   po_number?: string | null;
   reference_number?: string | null;
   stops?: LoadSummaryStop[] | null;
+  locale?: DriverMessageLocale;
 };
+
+export function parseDriverMessageLocale(value: unknown): DriverMessageLocale {
+  return String(value ?? "").trim().toLowerCase() === "es" ? "es" : "en";
+}
+
+export function driverFirstName(name: string | null | undefined): string {
+  return String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .find(Boolean) ?? "";
+}
+
+function officeHour(now: Date, timeZone = OFFICE_TIME_ZONE): number {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(now),
+  );
+  return Number.isFinite(hour) ? hour : now.getHours();
+}
+
+export function driverLoadGreeting(options: {
+  locale?: DriverMessageLocale;
+  driverName?: string | null;
+  now?: Date;
+  timeZone?: string;
+} = {}): string {
+  const locale = options.locale === "es" ? "es" : "en";
+  const hour = officeHour(options.now ?? new Date(), options.timeZone ?? OFFICE_TIME_ZONE);
+  const period = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const first = driverFirstName(options.driverName);
+  if (locale === "es") {
+    const hello =
+      period === "morning" ? "Buenos días" : period === "afternoon" ? "Buenas tardes" : "Buenas noches";
+    const named = first ? `${hello}, ${first}.` : `${hello}.`;
+    return `${named} Espero que estés teniendo un buen día.`;
+  }
+  const hello = period === "morning" ? "Good morning" : period === "afternoon" ? "Good afternoon" : "Good evening";
+  const named = first ? `${hello}, ${first}.` : `${hello}.`;
+  return `${named} Hope you're having a great day.`;
+}
 
 export { SMS_MISSING_KEYS } from "./sms-shared";
 
@@ -82,7 +126,43 @@ function smsStopWindow(
   return formatSmsStopWindow(start?.trim() || fallbackStart, end?.trim() || fallbackEnd, scheduleType);
 }
 
+function smsCopy(locale: DriverMessageLocale) {
+  if (locale === "es") {
+    return {
+      load: "Carga",
+      shipper: "Remitente",
+      receiver: "Receptor",
+      pickup: "Recogida",
+      delivery: "Entrega",
+      truck: "Camión",
+      trailer: "Remolque",
+      reefer: "Reefer",
+      yourLeg: "Su tramo",
+      appointment: "Cita",
+      special: "Instrucciones especiales",
+      notes: "Notas",
+      agreed: "Monto acordado",
+    };
+  }
+  return {
+    load: "Load",
+    shipper: "Shipper",
+    receiver: "Receiver",
+    pickup: "Pickup",
+    delivery: "Delivery",
+    truck: "Truck",
+    trailer: "Trailer",
+    reefer: "Reefer",
+    yourLeg: "Your leg",
+    appointment: "Appointment",
+    special: "Special instructions",
+    notes: "Notes",
+    agreed: "Agreed amount",
+  };
+}
+
 function smsStopBlocks(load: LoadSummaryInput): string[] {
+  const copy = smsCopy(load.locale === "es" ? "es" : "en");
   const stops = (load.stops ?? []).filter((stop) => stop);
   const pickups = stops.filter((stop) => String(stop.kind ?? "").trim().toLowerCase() !== "delivery");
   const deliveries = stops.filter((stop) => String(stop.kind ?? "").trim().toLowerCase() === "delivery");
@@ -97,48 +177,63 @@ function smsStopBlocks(load: LoadSummaryInput): string[] {
       load.pickup_start,
       load.pickup_end,
     );
-    blocks.push(["Shipper", place, window ? `Pickup ${window}` : ""].filter(Boolean).join("\n"));
+    blocks.push([copy.shipper, place, window ? `${copy.pickup} ${window}` : ""].filter(Boolean).join("\n"));
   }
   if (deliveries.length) {
     for (const stop of deliveries) {
       const place = smsStopPlace(stop, load.destination);
       const window = smsStopWindow(stop.window_start, stop.window_end, stop.schedule_type, load.delivery_start, load.delivery_end);
-      blocks.push(["Receiver", place, window ? `Delivery ${window}` : ""].filter(Boolean).join("\n"));
+      blocks.push([copy.receiver, place, window ? `${copy.delivery} ${window}` : ""].filter(Boolean).join("\n"));
     }
     return blocks;
   }
   if (load.destination.trim()) {
     const window = formatSmsStopWindow(load.delivery_start, load.delivery_end);
-    blocks.push(["Receiver", load.destination.trim(), window ? `Delivery ${window}` : ""].filter(Boolean).join("\n"));
+    blocks.push([copy.receiver, load.destination.trim(), window ? `${copy.delivery} ${window}` : ""].filter(Boolean).join("\n"));
   }
   return blocks;
 }
 
 export function formatLoadSummary(load: LoadSummaryInput): string {
+  const locale = load.locale === "es" ? "es" : "en";
+  const copy = smsCopy(locale);
   const trailer = load.trailer_unit || load.trailer_number || "";
-  const truckTrailer = [load.truck_unit ? `Truck ${load.truck_unit}` : "", trailer ? `Trailer ${trailer}` : ""]
+  const truckTrailer = [load.truck_unit ? `${copy.truck} ${load.truck_unit}` : "", trailer ? `${copy.trailer} ${trailer}` : ""]
     .filter(Boolean)
     .join(" · ");
   const reefer = resolveReeferSpec(load);
   const reeferLine =
     reefer.setpointF != null
-      ? `Reefer ${formatReeferSetpoint(reefer.setpointF)} ${labelForReeferMode(reefer.mode) || "Continuous"}`
+      ? `${copy.reefer} ${formatReeferSetpoint(reefer.setpointF)} ${labelForReeferMode(reefer.mode) || "Continuous"}`
       : "";
   const extras = [
-    load.your_leg?.trim() ? `Your leg: ${load.your_leg.trim()}` : "",
-    load.appointment_notes?.trim() ? `Appointment: ${load.appointment_notes.trim()}` : "",
-    load.special_instructions?.trim() ? `Special instructions: ${load.special_instructions.trim()}` : "",
-    load.public_notes?.trim() ? `Notes: ${load.public_notes.trim()}` : "",
+    load.your_leg?.trim() ? `${copy.yourLeg}: ${load.your_leg.trim()}` : "",
+    load.appointment_notes?.trim() ? `${copy.appointment}: ${load.appointment_notes.trim()}` : "",
+    load.special_instructions?.trim() ? `${copy.special}: ${load.special_instructions.trim()}` : "",
+    load.public_notes?.trim() ? `${copy.notes}: ${load.public_notes.trim()}` : "",
     isOwnerOperator(load.driver_type) && (load.oo_pay != null || load.rate != null)
-      ? `Agreed amount ${formatMoney(load.oo_pay ?? load.rate)}`
+      ? `${copy.agreed} ${formatMoney(load.oo_pay ?? load.rate)}`
       : "",
   ].filter(Boolean);
   const loadNumber = driverFacingLoadNumber(load);
   const blocks = [
-    loadNumber ? `Load ${loadNumber}` : "",
-    ...smsStopBlocks(load),
+    loadNumber ? `${copy.load} ${loadNumber}` : "",
+    ...smsStopBlocks({ ...load, locale }),
     [truckTrailer, reeferLine].filter(Boolean).join("\n"),
     extras.join("\n"),
   ].filter(Boolean);
   return blocks.join("\n\n");
+}
+
+export function formatDriverDispatchText(
+  load: LoadSummaryInput,
+  options: { locale?: DriverMessageLocale; now?: Date } = {},
+): string {
+  const locale = options.locale === "es" ? "es" : load.locale === "es" ? "es" : "en";
+  const greeting = driverLoadGreeting({
+    locale,
+    driverName: load.driver_name,
+    now: options.now,
+  });
+  return `${greeting}\n\n${formatLoadSummary({ ...load, locale })}`;
 }

@@ -9,7 +9,7 @@ import { driverComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
 import { assignedFleetAssetIds, listDrivers, listTrucks } from "@/lib/queries";
-import { formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
+import { fleetDivisionOf, formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +47,7 @@ export default async function DriversPage() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Division</th>
               <th>Phone</th>
               <th>Driver type</th>
               <th>CDL</th>
@@ -61,7 +62,7 @@ export default async function DriversPage() {
           <tbody>
             {drivers.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={11} className="px-5 py-8 text-sm text-slate-500">
                   No drivers yet.
                 </td>
               </tr>
@@ -78,6 +79,7 @@ export default async function DriversPage() {
                     <td>
                       <span className="font-semibold hover:underline">{driver.name}</span>
                     </td>
+                    <td>{fleetDivisionOf(driver)}</td>
                     <td>{driver.phone || "—"}</td>
                     <td>
                       <DriverKindBadge type={driver.driver_type} />

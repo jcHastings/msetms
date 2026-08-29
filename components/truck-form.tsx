@@ -5,7 +5,7 @@ import { FormBanner } from "@/components/form-banner";
 import { createTruckAction, updateTruckAction } from "@/lib/actions";
 import type { FleetDriverOption, TruckFormValues } from "@/lib/fleet-form-shared";
 import { US_STATES } from "@/lib/locations";
-import { DEFAULT_CAB_TYPE, TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
+import { DEFAULT_CAB_TYPE, FLEET_DIVISIONS, TRUCK_STATUSES, TRUCK_TYPES } from "@/lib/types";
 
 type Props = {
   truck?: TruckFormValues;
@@ -27,6 +27,16 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
     >
       {truck ? <input type="hidden" name="id" value={truck.id} /> : null}
       <FormBanner result={state} />
+      <div className="field">
+        <label htmlFor="division">Division *</label>
+        <select id="division" name="division" required defaultValue={truck?.division || "MSE"}>
+          {FLEET_DIVISIONS.map((division) => (
+            <option key={division} value={division}>
+              {division}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label htmlFor="unit_number">Unit number</label>
         <input id="unit_number" name="unit_number" required defaultValue={truck?.unit_number} />

@@ -30,12 +30,15 @@ import {
   canViewAudit,
   canViewLoadFinancials,
 } from "@/lib/settings-shared";
+import { driverLoadGreeting, type DriverMessageLocale } from "@/lib/load-summary";
 
 export function LoadWorkspace({
   loadId,
   status,
   initialTab,
   loadSummary,
+  loadSummaryEs = "",
+  driverName = "",
   driverAssigned,
   driverPhone,
   dispatcherId,
@@ -62,6 +65,8 @@ export function LoadWorkspace({
   status: string;
   initialTab: string;
   loadSummary: string;
+  loadSummaryEs?: string;
+  driverName?: string;
   driverAssigned: boolean;
   driverPhone: string;
   dispatcherId: number | null;
@@ -94,6 +99,10 @@ export function LoadWorkspace({
   const [smsNotice, setSmsNotice] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [smsPending, setSmsPending] = useState(false);
+  const [driverLocale, setDriverLocale] = useState<DriverMessageLocale>("en");
+  const dispatchPreview = `${driverLoadGreeting({ locale: driverLocale, driverName })}\n\n${
+    driverLocale === "es" ? loadSummaryEs || loadSummary : loadSummary
+  }`.trim();
   const markDirty = useCallback(() => setDirty(true), []);
   const clearDirty = useCallback(() => setDirty(false), []);
   const setSubmitState = useCallback((state: { canSubmit: boolean; pending: boolean }) => {
@@ -223,6 +232,7 @@ export function LoadWorkspace({
     const formData = new FormData();
     formData.set("load_id", String(loadId));
     formData.set("kind", kind);
+    formData.set("locale", driverLocale);
     if (body) formData.set("body", body);
     const result = await sendLoadSmsAction(formData);
     setSmsPending(false);
@@ -241,6 +251,7 @@ export function LoadWorkspace({
     const formData = new FormData();
     formData.set("load_id", String(loadId));
     formData.set("kind", kind);
+    formData.set("locale", driverLocale);
     if (body) formData.set("body", body);
     const result = await sendLoadWhatsAppAction(formData);
     setSmsPending(false);
@@ -538,8 +549,29 @@ export function LoadWorkspace({
             <p className="text-sm text-slate-600">
               Send this load confirmation to {driverPhone} (driver mobile on the load).
             </p>
+            <fieldset className="flex flex-wrap gap-4 text-sm">
+              <legend className="sr-only">Language</legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="driver-locale"
+                  checked={driverLocale === "en"}
+                  onChange={() => setDriverLocale("en")}
+                />
+                English
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="driver-locale"
+                  checked={driverLocale === "es"}
+                  onChange={() => setDriverLocale("es")}
+                />
+                Spanish
+              </label>
+            </fieldset>
             <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
-              {loadSummary}
+              {dispatchPreview}
             </pre>
             <div className="flex justify-end gap-2">
               <button className="btn btn-secondary" type="button" onClick={() => setDispatchOpen(false)}>
@@ -581,6 +613,7 @@ export function LoadWorkspace({
                   const form = new FormData();
                   form.set("load_id", String(loadId));
                   form.set("kind", "driver_load");
+                  form.set("locale", driverLocale);
                   const result = await sendLoadMailAction(form);
                   setSmsPending(false);
                   if (!result.ok) {

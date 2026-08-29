@@ -18,6 +18,7 @@ import {
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { assignedFleetAssetIds, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
+import { fleetDivisionOf } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,7 @@ export default async function TrucksPage() {
           <thead>
             <tr>
               <th>Unit</th>
+              <th>Division</th>
               <th>Year / make / model</th>
               <th>Plate</th>
               <th>Driver</th>
@@ -80,7 +82,7 @@ export default async function TrucksPage() {
           <tbody>
             {trucks.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={11} className="px-5 py-8 text-sm text-slate-500">
                   No trucks yet.
                 </td>
               </tr>
@@ -99,6 +101,7 @@ export default async function TrucksPage() {
                     <td>
                       <span className="font-mono font-semibold hover:underline">{truck.unit_number}</span>
                     </td>
+                    <td>{fleetDivisionOf(truck)}</td>
                     <td>{vehicleLabel(truck)}</td>
                     <td>{[truck.plate, truck.plate_state].filter(Boolean).join(" ") || "—"}</td>
                     <td>

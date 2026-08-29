@@ -13,7 +13,7 @@ import {
   truckComplianceAlerts,
 } from "@/lib/compliance";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
-import { isOwnerOperator, type DriverWithTruck, type Trailer, type Truck } from "@/lib/types";
+import { fleetDivisionOf, isOwnerOperator, type DriverWithTruck, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
   loadId: number;
@@ -128,6 +128,7 @@ export function AssignDialog({
                   {drivers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
+                      {` · ${fleetDivisionOf(item)}`}
                       {isOwnerOperator(item.driver_type) ? " · OO" : ""}
                       {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
                       {driverOptionNote(item, alertWindows)}
@@ -151,6 +152,7 @@ export function AssignDialog({
                   {trucks.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.unit_number}
+                      {` · ${fleetDivisionOf(item)}`}
                       {optionNote(truckComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}
@@ -170,7 +172,7 @@ export function AssignDialog({
                   <option value="">None</option>
                   {trailers.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.unit_number} · {item.type.replaceAll("_", " ")}
+                      {item.unit_number} · {fleetDivisionOf(item)} · {item.type.replaceAll("_", " ")}
                       {optionNote(trailerComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}

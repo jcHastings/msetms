@@ -11,6 +11,11 @@ import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./r
 import { listStops } from "./stops";
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
 import { isOwnerOperator, labelForLoadStatus, type LoadView } from "./types";
+import {
+  driverLoadGreeting,
+  parseDriverMessageLocale,
+  type DriverMessageLocale,
+} from "./load-summary";
 
 export type DriverLoadMailDraft = {
   to: string;
@@ -52,8 +57,13 @@ export function customerMailBlockReason(load: LoadView | null): string {
   return "";
 }
 
-export function mailNoReplyLine(officePhone = ""): string {
+export function mailNoReplyLine(officePhone = "", locale: DriverMessageLocale = "en"): string {
   const phone = officePhone.trim();
+  if (locale === "es") {
+    return phone
+      ? `No responda. Este correo no se revisa. Llame a la oficina al ${phone} si necesita más ayuda.`
+      : "No responda. Este correo no se revisa. Llame a la oficina si necesita más ayuda.";
+  }
   return phone
     ? `Do not reply. This mailbox is not monitored. Call the office at ${phone} if you need further assistance.`
     : "Do not reply. This mailbox is not monitored. Call the office if you need further assistance.";
@@ -75,32 +85,71 @@ export function composeDriverLoadEmail(input: {
   specialInstructions: string;
   settlement: string;
   officePhone?: string;
+  locale?: DriverMessageLocale;
+  driverName?: string | null;
+  now?: Date;
 }): DriverLoadMailDraft {
+  const locale = input.locale === "es" ? "es" : "en";
+  const copy =
+    locale === "es"
+      ? {
+          load: "Carga",
+          window: "Ventana",
+          appointment: "Cita",
+          ref: "Ref",
+          refs: "Refs",
+          commodity: "Commodity",
+          trailer: "Remolque",
+          reefer: "Reefer",
+          special: "Instrucciones especiales",
+          settlement: "Liquidación",
+          subject: `Carga ${input.loadNumber} — información del viaje`,
+        }
+      : {
+          load: "Load",
+          window: "Window",
+          appointment: "Appointment",
+          ref: "Ref",
+          refs: "Refs",
+          commodity: "Commodity",
+          trailer: "Trailer",
+          reefer: "Reefer",
+          special: "Special instructions",
+          settlement: "Settlement",
+          subject: `Load ${input.loadNumber} — trip information`,
+        };
+  const greeting = driverLoadGreeting({
+    locale,
+    driverName: input.driverName,
+    now: input.now,
+  });
   const lines = [
-    `Load ${input.loadNumber}`,
+    greeting,
+    "",
+    `${copy.load} ${input.loadNumber}`,
     "",
     ...input.stops.flatMap((stop) => [
       stop.title,
       stop.address,
-      stop.window ? `Window ${stop.window}` : "",
-      stop.appointment ? `Appointment ${stop.appointment}` : "",
-      stop.reference ? `Ref ${stop.reference}` : "",
+      stop.window ? `${copy.window} ${stop.window}` : "",
+      stop.appointment ? `${copy.appointment} ${stop.appointment}` : "",
+      stop.reference ? `${copy.ref} ${stop.reference}` : "",
       "",
     ]),
-    input.refs ? `Refs ${input.refs}` : "",
-    input.commodity ? `Commodity ${input.commodity}` : "",
-    input.trailer ? `Trailer ${input.trailer}` : "",
-    input.reefer ? `Reefer ${input.reefer}` : "",
-    input.specialInstructions ? `Special instructions: ${input.specialInstructions}` : "",
-    input.settlement ? `Settlement ${input.settlement}` : "",
+    input.refs ? `${copy.refs} ${input.refs}` : "",
+    input.commodity ? `${copy.commodity} ${input.commodity}` : "",
+    input.trailer ? `${copy.trailer} ${input.trailer}` : "",
+    input.reefer ? `${copy.reefer} ${input.reefer}` : "",
+    input.specialInstructions ? `${copy.special}: ${input.specialInstructions}` : "",
+    input.settlement ? `${copy.settlement} ${input.settlement}` : "",
     "",
-    mailNoReplyLine(input.officePhone),
+    mailNoReplyLine(input.officePhone, locale),
     "",
     "M & S Loads LLC · MS Express TMS",
   ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
   return {
     to: "",
-    subject: `Load ${input.loadNumber} — trip information`,
+    subject: copy.subject,
     text: lines.join("\n").trim() + "\n",
     replyTo: MAIL_NOREPLY,
   };
@@ -204,7 +253,11 @@ export function composeCustomerUpdateEmail(input: {
   };
 }
 
-export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
+export function buildDriverLoadDraft(
+  load: LoadView,
+  options: { locale?: DriverMessageLocale; now?: Date } = {},
+): DriverLoadMailDraft {
+  const locale = parseDriverMessageLocale(options.locale);
   const stops = listStops(load.id);
   const reefer = resolveReeferSpec(load);
   const settlement =
@@ -213,7 +266,7 @@ export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
       : "";
   const draft = composeDriverLoadEmail({
     loadNumber: load.load_number,
-    stops: stops.map((stop) => mailStopLines(stops, stop)),
+    stops: stops.map((stop) => mailStopLines(stops, stop, locale)),
     refs: "",
     commodity: load.commodity.trim(),
     trailer: (load.trailer_unit || load.trailer_number || "").trim(),
@@ -226,6 +279,9 @@ export function buildDriverLoadDraft(load: LoadView): DriverLoadMailDraft {
     specialInstructions: load.special_instructions.trim(),
     settlement,
     officePhone: getCompanyProfile().dispatcher_phone,
+    locale,
+    driverName: load.driver_name,
+    now: options.now,
   });
   return { ...draft, to: resolveLoadDriverEmail(load) };
 }
@@ -253,12 +309,14 @@ export async function buildCustomerUpdateDraft(load: LoadView): Promise<Customer
 export async function sendDriverLoadMail(
   loadId: number,
   send: typeof sendMail = sendMail,
+  options: { locale?: DriverMessageLocale } = {},
 ): Promise<{ to: string; subject: string }> {
   const load = getLoad(loadId);
   const blocked = driverMailBlockReason(load);
   if (!load || blocked) throw new Error(blocked || "Load not found.");
-  const draft = buildDriverLoadDraft(load);
-  const pdf = await renderConfirmationPdf(buildConfirmationForLoad(load.id, { packet: "internal" }));
+  const locale = parseDriverMessageLocale(options.locale);
+  const draft = buildDriverLoadDraft(load, { locale });
+  const pdf = await renderConfirmationPdf(buildConfirmationForLoad(load.id, { packet: "internal", locale }));
   await send({
     to: draft.to,
     subject: draft.subject,
@@ -301,6 +359,7 @@ export function lastLoadMail(loadId: number, kind: LoadMailKind): SentMailRow | 
 function mailStopLines(
   stops: LoadStop[],
   stop: LoadStop,
+  locale: DriverMessageLocale = "en",
 ): {
   title: string;
   address: string;
@@ -309,6 +368,10 @@ function mailStopLines(
   reference: string;
 } {
   const title = stopTypeLabel(stop.kind, stopTypeNumber(stops, stop.id));
+  const labeled =
+    locale === "es"
+      ? title.replace(/^Pickup\b/, "Recogida").replace(/^Delivery\b/, "Entrega")
+      : title;
   const address = [
     stop.name.trim(),
     formatStopPartyAddress(stop).replace(/\n/g, ", "),
@@ -317,7 +380,7 @@ function mailStopLines(
     .join(" — ");
   const window = formatStopWindow(stop.window_start, stop.window_end, stop.schedule_type);
   return {
-    title,
+    title: labeled,
     address,
     window,
     appointment: stop.confirmation.trim() || stop.notes.trim(),

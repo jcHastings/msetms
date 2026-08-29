@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createTrailerAction, updateTrailerAction } from "@/lib/actions";
 import type { FleetTruckOption, TrailerFormValues } from "@/lib/fleet-form-shared";
-import { DEFAULT_FLEET_TYPE, TRAILER_TYPES, TRUCK_STATUSES } from "@/lib/types";
+import { DEFAULT_FLEET_TYPE, FLEET_DIVISIONS, TRAILER_TYPES, TRUCK_STATUSES } from "@/lib/types";
 
 type Props = {
   trailer?: TrailerFormValues;
@@ -26,6 +26,16 @@ export function TrailerForm({ trailer, trucks = [], submitLabel }: Props) {
     >
       {trailer ? <input type="hidden" name="id" value={trailer.id} /> : null}
       <FormBanner result={state} />
+      <div className="field">
+        <label htmlFor="division">Division *</label>
+        <select id="division" name="division" required defaultValue={trailer?.division || "MSE"}>
+          {FLEET_DIVISIONS.map((division) => (
+            <option key={division} value={division}>
+              {division}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label htmlFor="unit_number">Trailer number</label>
         <input id="unit_number" name="unit_number" required defaultValue={trailer?.unit_number} />

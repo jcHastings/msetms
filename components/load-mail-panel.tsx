@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { sendLoadMailAction } from "@/lib/dispatcher-actions";
 import type { LoadMailKind } from "@/lib/mail-shared";
+import type { DriverMessageLocale } from "@/lib/load-summary";
 
 export function LoadMailPanel({
   loadId,
@@ -115,6 +116,7 @@ function LoadMailButton({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
+  const [locale, setLocale] = useState<DriverMessageLocale>("en");
 
   async function send() {
     if (!email.trim()) {
@@ -128,6 +130,7 @@ function LoadMailButton({
     form.set("load_id", String(loadId));
     form.set("kind", kind);
     form.set("load_number", loadNumber);
+    if (kind === "driver_load") form.set("locale", locale);
     const result = await sendLoadMailAction(form);
     setPending(false);
     if (!result.ok) {
@@ -140,6 +143,18 @@ function LoadMailButton({
 
   return (
     <div className="min-w-[14rem] flex-1">
+      {kind === "driver_load" ? (
+        <div className="mb-2 flex flex-wrap gap-3 text-sm">
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={locale === "en"} onChange={() => setLocale("en")} />
+            English
+          </label>
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={locale === "es"} onChange={() => setLocale("es")} />
+            Spanish
+          </label>
+        </div>
+      ) : null}
       <button className="btn btn-secondary" type="button" disabled={pending} onClick={() => void send()}>
         {pending ? "Sending…" : label}
       </button>

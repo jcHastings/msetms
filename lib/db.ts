@@ -735,6 +735,9 @@ export function migrate(db: Database): void {
   `);
   ensureColumn(db, "loads", "non_revenue", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "bol_json", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
+  ensureColumn(db, "trucks", "division", "TEXT NOT NULL DEFAULT 'MSE'");
+  ensureColumn(db, "trailers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "drivers", "last_trailer_id", "INTEGER");
   ensureColumn(db, "load_stops", "arrived_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_stops", "departed_at", "TEXT NOT NULL DEFAULT ''");

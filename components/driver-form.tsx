@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { createDriverAction, updateDriverAction } from "@/lib/actions";
 import type { DriverFormValues } from "@/lib/fleet-form-shared";
-import { CDL_ENDORSEMENTS, DRIVER_TYPES, normalizeDriverKind, parseCdlEndorsements } from "@/lib/types";
+import { CDL_ENDORSEMENTS, DRIVER_TYPES, FLEET_DIVISIONS, normalizeDriverKind, parseCdlEndorsements } from "@/lib/types";
 
 type Props = {
   driver?: DriverFormValues;
@@ -60,6 +60,16 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
           />
         </div>
       ) : null}
+      <div className="field">
+        <label htmlFor="division">Division *</label>
+        <select id="division" name="division" required defaultValue={driver?.division || "MSE"}>
+          {FLEET_DIVISIONS.map((division) => (
+            <option key={division} value={division}>
+              {division}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label htmlFor="name">Name *</label>
         <input id="name" name="name" required defaultValue={driver?.name} />

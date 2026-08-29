@@ -135,6 +135,13 @@ export async function LoadEditor({
           stops,
           your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
         })}
+        loadSummaryEs={formatLoadSummary({
+          ...load,
+          stops,
+          your_leg: yours ? formatRelayLane(yours.pickup, yours.delivery) : "",
+          locale: "es",
+        })}
+        driverName={load.driver_name ?? ""}
         driverAssigned={Boolean(load.driver_id)}
         driverPhone={load.driver_phone ?? ""}
         dispatcherId={load.dispatcher_id}

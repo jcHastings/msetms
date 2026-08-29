@@ -53,6 +53,8 @@ import {
   isOwnerOperator,
   normalizeCabType,
   normalizeDriverKind,
+  parseFleetDivision,
+  type FleetDivision,
 } from "./types";
 import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode, locationPlaceKey } from "./locations";
@@ -97,6 +99,16 @@ const LOAD_SELECT = `
 
 function now(): string {
   return new Date().toISOString();
+}
+
+export function setFleetDivision(
+  kind: "drivers" | "trucks" | "trailers",
+  id: number,
+  division?: string | null,
+): void {
+  getDb()
+    .prepare(`UPDATE ${kind} SET division = ?, updated_at = ? WHERE id = ?`)
+    .run(parseFleetDivision(division), now(), id);
 }
 
 function asLoadView(row: LoadView | undefined): LoadView | null {
@@ -426,6 +438,7 @@ export function createTrailer(input: {
   notes?: string;
   reefer_setpoint_f?: number | null;
   active?: number;
+  division?: FleetDivision | string;
 }): number {
   const timestamp = now();
   if (input.truck_id && !getTruck(input.truck_id)) throw new Error("Assigned truck not found.");
@@ -456,7 +469,9 @@ export function createTrailer(input: {
         timestamp,
         timestamp,
       );
-    return Number(result.lastInsertRowid);
+    const id = Number(result.lastInsertRowid);
+    setFleetDivision("trailers", id, input.division);
+    return id;
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
       throw new Error("A trailer with that unit number already exists.");
@@ -482,6 +497,7 @@ export function updateTrailer(
     notes?: string;
     reefer_setpoint_f?: number | null;
     active?: number;
+    division?: FleetDivision | string;
   },
 ): void {
   if (!getTrailer(id)) throw new Error("Trailer not found.");
@@ -513,6 +529,7 @@ export function updateTrailer(
         now(),
         id,
       );
+    if (input.division !== undefined) setFleetDivision("trailers", id, input.division);
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
       throw new Error("A trailer with that unit number already exists.");
@@ -543,6 +560,7 @@ export function createTruck(input: {
   notes?: string;
   active?: number;
   assigned_driver_id?: number | null;
+  division?: FleetDivision | string;
 }): number {
   const timestamp = now();
   try {
@@ -577,6 +595,7 @@ export function createTruck(input: {
         timestamp,
       );
     const id = Number(result.lastInsertRowid);
+    setFleetDivision("trucks", id, input.division);
     if (input.assigned_driver_id != null) assignDriverToTruck(id, input.assigned_driver_id);
     return id;
   } catch (error) {
@@ -611,6 +630,7 @@ export function updateTruck(
     notes?: string;
     active?: number;
     assigned_driver_id?: number | null;
+    division?: FleetDivision | string;
   },
 ): void {
   if (!getTruck(id)) throw new Error("Truck not found.");
@@ -648,6 +668,7 @@ export function updateTruck(
         now(),
         id,
       );
+    if (input.division !== undefined) setFleetDivision("trucks", id, input.division);
     if (input.assigned_driver_id !== undefined) assignDriverToTruck(id, input.assigned_driver_id);
   } catch (error) {
     if (String(error).includes("UNIQUE")) {
@@ -979,6 +1000,7 @@ export function createDriver(input: {
   drug_test_next?: string;
   termination_date?: string;
   cdl_endorsements?: string;
+  division?: FleetDivision | string;
 }): number {
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
@@ -1030,7 +1052,9 @@ export function createDriver(input: {
       timestamp,
       timestamp,
     );
-  return Number(result.lastInsertRowid);
+  const id = Number(result.lastInsertRowid);
+  setFleetDivision("drivers", id, input.division);
+  return id;
 }
 
 export function updateDriver(
@@ -1068,6 +1092,7 @@ export function updateDriver(
     drug_test_next?: string;
     termination_date?: string;
     cdl_endorsements?: string;
+    division?: FleetDivision | string;
   },
 ): void {
   const current = getDriver(id);
@@ -1123,6 +1148,7 @@ export function updateDriver(
       now(),
       id,
     );
+  if (input.division !== undefined) setFleetDivision("drivers", id, input.division);
 }
 
 export function authenticateDriver(driverId: number, pin: string): DriverWithTruck {

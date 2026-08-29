@@ -51,6 +51,7 @@ import {
   isOwnerOperator,
   isSchedulingType,
   parseCdlEndorsements,
+  parseFleetDivision,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
@@ -283,6 +284,7 @@ export async function createTruckAction(
       notes: String(formData.get("notes") ?? "").trim(),
       active: parseActive(formData),
       assigned_driver_id: parseOptionalInt(formData.get("assigned_driver_id")),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/trucks");
@@ -325,6 +327,7 @@ export async function updateTruckAction(
       notes: String(formData.get("notes") ?? "").trim(),
       active: parseActive(formData),
       assigned_driver_id: parseOptionalInt(formData.get("assigned_driver_id")),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/trucks");
@@ -372,6 +375,7 @@ export async function createDriverAction(
       termination_date: parseDateField(formData.get("termination_date")),
       pin: parseDriverPin(formData.get("pin")),
       cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -425,6 +429,7 @@ export async function updateDriverAction(
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
       cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/drivers");
@@ -897,6 +902,7 @@ export async function createTrailerAction(
       notes: String(formData.get("notes") ?? "").trim(),
       reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
       active: parseActive(formData),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/trailers");
@@ -930,6 +936,7 @@ export async function updateTrailerAction(
       notes: String(formData.get("notes") ?? "").trim(),
       reefer_setpoint_f: parseOptionalFloat(formData.get("reefer_setpoint_f")),
       active: parseActive(formData),
+      division: parseFleetDivision(formData.get("division")),
     });
     refresh();
     redirect("/fleet/trailers");

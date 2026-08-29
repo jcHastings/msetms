@@ -309,6 +309,8 @@ async function main() {
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
   assert.match(workspaceSource, /Email driver load/);
+  assert.match(workspaceSource, /Spanish/);
+  assert.match(workspaceSource, /driver-locale|driverLocale/);
   const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
   assert.match(mailPanelSource, /data-load-mail/);
   assert.match(mailPanelSource, /Email customer update/);
@@ -1119,6 +1121,10 @@ async function main() {
   assert.match(driverFormSrc, /normalizeDriverKind/);
   assert.match(driverFormSrc, /type="radio"/);
   assert.match(driverFormSrc, /name="driver_type"/);
+  assert.match(driverFormSrc, /name="division"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /name="division"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/trailer-form.tsx"), "utf8"), /name="division"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /fleetDivisionOf/);
   assert.match(driverFormSrc, /type\.label/);
   assert.doesNotMatch(driverFormSrc, /driver_type \?\? "single"/);
   assert.doesNotMatch(driverFormSrc, />Single</);
@@ -1618,6 +1624,40 @@ async function main() {
     pin: "2222",
     truck_id: null,
     status: "available",
+  });
+  assert.equal(queries.getDriver(driverId)?.division || "MSE", "MSE");
+  assert.equal(queries.getTruck(truckId)?.division || "MSE", "MSE");
+  queries.updateDriver(driverId, {
+    ...queries.getDriver(driverId)!,
+    license: queries.getDriver(driverId)!.license,
+    truck_id: truckId,
+    status: "available",
+    division: "MSX",
+  });
+  queries.updateTruck(truckId, {
+    unit_number: "999",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+    division: "MSX",
+  });
+  const msxTrailerId = queries.createTrailer({ unit_number: "DIV-MSX", type: "reefer", division: "MSX" });
+  assert.equal(queries.getDriver(driverId)?.division, "MSX");
+  assert.equal(queries.getTruck(truckId)?.division, "MSX");
+  assert.equal(queries.getTrailer(msxTrailerId)?.division, "MSX");
+  queries.updateDriver(driverId, {
+    ...queries.getDriver(driverId)!,
+    license: queries.getDriver(driverId)!.license,
+    truck_id: truckId,
+    status: "available",
+    division: "MSE",
+  });
+  queries.updateTruck(truckId, {
+    unit_number: "999",
+    type: "dry_van",
+    capacity_lbs: 45000,
+    status: "available",
+    division: "MSE",
   });
 
   const pickup = new Date();
@@ -2280,6 +2320,70 @@ async function main() {
     ].join("\n\n"),
   );
   assert.doesNotMatch(phoneSms, /1006153|localhost|Do not reply|M & S Loads LLC/);
+  const { driverLoadGreeting, formatDriverDispatchText } = await import("../lib/load-summary");
+  assert.equal(
+    driverLoadGreeting({ locale: "en", driverName: "Jose Ortega", now: new Date("2026-08-29T14:00:00.000Z") }),
+    "Good morning, Jose. Hope you're having a great day.",
+  );
+  assert.equal(
+    driverLoadGreeting({ locale: "en", driverName: "Chris", now: new Date("2026-08-29T18:00:00.000Z") }),
+    "Good afternoon, Chris. Hope you're having a great day.",
+  );
+  assert.equal(
+    driverLoadGreeting({ locale: "es", driverName: "Jose Ortega", now: new Date("2026-08-29T14:00:00.000Z") }),
+    "Buenos días, Jose. Espero que estés teniendo un buen día.",
+  );
+  assert.match(driverLoadGreeting({ locale: "en", driverName: "", now: new Date("2026-08-29T14:00:00.000Z") }), /^Good morning\./);
+  assert.doesNotMatch(driverLoadGreeting({ locale: "en", driverName: "" }), /driver/i);
+  const spanishSms = formatDriverDispatchText(
+    {
+      load_number: "MSE-1042",
+      customer_reference: "1006153",
+      origin: "Hastings, NE",
+      destination: "Bronx, NY",
+      pickup_start: "2026-08-23T08:00:00.000-04:00",
+      pickup_end: "2026-08-23T17:00:00.000-04:00",
+      delivery_start: "2026-08-25T08:00:00.000-04:00",
+      delivery_end: "2026-08-25T17:00:00.000-04:00",
+      commodity: "Beef",
+      reefer_setpoint_f: 26,
+      reefer_mode: "continuous",
+      special_instructions: "",
+      appointment_notes: "",
+      driver_name: "Jose Ortega",
+      driver_phone: "555-0100",
+      driver_type: "company_driver",
+      rate: 3100,
+      oo_pay: null,
+      truck_unit: "26",
+      trailer_number: "MS1519",
+      stops: [
+        {
+          kind: "pickup",
+          city: "Hastings",
+          state: "NE",
+          window_start: "2026-08-23T08:00:00.000-04:00",
+          window_end: "2026-08-23T17:00:00.000-04:00",
+          schedule_type: "fcfs",
+        },
+        {
+          kind: "delivery",
+          city: "Bronx",
+          state: "NY",
+          window_start: "2026-08-25T08:00:00.000-04:00",
+          window_end: "2026-08-25T17:00:00.000-04:00",
+          schedule_type: "fcfs",
+        },
+      ],
+    },
+    { locale: "es", now: new Date("2026-08-29T14:00:00.000Z") },
+  );
+  assert.match(spanishSms, /^Buenos días, Jose\./);
+  assert.match(spanishSms, /\n\nCarga MSE-1042\n\nRemitente\nHastings, NE\nRecogida /);
+  assert.match(spanishSms, /Receptor\nBronx, NY\nEntrega /);
+  assert.match(spanishSms, /Camión 26 · Remolque MS1519/);
+  assert.match(spanishSms, /Reefer 26°F Continuous/);
+  assert.doesNotMatch(spanishSms, /1006153|Shipper|Pickup |Load MSE/);
   const apptSms = formatLoadSummary({
     load_number: "MSE-1043",
     origin: "Hastings, NE",
@@ -2453,6 +2557,40 @@ async function main() {
       assert.equal(error instanceof Error && error.message, MAIL_MISSING);
       return true;
     },
+  );
+  const spanishMail = loadMail.composeDriverLoadEmail({
+    loadNumber: "MSE-MAIL",
+    stops: [{ title: "Pickup 1", address: "Hastings, NE", window: "8:00 AM", appointment: "", reference: "" }],
+    refs: "",
+    commodity: "Beef",
+    trailer: "MS1519",
+    reefer: "26°F · Continuous",
+    specialInstructions: "",
+    settlement: "",
+    officePhone: "402-302-0097",
+    locale: "es",
+    driverName: "Jose",
+    now: new Date("2026-08-29T14:00:00.000Z"),
+  });
+  assert.match(spanishMail.subject, /Carga MSE-MAIL/);
+  assert.match(spanishMail.text, /Buenos días, Jose/);
+  assert.match(spanishMail.text, /No responda/);
+  assert.match(spanishMail.text, /402-302-0097/);
+  assert.doesNotMatch(spanishMail.text, /Do not reply/);
+  assert.doesNotMatch(
+    loadMail.composeCustomerUpdateEmail({
+      loadNumber: "12345",
+      customerRef: "12345",
+      status: "Assigned",
+      truck: "28",
+      trailer: "MS1519",
+      lastLocation: "Hastings, NE",
+      eta: "",
+      nextStop: "",
+      stops: [],
+      officePhone: "402-302-0097",
+    }).text,
+    /Good morning|Buenos días|Hope you're having/,
   );
   const companyDraft = loadMail.composeDriverLoadEmail({
     loadNumber: "MSE-MAIL",

@@ -304,6 +304,17 @@ export function labelForFleetDocKind(value: string): string {
   return FLEET_DOC_KINDS.find((item) => item.value === value)?.label ?? value;
 }
 
+export const FLEET_DIVISIONS = ["MSE", "MSX"] as const;
+export type FleetDivision = (typeof FLEET_DIVISIONS)[number];
+
+export function parseFleetDivision(value: unknown): FleetDivision {
+  return String(value ?? "").trim().toUpperCase() === "MSX" ? "MSX" : "MSE";
+}
+
+export function fleetDivisionOf(value: { division?: string | null } | null | undefined): FleetDivision {
+  return parseFleetDivision(value?.division);
+}
+
 export type Truck = {
   id: number;
   unit_number: string;
@@ -331,6 +342,7 @@ export type Truck = {
   gps_address: string;
   gps_recorded_at: string;
   gps_source: string;
+  division: FleetDivision;
   created_at: string;
   updated_at: string;
 };
@@ -361,6 +373,7 @@ export type Trailer = {
   gps_address: string;
   gps_recorded_at: string;
   gps_source: string;
+  division: FleetDivision;
   created_at: string;
   updated_at: string;
 };
@@ -403,6 +416,7 @@ export type Driver = {
   drug_test_next: string;
   termination_date: string;
   last_trailer_id: number | null;
+  division: FleetDivision;
   created_at: string;
   updated_at: string;
 };

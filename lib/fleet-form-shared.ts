@@ -8,6 +8,8 @@ import {
   normalizeDriverKind,
   type TrailerType,
   type TruckType,
+  parseFleetDivision,
+  type FleetDivision,
 } from "./types";
 
 export function parseTruckType(value: unknown): TruckType {
@@ -41,6 +43,7 @@ export type TruckFormValues = {
   notes: string;
   active: number;
   assigned_driver_id: number | null;
+  division: FleetDivision;
   registration_issued: string;
   registration_expires: string;
   dot_inspected_on: string;
@@ -63,6 +66,7 @@ export type TrailerFormValues = {
   registration_expires: string;
   dot_inspected_on: string;
   dot_expires: string;
+  division: FleetDivision;
 };
 
 export type DriverFormValues = {
@@ -93,6 +97,7 @@ export type DriverFormValues = {
   drug_test_next: string;
   termination_date: string;
   has_app_login: boolean;
+  division: FleetDivision;
 };
 
 function num(value: unknown): number {
@@ -137,6 +142,7 @@ export function truckFormValues(truck: Record<string, unknown>): TruckFormValues
     notes: text(truck.notes),
     active: num(truck.active),
     assigned_driver_id: numOrNull(truck.assigned_driver_id),
+    division: parseFleetDivision(truck.division),
     registration_issued: text(truck.registration_issued),
     registration_expires: text(truck.registration_expires),
     dot_inspected_on: text(truck.dot_inspected_on),
@@ -161,6 +167,7 @@ export function trailerFormValues(trailer: Record<string, unknown>): TrailerForm
     registration_expires: text(trailer.registration_expires),
     dot_inspected_on: text(trailer.dot_inspected_on),
     dot_expires: text(trailer.dot_expires),
+    division: parseFleetDivision(trailer.division),
   };
 }
 
@@ -193,5 +200,6 @@ export function driverFormValues(driver: Record<string, unknown>): DriverFormVal
     drug_test_next: text(driver.drug_test_next),
     termination_date: text(driver.termination_date),
     has_app_login: num(driver.has_app_login) !== 0,
+    division: parseFleetDivision(driver.division),
   };
 }

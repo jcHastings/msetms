@@ -19,6 +19,7 @@ import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
+import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
 
 export type ConfirmationStop = {
   title: string;
@@ -76,6 +77,7 @@ export type ConfirmationModel = {
   internalLegs: string;
   reeferSetpoint: string;
   reeferMode: string;
+  locale?: DriverMessageLocale;
 };
 
 export function confirmationStatus(load: LoadView): string {
@@ -436,20 +438,37 @@ export function buildConfirmationModel(
 
 export function buildConfirmationForLoad(
   loadId: number,
-  options: { packet?: "customer" | "internal"; driverId?: number } = {},
+  options: { packet?: "customer" | "internal"; driverId?: number; locale?: DriverMessageLocale } = {},
 ): ConfirmationModel {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   const packet = options.packet === "internal" ? "internal" : "customer";
+  const locale = packet === "internal" ? parseDriverMessageLocale(options.locale) : "en";
   const model = buildConfirmationModel(load, getCompanyProfile(), { packet });
-  if (packet !== "internal") return model;
+  if (packet !== "internal") return { ...model, locale: "en" };
   const relays = listRelays(load.id);
   const yours = options.driverId ? relayForDriver(load.id, options.driverId) : null;
   const lines = [
-    yours ? `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}` : "",
+    yours
+      ? locale === "es"
+        ? `Su tramo: ${formatRelayLane(yours.pickup, yours.delivery)}`
+        : `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}`
+      : "",
     formatInternalRelayLines(relays),
   ].filter(Boolean);
-  return { ...model, internalLegs: lines.join("\n") };
+  if (locale === "es") {
+    const translateTitle = (title: string) =>
+      title.replace(/\bShipper\b/g, "Remitente").replace(/\bConsignee\b/g, "Consignatario");
+    return {
+      ...model,
+      locale,
+      internalLegs: lines.join("\n"),
+      shipper: { ...model.shipper, title: translateTitle(model.shipper.title) },
+      consignee: { ...model.consignee, title: translateTitle(model.consignee.title) },
+      stops: model.stops.map((stop) => ({ ...stop, title: translateTitle(stop.title) })),
+    };
+  }
+  return { ...model, internalLegs: lines.join("\n"), locale };
 }
 
 export async function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {
@@ -464,6 +483,10 @@ export async function renderConfirmationPdf(model: ConfirmationModel): Promise<B
   });
 }
 
+function confirmLabel(model: ConfirmationModel, english: string, spanish: string): string {
+  return model.locale === "es" && model.packet === "internal" ? spanish : english;
+}
+
 function confirmationTitle(model: ConfirmationModel, headerText: string): string {
   if (model.packet === "customer") {
     const custom = headerText.trim();
@@ -473,7 +496,9 @@ function confirmationTitle(model: ConfirmationModel, headerText: string): string
   const custom = headerText.trim();
   const stock = "Rate & Load Confirmation";
   if (custom && custom !== stock) return custom;
-  return model.style === "company_driver" ? "Load Confirmation" : stock;
+  return model.style === "company_driver"
+    ? confirmLabel(model, "Load Confirmation", "Confirmación de carga")
+    : stock;
 }
 
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
@@ -484,13 +509,13 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const bodySize = defaults.font_size || 10;
   const title = confirmationTitle(model, defaults.header_text);
   const contactRows: Array<[string, string]> = [
-    ["Dispatcher", model.company.dispatcher_name],
-    ["Phone #", model.company.dispatcher_phone],
-    ["Fax #", model.company.dispatcher_fax],
-    ["Email", model.company.dispatcher_email],
-    ["LOAD #", model.loadNumber],
-    ["Ship Date", model.shipDate],
-    ["Today's Date", model.todayDate],
+    [confirmLabel(model, "Dispatcher", "Despachador"), model.company.dispatcher_name],
+    [confirmLabel(model, "Phone #", "Teléfono"), model.company.dispatcher_phone],
+    [confirmLabel(model, "Fax #", "Fax"), model.company.dispatcher_fax],
+    [confirmLabel(model, "Email", "Correo"), model.company.dispatcher_email],
+    [confirmLabel(model, "LOAD #", "CARGA #"), model.loadNumber],
+    [confirmLabel(model, "Ship Date", "Fecha de carga"), model.shipDate],
+    [confirmLabel(model, "Today's Date", "Fecha de hoy"), model.todayDate],
   ];
 
   const logo = companyLogoPath();
@@ -547,22 +572,22 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ]);
   } else if (model.style === "owner_operator") {
     y = drawPartyRow(doc, left, y, width, [
-      ["Carrier", model.carrierName],
-      ["Phone #", model.carrierPhone],
-      ["Fax #", ""],
-      ["Equipment", model.equipment],
-      ["Agreed Amount", formatUsd(model.agreedAmount)],
-      ["Load Status", model.loadStatus],
+      [confirmLabel(model, "Carrier", "Transportista"), model.carrierName],
+      [confirmLabel(model, "Phone #", "Teléfono"), model.carrierPhone],
+      [confirmLabel(model, "Fax #", "Fax"), ""],
+      [confirmLabel(model, "Equipment", "Equipo"), model.equipment],
+      [confirmLabel(model, "Agreed Amount", "Monto acordado"), formatUsd(model.agreedAmount)],
+      [confirmLabel(model, "Load Status", "Estado"), model.loadStatus],
     ]);
   } else {
     y = drawPartyRow(doc, left, y, width, [
-      ["Driver", model.driverName],
-      ["Mobile #", model.driverPhone],
-      ["Email", model.driverEmail],
-      ["Equipment", model.equipment],
-      ["Truck #", model.truckNumber],
-      ["Trailer #", model.trailerNumber],
-      ["Load Status", model.loadStatus],
+      [confirmLabel(model, "Driver", "Conductor"), model.driverName],
+      [confirmLabel(model, "Mobile #", "Celular"), model.driverPhone],
+      [confirmLabel(model, "Email", "Correo"), model.driverEmail],
+      [confirmLabel(model, "Equipment", "Equipo"), model.equipment],
+      [confirmLabel(model, "Truck #", "Camión #"), model.truckNumber],
+      [confirmLabel(model, "Trailer #", "Remolque #"), model.trailerNumber],
+      [confirmLabel(model, "Load Status", "Estado"), model.loadStatus],
     ]);
   }
 
@@ -594,7 +619,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
   const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
   ensureSpace(12 + notesH + 6 + legsH);
-  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text("Dispatch Notes:", left, y, {
+  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
     lineBreak: false,
   });
   y += 12;
@@ -602,7 +627,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
   y += notesH + 6;
   if (model.packet === "internal" && model.internalLegs) {
-    doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text("Internal legs (not billed):", left, y, {
+    doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
       lineBreak: false,
     });
     y += 11;
@@ -661,7 +686,12 @@ function stampConfirmationFooter(
   if (footer) {
     doc.text(footer, left, 738, { width: width - 100, height: 12, lineBreak: false });
   }
-  doc.text(`Page ${page} of ${pageCount}`, left, 752, { width, align: "center", lineBreak: false });
+  doc.text(
+    model.locale === "es" ? `Página ${page} de ${pageCount}` : `Page ${page} of ${pageCount}`,
+    left,
+    752,
+    { width, align: "center", lineBreak: false },
+  );
   doc.rect(left, 28, width, 726).strokeColor("#d1d5db").lineWidth(0.4).stroke();
 }
 

@@ -10,7 +10,7 @@ import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session"
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
 import { assignedFleetAssetIds, listTrailers, persistedTrailerLocation } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
-import { labelForTrailerType } from "@/lib/types";
+import { fleetDivisionOf, labelForTrailerType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +56,7 @@ export default async function TrailersPage() {
           <thead>
             <tr>
               <th>Trailer</th>
+              <th>Division</th>
               <th>Type</th>
               <th>Truck</th>
               <th>Registration exp</th>
@@ -69,7 +70,7 @@ export default async function TrailersPage() {
           <tbody>
             {trailers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-5 py-8 text-sm text-slate-500">
+                <td colSpan={10} className="px-5 py-8 text-sm text-slate-500">
                   No trailers yet.
                 </td>
               </tr>
@@ -85,6 +86,7 @@ export default async function TrailersPage() {
                     <td>
                       <span className="font-mono font-semibold hover:underline">{trailer.unit_number}</span>
                     </td>
+                    <td>{fleetDivisionOf(trailer)}</td>
                     <td>{labelForTrailerType(trailer.type)}</td>
                     <td>{trailer.truck_unit ? `Unit ${trailer.truck_unit}` : "—"}</td>
                     <ExpiryCell
