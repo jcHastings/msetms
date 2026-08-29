@@ -166,8 +166,10 @@ export async function LoadEditor({
         canSendToAccounting={canEditLoads(role) && !load.non_revenue}
         canReturnFromAccounting={canAccessAccounting(role)}
       >
+        <LoadTabPanel when="financials">
+          {showFinancials ? <LoadMoneyBox load={load} /> : null}
+        </LoadTabPanel>
         <LoadTabPanel when="basics">
-          <LoadMoneyBox load={load} />
           {canSendSms(role) ? (
             <LoadMailPanel
               loadId={load.id}
@@ -186,7 +188,7 @@ export async function LoadEditor({
             />
           ) : null}
         </LoadTabPanel>
-        <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
+        <LoadTabPanel when={["basics", "customer", "assets", "financials"]} keepMounted>
           {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
             <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
               This load is in Accounting. Ask Accounting to send it back before changing it.

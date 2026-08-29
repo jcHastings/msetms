@@ -47,7 +47,7 @@ export function parseLoadTab(value: string | null | undefined): LoadTab {
 }
 
 export function isFormTab(tab: LoadTab): boolean {
-  return tab === "basics" || tab === "customer" || tab === "assets";
+  return tab === "basics" || tab === "customer" || tab === "assets" || tab === "financials";
 }
 
 export function isSaveTab(tab: LoadTab): boolean {
