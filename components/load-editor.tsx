@@ -16,8 +16,7 @@ import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { CopyTripNumber } from "@/components/copy-trip-number";
-import { LoadMailPanel } from "@/components/load-mail-panel";
-import { LoadMoneyBox } from "@/components/load-money-box";
+import { LoadFinancialsRate } from "@/components/load-financials-rate";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
@@ -40,15 +39,14 @@ import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
-import { canAccessAccounting, canDeleteDocuments, canEditLoads, canSendSms, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
+import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
-import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
+import { resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
 import { formatLoadSummary } from "@/lib/load-summary";
-import { formatDateTime } from "@/lib/format";
 import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
 import { relayForDriver } from "@/lib/relay-store";
@@ -176,42 +174,6 @@ export async function LoadEditor({
         canSendToAccounting={canEditLoads(role) && !load.non_revenue}
         canReturnFromAccounting={canAccessAccounting(role)}
       >
-        <LoadTabPanel when="basics">
-          <MasterLoadPanel
-            loadId={load.id}
-            loadNumber={load.load_number}
-            isChild={Boolean(load.parent_load_id)}
-            masterNumber={masterRow?.load_number ?? load.load_number}
-            family={family}
-            customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
-            stops={stops.map((stop) => ({
-              id: stop.id,
-              kind: stop.kind,
-              name: stop.name,
-              city: stop.city,
-              state: stop.state,
-            }))}
-            defaultCustomerId={load.customer_id}
-          />
-          <LoadMoneyBox load={load} />
-          {canSendSms(role) ? (
-            <LoadMailPanel
-              loadId={load.id}
-              loadNumber={load.load_number}
-              driverEmail={resolveLoadDriverEmail(load)}
-              customerEmail={resolveLoadCustomerEmail(load)}
-              driverAssigned={Boolean(load.driver_id)}
-              lastDriverSent={(() => {
-                const row = lastLoadMail(load.id, "driver_load");
-                return row ? formatDateTime(row.created_at) : "";
-              })()}
-              lastCustomerSent={(() => {
-                const row = lastLoadMail(load.id, "customer_update");
-                return row ? formatDateTime(row.created_at) : "";
-              })()}
-            />
-          ) : null}
-        </LoadTabPanel>
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
           {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
             <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -291,16 +253,11 @@ export async function LoadEditor({
                   customer split has its own rate and paperwork.
                 </p>
               ) : null}
-              <div className="mb-4">
-                <SendToAccountingControls
-                  loadId={load.id}
-                  loadNumber={load.load_number}
-                  status={load.status}
-                  desk={load.accounting_desk}
-                  canSend={canEditLoads(role) && !load.non_revenue}
-                  canReturn={canAccessAccounting(role)}
-                />
-              </div>
+              <LoadFinancialsRate
+                load={load}
+                driverType={load.driver_type}
+                defaultOoPercent={formSettings.defaultOoPercent}
+              />
               <TmsInvoicePanel
                 loadId={load.id}
                 status={load.status}

@@ -491,7 +491,7 @@ export function LoadWorkspace({
         </ActionMenu>
         ) : null}
         <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("basics", "master-load")}>
+          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("stops", "master-load")}>
             Split as master load
           </button>
           <form action={cloneLoadAction}>

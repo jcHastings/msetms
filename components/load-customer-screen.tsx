@@ -164,14 +164,7 @@ export function LoadCustomerScreen({
         <input
           id="customer_reference"
           name="customer_reference"
-          defaultValue={
-            load?.customer_reference ||
-            load?.po_number ||
-            load?.reference_number ||
-            defaults.customer_reference ||
-            defaults.reference_number ||
-            ""
-          }
+          defaultValue={load?.customer_reference || defaults.customer_reference || ""}
         />
       </div>
       </div>

@@ -81,14 +81,7 @@ export function LoadPayItems({
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
-        actions={
-          <>
-            <a className="btn btn-secondary" href={`/api/loads/${loadId}/confirmation`} target="_blank" rel="noreferrer">
-              View Customer Confirmation
-            </a>
-            <ViewInvoiceButton loadId={loadId} status={status} attachmentId={invoiceAttachmentId} />
-          </>
-        }
+        actions={<ViewInvoiceButton loadId={loadId} status={status} attachmentId={invoiceAttachmentId} />}
       />
       <PayItemGroup
         loadId={loadId}
@@ -102,27 +95,6 @@ export function LoadPayItems({
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
-        actions={
-          driverName ? (
-            <a
-              className="btn btn-secondary"
-              href={`/api/loads/${loadId}/confirmation?packet=internal`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View Carrier Confirmation
-            </a>
-          ) : (
-            <span
-              className="btn btn-secondary pointer-events-none cursor-not-allowed"
-              aria-disabled="true"
-              title="Assign a driver first"
-              data-carrier-confirmation-off=""
-            >
-              View Carrier Confirmation
-            </span>
-          )
-        }
       />
     </section>
   );
