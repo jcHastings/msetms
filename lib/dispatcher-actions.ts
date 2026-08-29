@@ -625,7 +625,11 @@ export async function sendToAccountingAction(formData: FormData): Promise<Action
       if (!loadId) throw new Error("Load is missing.");
       const { sendLoadToAccounting } = await import("./accounting-desk");
       const load = sendLoadToAccounting(loadId);
-      refresh();
+      revalidatePath(`/loads/${load.id}`);
+      revalidatePath("/board");
+      revalidatePath("/search");
+      revalidatePath("/accounting/invoices");
+      revalidatePath("/");
       return {
         ok: true,
         id: load.id,

@@ -1,13 +1,28 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { closeLoadOverlay } from "@/components/page-overlay-host";
+import { useDismissable } from "@/components/use-dismissable";
 import {
   returnLoadToOperationsAction,
   sendToAccountingAction,
 } from "@/lib/dispatcher-actions";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
+import { safeReturnTo } from "@/lib/load-page-shared";
 import { isBillableStatus } from "@/lib/types";
+
+function returnAfterAccounting(): void {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("embed") === "1" && window.parent !== window) {
+    window.parent.postMessage({ type: "ms-close-load" }, window.location.origin);
+    return;
+  }
+  if (params.has("open")) {
+    closeLoadOverlay(safeReturnTo(params.get("from"), "/board"));
+  }
+}
 
 export function SendToAccountingControls({
   loadId,
@@ -30,8 +45,15 @@ export function SendToAccountingControls({
   const archived = desk === "archived";
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDismissable(open, () => setOpen(false), panelRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function send() {
     setPending(true);
@@ -45,6 +67,7 @@ export function SendToAccountingControls({
       return;
     }
     setOpen(false);
+    returnAfterAccounting();
     router.refresh();
   }
 
@@ -97,6 +120,35 @@ export function SendToAccountingControls({
 
   if (!canSend || !isBillableStatus(status)) return null;
 
+  const confirm = (
+    <div
+      className="fixed inset-0 z-[80] overflow-y-auto bg-slate-900/40 p-4 sm:flex sm:items-center sm:justify-center"
+      data-accounting-send-overlay=""
+    >
+      <div ref={panelRef} className="card mx-auto my-3 w-full max-w-md p-5 shadow-xl sm:my-0">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-900">Send to Accounting Management</h2>
+          <button className="btn btn-secondary" type="button" data-accounting-send-close="" onClick={() => setOpen(false)} disabled={pending}>
+            Close
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-slate-600">
+          This load is ready for invoicing and billing. It will leave Active loads and appear in
+          Accounting Management.
+        </p>
+        {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)} disabled={pending}>
+            Cancel
+          </button>
+          <button className="btn btn-primary bg-slate-900" type="button" onClick={() => void send()} disabled={pending}>
+            {pending ? "Sending…" : `Yes, Send Load #${loadNumber} to Accounting`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       {variant === "menu" ? (
@@ -108,26 +160,7 @@ export function SendToAccountingControls({
           Send to Accounting Management
         </button>
       )}
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-            <h2 className="text-base font-semibold text-slate-900">Send to Accounting Management</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              This load is ready for invoicing and billing. It will leave Active loads and appear in
-              Accounting Management.
-            </p>
-            {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)} disabled={pending}>
-                Cancel
-              </button>
-              <button className="btn btn-primary bg-slate-900" type="button" onClick={send} disabled={pending}>
-                {pending ? "Sending…" : `Yes, Send Load #${loadNumber} to Accounting`}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {open && mounted ? createPortal(confirm, document.body) : null}
     </div>
   );
 }

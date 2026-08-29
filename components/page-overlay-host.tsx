@@ -76,14 +76,34 @@ export function PageOverlayHost({
     <>
       {children}
       {frameId ? (
-        <div className="load-overlay-backdrop" role="dialog" aria-label="Edit load">
+        <div className="load-overlay-backdrop" role="dialog" aria-label="Edit load" data-load-overlay="">
           <div className="load-overlay-panel overflow-hidden p-0">
+            <div className="flex justify-end border-b border-slate-200 bg-white px-3 py-2">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                data-overlay-close=""
+                onClick={() => closeLoadOverlay(returnTo)}
+              >
+                Close
+              </button>
+            </div>
             {loaded ? null : <p className="px-5 py-6 text-sm text-slate-700">Opening…</p>}
             <iframe
               title="Edit load"
               src={src}
               className={`min-h-[80vh] w-full border-0 ${loaded ? "" : "sr-only"}`}
-              onLoad={() => setLoaded(true)}
+              onLoad={(event) => {
+                setLoaded(true);
+                try {
+                  const path = event.currentTarget.contentWindow?.location.pathname ?? "";
+                  if (path && path !== `/loads/${frameId}`) {
+                    closeLoadOverlay(returnTo);
+                  }
+                } catch {
+                  /* same-origin load pages only */
+                }
+              }}
             />
           </div>
         </div>

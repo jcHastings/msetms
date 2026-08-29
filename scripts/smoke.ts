@@ -288,7 +288,22 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/send-to-accounting.tsx"), "utf8"), /Send to Accounting Management/);
+  const sendBooksUi = fs.readFileSync(path.join(process.cwd(), "components/send-to-accounting.tsx"), "utf8");
+  assert.match(sendBooksUi, /Send to Accounting Management/);
+  assert.match(sendBooksUi, /createPortal/);
+  assert.match(sendBooksUi, /data-accounting-send-overlay/);
+  assert.match(sendBooksUi, /data-accounting-send-close/);
+  assert.match(sendBooksUi, /ms-close-load/);
+  assert.match(sendBooksUi, /returnAfterAccounting/);
+  assert.doesNotMatch(sendBooksUi, /router\.push\("\/"\)/);
+  assert.doesNotMatch(sendBooksUi, /href="\/"(?:\s|>)/);
+  const sendActionSource = fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8");
+  const sendActionChunk = sendActionSource.slice(
+    sendActionSource.indexOf("export async function sendToAccountingAction"),
+    sendActionSource.indexOf("export async function returnLoadToOperationsAction"),
+  );
+  assert.match(sendActionChunk, /revalidatePath\(`\/loads\/\$\{load\.id\}`\)/);
+  assert.doesNotMatch(sendActionChunk, /refresh\(\)|revalidatePath\("\/", "layout"\)/);
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
@@ -749,7 +764,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /PageOverlayHost/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /Opening/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /requestLoadOverlay/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /ms-open-load/);
+  const overlayHost = fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8");
+  assert.match(overlayHost, /ms-open-load/);
+  assert.match(overlayHost, /data-overlay-close/);
+  assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
+  assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
