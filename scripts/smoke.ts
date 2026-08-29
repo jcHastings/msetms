@@ -798,6 +798,7 @@ async function main() {
   assert.match(overlayHost, /data-overlay-close/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
+  assert.match(overlayHost, /!path\.startsWith\("\/api\/"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
@@ -1458,6 +1459,7 @@ async function main() {
   assert.match(bolFormSource, /data-ignore-dirty/);
   assert.match(bolFormSource, /data-bol-print-view/);
   assert.match(bolFormSource, /target="_blank"/);
+  assert.match(bolFormSource, /openPdfInNewTab/);
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [

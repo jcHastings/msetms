@@ -106,7 +106,7 @@ export function PageOverlayHost({
                 setLoaded(true);
                 try {
                   const path = event.currentTarget.contentWindow?.location.pathname ?? "";
-                  if (path && path !== `/loads/${frameId}`) {
+                  if (path && path !== `/loads/${frameId}` && !path.startsWith("/api/")) {
                     closeLoadOverlay(returnTo);
                   }
                 } catch {

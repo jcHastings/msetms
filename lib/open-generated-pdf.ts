@@ -1,5 +1,10 @@
 /** Client-safe helpers for opening a generated PDF in Chrome on Windows. */
 
+export function openPdfInNewTab(href: string, event?: { preventDefault(): void }): void {
+  event?.preventDefault();
+  window.open(href, "_blank", "noopener,noreferrer");
+}
+
 export function filenameFromContentDisposition(header: string | null, fallback: string): string {
   const quoted = header?.match(/filename="([^"]+)"/i);
   if (quoted?.[1]) return quoted[1];

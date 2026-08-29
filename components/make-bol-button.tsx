@@ -21,6 +21,7 @@ import {
   splitBolSeals,
 } from "@/lib/bol-shared";
 import { formatDateTime } from "@/lib/format";
+import { openPdfInNewTab } from "@/lib/open-generated-pdf";
 import { labelForUploader, type Attachment } from "@/lib/types";
 
 export function MakeBolPanel({
@@ -404,7 +405,11 @@ export function MakeBolPanel({
           {bols.map((file) => (
             <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div>
-                <a href={`/api/attachments/${file.id}`} className="font-medium hover:underline">
+                <a
+                  href={`/api/attachments/${file.id}`}
+                  className="font-medium hover:underline"
+                  onClick={(event) => openPdfInNewTab(`/api/attachments/${file.id}`, event)}
+                >
                   {file.original_name}
                 </a>
                 <div className="text-xs text-slate-500">
@@ -418,6 +423,7 @@ export function MakeBolPanel({
                   target="_blank"
                   rel="noreferrer"
                   data-bol-print-view=""
+                  onClick={(event) => openPdfInNewTab(`/api/attachments/${file.id}`, event)}
                 >
                   Print / view
                 </a>
