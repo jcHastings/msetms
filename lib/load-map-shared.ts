@@ -1,0 +1,85 @@
+/** Client-safe load map types. No env, db, or API keys. */
+
+export type LoadMapPointKind = "pickup" | "delivery" | "truck" | "trailer" | "track";
+
+/** Existing map pin fills. Samsara trucks keep navy. */
+export const LOAD_MAP_MARKER_COLOR: Record<LoadMapPointKind, string> = {
+  pickup: "#166534",
+  delivery: "#be123c",
+  truck: "#0b1f3a",
+  trailer: "#d97706",
+  track: "#64748b",
+};
+
+export const SAMSARA_TRUCK_PIN_COLOR = LOAD_MAP_MARKER_COLOR.truck;
+
+export const LOAD_MAP_PIN_SIZE = 28;
+
+export type LoadMapLabelOrigin = { x: number; y: number };
+
+export type LoadMapPoint = {
+  id: string;
+  kind: LoadMapPointKind;
+  label: string;
+  lat: number;
+  lng: number;
+  detail?: string;
+  href?: string;
+  pinColor?: string;
+  markerText?: string;
+  labelClassName?: string;
+  labelOrigin?: LoadMapLabelOrigin;
+  pinShape?: "circle" | "arrow";
+  headingDeg?: number | null;
+};
+
+export type LoadTrackingEvent = {
+  id: string;
+  at: string;
+  who: string;
+  note: string;
+  gps?: string;
+  source: "check_call" | "samsara" | "orbcomm" | "status" | "sms";
+};
+
+export type LoadMapPathPoint = { lat: number; lng: number };
+
+export function stopsRoutePoints(points: LoadMapPoint[]): LoadMapPoint[] {
+  return points.filter((point) => point.kind === "pickup" || point.kind === "delivery" || point.kind === "truck");
+}
+
+export function loadMapPinFill(point: Pick<LoadMapPoint, "kind" | "pinColor">): string {
+  const raw = String(point.pinColor || LOAD_MAP_MARKER_COLOR[point.kind] || "").trim();
+  return /^#[0-9A-Fa-f]{3,8}$/.test(raw) ? raw : LOAD_MAP_MARKER_COLOR[point.kind];
+}
+
+export function loadMapPinSvg(point: Pick<LoadMapPoint, "kind" | "pinColor" | "pinShape" | "headingDeg">): string {
+  const fill = loadMapPinFill(point);
+  if (point.pinShape === "arrow") {
+    const rotation = Number(point.headingDeg);
+    const deg = Number.isFinite(rotation) ? rotation : 0;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_SIZE}" height="${LOAD_MAP_PIN_SIZE}" viewBox="0 0 ${LOAD_MAP_PIN_SIZE} ${LOAD_MAP_PIN_SIZE}"><g transform="rotate(${deg} 14 14)"><path d="M14 4 L22 24 L14 19 L6 24 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></g></svg>`;
+  }
+  const radius = point.kind === "track" ? 5 : 9;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_SIZE}" height="${LOAD_MAP_PIN_SIZE}" viewBox="0 0 ${LOAD_MAP_PIN_SIZE} ${LOAD_MAP_PIN_SIZE}"><circle cx="14" cy="14" r="${radius}" fill="${fill}" stroke="#ffffff" stroke-width="2"/></svg>`;
+}
+
+export function loadMapPinIconUrl(point: Pick<LoadMapPoint, "kind" | "pinColor" | "pinShape" | "headingDeg">): string {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(loadMapPinSvg(point))}`;
+}
+
+export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
+  return points
+    .filter((point) => point.kind === "pickup" || point.kind === "delivery")
+    .map((point) => ({ lat: point.lat, lng: point.lng }));
+}
+
+export function stopAddressLine(stop: {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}): string {
+  const cityState = [stop.city?.trim(), stop.state?.trim()].filter(Boolean).join(", ");
+  return [stop.street?.trim(), [cityState, stop.zip?.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}

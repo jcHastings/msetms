@@ -50,6 +50,19 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
             placeholder="Terms, invoice email, special billing instructions"
           />
         </div>
+        <div className="field">
+          <label htmlFor="payment_terms">Payment terms</label>
+          <input
+            id="payment_terms"
+            name="payment_terms"
+            defaultValue={customer?.payment_terms}
+            placeholder="Net 30"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="credit_hold" value="1" defaultChecked={Boolean(customer?.credit_hold)} />
+          Credit hold
+        </label>
       </div>
       <div>
         <div className="mb-3 flex items-center justify-between">

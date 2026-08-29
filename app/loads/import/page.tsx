@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
-import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { loadFormSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,6 @@ export default function ImportRateConPage() {
     <>
       <PageHeader
         title="Load from rate confirmation"
-        subtitle="Upload the customer rate con, review the extracted fields, then save and assign a driver."
         actions={
           <Link href="/loads/new" className="btn btn-secondary">
             Type a load instead
@@ -21,7 +21,9 @@ export default function ImportRateConPage() {
         customers={listCustomers()}
         trucks={listTrucks()}
         trailers={listTrailers()}
+        locations={listLocations()}
         drivers={listDrivers()}
+        formSettings={loadFormSettings()}
       />
     </>
   );

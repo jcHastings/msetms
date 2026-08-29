@@ -1,11 +1,11 @@
-# MSE TMS
+# MS Express TMS
 
 A local Transportation Management System for a small trucking company. Two interfaces:
 
 - **Dispatcher** (desktop) — book or import a load, assign truck + trailer + driver, change the unit later, watch tractor GPS / HOS and trailer / reefer status.
 - **Driver** (phone-width web app) — PIN login, see only their dispatch, update status, upload BOL/POD/photos.
 
-Single-tenant, no dispatcher login. Data lives in SQLite and files on disk, and survives refresh.
+Single-tenant. Dispatcher PIN login (demo: **MS Test / 4020** manager; **Jordan Lee / 4410** dispatcher; **Riley Parks / 5500** read-only). Optional authenticator 2-step after PIN once a user enrolls in **Settings → 2-step verification**. Driver PIN login is unchanged. Data lives in SQLite and files on disk, and survives refresh.
 
 ## Quick start
 
@@ -13,7 +13,7 @@ Install **Node.js 22.13+ or 24** from [nodejs.org](https://nodejs.org). That is 
 
 On **Windows 11**, install the Node LTS (or Current 24) installer only. Leave **Tools for Native Modules** / Python / Visual Studio Build Tools **unchecked**. Persistence uses Node’s built-in SQLite (`node:sqlite`), so `npm install` does not compile C++ and does not need Python.
 
-`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` junctions or copies `data` and `.env` into `.next/standalone` (Windows `symlink` hits `EPERM` without those).
+`node:sqlite` needs **Node 22.13+ or 24**. If `node -v` shows **20.x** but you already installed 24 under `C:\Program Files\nodejs`, PATH is using the old Node. `npm start` prefers the Node that launched it (`process.execPath`) and will try Program Files if PATH is too old. You do **not** need Developer Mode or Administrator: `npm start` **copies** (or `mkdir`s) `data`, copies `.env`, and **copies** `public` plus `.next/static` into `.next/standalone`. It never creates a Windows symlink or junction (`EPERM` without Developer Mode).
 
 ```bash
 npm install
@@ -21,7 +21,7 @@ npm run build
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for dispatch. Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
+Open [http://localhost:3000](http://localhost:3000) for dispatch (sign in as MS Test / 4020). Driver app: [http://localhost:3000/driver/login](http://localhost:3000/driver/login).
 
 Do **not** use `npm install --ignore-scripts` to “skip compile.” This repo has nothing that must be compiled. Ignoring scripts can leave `next` incomplete, so `npm run build` / `npm start` fail with a missing `next` command. A normal `npm install` is required.
 
@@ -49,33 +49,45 @@ The first start creates `data/tms.db` and seeds a Midwest/South fleet.
 | Command | What it does |
 | --- | --- |
 | `npm install` | Install JavaScript dependencies (no native compile) |
-| `npm run build` | Production build (writes `.next/standalone`) |
-| `npm start` | Run the standalone server and keep it listening |
+| `npm run build` | Production build, then **copies** `public` and `.next/static` into `.next/standalone` (no symlink) so styles load |
+| `npm start` | **The start command** — load repo-root `.env` / `.env.local`, recopy web assets, then run `node .next/standalone/server.js` |
 | `docker compose up --build` | Build the Node 22 image and serve port 3000 |
 | `npm run dev` | Webpack dev server (keep-alive wrapper) |
 | `npm test` | Workflow smoke test |
-| `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` |
+| `npm run sample-rate-con` | Regenerate `public/samples/sample-rate-con.pdf` and the Ascend-style sample |
 | `npm run sample-confirmations` | Regenerate layout-reference load confirmation PDFs |
 
-Requires **Node.js 22.13+ or 24** (`node:sqlite`). `npm start` runs `node .next/standalone/server.js` through `scripts/start-standalone.mjs` using `process.execPath` (not a different `node` from PATH). Next 16 documents that `next start` does not work with `output: 'standalone'`.
+Requires **Node.js 22.13+ or 24** (`node:sqlite`). **JC should start production with `npm start`** from the repo root (the folder that has `package.json` and `.env`). That script loads `.env` and `.env.local` from that same folder (so `SAMSARA_API_TOKEN` is applied), recopies `public` and `.next/static` into `.next/standalone` (Windows: **copy**, never symlink), then runs `node .next/standalone/server.js` using `process.execPath` (not a different `node` from PATH). It never prints secret values.
+
+**After `npm run build`, styles must load on standalone.** Next does not put `public` or `.next/static` inside `.next/standalone`. The build script copies both folders in (no symlink). Then `npm start` **or** `node .next/standalone/server.js` must show the styled UI. If those folders are missing, the page is unstyled raw HTML (default blue links). Prefer `npm start` — it copies the assets again and loads `.env`.
+
+Windows standalone does not need `next start`. Mike and Samsara reread `OPENAI_API_KEY` / `SAMSARA_API_TOKEN` at request time from `process.cwd()/.env`, the project-root `.env`, and `.next/standalone/.env` (trimmed, never logged). `sk-` keys count as set. Copying `.env` next to `server.js` is enough when you run that file directly.
+
+Do **not** run `next start` or `npx next start`. This app uses `output: "standalone"`. Next 16 will print that standalone is configured and dotenv 17 can report `injected env (0) from .env` even when the real project `.env` exists — because `next start` does not load env from the repo root the way the standalone server needs. `npm run start:next` is redirected to the same `npm start` wrapper.
 
 Next 16 on Linux can print Ready and then exit 0 (webpack and Turbopack) when stdin is closed, the session sends SIGHUP, or a log pipe hits EPIPE. This repo forces webpack for `npm run dev` and loads `scripts/next-keep-alive.cjs` so the process stays up.
 
 ## Dispatcher
 
-- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Click a row to open the load. Seeded demo data keeps the list from being empty.
-- Dashboard counts, dispatch board with status / pickup-date filters
+- **Exception inbox** on the dispatch home: *N loads fine / M need attention*, ranked CRITICAL → LOW (reefer vs setpoint, late vs window, missing POD, compliance, unassigned). Ack / snooze / resolve. Seeded demo data keeps the list from being empty.
+- Dashboard counts, shift handoff, watch list, daily recap, dispatch board with status / pickup-date filters. **Mike** is a **Mike** button on every dispatcher page (header and bottom-right), not the driver app. The panel always opens. If `OPENAI_API_KEY` is set, chat works; if not, Mike says add the key to `.env` and restart. Uses cheap `gpt-4o-mini`. Answers from TMS data only. Closest-to-city uses live or last persisted Samsara GPS; trucks with no ping are skipped and counted. Coordinates are never invented. The key is never logged.
+- **Locations** — shippers and receivers (address, phone, role, appointment vs FCFS, hours, scheduling notes). Pick a shipper/consignee on a load, or still type a one-off. Scheduling notes show on the load and on driver dispatch. Address search uses Google Places when `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY` is in `.env` (server-side; fields stay manual if the key is missing).
+- **Search** — Ascend-style search criteria: terms, origin/dest state, first-pickup date range (This week / This month), customer / driver / truck / trailer / status, plus live (default) / archived / cancelled. Results open the load. Save named reports (filters + visible columns) and reopen them from the dropdown.
+- **Accounting** — AR invoices, AP bills, OO driver pay, 3% commissions worksheet, QuickBooks (stub / live when tokens set)
+- **Settings** — hub for company contact/logo, insurance, dropdown lists, currency/units, tax, alert windows, routing notes, OO pay defaults, document header/footer/terms, load number prefix, sample-data toggle, dispatcher users/roles, 2-step verification, and integration status. Dispatcher login required. Saves to SQLite.
+- Richer load statuses, multi-stop, clone, templates, document checklist, claims
 - Create a load by hand, or **Load from rate confirmation**
 - Assign or **change** truck and driver after a load is sent; the old driver loses it, the new driver sees it
 - Special instructions, appointment notes, rate, and refs travel to the driver screen
 - Documents and driver photos appear on the load
-- Fleet document uploads on driver / truck / trailer (CDL, medical card, registration, DOT, insurance) stored under `data/uploads/fleet`; the load page opens the assigned unit’s files in one click
-- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set; otherwise labeled demo)
-- Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report)
+- **Drivers**, **Trucks**, and **Trailers** in the dispatcher nav — add/edit records, row ⋯ menu (Edit / Update / Delete / Inactive), compliance badges, document uploads (CDL, medical card, registration, DOT, insurance) under `data/uploads/fleet`. Driver PINs can be reset and are never shown in the list. Delete is blocked while assigned to an open load (unassign first or mark Inactive). Administrator and Standard can delete; Accounting cannot.
+- Tractor GPS and driver HOS from **Samsara** (live when `SAMSARA_API_TOKEN` is set). Shown on **Trucks** (list + detail), the dispatch board, dashboard **On the road**, and the load **Carrier / Asset** tab when that truck is assigned. **Import from Samsara** fetches every vehicle, previews each pairing, and writes only after Confirm. Any unit, name, or id is matched the same way: VIN (if the unit number agrees), unit number (digits only), license plate; stored Samsara id is last and cannot keep a swapped pair. No match creates a new truck. Pairing is never by list index. Last GPS (lat/lng + city) is stored on the truck and passed to Mike for closest-to-city answers. Missing ID: “No Samsara ID on this truck — Import from Samsara or paste the vehicle id.” Positions are never invented. Missing token: add `SAMSARA_API_TOKEN` to `.env` and restart. The token is never logged.
+- **Load map** (Load Actions → Load map): this load only — pickup/delivery stops, assigned Samsara tractor GPS, stored tracking pins, and ORBCOMM trailer GPS when lat/lng already exists. Uses Maps JavaScript API via `GOOGLE_MAPS_API_KEY` (enable Maps JavaScript API, Places, Geocoding, and Directions on the key). The map hides if the key or points are missing; addresses still save by hand. Coordinates are never invented. Not a fleet map. Official IFTA stays Samsara.
+- Trailer location (if available) and reefer status from **ORBCOMM** (temp, setpoint, return/supply air, alarms, last report). **Trailers → Import from Orbcomm** uses `ORBCOMM_*` when the B2B API returns assets, or a CSV/export preview-then-import. Match by ORBCOMM asset id or trailer #. No portal scrape.
 - Driver license (number, state, expiration) and medical card (issued / expires) on each driver record
 - Assign-time compliance alerts: license/med card (30 days), truck/trailer registration (60 days), DOT inspection (30 days). Expired documents require an explicit confirm. Both registration and DOT can warn on the same assign. Seed: Denise (license inside 30 days), Tyrell (expired medical), truck 210 and trailer TR-8801 (registration inside 60 days), truck 108 (DOT inside 30 days).
 - Company driver vs owner-operator: default pay % on the driver; load stores rate, OO %, and computed pay (hidden / N/A for company drivers). Fleet driver list filters by type.
-- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Dispatcher and driver can download it, including a load the dispatcher just created (a leftover driver-app sign-in does not 404 the file). Company header is editable on Settings.
+- **Load confirmation PDF** from a live load (owner-operator vs company-driver template). Title is page-centered on its own line; logo left; dispatcher/load card on the right below the title so email stays on one line. Dispatcher and driver can download it, including a load the dispatcher just created (a leftover driver-app sign-in does not 404 the file). Company header is editable on Settings.
 - **Send to QuickBooks** on a delivered load: invoice the customer for the load rate (not owner-operator pay). Without credentials, a labeled demo invoice can be recorded locally.
 - **IFTA mileage** on in-transit and delivered loads: miles by US state / Canadian province, totals, vehicle id, and a downloadable CSV on the load documents. **Refresh IFTA from Samsara** pulls live reports when a token is set; otherwise a labeled demo breakdown is built from origin / destination.
 
@@ -103,14 +115,14 @@ Uploads (BOL, POD, lumper, trailer/product/seal photos, camera PDFs) are stored 
 3. Review/edit every extracted field. A partial parse is expected.
 4. Save. The original file is attached to the load as a rate confirmation.
 
-A labeled ingest sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer).
+A labeled ingest sample lives at [`public/samples/sample-rate-con.pdf`](public/samples/sample-rate-con.pdf) (Delta Cold Storage, Atlanta → Jacksonville, special instructions, 0°F reefer). Ascend **LOAD CONFIRMATION** packets (Load #, Stops, Pay Items) also parse. The file stays attached even if some fields are blank. Weight never comes from the filename.
 
 Layout references for the outbound confirmation (not used as live data):
 
 - [`public/samples/sample-load-confirmation-oo.pdf`](public/samples/sample-load-confirmation-oo.pdf) — owner-operator style
 - [`public/samples/sample-load-confirmation-company.pdf`](public/samples/sample-load-confirmation-company.pdf) — company driver style
 
-Live confirmations are generated from the load record. Company name / dispatcher / phone / email are set on **Settings**.
+Live confirmations are generated from the load record. Company name / dispatcher / phone / email / address / logo are set on **Settings → Company contact**.
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
@@ -122,13 +134,14 @@ Both integrations are required. They do not share data:
 | --- | --- | --- | --- |
 | **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
-| **QuickBooks Online** | Invoice the customer for a delivered load (customer rate) | Owner-operator settlement / bills | `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`, `QUICKBOOKS_REALM_ID`, optional `QUICKBOOKS_ENVIRONMENT` |
+| **QuickBooks Online** | Invoice the customer for a delivered load (rate + lumper) | Owner-operator settlement / bills / relays | `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, optional `QBO_SANDBOX=true` |
+| **Google Maps** | Places autocomplete, Directions miles, and the per-load map (Maps JavaScript API) | Scraping maps.google.com; a fleet map of every truck | `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY`. Enable Places, Geocoding, Directions, and Maps JavaScript API. If the key is used in the browser for the load map, restrict it by HTTP referrer. |
 
 Copy `.env.example` to `.env` (or `.env.local`), fill only what you have, and restart. `.env` files are gitignored. Credentials are never committed, logged, stored in SQLite, or shown in the UI.
 
 **Integrations** has separate cards. Connected vs demo is independent: one integration can be live while another is demo.
 
-Map IDs on **Fleet**: truck → Samsara vehicle ID, driver → Samsara driver ID, trailer → ORBCOMM asset ID. The board and load page show Samsara tractor/HOS and ORBCOMM trailer/reefer when those IDs are mapped.
+Map IDs on **Fleet**: truck → Samsara vehicle ID (or import / match by unit #), driver → Samsara driver ID, trailer → ORBCOMM asset ID. Truck list, truck detail, the board, On the road, and the load Carrier/Asset tab show live Samsara tractor/HOS when matched. ORBCOMM trailer/reefer stays on the board and load page.
 
 The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (ORBCOMM) when available.
 
@@ -136,9 +149,9 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 
 1. Paste the token after `SAMSARA_API_TOKEN=`.
 2. Restart.
-3. On **Fleet**, set the Samsara vehicle ID on the truck and the Samsara driver ID on the driver.
+3. On **Fleet → Trucks**, use **Import from Samsara** (preview, then confirm) or set the Samsara vehicle ID by hand. Set the Samsara driver ID on the driver.
 
-When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time.
+When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles` for truck import, plus `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time. The token is never logged.
 
 In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
 
@@ -149,7 +162,7 @@ No token: labeled **demo** by-state miles from the load’s origin and destinati
 
 Token set and IFTA returns 401/403 or another API error: the load page shows the error. The app does **not** invent live Samsara miles.
 
-No token, or 401/403 on GPS/HOS: labeled **demo** GPS/HOS, plus a clear error on Integrations / the board. The app does not crash.
+No token: Integrations can still show a labeled demo sample. Live truck/board/load GPS is not invented. 401/403 on GPS/HOS: error on Integrations / the board, empty live positions (never demo coordinates). The app does not crash.
 
 ### ORBCOMM — trailer tracking and reefer
 
@@ -158,7 +171,7 @@ Source of record today: [Reefer Status Report](https://platform.orbcomm.com/#/po
 1. Ask ORBCOMM for Transportation Platform (B2B) username/password (and account id if they give one).
 2. Set `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE`.
 3. Restart.
-4. On **Fleet → Trailers**, set the ORBCOMM asset ID.
+4. On **Fleet → Trailers**, use **Import from Orbcomm** (API list when available, or CSV/export preview then import) or set the ORBCOMM asset ID by hand. Match by asset id or trailer #. Do not scrape the portal.
 
 When credentials are present the app requests `POST https://platform.orbcomm.com/SynB2BGatewayService/api/generateToken` and, if your account exposes it, an asset-status snapshot. There is **no scrape** of the logged-in portal.
 
@@ -182,39 +195,30 @@ When ORBCOMM enables Transportation Platform B2B access, put the username/passwo
 
 ### QuickBooks Online — invoice delivered loads
 
-This app does **not** run an in-app OAuth dance and does not ship secrets. You create a QBO app, finish OAuth in Intuit’s tools, and paste the resulting values into gitignored `.env`.
+QuickBooks **Online** only (not Desktop). Secrets stay in gitignored `.env`. **Settings → QuickBooks** runs Connect OAuth and stores the realm + refresh token on the server (`data/qbo-refresh.json`), never in the browser.
 
-1. Create an Intuit developer account at [developer.intuit.com](https://developer.intuit.com).
-2. Create an app. Enable **QuickBooks Online** with the accounting scope (`com.intuit.quickbooks.accounting`).
-3. Use **Development** keys for the Intuit sandbox (a sandbox company is created with the app). Production keys are a separate step later.
-4. Add the OAuth 2.0 Playground redirect URI Intuit shows for your app (typically under the app’s Keys tab).
-5. Open the [OAuth 2.0 Playground](https://developer.intuit.com/app/developer/playground), select your app, authorize the sandbox company, and exchange the code for tokens.
-6. Copy **Client ID**, **Client Secret**, **refresh token**, and **realm id** (company id). Access tokens expire in about an hour; the refresh token is what this app stores.
-7. Copy `.env.example` to `.env` and fill only those placeholders:
+1. Create an Intuit developer app at [developer.intuit.com](https://developer.intuit.com) with the accounting scope.
+2. Add redirect URI `http://localhost:3000/api/integrations/quickbooks/callback` (or your `QBO_REDIRECT_URI`).
+3. Copy `.env.example` to `.env` and set:
 
 ```
-QUICKBOOKS_CLIENT_ID=
-QUICKBOOKS_CLIENT_SECRET=
-QUICKBOOKS_REFRESH_TOKEN=
-QUICKBOOKS_REALM_ID=
-QUICKBOOKS_ENVIRONMENT=sandbox
+QBO_CLIENT_ID=
+QBO_CLIENT_SECRET=
+QBO_REDIRECT_URI=http://localhost:3000/api/integrations/quickbooks/callback
+QBO_SANDBOX=true
 ```
 
-8. Restart the app. **Integrations** shows Connected vs Demo independently of Samsara/ORBCOMM.
+4. Restart. Open **Settings → QuickBooks** and click **Connect QuickBooks**. If those keys are missing, the page shows setup steps and does not crash.
+5. **Accounting → QuickBooks** lists ready/sent invoices and any **Needs QBO customer** rows.
 
-When credentials are present, **Send to QuickBooks** on a delivered load:
+When connected, **Send to QuickBooks** on a delivered load:
 
-- Finds or creates a QBO customer by display name
-- Creates an invoice: customer, load #, PU → DEL, amount = load customer rate, date = delivery date, memo with refs / special instructions
-- Marks the load with the QBO invoice id and timestamp
+- Maps the TMS customer by DisplayName / CompanyName, or creates one. If that fails, the customer is queued as **Needs QBO customer** and the load is not marked sent.
+- Creates one invoice: customer, load #, PU → DEL, line haul = customer rate, plus lumper if recorded. Date = delivery date.
+- Relays and owner-operator / driver pay are **not** on the invoice.
+- Idempotent: a second send is blocked until you confirm. The QBO doc number is stored on the load.
 
-Owner-operator pay is **not** invoiced and is **not** a QBO bill. The invoice is always customer billing. A note is added on OO loads.
-
-Intuit rotates refresh tokens. The latest refresh token is written to gitignored `data/qbo-refresh.json` (never committed or shown). If refresh or invoice create returns 401/403, the UI shows the error and the load is **not** marked sent.
-
-No credentials: the same screen shows a labeled **demo** invoice preview. **Record demo invoice** stores a local `demo-…` invoice id so you can test the UI. A second send is blocked until you confirm.
-
-To use a live QuickBooks company later: create production keys, re-authorize against that company, set `QUICKBOOKS_ENVIRONMENT=production`, and paste the new refresh token + realm id.
+No app keys: labeled **demo** invoice you can record locally. 401/403 leaves the load unsent and asks you to re-connect in Settings.
 
 ## Data
 

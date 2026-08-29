@@ -1,59 +1,43 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
-import { ComplianceList } from "@/components/compliance-badge";
+import { startTransition, useActionState, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
-import {
-  collectAssignmentAlerts,
-  complianceShortLabel,
-  driverComplianceAlerts,
-  trailerComplianceAlerts,
-  truckComplianceAlerts,
-} from "@/lib/compliance";
-import { formatMoney, toInputDateTime } from "@/lib/format";
-import { computeOwnerOperatorPay } from "@/lib/settlement";
-import {
-  LOAD_STATUSES,
-  labelForLoadStatus,
-  type ActionResult,
-  type Customer,
-  type DriverWithTruck,
-  type Load,
-  type Trailer,
-  type Truck,
-} from "@/lib/types";
+import { LoadBasicsScreen, type LoadFormDefaults } from "@/components/load-basics-screen";
+import { LoadCarrierScreen } from "@/components/load-carrier-screen";
+import { LoadCustomerScreen } from "@/components/load-customer-screen";
+import { LoadLaneFields } from "@/components/load-lane-fields";
+import { useLoadEdit } from "@/components/load-edit-context";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
+import { isOwnerOperator, type ActionResult, type Customer, type DriverWithTruck, type Load, type Location, type Trailer, type Truck } from "@/lib/types";
 
-type Defaults = Partial<{
-  customer_id: number | null;
-  customer_name: string;
-  origin: string;
-  destination: string;
-  pickup_start: string;
-  pickup_end: string;
-  delivery_start: string;
-  delivery_end: string;
-  commodity: string;
-  weight: number | null;
-  rate: number | null;
-  notes: string;
-  special_instructions: string;
-  appointment_notes: string;
-  reference_number: string;
-  po_number: string;
-  reefer_setpoint_f: number | null;
-  trailer_number: string;
-}>;
+export type LoadFormScreen = "basics" | "customer" | "assets" | "all";
 
 type Props = {
   customers: Customer[];
   trucks: Truck[];
   trailers?: Trailer[];
   drivers: DriverWithTruck[];
+  locations?: Location[];
   load?: Load;
-  defaults?: Defaults;
+  defaults?: LoadFormDefaults;
   inboxId?: string;
+  commodities?: string[];
+  extraStatuses?: Array<{ value: string; label: string }>;
+  defaultOoPercent?: number;
+  weightUnit?: string;
+  currency?: string;
+  targetMarginPercent?: number;
+  placesEnabled?: boolean;
+  alertWindows?: ComplianceWindows;
+  equipmentChoices?: Array<{ value: string; label: string }>;
+  returnTo?: string;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
+  standalone?: boolean;
+  screen?: LoadFormScreen;
+  includeLane?: boolean;
 };
 
 export function LoadForm({
@@ -61,347 +45,180 @@ export function LoadForm({
   trucks,
   trailers = [],
   drivers,
+  locations = [],
   load,
   defaults,
   inboxId,
+  commodities = [],
+  extraStatuses = [],
+  defaultOoPercent = 75,
+  weightUnit = "lb",
+  alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
+  equipmentChoices = [],
+  returnTo = "/board",
   action,
   submitLabel,
+  standalone = false,
+  screen,
+  includeLane = false,
 }: Props) {
+  const router = useRouter();
+  const edit = useLoadEdit();
+  const workspace = standalone ? null : edit;
+  const resolvedScreen = resolveScreen(screen, workspace?.tab, standalone);
+  const formId = workspace?.formId;
   const [state, formAction, pending] = useActionState(action, null);
   const extraDefaults = defaults ?? {};
-  const [driverId, setDriverId] = useState(load?.driver_id ? String(load.driver_id) : "");
-  const [truckId, setTruckId] = useState(load?.truck_id ? String(load.truck_id) : "");
-  const [trailerId, setTrailerId] = useState(load?.trailer_id ? String(load.trailer_id) : "");
-  const [confirmed, setConfirmed] = useState(false);
-  const [rate, setRate] = useState(
-    load?.rate != null ? String(load.rate) : extraDefaults.rate != null ? String(extraDefaults.rate) : "",
+  const [blockExpired, setBlockExpired] = useState(false);
+  const [liveOoPercent, setLiveOoPercent] = useState<number | null>(() => {
+    const driver = drivers.find((item) => String(item.id) === (load?.driver_id ? String(load.driver_id) : ""));
+    if (!driver || !isOwnerOperator(driver.driver_type)) return null;
+    return load?.oo_percent ?? driver.pay_percent ?? defaultOoPercent;
+  });
+  const canSubmit = !pending && !blockExpired;
+  const onExpiredChange = useCallback((expired: boolean, confirmed: boolean) => {
+    setBlockExpired(expired && !confirmed);
+  }, []);
+  const onDriverIdChange = useCallback(
+    (nextId: string) => {
+      const driver = drivers.find((item) => String(item.id) === nextId);
+      if (!driver || !isOwnerOperator(driver.driver_type)) {
+        setLiveOoPercent(null);
+        return;
+      }
+      if (load?.driver_id === driver.id && load.oo_percent != null) {
+        setLiveOoPercent(load.oo_percent);
+        return;
+      }
+      setLiveOoPercent(driver.pay_percent ?? defaultOoPercent);
+    },
+    [drivers, defaultOoPercent, load],
   );
-  const [ooPercent, setOoPercent] = useState(
-    load?.oo_percent != null ? String(load.oo_percent) : "",
-  );
-  const selectedDriver = drivers.find((item) => String(item.id) === driverId);
-  const selectedTruck = trucks.find((item) => String(item.id) === truckId);
-  const selectedTrailer = trailers.find((item) => String(item.id) === trailerId);
-  const alerts = useMemo(
-    () => collectAssignmentAlerts({ driver: selectedDriver, truck: selectedTruck, trailer: selectedTrailer }),
-    [selectedDriver, selectedTruck, selectedTrailer],
-  );
-  const expired = alerts.some((alert) => alert.severity === "expired");
-  const parsedRate = rate.trim() ? Number.parseFloat(rate) : null;
-  const parsedPercent = ooPercent.trim() ? Number.parseFloat(ooPercent) : selectedDriver?.pay_percent ?? 75;
-  const liveOoPay =
-    selectedDriver?.driver_type === "owner_operator"
-      ? computeOwnerOperatorPay(parsedRate, parsedPercent)
-      : null;
+  const card = Boolean(workspace);
+
+  useEffect(() => {
+    workspace?.setSubmitState({ canSubmit, pending });
+  }, [workspace?.setSubmitState, canSubmit, pending]);
+
+  useEffect(() => {
+    if (state && "ok" in state && state.ok) {
+      workspace?.clearDirty();
+      router.refresh();
+    }
+  }, [workspace?.clearDirty, state, router]);
 
   return (
-    <form action={formAction} className="card space-y-6 p-6">
+    <form
+      id={formId}
+      className={workspace ? "space-y-6" : "card space-y-6 p-6"}
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => {
+          formAction(new FormData(event.currentTarget));
+        });
+      }}
+    >
       <FormBanner result={state} />
       {inboxId ? <input type="hidden" name="inbox_id" value={inboxId} /> : null}
-      <input type="hidden" name="customer_name" value={extraDefaults.customer_name ?? ""} />
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="field">
-          <label htmlFor="customer_id">Customer</label>
-          <select
-            id="customer_id"
-            name="customer_id"
-            required={!extraDefaults.customer_name}
-            defaultValue={load?.customer_id ?? extraDefaults.customer_id ?? ""}
-          >
-            <option value="">
-              {extraDefaults.customer_name
-                ? `Create “${extraDefaults.customer_name}”`
-                : "Select customer"}
-            </option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="status">Status</label>
-          <select id="status" name="status" defaultValue={load?.status ?? "available"}>
-            {LOAD_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {labelForLoadStatus(status)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="origin">Origin</label>
-          <input
-            id="origin"
-            name="origin"
-            required
-            defaultValue={load?.origin ?? extraDefaults.origin ?? ""}
-            placeholder="City, ST"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="destination">Destination</label>
-          <input
-            id="destination"
-            name="destination"
-            required
-            defaultValue={load?.destination ?? extraDefaults.destination ?? ""}
-            placeholder="City, ST"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="pickup_start">Pickup window start</label>
-          <input
-            id="pickup_start"
-            name="pickup_start"
-            type="datetime-local"
-            required
-            defaultValue={load ? toInputDateTime(load.pickup_start) : extraDefaults.pickup_start ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="pickup_end">Pickup window end</label>
-          <input
-            id="pickup_end"
-            name="pickup_end"
-            type="datetime-local"
-            required
-            defaultValue={load ? toInputDateTime(load.pickup_end) : extraDefaults.pickup_end ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="delivery_start">Delivery window start</label>
-          <input
-            id="delivery_start"
-            name="delivery_start"
-            type="datetime-local"
-            required
-            defaultValue={load ? toInputDateTime(load.delivery_start) : extraDefaults.delivery_start ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="delivery_end">Delivery window end</label>
-          <input
-            id="delivery_end"
-            name="delivery_end"
-            type="datetime-local"
-            required
-            defaultValue={load ? toInputDateTime(load.delivery_end) : extraDefaults.delivery_end ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="commodity">Commodity</label>
-          <input
-            id="commodity"
-            name="commodity"
-            defaultValue={load?.commodity ?? extraDefaults.commodity ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="weight">Weight (lbs)</label>
-          <input
-            id="weight"
-            name="weight"
-            type="number"
-            min={0}
-            defaultValue={load?.weight ?? extraDefaults.weight ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="rate">Rate (USD)</label>
-          <input
-            id="rate"
-            name="rate"
-            type="number"
-            min={0}
-            step="0.01"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="reference_number">Reference / rate con #</label>
-          <input
-            id="reference_number"
-            name="reference_number"
-            defaultValue={load?.reference_number ?? extraDefaults?.reference_number ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="po_number">PO number</label>
-          <input id="po_number" name="po_number" defaultValue={load?.po_number ?? extraDefaults?.po_number ?? ""} />
-        </div>
-        <div className="field">
-          <label htmlFor="reefer_setpoint_f">Reefer setpoint (°F)</label>
-          <input
-            id="reefer_setpoint_f"
-            name="reefer_setpoint_f"
-            type="number"
-            step="0.1"
-            defaultValue={load?.reefer_setpoint_f ?? extraDefaults?.reefer_setpoint_f ?? ""}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="trailer_id">Trailer</label>
-          <select
-            id="trailer_id"
-            name="trailer_id"
-            value={trailerId}
-            onChange={(event) => {
-              setTrailerId(event.target.value);
-              setConfirmed(false);
-            }}
-          >
-            <option value="">Unassigned</option>
-            {trailers.map((trailer) => (
-              <option key={trailer.id} value={trailer.id}>
-                {trailer.unit_number}
-                {optionNote(trailerComplianceAlerts(trailer))}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="trailer_number">Trailer # (override)</label>
-          <input
-            id="trailer_number"
-            name="trailer_number"
-            defaultValue={load?.trailer_number ?? extraDefaults?.trailer_number ?? ""}
-          />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="special_instructions">Special instructions (driver sees these)</label>
-          <textarea
-            id="special_instructions"
-            name="special_instructions"
-            rows={4}
-            defaultValue={load?.special_instructions ?? extraDefaults?.special_instructions ?? ""}
-          />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="appointment_notes">Appointment notes</label>
-          <textarea
-            id="appointment_notes"
-            name="appointment_notes"
-            rows={2}
-            defaultValue={load?.appointment_notes ?? extraDefaults?.appointment_notes ?? ""}
-          />
-        </div>
-        <div className="field md:col-span-2">
-          <label htmlFor="notes">Internal notes</label>
-          <textarea id="notes" name="notes" rows={3} defaultValue={load?.notes ?? extraDefaults?.notes ?? ""} />
-        </div>
-        <div className="field">
-          <label htmlFor="truck_id">Assigned truck</label>
-          <select
-            id="truck_id"
-            name="truck_id"
-            value={truckId}
-            onChange={(event) => {
-              setTruckId(event.target.value);
-              setConfirmed(false);
-            }}
-          >
-            <option value="">Unassigned</option>
-            {trucks.map((truck) => (
-              <option key={truck.id} value={truck.id}>
-                {truck.unit_number}
-                {optionNote(truckComplianceAlerts(truck))}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="driver_id">Assigned driver</label>
-          <select
-            id="driver_id"
-            name="driver_id"
-            value={driverId}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              setDriverId(nextId);
-              setConfirmed(false);
-              const next = drivers.find((item) => String(item.id) === nextId);
-              if (next?.driver_type === "owner_operator") {
-                const keepSaved = load?.driver_id === next.id && load.oo_percent != null;
-                setOoPercent(String(keepSaved ? load.oo_percent : next.pay_percent ?? 75));
-              } else {
-                setOoPercent("");
-              }
-            }}
-          >
-            <option value="">Unassigned</option>
-            {drivers.map((driver) => (
-              <option key={driver.id} value={driver.id}>
-                {driver.name}
-                {driver.driver_type === "owner_operator" ? " · OO" : ""}
-                {driverOptionNote(driver)}
-              </option>
-            ))}
-          </select>
-        </div>
-        {selectedDriver?.driver_type === "owner_operator" ? (
-          <>
-            <div className="field">
-              <label htmlFor="oo_percent">Owner-operator %</label>
-              <input
-                id="oo_percent"
-                name="oo_percent"
-                type="number"
-                min={0}
-                max={100}
-                step="0.1"
-                value={ooPercent || String(selectedDriver.pay_percent ?? 75)}
-                onChange={(event) => setOoPercent(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>Computed OO pay</label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                {formatMoney(liveOoPay)}
-                {parsedRate != null ? (
-                  <span className="ml-1 text-slate-500">
-                    ({parsedPercent}% of {formatMoney(parsedRate)})
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : selectedDriver ? (
+      <RateConStopFields prefix="pickup" stop={extraDefaults.shipper} />
+      <RateConStopFields prefix="delivery" stop={extraDefaults.consignee} />
+      {extraDefaults.extra_stops?.length ? (
+        <input type="hidden" name="extra_stops_json" value={JSON.stringify(extraDefaults.extra_stops)} />
+      ) : null}
+      <input type="hidden" name="return_to" value={load ? `/loads/${load.id}` : returnTo} />
+      {load ? <input type="hidden" name="stay_on_load" value="1" /> : null}
+
+      <div
+        hidden={resolvedScreen !== "basics" && resolvedScreen !== "all"}
+        className={resolvedScreen === "basics" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-load-screen="basics"
+      >
+        <LoadBasicsScreen
+          load={load}
+          defaults={extraDefaults}
+          commodities={commodities}
+          extraStatuses={extraStatuses}
+          weightUnit={weightUnit}
+          equipmentChoices={equipmentChoices}
+          card={card}
+          ooPercent={liveOoPercent}
+          onOoPercentChange={setLiveOoPercent}
+        />
+      </div>
+      <div
+        hidden={resolvedScreen !== "customer" && resolvedScreen !== "all"}
+        className={resolvedScreen === "customer" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-load-screen="customer"
+      >
+        <LoadCustomerScreen customers={customers} load={load} defaults={extraDefaults} card={card} />
+      </div>
+      <div
+        hidden={resolvedScreen !== "assets" && resolvedScreen !== "all"}
+        className={resolvedScreen === "assets" || resolvedScreen === "all" ? undefined : "hidden"}
+        data-assign-fields=""
+        data-load-screen="assets"
+      >
+        <LoadCarrierScreen
+          drivers={drivers}
+          trucks={trucks}
+          trailers={trailers}
+          load={load}
+          defaultOoPercent={defaultOoPercent}
+          alertWindows={alertWindows}
+          card={card}
+          onExpiredChange={onExpiredChange}
+          onDriverIdChange={onDriverIdChange}
+          ooPercent={liveOoPercent}
+          onOoPercentChange={setLiveOoPercent}
+        />
+      </div>
+      {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}
+      {resolvedScreen === "all" && !includeLane && !load ? (
+        <section className={card ? "card p-6" : undefined}>
           <div className="field">
-            <label>Owner-operator pay</label>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-              N/A — company driver
-            </div>
+            <label htmlFor="special_instructions">Routing notes</label>
+            <textarea
+              id="special_instructions"
+              name="special_instructions"
+              rows={2}
+              defaultValue={extraDefaults.special_instructions ?? ""}
+            />
           </div>
-        ) : null}
-      </div>
-      {alerts.length > 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <ComplianceList alerts={alerts} />
+        </section>
+      ) : null}
+
+      {workspace ? null : (
+        <div className="flex justify-end">
+          <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
+            {pending ? "Saving…" : submitLabel}
+          </button>
         </div>
-      ) : null}
-      {expired ? (
-        <label className="flex items-start gap-2 text-sm text-rose-800">
-          <input type="checkbox" name="confirm_expired" value="1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-          I confirm saving this assignment with expired documents.
-        </label>
-      ) : null}
-      <div className="flex justify-end">
-        <button className="btn btn-primary" type="submit" disabled={pending || (expired && !confirmed)}>
-          {pending ? "Saving…" : submitLabel}
-        </button>
-      </div>
+      )}
     </form>
   );
 }
 
-function driverOptionNote(driver: DriverWithTruck): string {
-  return optionNote(driverComplianceAlerts(driver));
+function RateConStopFields({ prefix, stop }: { prefix: "pickup" | "delivery"; stop?: ParsedStop }) {
+  if (!stop || !parsedStopHasDetails(stop)) return null;
+  return (
+    <>
+      <input type="hidden" name={`${prefix}_stop_name`} value={stop.name} />
+      <input type="hidden" name={`${prefix}_stop_street`} value={stop.street} />
+      <input type="hidden" name={`${prefix}_stop_city`} value={stop.city} />
+      <input type="hidden" name={`${prefix}_stop_state`} value={stop.state} />
+      <input type="hidden" name={`${prefix}_stop_zip`} value={stop.zip} />
+      <input type="hidden" name={`${prefix}_stop_phone`} value={stop.phone} />
+    </>
+  );
 }
 
-function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {
-  const label = complianceShortLabel(alerts);
-  return label ? ` · ${label}` : "";
+function resolveScreen(
+  screen: LoadFormScreen | undefined,
+  tab: string | undefined,
+  standalone: boolean,
+): LoadFormScreen {
+  if (screen) return screen;
+  if (standalone) return "all";
+  if (tab === "basics" || tab === "customer" || tab === "assets") return tab;
+  return "all";
 }

@@ -1,8 +1,26 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
+import { formatMdYDisplay, isAppointmentSchedule, isFcfsSchedule } from "./format";
+import { isCompanyCustomerName, tmsCustomerInvoiceLines } from "./invoice";
 import { computeOwnerOperatorPay } from "./settlement";
-import { getCustomer, getLoad, getTrailer } from "./queries";
-import type { CompanyProfile, LoadView } from "./types";
+import {
+  applyLocationToStop,
+  formatSchedulingSummary,
+  formatStopPartyAddress,
+  isPlaceholderStopName,
+  matchLocationForStop,
+  normalizeLocationName,
+} from "./locations";
+import { getCustomer, getLoad, getLocation, getTrailer, listLocations } from "./queries";
+import { listStops, stopTypeNumber, type LoadStop } from "./stops";
+import { locationRuleLabels } from "./location-rules-shared";
+import { formatInternalRelayLines, formatRelayLane } from "./relays";
+import { listRelays, relayForDriver } from "./relay-store";
+import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
+import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
+import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
+import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
+import { cityStateOnly } from "./load-documents-shared";
 
 export type ConfirmationStop = {
   title: string;
@@ -23,7 +41,13 @@ export type ConfirmationStop = {
   description: string;
 };
 
+export type ConfirmationRateLine = {
+  name: string;
+  amount: number;
+};
+
 export type ConfirmationModel = {
+  packet: "customer" | "internal";
   style: "owner_operator" | "company_driver";
   company: CompanyProfile;
   loadNumber: string;
@@ -38,34 +62,49 @@ export type ConfirmationModel = {
   truckNumber: string;
   trailerNumber: string;
   agreedAmount: number | null;
+  customerName: string;
+  customerBilling: string;
+  customerContact: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerReference: string;
+  customerRate: number | null;
+  customerRateLines: ConfirmationRateLine[];
   loadStatus: string;
   shipper: ConfirmationStop;
   consignee: ConfirmationStop;
+  stops: ConfirmationStop[];
   dispatchNotes: string;
+  internalLegs: string;
+  reeferSetpoint: string;
+  reeferMode: string;
+  locale?: DriverMessageLocale;
 };
 
 export function confirmationStatus(load: LoadView): string {
   if (load.status === "in_transit" || load.driver_progress) return "On Route";
   if (load.status === "assigned") return "Dispatched";
   if (load.status === "available") return "Available";
-  if (load.status === "delivered") return "Delivered";
+  if (load.status === "delivered" || load.status === "completed") return "Delivered";
   if (load.status === "cancelled") return "Cancelled";
   return load.status;
 }
 
 export function equipmentLabel(load: LoadView): string {
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
-  const type = trailer?.type || load.truck_type;
+  const type = trailer?.type || load.trailer_type || "";
   if (type === "reefer") return "53' Reefer";
   if (type === "dry_van") return "53' Dry Van";
   if (type === "flatbed") return "53' Flatbed";
   if (type === "box") return "Box Truck";
   if (type === "power_only") return "Power Only";
+  if (load.equipment === "reefer_53") return "53' Reefer";
+  if (load.equipment === "dry_van_53") return "53' Dry Van";
   return type ? type.replaceAll("_", " ") : "";
 }
 
 export function agreedAmountForLoad(load: LoadView): number | null {
-  if (load.driver_type !== "owner_operator") return null;
+  if (!isOwnerOperator(load.driver_type)) return null;
   if (load.oo_pay != null) return load.oo_pay;
   return computeOwnerOperatorPay(load.rate, load.oo_percent);
 }
@@ -80,10 +119,8 @@ export function formatUsd(value: number | null | undefined): string {
 }
 
 export function formatMdY(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${date.getFullYear()}`;
+  const value = formatMdYDisplay(iso);
+  return value === "—" ? "" : value;
 }
 
 function formatClock(iso: string): string {
@@ -92,18 +129,281 @@ function formatClock(iso: string): string {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+function formatStopClock(stop: LoadStop | undefined, fallback = ""): string {
+  const start = stop?.window_start || fallback;
+  if (!start) return "";
+  if (isAppointmentSchedule(stop?.schedule_type)) return formatClock(start);
+  if (isFcfsSchedule(stop?.schedule_type)) {
+    const from = formatClock(start);
+    const to = formatClock(stop?.window_end || "");
+    if (from && to && from !== to) return `${from} – ${to}`;
+    return from || to;
+  }
+  return formatClock(start);
+}
+
 function appointmentLabel(notes: string): string {
   if (!notes.trim()) return "No";
   if (/^no\b/i.test(notes.trim())) return "No";
   return "Yes";
 }
 
-export function buildConfirmationModel(load: LoadView, company = getCompanyProfile()): ConfirmationModel {
+function confirmationParty(
+  stop: LoadStop | undefined,
+  fallbackLocationId: number | null,
+  laneFallback = "",
+  customerName = "",
+) {
+  const linked = getLocation(stop?.location_id ?? fallbackLocationId ?? 0);
+  const matched = linked ?? (stop ? matchLocationForStop(listLocations(), stop) : null);
+  const base = stop
+    ? {
+        name: stop.name,
+        street: stop.street,
+        city: stop.city,
+        state: stop.state,
+        zip: stop.zip,
+        phone: stop.phone,
+        location_id: stop.location_id,
+      }
+    : matched
+      ? {
+          name: matched.name,
+          street: matched.street,
+          city: matched.city,
+          state: matched.state,
+          zip: matched.zip,
+          phone: matched.phone,
+          location_id: matched.id,
+        }
+      : null;
+  const merged = base
+    ? applyLocationToStop(
+        base,
+        matched ?? { id: 0, name: "", street: "", city: "", state: "", zip: "", phone: "" },
+      )
+    : null;
+  const address = merged
+    ? formatStopPartyAddress(merged) || laneFallback.trim()
+    : laneFallback.trim();
+  let name = merged?.name.trim() || matched?.name.trim() || "";
+  if (isPlaceholderStopName(name, merged?.city ?? "") && matched?.name.trim()) name = matched.name.trim();
+  if (customerName && normalizeLocationName(name) === normalizeLocationName(customerName)) {
+    name = matched && normalizeLocationName(matched.name) !== normalizeLocationName(customerName)
+      ? matched.name.trim()
+      : "";
+  }
+  return {
+    name,
+    address,
+    phone: (merged?.phone || matched?.phone || "").trim(),
+    hours: matched?.hours ?? "",
+    extra: [
+      ...locationRuleLabels(matched),
+      matched?.scheduling_notes ?? "",
+      stop?.instructions,
+      stop?.notes,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .join("\n"),
+    appointment: matched?.scheduling_type === "appointment" ? "Yes" : matched ? "No" : "",
+    location: matched,
+  };
+}
+
+function looksLikeBillingAddress(value: string): boolean {
+  if (/\d/.test(value) && /\b[A-Z]{2}\b/.test(value)) return true;
+  return /\d/.test(value) && /\b(st|street|ave|rd|blvd|dr|way|ln|ct|hwy|pkwy|box)\b/i.test(value);
+}
+
+function printableCustomerBilling(notes: string): string {
+  const trimmed = notes.trim();
+  if (!trimmed) return "";
+  if (/created from a rate confirmation/i.test(trimmed)) return "";
+  if (/^net\s*\d+\s*\.?$/i.test(trimmed)) return "";
+  const flattened = trimmed.replace(/\s*\n+\s*/g, ", ");
+  return looksLikeBillingAddress(flattened) ? flattened : "";
+}
+
+function confirmationCustomer(load: LoadView): {
+  name: string;
+  billing: string;
+  contact: string;
+  phone: string;
+  email: string;
+  reference: string;
+} {
   const customer = getCustomer(load.customer_id);
   const contact = customer?.contacts[0];
-  const style = load.driver_type === "owner_operator" ? "owner_operator" : "company_driver";
-  const notes = [load.special_instructions, load.appointment_notes, load.notes].filter(Boolean).join("\n");
+  const billingFromNotes = printableCustomerBilling(String(customer?.billing_notes ?? ""));
+  const company = getCompanyProfile();
+  const settings = getCompanySettings();
+  const office = formatCompanyAddress(settings);
+  const billing =
+    isCompanyCustomerName(load.customer_name, company.company_name) && office ? office : billingFromNotes;
   return {
+    name: load.customer_name.trim(),
+    billing,
+    contact: (load.contact_name || contact?.name || "").trim(),
+    phone: (load.contact_phone || contact?.phone || "").trim(),
+    email: (load.contact_email || contact?.email || "").trim(),
+    reference: (load.customer_reference || load.po_number || load.reference_number || "").trim(),
+  };
+}
+
+export function isCustomerFacingLoadNumber(
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+  value: string,
+): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  return text === String(load.load_number ?? "").trim() || text === String(load.customer_reference ?? "").trim();
+}
+
+export function driverFacingStopPo(
+  stop: { reference?: string | null } | undefined,
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+): string {
+  const stopPo = String(stop?.reference ?? "").trim();
+  if (!stopPo || isCustomerFacingLoadNumber(load, stopPo)) return "";
+  return stopPo;
+}
+
+export function driverFacingStopConfirmation(
+  stop: { confirmation?: string | null } | undefined,
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+): string {
+  const value = String(stop?.confirmation ?? "").trim();
+  if (!value || isCustomerFacingLoadNumber(load, value)) return "";
+  return value;
+}
+
+function confirmationStopTitle(kind: string | undefined, typeNumber: number): string {
+  const n = typeNumber > 0 ? typeNumber : 1;
+  if (kind === "delivery") return `Consignee ${n}`;
+  return `Shipper ${n}`;
+}
+
+function confirmationStopFromParty(
+  stop: LoadStop | undefined,
+  all: LoadStop[],
+  load: LoadView,
+  fallbackLocationId: number | null,
+  laneFallback: string,
+  kindHint: "pickup" | "delivery" = "pickup",
+  packet: "customer" | "internal" = "customer",
+): ConfirmationStop {
+  const party = confirmationParty(stop, fallbackLocationId, laneFallback, load.customer_name);
+  const kind = stop?.kind ?? kindHint;
+  const isPickup = kind === "pickup";
+  return {
+    title: confirmationStopTitle(kind, stop ? stopTypeNumber(all, stop.id) : 1),
+    name: party.name,
+    address: party.address,
+    phone: party.phone,
+    date: formatMdY(stop?.window_start || (isPickup ? load.pickup_start : load.delivery_start)),
+    time: formatStopClock(stop, isPickup ? load.pickup_start : load.delivery_start),
+    type: "",
+    quantity: "",
+    weight: load.weight != null ? String(load.weight) : "",
+    poNumber: packet === "internal" ? driverFacingStopPo(stop, load) : stop?.reference.trim() || load.po_number,
+    confirmationNumber:
+      packet === "internal" ? driverFacingStopConfirmation(stop, load) : (stop?.confirmation ?? "").trim(),
+    extra: party.extra,
+    hoursLabel: isPickup ? "Shipping Hours" : "Receiving Hours",
+    hours: party.hours,
+    appointment: party.appointment || appointmentLabel(load.appointment_notes),
+    description: load.commodity,
+  };
+}
+
+export function buildConfirmationModel(
+  load: LoadView,
+  company = getCompanyProfile(),
+  options: { packet?: "customer" | "internal" } = {},
+): ConfirmationModel {
+  const packet = options.packet === "internal" ? "internal" : "customer";
+  const stops = listStops(load.id);
+  const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
+  const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
+  const firstDelivery = stops.find((stop) => stop.kind === "delivery") ?? lastDelivery;
+  const shipperParty = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
+  const lastDeliveryParty = confirmationParty(
+    lastDelivery,
+    load.consignee_location_id,
+    load.destination,
+    load.customer_name,
+  );
+  const listedStops = stops.length
+    ? stops.map((stop) => {
+        const isFirstPickup = Boolean(pickup && stop.id === pickup.id);
+        const isLastDelivery = Boolean(lastDelivery && stop.id === lastDelivery.id);
+        return confirmationStopFromParty(
+          stop,
+          stops,
+          load,
+          isFirstPickup ? load.shipper_location_id : isLastDelivery ? load.consignee_location_id : stop.location_id,
+          isFirstPickup ? load.origin : isLastDelivery ? load.destination : "",
+          stop.kind,
+          packet,
+        );
+      })
+    : [
+        confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup", packet),
+        confirmationStopFromParty(
+          lastDelivery,
+          stops,
+          load,
+          load.consignee_location_id,
+          load.destination,
+          "delivery",
+          packet,
+        ),
+      ];
+  const shipper =
+    listedStops.find((stop) => stop.title.startsWith("Shipper")) ??
+    confirmationStopFromParty(pickup, stops, load, load.shipper_location_id, load.origin, "pickup", packet);
+  const consignee =
+    listedStops.find((stop) => stop.title === "Consignee 1") ??
+    listedStops.find((stop) => stop.title.startsWith("Consignee")) ??
+    confirmationStopFromParty(
+      firstDelivery,
+      stops,
+      load,
+      load.consignee_location_id,
+      load.destination,
+      "delivery",
+      packet,
+    );
+  const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
+  const notes = [
+    load.public_notes,
+    load.special_instructions,
+    load.appointment_notes,
+    shipperParty.location ? `Pickup: ${formatSchedulingSummary(shipperParty.location)}` : "",
+    lastDeliveryParty.location ? `Delivery: ${formatSchedulingSummary(lastDeliveryParty.location)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
+  const reefer = resolveReeferSpec({
+    reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
+    temperature_f: load.temperature_f,
+    reefer_mode: load.reefer_mode,
+    special_instructions: load.special_instructions,
+    equipment: load.equipment || equipmentLabel(load),
+    truck_type: load.truck_type,
+    trailer_type: trailer?.type ?? load.trailer_type,
+  });
+  const customer = confirmationCustomer(load);
+  const rateLines =
+    packet === "customer"
+      ? tmsCustomerInvoiceLines(load).map((line) => ({ name: line.name, amount: line.amount }))
+      : [];
+  const customerRate = rateLines.length ? rateLines.reduce((sum, line) => sum + line.amount, 0) : null;
+  return {
+    packet,
     style,
     company,
     loadNumber: load.load_number,
@@ -117,57 +417,81 @@ export function buildConfirmationModel(load: LoadView, company = getCompanyProfi
     equipment: equipmentLabel(load),
     truckNumber: load.truck_unit ?? "",
     trailerNumber: load.trailer_unit || load.trailer_number || "",
-    agreedAmount: agreedAmountForLoad(load),
+    agreedAmount: packet === "internal" ? agreedAmountForLoad(load) : null,
+    customerName: packet === "customer" ? customer.name : "",
+    customerBilling: packet === "customer" ? customer.billing : "",
+    customerContact: packet === "customer" ? customer.contact : "",
+    customerPhone: packet === "customer" ? customer.phone : "",
+    customerEmail: packet === "customer" ? customer.email : "",
+    customerReference: packet === "customer" ? customer.reference : "",
+    customerRate: packet === "customer" ? customerRate : null,
+    customerRateLines: packet === "customer" ? rateLines : [],
     loadStatus: confirmationStatus(load),
-    shipper: {
-      title: "Shipper 1",
-      name: load.customer_name,
-      address: load.origin,
-      phone: contact?.phone ?? "",
-      date: formatMdY(load.pickup_start),
-      time: formatClock(load.pickup_start),
-      type: "",
-      quantity: "",
-      weight: load.weight != null ? String(load.weight) : "",
-      poNumber: load.po_number,
-      confirmationNumber: load.reference_number,
-      extra: "",
-      hoursLabel: "Shipping Hours",
-      hours: "",
-      appointment: appointmentLabel(load.appointment_notes),
-      description: load.commodity,
-    },
-    consignee: {
-      title: "Consignee 1",
-      name: load.destination,
-      address: load.destination,
-      phone: "",
-      date: formatMdY(load.delivery_start),
-      time: formatClock(load.delivery_start),
-      type: "",
-      quantity: "",
-      weight: load.weight != null ? String(load.weight) : "",
-      poNumber: load.po_number,
-      confirmationNumber: load.reference_number,
-      extra: "",
-      hoursLabel: "Receiving Hours",
-      hours: "",
-      appointment: appointmentLabel(load.appointment_notes),
-      description: load.commodity,
-    },
+    shipper,
+    consignee,
+    stops: listedStops,
     dispatchNotes: notes,
+    internalLegs: "",
+    reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
+    reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) || "Continuous" : "",
   };
 }
 
-export function buildConfirmationForLoad(loadId: number): ConfirmationModel {
+export function buildConfirmationForLoad(
+  loadId: number,
+  options: { packet?: "customer" | "internal"; driverId?: number; locale?: DriverMessageLocale } = {},
+): ConfirmationModel {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  return buildConfirmationModel(load);
+  const packet = options.packet === "internal" ? "internal" : "customer";
+  const locale = packet === "internal" ? parseDriverMessageLocale(options.locale) : "en";
+  const model = buildConfirmationModel(load, getCompanyProfile(), { packet });
+  if (packet !== "internal") return { ...model, locale: "en" };
+  const relays = listRelays(load.id);
+  const yours = options.driverId ? relayForDriver(load.id, options.driverId) : null;
+  const lines = [
+    yours
+      ? locale === "es"
+        ? `Su tramo: ${formatRelayLane(yours.pickup, yours.delivery)}`
+        : `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}`
+      : "",
+    formatInternalRelayLines(relays),
+  ].filter(Boolean);
+  if (locale === "es") {
+    const translateTitle = (title: string) =>
+      title.replace(/\bShipper\b/g, "Remitente").replace(/\bConsignee\b/g, "Consignatario");
+    return {
+      ...model,
+      locale,
+      internalLegs: lines.join("\n"),
+      shipper: { ...model.shipper, title: translateTitle(model.shipper.title) },
+      consignee: { ...model.consignee, title: translateTitle(model.consignee.title) },
+      stops: model.stops.map((stop) => ({ ...stop, title: translateTitle(stop.title) })),
+    };
+  }
+  return { ...model, internalLegs: lines.join("\n"), locale };
 }
 
-export function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "LETTER", margin: 36 });
+export function applyBlindConfirmation(model: ConfirmationModel): ConfirmationModel {
+  const blindStop = (stop: ConfirmationStop): ConfirmationStop => ({
+    ...stop,
+    address: cityStateOnly(stop.address),
+    phone: "",
+  });
+  return {
+    ...model,
+    shipper: blindStop(model.shipper),
+    consignee: blindStop(model.consignee),
+    stops: model.stops.map(blindStop),
+    customerBilling: cityStateOnly(model.customerBilling),
+    customerPhone: "",
+    customerEmail: "",
+  };
+}
+
+export async function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ size: "LETTER", margin: 36, bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -177,108 +501,308 @@ export function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer>
   });
 }
 
+function confirmLabel(model: ConfirmationModel, english: string, spanish: string): string {
+  return model.locale === "es" && model.packet === "internal" ? spanish : english;
+}
+
+function confirmationTitle(model: ConfirmationModel, headerText: string): string {
+  if (model.packet === "customer") {
+    const custom = headerText.trim();
+    if (custom && !/load confirmation|rate & load/i.test(custom)) return custom;
+    return "Customer Confirmation";
+  }
+  const custom = headerText.trim();
+  const stock = "Rate & Load Confirmation";
+  if (custom && custom !== stock) return custom;
+  return model.style === "company_driver"
+    ? confirmLabel(model, "Load Confirmation", "Confirmación de carga")
+    : stock;
+}
+
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
+  const pageW = 612;
   const left = 36;
   const width = 540;
-  const right = left + width;
-  let y = 36;
+  const defaults = getDocumentDefaults(model.packet === "customer" ? "customer_confirmation" : "load_confirmation");
+  const bodySize = defaults.font_size || 10;
+  const title = confirmationTitle(model, defaults.header_text);
+  const contactRows: Array<[string, string]> = [
+    [confirmLabel(model, "Dispatcher", "Despachador"), model.company.dispatcher_name],
+    [confirmLabel(model, "Phone #", "Teléfono"), model.company.dispatcher_phone],
+    [confirmLabel(model, "Fax #", "Fax"), model.company.dispatcher_fax],
+    [confirmLabel(model, "Email", "Correo"), model.company.dispatcher_email],
+    [confirmLabel(model, "LOAD #", "CARGA #"), model.loadNumber],
+    [confirmLabel(model, "Ship Date", "Fecha de carga"), model.shipDate],
+    [confirmLabel(model, "Today's Date", "Fecha de hoy"), model.todayDate],
+  ];
 
-  const [brand, ...rest] = model.company.company_name.split(" ");
-  doc.font("Helvetica-Bold").fontSize(18).fillColor("#12315c").text(brand || "M&S", left, y, { continued: Boolean(rest.length) });
-  if (rest.length) {
-    doc.font("Helvetica-Bold").fillColor("#6b7c90").text(` ${rest.join(" ")}`);
+  const logo = companyLogoPath();
+  let logoDrawn = false;
+  if (logo) {
+    try {
+      doc.image(logo, left, 28, { fit: [78, 48] });
+      logoDrawn = true;
+    } catch {
+      // Skip a bad logo file rather than failing the confirmation.
+    }
   }
-  doc.fillColor("#111827").font("Helvetica-Bold").fontSize(14);
-  doc.text("Rate & Load Confirmation", left, y + 2, { width, align: "center" });
 
-  const boxX = 332;
-  const boxW = 244;
-  drawInfoGrid(doc, boxX, y, boxW, [
-    ["Dispatcher", model.company.dispatcher_name],
-    ["Phone #", model.company.dispatcher_phone],
-    ["Fax #", model.company.dispatcher_fax],
-    ["Email", model.company.dispatcher_email],
-    ["W/O", ""],
-  ], [
-    ["LOAD #", model.loadNumber],
-    ["Ship Date", model.shipDate],
-    ["Today's Date", model.todayDate],
-  ]);
-  y = 132;
+  // Title is page-centered on its own line. The dispatcher card starts below that
+  // baseline so "Dispatcher" never sits on the title and the title is not shoved left.
+  doc.font("Helvetica-Bold").fontSize(13);
+  let titleSize = 13;
+  while (titleSize > 9 && doc.widthOfString(title) > pageW - 160) {
+    titleSize -= 0.5;
+    doc.fontSize(titleSize);
+  }
+  doc.fillColor("#111827").text(title, 0, 38, { width: pageW, align: "center", lineBreak: false });
 
-  if (model.style === "owner_operator") {
-    y = drawPartyRow(doc, left, y, width, [
-      ["Carrier", model.carrierName],
-      ["Phone #", model.carrierPhone],
-      ["Fax #", ""],
-      ["Equipment", model.equipment],
-      ["Agreed Amount", formatUsd(model.agreedAmount)],
-      ["Load Status", model.loadStatus],
-    ]);
-  } else {
-    y = drawPartyRow(doc, left, y, width, [
-      ["Driver", model.driverName],
-      ["Mobile #", model.driverPhone],
-      ["Email", model.driverEmail],
+  doc.font("Helvetica").fontSize(8);
+  const emailW = doc.widthOfString(model.company.dispatcher_email || " ");
+  const cardW = Math.min(200, Math.max(168, 70 + emailW));
+  const cardX = left + width - cardW;
+  const cardY = 56;
+  const cardH = drawContactCard(doc, cardX, cardY, cardW, contactRows);
+
+  const nameWidth = Math.max(120, cardX - left - 10);
+  const nameY = logoDrawn ? 84 : 74;
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c");
+  doc.text(model.company.company_name || "M&S", left, nameY, { width: nameWidth, lineBreak: false });
+  const address = formatCompanyAddress(getCompanySettings());
+  if (address) {
+    doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(address, left, nameY + 14, {
+      width: nameWidth,
+      height: 18,
+      lineBreak: true,
+    });
+  }
+
+  let y = Math.max(148, cardY + cardH + 10);
+
+  if (model.packet === "customer") {
+    y = drawCustomerBlock(doc, left, y, width, model);
+    y = drawCustomerRate(doc, left, y + 6, width, model);
+    y = drawPartyRow(doc, left, y + 6, width, [
       ["Equipment", model.equipment],
       ["Truck #", model.truckNumber],
       ["Trailer #", model.trailerNumber],
       ["Load Status", model.loadStatus],
     ]);
+  } else if (model.style === "owner_operator") {
+    y = drawPartyRow(doc, left, y, width, [
+      [confirmLabel(model, "Carrier", "Transportista"), model.carrierName],
+      [confirmLabel(model, "Phone #", "Teléfono"), model.carrierPhone],
+      [confirmLabel(model, "Fax #", "Fax"), ""],
+      [confirmLabel(model, "Equipment", "Equipo"), model.equipment],
+      [confirmLabel(model, "Agreed Amount", "Monto acordado"), formatUsd(model.agreedAmount)],
+      [confirmLabel(model, "Load Status", "Estado"), model.loadStatus],
+    ]);
+  } else {
+    y = drawPartyRow(doc, left, y, width, [
+      [confirmLabel(model, "Driver", "Conductor"), model.driverName],
+      [confirmLabel(model, "Mobile #", "Celular"), model.driverPhone],
+      [confirmLabel(model, "Email", "Correo"), model.driverEmail],
+      [confirmLabel(model, "Equipment", "Equipo"), model.equipment],
+      [confirmLabel(model, "Truck #", "Camión #"), model.truckNumber],
+      [confirmLabel(model, "Trailer #", "Remolque #"), model.trailerNumber],
+      [confirmLabel(model, "Load Status", "Estado"), model.loadStatus],
+    ]);
   }
 
-  y = drawStop(doc, left, y + 10, width, model.shipper);
-  y = drawStop(doc, left, y + 8, width, model.consignee);
+  if (model.reeferSetpoint || model.reeferMode) {
+    y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
+  }
 
+  const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
+  const pageLimit = 704;
+  const stopHeight = 108;
+
+  function addContentPage() {
+    doc.addPage();
+    y = 48;
+  }
+
+  function ensureSpace(needed: number) {
+    if (y + needed <= pageLimit) return;
+    addContentPage();
+  }
+
+  for (let index = 0; index < stopBoxes.length; index += 1) {
+    const gap = index === 0 ? 10 : 8;
+    ensureSpace(gap + stopHeight);
+    y = drawStop(doc, left, y + gap, width, stopBoxes[index]);
+  }
+
+  y += 8;
+  const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
+  const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
+  ensureSpace(12 + notesH + 6 + legsH);
+  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
+    lineBreak: false,
+  });
   y += 12;
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text("Dispatch Notes:", left, y);
-  y += 14;
-  doc.font("Helvetica").fontSize(9).fillColor("#111827");
-  doc.text(model.dispatchNotes || " ", left, y, { width, height: 48 });
-  y = Math.max(y + 56, doc.y + 8);
+  doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
+  doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
+  y += notesH + 6;
+  if (model.packet === "internal" && model.internalLegs) {
+    doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
+      lineBreak: false,
+    });
+    y += 11;
+    doc.font("Helvetica").fontSize(Math.max(7, bodySize - 2)).text(model.internalLegs, left, y, {
+      width,
+      height: 28,
+      lineBreak: true,
+    });
+    y += 30;
+  }
 
-  if (model.style === "owner_operator") {
-    doc.font("Helvetica-Bold").fontSize(10).text("Carrier Pay:", left, y);
-    y += 14;
+  if (model.packet === "internal" && model.style === "owner_operator") {
+    ensureSpace(68);
+    doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y, { lineBreak: false });
+    y += 12;
     const haul = formatUsd(model.agreedAmount) || "$0.00 USD";
-    doc.font("Helvetica").fontSize(10).text(`Line Haul: ${haul.replace(" USD", "")}, `, left, y, { continued: true });
-    doc.font("Helvetica-Bold").text(`TOTAL: ${haul}`);
-    y += 28;
-    doc.font("Helvetica").fontSize(9);
+    doc.font("Helvetica").fontSize(9).text(`Line Haul: ${haul.replace(" USD", "")}   TOTAL: ${haul}`, left, y, {
+      width,
+      lineBreak: false,
+    });
+    y += 16;
+    doc.font("Helvetica").fontSize(8);
     drawWriteLine(doc, left, y, 170, "Accepted By");
     drawWriteLine(doc, left + 186, y, 120, "Date");
     drawWriteLine(doc, left + 322, y, 218, "Signature");
-    y += 28;
+    y += 20;
     drawWriteLine(doc, left, y, 150, "Driver Name", model.driverName);
     drawWriteLine(doc, left + 166, y, 120, "Cell #", model.driverPhone);
     drawWriteLine(doc, left + 302, y, 110, "Truck #", model.truckNumber);
     drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
   }
 
-  doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
-  doc.text("Page 1 of 1", left, 760, { width, align: "center" });
-  doc.rect(left, 28, width, 720).strokeColor("#d1d5db").lineWidth(0.4).stroke();
-  void right;
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i += 1) {
+    doc.switchToPage(range.start + i);
+    stampConfirmationFooter(doc, model, defaults, left, width, i + 1, range.count);
+  }
 }
 
-function drawInfoGrid(
+function stampConfirmationFooter(
+  doc: PDFKit.PDFDocument,
+  model: ConfirmationModel,
+  defaults: ReturnType<typeof getDocumentDefaults>,
+  left: number,
+  width: number,
+  page: number,
+  pageCount: number,
+): void {
+  doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
+  if (defaults.terms_text && model.packet !== "customer") {
+    doc.font("Helvetica").fontSize(7).fillColor("#374151");
+    doc.text(defaults.terms_text, left, 718, { width, height: 16, lineBreak: true });
+  }
+  const footer = defaults.footer_text.trim();
+  doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
+  if (footer) {
+    doc.text(footer, left, 738, { width: width - 100, height: 12, lineBreak: false });
+  }
+  doc.text(
+    model.locale === "es" ? `Página ${page} de ${pageCount}` : `Page ${page} of ${pageCount}`,
+    left,
+    752,
+    { width, align: "center", lineBreak: false },
+  );
+  doc.rect(left, 28, width, 726).strokeColor("#d1d5db").lineWidth(0.4).stroke();
+}
+
+function drawCustomerBlock(
   doc: PDFKit.PDFDocument,
   x: number,
   y: number,
   width: number,
-  leftRows: Array<[string, string]>,
-  rightRows: Array<[string, string]>,
-): void {
-  const col = width / 2;
-  const rowH = 14;
-  const rows = Math.max(leftRows.length, rightRows.length);
-  doc.rect(x, y, width, rows * rowH + 4).strokeColor("#9ca3af").lineWidth(0.6).stroke();
-  leftRows.forEach(([label, value], index) => {
-    kv(doc, x + 4, y + 3 + index * rowH, 52, col - 8, label, value);
+  model: ConfirmationModel,
+): number {
+  const fields: Array<[string, string]> = [
+    ["Customer", model.customerName],
+    ["Billing", model.customerBilling],
+    ["Contact", model.customerContact],
+    ["Phone", model.customerPhone],
+    ["Email", model.customerEmail],
+    ["Reference #", model.customerReference],
+  ];
+  const rows = fields.filter(([, value]) => value.trim());
+  if (!rows.length) {
+    rows.push(["Customer", model.customerName || " "]);
+  }
+  const rowH = 12;
+  const height = rows.length * rowH + 8;
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  rows.forEach(([label, value], index) => {
+    kv(doc, x + 6, y + 5 + index * rowH, 70, width - 16, label, value, label === "Customer");
   });
-  rightRows.forEach(([label, value], index) => {
-    kv(doc, x + col + 4, y + 3 + index * rowH, 68, col - 8, label, value, true);
+  return y + height;
+}
+
+function drawCustomerRate(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  model: ConfirmationModel,
+): number {
+  const lines = model.customerRateLines.length
+    ? model.customerRateLines
+    : model.customerRate != null
+      ? [{ name: "Flat Rate", amount: model.customerRate }]
+      : [];
+  const rowH = 13;
+  const height = Math.max(28, 18 + lines.length * rowH + 14);
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827").text("Rate", x + 6, y + 5, {
+    lineBreak: false,
   });
+  if (!lines.length) {
+    doc.font("Helvetica").fontSize(8).text(" ", x + 6, y + 18);
+    return y + height;
+  }
+  lines.forEach((line, index) => {
+    doc.font("Helvetica").fontSize(8).fillColor("#111827");
+    doc.text(line.name, x + 6, y + 18 + index * rowH, { width: width - 120, lineBreak: false });
+    doc.text(formatUsd(line.amount), x + width - 130, y + 18 + index * rowH, {
+      width: 120,
+      align: "right",
+      lineBreak: false,
+    });
+  });
+  doc.font("Helvetica-Bold").fontSize(8);
+  doc.text("Total", x + 6, y + 18 + lines.length * rowH, { width: width - 120, lineBreak: false });
+  doc.text(formatUsd(model.customerRate), x + width - 130, y + 18 + lines.length * rowH, {
+    width: 120,
+    align: "right",
+    lineBreak: false,
+  });
+  return y + height;
+}
+
+function drawContactCard(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  rows: Array<[string, string]>,
+): number {
+  const rowH = 12;
+  const height = rows.length * rowH + 6;
+  doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  rows.forEach(([label, value], index) => {
+    doc.font("Helvetica").fontSize(7).fillColor("#4b5563");
+    doc.text(`${label}:`, x + 4, y + 4 + index * rowH, { width: 52, lineBreak: false });
+    doc.font(label === "LOAD #" ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
+    doc.text(value || " ", x + 56, y + 4 + index * rowH, {
+      width: width - 62,
+      height: 10,
+      lineBreak: false,
+    });
+  });
+  return height;
 }
 
 function drawPartyRow(
@@ -297,11 +821,41 @@ function drawPartyRow(
   cells.forEach(([label], index) => {
     doc.rect(x + index * col, y, col, headerH + valueH).strokeColor("#9ca3af").lineWidth(0.5).stroke();
     doc.font("Helvetica-Bold").fontSize(7).fillColor("#111827");
-    doc.text(label, x + index * col + 3, y + 4, { width: col - 6 });
+    doc.text(label, x + index * col + 3, y + 4, { width: col - 6, lineBreak: false });
     doc.font("Helvetica").fontSize(8);
-    doc.text(cells[index][1] || " ", x + index * col + 3, y + headerH + 4, { width: col - 6 });
+    doc.text(cells[index][1] || " ", x + index * col + 3, y + headerH + 4, {
+      width: col - 6,
+      height: 16,
+      lineBreak: false,
+    });
   });
   return y + headerH + valueH;
+}
+
+function drawReeferBar(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  setpoint: string,
+  mode: string,
+): number {
+  const height = 20;
+  doc.save();
+  doc.rect(x, y, width, height).fill("#dbeafe");
+  doc.restore();
+  doc.rect(x, y, width, height).strokeColor("#1d4ed8").lineWidth(0.7).stroke();
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#1e3a8a");
+  doc.text("REEFER", x + 6, y + 6, { width: 52, lineBreak: false });
+  doc.font("Helvetica").fontSize(8).fillColor("#111827");
+  const parts = [
+    setpoint ? `Setpoint ${setpoint}` : "",
+    mode ? `Mode: ${mode}` : "",
+  ].filter(Boolean);
+  if (parts.length) {
+    doc.text(parts.join("     "), x + 62, y + 6, { width: width - 70, lineBreak: false });
+  }
+  return y + height;
 }
 
 function drawStop(
@@ -311,15 +865,25 @@ function drawStop(
   width: number,
   stop: ConfirmationStop,
 ): number {
-  const height = 118;
+  const height = 108;
   doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(stop.title, x + 6, y + 6);
-  doc.font("Helvetica-Bold").fontSize(9).text(stop.name || " ", x + 6, y + 22, { width: 230 });
+  const leftW = 220;
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(stop.title, x + 6, y + 6, {
+    lineBreak: false,
+  });
+  doc.font("Helvetica-Bold").fontSize(9).text(stop.name || " ", x + 6, y + 22, {
+    width: leftW - 8,
+    height: 12,
+    lineBreak: false,
+  });
   doc.font("Helvetica").fontSize(8);
-  doc.text(stop.address || " ", x + 6, y + 36, { width: 230 });
-  if (stop.phone) doc.text(`Phone: ${stop.phone}`, x + 6, y + 62);
+  doc.text(stop.address || " ", x + 6, y + 36, { width: leftW - 8, height: 28, lineBreak: true });
+  if (stop.phone) {
+    doc.text(`Phone: ${stop.phone}`, x + 6, y + 68, { width: leftW - 8, lineBreak: false });
+  }
 
-  const gridX = x + 250;
+  const gridX = x + leftW;
+  const colW = (width - leftW) / 2;
   const rows: Array<[string, string]> = [
     ["Date", stop.date],
     ["Time", stop.time],
@@ -335,10 +899,15 @@ function drawStop(
   rows.forEach(([label, value], index) => {
     const col = index < 5 ? 0 : 1;
     const row = index < 5 ? index : index - 5;
-    kv(doc, gridX + col * 150, y + 8 + row * 14, 78, 148, label, value);
+    const wide = /hours/i.test(label);
+    kv(doc, gridX + col * colW, y + 8 + row * 14, wide ? 74 : 70, wide ? colW + 8 : colW - 4, label, value);
   });
   if (stop.extra) {
-    doc.font("Helvetica").fontSize(7).text(stop.extra, gridX, y + 96, { width: 280 });
+    doc.font("Helvetica").fontSize(7).text(stop.extra, x + 6, y + height - 12, {
+      width: width - 12,
+      height: 10,
+      lineBreak: false,
+    });
   }
   return y + height;
 }
@@ -353,9 +922,17 @@ function kv(
   value: string,
   emphasize = false,
 ): void {
-  doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(`${label}:`, x, y, { width: labelW });
-  doc.font(emphasize ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor("#111827");
-  doc.text(value || " ", x + labelW, y, { width: width - labelW });
+  doc.font("Helvetica").fontSize(7).fillColor("#4b5563").text(`${label}:`, x, y, {
+    width: labelW,
+    height: 10,
+    lineBreak: false,
+  });
+  doc.font(emphasize ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
+  doc.text(value || " ", x + labelW, y, {
+    width: Math.max(36, width - labelW),
+    height: 10,
+    lineBreak: false,
+  });
 }
 
 function drawWriteLine(

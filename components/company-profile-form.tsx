@@ -1,21 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
-import { FormBanner } from "@/components/form-banner";
-import { updateCompanyProfileAction } from "@/lib/actions";
-import type { ActionResult, CompanyProfile } from "@/lib/types";
+import { SettingsForm } from "@/components/settings-form";
+import { saveCompanyContactAction } from "@/lib/settings-actions";
+import type { CompanyProfile } from "@/lib/types";
 
-export function CompanyProfileForm({ profile }: { profile: CompanyProfile }) {
-  const [state, formAction, pending] = useActionState(
-    updateCompanyProfileAction as (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>,
-    null,
-  );
-
+export function CompanyProfileForm({
+  profile,
+  canEdit = true,
+}: {
+  profile: CompanyProfile;
+  canEdit?: boolean;
+}) {
   return (
-    <form action={formAction} className="grid gap-3 md:grid-cols-2">
-      <div className="md:col-span-2">
-        <FormBanner result={state} />
-      </div>
+    <SettingsForm action={saveCompanyContactAction} submitLabel="Save company contact" canEdit={canEdit}>
       <div className="field md:col-span-2">
         <label htmlFor="company_name">Company name</label>
         <input id="company_name" name="company_name" required defaultValue={profile.company_name} />
@@ -36,11 +33,22 @@ export function CompanyProfileForm({ profile }: { profile: CompanyProfile }) {
         <label htmlFor="dispatcher_email">Email</label>
         <input id="dispatcher_email" name="dispatcher_email" defaultValue={profile.dispatcher_email} />
       </div>
-      <div className="md:col-span-2 flex justify-end">
-        <button className="btn btn-secondary" type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Save company header"}
-        </button>
+      <div className="field md:col-span-2">
+        <label htmlFor="street">Street</label>
+        <input id="street" name="street" defaultValue={profile.street} />
       </div>
-    </form>
+      <div className="field">
+        <label htmlFor="city">City</label>
+        <input id="city" name="city" defaultValue={profile.city} />
+      </div>
+      <div className="field">
+        <label htmlFor="state">State</label>
+        <input id="state" name="state" maxLength={2} defaultValue={profile.state} />
+      </div>
+      <div className="field">
+        <label htmlFor="zip">ZIP</label>
+        <input id="zip" name="zip" defaultValue={profile.zip} />
+      </div>
+    </SettingsForm>
   );
 }

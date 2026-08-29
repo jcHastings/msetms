@@ -26,21 +26,8 @@ export function QuickbooksInvoicePanel({
       : "Send to QuickBooks";
 
   return (
-    <section className="card mb-4 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Bills the <strong>customer rate</strong>
-            {preview.mode === "demo"
-              ? " — demo preview (no QuickBooks credentials)."
-              : ` — live ${preview.environment} company.`}
-          </p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-          {preview.mode === "demo" ? "Demo" : "QuickBooks"}
-        </span>
-      </div>
+    <section className="card mb-4 p-5" data-qbo-invoice="">
+      <h2 className="text-sm font-semibold">QuickBooks invoice</h2>
 
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
         <div>
@@ -56,7 +43,7 @@ export function QuickbooksInvoicePanel({
           <dd className="font-semibold">{preview.lane}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Amount (customer rate)</dt>
+          <dt className="text-slate-500">Amount</dt>
           <dd className="font-semibold">{formatMoney(preview.amount)}</dd>
         </div>
         <div>
@@ -65,7 +52,7 @@ export function QuickbooksInvoicePanel({
         </div>
         {preview.alreadySent ? (
           <div>
-            <dt className="text-slate-500">Already sent</dt>
+            <dt className="text-slate-500">QBO doc #</dt>
             <dd className="font-semibold">
               {preview.existingInvoiceNumber || preview.existingInvoiceId}
               {preview.existingSentAt ? ` · ${formatDateTime(preview.existingSentAt)}` : ""}
@@ -74,13 +61,26 @@ export function QuickbooksInvoicePanel({
           </div>
         ) : null}
       </dl>
+      {preview.customerNeedsQbo ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Needs QBO customer: {preview.customerName}. Match or create this customer in QuickBooks, then send again.
+        </p>
+      ) : null}
+      <ul className="mt-3 space-y-1 text-sm text-slate-700">
+        {preview.lines.map((line) => (
+          <li key={`${line.name}-${line.description}`} className="flex justify-between gap-3">
+            <span>
+              {line.name}
+              <span className="text-slate-500"> · {line.description}</span>
+            </span>
+            <span className="font-semibold">{formatMoney(line.amount)}</span>
+          </li>
+        ))}
+      </ul>
 
       <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
         {preview.memo}
       </pre>
-      {preview.ownerOperatorNote ? (
-        <p className="mt-2 text-sm text-slate-600">{preview.ownerOperatorNote}</p>
-      ) : null}
 
       <form action={formAction} className="mt-4 space-y-3">
         {state?.ok ? (

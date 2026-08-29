@@ -1,5 +1,8 @@
 import { formatDate } from "./format";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "./settings-shared";
 import type { Driver, Trailer, Truck } from "./types";
+
+export type { ComplianceWindows };
 
 export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection";
 
@@ -13,9 +16,9 @@ export type ComplianceAlert = {
   message: string;
 };
 
-const DRIVER_WINDOW_DAYS = 30;
-const REGISTRATION_WINDOW_DAYS = 60;
-const DOT_WINDOW_DAYS = 30;
+function resolvedWindows(windows?: ComplianceWindows): ComplianceWindows {
+  return windows ?? DEFAULT_COMPLIANCE_WINDOWS;
+}
 
 export function daysUntil(dateStr: string, now = new Date()): number | null {
   const trimmed = dateStr.trim();
@@ -60,39 +63,45 @@ function alertFor(
   return null;
 }
 
-export function driverComplianceAlerts(driver: Driver): ComplianceAlert[] {
+export function driverComplianceAlerts(driver: Driver, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = driver.name;
+  const { driverDays } = resolvedWindows(windows);
   return [
-    alertFor(driver.license_expires, DRIVER_WINDOW_DAYS, subject, "driver license", "license"),
-    alertFor(driver.medical_expires, DRIVER_WINDOW_DAYS, subject, "medical card", "medical"),
+    alertFor(driver.license_expires, driverDays, subject, "driver license", "license"),
+    alertFor(driver.medical_expires, driverDays, subject, "medical card", "medical"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function truckComplianceAlerts(truck: Truck): ComplianceAlert[] {
+export function truckComplianceAlerts(truck: Truck, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = `Unit ${truck.unit_number}`;
+  const { registrationDays, dotDays } = resolvedWindows(windows);
   return [
-    alertFor(truck.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(truck.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
+    alertFor(truck.registration_expires, registrationDays, subject, "registration", "registration"),
+    alertFor(truck.dot_expires, dotDays, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function trailerComplianceAlerts(trailer: Trailer): ComplianceAlert[] {
+export function trailerComplianceAlerts(trailer: Trailer, windows?: ComplianceWindows): ComplianceAlert[] {
   const subject = `Trailer ${trailer.unit_number}`;
+  const { registrationDays, dotDays } = resolvedWindows(windows);
   return [
-    alertFor(trailer.registration_expires, REGISTRATION_WINDOW_DAYS, subject, "registration", "registration"),
-    alertFor(trailer.dot_expires, DOT_WINDOW_DAYS, subject, "DOT inspection", "dot_inspection"),
+    alertFor(trailer.registration_expires, registrationDays, subject, "registration", "registration"),
+    alertFor(trailer.dot_expires, dotDays, subject, "DOT inspection", "dot_inspection"),
   ].filter((item): item is ComplianceAlert => Boolean(item));
 }
 
-export function collectAssignmentAlerts(input: {
-  driver?: Driver | null;
-  truck?: Truck | null;
-  trailer?: Trailer | null;
-}): ComplianceAlert[] {
+export function collectAssignmentAlerts(
+  input: {
+    driver?: Driver | null;
+    truck?: Truck | null;
+    trailer?: Trailer | null;
+  },
+  windows?: ComplianceWindows,
+): ComplianceAlert[] {
   return [
-    ...(input.driver ? driverComplianceAlerts(input.driver) : []),
-    ...(input.truck ? truckComplianceAlerts(input.truck) : []),
-    ...(input.trailer ? trailerComplianceAlerts(input.trailer) : []),
+    ...(input.driver ? driverComplianceAlerts(input.driver, windows) : []),
+    ...(input.truck ? truckComplianceAlerts(input.truck, windows) : []),
+    ...(input.trailer ? trailerComplianceAlerts(input.trailer, windows) : []),
   ];
 }
 

@@ -7,13 +7,30 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const company = {
   company_name: "MS EXPRESS",
-  dispatcher_name: "Ana G",
+  dispatcher_name: "MS Test",
   dispatcher_phone: "402-302-0097",
   dispatcher_fax: "",
   dispatcher_email: "ana@msloads.com",
+  street: "",
+  city: "",
+  state: "",
+  zip: "",
+};
+
+const emptyCustomer = {
+  packet: "internal" as const,
+  customerName: "",
+  customerBilling: "",
+  customerContact: "",
+  customerPhone: "",
+  customerEmail: "",
+  customerReference: "",
+  customerRate: null,
+  customerRateLines: [],
 };
 
 const ooSample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "owner_operator",
   company,
   loadNumber: "1006149",
@@ -65,10 +82,16 @@ const ooSample: ConfirmationModel = {
     appointment: "Yes",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
+  internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
+ooSample.stops = [ooSample.shipper, ooSample.consignee];
 
 const companySample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "company_driver",
   company,
   loadNumber: "1006151",
@@ -120,8 +143,13 @@ const companySample: ConfirmationModel = {
     appointment: "No",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
+  internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
+companySample.stops = [companySample.shipper, companySample.consignee];
 
 async function main(): Promise<void> {
   const oo = await renderConfirmationPdf(ooSample);

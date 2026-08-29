@@ -18,7 +18,6 @@ export default function CustomersPage() {
     <>
       <PageHeader
         title="Customers"
-        subtitle="Shippers and bill-to accounts. Pick one when you book a load."
         actions={
           <Link href="/customers/new" className="btn btn-primary">
             New customer
@@ -42,6 +41,8 @@ export default function CustomersPage() {
                   <div className="font-semibold">{customer.name}</div>
                   <div className="text-xs text-slate-500">
                     {customer.contactCount} contact{customer.contactCount === 1 ? "" : "s"}
+                    {customer.payment_terms ? ` · ${customer.payment_terms}` : ""}
+                    {customer.credit_hold ? " · credit hold" : ""}
                   </div>
                 </td>
                 <td>

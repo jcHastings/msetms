@@ -4,14 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { driverUploadAction } from "@/lib/driver-actions";
 import { imagesToPdf, pdfFileName } from "@/lib/image-pdf";
-import { ATTACHMENT_KINDS } from "@/lib/types";
-
 type Draft = { previewUrl: string; blob: Blob };
 type Page = Draft & { id: string };
-
-const DRIVER_KINDS = ATTACHMENT_KINDS.filter(
-  (kind) => kind.value !== "rate_con" && kind.value !== "ifta",
-);
 
 export function DriverCameraPdf({
   loadId,
@@ -24,7 +18,7 @@ export function DriverCameraPdf({
   const captureRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [kind, setKind] = useState("pod");
+  const kind = "doc";
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [live, setLive] = useState<MediaStream | null>(null);
@@ -112,6 +106,42 @@ export function DriverCameraPdf({
     });
   }
 
+function autoCropAndGrayscale(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  const source = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = source;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 4;
+      const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      data[i] = gray;
+      data[i + 1] = gray;
+      data[i + 2] = gray;
+      if (gray < 236) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  ctx.putImageData(source, 0, 0);
+  const pad = 8;
+  if (maxX > minX + 20 && maxY > minY + 20) {
+    const sx = Math.max(0, minX - pad);
+    const sy = Math.max(0, minY - pad);
+    const sw = Math.min(width - sx, maxX - minX + pad * 2);
+    const sh = Math.min(height - sy, maxY - minY + pad * 2);
+    const cropped = ctx.getImageData(sx, sy, sw, sh);
+    canvas.width = sw;
+    canvas.height = sh;
+    ctx.putImageData(cropped, 0, 0);
+  }
+}
+
   async function blobToJpeg(blob: Blob): Promise<Uint8Array> {
     const bitmap = await createImageBitmap(blob);
     const maxEdge = 1600;
@@ -123,6 +153,7 @@ export function DriverCameraPdf({
     if (!ctx) throw new Error("Could not prepare the photo.");
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
+    autoCropAndGrayscale(ctx, canvas);
     const jpeg = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", 0.82),
     );
@@ -150,7 +181,6 @@ export function DriverCameraPdf({
       const file = new File([copy], pdfFileName(kind, loadNumber), { type: "application/pdf" });
       const form = new FormData();
       form.set("load_id", String(loadId));
-      form.set("kind", kind);
       form.set("file", file);
       const result = await driverUploadAction(form);
       if (!result.ok) {
@@ -159,7 +189,7 @@ export function DriverCameraPdf({
       }
       for (const page of pages) URL.revokeObjectURL(page.previewUrl);
       setPages([]);
-      setSaved("PDF saved on this load. Dispatch can open it now.");
+      setSaved("Saved. Pick Receipt, Scale Ticket, BOL, or Proof of Delivery on the files list.");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not make the PDF.");
@@ -169,27 +199,9 @@ export function DriverCameraPdf({
   }
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 className="text-base font-semibold">Take a document photo</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Camera first. Preview, then make a PDF (BOL / POD / lumper / other) on this phone.
-      </p>
-
-      <div className="mt-3 field">
-        <label htmlFor="camera-kind">Type</label>
-        <select
-          id="camera-kind"
-          className="min-h-12"
-          value={kind}
-          onChange={(event) => setKind(event.target.value)}
-        >
-          {DRIVER_KINDS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <section className="rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10">
+      <h2 className="text-base font-semibold text-white">Take a document photo</h2>
+      <p className="mt-1 text-sm text-slate-400">Upload first. Type it on the files list after it saves.</p>
 
       <input
         ref={captureRef}

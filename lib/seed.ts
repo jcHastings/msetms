@@ -18,6 +18,8 @@ function isoDate(offsetDays: number): string {
 }
 
 export function seedDatabase(db: Database): void {
+  const driverCount = (db.prepare("SELECT COUNT(*) as count FROM drivers").get() as { count: number }).count;
+  if (driverCount > 0) return;
   const created = now();
 
   const insertCustomer = db.prepare(
@@ -124,14 +126,14 @@ export function seedDatabase(db: Database): void {
       created,
     );
 
-    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
-    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
-    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
-    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
-    insertTruck.run("301", "box", 26000, "available", "", "", "", "", created, created);
+    const t101 = Number(insertTruck.run("101", "sleeper", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
+    const t102 = Number(insertTruck.run("102", "sleeper", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t108 = Number(insertTruck.run("108", "sleeper", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
+    const t112 = Number(insertTruck.run("112", "day_cab", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
+    const t118 = Number(insertTruck.run("118", "sleeper", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t205 = Number(insertTruck.run("205", "sleeper", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
+    const t210 = Number(insertTruck.run("210", "day_cab", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
+    insertTruck.run("301", "day_cab", 26000, "available", "", "", "", "", created, created);
 
     const insertTrailer = db.prepare(
       `INSERT INTO trailers (
@@ -189,6 +191,13 @@ export function seedDatabase(db: Database): void {
     db.prepare(
       `UPDATE trucks SET registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ? WHERE unit_number = ?`,
     ).run(isoDate(-180), isoDate(220), isoDate(-90), isoDate(200), "112");
+    const patchTruck = db.prepare(
+      `UPDATE trucks SET year = ?, make = ?, model = ?, plate = ?, vin = ? WHERE unit_number = ?`,
+    );
+    patchTruck.run("2020", "Volvo", "VNL 760", "KY-102", "4V4NC9EH5LN102001", "102");
+    patchTruck.run("2019", "Kenworth", "T680", "TN-108", "1XKYD49X5KJ108001", "108");
+    patchTruck.run("2021", "Freightliner", "Cascadia", "TN-112", "3AKJHHDR8MSLJ1120", "112");
+    patchTruck.run("2018", "Peterbilt", "579", "TN-210", "1XPBD49X5JD210001", "210");
 
     const marcus = Number(
       insertDriver.run("Marcus Hale", "(502) 555-0101", "KY-D-448291", "1024", "samsara-drv-marcus", t102, "on_duty", created, created)
@@ -443,7 +452,7 @@ export function seedDatabase(db: Database): void {
     const extras = db.prepare(
       `UPDATE loads SET
         special_instructions = ?, appointment_notes = ?, reference_number = ?, po_number = ?,
-        reefer_setpoint_f = ?, trailer_number = ?, driver_progress = ?
+        reefer_setpoint_f = ?, reefer_mode = ?, trailer_number = ?, driver_progress = ?
        WHERE load_number = ?`,
     );
     extras.run(
@@ -452,6 +461,7 @@ export function seedDatabase(db: Database): void {
       "RC-1043",
       "PO-44118",
       36,
+      "continuous",
       "TR-8801",
       "",
       "MSE-1043",
@@ -462,6 +472,7 @@ export function seedDatabase(db: Database): void {
       "RC-1045",
       "PO-55209",
       34,
+      "continuous",
       "TR-7742",
       "en_route_delivery",
       "MSE-1045",
@@ -475,16 +486,18 @@ export function seedDatabase(db: Database): void {
       "",
       null,
       "",
+      "",
       "en_route_delivery",
       "MSE-1046",
     );
-    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "MSE-1044");
+    extras.run("PO 88421 on BOL. No tarps.", "", "RC-1044", "PO-88421", null, "", "", "", "MSE-1044");
     extras.run(
       "Flatbed. 4-foot tarps. Chains in the box.",
       "",
       "RC-1051",
       "",
       null,
+      "",
       "",
       "",
       "MSE-1051",
@@ -528,7 +541,196 @@ export function seedDatabase(db: Database): void {
     patchDriver.run("229817", "IL", isoDate(400), isoDate(-100), isoDate(220), "company_driver", null, "Angela Ruiz");
     patchDriver.run("104552", "MS", isoDate(400), isoDate(-400), isoDate(-10), "company_driver", null, "Tyrell Brooks");
     patchDriver.run("667320", "KS", isoDate(400), isoDate(-90), isoDate(210), "owner_operator", 80, "Sam Keene");
+
+    seedDemoLocations(db);
   });
 
   seed();
+}
+
+type LocationSeed = {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  notes: string;
+  role: "shipper" | "receiver" | "both";
+  scheduling_type: "appointment" | "fcfs";
+  hours: string;
+  scheduling_notes: string;
+  shipperLoads?: string[];
+  consigneeLoads?: string[];
+};
+
+const DEMO_LOCATIONS: LocationSeed[] = [
+  {
+    name: "Heartland Foods — Chicago",
+    street: "4400 W 47th St",
+    city: "Chicago",
+    state: "IL",
+    zip: "60632",
+    phone: "(312) 555-0148",
+    notes: "Live unload. Call Megan 60 minutes out.",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "Mon–Fri 06:00–14:00",
+    scheduling_notes: "FCFS. No Saturday pickup. Guard shack on 47th.",
+    shipperLoads: ["MSE-1042"],
+  },
+  {
+    name: "Heartland Indianapolis DC",
+    street: "8900 Brookville Rd",
+    city: "Indianapolis",
+    state: "IN",
+    zip: "46239",
+    phone: "(317) 555-0160",
+    notes: "POD required.",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 08:00–16:00",
+    scheduling_notes: "Appointment required. Use dock 6–9. Driver must have a gate pass.",
+    consigneeLoads: ["MSE-1042", "MSE-1050"],
+  },
+  {
+    name: "River City Produce — Memphis",
+    street: "1200 Harbor Ave",
+    city: "Memphis",
+    state: "TN",
+    zip: "38113",
+    phone: "(901) 555-0166",
+    notes: "Reefer only. Pulp product at pickup.",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "Daily 05:00–11:00",
+    scheduling_notes: "Appointment required. Pre-cool to 36°F. Call Luis 60 minutes out.",
+    shipperLoads: ["MSE-1043"],
+  },
+  {
+    name: "Atlanta Produce DC",
+    street: "2100 Forest Pkwy",
+    city: "Atlanta",
+    state: "GA",
+    zip: "30315",
+    phone: "(404) 555-0122",
+    notes: "Lumper possible.",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "Mon–Sat 04:00–14:00",
+    scheduling_notes: "Appointment required. Docks 4–7. Lumper receipt required.",
+    consigneeLoads: ["MSE-1043"],
+  },
+  {
+    name: "River City Nashville Cooler",
+    street: "700 Cowan St",
+    city: "Nashville",
+    state: "TN",
+    zip: "37207",
+    phone: "(615) 555-0144",
+    notes: "Chilled dairy shipper.",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 06:00–12:00",
+    scheduling_notes: "Appointment required. Photograph seals. Maintain 34°F.",
+    shipperLoads: ["MSE-1045"],
+  },
+  {
+    name: "Dallas Cold Storage",
+    street: "3500 S Lamar St",
+    city: "Dallas",
+    state: "TX",
+    zip: "75215",
+    phone: "(214) 555-0190",
+    notes: "Evening appointment window.",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "Daily 14:00–22:00",
+    scheduling_notes: "Appointment required this evening. Check-call at 14:00.",
+    consigneeLoads: ["MSE-1045"],
+  },
+  {
+    name: "Prairie Grain Cooperative",
+    street: "1800 Inland Dr",
+    city: "Kansas City",
+    state: "MO",
+    zip: "64120",
+    phone: "(816) 555-0133",
+    notes: "Scale tickets required.",
+    role: "both",
+    scheduling_type: "fcfs",
+    hours: "Mon–Fri 07:00–15:00. Closed Saturday.",
+    scheduling_notes: "FCFS. Scale ticket in door pocket. No Saturday deliveries.",
+    shipperLoads: ["MSE-1046"],
+  },
+  {
+    name: "Gulf Coast Packaging",
+    street: "4400 Portway",
+    city: "Houston",
+    state: "TX",
+    zip: "77015",
+    phone: "(713) 555-0188",
+    notes: "Bill-to at this address.",
+    role: "shipper",
+    scheduling_type: "fcfs",
+    hours: "Mon–Fri 07:00–16:00",
+    scheduling_notes: "FCFS. Confirm yard hours before hook.",
+    shipperLoads: ["MSE-1047"],
+  },
+  {
+    name: "Blue Ridge Appliances DC",
+    street: "2400 Elm Hill Pike",
+    city: "Nashville",
+    state: "TN",
+    zip: "37210",
+    phone: "(615) 555-0129",
+    notes: "Use docks 12–18.",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 08:00–16:00",
+    scheduling_notes: "Appointment required at DC. Use dock 12–18.",
+    consigneeLoads: ["MSE-1048", "MSE-1051"],
+  },
+];
+
+/** Seed shipper/receiver locations and attach them to matching demo loads. */
+export function seedDemoLocations(db: Database): void {
+  const existing = (db.prepare("SELECT COUNT(*) as count FROM locations").get() as { count: number }).count;
+  if (existing > 0) return;
+
+  const created = now();
+  const insert = db.prepare(
+    `INSERT INTO locations (
+      name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const linkShipper = db.prepare("UPDATE loads SET shipper_location_id = ? WHERE load_number = ?");
+  const linkConsignee = db.prepare("UPDATE loads SET consignee_location_id = ? WHERE load_number = ?");
+
+  for (const location of DEMO_LOCATIONS) {
+    const id = Number(
+      insert.run(
+        location.name,
+        location.street,
+        location.city,
+        location.state,
+        location.zip,
+        location.phone,
+        location.notes,
+        location.role,
+        location.scheduling_type,
+        location.hours,
+        location.scheduling_notes,
+        created,
+        created,
+      ).lastInsertRowid,
+    );
+    for (const loadNumber of location.shipperLoads ?? []) {
+      linkShipper.run(id, loadNumber);
+    }
+    for (const loadNumber of location.consigneeLoads ?? []) {
+      linkConsignee.run(id, loadNumber);
+    }
+  }
 }

@@ -15,26 +15,21 @@ Do not implement the full catalog in this PR. Ship the current v1 slice only.
 
 ## Now (this PR / v1)
 
-Existing work only:
+Working screens in [SHIPPED.md](./SHIPPED.md). Catalog marks in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
-- Dispatcher web desk and phone-width driver web app
-- **Exception inbox** on dispatch home (N fine / M need attention, ranked CRITICAL–LOW)
-- Loads: create, edit, board filters, assign / reassign truck + trailer + driver
-- Rate-con ingest (PDF / local OCR) with review before save
-- Load confirmation PDFs (owner-operator vs company-driver templates)
-- Compliance: CDL, medical card, truck/trailer registration, DOT inspection; assign-time alerts
-- Company driver vs owner-operator (rate, %, pay on the load; confirmation money only for OO)
-- QuickBooks Online **stub** — demo invoice locally; live invoice only when env credentials work
-- Samsara **stub** — demo GPS/HOS; live when `SAMSARA_API_TOKEN` is set
-- ORBCOMM **stub** — demo / imported reefer; live when ORBCOMM env creds work
-- IFTA **attach** — jurisdiction table + CSV on the load; demo from origin/destination without a token; Samsara IFTA APIs when the token works
+- Dispatcher PIN login + phone-width driver web app
+- **Exception inbox** on dispatch home (ack / snooze / resolve, filters, handoff, watch, recap)
+- Loads: create, edit, richer statuses, multi-stop, clone, templates, board filters, assign / reassign
+- **Locations** and **Search** in the dispatcher nav
+- **Accounting** nav: AR, AP, driver pay, commissions, QuickBooks stub
+- **Settings hub**: company, insurance, lists, units, tax, alerts, routing, pay/margin, documents, load numbers, users, integrations
+- Rate-con ingest, load confirmation PDFs, compliance page, claims, reports CSV
+- QBO / Samsara / ORBCOMM / IFTA stubs (live only when env credentials work)
 
 Each integration is Connected vs Demo independently. Failed live APIs show an error. No invented “live” data. No secrets in git.
 
 ## Next
 
-- Richer load statuses (at PU / picked up / at DEL, reason codes)
-- Multi-stop loads
 - **IFTA live** as the default path when the token and scopes are present (trip-window detail, not only demo)
 - **QBO live** as the default path when refresh token + realm are present (customer invoice only; still not OO bills)
 
