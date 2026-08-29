@@ -2342,6 +2342,14 @@ async function main() {
     driverLoadGreeting({ locale: "es", driverName: "Jose Ortega", now: new Date("2026-08-29T14:00:00.000Z") }),
     "Buenos días, Jose. Espero que estés teniendo un buen día.",
   );
+  assert.equal(
+    driverLoadGreeting({ locale: "en", driverName: "Chris", now: new Date("2026-08-30T01:00:00.000Z") }),
+    "Good evening, Chris. Hope you're having a great day.",
+  );
+  assert.equal(
+    driverLoadGreeting({ locale: "es", driverName: "Jose", now: new Date("2026-08-30T01:00:00.000Z") }),
+    "Buenas noches, Jose. Espero que estés teniendo un buen día.",
+  );
   assert.match(driverLoadGreeting({ locale: "en", driverName: "", now: new Date("2026-08-29T14:00:00.000Z") }), /^Good morning\./);
   assert.doesNotMatch(driverLoadGreeting({ locale: "en", driverName: "" }), /driver/i);
   const spanishSms = formatDriverDispatchText(
@@ -2393,6 +2401,7 @@ async function main() {
   assert.match(spanishSms, /Camión 26 · Remolque MS1519/);
   assert.match(spanishSms, /Reefer 26°F Continuous/);
   assert.doesNotMatch(spanishSms, /1006153|Shipper|Pickup |Load MSE/);
+  assert.doesNotMatch(spanishSms, /402-302-0097|Do not reply|No responda|M & S Loads LLC/);
   const apptSms = formatLoadSummary({
     load_number: "MSE-1043",
     origin: "Hastings, NE",
