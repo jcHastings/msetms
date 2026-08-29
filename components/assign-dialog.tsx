@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDismissable } from "@/components/use-dismissable";
 import { ComplianceList } from "@/components/compliance-badge";
 import { assignLoadAction } from "@/lib/actions";
@@ -43,8 +44,22 @@ export function AssignDialog({
   const [driverId, setDriverId] = useState("");
   const [ooPercent, setOoPercent] = useState(String(defaultOoPercent));
   const [confirmed, setConfirmed] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLFormElement>(null);
   useDismissable(open, () => setOpen(false), panelRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   const driver = drivers.find((item) => String(item.id) === driverId);
   const truck = trucks.find((item) => String(item.id) === truckId);
@@ -83,14 +98,17 @@ export function AssignDialog({
     setOpen(false);
   }
 
-  return (
-    <>
-      <button className="btn btn-secondary" type="button" onClick={() => setOpen(true)}>
-        {label}
-      </button>
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6">
-          <form ref={panelRef} className="card w-full max-w-md p-5 shadow-xl" onSubmit={onSubmit}>
+  const panel = (
+    <div
+      className="fixed inset-0 z-[80] overflow-y-auto overscroll-contain bg-slate-900/40 p-3 sm:flex sm:items-center sm:justify-center sm:p-6"
+      data-assign-overlay=""
+    >
+      <form
+        ref={panelRef}
+        className="card mx-auto my-3 w-full max-w-md p-5 shadow-xl sm:my-0"
+        data-assign-panel=""
+        onSubmit={onSubmit}
+      >
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Assign {loadNumber}</h2>
             </div>
@@ -201,9 +219,16 @@ export function AssignDialog({
                 {pending ? "Dispatching…" : "Assign & Dispatch"}
               </button>
             </div>
-          </form>
-        </div>
-      ) : null}
+      </form>
+    </div>
+  );
+
+  return (
+    <>
+      <button className="btn btn-secondary" type="button" data-assign-open="" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+      {open && mounted ? createPortal(panel, document.body) : null}
     </>
   );
 }

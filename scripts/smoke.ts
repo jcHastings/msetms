@@ -9177,6 +9177,10 @@ Continuous reefer. Two load locks.
   assert.match(loadImportUi, /JSON\.stringify\(rows\)/);
   const assignUi = fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8");
   assert.match(assignUi, /useDismissable/);
+  assert.match(assignUi, /createPortal/);
+  assert.match(assignUi, /document\.body/);
+  assert.match(assignUi, /data-assign-overlay/);
+  assert.match(assignUi, /overflow-y-auto/);
   assert.match(assignUi, /name="truck_id"[\s\S]*?\{item\.unit_number\}[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /name="truck_id"[\s\S]*?item\.type[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /dry van/i);
