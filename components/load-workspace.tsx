@@ -59,6 +59,7 @@ export function LoadWorkspace({
   accountingDesk = "operations",
   canSendToAccounting = false,
   canReturnFromAccounting = false,
+  header,
   children,
 }: {
   loadId: number | null;
@@ -87,6 +88,7 @@ export function LoadWorkspace({
   accountingDesk?: string;
   canSendToAccounting?: boolean;
   canReturnFromAccounting?: boolean;
+  header?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -268,6 +270,7 @@ export function LoadWorkspace({
     <LoadEditProvider
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
+      {header}
       <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
         {create ? (
           <p className="px-3 py-2 text-sm font-semibold text-slate-600">New load</p>

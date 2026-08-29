@@ -98,35 +98,37 @@ export async function LoadEditor({
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
-      <PageHeader
-        title={load.load_number}
-        subtitle={formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`}
-        actions={
-          <div className="flex items-center gap-3">
-            <CopyTripNumber value={load.load_number} />
-            <LoadStatusBadge status={load.status} />
-            {loadNeedsCriticalTag(load.id) ? <CriticalTag /> : null}
-            <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
-            {load.qbo_invoice_number || load.qbo_invoice_id ? (
-              <span className="text-sm text-slate-600">
-                QBO {load.qbo_invoice_number || load.qbo_invoice_id}
-              </span>
-            ) : null}
-            {canEditLoads(role) || canAccessAccounting(role) ? (
-              <SendToAccountingControls
-                loadId={load.id}
-                loadNumber={load.load_number}
-                status={load.status}
-                desk={load.accounting_desk}
-                canSend={canEditLoads(role) && !load.non_revenue}
-                canReturn={canAccessAccounting(role)}
-                variant="header"
-              />
-            ) : null}
-          </div>
-        }
-      />
       <LoadWorkspace
+        header={
+          <PageHeader
+            title={load.load_number}
+            subtitle={formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`}
+            actions={
+              <div className="flex items-center gap-3">
+                <CopyTripNumber value={load.load_number} />
+                <LoadStatusBadge status={load.status} />
+                {loadNeedsCriticalTag(load.id) ? <CriticalTag /> : null}
+                <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
+                {load.qbo_invoice_number || load.qbo_invoice_id ? (
+                  <span className="text-sm text-slate-600">
+                    QBO {load.qbo_invoice_number || load.qbo_invoice_id}
+                  </span>
+                ) : null}
+                {canEditLoads(role) || canAccessAccounting(role) ? (
+                  <SendToAccountingControls
+                    loadId={load.id}
+                    loadNumber={load.load_number}
+                    status={load.status}
+                    desk={load.accounting_desk}
+                    canSend={canEditLoads(role) && !load.non_revenue}
+                    canReturn={canAccessAccounting(role)}
+                    variant="header"
+                  />
+                ) : null}
+              </div>
+            }
+          />
+        }
         loadId={load.id}
         status={load.status}
         initialTab={tab}

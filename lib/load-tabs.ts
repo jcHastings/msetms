@@ -54,6 +54,11 @@ export function isSaveTab(tab: LoadTab): boolean {
   return isFormTab(tab) || tab === "stops" || tab === "financials";
 }
 
+/** Customer Info and Financials get the customer sheet. Carrier and Driver Info gets the driver sheet. */
+export function confirmationPacketForTab(tab: LoadTab): "customer" | "internal" {
+  return tab === "assets" ? "internal" : "customer";
+}
+
 /** Kept for older callers. Tab switches stay on the client so the editor does not remount. */
 export function tabNeedsServerPaint(_tab: LoadTab): boolean {
   return false;
