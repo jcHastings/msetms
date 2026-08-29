@@ -405,28 +405,26 @@ export function MakeBolPanel({
           {bols.map((file) => (
             <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div>
-                <a
-                  href={`/api/attachments/${file.id}`}
+                <button
+                  type="button"
                   className="font-medium hover:underline"
-                  onClick={(event) => openPdfInNewTab(`/api/attachments/${file.id}`, event)}
+                  onClick={() => openPdfInNewTab(`/api/attachments/${file.id}`)}
                 >
                   {file.original_name}
-                </a>
+                </button>
                 <div className="text-xs text-slate-500">
                   BOL · {labelForUploader(file.uploaded_by)} · {formatDateTime(file.created_at)}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a
+                <button
                   className="btn btn-secondary"
-                  href={`/api/attachments/${file.id}`}
-                  target="_blank"
-                  rel="noreferrer"
+                  type="button"
                   data-bol-print-view=""
-                  onClick={(event) => openPdfInNewTab(`/api/attachments/${file.id}`, event)}
+                  onClick={() => openPdfInNewTab(`/api/attachments/${file.id}`)}
                 >
                   Print / view
-                </a>
+                </button>
                 <a className="btn btn-ghost" href={`/api/attachments/${file.id}?download=1`}>
                   Download
                 </a>

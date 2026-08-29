@@ -2,6 +2,12 @@
 
 export function openPdfInNewTab(href: string, event?: { preventDefault(): void }): void {
   event?.preventDefault();
+  const preview = window.open("about:blank", "_blank");
+  if (preview && !preview.closed) {
+    preview.opener = null;
+    preview.location.replace(href);
+    return;
+  }
   window.open(href, "_blank", "noopener,noreferrer");
 }
 

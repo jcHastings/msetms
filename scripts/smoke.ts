@@ -1458,8 +1458,8 @@ async function main() {
   assert.match(bolFormSource, /from ["']@\/lib\/bol-shared["']/);
   assert.match(bolFormSource, /data-ignore-dirty/);
   assert.match(bolFormSource, /data-bol-print-view/);
-  assert.match(bolFormSource, /target="_blank"/);
   assert.match(bolFormSource, /openPdfInNewTab/);
+  assert.match(bolFormSource, /type="button"/);
   const { matchLocationForPlace } = await import("../lib/places-shared");
   const matchedId = matchLocationForPlace(
     [
