@@ -137,7 +137,7 @@ export function SendToAccountingControls({
     }
     return (
       <div className="space-y-2" data-accounting-sent="">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
           Load has been Sent to Accounting Management
         </div>
         <div className="flex flex-wrap gap-2">

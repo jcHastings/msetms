@@ -239,6 +239,16 @@ export async function LoadEditor({
         <LoadTabPanel when="financials">
           {showFinancials ? (
             <>
+              <div className="mb-4">
+                <SendToAccountingControls
+                  loadId={load.id}
+                  loadNumber={load.load_number}
+                  status={load.status}
+                  desk={load.accounting_desk}
+                  canSend={canEditLoads(role) && !load.non_revenue}
+                  canReturn={canAccessAccounting(role)}
+                />
+              </div>
               <TmsInvoicePanel
                 loadId={load.id}
                 status={load.status}
@@ -266,16 +276,6 @@ export async function LoadEditor({
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => driver.name)}
               />
-              <div className="mt-4">
-                <SendToAccountingControls
-                  loadId={load.id}
-                  loadNumber={load.load_number}
-                  status={load.status}
-                  desk={load.accounting_desk}
-                  canSend={canEditLoads(role) && !load.non_revenue}
-                  canReturn={canAccessAccounting(role)}
-                />
-              </div>
               {loadIsOnAccountingDesk(load) ? (
                 <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
               ) : null}
