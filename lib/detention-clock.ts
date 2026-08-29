@@ -23,9 +23,10 @@ export function resolveDetentionSchedule(
 }
 
 /**
- * FCFS 8 AM–5 PM: midnight arrival → clock at 8 AM (mark 10 AM).
- * FCFS 8 AM–5 PM: 10 AM arrival → clock at 10 AM (mark 12 PM).
- * APPT: clock starts at the appointment time, not arrival.
+ * FCFS before window start: clock = windowStart (mark = windowStart + 2h).
+ * FCFS during the window: clock = arrivedAt (mark = arrivedAt + 2h).
+ * APPT: clock = appointment time, not arrival (mark = appointment + 2h).
+ * Exact minutes from the real timestamps. No fixed clock hours.
  */
 export function detentionClockStart(input: {
   scheduleType?: string | null;

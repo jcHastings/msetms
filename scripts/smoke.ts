@@ -668,9 +668,12 @@ async function main() {
   assert.match(stopsPanelUi, /isAppointmentSchedule/);
   assert.match(stopsPanelUi, /data-detention-mark/);
   assert.match(stopsPanelUi, /detentionTwoHourMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /windowStart && arrived\.getTime\(\) < windowStart\.getTime\(\)/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /schedule === "appointment"/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8"), /return arrived/);
+  const detentionClockSrc = fs.readFileSync(path.join(process.cwd(), "lib/detention-clock.ts"), "utf8");
+  assert.match(detentionClockSrc, /windowStart && arrived\.getTime\(\) < windowStart\.getTime\(\)/);
+  assert.match(detentionClockSrc, /schedule === "appointment"/);
+  assert.match(detentionClockSrc, /return arrived/);
+  assert.match(detentionClockSrc, /start\.getTime\(\) \+ DETENTION_FREE_MS/);
+  assert.doesNotMatch(detentionClockSrc, /8 AM|10 AM|12 PM|T10:00:00|T12:00:00/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /AND \$\{field\} = ''/);
   assert.match(stopsPanelUi, /Add Pickup/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/geofence.ts"), "utf8"), /GEOFENCE_MILES = 2/);
@@ -11848,7 +11851,7 @@ Continuous reefer. Two load locks.
       arrivedAt: "2026-08-29T00:00:00.000-05:00",
     })?.toISOString(),
     new Date("2026-08-29T08:00:00.000-05:00").toISOString(),
-    "early FCFS arrival waits for window start, not 2 AM",
+    "early FCFS arrival waits for window start, not arrival + 2 hours",
   );
   const insideArrival = detentionTwoHourMark({
     ...fcfsWindow,
@@ -11857,7 +11860,7 @@ Continuous reefer. Two load locks.
   assert.equal(
     insideArrival?.toISOString(),
     new Date("2026-08-29T12:00:00.000-05:00").toISOString(),
-    "FCFS in-window arrival marks at arrival + 2 hours (12 PM), not 10 AM",
+    "FCFS in-window arrival marks at arrivedAt + exactly 2 hours",
   );
   assert.equal(
     detentionClockStart({
@@ -11866,12 +11869,42 @@ Continuous reefer. Two load locks.
     })?.toISOString(),
     new Date("2026-08-29T10:00:00.000-05:00").toISOString(),
   );
+  const oddWindow = {
+    scheduleType: "fcfs",
+    windowStart: "2026-08-29T09:22:00.000-05:00",
+    windowEnd: "2026-08-29T17:41:00.000-05:00",
+  };
+  assert.equal(
+    detentionTwoHourMark({
+      ...oddWindow,
+      arrivedAt: "2026-08-29T06:14:00.000-05:00",
+    })?.toISOString(),
+    new Date("2026-08-29T11:22:00.000-05:00").toISOString(),
+    "early FCFS mark is windowStart + exactly 2 hours",
+  );
+  assert.equal(
+    detentionTwoHourMark({
+      ...oddWindow,
+      arrivedAt: "2026-08-29T11:37:00.000-05:00",
+    })?.toISOString(),
+    new Date("2026-08-29T13:37:00.000-05:00").toISOString(),
+    "in-window FCFS 11:37 AM marks at 1:37 PM",
+  );
   const apptMark = detentionTwoHourMark({
     scheduleType: "appointment",
     windowStart: "2026-08-29T08:00:00.000-05:00",
     arrivedAt: "2026-08-29T00:00:00.000-05:00",
   });
   assert.equal(apptMark?.toISOString(), new Date("2026-08-29T10:00:00.000-05:00").toISOString());
+  assert.equal(
+    detentionTwoHourMark({
+      scheduleType: "appointment",
+      windowStart: "2026-08-29T09:22:00.000-05:00",
+      arrivedAt: "2026-08-29T00:00:00.000-05:00",
+    })?.toISOString(),
+    new Date("2026-08-29T11:22:00.000-05:00").toISOString(),
+    "APPT mark is appointment + exactly 2 hours, not arrival",
+  );
   assert.equal(
     detentionStillInsideAtMark({
       arrivedAt: "2026-08-29T00:00:00.000-05:00",
