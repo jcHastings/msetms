@@ -413,7 +413,7 @@ async function main() {
   assert.match(basicsChunk, /data-autosave/);
   assert.match(basicsChunk, /blurPersist/);
   assert.match(basicsChunk, /LoadRateFields/);
-  assert.match(basicsChunk, /\{!load \? \(/);
+  assert.match(basicsChunk, /\{!load \|\| defaults\.rate != null \? \(/);
   assert.doesNotMatch(basicsChunk, /htmlFor="rate"|id="rate"/);
   assert.match(rateFieldsSource, /htmlFor="rate"/);
   assert.match(rateFieldsSource, /Customer rate/);
@@ -3424,6 +3424,90 @@ Bronx, NY 10474
   assert.equal(noahParsed.customer_id, noahId);
   assert.equal(noahParsed.rate, 5869);
   assert.equal(noahParsed.weight, 21000);
+
+  const messyAscendRate = parseRateConText(
+    `
+LOAD CONFIRMATION
+Load # 52309
+Customer Information
+NOAH'S ARK PROCESSORS
+Weight
+21000 lbs
+Commodity
+FRESH BEEF
+Stops / Actions
+1
+Pickup
+08/21/26
+Nebraska Cold Storage
+600 E 39th St
+Hastings, NE 68901
+2
+Delivery
+08/24/26
+Westside Foods - KOSHER
+355 Food Center Dr
+Bronx, NY 10474
+Pay Items
+Description
+Notes
+Quantity
+Rate
+Amount
+Flat Rate
+1
+5 869.00
+$ 5 869.00
+Fuel surcharge rate: $0.45 per mile
+Total
+$ 5 869.00
+Terms of Load
+Linehaul rate: 1
+`,
+    queries.listCustomers(),
+    "Load_Confirmation_52309_20260830013800.pdf",
+  );
+  assert.equal(messyAscendRate.rate, 5869, "pay-item total wins over qty 1 and fuel-per-mile");
+  assert.equal(messyAscendRate.weight, 21000);
+
+  const agreedAmount = parseRateConText(
+    `
+Rate & Load Confirmation
+LOAD #: 52310
+Shipper 1
+Nebraska Cold Storage
+600 E 39th St, Hastings, NE 68901
+Date 08/21/2026
+Weight 21000 lbs
+Description FRESH BEEF
+Consignee 1
+Westside Foods
+355 Food Center Dr, Bronx, NY 10474
+Agreed Amount: $5,869.00
+Dispatch Notes:
+Continuous reefer.
+`,
+  );
+  assert.equal(agreedAmount.rate, 5869, "printed agreed amount is the customer rate");
+
+  const { extractDocumentText: extract52309Text } = await import("../lib/rate-con");
+  const real52309Text = await extract52309Text(
+    fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/Load_Confirmation_52309.pdf")),
+    "application/pdf",
+    "Load_Confirmation_52309_20260830013800.pdf",
+  );
+  const real52309 = parseRateConText(
+    real52309Text,
+    queries.listCustomers(),
+    "Load_Confirmation_52309_20260830013800.pdf",
+  );
+  assert.equal(real52309.rate, 5869, "Ascend 52309 Flat Rate total is the customer rate");
+  assert.equal(real52309.weight, 21000);
+  assert.match(real52309.commodity, /FRESH BEEF/i);
+  assert.equal(real52309.reference_number, "52309");
+  assert.equal(real52309.customer_name, "", "carrier packet has no Customer Information block");
+  assert.match(real52309.shipper.name, /Nebraska Cold Storage/i);
+  assert.match(real52309.origin, /Hastings/i);
 
   const threeStopAscend = parseRateConText(
     `

@@ -155,7 +155,9 @@ export function LoadBasicsScreen({
           </datalist>
         ) : null}
       </div>
-      {!load ? <LoadRateFields defaultsRate={defaults.rate ?? null} /> : null}
+      {!load || defaults.rate != null ? (
+        <LoadRateFields defaultsRate={defaults.rate ?? load?.rate ?? null} />
+      ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>
         <input
