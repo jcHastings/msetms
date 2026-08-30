@@ -150,7 +150,7 @@ button {
 
 .table-grid.table-grid-board {
   table-layout: fixed;
-  width: max(100%, 86rem);
+  width: max(100%, 90rem);
 }
 
 .table-grid-board th {
@@ -205,20 +205,35 @@ button {
 .table-grid-board .board-edit-cell {
   position: sticky;
   right: 0;
+  z-index: 3;
+  width: 10.5rem;
+  min-width: 10.5rem;
+  max-width: 10.5rem;
+}
+
+.table-grid-board .board-move-head,
+.table-grid-board .board-move-cell {
+  position: sticky;
+  right: 10.5rem;
   z-index: 2;
-  min-width: 9.5rem;
+  width: 9.25rem;
+  min-width: 9.25rem;
+  max-width: 9.25rem;
   box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
 }
 
-.table-grid-board .board-edit-head {
+.table-grid-board .board-edit-head,
+.table-grid-board .board-move-head {
   background: #f8fafc;
 }
 
-.table-grid-board .board-edit-cell {
+.table-grid-board .board-edit-cell,
+.table-grid-board .board-move-cell {
   background: #fff;
 }
 
-.table-grid tbody tr:hover td.board-edit-cell {
+.table-grid tbody tr:hover td.board-edit-cell,
+.table-grid tbody tr:hover td.board-move-cell {
   background: #f4f8fc;
 }
 

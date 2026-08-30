@@ -141,7 +141,7 @@ async function BoardLiveSection({
                   <th>HOS</th>
                   <th>Reefer</th>
                   <th>Rate</th>
-                  <th>Move</th>
+                  <th className="board-move-head">Move</th>
                   <th className="board-edit-head"></th>
                 </tr>
               </thead>
@@ -250,7 +250,7 @@ async function BoardLiveSection({
                       />
                     </td>
                     <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>
-                    <td>
+                    <td className="board-move-cell" data-board-move="">
                       <LoadStatusSelect
                         loadId={load.id}
                         status={load.status}

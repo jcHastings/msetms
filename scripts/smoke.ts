@@ -91,6 +91,11 @@ async function main() {
   assert.match(boardUi, /data-dispatch-board/);
   assert.match(boardUi, /table-grid-board/);
   assert.match(boardUi, /board-edit-cell/);
+  assert.match(boardUi, /board-move-cell/);
+  assert.match(boardUi, /data-board-move/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-move-cell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /right:\s*10\.5rem/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-status-select.tsx"), "utf8"), /w-full min-w-0/);
   assert.match(boardUi, /Promise\.all\(\[getReeferSnapshots\(\), getSamsaraFleet\(\)\]\)/);
   assert.match(boardUi, /<Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/orbcomm/page.tsx"), "utf8"), /redirect\("\/fleet\/orbcomm"\)/);

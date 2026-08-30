@@ -29,7 +29,7 @@ export function LoadStatusSelect({
   }
 
   return (
-    <div className="min-w-36">
+    <div className="w-full min-w-0">
       <select
         className={`w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium ${loadStatusBadgeClass(status)}`}
         defaultValue={status}
