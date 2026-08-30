@@ -508,9 +508,16 @@ function isNoiseRow(line: string): boolean {
   if (/^customer\s+pickup/i.test(text)) return true;
   if (/^\*{2,}|★{2,}|stars?/i.test(text)) return true;
   if (/future[- ]week|park/i.test(text)) return true;
+  if (isUnnumberedLoadId(text)) return true;
   if (/^control#?\s*\|?\s*po#?/i.test(text)) return true;
   if (/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(text)) return true;
   return false;
+}
+
+/** Incomplete IDs like `0831-` (no letter). Not a truck. Ignore PFG and other rows under them. */
+function isUnnumberedLoadId(line: string): boolean {
+  const first = splitRow(line)[0] || line.trim();
+  return /^\d{3,4}-\s*$/.test(first);
 }
 
 function isTotalRow(line: string): boolean {
@@ -548,6 +555,10 @@ export function parseTieSheetText(text: string): TieSheetExtract {
         continue;
       }
     }
+    if (isUnnumberedLoadId(trimmed)) {
+      if (sawTruck && extract.orders.length) break;
+      continue;
+    }
     if (isNoiseRow(trimmed)) {
       if (sawTruck && extract.orders.length && !trimmed) break;
       continue;
@@ -566,6 +577,7 @@ export function parseTieSheetText(text: string): TieSheetExtract {
       continue;
     }
     if (sawTruck && extract.orders.length && !trimmed) break;
+    if (!extract.load_id) continue;
     sawTruck = true;
     const place = splitCityState(cells[3] ?? "");
     const qty = parseTieSheetNumber(cells[7]);

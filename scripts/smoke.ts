@@ -1441,7 +1441,12 @@ async function main() {
   assert.match(tieSheetSharedSrc, /Never group by city alone/);
   assert.match(tieSheetSharedSrc, /western-kosher-heartland/);
   assert.match(tieSheetSharedSrc, /fillAmbiguousTieSheetFields/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /THREE drops/);
+  const fixtureSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8");
+  assert.match(fixtureSrc, /THREE drops/);
+  assert.match(fixtureSrc, /not a happy-path same-drop/);
+  assert.match(fixtureSrc, /0824-10E Bozzutos/);
+  assert.match(fixtureSrc, /Ignore unnumbered 0831- PFG/);
+  assert.doesNotMatch(fixtureSrc, /googleusercontent|Drive auto-pull|Grok Bot/);
   assert.match(tieSheetAiSrc, /do not group by city/);
   assert.match(tieSheetAiSrc, /Heartland Kosher and Western Kosher/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /tie-sheet-0824-14M\.png/);
@@ -13696,6 +13701,7 @@ Continuous reefer. Two load locks.
     TIE_SHEET_FIXTURE_0824_5W,
     TIE_SHEET_FIXTURE_0824_9E,
     TIE_SHEET_FIXTURE_0824_4W,
+    TIE_SHEET_FIXTURE_0824_10E,
     TIE_SHEET_0824_4W_DROPS,
     TIE_SHEET_PICTURE_FILES,
     knownTieSheetExtract,
@@ -13731,6 +13737,37 @@ parked for next week
   assert.equal(ignoredParks.orders.length, 1);
   assert.equal(ignoredParks.orders[0]?.control, "74774");
   assert.equal(ignoredParks.orders.some((order) => order.control === "99999" || order.control === "0831-1E"), false);
+
+  const ignoredUnnumberedPfg = parseTieSheetText(`0831-
+74910 | 3698429 | PFG | Springfield, MA | 9/4 | 9/7 | 37,714 | 575 | |
+`);
+  assert.equal(ignoredUnnumberedPfg.load_id, "");
+  assert.equal(ignoredUnnumberedPfg.orders.length, 0, "unnumbered 0831- PFG is not a truck");
+  const truckThenUnnumberedPfg = parseTieSheetText(`0824-9E
+74789 | 128494 | Bertolino | Peabody, MA | 8/28 | 8/31 | 37,152 | 630 | | 8am appt 8/31
+
+0831-
+74910 | 3698429 | PFG | Springfield, MA | 9/4 | 9/7 | 37,714 | 575 | |
+`);
+  assert.equal(truckThenUnnumberedPfg.load_id, "0824-9E");
+  assert.deepEqual(truckThenUnnumberedPfg.orders.map((order) => order.control), ["74789"]);
+
+  const extra10E = parseTieSheetText(TIE_SHEET_FIXTURE_0824_10E);
+  assert.equal(extra10E.load_id, "0824-10E");
+  const extra10EDraft = draftFromTieSheetExtract(extra10E);
+  assert.equal(extra10EDraft.drops.length, 1, "0824-10E is an optional clean single");
+  assert.match(extra10EDraft.drop.name, /Bozzutos/i);
+  assert.equal(extra10EDraft.drop.city, "North Haven");
+  assert.equal(extra10EDraft.drop.state, "CT");
+  assert.deepEqual(extra10EDraft.drop.order_numbers, ["74371"]);
+  assert.deepEqual(extra10EDraft.drop.po_numbers, ["3205355"]);
+  assert.equal(extra10EDraft.weight, 46987);
+  assert.equal(extra10EDraft.case_count, 635);
+  assert.equal(extra10EDraft.drop.schedule_type, "appointment");
+  assert.ok(!TIE_SHEET_FIXTURES.some((row) => row.id === "0824-10E"), "10E is not a picture-upload fixture");
+  assert.ok(!TIE_SHEET_PICTURE_FILES.some((row) => row.id === "0824-10E"));
+  assert.ok(!TIE_SHEET_FIXTURES.some((row) => row.id === "0824-4W"), "4W is mixed, not a happy-path same-drop");
+  assert.ok(!TIE_SHEET_PICTURE_FILES.some((row) => row.id === "0824-4W"));
 
   const pastedTieSheet = proposeMikeWork(TIE_SHEET_FIXTURE_0824_14M);
   assert.equal(

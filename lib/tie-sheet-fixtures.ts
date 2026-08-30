@@ -2,11 +2,14 @@
  * Test-only markdown/text of the example trucks, plus known-snapshot fill
  * when a picture is ambiguous. Do not import from dispatcher UI.
  *
- * Live picture crops (when present):
+ * Picture-upload fixtures (unchanged):
  *   tie-sheet-0824-14M.png — 3 orders, one drop MBL Hammond IN
  *   tie-sheet-0824-19E.png — 2 orders, one drop Westside Nonkosher Bronx NY, FCFS
  *   tie-sheet-0824-5W.png — 2 orders, one drop Zant Los Angeles CA
  *   tie-sheet-0824-9E.png — single order Bertolino Peabody MA
+ * Optional extra (markdown only, not a product path): 0824-10E Bozzutos North Haven CT.
+ * 0824-4W is mixed receivers/cities — not a happy-path same-drop example.
+ * Ignore unnumbered 0831- PFG rows.
  *
  * Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
  */
@@ -44,7 +47,8 @@ XK + TOTAL | | | | | | 37,152 |
 `;
 
 /**
- * JC locked mixed acceptance. One load, THREE drops — not 7 orders, not 2 cities.
+ * Mixed truck — not a happy-path same-drop example, not a picture-upload fixture.
+ * JC locked: one load, THREE drops — not 7 orders, not 2 cities.
  * 1. Rolling Ranch, Ontario CA — 74865 only
  * 2. Western Kosher / Heartland, same dock — 74846 + 7599 + 7714 + 7621 + 7622
  * 3. Zant, Los Angeles — 74793 only (different customer; city is also LA)
@@ -74,7 +78,16 @@ export const TIE_SHEET_0824_4W_DROPS = [
   { label: "Zant", city: "Los Angeles", state: "CA", orders: ["74793"], pos: ["468128"] },
 ] as const;
 
-/** Same-receiver trucks (one drop each). 0824-4W is the locked mixed three-drop fixture. */
+/**
+ * Optional extra clean single. Markdown/text tests only — not a picture-upload
+ * fixture and not a product path.
+ */
+export const TIE_SHEET_FIXTURE_0824_10E = `0824-10E
+Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
+74371 | 3205355 | Bozzutos | North Haven, CT | 8/28 | 8/31 | 46,987 | 635 | | 2am appt 8/31
+`;
+
+/** Same-receiver picture-upload trucks (one drop each). 4W is mixed, not in this list. */
 export const TIE_SHEET_FIXTURES = [
   { id: "0824-14M", text: TIE_SHEET_FIXTURE_0824_14M },
   { id: "0824-19E", text: TIE_SHEET_FIXTURE_0824_19E },
@@ -95,6 +108,7 @@ const KNOWN_TEXTS: Record<string, string> = {
   "0824-5W": TIE_SHEET_FIXTURE_0824_5W,
   "0824-9E": TIE_SHEET_FIXTURE_0824_9E,
   "0824-4W": TIE_SHEET_FIXTURE_0824_4W,
+  "0824-10E": TIE_SHEET_FIXTURE_0824_10E,
 };
 
 export function knownTieSheetExtract(loadId: string): TieSheetExtract | null {
