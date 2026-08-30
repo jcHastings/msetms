@@ -64,6 +64,13 @@ export function cityStateOnly(address: string): string {
   return address.trim();
 }
 
+/** Customer rate confirmation / invoice — dispatcher only. Never on the driver app. */
+export function isCustomerRateDocument(file: { kind: string; original_name?: string }): boolean {
+  if (file.kind === "rate_con" || file.kind === "invoice") return true;
+  const name = String(file.original_name ?? "").toLowerCase();
+  return name.includes("customer-confirmation") || name.includes("customer_confirmation");
+}
+
 export function attachmentIdFromHref(href: string): number | null {
   const match = href.match(/\/api\/attachments\/(\d+)/);
   if (!match) return null;
