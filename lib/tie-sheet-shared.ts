@@ -571,6 +571,39 @@ export function parseTieSheetText(text: string): TieSheetExtract {
   return extract;
 }
 
+/** Fill blank vision fields from a known snapshot. Never overwrite a value the picture already gave. */
+export function fillAmbiguousTieSheetFields(seen: TieSheetExtract, known: TieSheetExtract): TieSheetExtract {
+  const knownByControl = new Map(known.orders.map((order) => [order.control.trim(), order]));
+  const seenControls = new Set(seen.orders.map((order) => order.control.trim()).filter(Boolean));
+  const orders = seen.orders.map((order) => {
+    const hint = knownByControl.get(order.control.trim());
+    if (!hint) return order;
+    return {
+      control: order.control || hint.control,
+      po: order.po || hint.po,
+      deliver_to: order.deliver_to || hint.deliver_to,
+      city: order.city || hint.city,
+      state: order.state || hint.state,
+      ship_date: order.ship_date || hint.ship_date,
+      delv_date: order.delv_date || hint.delv_date,
+      weight: order.weight ?? hint.weight,
+      qty: order.qty ?? hint.qty,
+      qty_label: order.qty_label || hint.qty_label,
+      comments: order.comments || hint.comments,
+      appts: order.appts || hint.appts,
+    };
+  });
+  for (const hint of known.orders) {
+    if (hint.control && !seenControls.has(hint.control.trim())) orders.push(hint);
+  }
+  return {
+    load_id: seen.load_id || known.load_id,
+    orders,
+    total_weight: seen.total_weight ?? known.total_weight,
+    total_qty: seen.total_qty ?? known.total_qty,
+  };
+}
+
 export function encodeTieSheetDraft(draft: TieSheetDraft): string {
   return JSON.stringify(draft);
 }

@@ -1,9 +1,19 @@
 /**
- * Test-only markdown/text of the four 8.24 trucks.
- * Layout reference for unit tests. Do not import from dispatcher UI.
+ * Test-only markdown/text of the example trucks, plus known-snapshot fill
+ * when a picture is ambiguous. Do not import from dispatcher UI.
+ *
+ * Live picture crops (when present):
+ *   tie-sheet-0824-14M.png — 3 orders, one drop MBL Hammond IN
+ *   tie-sheet-0824-19E.png — 2 orders, one drop Westside Nonkosher Bronx NY, FCFS
+ *   tie-sheet-0824-5W.png — 2 orders, one drop Zant Los Angeles CA
+ *   tie-sheet-0824-9E.png — single order Bertolino Peabody MA
  *
  * Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
  */
+
+import fs from "node:fs";
+import path from "node:path";
+import { normalizeTieSheetLoadId, parseTieSheetText, type TieSheetExtract } from "./tie-sheet-shared";
 
 export const TIE_SHEET_FIXTURE_0824_14M = `0824-14M
 Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
@@ -52,3 +62,45 @@ export const TIE_SHEET_FIXTURES = [
   { id: "0824-5W", text: TIE_SHEET_FIXTURE_0824_5W },
   { id: "0824-9E", text: TIE_SHEET_FIXTURE_0824_9E },
 ] as const;
+
+export const TIE_SHEET_PICTURE_FILES = [
+  { id: "0824-14M", file: "tie-sheet-0824-14M.png" },
+  { id: "0824-19E", file: "tie-sheet-0824-19E.png" },
+  { id: "0824-5W", file: "tie-sheet-0824-5W.png" },
+  { id: "0824-9E", file: "tie-sheet-0824-9E.png" },
+] as const;
+
+const KNOWN_TEXTS: Record<string, string> = {
+  "0824-14M": TIE_SHEET_FIXTURE_0824_14M,
+  "0824-19E": TIE_SHEET_FIXTURE_0824_19E,
+  "0824-5W": TIE_SHEET_FIXTURE_0824_5W,
+  "0824-9E": TIE_SHEET_FIXTURE_0824_9E,
+  "0824-4W": TIE_SHEET_FIXTURE_0824_4W,
+};
+
+export function knownTieSheetExtract(loadId: string): TieSheetExtract | null {
+  const key = normalizeTieSheetLoadId(loadId);
+  const text = KNOWN_TEXTS[key];
+  if (!text) return null;
+  return parseTieSheetText(text);
+}
+
+/** Live crop if the dispatcher-attached PNG is on disk. Tests only. */
+export function readTieSheetPictureFixture(
+  id: string,
+  cwd = process.cwd(),
+): { buffer: Buffer; filename: string; mimeType: string } | null {
+  const row = TIE_SHEET_PICTURE_FILES.find((item) => item.id === id);
+  const names = [
+    row?.file,
+    path.join("scripts", "fixtures", "tie-sheet", `${id}.png`),
+    path.join("lib", "tie-sheet-pictures", `${id}.png`),
+  ].filter((name): name is string => Boolean(name));
+  for (const name of names) {
+    const full = path.isAbsolute(name) ? name : path.join(cwd, name);
+    if (fs.existsSync(full)) {
+      return { buffer: fs.readFileSync(full), filename: path.basename(full), mimeType: "image/png" };
+    }
+  }
+  return null;
+}

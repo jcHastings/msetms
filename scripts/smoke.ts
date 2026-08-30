@@ -1437,6 +1437,9 @@ async function main() {
   assert.match(tieSheetSharedSrc, /Nebraska Cold Storage Inc/);
   assert.match(tieSheetSharedSrc, /M&S Loads/);
   assert.match(tieSheetSharedSrc, /groupTieSheetOrdersByDock/);
+  assert.match(tieSheetSharedSrc, /fillAmbiguousTieSheetFields/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /tie-sheet-0824-14M\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8"), /Order# \/ Control#/);
   assert.doesNotMatch(tieSheetSharedSrc, /Liftgate|Inside Pickup|Inside Delivery/);
   assert.doesNotMatch(tieSheetSharedSrc, /one drop per truck/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet.ts"), "utf8"), /console\.log/);
@@ -13687,10 +13690,14 @@ Continuous reefer. Two load locks.
     TIE_SHEET_FIXTURE_0824_5W,
     TIE_SHEET_FIXTURE_0824_9E,
     TIE_SHEET_FIXTURE_0824_4W,
+    TIE_SHEET_PICTURE_FILES,
+    knownTieSheetExtract,
+    readTieSheetPictureFixture,
   } = await import("../lib/tie-sheet-fixtures");
   const {
     draftFromTieSheetExtract,
     encodeTieSheetDraft,
+    fillAmbiguousTieSheetFields,
     parseTieSheetText,
     TIE_SHEET_CUSTOMER,
     TIE_SHEET_MISSING_KEY_MESSAGE,
@@ -13916,68 +13923,72 @@ parked for next week
   assert.match(TIE_SHEET_MISSING_KEY_MESSAGE, /not connected/);
   assert.doesNotMatch(TIE_SHEET_MISSING_KEY_MESSAGE, /\.env|OPENAI_API_KEY|sk-/);
 
-  setTieSheetAiTestClient(async () =>
-    JSON.stringify({
-      load_id: "0824-14M",
-      total_weight: 36533,
-      orders: [
-        {
-          control: "74774",
-          po: "89676G",
-          deliver_to: "MBL",
-          city: "Hammond",
-          state: "IN",
-          ship_date: "8/28",
-          delv_date: "8/31",
-          weight: 18851,
-          qty: "Mixed",
-          appts: "7:00 AM",
-        },
-        {
-          control: "74775",
-          po: "89784",
-          deliver_to: "MBL",
-          city: "Hammond",
-          state: "IN",
-          ship_date: "8/28",
-          delv_date: "8/31",
-          weight: 17330,
-          qty: 245,
-          appts: "7:00 AM",
-        },
-        {
-          control: "74929",
-          po: "Kosher 89786",
-          deliver_to: "MBL",
-          city: "Hammond",
-          state: "IN",
-          ship_date: "8/28",
-          delv_date: "8/31",
-          weight: 352,
-          qty: 6,
-          appts: "7:00 AM",
-        },
-      ],
-    }),
+  const thin14M = parseTieSheetText(TIE_SHEET_FIXTURE_0824_14M);
+  const ambiguous14M = fillAmbiguousTieSheetFields(
+    { load_id: "0824-14M", orders: [{ ...thin14M.orders[0], po: "", city: "", weight: null, qty: null, qty_label: "", appts: "" }], total_weight: null, total_qty: null },
+    thin14M,
   );
-  const loadsBeforeVision = queries.listLoads({ status: "all" }).length;
-  const visionRead = await askMike("", [], { mimeType: "image/png", buffer: tinyPng, filename: "0824-14M.png" });
-  setTieSheetAiTestClient(null);
-  assert.equal(visionRead.proposals.length, 1);
-  assert.equal(visionRead.proposals[0]?.kind, "build_tie_sheet");
-  assert.match(visionRead.proposals[0]?.preview ?? "", /74774/);
-  assert.match(visionRead.proposals[0]?.preview ?? "", /M&S Loads/);
-  assert.match(visionRead.proposals[0]?.preview ?? "", /Nebraska Cold Storage/);
-  assert.equal(queries.listLoads({ status: "all" }).length, loadsBeforeVision, "vision read must not save until confirm");
-  const visionConfirm = applyMikeProposal(visionRead.proposals[0]?.payload ?? {}, "build_tie_sheet");
-  assert.ok(visionConfirm.id);
-  const visionLoad = queries.getLoad(visionConfirm.id);
-  assert.equal(visionLoad?.customer_name, TIE_SHEET_CUSTOMER);
-  const visionStops = (await import("../lib/stops")).listStops(visionConfirm.id!);
-  assert.equal(visionStops.length, 2);
-  assert.equal(visionStops.filter((stop) => stop.kind === "delivery").length, 1);
-  assert.match(visionStops.find((stop) => stop.kind === "delivery")?.confirmation ?? "", /74774/);
-  assert.match(visionStops.find((stop) => stop.kind === "delivery")?.confirmation ?? "", /74929/);
+  assert.equal(ambiguous14M.orders[0]?.po, "89676G");
+  assert.equal(ambiguous14M.orders[0]?.city, "Hammond");
+  assert.equal(ambiguous14M.total_weight, 36533);
+  assert.equal(ambiguous14M.orders.length, 3, "known snapshot supplies the other two orders when the crop is thin");
+
+  assert.equal(TIE_SHEET_PICTURE_FILES.length, 4);
+  const pictureTrucks = [
+    { id: "0824-14M", receiver: /MBL/, city: "Hammond", orders: ["74774", "74775", "74929"], pos: ["89676G", "89784", "Kosher 89786"] },
+    { id: "0824-19E", receiver: /Westside Nonkosher/, city: "Bronx", orders: ["74480", "74795"], pos: ["288167", "289281"] },
+    { id: "0824-5W", receiver: /Zant/, city: "Los Angeles", orders: ["74792", "74794"], pos: ["468110", "468111"] },
+    { id: "0824-9E", receiver: /Bertolino/, city: "Peabody", orders: ["74789"], pos: ["128494"] },
+  ];
+  for (const truck of pictureTrucks) {
+    const known = knownTieSheetExtract(truck.id);
+    assert.ok(known);
+    setTieSheetAiTestClient(async () =>
+      JSON.stringify({
+        load_id: truck.id,
+        orders: known.orders.map((order) => ({ control: order.control })),
+      }),
+    );
+    const picture = readTieSheetPictureFixture(truck.id) ?? {
+      buffer: tinyPng,
+      filename: `tie-sheet-${truck.id}.png`,
+      mimeType: "image/png",
+    };
+    const loadsBeforePicture = queries.listLoads({ status: "all" }).length;
+    const pictureRead = await askMike("", [], {
+      mimeType: picture.mimeType,
+      buffer: picture.buffer,
+      filename: picture.filename,
+    });
+    setTieSheetAiTestClient(null);
+    assert.equal(pictureRead.proposals.length, 1, `${truck.id} picture drafts one load`);
+    assert.equal(pictureRead.proposals[0]?.kind, "build_tie_sheet");
+    assert.match(pictureRead.proposals[0]?.preview ?? "", /M&S Loads/);
+    assert.match(pictureRead.proposals[0]?.preview ?? "", /Nebraska Cold Storage/);
+    assert.match(pictureRead.proposals[0]?.preview ?? "", truck.receiver);
+    for (const order of truck.orders) assert.match(pictureRead.proposals[0]?.preview ?? "", new RegExp(order));
+    assert.equal(queries.listLoads({ status: "all" }).length, loadsBeforePicture, `${truck.id} vision must not save until confirm`);
+    const pictureConfirm = applyMikeProposal(pictureRead.proposals[0]?.payload ?? {}, "build_tie_sheet");
+    assert.ok(pictureConfirm.id);
+    const pictureLoad = queries.getLoad(pictureConfirm.id);
+    assert.equal(pictureLoad?.customer_name, TIE_SHEET_CUSTOMER);
+    const pictureStops = (await import("../lib/stops")).listStops(pictureConfirm.id!);
+    assert.equal(pictureStops.filter((stop) => stop.kind === "pickup").length, 1);
+    assert.equal(pictureStops.filter((stop) => stop.kind === "delivery").length, 1, `${truck.id} is one drop`);
+    const pictureDrop = pictureStops.find((stop) => stop.kind === "delivery");
+    assert.equal(pictureDrop?.city, truck.city);
+    if (truck.id === "0824-19E") {
+      assert.equal(pictureDrop?.state, "NY");
+      assert.equal(pictureDrop?.schedule_type, "fcfs");
+    }
+    for (const order of truck.orders) assert.match(`${pictureDrop?.confirmation} ${pictureDrop?.notes}`, new RegExp(order));
+    for (const po of truck.pos) {
+      assert.match(
+        `${pictureDrop?.reference} ${pictureDrop?.notes} ${pictureLoad?.po_number}`,
+        new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+  }
 
   const whatsappEnvKeys = [
     "TWILIO_ACCOUNT_SID",

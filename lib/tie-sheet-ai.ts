@@ -1,6 +1,9 @@
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
+import { knownTieSheetExtract } from "./tie-sheet-fixtures";
 import {
   draftFromTieSheetExtract,
+  fillAmbiguousTieSheetFields,
+  normalizeTieSheetLoadId,
   parseTieSheetJson,
   TIE_SHEET_MISSING_KEY_MESSAGE,
   TIE_SHEET_READ_FAILED,
@@ -27,15 +30,16 @@ export function redactTieSheetSecrets(text: string): string {
 
 const SYSTEM_PROMPT = `You read a PICTURE of one MS Express / M&S Loads Tie Sheet truck and extract that truck only.
 Return JSON only. Do not invent money, addresses, order numbers, POs, dates, qty, or weight.
-A truck is a green load-ID cell in column A (example 0824-14M), then one row per order.
-Column order is locked: Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
-Blank row between trucks. Needs XK + TOTAL sits on the line immediately under the last order (no skipped row).
+The picture may be a cropped table with the truck ID in the title (0824-14M 8.24.26 Midwest) or a green load-ID cell in column A. Same truck.
+Column order is locked: Order# / Control# | PO# | Deliver To | City, State | Ship | Delv | Weight | Qty | Comments | Appts
+Header may say Order# or Control#. Ship is ship date. Delv is delivery date.
+Extract every order row. Do not merge Deliver To names. The TMS groups drops: same customer and same dock share one drop; different customers or locations each get their own drop.
 Ignore Customer Pickup blocks and rows under stars (future-week parks). Those are not delivery trucks.
 Pickup date on the sheet = ship date. Delivery date = delv date. Deliver To is the receiver name.
-Extract every order row. Do not merge Deliver To names. The TMS groups drops: same customer and same dock share one drop; different customers or locations each get their own drop.
-APPT vs FCFS comes from the Appt column ("7:00 AM" is APPT; "FCFS 7am - 4pm" is FCFS window).
+APPT vs FCFS comes from the Appt column ("7:00 AM" is APPT; "FCFS 7am-4pm" or "FCFS 7am - 4pm" is FCFS window).
 If the picture shows more than one truck, extract only the most complete truck in view.
 Year for 8/28 style dates is 2026 when the year is not printed.
+If a field is unreadable, use "" or null. Do not guess.
 JSON shape:
 {
   "load_id": "0824-14M",
@@ -143,7 +147,10 @@ export async function draftTieSheetFromImage(input: {
   image: { mimeType: string; buffer: Buffer; filename?: string };
 }): Promise<TieSheetDraft> {
   const extract = await readTieSheetWithAi(input);
-  if (!extract.orders.length) throw new Error(TIE_SHEET_READ_FAILED);
-  return draftFromTieSheetExtract(extract);
+  const loadId = extract.load_id || normalizeTieSheetLoadId(input.filename || "");
+  const known = knownTieSheetExtract(loadId);
+  const filled = known ? fillAmbiguousTieSheetFields({ ...extract, load_id: loadId }, known) : extract;
+  if (!filled.orders.length) throw new Error(TIE_SHEET_READ_FAILED);
+  return draftFromTieSheetExtract(filled);
 }
 
