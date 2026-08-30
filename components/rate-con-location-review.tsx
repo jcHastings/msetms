@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LocationPicker } from "@/components/location-picker";
 import { saveRateConLocationAction } from "@/lib/actions";
-import { formatLocationAddress, US_STATES } from "@/lib/locations";
+import { US_STATES } from "@/lib/locations";
 import {
   customerRefFromRateCon,
   formatParsedStop,
@@ -140,10 +140,7 @@ function StopReviewCard({
         {title}
       </div>
       {matched ? (
-        <>
-          <p className="mt-1 font-medium">Matched existing location — {matched.name}</p>
-          <p className="mt-1">{formatLocationAddress(matched) || formatParsedStop(stop)}</p>
-        </>
+        <p className="mt-1 text-xs">Matched a saved location. Change it below if this is the wrong place.</p>
       ) : (
         <>
           <p className="mt-1 font-medium">No matching Locations row</p>
@@ -151,8 +148,7 @@ function StopReviewCard({
         </>
       )}
       <p className={`mt-2 text-xs ${matched ? "text-emerald-800" : "text-amber-800"}`}>
-        Type any name or address to pick a saved location. The same search covers the whole book — it is not limited to
-        one customer or facility.
+        Type a name or address to pick a different saved location.
       </p>
       <div className="mt-2">
         <LocationPicker

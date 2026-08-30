@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
@@ -28,6 +28,7 @@ export function RateConImport({
   locations = [],
   drivers,
   formSettings,
+  children,
 }: {
   customers: Customer[];
   trucks: Truck[];
@@ -35,6 +36,7 @@ export function RateConImport({
   locations?: Location[];
   drivers: DriverWithTruck[];
   formSettings?: LoadFormSettings;
+  children?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
@@ -120,7 +122,9 @@ export function RateConImport({
           drivers={drivers}
           formSettings={formSettings}
         />
-      ) : null}
+      ) : (
+        children
+      )}
     </div>
   );
 }
