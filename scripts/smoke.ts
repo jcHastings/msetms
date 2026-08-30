@@ -891,9 +891,20 @@ async function main() {
   assert.match(financialsTab, /loadIsOnAccountingDesk/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/quickbooks-invoice-panel.tsx"), "utf8"), /data-qbo-invoice/);
   const invoicesHubUi = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(invoicesHubUi, /QboInvoiceSendButton/);
   assert.match(invoicesHubUi, /Send to QuickBooks/);
   assert.match(invoicesHubUi, /Record demo invoice/);
   assert.doesNotMatch(invoicesHubUi, /Export to QBO|Resend QBO/);
+  assert.doesNotMatch(invoicesHubUi, /sendToQuickbooksFormAction/);
+  const qboSendButtonUi = fs.readFileSync(path.join(process.cwd(), "components/qbo-invoice-send-button.tsx"), "utf8");
+  assert.match(qboSendButtonUi, /data-qbo-send-notice/);
+  assert.match(qboSendButtonUi, /confirm_resend/);
+  assert.match(qboSendButtonUi, /Invoice sent again to QuickBooks/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /Invoice sent again to QuickBooks/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"),
+    /if \(!result\.ok\) throw new Error\(result\.error\)/,
+  );
   assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
   assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
   assert.match(docsPage, /when="assets"/);
@@ -9845,6 +9856,56 @@ Continuous reefer. Two load locks.
 
     const demoResent = await qbo.sendLoadToQuickbooks(loadId, { confirmResend: true });
     assert.notEqual(demoResent.invoiceId, demoSent.invoiceId);
+
+    const unbilledZeroId = queries.createLoad({
+      customer_id: customerId,
+      origin: "Hastings, NE",
+      destination: "Bronx, NY",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 40000,
+      commodity: "Unbilled zero",
+      rate: 0,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "accounting",
+      truck_id: null,
+      driver_id: null,
+    });
+    const unbilledZero = queries.getLoad(unbilledZeroId);
+    assert.ok(unbilledZero);
+    const zeroPreview = qbo.previewQuickbooksInvoice(unbilledZero);
+    assert.equal(zeroPreview.amount, 0);
+    assert.equal(zeroPreview.lines.length, 0);
+    await assert.rejects(() => qbo.sendLoadToQuickbooks(unbilledZeroId), /no customer billed rate/i);
+    const { sendToQuickbooksAction, sendToQuickbooksFormAction } = await import("../lib/actions");
+    const zeroForm = new FormData();
+    zeroForm.set("load_id", String(unbilledZeroId));
+    const zeroResult = await sendToQuickbooksAction(null, zeroForm);
+    assert.equal(zeroResult.ok, false);
+    assert.match(zeroResult.error, /no customer billed rate/i);
+    await sendToQuickbooksFormAction(zeroForm);
+    assert.ok(!queries.getLoad(unbilledZeroId)?.qbo_invoice_id);
+
+    const coleForm = new FormData();
+    coleForm.set("load_id", String(coleLoad.id));
+    const coleSend = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleSend.ok, true);
+    assert.match(String(coleSend.message), /Invoice sent to QuickBooks/);
+    const coleAgainSilent = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleAgainSilent.ok, false);
+    assert.match(coleAgainSilent.error, /already sent|send again/i);
+    coleForm.set("confirm_resend", "1");
+    const coleAgain = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleAgain.ok, true);
+    assert.match(String(coleAgain.message), /sent again/i);
 
     const qboStatus = await qbo.getQuickbooksStatus();
     assert.equal(qboStatus.configured, false);

@@ -591,8 +591,7 @@ export async function disconnectQuickbooksAction(): Promise<void> {
 }
 
 export async function sendToQuickbooksFormAction(formData: FormData): Promise<void> {
-  const result = await sendToQuickbooksAction(null, formData);
-  if (!result.ok) throw new Error(result.error);
+  await sendToQuickbooksAction(null, formData);
 }
 
 export async function sendToQuickbooksAction(
@@ -607,7 +606,11 @@ export async function sendToQuickbooksAction(
     const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
     await sendLoadToQuickbooks(loadId, { confirmResend });
     refresh();
-    return { ok: true, id: loadId };
+    return {
+      ok: true,
+      id: loadId,
+      message: confirmResend ? "Invoice sent again to QuickBooks." : "Invoice sent to QuickBooks.",
+    };
   } catch (error) {
     return fail(error);
   }

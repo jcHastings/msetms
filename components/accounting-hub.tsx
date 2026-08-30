@@ -12,7 +12,7 @@ import {
   sendBillToQuickbooksFormAction,
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
-import { sendToQuickbooksFormAction } from "@/lib/actions";
+import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
 import {
   defaultPayPeriod,
   groupDriverPay,
@@ -215,17 +215,17 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
                   <td>{formatMoney(total, settings.currency)}</td>
                   <td>{row.paid ? formatMoney(0, settings.currency) : formatMoney(total, settings.currency)}</td>
                   <td>
-                    <form action={sendToQuickbooksFormAction}>
-                      <input type="hidden" name="load_id" value={row.id} />
-                      {row.qbo_invoice_id ? <input type="hidden" name="confirm_resend" value="1" /> : null}
-                      <button className="btn btn-secondary" type="submit" data-qbo-send="">
-                        {row.qbo_invoice_id
+                    <QboInvoiceSendButton
+                      loadId={row.id}
+                      alreadySent={Boolean(row.qbo_invoice_id)}
+                      label={
+                        row.qbo_invoice_id
                           ? "Send again to QuickBooks"
                           : qboConnected
                             ? "Send to QuickBooks"
-                            : "Record demo invoice"}
-                      </button>
-                    </form>
+                            : "Record demo invoice"
+                      }
+                    />
                   </td>
                   <HubActions>
                     <a className="btn btn-secondary" href={`/api/loads/${row.id}/invoice`}>
