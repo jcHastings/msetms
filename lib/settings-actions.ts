@@ -35,7 +35,13 @@ import {
   getWorkflowSettings,
   type DocumentType,
 } from "./settings";
-import type { WorkflowLateKind } from "./workflow-shared";
+import {
+  minutesFromAmount,
+  type WorkflowCard,
+  type WorkflowDurationUnit,
+  type WorkflowLateKind,
+  type WorkflowLateMode,
+} from "./workflow-shared";
 import { fileToBuffer } from "./files";
 import type { ActionResult } from "./types";
 
@@ -277,31 +283,64 @@ export async function saveDocumentFontAction(
   }
 }
 
+function asDurationUnit(value: FormDataEntryValue | null, fallback: WorkflowDurationUnit): WorkflowDurationUnit {
+  return String(value ?? fallback) === "hours" ? "hours" : "minutes";
+}
+
 export async function saveWorkflowAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await requireSettingsEditor();
-    const lateKind = String(formData.get("late_kind") ?? "either") as WorkflowLateKind;
-    updateWorkflowSettings({
-      ...getWorkflowSettings(),
-      blockAssignExpiredDriver: String(formData.get("block_driver") ?? "") === "1",
-      blockAssignExpiredTruck: String(formData.get("block_truck") ?? "") === "1",
-      blockAssignExpiredTrailer: String(formData.get("block_trailer") ?? "") === "1",
-      arrivePickupLoadStatus: String(formData.get("arrive_pu_load") ?? ""),
-      arrivePickupTruckStatus: String(formData.get("arrive_pu_truck") ?? ""),
-      departPickupLoadStatus: String(formData.get("depart_pu_load") ?? ""),
-      departPickupTruckStatus: String(formData.get("depart_pu_truck") ?? ""),
-      arriveDeliveryLoadStatus: String(formData.get("arrive_del_load") ?? ""),
-      arriveDeliveryTruckStatus: String(formData.get("arrive_del_truck") ?? ""),
-      driverAssignLoadStatus: String(formData.get("driver_assign_load") ?? ""),
-      driverAssignTruckStatus: String(formData.get("driver_assign_truck") ?? ""),
-      lateStopKind: lateKind === "pickup" || lateKind === "delivery" ? lateKind : "either",
-      lateStopMinutes: parseOptionalInt(formData.get("late_minutes")) ?? 60,
-      lateStopLoadStatus: String(formData.get("late_load") ?? ""),
-      lateStopOnlyStatuses: formData.getAll("late_only").map(String),
-    });
+    const card = String(formData.get("card") ?? "all") as WorkflowCard | "all";
+    const current = getWorkflowSettings();
+    const lateKind = String(formData.get("late_kind") ?? current.lateStopKind) as WorkflowLateKind;
+    const lateMode = String(formData.get("late_mode") ?? current.lateStopMode) as WorkflowLateMode;
+    const lateUnit = asDurationUnit(formData.get("late_unit"), current.lateStopUnit);
+    const noActivityUnit = asDurationUnit(formData.get("no_activity_unit"), current.noActivityUnit);
+    const next = { ...current };
+    if (card === "user_assign" || card === "all") {
+      next.autoAssignDispatcherOnCreate = String(formData.get("auto_assign_dispatcher") ?? "") === "1";
+    }
+    if (card === "blocks" || card === "all") {
+      next.blockAssignExpiredDriver = String(formData.get("block_driver") ?? "") === "1";
+      next.blockAssignExpiredTruck = String(formData.get("block_truck") ?? "") === "1";
+      next.blockAssignExpiredTrailer = String(formData.get("block_trailer") ?? "") === "1";
+    }
+    if (card === "arrive_depart" || card === "all") {
+      next.arrivePickupLoadStatus = String(formData.get("arrive_pu_load") ?? "");
+      next.arrivePickupTruckStatus = String(formData.get("arrive_pu_truck") ?? "");
+      next.departPickupLoadStatus = String(formData.get("depart_pu_load") ?? "");
+      next.departPickupTruckStatus = String(formData.get("depart_pu_truck") ?? "");
+      next.arriveDeliveryLoadStatus = String(formData.get("arrive_del_load") ?? "");
+      next.arriveDeliveryTruckStatus = String(formData.get("arrive_del_truck") ?? "");
+    }
+    if (card === "driver_assign" || card === "all") {
+      next.driverAssignLoadStatus = String(formData.get("driver_assign_load") ?? "");
+      next.driverAssignTruckStatus = String(formData.get("driver_assign_truck") ?? "");
+    }
+    if (card === "late" || card === "all") {
+      next.lateStopKind = lateKind === "pickup" || lateKind === "delivery" ? lateKind : "either";
+      next.lateStopMode = lateMode === "same_day" ? "same_day" : "specified";
+      next.lateStopUnit = lateUnit;
+      next.lateStopMinutes = minutesFromAmount(parseOptionalInt(formData.get("late_minutes")) ?? 60, lateUnit);
+      next.lateStopLoadStatus = String(formData.get("late_load") ?? "");
+      next.lateStopOnlyStatuses = formData.getAll("late_only").map(String);
+    }
+    if (card === "documents" || card === "all") {
+      next.invoiceSentLoadStatus = String(formData.get("invoice_sent_load") ?? "");
+      next.invoiceSentTruckStatus = String(formData.get("invoice_sent_truck") ?? "");
+      next.docsRequestedLoadStatus = String(formData.get("docs_requested_load") ?? "");
+      next.docsRequestedTruckStatus = String(formData.get("docs_requested_truck") ?? "");
+    }
+    if (card === "no_activity" || card === "all") {
+      next.noActivityUnit = noActivityUnit;
+      next.noActivityMinutes = minutesFromAmount(parseOptionalInt(formData.get("no_activity_minutes")) ?? 0, noActivityUnit);
+      next.noActivityLoadStatus = String(formData.get("no_activity_load") ?? "");
+      next.noActivityOnlyStatuses = formData.getAll("no_activity_only").map(String);
+    }
+    updateWorkflowSettings(next);
     refresh();
     return { ok: true, message: "Workflow saved." };
   } catch (error) {

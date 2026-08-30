@@ -803,7 +803,16 @@ export function getWorkflowSettings(): WorkflowSettings {
 
 export function updateWorkflowSettings(input: WorkflowSettings): WorkflowSettings {
   const next = parseWorkflowSettings(JSON.stringify(input));
-  getDb().prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  const db = getDb();
+  const written = db.prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  if (written.changes === 0) {
+    db.prepare(
+      `INSERT OR IGNORE INTO company_profile (
+        id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
+      ) VALUES (1, 'M&S Loads', 'MS Test', '', '', '')`,
+    ).run();
+    db.prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  }
   return next;
 }
 

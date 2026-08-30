@@ -43,7 +43,13 @@ import {
   type LoadInput,
 } from "./queries";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
-import { applyWorkflowOnDriverAssign, assetsForAssignment, requireAssignmentHardBlock } from "./workflow";
+import {
+  applyWorkflowOnDocumentAction,
+  applyWorkflowOnDriverAssign,
+  assetsForAssignment,
+  maybeAssignCreatingDispatcher,
+  requireAssignmentHardBlock,
+} from "./workflow";
 import {
   DRIVER_STATUSES,
   DRIVER_TYPES,
@@ -455,6 +461,7 @@ export async function createLoadAction(
       const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       const id = createLoad(input);
+      maybeAssignCreatingDispatcher(id, actor.id);
       if (input.driver_id) applyWorkflowOnDriverAssign(id);
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
@@ -604,6 +611,7 @@ export async function sendToQuickbooksAction(
     const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
     const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
     await sendLoadToQuickbooks(loadId, { confirmResend });
+    applyWorkflowOnDocumentAction(loadId, "invoice_sent");
     refresh();
     return {
       ok: true,

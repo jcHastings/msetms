@@ -1465,6 +1465,60 @@ html:has([data-load-embed]) body {
   border-radius: 0.4rem;
 }
 
+.workflow-heads-up {
+  border: 1px solid #fecdd3;
+  background: #fff1f2;
+  color: #881337;
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.workflow-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.workflow-card h2 {
+  margin: 0;
+  padding: 0.55rem 1rem;
+  background: #eef2f6;
+  border-bottom: 1px solid #dce3ec;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.workflow-card-note {
+  margin: 0 0 0.75rem;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.workflow-rule-grid {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) minmax(8rem, 1fr) minmax(8rem, 1fr);
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.workflow-rule-grid > span {
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: #475569;
+}
+
+.btn.workflow-save {
+  background: #1f7a3a;
+  border-color: #196432;
+  color: #fff;
+}
+
+.btn.workflow-save:hover {
+  background: #196432;
+}
+
 .settings-page .field {
   gap: 0.15rem;
 }

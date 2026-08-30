@@ -69,6 +69,8 @@ export async function driverStopCheckAction(formData: FormData): Promise<ActionR
         throw new Error("Check in first.");
       }
       stampStopTime(stopId, kind === "arrive" ? "arrived_at" : "departed_at", new Date().toISOString());
+      const { applyWorkflowAfterGeofence } = await import("./workflow");
+      applyWorkflowAfterGeofence(loadId);
       updateDriverProgress(loadId, driver.id, progressForStopEvent(kind, stop.kind));
       refresh();
       return { ok: true, id: loadId };

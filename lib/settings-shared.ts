@@ -35,7 +35,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/workflow",
         label: "Automated Workflow",
-        hint: "Assign blocks and live load status rules",
+        hint: "If-this-then-that: assign blocks, arrive/depart, late stops",
       },
       {
         href: "/settings/routing",

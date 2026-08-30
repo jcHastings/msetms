@@ -916,10 +916,17 @@ async function main() {
   assert.doesNotMatch(documentCopy, /TriumphPay/);
   const workflowPage = fs.readFileSync(path.join(process.cwd(), "app/settings/workflow/page.tsx"), "utf8");
   assert.match(workflowPage, /Automated Workflow/);
-  assert.match(workflowPage, /Block assign/);
-  assert.match(workflowPage, /Samsara arrive and depart/);
-  assert.match(workflowPage, /Late pickup or delivery/);
-  assert.doesNotMatch(workflowPage, /Highway|EDI 214|Setup Packet Sent To Carrier|MyCarrierPortal/i);
+  assert.match(workflowPage, /Heads up/);
+  assert.match(workflowPage, /WorkflowEngine/);
+  const workflowUi = fs.readFileSync(path.join(process.cwd(), "components/workflow-engine.tsx"), "utf8");
+  assert.match(workflowUi, /Prevent a driver, truck, or trailer/);
+  assert.match(workflowUi, /arrive and depart/);
+  assert.match(workflowUi, /Late Pickups or Deliveries/);
+  assert.match(workflowUi, /Save assignment block rules/);
+  assert.match(workflowUi, /Save late stop rules/);
+  assert.match(workflowUi, /auto_assign_dispatcher/);
+  assert.doesNotMatch(workflowUi, /Setup Packet Sent To Carrier|MyCarrierPortal|Incoming EDI 214/i);
+  assert.doesNotMatch(workflowPage, /Setup Packet Sent To Carrier|MyCarrierPortal/i);
   const alertsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8");
   assert.match(alertsPage, /GPS quiet window/);
   assert.match(alertsPage, /Automated Alerting/);
@@ -5047,6 +5054,162 @@ Continuous reefer. Two load locks.
     /Cannot assign/,
   );
   workflow.requireAssignmentHardBlock({ driver: tyrell }, DEFAULT_WORKFLOW_SETTINGS);
+  const settingsStore = await import("../lib/settings");
+  const previousWorkflow = settingsStore.getWorkflowSettings();
+  const { addStop, stampStopTime } = await import("../lib/stops");
+  const workflowLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-08-20T08:00:00.000Z",
+    pickup_end: "2026-08-20T12:00:00.000Z",
+    delivery_start: "2026-08-21T08:00:00.000Z",
+    delivery_end: "2026-08-21T16:00:00.000Z",
+    weight: 40000,
+    commodity: "Workflow fire",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  addStop(workflowLoadId, {
+    kind: "pickup",
+    name: "Shipper",
+    city: "Hastings",
+    state: "NE",
+    window_start: "2026-08-20T08:00:00.000Z",
+    window_end: "2026-08-20T12:00:00.000Z",
+  });
+  addStop(workflowLoadId, {
+    kind: "delivery",
+    name: "Receiver",
+    city: "Chicago",
+    state: "IL",
+    window_start: "2026-08-21T08:00:00.000Z",
+    window_end: "2026-08-21T16:00:00.000Z",
+  });
+  const workflowStops = (await import("../lib/stops")).listStops(workflowLoadId);
+  const workflowPickup = workflowStops.find((stop) => stop.kind === "pickup");
+  const workflowDelivery = workflowStops.find((stop) => stop.kind === "delivery");
+  assert.ok(workflowPickup && workflowDelivery);
+  stampStopTime(workflowPickup.id, "arrived_at", "2026-08-20T09:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "at_pickup");
+  stampStopTime(workflowPickup.id, "departed_at", "2026-08-20T11:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "in_transit");
+  stampStopTime(workflowDelivery.id, "arrived_at", "2026-08-21T10:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "at_delivery");
+  settingsStore.updateWorkflowSettings({
+    ...previousWorkflow,
+    driverAssignLoadStatus: "assigned",
+    driverAssignTruckStatus: "dispatched",
+  });
+  const driverAssignLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: "2026-08-22T08:00:00.000Z",
+    pickup_end: "2026-08-22T12:00:00.000Z",
+    delivery_start: "2026-08-22T14:00:00.000Z",
+    delivery_end: "2026-08-22T18:00:00.000Z",
+    weight: 10000,
+    commodity: "Driver assign fire",
+    rate: 400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  workflow.applyWorkflowOnDriverAssign(driverAssignLoadId);
+  const afterDriverAssign = queries.getLoad(driverAssignLoadId);
+  assert.equal(afterDriverAssign?.status, "assigned");
+  assert.equal(afterDriverAssign?.truck_status, "dispatched");
+  const lateLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "York, NE",
+    destination: "Grand Island, NE",
+    pickup_start: "2026-08-20T08:00:00.000Z",
+    pickup_end: "2026-08-20T10:00:00.000Z",
+    delivery_start: "2026-08-21T08:00:00.000Z",
+    delivery_end: "2026-08-21T12:00:00.000Z",
+    weight: 8000,
+    commodity: "Late fire",
+    rate: 300,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "loading",
+    truck_id: null,
+    driver_id: null,
+  });
+  addStop(lateLoadId, {
+    kind: "pickup",
+    name: "Late shipper",
+    city: "York",
+    state: "NE",
+    window_start: "2026-08-20T08:00:00.000Z",
+    window_end: "2026-08-20T10:00:00.000Z",
+  });
+  settingsStore.updateWorkflowSettings({
+    ...previousWorkflow,
+    lateStopKind: "pickup",
+    lateStopMode: "specified",
+    lateStopMinutes: 30,
+    lateStopUnit: "minutes",
+    lateStopLoadStatus: "hold",
+    lateStopOnlyStatuses: ["loading"],
+  });
+  assert.equal(settingsStore.getWorkflowSettings().lateStopLoadStatus, "hold");
+  const lateChanged = workflow.applyLateStopWorkflow(new Date("2026-08-20T12:00:00.000Z"));
+  assert.ok(lateChanged >= 1);
+  assert.equal(queries.getLoad(lateLoadId)?.status, "hold");
+  const deskUser = settingsStore.listDispatcherUsers(false)[0];
+  assert.ok(deskUser);
+  settingsStore.updateWorkflowSettings({ ...previousWorkflow, autoAssignDispatcherOnCreate: true });
+  const autoDispatchId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Kearney, NE",
+    destination: "North Platte, NE",
+    pickup_start: "2026-08-23T08:00:00.000Z",
+    pickup_end: "2026-08-23T12:00:00.000Z",
+    delivery_start: "2026-08-23T14:00:00.000Z",
+    delivery_end: "2026-08-23T18:00:00.000Z",
+    weight: 5000,
+    commodity: "Auto dispatcher",
+    rate: 250,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  workflow.maybeAssignCreatingDispatcher(autoDispatchId, deskUser.id);
+  assert.equal(queries.getLoad(autoDispatchId)?.dispatcher_id, deskUser.id);
+  settingsStore.updateWorkflowSettings(previousWorkflow);
   const { expandDocumentTags } = await import("../lib/document-tags");
   assert.equal(expandDocumentTags("Load [load_id] for [customer_name]", { loadId: "MSE-1", customerName: "Acme" }), "Load MSE-1 for Acme");
   const upcoming = queries.listUpcomingCompliance();

@@ -36,6 +36,11 @@ import {
   setLoadWatched,
   updateLoadDetails,
 } from "./queries";
+import {
+  applyWorkflowAfterGeofence,
+  applyWorkflowOnDocumentAction,
+  maybeAssignCreatingDispatcher,
+} from "./workflow";
 import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
@@ -117,10 +122,11 @@ export async function dispatcherLogoutAction(): Promise<void> {
 
 export async function cloneLoadAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
-    await requireLoadEditor();
+    const actor = await requireLoadEditor();
     const id = parseOptionalInt(formData.get("load_id"));
     if (!id) throw new Error("Load is missing.");
     const cloned = cloneLoad(id);
+    maybeAssignCreatingDispatcher(cloned, actor.id);
     writeAudit("clone", "load", cloned, `from ${id}`);
     refresh();
     redirect(`/loads/${cloned}`);
@@ -189,10 +195,11 @@ export async function saveTemplateAction(formData: FormData): Promise<void> {
 
 export async function createFromTemplateAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
-    await requireLoadEditor();
+    const actor = await requireLoadEditor();
     const id = parseOptionalInt(formData.get("template_id"));
     if (!id) throw new Error("Template is missing.");
     const loadId = createLoadFromTemplate(id);
+    maybeAssignCreatingDispatcher(loadId, actor.id);
     refresh();
     redirect(`/loads/${loadId}`);
   });
@@ -384,7 +391,10 @@ export async function updateStopAction(formData: FormData): Promise<void> {
     const stop = getDb().prepare("SELECT load_id FROM load_stops WHERE id = ?").get(id) as
       | { load_id: number }
       | undefined;
-    if (stop) await refreshLoadRouteQuiet(stop.load_id);
+    if (stop) {
+      if (input.arrived_at || input.departed_at) applyWorkflowAfterGeofence(stop.load_id);
+      await refreshLoadRouteQuiet(stop.load_id);
+    }
     refresh();
   });
 }
@@ -634,6 +644,7 @@ export async function requestDriverDocumentsAction(formData: FormData): Promise<
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       setLoadDocsRequested(loadId, true);
+      applyWorkflowOnDocumentAction(loadId, "docs_requested");
       refresh();
       return { ok: true, id: loadId, message: "Driver will see a request for BOL/POD/photos on this load." };
     } catch (error) {
@@ -660,6 +671,7 @@ export async function requestPodAction(formData: FormData): Promise<ActionResult
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       setLoadDocsRequested(loadId, true);
+      applyWorkflowOnDocumentAction(loadId, "docs_requested");
       refresh();
       return { ok: true, id: loadId, message: "POD requested from the driver." };
     } catch (error) {
