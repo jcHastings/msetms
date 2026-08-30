@@ -165,7 +165,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       pickup_end: pickup.end || ascend.pickup_end || printed.pickup_end || "",
       delivery_start: delivery.start || ascend.delivery_start || printed.delivery_start || "",
       delivery_end: delivery.end || ascend.delivery_end || printed.delivery_end || "",
-      rate: parseMoney(labeled(text, ["rate", "linehaul", "total pay", "flat rate"]) ?? "") ?? ascend.rate,
+      rate: parseConfirmationRate(text),
       commodity: labeled(text, ["commodity", "product", "description"]) || ascend.commodity || printed.commodity || "",
       weight: parseWeight(labeled(text, ["weight"]) ?? "") ?? ascend.weight ?? printed.weight,
       reference_number:
@@ -347,19 +347,38 @@ function normalizePartyName(name: string): string {
 }
 
 function parseAscendRate(text: string): number | null {
+  return parseConfirmationRate(text);
+}
+
+/** Freight $ from a rate con — not qty 1, not fuel-per-mile, not a load number. */
+function parseConfirmationRate(text: string): number | null {
   const patterns = [
-    /pay items[\s\S]{0,240}total\s*\$?\s*([\d,]+(?:\.\d+)?)/i,
-    /flat\s*rate[\s\S]{0,80}\$\s*([\d,]+(?:\.\d+)?)/i,
-    /(?:rate|line\s*haul)\s*[:#/]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i,
-    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/\s*)?flat\s*rate/i,
+    /pay items[\s\S]{0,1200}(?:^|\n)\s*total\s*\$?\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/im,
+    /(?:agreed\s+amount|customer\s+rate|all[\s-]?in)\s*[:#]?\s*\$?\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/i,
+    /flat\s*rate[\s\S]{0,160}\$\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/i,
+    /(?:^|\n)\s*(?:rate|line\s*haul|total\s+pay)\s*[:#/]?\s*\$\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/im,
+    /\$\s*([0-9][0-9, ]*(?:\.\d{1,2})?)\s*(?:\/\s*)?flat\s*rate/i,
+    /(?:^|\n)\s*(?:rate|line\s*haul|total\s+pay)\s*[:#/]\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/im,
   ];
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (!match) continue;
-    const value = Number.parseFloat(match[1].replace(/,/g, ""));
-    if (Number.isFinite(value) && value >= 50 && value <= 50000) return value;
+    const value = freightFromCapture(text, pattern);
+    if (value != null) return value;
   }
-  return null;
+  return parseFreightMoney(
+    labeled(text, ["agreed amount", "customer rate", "total pay", "linehaul", "flat rate", "rate"]) ?? "",
+  );
+}
+
+function freightFromCapture(text: string, pattern: RegExp): number | null {
+  const match = text.match(pattern);
+  if (!match?.[1]) return null;
+  return parseFreightMoney(match[1]);
+}
+
+function parseFreightMoney(value: string): number | null {
+  const amount = parseMoney(value);
+  if (amount == null || amount < 50 || amount > 50000) return null;
+  return amount;
 }
 
 function dedupeExtraStops(stops: ParsedExtraStop[]): ParsedExtraStop[] {
@@ -740,8 +759,12 @@ function toIso(datePart: string, timePart: string): string {
 }
 
 function parseMoney(value: string): number | null {
-  const match = value.replace(/,/g, "").match(/\$?\s*(\d+(?:\.\d+)?)/);
-  return match ? Number.parseFloat(match[1]) : null;
+  const dollar = value.match(/\$\s*([0-9][0-9, ]*(?:\.\d{1,2})?)/);
+  const raw = dollar?.[1] ?? value.match(/([0-9][0-9, ]*(?:\.\d{1,2})?)/)?.[1];
+  if (!raw) return null;
+  const cleaned = raw.replace(/,/g, "").replace(/\s+/g, "");
+  const amount = Number.parseFloat(cleaned);
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function parseWeight(value: string): number | null {
