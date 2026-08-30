@@ -17,7 +17,11 @@ export function deskNavSectionForPath(
   return null;
 }
 
-/** Accordion: opening one parent closes the others. Clicking the open parent collapses all. */
+/** Accordion only. Never a set of open parents — JC’s “all open” clip is the anti-pattern. */
+export const DESK_NAV_ACCORDION = "single" as const;
+
+/** Opening one parent closes the others. Clicking the open parent collapses all. */
 export function nextDeskNavOpenSection(currentOpen: string | null, clicked: string): string | null {
+  if (!clicked) return currentOpen;
   return currentOpen === clicked ? null : clicked;
 }

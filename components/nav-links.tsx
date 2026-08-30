@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { deskNavSectionForPath, isDeskNavActive, nextDeskNavOpenSection } from "@/lib/desk-nav-shared";
+import { DESK_NAV_ACCORDION, deskNavSectionForPath, isDeskNavActive, nextDeskNavOpenSection } from "@/lib/desk-nav-shared";
 import { canSeeNavHref } from "@/lib/settings-shared";
 
 type NavItem = { href: string; label: string; short: string; icon: string };
@@ -110,7 +110,10 @@ export function NavLinks({ role }: { role: string }) {
   }, [currentSection]);
 
   return (
-    <nav className="desk-nav-icons flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3">
+    <nav
+      className="desk-nav-icons flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3"
+      data-nav-accordion={DESK_NAV_ACCORDION}
+    >
       {entries.map((entry) => {
         if (entry.kind === "link") {
           if (!canSeeNavHref(role, entry.item.href)) return null;

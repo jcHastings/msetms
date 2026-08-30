@@ -50,7 +50,15 @@ async function main() {
   assert.equal(isDeskNavActive("/reports/statistics", "/reports/statistics"), true);
   assert.equal(isDeskNavActive("/accounting/pay", "/accounting/pay"), true);
   assert.equal(isDeskNavActive("/accounting", "/accounting/pay"), false);
-  const { deskNavSectionForPath, nextDeskNavOpenSection } = await import("../lib/desk-nav-shared");
+  const { DESK_NAV_ACCORDION, deskNavSectionForPath, nextDeskNavOpenSection } = await import("../lib/desk-nav-shared");
+  assert.equal(DESK_NAV_ACCORDION, "single");
+  let accordionOpen: string | null = null;
+  for (const parent of ["Dispatch", "Fleet", "Customers", "Accounting", "Reports"] as const) {
+    accordionOpen = nextDeskNavOpenSection(accordionOpen, parent);
+    assert.equal(accordionOpen, parent, "only the last clicked parent stays open");
+  }
+  accordionOpen = nextDeskNavOpenSection(accordionOpen, "Reports");
+  assert.equal(accordionOpen, null, "clicking the open parent collapses all");
   assert.equal(
     deskNavSectionForPath("/accounting/pay", [
       { title: "Fleet", items: [{ href: "/fleet" }] },
@@ -69,7 +77,9 @@ async function main() {
     "Reports",
   );
   assert.match(navSource, /nextDeskNavOpenSection/);
+  assert.match(navSource, /DESK_NAV_ACCORDION/);
   assert.match(navSource, /aria-expanded/);
+  assert.doesNotMatch(navSource, /Set<string>|openSections/);
   assert.match(navSource, /kind: "link"/);
   assert.match(navSource, /title: "Reports"/);
   assert.match(navSource, /\{open \?/);
