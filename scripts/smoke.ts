@@ -10472,7 +10472,7 @@ Continuous reefer. Two load locks.
   assert.match(usersPage, /listDispatcherUsers/);
   assert.match(usersPage, /currentUserId/);
   const usersTable = fs.readFileSync(path.join(process.cwd(), "components/users-table.tsx"), "utf8");
-  assert.match(usersTable, />Edit</);
+  assert.match(usersTable, /"Edit"/);
   assert.match(usersTable, /DeleteUserForm/);
   assert.match(usersTable, /data-users-list/);
   assert.doesNotMatch(usersTable, /overflow-hidden/);
