@@ -6,3 +6,18 @@ export function isDeskNavActive(href: string, pathname: string): boolean {
   if (EXACT_NAV_HREFS.has(href)) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
+
+export function deskNavSectionForPath(
+  pathname: string,
+  sections: Array<{ title: string; items: Array<{ href: string }> }>,
+): string | null {
+  for (const section of sections) {
+    if (section.items.some((item) => isDeskNavActive(item.href, pathname))) return section.title;
+  }
+  return null;
+}
+
+/** Accordion: opening one parent closes the others. Clicking the open parent collapses all. */
+export function nextDeskNavOpenSection(currentOpen: string | null, clicked: string): string | null {
+  return currentOpen === clicked ? null : clicked;
+}

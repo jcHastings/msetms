@@ -685,6 +685,35 @@ button {
   color: #d4a017;
 }
 
+.desk-nav-parent {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  background: transparent;
+  color: #d4a017;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.desk-nav-parent:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.desk-nav-parent-active {
+  color: #f3d27a;
+}
+
+.desk-nav-chevron {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
 .desk-nav-link {
   color: #d5deea;
 }

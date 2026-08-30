@@ -24,6 +24,12 @@ export function isAutoOwnerOperatorPay(
   return sameMoney(ooPay, computeOwnerOperatorPay(rate, percent));
 }
 
+/** Office share of the flat billed rate after owner-operator percent. */
+export function officeSharePercent(ooPercent: number | null | undefined): number | null {
+  if (ooPercent == null || Number.isNaN(Number(ooPercent))) return null;
+  return Math.round((100 - Number(ooPercent)) * 10) / 10;
+}
+
 export function impliedOwnerOperatorPercent(
   pay: number | null | undefined,
   rate: number | null | undefined,

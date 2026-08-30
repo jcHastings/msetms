@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isDeskNavActive } from "@/lib/desk-nav-shared";
+import { useEffect, useState } from "react";
+import { deskNavSectionForPath, isDeskNavActive, nextDeskNavOpenSection } from "@/lib/desk-nav-shared";
 import { canSeeNavHref } from "@/lib/settings-shared";
 
 const SECTIONS: Array<{
@@ -71,37 +72,57 @@ export function NavLinks({ role }: { role: string }) {
     ...section,
     items: section.items.filter((item) => canSeeNavHref(role, item.href)),
   })).filter((section) => section.items.length > 0);
+  const currentSection = deskNavSectionForPath(pathname, sections);
+  const [openSection, setOpenSection] = useState<string | null>(currentSection);
+
+  useEffect(() => {
+    setOpenSection(currentSection);
+  }, [currentSection]);
 
   return (
-    <nav className="desk-nav-icons flex flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 py-3">
-      {sections.map((section) => (
-        <div key={section.title}>
-          <div className="desk-nav-section px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
-            {section.title}
+    <nav className="desk-nav-icons flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3">
+      {sections.map((section) => {
+        const open = openSection === section.title;
+        const sectionActive = currentSection === section.title;
+        return (
+          <div key={section.title} data-nav-section={section.title} data-nav-open={open ? "true" : "false"}>
+            <button
+              type="button"
+              className={`desk-nav-parent desk-nav-section ${sectionActive ? "desk-nav-parent-active" : ""}`}
+              aria-expanded={open}
+              onClick={() => setOpenSection((current) => nextDeskNavOpenSection(current, section.title))}
+            >
+              <span>{section.title}</span>
+              <span className="desk-nav-chevron" aria-hidden>
+                {open ? "▾" : "▸"}
+              </span>
+            </button>
+            {open ? (
+              <div className="flex flex-col gap-0.5 pb-1">
+                {section.items.map((item) => {
+                  const active = isDeskNavActive(item.href, pathname);
+                  const className = `desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
+                    active ? "desk-nav-link-active" : ""
+                  }`;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      data-nav-href={item.href}
+                      prefetch={item.href === "/claims" ? false : undefined}
+                      className={className}
+                    >
+                      <NavIcon name={item.icon} />
+                      <span className="text-xs font-semibold leading-tight">{item.short}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
-          <div className="flex flex-col gap-0.5">
-            {section.items.map((item) => {
-              const active = isDeskNavActive(item.href, pathname);
-              const className = `desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
-                active ? "desk-nav-link-active" : ""
-              }`;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={item.label}
-                  data-nav-href={item.href}
-                  prefetch={item.href === "/claims" ? false : undefined}
-                  className={className}
-                >
-                  <NavIcon name={item.icon} />
-                  <span className="text-xs font-semibold leading-tight">{item.short}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

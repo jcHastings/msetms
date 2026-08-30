@@ -50,6 +50,19 @@ async function main() {
   assert.equal(isDeskNavActive("/reports/statistics", "/reports/statistics"), true);
   assert.equal(isDeskNavActive("/accounting/pay", "/accounting/pay"), true);
   assert.equal(isDeskNavActive("/accounting", "/accounting/pay"), false);
+  const { deskNavSectionForPath, nextDeskNavOpenSection } = await import("../lib/desk-nav-shared");
+  assert.equal(
+    deskNavSectionForPath("/accounting/pay", [
+      { title: "Fleet", items: [{ href: "/fleet" }] },
+      { title: "Accounting", items: [{ href: "/accounting/pay" }] },
+    ]),
+    "Accounting",
+  );
+  assert.equal(nextDeskNavOpenSection(null, "Accounting"), "Accounting");
+  assert.equal(nextDeskNavOpenSection("Accounting", "Fleet"), "Fleet");
+  assert.equal(nextDeskNavOpenSection("Accounting", "Accounting"), null);
+  assert.match(navSource, /nextDeskNavOpenSection/);
+  assert.match(navSource, /aria-expanded/);
   const claimsPage = fs.readFileSync(path.join(process.cwd(), "app/claims/page.tsx"), "utf8");
   assert.match(claimsPage, /data-claims-desk/);
   assert.match(claimsPage, /Claims \/ OS&D/);
@@ -646,6 +659,12 @@ async function main() {
   assert.match(paySource, /Other payee/);
   assert.match(paySource, /Total income/);
   assert.match(paySource, /Gross profit/);
+  assert.match(paySource, /officeSharePercent/);
+  assert.match(paySource, /data-oo-office-percent/);
+  const { officeSharePercent } = await import("../lib/settlement");
+  assert.equal(officeSharePercent(85), 15);
+  assert.equal(officeSharePercent(75), 25);
+  assert.equal(officeSharePercent(null), null);
   assert.doesNotMatch(paySource, /ViewInvoiceButton/);
   assert.doesNotMatch(paySource, /View Customer Confirmation/);
   assert.doesNotMatch(paySource, /View Carrier Confirmation/);
@@ -885,11 +904,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
   const documentsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/documents/page.tsx"), "utf8");
-  assert.match(documentsPage, /Driver confirmation/);
-  assert.match(documentsPage, /Customer confirmation/);
-  assert.match(documentsPage, /Bill of Lading/);
+  assert.match(documentsPage, /SETTINGS_DOCUMENT_EDITORS/);
   assert.match(documentsPage, /Font for generated documents/);
   assert.doesNotMatch(documentsPage, /LTL Quote|3rd Party BOL|Powered by Ascend/i);
+  const documentCopy = fs.readFileSync(path.join(process.cwd(), "lib/document-copy.ts"), "utf8");
+  assert.match(documentCopy, /Driver confirmation/);
+  assert.match(documentCopy, /Customer confirmation/);
+  assert.match(documentCopy, /Bill of Lading/);
+  assert.doesNotMatch(documentCopy, /TriumphPay/);
   const workflowPage = fs.readFileSync(path.join(process.cwd(), "app/settings/workflow/page.tsx"), "utf8");
   assert.match(workflowPage, /Automated Workflow/);
   assert.match(workflowPage, /Block assign/);
