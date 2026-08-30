@@ -141,9 +141,8 @@ export function LoadForm({
           weightUnit={weightUnit}
           equipmentChoices={equipmentChoices}
           card={card}
-          ooPercent={liveOoPercent}
-          onOoPercentChange={setLiveOoPercent}
         />
+        {liveOoPercent != null ? <input type="hidden" name="oo_percent" value={String(liveOoPercent)} /> : null}
       </div>
       <div
         hidden={resolvedScreen !== "customer" && resolvedScreen !== "all"}

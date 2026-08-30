@@ -48,8 +48,6 @@ export function LoadBasicsScreen({
   weightUnit = "lb",
   equipmentChoices = [],
   card = true,
-  ooPercent = null,
-  onOoPercentChange,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -58,8 +56,6 @@ export function LoadBasicsScreen({
   weightUnit?: string;
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
-  ooPercent?: number | null;
-  onOoPercentChange?: (percent: number | null) => void;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
   const [status, setStatus] = useState<string>(load?.status ?? "available");
@@ -159,13 +155,7 @@ export function LoadBasicsScreen({
           </datalist>
         ) : null}
       </div>
-      {!load ? (
-        <LoadRateFields
-          defaultsRate={defaults.rate ?? null}
-          ooPercent={ooPercent}
-          onOoPercentChange={onOoPercentChange}
-        />
-      ) : null}
+      {!load ? <LoadRateFields defaultsRate={defaults.rate ?? null} /> : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>
         <input

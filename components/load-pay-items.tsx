@@ -2,40 +2,51 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
+import { CustomerRateField, OwnerOperatorPayFields } from "@/components/load-rate-fields";
+import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { formatMoney } from "@/lib/format";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
-import { isOwnerOperator } from "@/lib/types";
+import { isOwnerOperator, type Load } from "@/lib/types";
 
 function sumItems(items: LoadPayItem[]): number {
   return items.reduce((sum, item) => sum + (item.total ?? 0), 0);
 }
 
 export function LoadPayItems({
-  loadId,
+  load,
   items,
   customerName,
   driverName,
   driverType,
   ownerOperators = [],
-  rateFallback = null,
-  ooPay = null,
+  defaultOoPercent = null,
 }: {
-  loadId: number;
+  load: Load;
   items: LoadPayItem[];
   customerName: string;
   driverName: string | null;
   driverType?: string | null;
   ownerOperators?: string[];
-  rateFallback?: number | null;
-  ooPay?: number | null;
+  defaultOoPercent?: number | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
-  const incomeTotal = income.length ? sumItems(income) : rateFallback ?? 0;
-  const expenseTotal = sumItems(expenses);
-  const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
+  const hasFlatIncome = income.some((item) => item.category === "flat_rate");
+  const hasFlatExpense = expenses.some((item) => item.category === "flat_rate" && item.bill_to === "driver");
   const ownerOperator = isOwnerOperator(driverType);
+  const [liveRate, setLiveRate] = useState(load.rate != null ? String(load.rate) : "");
+  const [ooPercent, setOoPercent] = useState<number | null>(
+    ownerOperator ? (load.oo_percent ?? defaultOoPercent ?? null) : null,
+  );
+  const rateAmount = Number(liveRate);
+  const incomeTotal =
+    Math.round(
+      ((hasFlatIncome ? 0 : Number.isFinite(rateAmount) ? rateAmount : 0) + sumItems(income)) * 100,
+    ) / 100;
+  const ooAmount = ownerOperator && !hasFlatExpense ? (load.oo_pay ?? 0) : 0;
+  const expenseTotal = Math.round((sumItems(expenses) + ooAmount) * 100) / 100;
+  const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
   const ooNames = ownerOperators.filter(Boolean);
   return (
     <section data-load-tab="financials" className="space-y-6">
@@ -52,45 +63,77 @@ export function LoadPayItems({
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
           <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(profit)}</div>
         </div>
-        {ownerOperator && ooPay != null ? (
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3" data-oo-pay="">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">OO pay</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
-              {formatMoney(ooPay)}
-              {rateFallback != null && rateFallback > 0
-                ? ` · ${Math.round((ooPay / rateFallback) * 1000) / 10}%`
-                : ""}
-            </div>
-          </div>
-        ) : null}
       </div>
       <PayItemGroup
-        loadId={loadId}
+        loadId={load.id}
         side="income"
         title="Income / Budget"
         items={income}
         total={incomeTotal}
         defaultPayee={customerName}
         defaultBillTo="customer"
-        defaultCategory="flat_rate"
+        defaultCategory="detention"
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
+        emptyText="No extra line items. Detention, fuel, and lumpers go here."
+        lead={
+          <div className="grid gap-4 md:grid-cols-2">
+            <CustomerRateField load={load} onRateChange={setLiveRate} />
+            <EmptyMoveField load={load} />
+          </div>
+        }
       />
       <PayItemGroup
-        loadId={loadId}
+        loadId={load.id}
         side="expense"
         title="Expenses"
         items={expenses}
         total={expenseTotal}
         defaultPayee={ownerOperator ? driverName ?? "" : ""}
         defaultBillTo={ownerOperator ? "driver" : "customer"}
-        defaultCategory={ownerOperator ? "flat_rate" : "lumper"}
+        defaultCategory={ownerOperator ? "lumper" : "lumper"}
         customerName={customerName}
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
+        emptyText={
+          ownerOperator
+            ? "No extra expenses. Lumpers and other pay-outs go here."
+            : "No line items. Click + Add Line Item."
+        }
+        lead={
+          ownerOperator ? (
+            <OwnerOperatorPayFields
+              load={load}
+              rate={liveRate}
+              ooPercent={ooPercent}
+              onOoPercentChange={setOoPercent}
+            />
+          ) : null
+        }
       />
     </section>
+  );
+}
+
+function EmptyMoveField({ load }: { load: Load }) {
+  const { persistFields } = useLoadAssignPersist(load.id);
+  return (
+    <div className="field" data-empty-move="">
+      <label htmlFor="non_revenue">Empty move</label>
+      <select
+        id="non_revenue"
+        name="non_revenue"
+        data-critical-save=""
+        defaultValue={load.non_revenue ? "1" : "0"}
+        onChange={(event) => {
+          void persistFields({ non_revenue: event.target.value });
+        }}
+      >
+        <option value="0">Revenue load</option>
+        <option value="1">Non-revenue — pay and miles, no customer invoice</option>
+      </select>
+    </div>
   );
 }
 
@@ -107,6 +150,8 @@ function PayItemGroup({
   ownerOperatorName,
   ownerOperators,
   actions,
+  lead,
+  emptyText = "No line items. Click + Add Line Item.",
 }: {
   loadId: number;
   side: PayItemSide;
@@ -120,6 +165,8 @@ function PayItemGroup({
   ownerOperatorName: string | null;
   ownerOperators: string[];
   actions?: ReactNode;
+  lead?: ReactNode;
+  emptyText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const tone = side === "income" ? "finance-income" : "finance-expense";
@@ -134,9 +181,10 @@ function PayItemGroup({
           </button>
         </div>
       </div>
-      <div className="p-5">
+      <div className="p-5 space-y-4">
+      {lead}
       {items.length === 0 ? (
-        <p className="text-sm text-slate-500">No line items. Click + Add Line Item.</p>
+        <p className="text-sm text-slate-500">{emptyText}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="table-grid text-sm">
