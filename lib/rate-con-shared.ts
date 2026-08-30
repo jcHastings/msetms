@@ -113,10 +113,13 @@ export function parseAddressBlob(raw: string): ParsedStop {
   stop.phone = extractLabeledPhone(raw);
 
   let text = raw
-    .replace(/\bphone\s*[:#]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/gi, "\n")
+    .replace(/\bphone\s*[:#]?\s*(?:\+?1[-.\s]*)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/gi, "\n")
     .replace(/\b(?:preferred freezer)[\s\S]*/i, "\n")
-    .replace(/\b(?:email:|contact:)\b[\s\S]*/i, "\n")
-    .replace(/\b(?:date|time|type|qty|quantity|weight|description|commodity)\b[\s\S]*/i, "\n")
+    .replace(/^(?:email|contact)\s*[:#]?\s*\S*.*$/gim, "")
+    .replace(/^(?:date|time|type|qty|quantity|weight|description|commodity)\b.*$/gim, "")
+    .replace(/^page\s+\d+.*$/gim, "")
+    .replace(/^powered by.*$/gim, "")
+    .replace(/^\|?\s*jc feder.*$/gim, "")
     .replace(/\bUSA\b/gi, " ")
     .replace(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g, " ")
     .replace(/\b(?:pickup|delivery|pick up|deliver|drop)\b[:\s]*/gi, " ");
@@ -138,8 +141,8 @@ export function parseAddressBlob(raw: string): ParsedStop {
   const streetIdx = parts.findIndex(isStreetLine);
   if (streetIdx >= 0) {
     stop.street = parts[streetIdx];
-    const before = parts.slice(0, streetIdx).filter((part) => !isStreetLine(part));
-    stop.name = before[0] ?? "";
+    const before = parts.slice(0, streetIdx).filter((part) => !isStreetLine(part) && !looksLikeCityState(part));
+    stop.name = joinWrappedName(before);
   } else {
     for (const part of parts) {
       const split = splitNameAndStreet(part);
@@ -217,8 +220,17 @@ function addressMatches(location: Location, stop: ParsedStop): boolean {
 }
 
 function extractLabeledPhone(text: string): string {
-  const match = text.match(/phone\s*[:#]?\s*(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i);
+  const match = text.match(/phone\s*[:#]?\s*(?:\+?1[-.\s]*)?(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i);
   return match?.[1]?.trim() ?? "";
+}
+
+function joinWrappedName(parts: string[]): string {
+  if (!parts.length) return "";
+  let name = parts[0];
+  if (/-\s*$/.test(name) && parts[1] && !isStreetLine(parts[1]) && !looksLikeCityState(parts[1])) {
+    name = `${name.replace(/\s*-\s*$/, "")} - ${parts[1]}`;
+  }
+  return name;
 }
 
 function splitNameAndStreet(value: string): { name: string; street: string } {
@@ -232,7 +244,10 @@ function isStreetLine(line: string): boolean {
   if (!/^\d{1,6}\b/.test(trimmed)) return false;
   if (/\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(trimmed)) return false;
   if (/\b(?:lbs?|pounds|miles)\b/i.test(trimmed)) return false;
-  return STREET_SUFFIX.test(trimmed) || STREET_IN_LINE.test(trimmed);
+  if (STREET_SUFFIX.test(trimmed) || STREET_IN_LINE.test(trimmed)) return true;
+  return /\b(?:st|street|rd|road|ave|avenue|blvd|boulevard|dr|drive|ln|lane|hwy|highway|way|ct|court|pl|place|pkwy|parkway|cir|circle|trl|trail)\.?\b/i.test(
+    trimmed,
+  );
 }
 
 function isJunkLine(line: string): boolean {
@@ -246,6 +261,12 @@ function isJunkLine(line: string): boolean {
   }
   if (/^preferred freezer/i.test(line)) return true;
   if (/^(?:phone|email|contact)\b/i.test(line)) return true;
+  if (/^page\s+\d+/i.test(line)) return true;
+  if (/^powered by/i.test(line)) return true;
+  if (/jc feder|ascend\s*tms|tms\s*\.com/i.test(line)) return true;
+  if (/^primary contact$/i.test(line)) return true;
+  if (/^(?:references?|cargo|notes|driver instructions)\s*:/i.test(line)) return true;
+  if (/^note:/i.test(line)) return true;
   if (/^\d{1,2}:\d{2}/.test(line)) return true;
   if (/^(?:lbs?|pounds)\b/i.test(line)) return true;
   return false;

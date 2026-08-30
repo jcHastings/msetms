@@ -702,6 +702,8 @@ async function main() {
   const rateConReviewSource = fs.readFileSync(path.join(process.cwd(), "components/rate-con-location-review.tsx"), "utf8");
   assert.match(rateConReviewSource, /LocationPicker/);
   assert.match(rateConReviewSource, /Type any name or address/);
+  assert.match(rateConReviewSource, /extra_stops/);
+  assert.match(rateConReviewSource, /data-extra-stop/);
   assert.doesNotMatch(rateConReviewSource, /Change the dropdown/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /This load only|Check calls and stored GPS/);
@@ -3507,7 +3509,22 @@ Continuous reefer.
   assert.equal(real52309.reference_number, "52309");
   assert.equal(real52309.customer_name, "", "carrier packet has no Customer Information block");
   assert.match(real52309.shipper.name, /Nebraska Cold Storage/i);
+  assert.match(real52309.shipper.street, /600 E 39th/i);
   assert.match(real52309.origin, /Hastings/i);
+  assert.match(real52309.consignee.name, /Westside Foods/i);
+  assert.match(real52309.consignee.street, /355 Food Center/i);
+  assert.match(real52309.consignee.city, /Bronx/i);
+  assert.equal(real52309.extra_stops.length, 3, "52309 has four deliveries — keep every drop after the first");
+  assert.match(real52309.extra_stops[0]?.stop.name ?? "", /Chef's Kingdom/i);
+  assert.match(real52309.extra_stops[0]?.stop.street ?? "", /1 Alpine/i);
+  assert.match(real52309.extra_stops[0]?.stop.city ?? "", /Chestnut Ridge/i);
+  assert.match(real52309.extra_stops[1]?.stop.name ?? "", /Wakefern/i);
+  assert.match(real52309.extra_stops[1]?.stop.street ?? "", /5000 Riverside/i);
+  assert.match(real52309.extra_stops[1]?.stop.city ?? "", /Keasbey/i);
+  assert.match(real52309.extra_stops[2]?.stop.name ?? "", /Kayco/i);
+  assert.match(real52309.extra_stops[2]?.stop.street ?? "", /72 New Hook/i);
+  assert.match(real52309.extra_stops[2]?.stop.city ?? "", /Bayonne/i);
+  assert.ok(real52309.extra_stops.every((extra) => extra.kind === "delivery"));
 
   const threeStopAscend = parseRateConText(
     `
@@ -3814,6 +3831,49 @@ Continuous reefer. Two load locks.
     filledPickup?.street,
     "a filled street must not be overwritten on a later apply",
   );
+
+  const fiveStopLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: real52309.origin,
+    destination: real52309.destination,
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 21000,
+    commodity: "FRESH BEEF",
+    rate: 5869,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "52309",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const fiveStopForm = new FormData();
+  fiveStopForm.set("pickup_stop_name", real52309.shipper.name);
+  fiveStopForm.set("pickup_stop_street", real52309.shipper.street);
+  fiveStopForm.set("pickup_stop_city", real52309.shipper.city);
+  fiveStopForm.set("pickup_stop_state", real52309.shipper.state);
+  fiveStopForm.set("pickup_stop_zip", real52309.shipper.zip);
+  fiveStopForm.set("delivery_stop_name", real52309.consignee.name);
+  fiveStopForm.set("delivery_stop_street", real52309.consignee.street);
+  fiveStopForm.set("delivery_stop_city", real52309.consignee.city);
+  fiveStopForm.set("delivery_stop_state", real52309.consignee.state);
+  fiveStopForm.set("delivery_stop_zip", real52309.consignee.zip);
+  fiveStopForm.set("extra_stops_json", JSON.stringify(real52309.extra_stops));
+  applyRateConStopsToLoad(fiveStopLoadId, fiveStopForm);
+  const fiveStopRows = listRateConStops(fiveStopLoadId);
+  assert.equal(fiveStopRows.length, 5, "one pickup and four deliveries each stay their own stop");
+  assert.equal(fiveStopRows.filter((stop) => stop.kind === "pickup").length, 1);
+  assert.equal(fiveStopRows.filter((stop) => stop.kind === "delivery").length, 4);
+  assert.match(fiveStopRows.find((stop) => /Chef/i.test(stop.name))?.street ?? "", /1 Alpine/i);
+  assert.match(fiveStopRows.find((stop) => /Wakefern/i.test(stop.name))?.city ?? "", /Keasbey/i);
+  assert.match(fiveStopRows.find((stop) => /Kayco/i.test(stop.name))?.city ?? "", /Bayonne/i);
 
   const blankPdf = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });
