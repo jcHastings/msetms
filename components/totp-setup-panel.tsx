@@ -51,7 +51,7 @@ export function TotpSetupPanel({
       <section className="card space-y-3 p-6">
         <h2 className="text-sm font-semibold">2-step is on</h2>
         <p className="text-sm text-slate-600">
-          Sign-in asks for a 6-digit authenticator code after your PIN. Unused recovery codes:{" "}
+          Sign-in emails a one-time code after your password. This authenticator is optional. Unused recovery codes:{" "}
           <span className="font-semibold">{recoveryRemaining}</span>. Ask an admin to reset 2-step if you lose
           the app.
         </p>
@@ -119,7 +119,7 @@ export function TwoFactorPolicyForm({ required, canEdit }: { required: boolean; 
     <section className="card p-6" data-email-otp-policy="">
       <h2 className="text-sm font-semibold">Require 2-step for all dispatchers</h2>
       <p className="mt-1 text-sm text-slate-600">
-        After PIN, send a one-time email code. Users with no email are told to add one.
+        After the password, send a one-time email code. Users with no email are told to add one.
       </p>
       <form action={action} className="mt-4 space-y-3">
         <FormBanner result={state} />

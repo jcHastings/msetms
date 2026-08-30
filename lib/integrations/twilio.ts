@@ -18,7 +18,7 @@ export function formatSmsDestination(phone: string): string {
   if (trimmed.startsWith("+") && digits.length >= 10) return `+${digits}`;
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  throw new Error("Driver mobile must be a 10-digit US number or include a country code.");
+  throw new Error("That phone number is not a valid mobile number.");
 }
 
 export async function sendTwilioSms(

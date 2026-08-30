@@ -1,6 +1,7 @@
 "use client";
 
 import { SettingsForm } from "@/components/settings-form";
+import { DISPATCHER_PASSWORD_HINT } from "@/lib/dispatcher-password-shared";
 import {
   formRoleValue,
   selectableDispatcherRoles,
@@ -29,19 +30,27 @@ export function DispatcherUserForm({
       <div className="field">
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" defaultValue={user?.email ?? ""} disabled={!canEdit} />
+        <p className="mt-1 text-xs text-slate-500">Sign-in codes and password resets go here.</p>
       </div>
       <div className="field">
-        <label htmlFor="pin">PIN / password {user ? "(leave blank to keep)" : ""}</label>
+        <label htmlFor="phone">Phone</label>
+        <input id="phone" name="phone" type="tel" defaultValue={user?.phone ?? ""} disabled={!canEdit} />
+        <p className="mt-1 text-xs text-slate-500">
+          Used only to text a code when this person changes their password.
+        </p>
+      </div>
+      <div className="field">
+        <label htmlFor="password">Password {user ? "(leave blank to keep)" : ""}</label>
         <input
-          id="pin"
-          name="pin"
+          id="password"
+          name="password"
           type="password"
-          inputMode="numeric"
           required={!user}
           defaultValue=""
           autoComplete="new-password"
           disabled={!canEdit}
         />
+        <p className="mt-1 text-xs text-slate-500">{DISPATCHER_PASSWORD_HINT}</p>
       </div>
       <div className="field">
         <label htmlFor="role">Role</label>
@@ -67,6 +76,11 @@ export function DispatcherUserForm({
             {user.email?.trim()
               ? "Sign-in emails a code to this user’s email."
               : "Add an email on this user. Sign-in cannot send a code without one."}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            {user.has_password
+              ? "A password is set. Leave the password field blank to keep it."
+              : "No password yet. They must use Forgot password, or set one here."}
           </p>
         </div>
       ) : null}

@@ -80,7 +80,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/security",
         label: "2-step verification",
-        hint: "Email sign-in code after PIN",
+        hint: "Email sign-in code after password",
       },
     ],
   },
@@ -169,12 +169,13 @@ export const PAY_METHODS = [
 export type DispatcherUser = {
   id: number;
   name: string;
-  pin: string;
   role: string;
   email: string;
+  phone: string;
   active: number;
   permission_group: string;
   totp_enrolled: number;
+  has_password: number;
 };
 
 export type PublicDispatcher = {
@@ -182,15 +183,17 @@ export type PublicDispatcher = {
   name: string;
   role: string;
   email: string;
+  phone: string;
   active: number;
   permission_group: string;
   totp_enrolled: boolean;
+  has_password: boolean;
 };
 
 export function toPublicDispatcher(
   user: Pick<
     DispatcherUser,
-    "id" | "name" | "role" | "email" | "active" | "permission_group" | "totp_enrolled"
+    "id" | "name" | "role" | "email" | "phone" | "active" | "permission_group" | "totp_enrolled" | "has_password"
   >,
 ): PublicDispatcher {
   return {
@@ -198,9 +201,11 @@ export function toPublicDispatcher(
     name: user.name,
     role: user.role,
     email: user.email,
+    phone: user.phone ?? "",
     active: user.active,
     permission_group: user.permission_group,
     totp_enrolled: Boolean(user.totp_enrolled),
+    has_password: Boolean(user.has_password),
   };
 }
 

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { PASSWORD_NOT_RECOGNIZED, PASSWORD_UNSET, verifyDispatcherPassword } from "./dispatcher-password";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
   canAccessAccounting,
@@ -68,10 +69,16 @@ export function getDispatcher(id: number): Dispatcher | null {
   return user ? toPublicDispatcher(user) : null;
 }
 
-export function authenticateDispatcher(dispatcherId: number, pin: string): Dispatcher {
+export function authenticateDispatcher(dispatcherId: number, password: string): Dispatcher {
   const user = getDispatcherUser(dispatcherId);
-  if (!user || !user.active || user.pin !== pin.trim()) {
-    throw new Error("Dispatcher or PIN is not recognized.");
+  if (!user || !user.active) {
+    throw new Error(PASSWORD_NOT_RECOGNIZED);
+  }
+  if (!user.has_password) {
+    throw new Error(PASSWORD_UNSET);
+  }
+  if (!verifyDispatcherPassword(dispatcherId, password)) {
+    throw new Error(PASSWORD_NOT_RECOGNIZED);
   }
   return toPublicDispatcher(user);
 }
@@ -81,9 +88,11 @@ const SCRIPT_ACTOR: Dispatcher = {
   name: "script",
   role: "admin",
   email: "",
+  phone: "",
   active: 1,
   permission_group: "all",
   totp_enrolled: false,
+  has_password: false,
 };
 
 async function sessionCookieValue(): Promise<string | undefined | "no-request"> {

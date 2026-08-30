@@ -20,6 +20,8 @@ import {
   type DocumentType,
   type DropdownKind,
 } from "./settings-shared";
+import { setDispatcherPassword } from "./dispatcher-password";
+import { dispatcherPasswordError } from "./dispatcher-password-shared";
 import {
   BOL_TERMS,
   CUSTOMER_CONFIRMATION_TERMS,
@@ -669,8 +671,8 @@ export function clearCompanyLogo(): CompanySettings {
   return patchSettings({ logo_stored_name: "", logo_original_name: "", logo_mime_type: "" });
 }
 
-const DISPATCHER_SAFE_COLUMNS =
-  "id, name, pin, role, email, active, permission_group, totp_enrolled";
+const DISPATCHER_SAFE_COLUMNS = `id, name, role, email, phone, active, permission_group, totp_enrolled,
+  CASE WHEN length(trim(password_hash)) > 0 THEN 1 ELSE 0 END AS has_password`;
 
 export function listDispatcherUsers(includeInactive = true): DispatcherUser[] {
   const where = includeInactive ? "" : "WHERE active = 1";
@@ -718,34 +720,46 @@ function countAdmins(exceptId?: number): number {
 
 export function createDispatcherUser(input: {
   name: string;
-  pin: string;
+  password: string;
   role: string;
   email?: string;
+  phone?: string;
   permission_group?: string;
   active?: boolean;
 }): number {
   const name = input.name.trim();
-  const pin = input.pin.trim();
+  const password = input.password;
   if (!name) throw new Error("Name is required.");
-  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4–8 digits.");
+  const policy = dispatcherPasswordError(password);
+  if (policy) throw new Error(policy);
   const role = parseDispatcherRole(input.role);
   const group = parsePermissionGroup(input.permission_group ?? defaultPermissionGroupForRole(role));
   const result = getDb()
     .prepare(
-      `INSERT INTO dispatchers (name, pin, role, email, active, permission_group)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO dispatchers (name, pin, role, email, phone, active, permission_group, password_hash)
+       VALUES (?, '', ?, ?, ?, ?, ?, '')`,
     )
-    .run(name, pin, role, (input.email ?? "").trim(), input.active === false ? 0 : 1, group);
-  return Number(result.lastInsertRowid);
+    .run(
+      name,
+      role,
+      (input.email ?? "").trim(),
+      (input.phone ?? "").trim(),
+      input.active === false ? 0 : 1,
+      group,
+    );
+  const id = Number(result.lastInsertRowid);
+  setDispatcherPassword(id, password);
+  return id;
 }
 
 export function updateDispatcherUser(
   id: number,
   input: {
     name: string;
-    pin: string;
     role: string;
     email?: string;
+    phone?: string;
+    password?: string;
     permission_group?: string;
     active?: boolean;
   },
@@ -753,9 +767,7 @@ export function updateDispatcherUser(
   const existing = getDispatcherUser(id);
   if (!existing) throw new Error("User was not found.");
   const name = input.name.trim();
-  const pin = input.pin.trim() || existing.pin;
   if (!name) throw new Error("Name is required.");
-  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4–8 digits.");
   const role = parseDispatcherRole(input.role);
   const group = parsePermissionGroup(input.permission_group ?? existing.permission_group);
   const active = input.active === false ? 0 : 1;
@@ -765,10 +777,12 @@ export function updateDispatcherUser(
   getDb()
     .prepare(
       `UPDATE dispatchers
-       SET name = ?, pin = ?, role = ?, email = ?, active = ?, permission_group = ?
+       SET name = ?, role = ?, email = ?, phone = ?, active = ?, permission_group = ?, pin = ''
        WHERE id = ?`,
     )
-    .run(name, pin, role, (input.email ?? "").trim(), active, group, id);
+    .run(name, role, (input.email ?? "").trim(), (input.phone ?? existing.phone ?? "").trim(), active, group, id);
+  const password = input.password?.trim() ?? "";
+  if (password) setDispatcherPassword(id, password);
 }
 
 export function deleteDispatcherUser(id: number, actorId?: number | null): void {

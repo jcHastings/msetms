@@ -15,15 +15,12 @@ export default async function DispatcherLoginPage() {
       <div className="mb-6">
         <BrandMark size="lg" />
         <h1 className="mt-4 text-3xl font-semibold">Dispatcher desk</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Sign in with your password. We then email a one-time code to the address on your user record.
+          First time here? Use Forgot password to set one.
+        </p>
       </div>
       <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />
-      <div className="mt-6 rounded-2xl bg-white p-4 text-sm text-slate-600 shadow-sm">
-        <div className="font-semibold text-slate-800">Demo PIN</div>
-        <p className="mt-1">MS Test · 4020 (Administrator)</p>
-        <p className="mt-1">Jordan Lee · 4410 (Standard)</p>
-        <p className="mt-1">Casey Ortiz · 6600 (Accounting)</p>
-        <p className="mt-1">Riley Parks · 5500 (Read-only)</p>
-      </div>
     </div>
   );
 }

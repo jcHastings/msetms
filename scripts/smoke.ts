@@ -324,7 +324,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /email_code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign-in code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Resend code/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code|Authenticator code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="password"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code|Authenticator code|name="pin"|Demo PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname.startsWith\("\/login\/"\)/);
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
@@ -339,8 +342,10 @@ async function main() {
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MS Test/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G|Demo PIN|4020|4410/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/forgot/page.tsx"), "utf8"), /Forgot password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/reset/page.tsx"), "utf8"), /Set password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8"), /companyLogoPath/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MSE Transport/);
@@ -10064,9 +10069,19 @@ Continuous reefer. Two load locks.
   assert.equal(session.listDispatchers().some((row) => row.name === "Ana G"), false);
   assert.equal(msTest.totp_enrolled, false);
   assert.equal("pin" in msTest, false);
+  assert.equal("password_hash" in msTest, false);
   assert.equal("totp_secret" in msTest, false);
-  assert.equal(session.authenticateDispatcher(msTest.id, "4020").role, "manager");
-  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"));
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /Forgot password|not recognized/);
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"), /Forgot password|not recognized/);
+  settingsMod.updateDispatcherUser(msTest.id, {
+    name: msTest.name,
+    role: msTest.role,
+    email: msTest.email,
+    phone: "4025550100",
+    password: "Office1$ab",
+  });
+  assert.equal(session.authenticateDispatcher(msTest.id, "Office1$ab").role, "manager");
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
   assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
   assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
 
@@ -10539,7 +10554,7 @@ Continuous reefer. Two load locks.
   );
   const removableUserId = settings.createDispatcherUser({
     name: "Temp Desk User",
-    pin: "2468",
+    password: "Temp1$ab",
     role: "dispatcher",
     email: "temp-desk@msloads.com",
   });
@@ -10547,7 +10562,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.getDispatcherUser(removableUserId), null);
   const selfId = settings.createDispatcherUser({
     name: "Self Desk User",
-    pin: "1357",
+    password: "Self1$ab",
     role: "dispatcher",
     email: "self-desk@msloads.com",
   });
@@ -10579,7 +10594,9 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8"), /SettingsAdminGate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/settings-admin-gate.tsx"), "utf8"), /Only an Administrator can change Settings/);
   const userForm = fs.readFileSync(path.join(process.cwd(), "components/dispatcher-user-form.tsx"), "utf8");
-  assert.doesNotMatch(userForm, /user\?\.pin/);
+  assert.doesNotMatch(userForm, /user\?\.pin|name="pin"/);
+  assert.match(userForm, /name="password"/);
+  assert.match(userForm, /name="phone"/);
   assert.match(userForm, /defaultValue=""/);
   assert.match(userForm, /leave blank to keep/);
   assert.match(userForm, /2-step verification/);
@@ -10687,7 +10704,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.isKnownLoadStatus("waiting_paper"), true);
   const userId = settings.createDispatcherUser({
     name: "Smoke Desk",
-    pin: "7777",
+    password: "Desk1$ab",
     role: "dispatcher",
     email: "smoke@msloads.com",
     permission_group: "billing",
@@ -10695,7 +10712,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.getDispatcherUser(userId)?.permission_group, "billing");
   const booksId = settings.createDispatcherUser({
     name: "Smoke Books",
-    pin: "8888",
+    password: "Books1$ab",
     role: "accounting",
     email: "books@msloads.com",
   });
@@ -10726,7 +10743,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(signInMail.text, /Twilio|SendGrid|SMTP_/);
   const otpUserId = settings.createDispatcherUser({
     name: "Email Code Desk",
-    pin: "3344",
+    password: "Otp1$abc",
     role: "dispatcher",
     email: "otp-desk@msloads.com",
   });
@@ -10738,7 +10755,7 @@ Continuous reefer. Two load locks.
   assert.throws(() => emailOtp.verifyEmailOtp(otpUserId, issued.code), /expired|not valid/);
   const noMailId = settings.createDispatcherUser({
     name: "No Email Desk",
-    pin: "5566",
+    password: "None1$ab",
     role: "dispatcher",
     email: "",
   });
@@ -10749,6 +10766,85 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-email-otp.ts"), "utf8"), /console\.log/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /one-time code/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /mustEnroll|2-step setup/);
+  const passwordRules = await import("../lib/dispatcher-password-shared");
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1$ab"), true);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("office1$ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("OFFICE1$AB"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office$ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1-ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Short1$"), false);
+  const passwords = await import("../lib/dispatcher-password");
+  assert.equal(passwords.maskPhone("402-555-0199"), "•••-•••-0199");
+  assert.match(passwords.composePasswordChangeSms({ code: "123456", officePhone: "402-302-0097" }), /123456/);
+  assert.doesNotMatch(passwords.composePasswordChangeSms({ code: "123456" }), /TWILIO_|Auth Token/);
+  const resetMail = passwords.composePasswordResetEmail({
+    resetUrl: "https://desk.example/login/reset?token=abc",
+    officePhone: "402-302-0097",
+  });
+  assert.match(resetMail.subject, /Reset your MS Express TMS password/);
+  assert.match(resetMail.text, /desk\.example\/login\/reset/);
+  assert.match(resetMail.text, /Do not reply/);
+  assert.match(resetMail.text, /not monitored/);
+  assert.doesNotMatch(resetMail.text, /TWILIO_|SMTP_|SendGrid/);
+  const historyUserId = settings.createDispatcherUser({
+    name: "Password History Desk",
+    password: "First1$ab",
+    role: "dispatcher",
+    email: "history-desk@msloads.com",
+    phone: "4025550199",
+  });
+  assert.throws(
+    () => settings.updateDispatcherUser(historyUserId, {
+      name: "Password History Desk",
+      role: "dispatcher",
+      email: "history-desk@msloads.com",
+      phone: "4025550199",
+      password: "First1$ab",
+    }),
+    /used before/,
+  );
+  settings.updateDispatcherUser(historyUserId, {
+    name: "Password History Desk",
+    role: "dispatcher",
+    email: "history-desk@msloads.com",
+    phone: "4025550199",
+    password: "Second2$ab",
+  });
+  assert.equal(session.authenticateDispatcher(historyUserId, "Second2$ab").id, historyUserId);
+  assert.throws(
+    () => settings.updateDispatcherUser(historyUserId, {
+      name: "Password History Desk",
+      role: "dispatcher",
+      email: "history-desk@msloads.com",
+      phone: "4025550199",
+      password: "First1$ab",
+    }),
+    /used before/,
+  );
+  const resetToken = passwords.createPasswordResetToken(historyUserId);
+  passwords.resetPasswordWithToken(resetToken, "Third3$ab");
+  assert.equal(session.authenticateDispatcher(historyUserId, "Third3$ab").id, historyUserId);
+  assert.throws(() => passwords.resetPasswordWithToken(resetToken, "Fourth4$ab"), /not valid|expired/);
+  assert.throws(() => passwords.issuePasswordSmsOtp(noMailId), /phone number/);
+  const smsIssued = passwords.issuePasswordSmsOtp(historyUserId);
+  assert.match(smsIssued.code, /^\d{6}$/);
+  assert.equal(smsIssued.phone, "4025550199");
+  assert.throws(() => passwords.issuePasswordSmsOtp(historyUserId, { resend: true }), /Wait before/);
+  passwords.verifyPasswordSmsOtp(historyUserId, smsIssued.code);
+  assert.throws(() => passwords.verifyPasswordSmsOtp(historyUserId, smsIssued.code), /expired|not valid/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /sendMail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /sendTwilioSms/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /currentBrowserOrigin/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password.ts"), "utf8"), /console\.log/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /sms_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("password"\)/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("pin"\)/);
+  const pinDriver = queries.listDrivers().find((driver) => driver.pin);
+  assert.ok(pinDriver, "driver PIN login stays on the driver record");
+  assert.equal(queries.authenticateDriver(pinDriver.id, pinDriver.pin).id, pinDriver.id);
+  assert.throws(() => queries.authenticateDriver(pinDriver.id, "0000"));
   settings.updateTwoFactorPolicy(true);
   const totp = await import("../lib/totp");
   const dispatcherTotp = await import("../lib/dispatcher-totp");

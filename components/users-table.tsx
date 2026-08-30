@@ -53,10 +53,11 @@ export function UsersTable({
                   <Link href={`/users/${user.id}`} className="text-sm font-semibold underline">
                     {user.name}
                   </Link>
-                  <div className="text-xs text-slate-500">{user.email || "No email"}</div>
+                  <div className="text-xs text-slate-500">{user.email || "No email"}{user.phone ? ` · ${user.phone}` : ""}</div>
                   <div className="mt-1 text-xs text-slate-600">
                     {roleLabel(user.role)} · {user.active ? "Active" : "Inactive"} ·{" "}
                     {user.email?.trim() ? "Email on file" : "Add an email"}
+                    {user.has_password ? "" : " · Set a password"}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

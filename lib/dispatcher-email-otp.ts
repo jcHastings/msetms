@@ -81,7 +81,7 @@ export function secondsUntilEmailOtpResend(dispatcherId: number): number {
 
 export function issueEmailOtp(dispatcherId: number, opts?: { resend?: boolean }): { code: string; email: string } {
   const user = getDispatcherUser(dispatcherId);
-  if (!user?.active) throw new Error("Dispatcher or PIN is not recognized.");
+  if (!user?.active) throw new Error("Dispatcher or password is not recognized.");
   const email = normalizeEmail(user.email);
   if (!isUsableEmail(email)) throw new Error(EMAIL_OTP_NO_EMAIL);
   if (opts?.resend && secondsUntilEmailOtpResend(dispatcherId) > 0) {

@@ -641,6 +641,8 @@ export type ActionResult =
       needsTotp?: boolean;
       needsEmailCode?: boolean;
       maskedEmail?: string;
+      needsSmsCode?: boolean;
+      maskedPhone?: string;
       recoveryCodes?: string[];
     }
   | { ok: false; error: string; duplicate?: boolean; existingId?: number };

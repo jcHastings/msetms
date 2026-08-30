@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import type { PublicDispatcher } from "@/lib/settings-shared";
@@ -65,12 +66,23 @@ export function DispatcherLoginForm({
             </select>
           </div>
           <div className="field">
-            <label htmlFor="pin">PIN</label>
-            <input id="pin" name="pin" inputMode="numeric" required autoComplete="off" />
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+            />
           </div>
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Signing in…" : "Sign in"}
           </button>
+          <p className="text-center text-sm">
+            <Link href="/login/forgot" className="font-semibold underline">
+              Forgot password
+            </Link>
+          </p>
         </>
       )}
     </form>

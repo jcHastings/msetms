@@ -101,7 +101,7 @@ export async function dispatcherLoginAction(
     const resend = String(formData.get("resend") ?? "") === "1";
     if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
-      if (!pendingId) throw new Error("PIN step expired. Sign in again.");
+      if (!pendingId) throw new Error("Password step expired. Sign in again.");
       if (resend) return await sendSignInCode(pendingId, true);
       verifyEmailOtp(pendingId, emailCode);
       await setDispatcherSession(pendingId);
@@ -110,9 +110,9 @@ export async function dispatcherLoginAction(
     }
 
     const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
-    const pin = String(formData.get("pin") ?? "").trim();
-    if (!dispatcherId || !pin) throw new Error("Pick your name and enter your PIN.");
-    const dispatcher = authenticateDispatcher(dispatcherId, pin);
+    const password = String(formData.get("password") ?? "");
+    if (!dispatcherId || !password) throw new Error("Pick your name and enter your password.");
+    const dispatcher = authenticateDispatcher(dispatcherId, password);
     if (!isTwoFactorRequired()) {
       await setDispatcherSession(dispatcher.id);
       refresh();

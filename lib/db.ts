@@ -705,6 +705,38 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_email_otp_dispatcher
       ON dispatcher_email_otp(dispatcher_id, used_at);
   `);
+  ensureColumn(db, "dispatchers", "password_hash", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "phone", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatcher_password_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_history_dispatcher
+      ON dispatcher_password_history(dispatcher_id);
+    CREATE TABLE IF NOT EXISTS dispatcher_password_reset (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_reset_token
+      ON dispatcher_password_reset(token_hash, used_at);
+    CREATE TABLE IF NOT EXISTS dispatcher_password_sms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_sms_dispatcher
+      ON dispatcher_password_sms(dispatcher_id, used_at);
+  `);
   const otpShip = db.prepare("SELECT email_otp_shipped AS shipped FROM company_profile WHERE id = 1").get() as
     | { shipped?: number }
     | undefined;
@@ -750,6 +782,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "tms_invoice_at", "TEXT NOT NULL DEFAULT ''");
   db.prepare("UPDATE dispatchers SET name = 'MS Test' WHERE name = 'Ana G' AND pin = '4020'").run();
   db.prepare("UPDATE company_profile SET dispatcher_name = 'MS Test' WHERE id = 1 AND dispatcher_name = 'Ana G'").run();
+  db.prepare("UPDATE dispatchers SET pin = '' WHERE pin != ''").run();
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
@@ -866,28 +899,24 @@ export function migrate(db: Database): void {
 function backfillDispatchers(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM dispatchers").get() as { count: number }).count;
   if (count > 0) return;
-  db.prepare("INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)").run(
-    "MS Test",
-    "4020",
-    "manager",
-    "ana@msloads.com",
-    "all",
-  );
+  db.prepare(
+    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group, password_hash, phone) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+  ).run("MS Test", "", "manager", "ana@msloads.com", "all", "", "");
 }
 
 function backfillSettingsUsers(db: Database): void {
-  const extras: Array<[string, string, string, string, string]> = [
-    ["Jordan Lee", "4410", "dispatcher", "jordan@msloads.com", "dispatch"],
-    ["Casey Ortiz", "6600", "accounting", "casey@msloads.com", "billing"],
-    ["Riley Parks", "5500", "read_only", "riley@msloads.com", "dispatch"],
+  const extras: Array<[string, string, string, string]> = [
+    ["Jordan Lee", "dispatcher", "jordan@msloads.com", "dispatch"],
+    ["Casey Ortiz", "accounting", "casey@msloads.com", "billing"],
+    ["Riley Parks", "read_only", "riley@msloads.com", "dispatch"],
   ];
   const find = db.prepare("SELECT id FROM dispatchers WHERE name = ?");
   const insert = db.prepare(
-    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)",
+    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group, password_hash, phone) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
   );
-  for (const [name, pin, role, email, group] of extras) {
+  for (const [name, role, email, group] of extras) {
     if (find.get(name)) continue;
-    insert.run(name, pin, role, email, group);
+    insert.run(name, "", role, email, group, "", "");
   }
 }
 

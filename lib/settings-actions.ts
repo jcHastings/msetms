@@ -418,9 +418,10 @@ export async function createDispatcherUserAction(
     const role = String(formData.get("role") ?? "dispatcher");
     const id = createDispatcherUser({
       name: requiredString(formData.get("name"), "Name"),
-      pin: requiredString(formData.get("pin"), "PIN"),
+      password: requiredString(formData.get("password"), "Password"),
       role,
       email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
       permission_group:
         String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
@@ -505,7 +506,7 @@ export async function resetDispatcherTotpAction(
     if (!id) throw new Error("User is missing.");
     resetDispatcherTotp(id, admin.name);
     refresh();
-    return { ok: true, message: "2-step was reset. They can sign in with PIN until they enroll again." };
+    return { ok: true, message: "2-step was reset. They sign in with their password and email code." };
   } catch (error) {
     return fail(error);
   }
@@ -521,9 +522,10 @@ export async function updateDispatcherUserAction(
     const role = String(formData.get("role") ?? "dispatcher");
     updateDispatcherUser(id, {
       name: requiredString(formData.get("name"), "Name"),
-      pin: String(formData.get("pin") ?? ""),
+      password: String(formData.get("password") ?? ""),
       role,
       email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
       permission_group:
         String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
