@@ -62,9 +62,13 @@ async function main() {
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
   const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
-  const { loadMatchesListQuery, parseLoadListTab, filtersForLoadListTab, LOAD_LIST_TABS } = await import(
-    "../lib/load-list-shared"
-  );
+  const {
+    loadMatchesListQuery,
+    parseLoadListTab,
+    filtersForLoadListTab,
+    listFiltersForBoardStatus,
+    LOAD_LIST_TABS,
+  } = await import("../lib/load-list-shared");
   assert.equal(parseLoadListTab(""), "active");
   assert.equal(parseLoadListTab("planning"), "planning");
   assert.equal(parseLoadListTab("accounting"), "accounting");
@@ -80,6 +84,10 @@ async function main() {
   assert.equal(filtersForLoadListTab("mine", {}).dispatcherId, -1);
   assert.equal(filtersForLoadListTab("master").masterOnly, true);
   assert.equal(filtersForLoadListTab("accounting").status, "accounting");
+  assert.equal(listFiltersForBoardStatus("in_transit").status, "in_transit");
+  assert.equal(listFiltersForBoardStatus("available").status, "available");
+  assert.equal(listFiltersForBoardStatus("planning").status, "planning");
+  assert.equal(listFiltersForBoardStatus("").status, "active");
   assert.equal(
     loadMatchesListQuery(
       {
@@ -101,8 +109,7 @@ async function main() {
     false,
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
-  assert.match(boardUi, /listLoads\(filtersForLoadListTab/);
-  assert.match(boardUi, /parseLoadListTab/);
+  assert.match(boardUi, /listLoads\(listFiltersForBoardStatus/);
   assert.match(boardUi, /getSignedInDispatcher/);
   assert.match(boardUi, /BoardWhenCell/);
   assert.match(boardUi, /formatBoardDateTime/);
@@ -132,9 +139,12 @@ async function main() {
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
   assert.match(boardToolbar, /LOAD_LIST_TABS/);
+  assert.match(boardToolbar, /load-list-tabs/);
+  assert.match(boardToolbar, /Load Manager tabs/);
+  assert.doesNotMatch(boardToolbar, /AscendLTL|Externally Posted|AscendAI|Post Loads/);
   const loadListShared = fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8");
   assert.match(loadListShared, /Planning Loads/);
-  assert.match(loadListShared, /Ready for Accounting/);
+  assert.match(loadListShared, /Ready for Accounting Loads/);
   assert.match(loadListShared, /Misc\. Loads/);
   assert.match(loadListShared, /My Loads/);
   assert.match(loadListShared, /Master Loads/);

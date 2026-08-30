@@ -31,11 +31,7 @@ import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
-import {
-  filtersForLoadListTab,
-  loadShowsOnDispatchBoard,
-  parseLoadListTab,
-} from "@/lib/load-list-shared";
+import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -48,14 +44,14 @@ export default async function BoardPage({
   searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string; tab?: string }>;
 }) {
   const params = await searchParams;
-  const status = parseLoadListTab(params.status);
+  const status = params.status ?? "active";
   const date = params.date ?? "";
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
   const current = { status, date };
   const dispatcher = await getSignedInDispatcher();
   const loads = sortMasterFamilies(
-    listLoads(filtersForLoadListTab(status, { date, dispatcherId: dispatcher?.id })).filter(
+    listLoads(listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher?.id })).filter(
       (load) => status === "accounting" || loadShowsOnDispatchBoard(load.status),
     ),
   );

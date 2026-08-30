@@ -3,7 +3,7 @@
 export const LOAD_LIST_TABS = [
   { value: "active", label: "Active Loads" },
   { value: "planning", label: "Planning Loads" },
-  { value: "accounting", label: "Ready for Accounting" },
+  { value: "accounting", label: "Ready for Accounting Loads" },
   { value: "misc", label: "Misc. Loads" },
   { value: "all", label: "All Loads" },
   { value: "mine", label: "My Loads" },
@@ -19,9 +19,25 @@ export function loadShowsOnDispatchBoard(status: string): boolean {
   return status !== "accounting";
 }
 
+export function isLoadListTab(value: string | null | undefined): value is LoadListTab {
+  return LOAD_LIST_TABS.some((tab) => tab.value === value);
+}
+
 export function parseLoadListTab(value: string | null | undefined): LoadListTab {
   const match = LOAD_LIST_TABS.find((tab) => tab.value === value);
   return match?.value ?? "active";
+}
+
+/** Tab values use tab filters. Other values (in_transit, available) stay exact status filters. */
+export function listFiltersForBoardStatus(
+  status: string | null | undefined,
+  extras: { date?: string; dispatcherId?: number | null } = {},
+): LoadListFilters {
+  const raw = String(status ?? "").trim();
+  if (!raw || isLoadListTab(raw)) {
+    return filtersForLoadListTab(raw ? raw : "active", extras);
+  }
+  return { status: raw, date: extras.date || undefined };
 }
 
 export type LoadListFilters = {

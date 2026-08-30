@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useBoardFilter } from "@/components/board-filter";
-import { LOAD_LIST_TABS } from "@/lib/load-list-shared";
+import { isLoadListTab, LOAD_LIST_TABS, parseLoadListTab } from "@/lib/load-list-shared";
 
 type Props = {
   status: string;
@@ -11,6 +11,7 @@ type Props = {
 
 export function BoardToolbar({ status, date }: Props) {
   const { q, setQ } = useBoardFilter();
+  const currentTab = isLoadListTab(status) ? status : parseLoadListTab(status);
 
   function tabHref(value: string) {
     const params = new URLSearchParams();
@@ -21,22 +22,20 @@ export function BoardToolbar({ status, date }: Props) {
   }
 
   return (
-    <div className="card mb-3 border-[#0b1f3a] px-2 py-2" data-load-list-chrome="">
-      <div className="load-tabs flex flex-wrap gap-0.5 px-1 pt-1">
+    <div className="mb-3" data-load-list-chrome="">
+      <div className="load-list-tabs" role="tablist" aria-label="Load Manager tabs">
         {LOAD_LIST_TABS.map((tab) => (
           <Link
             key={tab.value}
             href={tabHref(tab.value)}
-            className={`load-tab rounded-t px-2 py-1 text-xs font-semibold ${
-              status === tab.value ? "load-tab-active" : ""
-            }`}
-            aria-current={status === tab.value ? "page" : undefined}
+            className={`load-tab ${currentTab === tab.value ? "load-tab-active" : ""}`}
+            aria-current={currentTab === tab.value ? "page" : undefined}
           >
             {tab.label}
           </Link>
         ))}
       </div>
-      <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => event.preventDefault()}>
+      <form className="load-list-search" onSubmit={(event) => event.preventDefault()}>
         <div className="field min-w-56 flex-1">
           <label htmlFor="load-list-q">Search loads on this tab</label>
           <input
