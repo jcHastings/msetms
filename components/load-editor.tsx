@@ -108,7 +108,13 @@ export async function LoadEditor({
           <PageHeader
             title={load.load_number}
             subtitle={[
-              load.parent_load_id ? `Child of master ${masterRow?.load_number ?? ""}` : childRows.length ? `Master load · ${childRows.map((row) => row.load_number).join(", ")}` : "",
+              load.parent_load_id
+                ? `Child of master ${masterRow?.load_number ?? ""}`
+                : childRows.length
+                  ? `Master load · ${childRows.map((row) => row.load_number).join(", ")}`
+                  : load.is_master
+                    ? "Master load"
+                    : "",
               formatLoadLaneFromStops(stops, locations) || `${load.origin} → ${load.destination}`,
             ]
               .filter(Boolean)
@@ -209,6 +215,7 @@ export async function LoadEditor({
             loadId={load.id}
             loadNumber={load.load_number}
             isChild={Boolean(load.parent_load_id)}
+            savedMaster={Boolean(load.is_master) || childRows.length > 0}
             masterNumber={masterRow?.load_number ?? load.load_number}
             family={family}
             customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}

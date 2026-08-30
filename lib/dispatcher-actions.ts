@@ -127,6 +127,24 @@ export async function cloneLoadAction(formData: FormData): Promise<void> {
   });
 }
 
+export async function setMasterLoadAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const id = parseOptionalInt(formData.get("load_id"));
+      if (!id) throw new Error("Load is missing.");
+      const enabled = formData.get("is_master") === "1";
+      const { setLoadIsMaster } = await import("./master-load");
+      setLoadIsMaster(id, enabled);
+      writeAudit("update", "master_load", id, enabled ? "multiple customers" : "regular load");
+      refresh();
+      return { ok: true, message: enabled ? "This load is a master." : "This load is a regular load." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function addMasterChildAction(
   _prev: ActionResult | null,
   formData: FormData,

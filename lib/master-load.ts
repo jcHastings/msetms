@@ -55,6 +55,24 @@ export function listMasterFamily(loadId: number): MasterFamilyMember[] {
   ];
 }
 
+export function setLoadIsMaster(loadId: number, enabled: boolean): void {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  if (isChildLoad(load)) throw new Error("Change this on the master.");
+  if (!enabled && loadHasChildren(loadId)) {
+    throw new Error("Remove the customer splits first.");
+  }
+  getDb()
+    .prepare("UPDATE loads SET is_master = ?, updated_at = ? WHERE id = ?")
+    .run(enabled ? 1 : 0, new Date().toISOString(), loadId);
+  recordLoadAudit({
+    loadId,
+    action: "update",
+    field: "master_load",
+    newValue: enabled ? "multiple customers" : "regular load",
+  });
+}
+
 export function loadHasChildren(loadId: number): boolean {
   const row = getDb()
     .prepare("SELECT 1 AS ok FROM loads WHERE parent_load_id = ? LIMIT 1")
@@ -148,6 +166,9 @@ export function createMasterChild(input: {
   getDb()
     .prepare("UPDATE loads SET parent_load_id = ?, master_suffix = ?, updated_at = ? WHERE id = ?")
     .run(parent.id, suffix, new Date().toISOString(), childId);
+  getDb()
+    .prepare("UPDATE loads SET is_master = 1, updated_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), parent.id);
   replaceChildStops(childId, masterStops, input.stopIds);
 
   if (input.copyFinancials) {

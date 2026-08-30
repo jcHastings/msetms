@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
-import { addMasterChildAction } from "@/lib/dispatcher-actions";
+import { addMasterChildAction, setMasterLoadAction } from "@/lib/dispatcher-actions";
 import { overlayHref } from "@/lib/load-page-shared";
 import type { MasterFamilyMember } from "@/lib/master-load-shared";
 import { childLoadNumber, nextChildSuffix } from "@/lib/master-load-shared";
@@ -19,8 +20,8 @@ export type MasterStopChoice = {
 
 export function MasterLoadPanel({
   loadId,
-  loadNumber,
   isChild,
+  savedMaster = false,
   masterNumber,
   family,
   customers,
@@ -30,16 +31,19 @@ export function MasterLoadPanel({
   loadId: number;
   loadNumber: string;
   isChild: boolean;
+  savedMaster?: boolean;
   masterNumber: string;
   family: MasterFamilyMember[];
   customers: Array<{ id: number; name: string }>;
   stops: MasterStopChoice[];
   defaultCustomerId: number;
 }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(addMasterChildAction, null);
-  const [turnedOn, setTurnedOn] = useState(false);
+  const [turnedOn, setTurnedOn] = useState(savedMaster);
   const children = family.filter((row) => row.parent_load_id);
-  const isMaster = isChild || children.length > 0 || turnedOn;
+  const locked = isChild || children.length > 0;
+  const enabled = locked || savedMaster || turnedOn;
   let nextSuffix = "A";
   try {
     nextSuffix = nextChildSuffix(children.map((row) => row.master_suffix));
@@ -50,9 +54,27 @@ export function MasterLoadPanel({
   const masterId = family.find((row) => !row.parent_load_id)?.id ?? loadId;
 
   useEffect(() => {
+    setTurnedOn(savedMaster);
+  }, [savedMaster]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.hash.replace(/^#/, "") === "master-load") setTurnedOn(true);
   }, []);
+
+  async function toggle(next: boolean) {
+    if (locked && !next) return;
+    const form = new FormData();
+    form.set("load_id", String(loadId));
+    form.set("is_master", next ? "1" : "0");
+    const result = await setMasterLoadAction(form);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    setTurnedOn(next);
+    router.refresh();
+  }
 
   function openMember(id: number) {
     const embed = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -69,19 +91,20 @@ export function MasterLoadPanel({
 
   return (
     <section className="card mb-4 overflow-hidden" id="master-load" data-master-load="">
-      <div className="section-head px-5 py-3">
-        <h2 className="text-sm font-semibold">Master load</h2>
+      <div className="section-head bg-amber-100 px-5 py-3">
+        <label className="flex items-center gap-2 text-sm font-semibold" data-master-opt-in="">
+          <input
+            type="checkbox"
+            data-master-customers=""
+            checked={enabled}
+            disabled={isChild || children.length > 0}
+            onChange={(event) => void toggle(event.target.checked)}
+          />
+          Use multiple customers (Master Load)
+        </label>
       </div>
+      {enabled ? (
       <div className="space-y-4 p-5 text-sm">
-        {!isMaster ? (
-          <div className="space-y-3" data-master-opt-in="">
-            <p className="text-slate-600">This load is not a master. Turn it into one to bill more than one customer on the same trip.</p>
-            <button className="btn btn-secondary" type="button" data-master-turn-on="" onClick={() => setTurnedOn(true)}>
-              Turn into a master load
-            </button>
-          </div>
-        ) : (
-          <>
         <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
           {family.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
@@ -172,9 +195,8 @@ export function MasterLoadPanel({
             </button>
           </form>
         )}
-          </>
-        )}
       </div>
+      ) : null}
     </section>
   );
 }

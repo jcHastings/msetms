@@ -854,15 +854,18 @@ async function main() {
   const parentIdxAt = dbMigrateSource.indexOf("idx_loads_parent");
   assert.ok(parentColAt >= 0 && parentIdxAt > parentColAt, "add parent_load_id before indexing it");
   const masterPanelSource = fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8");
-  assert.match(masterPanelSource, /Master load/);
+  assert.match(masterPanelSource, /Use multiple customers \(Master Load\)/);
   assert.match(masterPanelSource, /stop_ids/);
   assert.match(masterPanelSource, /data-master-opt-in/);
-  assert.match(masterPanelSource, /data-master-turn-on/);
-  assert.match(masterPanelSource, /Turn into a master load/);
+  assert.match(masterPanelSource, /data-master-customers/);
+  assert.match(masterPanelSource, /setMasterLoadAction/);
   assert.doesNotMatch(masterPanelSource, /One trip, more than one customer|same as Ascend|Bill and paperwork live on the child|Dispatch stays on the master/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Turn into a master load/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Use multiple customers \(Master Load\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /is_master/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /ms-open-load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/master-load.ts"), "utf8"), /createMasterChild/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/master-load.ts"), "utf8"), /setLoadIsMaster/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /setMasterLoadAction/);
   const { childLoadNumber, nextChildSuffix, sortMasterFamilies } = await import("../lib/master-load-shared");
   assert.equal(childLoadNumber("MSE-12345", "a"), "MSE-12345-A");
   assert.equal(nextChildSuffix(["A", "b"]), "C");
@@ -2122,7 +2125,12 @@ async function main() {
     driver_id: null,
   });
   const masterStops = (await import("../lib/stops")).ensureDefaultStops(masterTripId);
-  const { createMasterChild, listChildLoads, listMasterFamily } = await import("../lib/master-load");
+  const { createMasterChild, listChildLoads, listMasterFamily, setLoadIsMaster } = await import("../lib/master-load");
+  assert.equal(queries.getLoad(masterTripId)?.is_master, 0, "new load should not start as a master");
+  setLoadIsMaster(masterTripId, true);
+  assert.equal(queries.getLoad(masterTripId)?.is_master, 1, "checkbox should mark the load as a master");
+  setLoadIsMaster(masterTripId, false);
+  assert.equal(queries.getLoad(masterTripId)?.is_master, 0, "unchecking should return the load to regular");
   const splitA = createMasterChild({
     parentId: masterTripId,
     customerId,
@@ -2133,6 +2141,13 @@ async function main() {
   assert.equal(splitA.load_number, "MSE-88801-A");
   assert.equal(splitA.parent_load_id, masterTripId);
   assert.equal(splitA.master_suffix, "A");
+  assert.equal(queries.getLoad(masterTripId)?.is_master, 1, "adding a customer should mark the parent as a master");
+  try {
+    setLoadIsMaster(masterTripId, false);
+    assert.fail("should not turn off a master that still has customer splits");
+  } catch (error) {
+    assert.match(String(error instanceof Error ? error.message : error), /customer splits/);
+  }
   const masterDropStops = masterStops.filter((stop) => stop.kind === "delivery");
   const splitB = createMasterChild({
     parentId: masterTripId,

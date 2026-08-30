@@ -12,6 +12,7 @@ import {
   requestDriverDocumentsAction,
   requestPodAction,
   saveTemplateAction,
+  setMasterLoadAction,
   sendLoadSmsAction,
   sendLoadWhatsAppAction,
   watchLoadAction,
@@ -466,8 +467,23 @@ export function LoadWorkspace({
         </ActionMenu>
         ) : null}
         <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-          <button type="button" className="menu-item w-full text-left" onClick={() => setTab("stops", "master-load")}>
-            Turn into a master load
+          <button
+            type="button"
+            className="menu-item w-full text-left"
+            onClick={async () => {
+              if (!loadId) return;
+              const form = new FormData();
+              form.set("load_id", String(loadId));
+              form.set("is_master", "1");
+              const result = await setMasterLoadAction(form);
+              if (!result.ok) {
+                window.alert(result.error);
+                return;
+              }
+              setTab("stops", "master-load");
+            }}
+          >
+            Use multiple customers (Master Load)
           </button>
           <form action={cloneLoadAction}>
             <input type="hidden" name="load_id" value={loadId} />

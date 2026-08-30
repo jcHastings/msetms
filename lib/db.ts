@@ -738,6 +738,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "bol_json", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "parent_load_id", "INTEGER");
   ensureColumn(db, "loads", "master_suffix", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "is_master", "INTEGER NOT NULL DEFAULT 0");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_loads_parent ON loads(parent_load_id);`);
   ensureColumn(db, "drivers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trucks", "division", "TEXT NOT NULL DEFAULT 'MSE'");
