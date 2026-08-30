@@ -6,6 +6,7 @@ import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
+import type { ParsedExtraStop, ParsedStop } from "@/lib/rate-con-shared";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
@@ -32,12 +33,10 @@ export type LoadFormDefaults = Partial<{
   trailer_number: string;
   shipper_location_id: number | null;
   consignee_location_id: number | null;
-  shipper: { name: string; street: string; city: string; state: string; zip: string; phone: string };
-  consignee: { name: string; street: string; city: string; state: string; zip: string; phone: string };
-  extra_stops: Array<{
-    kind: "pickup" | "delivery";
-    stop: { name: string; street: string; city: string; state: string; zip: string; phone: string };
-  }>;
+  shipper: ParsedStop;
+  consignee: ParsedStop;
+  extra_stops: ParsedExtraStop[];
+  equipment: string;
 }>;
 
 export function LoadBasicsScreen({
@@ -206,7 +205,7 @@ export function LoadBasicsScreen({
         <select
           id="equipment"
           name="equipment"
-          defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}
+          defaultValue={load?.equipment || defaults.equipment || DEFAULT_LOAD_EQUIPMENT}
           data-autosave=""
           data-first-assign={load?.equipment ? undefined : ""}
           onChange={(event) => {

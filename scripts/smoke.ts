@@ -1495,6 +1495,7 @@ async function main() {
     "components/rate-con-import.tsx",
     "components/rate-con-apply.tsx",
     "components/rate-con-location-review.tsx",
+    "components/rate-con-review.tsx",
     "components/load-form.tsx",
     "components/load-basics-screen.tsx",
     "components/load-rate-fields.tsx",
@@ -1515,6 +1516,7 @@ async function main() {
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/rate-con-ai["']/, `${file} must not import server rate-con AI`);
     assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places|bol)["']/, `${file} must stay client-safe`);
   }
   const bolFormSource = fs.readFileSync(path.join(process.cwd(), "components/make-bol-button.tsx"), "utf8");
@@ -3925,6 +3927,376 @@ Continuous reefer. Two load locks.
     assert.equal(blankExtract.warning, "Couldn't read text from this PDF");
     assert.equal(blankExtract.fileName, "Load_Confirmation_45090_20260823190045.pdf");
     assert.ok(blankExtract.inboxId);
+  }
+
+  const {
+    applyAiRateCon,
+    decorateHintRateCon,
+    parseRateConAiJson,
+    RATE_CON_AI_MISSING_KEY,
+    setRateConAiTestClient,
+  } = await import("../lib/rate-con-ai");
+  const brokerDraft = parseRateConAiJson(`{
+    "customer_name": "Allen Lund Company",
+    "customer_confidence": "high",
+    "rate": 4250,
+    "rate_confidence": "high",
+    "commodity": "Fresh beef trimmings",
+    "weight": 38400,
+    "load_number": "RXO-77241",
+    "po_number": "WSF-8891",
+    "equipment": "reefer",
+    "reefer_setpoint_f": 28,
+    "reefer_mode": "continuous",
+    "special_instructions": "Call the yard before arrival.",
+    "stops": [
+      {
+        "kind": "pickup",
+        "name": "Hastings Packing",
+        "street": "100 Packer Rd",
+        "city": "Hastings",
+        "state": "NE",
+        "zip": "68901",
+        "schedule_type": "appointment",
+        "window_start": "2026-08-21T06:00",
+        "window_end": "2026-08-21T10:00",
+        "confirmation": "HST-441",
+        "notes": "Call the yard before arrival.",
+        "confidence": "high"
+      },
+      {
+        "kind": "delivery",
+        "name": "Westside Foods - KOSHER",
+        "street": "355 Food Center Dr",
+        "city": "Bronx",
+        "state": "NY",
+        "zip": "10474",
+        "schedule_type": "fcfs",
+        "window_start": "2026-08-24T07:00",
+        "window_end": "2026-08-24T15:00",
+        "confirmation": "WSF-8891",
+        "confidence": "high"
+      },
+      {
+        "kind": "delivery",
+        "name": "Kayco Bayonne",
+        "street": "72 New Hook Rd",
+        "city": "Bayonne",
+        "state": "NJ",
+        "zip": "07002",
+        "schedule_type": "appointment",
+        "window_start": "2026-08-24T16:00",
+        "confirmation": "",
+        "confidence": "high"
+      }
+    ]
+  }`);
+  const allenId = queries.createCustomer({ name: "Allen Lund Company", billing_notes: "", contacts: [] });
+  const brokerParsed = applyAiRateCon(brokerDraft, queries.listCustomers(), emptyParsedRateCon(), "RXO Carrier Tender");
+  assert.equal(brokerParsed.reader, "ai");
+  assert.equal(brokerParsed.customer_name, "Allen Lund Company");
+  assert.equal(brokerParsed.customer_id, allenId);
+  assert.equal(brokerParsed.rate, 4250);
+  assert.equal(brokerParsed.weight, 38400);
+  assert.match(brokerParsed.commodity, /Fresh beef/i);
+  assert.equal(brokerParsed.load_number_hint, "RXO-77241");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(brokerParsed), "RXO-77241");
+  assert.equal(brokerParsed.equipment, "reefer_53");
+  assert.equal(brokerParsed.reefer_mode, "continuous");
+  assert.equal(brokerParsed.reefer_setpoint_f, 28);
+  assert.equal(brokerParsed.shipper.name, "Hastings Packing");
+  assert.match(brokerParsed.shipper.street, /100 Packer/i);
+  assert.equal(brokerParsed.shipper.schedule_type, "appointment");
+  assert.equal(brokerParsed.shipper.confirmation, "HST-441");
+  assert.equal(brokerParsed.consignee.name, "Westside Foods - KOSHER");
+  assert.equal(brokerParsed.consignee.schedule_type, "fcfs");
+  assert.equal(brokerParsed.extra_stops.length, 1);
+  assert.equal(brokerParsed.extra_stops[0]?.kind, "delivery");
+  assert.match(brokerParsed.extra_stops[0]?.stop.name ?? "", /Kayco/i);
+  assert.equal(brokerParsed.field_flags.some((flag) => flag.key === "rate" && flag.status === "low"), false);
+
+  const lowMoney = applyAiRateCon(
+    {
+      customer_name: "Maybe This Broker",
+      customer_confidence: "low",
+      rate: 9999,
+      rate_confidence: "low",
+      commodity: "Beef",
+      weight: 20000,
+      load_number: "X-1",
+      stops: [
+        { kind: "pickup", name: "Yard A", street: "1 A St", city: "Omaha", state: "NE", zip: "68102" },
+        { kind: "delivery", name: "Yard B", street: "2 B St", city: "Chicago", state: "IL", zip: "60601" },
+      ],
+    },
+    queries.listCustomers(),
+  );
+  assert.equal(lowMoney.rate, null, "low-confidence rate must not fill money");
+  assert.equal(lowMoney.customer_id, null, "low-confidence customer must not match identity");
+  assert.ok(lowMoney.field_flags.some((flag) => flag.key === "rate" && flag.status === "low"));
+  assert.ok(lowMoney.field_flags.some((flag) => flag.key === "customer" && flag.status === "low"));
+
+  const hinted = decorateHintRateCon(parseRateConText("RATE CONFIRMATION\nCustomer: Delta Cold Storage\nRate: $100\n", []));
+  assert.equal(hinted.reader, "hint");
+  assert.ok(hinted.field_flags.some((flag) => flag.status === "missing"));
+  assert.match(RATE_CON_AI_MISSING_KEY, /not connected/);
+  assert.doesNotMatch(RATE_CON_AI_MISSING_KEY, /\.env|OPENAI_API_KEY|sk-/);
+
+  const brokerPdf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocumentCtor({ size: "LETTER", margin: 48 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.fontSize(16).text("RXO Carrier Tender");
+    doc.fontSize(11).text("Tender ID  RXO-77241");
+    doc.text("Bill-to party  Allen Lund Company");
+    doc.text("All-in freight  USD 4,250.00");
+    doc.text("Collect at Hastings Packing, 100 Packer Rd, Hastings NE 68901");
+    doc.text("Deliver to Westside Foods - KOSHER, 355 Food Center Dr, Bronx NY 10474");
+    doc.end();
+  });
+  setRateConAiTestClient(async () => JSON.stringify(brokerDraft));
+  const brokerForm = new FormData();
+  brokerForm.set("rate_con", new File([new Uint8Array(brokerPdf)], "rxo-tender-77241.pdf", { type: "application/pdf" }));
+  const brokerExtract = await (await import("../lib/actions")).parseRateConAction(null, brokerForm);
+  setRateConAiTestClient(null);
+  assert.equal(brokerExtract.ok, true);
+  if (brokerExtract.ok && "parsed" in brokerExtract) {
+    assert.equal(brokerExtract.parsed.reader, "ai");
+    assert.equal(brokerExtract.parsed.customer_name, "Allen Lund Company");
+    assert.equal(brokerExtract.parsed.rate, 4250);
+    assert.equal(brokerExtract.parsed.shipper.name, "Hastings Packing");
+    assert.equal(brokerExtract.parsed.consignee.city, "Bronx");
+    assert.equal(brokerExtract.parsed.extra_stops.length, 1);
+    assert.ok(brokerExtract.inboxId, "file is held; load is not created until confirm");
+    const loadsBeforeConfirm = queries.listLoads().length;
+    assert.equal(queries.listLoads().length, loadsBeforeConfirm, "AI read must not save a load");
+  }
+
+  const rateConImportUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConImportUi, /Confirm and save load/);
+  assert.match(rateConImportUi, /Discard draft/);
+  assert.match(rateConImportUi, /data-rate-con-discard/);
+  assert.match(rateConImportUi, /RateConFieldFlags/);
+  assert.doesNotMatch(rateConImportUi, /Liftgate|Inside Pickup|Inside Delivery/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /gpt-4o-mini|MIKE_OPENAI_MODEL/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /redactRateConSecrets/);
+
+  const { extractDocumentText: extractBrokerText } = await import("../lib/rate-con");
+  const { parsedStopHasDetails } = await import("../lib/rate-con-shared");
+  const comparisonFixtures = [
+    {
+      file: "tql-po-36817888.pdf",
+      needle: /TQL PO#\s*36817888/i,
+      hintMustMissStops: true,
+      hintRate: null as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "TQL",
+        "customer_confidence": "high",
+        "rate": null,
+        "rate_confidence": "low",
+        "commodity": "Canned food",
+        "weight": 44000,
+        "load_number": "36817888",
+        "po_number": "50826",
+        "equipment": "reefer",
+        "reefer_mode": "continuous",
+        "special_instructions": "Must accept TQL tracking. Food grade trailer. Do not break the seal.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "Indel Food Products Inc",
+            "street": "9515 Plaza Circle",
+            "city": "El Paso",
+            "state": "TX",
+            "zip": "79927",
+            "phone": "915-590-5914",
+            "schedule_type": "fcfs",
+            "window_start": "2026-05-18T08:00",
+            "window_end": "2026-05-18T17:00",
+            "confirmation": "50826",
+            "notes": "FCFS 08:00 to 17:00 MST",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "Cox Marketing",
+            "street": "10150 Pilot Ave",
+            "city": "Midland",
+            "state": "TX",
+            "zip": "79706",
+            "schedule_type": "fcfs",
+            "window_start": "2026-05-19T06:00",
+            "window_end": "2026-05-19T14:00",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+    {
+      file: "bmm-load-confirmation-056299.pdf",
+      needle: /LOAD CONFIRMATION AND PAYMENT AGREEMENT/i,
+      hintMustMissStops: true,
+      hintRate: 2000 as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "BMM Logistics",
+        "customer_confidence": "high",
+        "rate": 2000,
+        "rate_confidence": "high",
+        "commodity": "CANDY",
+        "weight": 20000,
+        "load_number": "056299",
+        "po_number": "H20279911",
+        "equipment": "reefer",
+        "reefer_setpoint_f": 60,
+        "reefer_mode": "continuous",
+        "special_instructions": "PRECOOL TO 60F. FOLLOW TEMP ON BOL. 2 LOAD LOCKS REQUIRED.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "FERRERO",
+            "street": "600 Cottontail LN",
+            "city": "Somerset",
+            "state": "NJ",
+            "zip": "08873",
+            "schedule_type": "appointment",
+            "window_start": "2025-12-05T16:30",
+            "window_end": "2025-12-05T16:30",
+            "confirmation": "H20279911",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "SP DEKALB DC",
+            "street": "801 E GURLER RD",
+            "city": "DeKalb",
+            "state": "IL",
+            "zip": "60115",
+            "schedule_type": "appointment",
+            "window_start": "2025-12-07T12:00",
+            "window_end": "2025-12-07T12:00",
+            "confirmation": "1155538327",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+    {
+      file: "cei-load-confirmation-0502830.pdf",
+      needle: /CEI LOGISTICS/i,
+      hintMustMissStops: true,
+      hintRate: null as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "CEI Logistics",
+        "customer_confidence": "high",
+        "rate": 4000,
+        "rate_confidence": "high",
+        "commodity": "Fresh Product",
+        "weight": 28000,
+        "load_number": "0502830",
+        "po_number": "49596555",
+        "equipment": "reefer",
+        "reefer_mode": "continuous",
+        "special_instructions": "Verify rate confirmation temperature matches the BOL before leaving shipper. Four Kites tracking required.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "DFA DAIRY BRANDS",
+            "street": "1188 LINCOLN ST SW",
+            "city": "Le Mars",
+            "state": "IA",
+            "zip": "51031",
+            "phone": "712-548-2200",
+            "schedule_type": "appointment",
+            "window_start": "2026-07-14T23:59",
+            "confirmation": "49596555",
+            "notes": "No driver loading. ck temp on bol b4 leaving shpr",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "MCLANE COMMERCE CITY",
+            "street": "17100 EAST 81ST AVE",
+            "city": "Commerce City",
+            "state": "CO",
+            "zip": "80022",
+            "phone": "720-374-5080",
+            "schedule_type": "appointment",
+            "window_start": "2026-07-16T01:00",
+            "confirmation": "49596555",
+            "notes": "No driver unloading",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+  ];
+  for (const fixture of comparisonFixtures) {
+    const pdfPath = path.join(process.cwd(), "scripts/fixtures", fixture.file);
+    assert.equal(fs.existsSync(pdfPath), true, fixture.file);
+    const text = await extractBrokerText(fs.readFileSync(pdfPath), "application/pdf", fixture.file);
+    assert.match(text, fixture.needle, `${fixture.file} must extract readable text`);
+    const hintOnly = parseRateConText(text, [], fixture.file);
+    assert.equal(parsedStopHasDetails(hintOnly.shipper), false, `${fixture.file} layout helper misses pickup`);
+    assert.equal(parsedStopHasDetails(hintOnly.consignee), false, `${fixture.file} layout helper misses delivery`);
+    assert.equal(hintOnly.extra_stops.length, 0);
+    assert.equal(hintOnly.rate, fixture.hintRate, `${fixture.file} hint rate`);
+    const tqlCustomer = queries.listCustomers().find((row) => row.name === fixture.draft.customer_name);
+    const customerId =
+      tqlCustomer?.id ??
+      queries.createCustomer({ name: String(fixture.draft.customer_name ?? ""), billing_notes: "", contacts: [] });
+    const aiDraft = applyAiRateCon(fixture.draft, queries.listCustomers(), hintOnly, text);
+    assert.equal(aiDraft.reader, "ai");
+    assert.equal(aiDraft.customer_id, customerId);
+    assert.ok(parsedStopHasDetails(aiDraft.shipper), `${fixture.file} AI fills pickup`);
+    assert.ok(parsedStopHasDetails(aiDraft.consignee), `${fixture.file} AI fills delivery`);
+    assert.match(aiDraft.shipper.street, /\d/);
+    assert.match(aiDraft.consignee.street, /\d/);
+    if (fixture.file.startsWith("tql")) {
+      assert.equal(aiDraft.rate, null, "TQL sheet has no freight $ — do not invent a rate");
+      assert.ok(aiDraft.field_flags.some((flag) => flag.key === "rate"));
+      assert.equal(aiDraft.weight, 44000);
+      assert.match(aiDraft.commodity, /canned food/i);
+      assert.equal(aiDraft.shipper.schedule_type, "fcfs");
+      assert.equal(aiDraft.consignee.schedule_type, "fcfs");
+      assert.equal(aiDraft.consignee.city, "Midland");
+    }
+    if (fixture.file.startsWith("bmm")) {
+      assert.equal(aiDraft.rate, 2000);
+      assert.equal(aiDraft.weight, 20000);
+      assert.match(aiDraft.commodity, /^CANDY$/i);
+      assert.equal(aiDraft.reefer_setpoint_f, 60);
+      assert.match(aiDraft.shipper.name, /FERRERO/i);
+      assert.match(aiDraft.consignee.city, /DeKalb/i);
+    }
+    if (fixture.file.startsWith("cei")) {
+      assert.equal(aiDraft.rate, 4000);
+      assert.equal(aiDraft.weight, 28000);
+      assert.match(aiDraft.shipper.name, /DFA DAIRY/i);
+      assert.match(aiDraft.consignee.name, /MCLANE/i);
+      assert.equal(aiDraft.load_number_hint, "0502830");
+    }
+  }
+  const tqlPath = path.join(process.cwd(), "scripts/fixtures", "tql-po-36817888.pdf");
+  const tqlDraft = comparisonFixtures[0]?.draft;
+  setRateConAiTestClient(async () => JSON.stringify(tqlDraft));
+  const tqlForm = new FormData();
+  tqlForm.set(
+    "rate_con",
+    new File([new Uint8Array(fs.readFileSync(tqlPath))], "tql-po-36817888.pdf", { type: "application/pdf" }),
+  );
+  const tqlExtract = await (await import("../lib/actions")).parseRateConAction(null, tqlForm);
+  setRateConAiTestClient(null);
+  assert.equal(tqlExtract.ok, true);
+  if (tqlExtract.ok && "parsed" in tqlExtract) {
+    assert.equal(tqlExtract.parsed.reader, "ai");
+    assert.equal(tqlExtract.parsed.rate, null, "confirm-before-save: TQL rate stays empty");
+    assert.match(tqlExtract.parsed.shipper.street, /9515 Plaza/i);
+    assert.match(tqlExtract.parsed.consignee.city, /Midland/i);
+    const loadsAfterTql = queries.listLoads().length;
+    assert.equal(queries.listLoads().length, loadsAfterTql, "reading TQL must not save a load");
   }
 
   const sampleAscendPdf = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");

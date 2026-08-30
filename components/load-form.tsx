@@ -205,6 +205,11 @@ function RateConStopFields({ prefix, stop }: { prefix: "pickup" | "delivery"; st
       <input type="hidden" name={`${prefix}_stop_state`} value={stop.state} />
       <input type="hidden" name={`${prefix}_stop_zip`} value={stop.zip} />
       <input type="hidden" name={`${prefix}_stop_phone`} value={stop.phone} />
+      <input type="hidden" name={`${prefix}_stop_schedule_type`} value={stop.schedule_type} />
+      <input type="hidden" name={`${prefix}_stop_window_start`} value={stop.window_start} />
+      <input type="hidden" name={`${prefix}_stop_window_end`} value={stop.window_end} />
+      <input type="hidden" name={`${prefix}_stop_confirmation`} value={stop.confirmation} />
+      <input type="hidden" name={`${prefix}_stop_notes`} value={stop.notes} />
     </>
   );
 }

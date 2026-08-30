@@ -5,6 +5,7 @@ import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
+import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, createLoadAction } from "@/lib/actions";
 import type { ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
@@ -68,7 +69,9 @@ export function RateConImport({
       >
         <div>
           <h2 className="text-sm font-semibold">Drop a rate con or load email</h2>
-          <p className="mt-1 text-sm text-slate-500">PDF, photo, or forwarded load email. Review, then save.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            PDF, photo, or forwarded load email. AI reads any broker layout. Review, then confirm — nothing is saved until you confirm.
+          </p>
         </div>
         {localError ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -76,7 +79,7 @@ export function RateConImport({
           </div>
         ) : null}
         {serverError ? <FormBanner result={serverError} /> : null}
-        {state && "warning" in state && state.warning ? (
+        {!parsed && state && "warning" in state && state.warning ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {state.warning}
           </div>
@@ -105,7 +108,7 @@ export function RateConImport({
             }
           }}
         >
-          {pending ? "Reading…" : "Extract fields"}
+          {pending ? "Reading…" : "Read rate con"}
         </button>
       </form>
 
@@ -152,12 +155,22 @@ function RateConImportedLoad({
   drivers: DriverWithTruck[];
   formSettings?: LoadFormSettings;
 }) {
+  const [discarded, setDiscarded] = useState(false);
   const book = useRateConLocationBook(parsed, locations);
+  if (discarded) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-rate-con-discarded="">
+        Draft discarded. The load was not saved.
+      </div>
+    );
+  }
   return (
-    <div>
+    <div data-rate-con-draft="">
       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-        Review the extracted fields, fix anything wrong, then save. The original file stays on
-        the load as a rate confirmation attachment.
+        {parsed.reader === "ai"
+          ? "Review the AI draft, fix anything wrong, then confirm. The load is not saved until you confirm."
+          : "Review the guessed fields, fix anything wrong, then confirm. The load is not saved until you confirm."}{" "}
+        The original file stays on the load as a rate confirmation attachment.
         {fileName ? <span className="mt-1 block font-mono text-xs">{fileName}</span> : null}
       </div>
       {warning ? (
@@ -165,6 +178,8 @@ function RateConImportedLoad({
           {warning}
         </div>
       ) : null}
+      <RateConFieldFlags parsed={parsed} />
+      <RateConNeedsReviewNote parsed={parsed} />
       {book.review}
       <LoadForm
         key={book.formKey}
@@ -180,8 +195,13 @@ function RateConImportedLoad({
         defaults={book.defaults}
         {...formSettings}
         action={createLoadAction}
-        submitLabel="Save load from rate con"
+        submitLabel="Confirm and save load"
       />
+      <div className="mt-3">
+        <button className="btn btn-secondary" type="button" data-rate-con-discard="" onClick={() => setDiscarded(true)}>
+          Discard draft
+        </button>
+      </div>
       {parsed.raw_text ? (
         <details className="mt-4 text-sm text-slate-500">
           <summary className="cursor-pointer font-medium">Extracted text</summary>

@@ -40,6 +40,8 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
     defaults: {
       ...parsed,
       customer_reference: customerRefFromRateCon(parsed),
+      equipment: parsed.equipment,
+      reefer_mode: parsed.reefer_mode,
       shipper_location_id: shipperId ? Number(shipperId) : null,
       consignee_location_id: consigneeId ? Number(consigneeId) : null,
     },
@@ -124,7 +126,26 @@ function ExtraStopCard({ title, stop }: { title: string; stop: ParsedStop }) {
     <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm" data-extra-stop="">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">{title}</div>
       <p className="mt-1 font-medium">{formatParsedStop(stop)}</p>
+      <StopMeta stop={stop} />
     </section>
+  );
+}
+
+function StopMeta({ stop }: { stop: ParsedStop }) {
+  const schedule =
+    stop.schedule_type === "fcfs" ? "FCFS" : stop.schedule_type === "appointment" ? "Appointment required" : "";
+  if (!schedule && !stop.confirmation && !stop.notes && !stop.window_start) return null;
+  return (
+    <ul className="mt-2 space-y-0.5 text-xs text-slate-600" data-stop-meta="">
+      {schedule ? <li>Window: {schedule}</li> : null}
+      {stop.window_start || stop.window_end ? (
+        <li>
+          Hours: {[stop.window_start, stop.window_end].filter(Boolean).join(" – ")}
+        </li>
+      ) : null}
+      {stop.confirmation ? <li>PO / confirmation: {stop.confirmation}</li> : null}
+      {stop.notes ? <li>Notes: {stop.notes}</li> : null}
+    </ul>
   );
 }
 
@@ -168,8 +189,10 @@ function StopReviewCard({
         <>
           <p className="mt-1 font-medium">No matching Locations row</p>
           <p className="mt-1">{formatParsedStop(stop)}</p>
+          <StopMeta stop={stop} />
         </>
       )}
+      {matched ? <StopMeta stop={stop} /> : null}
       <p className={`mt-2 text-xs ${matched ? "text-emerald-800" : "text-amber-800"}`}>
         Type a name or address to pick a different saved location.
       </p>
@@ -217,8 +240,27 @@ function SaveNewLocationCard({
       ) : null}
       <form action={formAction} className="mt-3 grid gap-2 md:grid-cols-2">
         <input type="hidden" name="role" value={role} />
-        <input type="hidden" name="scheduling_type" value="appointment" />
         <input type="hidden" name="notes" value="Added from rate confirmation" />
+        <div className="field md:col-span-2">
+          <label htmlFor={`${prefix}-scheduling`}>Scheduling</label>
+          <select
+            id={`${prefix}-scheduling`}
+            name="scheduling_type"
+            defaultValue={stop.schedule_type === "fcfs" ? "fcfs" : "appointment"}
+          >
+            <option value="appointment">Appointment required</option>
+            <option value="fcfs">FCFS</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm font-medium md:col-span-2">
+          <input
+            type="checkbox"
+            name="call_before"
+            value="1"
+            defaultChecked={/call before/i.test(stop.notes)}
+          />
+          Call before pickup/delivery
+        </label>
         <div className="field md:col-span-2">
           <label htmlFor={`${prefix}-name`}>Name</label>
           <input id={`${prefix}-name`} name="name" required defaultValue={stop.name} />

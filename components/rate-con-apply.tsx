@@ -5,6 +5,7 @@ import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
+import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
 import { customerRefFromRateCon, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
@@ -74,7 +75,7 @@ export function RateConApply({
           </div>
         ) : null}
         {serverError ? <FormBanner result={serverError} /> : null}
-        {state && "warning" in state && state.warning ? (
+        {!parsed && state && "warning" in state && state.warning ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {state.warning}
           </div>
@@ -104,7 +105,7 @@ export function RateConApply({
             }
           }}
         >
-          {pending ? "Reading…" : "Extract fields"}
+          {pending ? "Reading…" : "Read rate con"}
         </button>
       </form>
       {parsed && state && "inboxId" in state ? (
@@ -157,9 +158,19 @@ function RateConAppliedLoad({
   };
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
+  const [discarded, setDiscarded] = useState(false);
   const book = useRateConLocationBook(parsed, locations);
+  if (discarded) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-rate-con-discarded="">
+        Draft discarded. This load was not changed.
+      </div>
+    );
+  }
   return (
-    <>
+    <div data-rate-con-draft="">
+      <RateConFieldFlags parsed={parsed} />
+      <RateConNeedsReviewNote parsed={parsed} />
       {book.review}
       <LoadForm
         key={book.formKey}
@@ -191,8 +202,13 @@ function RateConAppliedLoad({
         defaults={book.defaults}
         {...formSettings}
         action={action}
-        submitLabel="Apply rate con to this load"
+        submitLabel="Confirm and apply rate con"
       />
-    </>
+      <div className="mt-3">
+        <button className="btn btn-secondary" type="button" data-rate-con-discard="" onClick={() => setDiscarded(true)}>
+          Discard draft
+        </button>
+      </div>
+    </div>
   );
 }

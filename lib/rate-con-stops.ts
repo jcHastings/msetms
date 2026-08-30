@@ -3,6 +3,7 @@ import { parseOptionalInt } from "./format";
 import { isPlaceholderStopName } from "./locations";
 import { getLocation, getLoad } from "./queries";
 import {
+  normalizeParsedStop,
   parsedStopHasDetails,
   type ParsedExtraStop,
   type ParsedRateCon,
@@ -18,14 +19,19 @@ export function splitLaneCityState(value: string): { city: string; state: string
 }
 
 function parsedStopFromForm(formData: FormData, prefix: "pickup" | "delivery"): ParsedStop | null {
-  const stop: ParsedStop = {
+  const stop = normalizeParsedStop({
     name: String(formData.get(`${prefix}_stop_name`) ?? "").trim(),
     street: String(formData.get(`${prefix}_stop_street`) ?? "").trim(),
     city: String(formData.get(`${prefix}_stop_city`) ?? "").trim(),
     state: String(formData.get(`${prefix}_stop_state`) ?? "").trim(),
     zip: String(formData.get(`${prefix}_stop_zip`) ?? "").trim(),
     phone: String(formData.get(`${prefix}_stop_phone`) ?? "").trim(),
-  };
+    schedule_type: String(formData.get(`${prefix}_stop_schedule_type`) ?? "").trim(),
+    window_start: String(formData.get(`${prefix}_stop_window_start`) ?? "").trim(),
+    window_end: String(formData.get(`${prefix}_stop_window_end`) ?? "").trim(),
+    confirmation: String(formData.get(`${prefix}_stop_confirmation`) ?? "").trim(),
+    notes: String(formData.get(`${prefix}_stop_notes`) ?? "").trim(),
+  });
   return stop.name || stop.street || stop.city ? stop : null;
 }
 
@@ -40,14 +46,7 @@ function extraStopsFromForm(formData: FormData): ParsedExtraStop[] {
       const row = item as { kind?: string; stop?: Partial<ParsedStop> };
       const kind = row.kind === "delivery" ? "delivery" : row.kind === "pickup" ? "pickup" : null;
       if (!kind || !row.stop) return [];
-      const stop: ParsedStop = {
-        name: String(row.stop.name ?? "").trim(),
-        street: String(row.stop.street ?? "").trim(),
-        city: String(row.stop.city ?? "").trim(),
-        state: String(row.stop.state ?? "").trim(),
-        zip: String(row.stop.zip ?? "").trim(),
-        phone: String(row.stop.phone ?? "").trim(),
-      };
+      const stop = normalizeParsedStop(row.stop);
       return parsedStopHasDetails(stop) ? [{ kind, stop }] : [];
     });
   } catch {
@@ -92,15 +91,15 @@ function stopInputFromParts(
       phone: location.phone,
       window_start: existing?.window_start || windowStart,
       window_end: existing?.window_end || windowEnd,
-      confirmation: existing?.confirmation ?? "",
+      confirmation: parsed?.confirmation || existing?.confirmation || "",
       cargo: existing?.cargo ?? "",
-      reference: existing?.reference ?? "",
-      instructions: existing?.instructions ?? "",
-      notes: existing?.notes ?? "",
+      reference: parsed?.confirmation || existing?.reference || "",
+      instructions: parsed?.notes || existing?.instructions || "",
+      notes: parsed?.notes || existing?.notes || "",
       arrived_at: existing?.arrived_at,
       departed_at: existing?.departed_at,
       delivered: existing?.delivered,
-      schedule_type: existing?.schedule_type,
+      schedule_type: parsed?.schedule_type || existing?.schedule_type,
     };
   }
   if (!parsed || !(parsed.name.trim() || parsed.street.trim() || parsed.city.trim())) return null;
@@ -114,17 +113,17 @@ function stopInputFromParts(
     state: parsed.state || existing?.state || split.state,
     zip: parsed.zip || existing?.zip || "",
     phone: parsed.phone || existing?.phone || "",
-    window_start: existing?.window_start || windowStart,
-    window_end: existing?.window_end || windowEnd,
-    confirmation: existing?.confirmation ?? "",
+    window_start: parsed.window_start || existing?.window_start || windowStart,
+    window_end: parsed.window_end || existing?.window_end || windowEnd,
+    confirmation: parsed.confirmation || existing?.confirmation || "",
     cargo: existing?.cargo ?? "",
-    reference: existing?.reference ?? "",
-    instructions: existing?.instructions ?? "",
-    notes: existing?.notes ?? "",
+    reference: parsed.confirmation || existing?.reference || "",
+    instructions: parsed.notes || existing?.instructions || "",
+    notes: parsed.notes || existing?.notes || "",
     arrived_at: existing?.arrived_at,
     departed_at: existing?.departed_at,
     delivered: existing?.delivered,
-    schedule_type: existing?.schedule_type,
+    schedule_type: parsed.schedule_type || existing?.schedule_type,
   };
 }
 
