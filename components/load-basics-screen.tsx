@@ -6,6 +6,7 @@ import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
 import { LoadStatusBadge } from "@/components/status-badge";
+import type { ParsedExtraStop, ParsedStop } from "@/lib/rate-con-shared";
 import { DEFAULT_LOAD_EQUIPMENT, LOAD_STATUSES, labelForLoadStatus, type Load } from "@/lib/types";
 
 export type LoadFormDefaults = Partial<{
@@ -32,24 +33,9 @@ export type LoadFormDefaults = Partial<{
   trailer_number: string;
   shipper_location_id: number | null;
   consignee_location_id: number | null;
-  shipper: { name: string; street: string; city: string; state: string; zip: string; phone: string };
-  consignee: { name: string; street: string; city: string; state: string; zip: string; phone: string };
-  extra_stops: Array<{
-    kind: "pickup" | "delivery";
-    stop: {
-      name: string;
-      street: string;
-      city: string;
-      state: string;
-      zip: string;
-      phone: string;
-      schedule_type?: string;
-      window_start?: string;
-      window_end?: string;
-      confirmation?: string;
-      notes?: string;
-    };
-  }>;
+  shipper: ParsedStop;
+  consignee: ParsedStop;
+  extra_stops: ParsedExtraStop[];
   equipment: string;
 }>;
 

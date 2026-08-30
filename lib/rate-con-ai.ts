@@ -159,14 +159,24 @@ export async function readRateConWithAi(input: {
   image?: { mimeType: string; buffer: Buffer } | null;
 }): Promise<RateConAiDraft> {
   await loadRuntimeEnv();
-  if (!testClient && !isOpenAiConfigured()) {
-    throw new Error(RATE_CON_AI_MISSING_KEY);
+  const body = rateConAiRequestBody(input);
+  if (testClient) {
+    return parseRateConAiJson(await testClient(body));
   }
   const key = getOpenAiApiKey();
-  if (!testClient && !key) {
+  if (!isOpenAiConfigured() || !key) {
     throw new Error(RATE_CON_AI_MISSING_KEY);
   }
+  return parseRateConAiJson(await completeOpenAi(key, body));
+}
 
+function rateConAiRequestBody(input: {
+  text: string;
+  filename?: string;
+  customers?: Customer[];
+  hint?: ParsedRateCon;
+  image?: { mimeType: string; buffer: Buffer } | null;
+}): Record<string, unknown> {
   const customerNames = (input.customers ?? [])
     .map((customer) => customer.name.trim())
     .filter(Boolean)
@@ -189,7 +199,7 @@ export async function readRateConWithAi(input: {
     });
   }
 
-  const body = {
+  return {
     model: MIKE_OPENAI_MODEL,
     temperature: 0,
     response_format: { type: "json_object" },
@@ -198,11 +208,6 @@ export async function readRateConWithAi(input: {
       { role: "user", content },
     ],
   };
-
-  const raw = testClient
-    ? await testClient(body)
-    : await completeOpenAi(key, body);
-  return parseRateConAiJson(raw);
 }
 
 async function completeOpenAi(key: string, body: Record<string, unknown>): Promise<string> {
@@ -357,7 +362,7 @@ function stopFromAi(row: RateConAiStop): ParsedExtraStop[] {
     confirmation: row.confirmation,
     notes: row.notes,
   });
-  if (!parsedStopHasDetails(stop) && !stop.city.trim()) return [];
+  if (!stop.name.trim() && !stop.street.trim() && !stop.city.trim()) return [];
   return [{ kind, stop }];
 }
 
