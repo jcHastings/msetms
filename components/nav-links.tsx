@@ -66,9 +66,15 @@ const NAV: NavEntry[] = [
       { href: "/reports/manage", label: "Manage reports", short: "Manage", icon: "manage" },
       { href: "/reports/statistics", label: "Statistics", short: "Stats", icon: "stats" },
       { href: "/claims", label: "Claims", short: "Claims", icon: "claims" },
-      { href: "/users", label: "Users", short: "Users", icon: "users" },
-      { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
       { href: "/driver/login", label: "Driver app", short: "Driver", icon: "driver" },
+    ],
+  },
+  {
+    kind: "section",
+    title: "Settings",
+    items: [
+      { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
+      { href: "/users", label: "Users", short: "Users", icon: "users" },
     ],
   },
 ];

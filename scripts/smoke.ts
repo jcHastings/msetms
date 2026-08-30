@@ -53,11 +53,11 @@ async function main() {
   const { DESK_NAV_ACCORDION, deskNavSectionForPath, nextDeskNavOpenSection } = await import("../lib/desk-nav-shared");
   assert.equal(DESK_NAV_ACCORDION, "single");
   let accordionOpen: string | null = null;
-  for (const parent of ["Dispatch", "Fleet", "Customers", "Accounting", "Reports"] as const) {
+  for (const parent of ["Dispatch", "Fleet", "Customers", "Accounting", "Reports", "Settings"] as const) {
     accordionOpen = nextDeskNavOpenSection(accordionOpen, parent);
     assert.equal(accordionOpen, parent, "only the last clicked parent stays open");
   }
-  accordionOpen = nextDeskNavOpenSection(accordionOpen, "Reports");
+  accordionOpen = nextDeskNavOpenSection(accordionOpen, "Settings");
   assert.equal(accordionOpen, null, "clicking the open parent collapses all");
   assert.equal(
     deskNavSectionForPath("/accounting/pay", [
@@ -82,6 +82,27 @@ async function main() {
   assert.doesNotMatch(navSource, /Set<string>|openSections/);
   assert.match(navSource, /kind: "link"/);
   assert.match(navSource, /title: "Reports"/);
+  assert.match(navSource, /title: "Settings"/);
+  const reportsNavBlock = navSource.slice(navSource.indexOf('title: "Reports"'), navSource.indexOf('title: "Settings"'));
+  assert.doesNotMatch(reportsNavBlock, /href: "\/users"/);
+  assert.doesNotMatch(reportsNavBlock, /href: "\/settings"/);
+  const settingsNavBlock = navSource.slice(navSource.indexOf('title: "Settings"'));
+  assert.match(settingsNavBlock, /href: "\/settings"/);
+  assert.match(settingsNavBlock, /href: "\/users"/);
+  assert.equal(
+    deskNavSectionForPath("/users", [
+      { title: "Reports", items: [{ href: "/reports" }, { href: "/claims" }] },
+      { title: "Settings", items: [{ href: "/settings" }, { href: "/users" }] },
+    ]),
+    "Settings",
+  );
+  assert.equal(
+    deskNavSectionForPath("/settings/company", [
+      { title: "Reports", items: [{ href: "/reports" }] },
+      { title: "Settings", items: [{ href: "/settings" }, { href: "/users" }] },
+    ]),
+    "Settings",
+  );
   assert.match(navSource, /\{open \?/);
   assert.doesNotMatch(navSource, /LTL Orders|Find New Shippers|EDI \/ Tenders|AscendAI Load/);
   const claimsPage = fs.readFileSync(path.join(process.cwd(), "app/claims/page.tsx"), "utf8");
