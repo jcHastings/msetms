@@ -16,7 +16,6 @@ import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { CopyTripNumber } from "@/components/copy-trip-number";
-import { LoadFinancialsRate } from "@/components/load-financials-rate";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
@@ -250,11 +249,6 @@ export async function LoadEditor({
                   customer split has its own rate and paperwork.
                 </p>
               ) : null}
-              <LoadFinancialsRate
-                load={load}
-                driverType={load.driver_type}
-                defaultOoPercent={formSettings.defaultOoPercent}
-              />
               <TmsInvoicePanel
                 loadId={load.id}
                 status={load.status}
@@ -269,13 +263,12 @@ export async function LoadEditor({
                 })()}
               />
               <LoadPayItems
-                loadId={load.id}
+                load={load}
                 items={payItems}
                 customerName={load.customer_name}
                 driverName={assignedLoadName(load)}
                 driverType={load.driver_type}
-                rateFallback={load.rate}
-                ooPay={load.oo_pay}
+                defaultOoPercent={formSettings.defaultOoPercent}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => assignedLoadName(driver))}

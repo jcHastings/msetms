@@ -376,7 +376,7 @@ async function main() {
   const customerChunk = fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8");
   const assetsChunk = fs.readFileSync(path.join(process.cwd(), "components/load-carrier-screen.tsx"), "utf8");
   const rateFieldsSource = fs.readFileSync(path.join(process.cwd(), "components/load-rate-fields.tsx"), "utf8");
-  const financialsRateSource = fs.readFileSync(path.join(process.cwd(), "components/load-financials-rate.tsx"), "utf8");
+  const payItemsSource = fs.readFileSync(path.join(process.cwd(), "components/load-pay-items.tsx"), "utf8");
   assert.match(loadFormSource, /LoadBasicsScreen/);
   assert.match(loadFormSource, /LoadCustomerScreen/);
   assert.match(loadFormSource, /LoadCarrierScreen/);
@@ -418,7 +418,8 @@ async function main() {
   assert.match(rateFieldsSource, /htmlFor="rate"/);
   assert.match(rateFieldsSource, /Customer rate/);
   assert.match(rateFieldsSource, /data-create-rate-note/);
-  assert.match(rateFieldsSource, /This becomes the customer rate on Financials/);
+  assert.match(rateFieldsSource, /This becomes the customer rate on Income \/ Budget/);
+  assert.match(rateFieldsSource, /data-income-customer-rate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pay-items.ts"), "utf8"), /importCreateRateToFinancials/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /importCreateRateToFinancials/);
   assert.match(rateFieldsSource, /name="oo_percent"/);
@@ -426,11 +427,16 @@ async function main() {
   assert.match(rateFieldsSource, /data-oo-percent/);
   assert.match(rateFieldsSource, /data-oo-pay/);
   assert.match(rateFieldsSource, /data-oo-pay-pair/);
+  assert.match(rateFieldsSource, /data-expense-oo-pay/);
   assert.match(rateFieldsSource, /impliedOwnerOperatorPercent/);
   assert.match(rateFieldsSource, /Dollars/);
-  assert.match(rateFieldsSource, /Percent of flat rate/);
-  assert.match(financialsRateSource, /LoadRateFields/);
-  assert.match(financialsRateSource, /data-financials-rate/);
+  assert.match(rateFieldsSource, /Percent of customer rate/);
+  assert.match(rateFieldsSource, /Owner-operator rate/);
+  assert.match(payItemsSource, /CustomerRateField/);
+  assert.match(payItemsSource, /OwnerOperatorPayFields/);
+  assert.match(payItemsSource, /data-empty-move/);
+  assert.doesNotMatch(payItemsSource, /OO pay/);
+  assert.doesNotMatch(rateFieldsSource, /Income lines below are extras/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-form.tsx"), "utf8"), /load\?\.oo_percent \?\? driver\.pay_percent/);
   assert.match(basicsChunk, /data-critical-save/);
   assert.match(basicsChunk, /continuous/);
@@ -545,7 +551,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tab-panel.tsx"), "utf8"), /if \(!visible && !keepMounted\) return null/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /keepMounted/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /when=\{\["basics", "customer", "assets"\]\}/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadFinancialsRate/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadFinancialsRate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadPayItems/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadMoneyBox|LoadMailPanel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /LoadLogLiveCards/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /Suspense/);
@@ -1474,7 +1481,7 @@ async function main() {
     "components/load-form.tsx",
     "components/load-basics-screen.tsx",
     "components/load-rate-fields.tsx",
-    "components/load-financials-rate.tsx",
+    "components/load-pay-items.tsx",
     "components/load-customer-screen.tsx",
     "components/load-carrier-screen.tsx",
     "components/load-lane-fields.tsx",

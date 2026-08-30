@@ -109,7 +109,7 @@ export function billedCustomerRate(load: { id: number; rate?: number | null }): 
   return flatCustomerRate(load);
 }
 
-/** New-load customer rate becomes Financials customer rate. Does not add a pay line. */
+/** New-load customer rate becomes the Income / Budget customer rate. Does not add a pay line. */
 export function importCreateRateToFinancials(loadId: number, rate: number | null): void {
   if (rate == null || Number.isNaN(rate)) return;
   const flats = customerInvoicePayItems(loadId).filter((item) => item.category === "flat_rate");
