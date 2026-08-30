@@ -908,7 +908,8 @@ async function main() {
   assert.match(documentsPage, /Font for generated documents/);
   assert.match(documentsPage, /DocumentFontForm/);
   assert.match(documentsPage, /DocumentTagHints/);
-  assert.doesNotMatch(documentsPage, /LTL Quote|3rd Party BOL|Powered by Ascend|Legal Center/i);
+  assert.match(documentsPage, /Skip LTL quotes and 3rd-party BOL/);
+  assert.doesNotMatch(documentsPage, /Powered by Ascend|Legal Center/i);
   const documentCopy = fs.readFileSync(path.join(process.cwd(), "lib/document-copy.ts"), "utf8");
   assert.match(documentCopy, /Driver confirmation/);
   assert.match(documentCopy, /Customer confirmation/);
