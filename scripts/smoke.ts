@@ -1416,6 +1416,36 @@ async function main() {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
   }
+  const mikeChatSrc = fs.readFileSync(path.join(process.cwd(), "components/mike-chat.tsx"), "utf8");
+  assert.match(mikeChatSrc, /imageFileFromClipboard/);
+  assert.match(mikeChatSrc, /addEventListener\("paste"/);
+  assert.match(mikeChatSrc, /data-mike-paste/);
+  assert.match(mikeChatSrc, /formData\.set\("picture"/);
+  assert.match(mikeChatSrc, /Ask Mike, or paste a picture/);
+  assert.doesNotMatch(mikeChatSrc, /Choose file|type=["']file["']/);
+  const mikePasteSrc = fs.readFileSync(path.join(process.cwd(), "lib/mike-paste-shared.ts"), "utf8");
+  assert.match(mikePasteSrc, /imageFileFromClipboard/);
+  assert.doesNotMatch(mikePasteSrc, /from ["']\.\/(db|env|settings|places)["']/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike-actions.ts"), "utf8"), /formData\.get\("picture"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8"), /image_url/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8"), /extractDocumentText/);
+  const { imageFileFromClipboard, isMikePictureName, mikeHistoryLine, mikePicturePrompt } = await import(
+    "../lib/mike-paste-shared"
+  );
+  assert.equal(isMikePictureName("image/png", "shot.png"), true);
+  assert.equal(isMikePictureName("image/svg+xml", "mark.svg"), false);
+  const pasted = imageFileFromClipboard({
+    items: [
+      {
+        type: "image/png",
+        getAsFile: () => new File([new Uint8Array([137, 80, 78, 71])], "tie-sheet.png", { type: "image/png" }),
+      },
+    ],
+  });
+  assert.equal(pasted?.name, "tie-sheet.png");
+  assert.equal(imageFileFromClipboard({ items: [{ type: "text/plain", getAsFile: () => null }] }), null);
+  assert.equal(mikeHistoryLine("", true), "Pasted a picture.");
+  assert.match(mikePicturePrompt("", { mime: "image/png", name: "x.png", base64: "xx", text: "Tie Sheet 52309" }), /52309/);
   const mikeSrc = fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8");
   assert.match(mikeSrc, /Never invent GPS|hasPosition/);
   assert.match(mikeSrc, /emptyDrivers/);

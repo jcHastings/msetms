@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { askMikeAction, confirmMikeProposalAction } from "@/lib/mike-actions";
+import { imageFileFromClipboard } from "@/lib/mike-paste-shared";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "@/lib/mike-shared";
 
 export function MikeChat({
@@ -14,6 +15,9 @@ export function MikeChat({
   const [state, formAction, pending] = useActionState(askMikeAction, null);
   const [liveConfigured, setLiveConfigured] = useState<boolean | null>(null);
   const [confirmNotice, setConfirmNotice] = useState<string | null>(null);
+  const [picture, setPicture] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [sent, setSent] = useState(false);
   const messages = state?.messages ?? initialMessages;
   const proposals = state?.proposals ?? [];
   const ready = state?.configured ?? liveConfigured ?? configured;
@@ -35,8 +39,40 @@ export function MikeChat({
     };
   }, []);
 
+  useEffect(() => {
+    if (!picture) {
+      setPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(picture);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [picture]);
+
+  useEffect(() => {
+    if (pending) setSent(true);
+  }, [pending]);
+
+  useEffect(() => {
+    if (!pending && sent) {
+      setPicture(null);
+      setSent(false);
+    }
+  }, [pending, sent]);
+
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const file = imageFileFromClipboard(event.clipboardData);
+      if (!file) return;
+      event.preventDefault();
+      setPicture(file);
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
   return (
-    <aside className="card flex h-full min-h-[24rem] w-full flex-col">
+    <aside className="card flex h-full min-h-[24rem] w-full flex-col" data-mike-chat="">
       <header className="border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-semibold">Mike</h2>
         <p className="mt-0.5 text-xs text-slate-500">Dispatcher assistant.</p>
@@ -49,7 +85,7 @@ export function MikeChat({
         ) : null}
         {messages.length === 0 && ready ? (
           <p className="text-slate-500">
-            Ask who is empty, draft a detention email, or start a load from a rate-con. Confirm before anything sends.
+            Ask who is empty, draft a detention email, start a load from a rate-con, or paste a picture. Confirm before anything sends.
           </p>
         ) : null}
         {messages.map((message, index) => (
@@ -79,16 +115,42 @@ export function MikeChat({
           <p className="text-sm text-rose-700">{state.error}</p>
         ) : null}
       </div>
-      <form action={formAction} className="border-t border-slate-200 p-3">
+      <form
+        action={(formData) => {
+          if (picture) formData.set("picture", picture);
+          formAction(formData);
+        }}
+        className="border-t border-slate-200 p-3"
+        data-mike-paste=""
+        onDragOver={(event) => {
+          if ([...event.dataTransfer.types].includes("Files")) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          const file = imageFileFromClipboard(event.dataTransfer);
+          if (!file) return;
+          event.preventDefault();
+          setPicture(file);
+        }}
+      >
         <label htmlFor="mike-question" className="sr-only">
           Ask Mike
         </label>
+        {picture ? (
+          <div className="mb-2 flex items-start gap-2" data-mike-picture="">
+            {preview ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={preview} alt="" className="max-h-24 rounded-md border border-slate-200" />
+            ) : null}
+            <button className="btn btn-secondary text-xs" type="button" onClick={() => setPicture(null)}>
+              Remove
+            </button>
+          </div>
+        ) : null}
         <textarea
           id="mike-question"
           name="question"
           rows={2}
-          required
-          placeholder="Draft detention on 1005921"
+          placeholder="Ask Mike, or paste a picture"
           className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <button className="btn btn-primary mt-2 w-full" type="submit" disabled={pending}>
