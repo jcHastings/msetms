@@ -13924,8 +13924,8 @@ parked for next week
   assert.notEqual(mixedDraft.drops.length, 2, "0824-4W is not one drop per city");
   assert.equal(mixedDraft.drops.length, 3, "0824-4W is one load with three customer/dock drops");
   assert.equal(TIE_SHEET_0824_4W_DROPS.length, 3);
-  const mixedPreview = tieSheetDraftPreview(mixedDraft);
-  assert.match(mixedPreview, /3 drops/);
+  const mixedTieSheetPreview = tieSheetDraftPreview(mixedDraft);
+  assert.match(mixedTieSheetPreview, /3 drops/);
   for (const [index, expected] of TIE_SHEET_0824_4W_DROPS.entries()) {
     const drop = mixedDraft.drops[index];
     assert.ok(drop, `0824-4W drop ${index + 1} ${expected.label}`);
@@ -13937,12 +13937,12 @@ parked for next week
     assert.deepEqual(drop.order_numbers, [...expected.orders]);
     for (const order of expected.orders) {
       assert.match(`${drop.confirmation} ${drop.notes}`, new RegExp(order));
-      assert.match(mixedPreview, new RegExp(order));
+      assert.match(mixedTieSheetPreview, new RegExp(order));
     }
     for (const po of expected.pos) {
       assert.ok(drop.po_numbers.includes(po), `${expected.label} must keep PO ${po} on that drop`);
       assert.match(`${drop.reference} ${drop.notes}`, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-      assert.match(mixedPreview, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(mixedTieSheetPreview, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
   }
   assert.equal(mixedDraft.drops.filter((drop) => drop.city === "Los Angeles").length, 2, "LA city alone is not one drop");
