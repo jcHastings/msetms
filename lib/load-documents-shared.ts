@@ -24,10 +24,11 @@ export type DefaultedDocumentRow = {
 };
 
 export const DEFAULTED_DOC_DESCRIPTIONS: Record<Exclude<DefaultedDocKey, "bol_third_party">, string> = {
-  bol: "Contains the details of the load and includes signature areas for the consignor, consignee, and driver on the load.",
+  bol: "Master BOL with every pickup and delivery on the load, plus signature areas for the consignor, consignee, and driver.",
   bol_signatures:
-    "Contains the details of the load and includes stop-level signature areas for the consignor, consignee, and driver.",
-  bol_blind: "The Blind BOL for this load without street or phone on pickups and deliveries.",
+    "Master BOL with every stop and signature areas at each pickup and delivery for the consignor, consignee, and driver.",
+  bol_blind:
+    "Blind BOL with destination cities only — no street address, phone, or consignee name. Signature areas for the consignor, consignee, and driver.",
   carrier_confirmation: "Carrier confirmation to be sent to the carrier for acceptance and signature.",
   carrier_confirmation_blind:
     "Blind carrier confirmation without detailed street addresses, to be sent for acceptance and signature.",
@@ -41,7 +42,7 @@ export function thirdPartyBolDescription(): string {
 
 export function defaultedFilename(loadNumber: string, key: DefaultedDocKey, stopId?: number | null): string {
   const safe = loadNumber.trim() || "load";
-  if (key === "bol") return `${safe}-BOL.pdf`;
+  if (key === "bol") return `${safe}-BOL-master.pdf`;
   if (key === "bol_signatures") return `${safe}-BOL-signatures.pdf`;
   if (key === "bol_blind") return `${safe}-BOL-blind.pdf`;
   if (key === "bol_third_party") return `${safe}-BOL-3rd-${stopId ?? "lane"}.pdf`;
@@ -52,7 +53,7 @@ export function defaultedFilename(loadNumber: string, key: DefaultedDocKey, stop
 }
 
 export function isVariantBolName(name: string): boolean {
-  return /-BOL-(signatures|blind|3rd)-?/i.test(name);
+  return /-BOL-(signatures|blind|3rd|master)-?/i.test(name);
 }
 
 export function cityStateOnly(address: string): string {

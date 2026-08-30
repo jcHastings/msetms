@@ -1,5 +1,4 @@
-import { BOL_PAPERWORK_NAME, type BolDraft } from "./bol-shared";
-import { bolPrefillForLoad, generateBolPdf } from "./bol";
+import { buildAscendBolModel, renderAscendBolPdf, type AscendBolVariant } from "./bol-ascend";
 import { addAttachment, listAttachments } from "./files";
 import {
   applyBlindConfirmation,
@@ -8,9 +7,7 @@ import {
 } from "./load-confirmation";
 import {
   DEFAULTED_DOC_DESCRIPTIONS,
-  cityStateOnly,
   defaultedFilename,
-  isVariantBolName,
   thirdPartyBolDescription,
   type DefaultedDocKey,
   type DefaultedDocumentRow,
@@ -21,17 +18,9 @@ import { getLoad } from "./queries";
 import { listStops, type LoadStop } from "./stops";
 import type { Attachment, AttachmentKind, LoadView } from "./types";
 
-function stopAddress(stop: LoadStop): string {
-  const cityState = [stop.city.trim(), stop.state.trim()].filter(Boolean).join(", ");
-  return [stop.street.trim(), cityState, stop.zip.trim()].filter(Boolean).join(", ");
-}
-
-function pickupStop(stops: LoadStop[], load: LoadView): { name: string; address: string; phone: string } {
+function pickupName(stops: LoadStop[], load: LoadView): string {
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
-  if (!pickup) {
-    return { name: load.origin, address: load.origin, phone: "" };
-  }
-  return { name: pickup.name || load.origin, address: stopAddress(pickup) || load.origin, phone: pickup.phone };
+  return pickup?.name || load.origin;
 }
 
 function deliveryStops(stops: LoadStop[], load: LoadView): LoadStop[] {
@@ -70,10 +59,7 @@ function findNamed(attachments: Attachment[], filename: string): Attachment | un
 }
 
 function matchStandardBol(attachments: Attachment[], loadNumber: string): Attachment | undefined {
-  return (
-    findNamed(attachments, defaultedFilename(loadNumber, "bol")) ||
-    attachments.find((file) => file.kind === "bol" && !isVariantBolName(file.original_name))
-  );
+  return findNamed(attachments, defaultedFilename(loadNumber, "bol"));
 }
 
 function matchDraftInvoice(attachments: Attachment[], loadNumber: string): Attachment | undefined {
@@ -103,7 +89,7 @@ export function listDefaultedDocuments(loadId: number): DefaultedDocumentRow[] {
   if (!load) return [];
   const attachments = listAttachments(loadId);
   const stops = listStops(loadId);
-  const pickup = pickupStop(stops, load);
+  const pickup = pickupName(stops, load);
   const attachedTo = `Load ${load.load_number}`;
   const rows: DefaultedDocumentRow[] = [];
 
@@ -114,7 +100,7 @@ export function listDefaultedDocuments(loadId: number): DefaultedDocumentRow[] {
       key: "bol_third_party",
       stopId: dest.id || null,
       title: "3rd Party Bill of lading",
-      source: `System Generated ${pickup.name} to ${dest.name || load.destination}`,
+      source: `System Generated ${pickup} to ${dest.name || load.destination}`,
       description: thirdPartyBolDescription(),
       attachedTo,
       status: found ? "generated" : "ready",
@@ -192,36 +178,12 @@ export function listDefaultedDocuments(loadId: number): DefaultedDocumentRow[] {
   return rows;
 }
 
-function blindDraft(draft: BolDraft): BolDraft {
-  return {
-    ...draft,
-    originAddress: cityStateOnly(draft.originAddress),
-    originPhone: "",
-    destAddress: cityStateOnly(draft.destAddress),
-    destPhone: "",
-  };
-}
-
-function thirdPartyDraft(load: LoadView, dest: LoadStop): BolDraft {
-  const base = bolPrefillForLoad(load);
-  const pickup = pickupStop(listStops(load.id), load);
-  return {
-    ...base,
-    originName: pickup.name,
-    originAddress: pickup.address,
-    originPhone: pickup.phone,
-    destName: dest.name || load.destination,
-    destAddress: stopAddress(dest) || load.destination,
-    destPhone: dest.phone,
-    freightCharges: "3rd Party",
-    thirdParty: BOL_PAPERWORK_NAME,
-    items: [
-      {
-        ...base.items[0],
-        description: dest.cargo.trim() || base.items[0]?.description || load.commodity,
-      },
-    ],
-  };
+function bolVariantForKey(key: DefaultedDocKey): AscendBolVariant | null {
+  if (key === "bol") return "master";
+  if (key === "bol_blind") return "blind";
+  if (key === "bol_signatures") return "signatures";
+  if (key === "bol_third_party") return "third_party";
+  return null;
 }
 
 export async function generateDefaultedDocument(
@@ -242,35 +204,15 @@ export async function generateDefaultedDocument(
   const filename = defaultedFilename(load.load_number, key, stopId ?? null);
   const stops = listStops(loadId);
 
-  if (key === "bol" || key === "bol_blind" || key === "bol_signatures" || key === "bol_third_party") {
-    let draft = bolPrefillForLoad(load);
-    if (key === "bol_blind") draft = blindDraft(draft);
-    if (key === "bol_third_party") {
+  const variant = bolVariantForKey(key);
+  if (variant) {
+    if (variant === "third_party") {
       const dest =
         deliveryStops(stops, load).find((stop) => stop.id === stopId) ?? deliveryStops(stops, load)[0];
       if (!dest) throw new Error("This load needs a delivery stop for a 3rd party BOL.");
-      draft = thirdPartyDraft(load, dest);
     }
-    const extraStops =
-      key === "bol_signatures"
-        ? (stops.length
-            ? stops.map((stop) => ({
-                name: stop.name,
-                kind: stop.kind,
-                city: stop.city,
-                state: stop.state,
-              }))
-            : [
-                { name: load.origin, kind: "pickup", city: "", state: "" },
-                { name: load.destination, kind: "delivery", city: "", state: "" },
-              ])
-        : [];
-    const { buffer } = await generateBolPdf(loadId, draft, {
-      persistDraft: false,
-      keepAllPages: key === "bol_signatures",
-      extraStops,
-      filename,
-    });
+    const model = buildAscendBolModel(loadId, variant, stopId ?? null);
+    const buffer = await renderAscendBolPdf(model);
     return storePdf(loadId, "bol", filename, buffer);
   }
 

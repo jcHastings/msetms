@@ -117,9 +117,9 @@ export function DefaultedDocuments({
       </div>
       <div className="space-y-3 p-5">
         <p className="text-sm text-slate-600">
-          Same set Ascend keeps on the load: 3rd party BOLs per delivery, standard / blind / per-stop BOLs,
-          carrier and customer confirmations, and a draft invoice. Print / view opens the preview here — the load
-          stays open.
+          Multi-drop loads get a BOL for each delivery, a master BOL with every stop, a blind BOL (cities only —
+          no street or consignee), and a BOL with signatures at each stop. Carrier and customer confirmations and
+          a draft invoice stay on this list too. Print / view opens the preview here — the load stays open.
         </p>
         <label className="field max-w-sm">
           <span>Filter the document list</span>

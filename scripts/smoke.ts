@@ -1519,6 +1519,8 @@ async function main() {
   assert.match(defaultedUi, /Your defaulted documents/);
   assert.match(defaultedUi, /data-defaulted-documents/);
   assert.match(defaultedUi, /Generate missing/);
+  assert.match(defaultedUi, /master BOL with every stop/);
+  assert.match(defaultedUi, /cities only/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/document-preview.tsx"), "utf8"), /Document Preview \/ Edit/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/document-preview.tsx"), "utf8"), /data-document-preview/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /DocumentPreviewProvider/);
@@ -1526,8 +1528,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /DefaultedDocuments/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/open-attachment-link.tsx"), "utf8"), /useDocumentPreview/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /bol_third_party/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /BOL-master/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /isCustomerRateDocument/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /generateDefaultedDocument/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /buildAscendBolModel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/bol-ascend.ts"), "utf8"), /BILL OF LADING/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/documents/route.ts"), "utf8"), /generateDefaultedDocument/);
   const { cityStateOnly } = await import("../lib/load-documents-shared");
   assert.equal(cityStateOnly("275 Blair rd, Avenel, NJ 07001"), "Avenel, NJ 07001");
@@ -4665,26 +4670,156 @@ Continuous reefer. Two load locks.
   assert.match(bolText, /Page 1 of 1/);
   const { listDefaultedDocuments, generateDefaultedDocument } = await import("../lib/load-documents");
   const defaulted = listDefaultedDocuments(deniseLoad.id);
-  assert.ok(defaulted.some((row) => row.key === "bol" && row.status === "generated"));
+  assert.ok(defaulted.some((row) => row.key === "bol" && row.status === "ready"));
   assert.ok(defaulted.some((row) => row.key === "bol_third_party"));
   assert.ok(defaulted.some((row) => row.title === "Customer confirmation"));
+  const masterBol = await generateDefaultedDocument(deniseLoad.id, "bol");
+  assert.match(masterBol.original_name, /MSE-1045-BOL-master\.pdf/);
+  const masterBolText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(masterBol))), { mergePages: true })).text ?? "",
+  );
+  assert.match(masterBolText, /BILL OF LADING/);
+  assert.match(masterBolText, /River City Nashville Cooler/);
+  assert.match(masterBolText, /700 Cowan/);
+  assert.match(masterBolText, /Dallas Cold Storage/);
+  assert.match(masterBolText, /3500 S Lamar/);
+  assert.match(masterBolText, /Shipper \/ Consignor/);
+  assert.doesNotMatch(masterBolText, /AscendTMS|Powered by|Nanuet/);
+  const thirdPartyBol = await generateDefaultedDocument(deniseLoad.id, "bol_third_party");
+  const thirdPartyText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(thirdPartyBol))), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(thirdPartyText, /Ship From/);
+  assert.match(thirdPartyText, /Ship To/);
+  assert.match(thirdPartyText, /3rd Party/);
+  assert.match(thirdPartyText, /River City Nashville Cooler/);
+  assert.match(thirdPartyText, /Dallas Cold Storage/);
   const blindBol = await generateDefaultedDocument(deniseLoad.id, "bol_blind");
   const blindBolText = String(
     (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(blindBol))), { mergePages: true })).text ?? "",
   );
-  assert.match(blindBolText, /Bill Of Lading/);
+  assert.match(blindBolText, /BILL OF LADING/);
+  assert.match(blindBolText, /Nashville, TN/);
+  assert.match(blindBolText, /Dallas, TX/);
+  assert.doesNotMatch(blindBolText, /River City Nashville Cooler|Dallas Cold Storage/);
+  assert.doesNotMatch(blindBolText, /700 Cowan|3500 S Lamar/);
+  assert.doesNotMatch(blindBolText, /\(615\) 555-0144|\(214\) 555-0190/);
   assert.doesNotMatch(blindBolText, /AscendTMS|Powered by|Nanuet/);
   const signedBol = await generateDefaultedDocument(deniseLoad.id, "bol_signatures");
-  assert.equal((await PDFDocument.load(fs.readFileSync(filesMod.getAttachmentPath(signedBol)))).getPageCount(), 2);
+  assert.ok((await PDFDocument.load(fs.readFileSync(filesMod.getAttachmentPath(signedBol)))).getPageCount() >= 1);
   const signedBolText = String(
     (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(signedBol))), { mergePages: true })).text ?? "",
   );
-  assert.match(signedBolText, /Signatures per stop/);
+  assert.match(signedBolText, /Receiver \/ Consignee/);
+  assert.match(signedBolText, /Driver Initials/);
+  assert.match(signedBolText, /River City Nashville Cooler/);
   const customerConf = await generateDefaultedDocument(deniseLoad.id, "customer_confirmation");
   const customerConfText = String(
     (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(customerConf))), { mergePages: true })).text ?? "",
   );
   assert.doesNotMatch(customerConfText, /AscendTMS|Powered by/);
+  const bolDropId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 21000,
+    commodity: "Fresh beef",
+    rate: 3200,
+    notes: "",
+    special_instructions: "SAMPLE multi-drop for BOL variants.",
+    appointment_notes: "",
+    reference_number: "RC-BOL-DROP",
+    po_number: "PO-BOL-DROP",
+    reefer_setpoint_f: 26,
+    trailer_number: "TR-BOL",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: denise.id,
+  });
+  replaceStops(bolDropId, [
+    {
+      kind: "pickup",
+      name: "Nebraska Cold Storage",
+      street: "600 E 39th St",
+      city: "Hastings",
+      state: "NE",
+      zip: "68901",
+      phone: "402-461-4442",
+    },
+    {
+      kind: "delivery",
+      name: "Westside Foods - KOSHER",
+      street: "355 Food Center Dr",
+      city: "Bronx",
+      state: "NY",
+      zip: "10474",
+      cargo: "FRESH BEEF - 20952 lbs",
+    },
+    {
+      kind: "delivery",
+      name: "The Chef's Kingdom - Chestnut Ridge",
+      street: "1 Alpine Ct",
+      city: "Chestnut Ridge",
+      state: "NY",
+      zip: "10977",
+    },
+    {
+      kind: "delivery",
+      name: "Kayco-Bayonne",
+      street: "72 New Hook RD",
+      city: "Bayonne",
+      state: "NJ",
+      zip: "07002",
+    },
+  ]);
+  const dropDocs = listDefaultedDocuments(bolDropId);
+  assert.equal(dropDocs.filter((row) => row.key === "bol_third_party").length, 3);
+  assert.ok(dropDocs.some((row) => row.source.includes("Nebraska Cold Storage to Westside Foods - KOSHER")));
+  assert.ok(dropDocs.some((row) => row.source.includes("Nebraska Cold Storage to Kayco-Bayonne")));
+  const dropMaster = await generateDefaultedDocument(bolDropId, "bol");
+  const dropMasterText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(dropMaster))), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(dropMasterText, /Nebraska Cold Storage/);
+  assert.match(dropMasterText, /600 E 39th St/);
+  assert.match(dropMasterText, /Westside Foods - KOSHER/);
+  assert.match(dropMasterText, /355 Food Center Dr/);
+  assert.match(dropMasterText, /The Chef's Kingdom/);
+  assert.match(dropMasterText, /Kayco-Bayonne/);
+  const westside = dropDocs.find((row) => row.key === "bol_third_party" && row.source.includes("Westside Foods"));
+  assert.ok(westside);
+  const westsideBol = await generateDefaultedDocument(bolDropId, "bol_third_party", westside.stopId);
+  const westsideText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(westsideBol))), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(westsideText, /Westside Foods - KOSHER/);
+  assert.doesNotMatch(westsideText, /Kayco-Bayonne/);
+  const dropBlind = await generateDefaultedDocument(bolDropId, "bol_blind");
+  const dropBlindText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(dropBlind))), { mergePages: true })).text ??
+      "",
+  );
+  assert.match(dropBlindText, /Hastings, NE/);
+  assert.match(dropBlindText, /Bronx, NY/);
+  assert.match(dropBlindText, /Chestnut Ridge, NY/);
+  assert.match(dropBlindText, /Bayonne, NJ/);
+  assert.doesNotMatch(dropBlindText, /Westside Foods|Kayco-Bayonne|Nebraska Cold Storage/);
+  assert.doesNotMatch(dropBlindText, /600 E 39th|355 Food Center|72 New Hook/);
+  const dropSigned = await generateDefaultedDocument(bolDropId, "bol_signatures");
+  const dropSignedText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(dropSigned))), { mergePages: true })).text ??
+      "",
+  );
+  assert.match(dropSignedText, /Westside Foods - KOSHER/);
+  assert.match(dropSignedText, /Kayco-Bayonne/);
+  assert.match(dropSignedText, /Driver Initials/);
   assert.match(bolText, /River City Nashville Cooler/);
   assert.match(bolText, /700 Cowan/);
   assert.match(bolText, /\(615\) 555-0144/);
@@ -4734,7 +4869,7 @@ Continuous reefer. Two load locks.
   const madeItsBol = await (await import("../lib/actions")).makeBolAction(deniseLoad.id, null, itsItemsForm);
   assert.equal(madeItsBol.ok, true);
   const itsBols = filesMod.listAttachments(deniseLoad.id).filter((file) => file.kind === "bol");
-  assert.equal(itsBols.length, 4);
+  assert.equal(itsBols.length, 6);
   const itsBolBuf = fs.readFileSync(filesMod.getAttachmentPath(itsBols[0]));
   const itsBolText = String((await extractText(new Uint8Array(itsBolBuf), { mergePages: true })).text ?? "");
   assert.match(itsBolText, /fresh beef/);
