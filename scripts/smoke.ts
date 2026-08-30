@@ -417,6 +417,10 @@ async function main() {
   assert.doesNotMatch(basicsChunk, /htmlFor="rate"|id="rate"/);
   assert.match(rateFieldsSource, /htmlFor="rate"/);
   assert.match(rateFieldsSource, /Customer rate/);
+  assert.match(rateFieldsSource, /data-create-rate-note/);
+  assert.match(rateFieldsSource, /This becomes the customer rate on Financials/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pay-items.ts"), "utf8"), /importCreateRateToFinancials/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /importCreateRateToFinancials/);
   assert.match(rateFieldsSource, /name="oo_percent"/);
   assert.match(rateFieldsSource, /name="oo_pay"/);
   assert.match(rateFieldsSource, /data-oo-percent/);
@@ -2061,7 +2065,7 @@ async function main() {
     ),
   );
 
-  const { addPayItem, listPayItems } = await import("../lib/pay-items");
+  const { addPayItem, billedCustomerRate, listPayItems } = await import("../lib/pay-items");
   const masterOtherCustomerId = queries.createCustomer({
     name: "Master Split Receiver",
     billing_notes: "",
@@ -2142,7 +2146,9 @@ async function main() {
     truck_id: null,
     driver_id: null,
   });
-  assert.equal(listPayItems(payLoadId).length, 0, "financials start with no blank row");
+  assert.equal(queries.getLoad(payLoadId)?.rate, 1100, "new-load rate becomes Financials customer rate");
+  assert.equal(listPayItems(payLoadId).length, 0, "create rate does not also add a flat-rate pay line");
+  assert.equal(billedCustomerRate(queries.getLoad(payLoadId)!), 1100);
   addPayItem(payLoadId, {
     side: "income",
     bill_to: "customer",

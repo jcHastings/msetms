@@ -109,6 +109,16 @@ export function billedCustomerRate(load: { id: number; rate?: number | null }): 
   return flatCustomerRate(load);
 }
 
+/** New-load customer rate becomes Financials customer rate. Does not add a pay line. */
+export function importCreateRateToFinancials(loadId: number, rate: number | null): void {
+  if (rate == null || Number.isNaN(rate)) return;
+  const flats = customerInvoicePayItems(loadId).filter((item) => item.category === "flat_rate");
+  if (flats.length) return;
+  getDb()
+    .prepare("UPDATE loads SET rate = ?, updated_at = ? WHERE id = ?")
+    .run(rate, new Date().toISOString(), loadId);
+}
+
 export function driverPayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId).filter((item) => item.bill_to === "driver");
 }

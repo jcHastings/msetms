@@ -17,7 +17,7 @@ import { getDb } from "./db";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
 import { driverAssignedToLoad } from "./relay-store";
-import { flatCustomerRate } from "./pay-items";
+import { flatCustomerRate, importCreateRateToFinancials } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   ACTIVE_LOAD_STATUSES,
@@ -1549,6 +1549,7 @@ export function createLoad(input: LoadInput): number {
     return id;
   });
   const id = insert();
+  importCreateRateToFinancials(id, input.rate);
   recordLoadAudit({ loadId: id, action: "create", field: "load", newValue: loadNumber });
   recordLoadChanges(id, "create", [
     { field: "customer", newValue: customerName(input.customer_id) },
