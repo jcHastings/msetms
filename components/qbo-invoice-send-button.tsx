@@ -8,10 +8,12 @@ export function QboInvoiceSendButton({
   loadId,
   alreadySent,
   label,
+  variant = "button",
 }: {
   loadId: number;
   alreadySent: boolean;
   label: string;
+  variant?: "button" | "link";
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -38,9 +40,9 @@ export function QboInvoiceSendButton({
   }
 
   return (
-    <div className="max-w-[16rem] space-y-1">
+    <div className={variant === "link" ? "space-y-1" : "max-w-[16rem] space-y-1"}>
       <button
-        className="btn btn-secondary"
+        className={variant === "link" ? "acct-link" : "btn btn-secondary"}
         type="button"
         data-qbo-send=""
         disabled={pending}

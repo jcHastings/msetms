@@ -70,10 +70,10 @@ export function TmsInvoicePanel({
 
   return (
     <section className="card mb-4 overflow-hidden" data-invoice-panel="" data-load-tab="financials">
-      <div className="section-head px-5 py-3">
-        <h2 className="text-sm font-semibold">Invoice</h2>
+      <div className="section-head px-3 py-1.5">
+        <h2 className="text-[12.5px] font-semibold">Invoice</h2>
       </div>
-      <div className="p-5">
+      <div className="p-3">
       {invoice ? (
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>

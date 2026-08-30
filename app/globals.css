@@ -65,6 +65,125 @@ a.hub-tab-active .hub-tab-label,
   color: #ffffff !important;
 }
 
+.acct-hub-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid #c5d0dc;
+}
+
+.acct-hub-tabs .hub-tab {
+  border-radius: 2px 2px 0 0;
+  margin: 0 2px 0 0;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid #c5d0dc;
+  border-bottom: none;
+  background: #e8edf2;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.acct-hub-tabs .hub-tab:hover {
+  background: #dbe4ee;
+  color: #1e293b;
+}
+
+.acct-hub-tabs a.hub-tab-active,
+.acct-hub-tabs .hub-tab-active,
+.acct-hub-tabs a.hub-tab-active:hover,
+.acct-hub-tabs .hub-tab-active:hover,
+.acct-hub-tabs a.hub-tab-active .hub-tab-label,
+.acct-hub-tabs .hub-tab-active .hub-tab-label {
+  background: #d7e8f7 !important;
+  color: #0b1f3a !important;
+}
+
+.table-grid-acct th {
+  padding: 0.28rem 0.4rem;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.table-grid-acct td {
+  padding: 0.22rem 0.4rem;
+  font-size: 12.5px;
+  line-height: 1.25;
+  vertical-align: middle;
+}
+
+.table-grid-acct tbody tr {
+  height: 34px;
+}
+
+.acct-link,
+button.acct-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #1d4f91;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.acct-link:hover,
+button.acct-link:hover {
+  color: #123868;
+}
+
+.acct-expand-panel {
+  background: #f3f5f8;
+  padding: 0.45rem 0.6rem 0.55rem;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.acct-aging-current {
+  background: #e8f6e8;
+}
+
+.acct-aging-29 {
+  background: #fff6d6;
+}
+
+.acct-aging-30 {
+  background: #f8e6d4;
+}
+
+.qbo-export-status {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.qbo-export-status-sent {
+  color: #1d4f91;
+}
+
+.qbo-export-status-pay {
+  color: #64748b;
+}
+
+.qbo-connected-banner {
+  border: 1px solid #86efac;
+  background: #ecfdf3;
+  color: #14532d;
+}
+
+.btn-danger {
+  background: #b91c1c;
+  border-color: #991b1b;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #991b1b;
+}
+
 .driver-dest,
 a.driver-dest,
 a.driver-dest:hover {
@@ -768,6 +887,36 @@ button {
 .load-tab-back:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+.load-workspace .field {
+  gap: 0.15rem;
+}
+
+.load-workspace .field label {
+  font-size: 0.7rem;
+}
+
+.load-workspace .field input,
+.load-workspace .field select,
+.load-workspace .field textarea {
+  padding: 0.28rem 0.45rem;
+  border-radius: 0.3rem;
+  font-size: 12.5px;
+}
+
+.load-workspace .btn {
+  padding: 0.22rem 0.5rem;
+  font-size: 12.5px;
+  border-radius: 0.3rem;
+}
+
+.load-workspace .card {
+  border-radius: 0.4rem;
+}
+
+.load-workspace h2 {
+  font-size: 12.5px;
 }
 
 .load-actions {

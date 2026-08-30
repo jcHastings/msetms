@@ -261,17 +261,18 @@ export function LoadWorkspace({
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
     <DocumentPreviewProvider>
+    <div className="load-workspace">
       {header}
-      <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
+      <div className="load-tabs mb-2 flex flex-wrap items-center justify-between gap-1 px-2 pt-1">
         {create ? (
-          <p className="px-3 py-2 text-sm font-semibold text-slate-600">New load</p>
+          <p className="px-2 py-1 text-[12.5px] font-semibold text-slate-600">New load</p>
         ) : (
-          <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
+          <nav className="flex flex-wrap gap-0.5" aria-label="Load tabs">
             {loadFormTabsForRole(role).map((item) => (
               <button
                 key={item.value}
                 type="button"
-                className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
+                className={`load-tab rounded-t px-2 py-1 text-[12.5px] font-semibold ${
                   tab === item.value ? "load-tab-active" : ""
                 }`}
                 aria-current={tab === item.value ? "page" : undefined}
@@ -300,9 +301,9 @@ export function LoadWorkspace({
       </div>
 
       {loadId ? (
-      <div className="load-actions mb-4 px-4 py-3">
-        <div className="load-actions-label mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]">Load Actions</div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="load-actions mb-2 px-2 py-1.5">
+        <div className="load-actions-label mb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">Load Actions</div>
+        <div className="flex flex-wrap items-center gap-1">
         {canSendSms(role) && tab !== "docs" ? (
           <button
             type="button"
@@ -623,6 +624,7 @@ export function LoadWorkspace({
       >
         {children}
       </div>
+    </div>
     </DocumentPreviewProvider>
     </LoadEditProvider>
   );

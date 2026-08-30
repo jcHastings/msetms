@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { QBO_MAP_TABS, hubTabClass, parseQboMapTab } from "@/lib/accounting-desk-shared";
 import { listQboItemMaps, listQboVendorMaps } from "@/lib/accounting-desk";
+import { disconnectQuickbooksAction } from "@/lib/actions";
 import {
   saveQboCustomerMapFormAction,
   saveQboItemMapFormAction,
@@ -42,8 +43,11 @@ export default async function QuickbooksAccountingPage({
 
   return (
     <>
-      <PageHeader title="QuickBooks" />
-      <nav className="mb-4 flex flex-wrap gap-1 border-b border-slate-200 pb-2">
+      <PageHeader dense title="Accounting Management" />
+      <p className="mb-3 text-[12.5px] text-slate-600">
+        Perform accounting related tasks on loads that have been Sent to Accounting.
+      </p>
+      <nav className="acct-hub-tabs">
         {QBO_MAP_TABS.map((item) => (
           <Link
             key={item.value}
@@ -56,33 +60,72 @@ export default async function QuickbooksAccountingPage({
       </nav>
 
       {tab === "connection" ? (
-        <section className="card p-5">
-          <div className="text-sm font-semibold">Connection</div>
-          <p className="mt-1 text-sm text-slate-600">
-            {qbo.configured || qbo.refreshTokenSet ? "Connected" : "Not connected"}
-            {qbo.companyName ? ` · ${qbo.companyName}` : ""}
-          </p>
+        <section className="card space-y-5 p-5">
+          <h2 className="text-sm font-semibold">QuickBooks Settings</h2>
+          <fieldset className="space-y-1 text-[12.5px]">
+            <legend className="sr-only">QuickBooks integration type</legend>
+            <label className="flex items-center gap-2 text-slate-400">
+              <input type="radio" name="qbo_kind" disabled />
+              QuickBooks Desktop
+            </label>
+            <label className="flex items-center gap-2 font-semibold">
+              <input type="radio" name="qbo_kind" defaultChecked readOnly />
+              QuickBooks Online
+            </label>
+            <label className="flex items-center gap-2 text-slate-400">
+              <input type="radio" name="qbo_kind" disabled />
+              None (Disabled)
+            </label>
+          </fieldset>
+          {qbo.configured || qbo.refreshTokenSet ? (
+            <div className="qbo-connected-banner rounded-md px-4 py-3 text-[13px]">
+              <div className="font-semibold text-emerald-800">QuickBooks Online Connection Enabled</div>
+              <p className="mt-1">
+                Invoice export is enabled{qbo.companyName ? ` · ${qbo.companyName}` : ""}.
+                {qbo.environment === "sandbox" ? " Sandbox." : ""}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-slate-600">
+              {qbo.oauthReady ? "Not connected." : "Connect credentials are not set."}
+            </p>
+          )}
           {qbo.error ? (
-            <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
               {qbo.error}
             </p>
           ) : null}
           {canConnect ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/settings/quickbooks" className="btn btn-secondary">
-                Settings → QuickBooks
-              </Link>
-              {qbo.oauthReady && !qbo.configured ? (
-                <a className="btn btn-primary" href="/api/integrations/quickbooks/connect">
-                  Connect QuickBooks
-                </a>
-              ) : null}
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm font-semibold">Disconnect from QuickBooks Online</div>
+                <p className="mt-1 text-[12.5px] text-slate-600">
+                  Stops invoice export until an Administrator connects again. Settings → QuickBooks stays Connect only.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {qbo.refreshTokenSet ? (
+                  <form action={disconnectQuickbooksAction}>
+                    <button className="btn btn-danger" type="submit">
+                      Disconnect From QuickBooks
+                    </button>
+                  </form>
+                ) : null}
+                <Link href="/settings/quickbooks" className="btn btn-secondary">
+                  Settings → QuickBooks
+                </Link>
+                {qbo.oauthReady && !qbo.configured ? (
+                  <a className="btn btn-primary" href="/api/integrations/quickbooks/connect">
+                    Connect QuickBooks
+                  </a>
+                ) : null}
+              </div>
             </div>
           ) : (
-            <p className="mt-3 text-sm text-slate-600">Ask an Administrator to connect QuickBooks.</p>
+            <p className="text-[12.5px] text-slate-600">Ask an Administrator to connect or disconnect QuickBooks.</p>
           )}
-          <p className="mt-4 text-sm text-slate-600">
-            Export invoices and bills from Invoices / Bills. This page is connection and mapping only.
+          <p className="text-[12.5px] text-slate-600">
+            Export invoices from Invoices / Bills after a load is sent to accounting. Customer billed rate only.
           </p>
         </section>
       ) : null}

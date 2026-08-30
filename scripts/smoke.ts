@@ -20,10 +20,10 @@ async function main() {
   assert.match(navSource, /label: "Search"/);
   assert.match(navSource, /title: "Accounting"/);
   assert.match(navSource, /href: "\/accounting"/);
-  assert.match(navSource, /label: "Invoices"/);
-  assert.match(navSource, /label: "Bills"/);
+  assert.match(navSource, /AR\/AP Report/);
+  assert.match(navSource, /Invoices\/Bills/);
   assert.doesNotMatch(navSource, /Invoices \(AR\)|Bills \(AP\)/);
-  assert.match(navSource, /Driver pay/);
+  assert.match(navSource, /Driver Pay/);
   assert.match(navSource, /Commissions/);
   assert.match(navSource, /QuickBooks/);
   assert.match(navSource, /href: "\/compliance"/);
@@ -156,9 +156,14 @@ async function main() {
   assert.match(qboAccountingPage, /Map Pay Items/);
   assert.match(qboAccountingPage, /Map Customers/);
   assert.match(qboAccountingPage, /Map Vendors/);
+  assert.match(qboAccountingPage, /QuickBooks Online Connection Enabled/);
+  assert.match(qboAccountingPage, /Disconnect From QuickBooks/);
+  assert.match(qboAccountingPage, /QuickBooks Desktop/);
   assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /acct-hub-tabs/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-acct/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /color: #ffffff !important/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
@@ -243,6 +248,7 @@ async function main() {
   assert.match(workspaceSource, /load-action-btn/);
   assert.match(workspaceSource, /load-action-menu/);
   assert.match(workspaceSource, /load-tab-back/);
+  assert.match(workspaceSource, /load-workspace/);
   const cssSource = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(cssSource, /\.load-tabs/);
   assert.match(cssSource, /\.load-tab-active/);
@@ -252,6 +258,8 @@ async function main() {
   assert.match(cssSource, /#0b1f3a/);
   assert.match(cssSource, /#d4a017/);
   assert.match(cssSource, /\[data-load-list-chrome\]/);
+  assert.match(cssSource, /\.load-workspace \.field/);
+  assert.match(cssSource, /\.load-workspace \.btn/);
   assert.match(cssSource, /\.stop-row-pickup/);
   assert.match(cssSource, /\.stop-chip-delivery/);
   assert.match(cssSource, /\.finance-income/);
@@ -786,14 +794,19 @@ async function main() {
   assert.match(payPageSource, /tab=pay/);
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
   assert.match(hubSource, /hubTabClass/);
-  assert.match(hubSource, /\/api\/loads\/\$\{row\.id\}\/invoice/);
+  assert.match(hubSource, /acct-hub-tabs/);
+  assert.match(hubSource, /InvoicesAcctTable/);
   assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /overflow-x-auto/);
   assert.match(hubSource, /min-w-max/);
   assert.match(hubSource, /sticky right-0/);
-  assert.match(hubSource, /title="Send back to Load Management"/);
+  const invoicesTableUi = fs.readFileSync(path.join(process.cwd(), "components/invoices-acct-table.tsx"), "utf8");
+  assert.match(invoicesTableUi, /\/api\/loads\/\$\{row\.id\}\/invoice/);
+  assert.match(invoicesTableUi, /title="Send back to Load Management"/);
+  assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
+  assert.match(invoicesTableUi, /QboInvoiceSendButton/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
@@ -891,11 +904,15 @@ async function main() {
   assert.match(financialsTab, /loadIsOnAccountingDesk/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/quickbooks-invoice-panel.tsx"), "utf8"), /data-qbo-invoice/);
   const invoicesHubUi = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
-  assert.match(invoicesHubUi, /QboInvoiceSendButton/);
+  assert.match(invoicesHubUi, /InvoicesAcctTable/);
   assert.match(invoicesHubUi, /Send to QuickBooks/);
   assert.match(invoicesHubUi, /Record demo invoice/);
+  assert.match(invoicesHubUi, /qboInvoiceExportStatus/);
   assert.doesNotMatch(invoicesHubUi, /Export to QBO|Resend QBO/);
   assert.doesNotMatch(invoicesHubUi, /sendToQuickbooksFormAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/arap-report.tsx"), "utf8"), /Accounts Receivable/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/arap-report.tsx"), "utf8"), /0-29 Days Past Due/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/page.tsx"), "utf8"), /ArapReport/);
   const qboSendButtonUi = fs.readFileSync(path.join(process.cwd(), "components/qbo-invoice-send-button.tsx"), "utf8");
   assert.match(qboSendButtonUi, /data-qbo-send-notice/);
   assert.match(qboSendButtonUi, /confirm_resend/);
@@ -9061,6 +9078,18 @@ Continuous reefer. Two load locks.
   const accountingPay = await import("../lib/accounting");
   const driverPayRows = accountingPay.listDriverPay();
   assert.ok(Array.isArray(driverPayRows));
+  const aging = await import("../lib/accounting-aging");
+  assert.equal(aging.paymentTermsDays("Net 30"), 30);
+  assert.equal(aging.paymentTermsDays("30 days"), 30);
+  assert.equal(aging.paymentTermsDays(""), 30);
+  assert.equal(aging.agingAmounts(100, 0).current, 100);
+  assert.equal(aging.agingAmounts(100, 12).aging0to29, 100);
+  assert.equal(aging.agingAmounts(100, 40).aging30, 100);
+  assert.equal(aging.qboInvoiceExportStatus({ qbo_invoice_id: "", qbo_sent_at: "" }).invoiceLine, "Unsent");
+  assert.match(
+    aging.qboInvoiceExportStatus({ qbo_invoice_id: "1", qbo_sent_at: "2026-08-30T13:24:00.000Z", paid: false }).invoiceLine,
+    /Invoice Exported/,
+  );
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
   const mapLib = await import("../lib/load-map");

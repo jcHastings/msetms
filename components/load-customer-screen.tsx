@@ -36,11 +36,11 @@ export function LoadCustomerScreen({
   return (
     <section data-load-tab="customer" className={card ? "card overflow-hidden" : undefined}>
       {card ? (
-        <div className="section-head px-6 py-3">
-          <h2 className="text-sm font-semibold">Customer</h2>
+        <div className="section-head px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Customer</h2>
         </div>
       ) : null}
-      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+      <div className={card ? "grid gap-2 p-3 md:grid-cols-2" : "grid gap-2 md:grid-cols-2"}>
       <input type="hidden" name="customer_name" value={customerId ? "" : createName} />
       <input type="hidden" id="customer_id" name="customer_id" value={customerId} required={!createName} />
       <div className="field md:col-span-2" data-customer-picker="" data-critical-save="">

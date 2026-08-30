@@ -106,6 +106,7 @@ export async function LoadEditor({
       <LoadWorkspace
         header={
           <PageHeader
+            dense
             title={load.load_number}
             subtitle={[
               load.parent_load_id
@@ -299,12 +300,12 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="docs">
-          <div data-load-tab="docs" className="space-y-4">
-          <div className="load-docs-actions mb-3 px-4 py-3">
-            <div className="load-actions-label mb-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
+          <div data-load-tab="docs" className="space-y-3">
+          <div className="load-docs-actions mb-2 px-2 py-1.5">
+            <div className="load-actions-label mb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
               Document actions
             </div>
-            <p className="text-sm text-slate-700">
+            <p className="text-[12.5px] text-slate-700">
               Defaulted documents stay on this load. Print / view opens the preview — it does not close the load.
             </p>
           </div>
@@ -324,10 +325,10 @@ export async function LoadEditor({
             formSettings={formSettings}
           />
           <section className="card mb-4 overflow-hidden">
-            <div className="section-head px-5 py-3">
-              <h2 className="text-sm font-semibold">Document checklist</h2>
+            <div className="section-head px-3 py-1.5">
+              <h2 className="text-[12.5px] font-semibold">Document checklist</h2>
             </div>
-            <ul className="space-y-1 p-5 text-sm">
+            <ul className="space-y-1 p-3 text-[12.5px]">
               {checklist.map((doc) => {
                 const have = attachments.some((file) => file.kind === doc.kind);
                 return (

@@ -91,7 +91,7 @@ export function MasterLoadPanel({
 
   return (
     <section className="card mb-4 overflow-hidden" id="master-load" data-master-load="">
-      <div className="section-head bg-amber-100 px-5 py-3">
+      <div className="section-head bg-amber-100 px-3 py-1.5">
         <label className="flex items-center gap-2 text-sm font-semibold" data-master-opt-in="">
           <input
             type="checkbox"

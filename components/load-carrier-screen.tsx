@@ -68,11 +68,11 @@ export function LoadCarrierScreen({
   return (
     <section data-load-tab="assets" className={card ? "card overflow-hidden" : undefined}>
       {card ? (
-        <div className="section-head px-6 py-3">
-          <h2 className="text-sm font-semibold">Truck / driver / trailer</h2>
+        <div className="section-head px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Truck / driver / trailer</h2>
         </div>
       ) : null}
-      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+      <div className={card ? "grid gap-2 p-3 md:grid-cols-2" : "grid gap-2 md:grid-cols-2"}>
       <div className="md:col-span-2 flex flex-wrap gap-2">
         <button
           type="button"

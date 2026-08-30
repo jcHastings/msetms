@@ -33,7 +33,7 @@ export function LoadRoutingGuide({
   }, [guide.source, loadId, refreshAction]);
 
   return (
-    <section className="card mt-4 space-y-3 p-5" id="routing">
+    <section className="card mt-2 space-y-2 p-3" id="routing">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Routing guide</h2>

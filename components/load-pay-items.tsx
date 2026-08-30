@@ -49,19 +49,19 @@ export function LoadPayItems({
   const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
   const ooNames = ownerOperators.filter(Boolean);
   return (
-    <section data-load-tab="financials" className="space-y-6">
-      <div className="grid gap-3 md:grid-cols-3" data-financials-totals="">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Total income</div>
-          <div className="mt-1 text-lg font-semibold text-emerald-950">{formatMoney(incomeTotal)}</div>
+    <section data-load-tab="financials" className="space-y-3">
+      <div className="grid gap-2 md:grid-cols-3" data-financials-totals="">
+        <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Total income</div>
+          <div className="mt-0.5 text-sm font-semibold text-emerald-950">{formatMoney(incomeTotal)}</div>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Total expenses</div>
-          <div className="mt-1 text-lg font-semibold text-amber-950">{formatMoney(expenseTotal)}</div>
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">Total expenses</div>
+          <div className="mt-0.5 text-sm font-semibold text-amber-950">{formatMoney(expenseTotal)}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(profit)}</div>
+        <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
+          <div className="mt-0.5 text-sm font-semibold text-slate-900">{formatMoney(profit)}</div>
         </div>
       </div>
       <PayItemGroup
@@ -172,7 +172,7 @@ function PayItemGroup({
   const tone = side === "income" ? "finance-income" : "finance-expense";
   return (
     <section className={`card overflow-hidden ${tone}`}>
-      <div className="finance-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+      <div className="finance-head flex flex-wrap items-center justify-between gap-2 px-3 py-1.5">
         <h2 className="text-sm font-semibold">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           {actions}

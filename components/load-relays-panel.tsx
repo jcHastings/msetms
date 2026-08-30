@@ -29,7 +29,7 @@ export function LoadRelaysPanel({
   const defaultFromId = last?.driver_id ?? primaryDriverId ?? null;
 
   return (
-    <section className="card mb-4 p-5" id="relays">
+    <section className="card mb-2 p-3" id="relays">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Relays</h2>

@@ -5,14 +5,19 @@ import {
   archiveAccountingLoadFormAction,
   closeDriverPayPeriodAction,
   createBillAction,
-  markReceivablePaidAction,
   payAllOpenBillsFormAction,
   payBillAction,
   returnLoadToOperationsFormAction,
   sendBillToQuickbooksFormAction,
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
-import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
+import { InvoicesAcctTable, type InvoiceAcctRow } from "@/components/invoices-acct-table";
+import {
+  addDaysIso,
+  invoiceAnchorIso,
+  paymentTermsDays,
+  qboInvoiceExportStatus,
+} from "@/lib/accounting-aging";
 import {
   defaultPayPeriod,
   groupDriverPay,
@@ -21,12 +26,15 @@ import {
   listReceivables,
 } from "@/lib/accounting";
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
-import { formatMdYDisplay, formatMoney } from "@/lib/format";
+import { listAttachments } from "@/lib/files";
+import { formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
+import { getCustomer } from "@/lib/queries";
 import { getCompanySettings, taxOnAmount } from "@/lib/settings";
+import { listStops } from "@/lib/stops";
 import { LoadStatusBadge } from "@/components/status-badge";
-import type { LoadView } from "@/lib/types";
+import { labelForLoadStatus, type LoadView } from "@/lib/types";
 
 function matchesQuery(load: LoadView, q: string): boolean {
   if (!q.trim()) return true;
@@ -84,7 +92,7 @@ export function AccountingHub({
   ]);
   return (
     <div>
-      <nav className="mb-4 flex flex-wrap gap-1 border-b border-slate-200 pb-2">
+      <nav className="acct-hub-tabs">
         {ACCOUNTING_HUB_TABS.map((item) => (
           <Link
             key={item.value}
@@ -142,7 +150,7 @@ function SearchBox({
   return (
     <form className="mb-3 flex flex-wrap gap-2" method="get">
       <input type="hidden" name="tab" value={tab} />
-      <select name="branch" defaultValue={branch} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+      <select name="branch" defaultValue={branch} className="rounded border border-slate-300 px-2 py-1 text-[12.5px]">
         <option value="">All branches</option>
         {branches.map((name) => (
           <option key={name} value={name}>
@@ -154,7 +162,7 @@ function SearchBox({
         name="q"
         defaultValue={q}
         placeholder="Customer, invoice #, pick/drop"
-        className="min-w-[220px] flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+        className="min-w-[220px] flex-1 rounded border border-slate-300 px-2 py-1 text-[12.5px]"
       />
       <button className="btn btn-secondary" type="submit">
         Search
@@ -163,107 +171,65 @@ function SearchBox({
   );
 }
 
-function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
+function stopLabel(stop: { name: string; street: string; city: string; state: string; zip: string } | undefined, fallback: string): string {
+  if (!stop) return fallback;
+  return [stop.name, stop.street, [stop.city, stop.state, stop.zip].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || fallback;
+}
+
+function toInvoiceAcctRow(
+  row: ReturnType<typeof listReceivables>[number],
+  qboConnected: boolean,
+): InvoiceAcctRow {
   const settings = getCompanySettings();
+  const tax = taxOnAmount(row.rate);
+  const total = (row.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
+  const invoiceIso = invoiceAnchorIso(row);
+  const terms = getCustomer(row.customer_id)?.payment_terms ?? "";
+  const dueIso = invoiceIso ? addDaysIso(invoiceIso, paymentTermsDays(terms)) : "";
+  const qbo = qboInvoiceExportStatus(row);
+  const attachments = listAttachments(row.id);
+  const stops = listStops(row.id);
+  const pick = stops.find((stop) => stop.kind === "pickup");
+  const drop = [...stops].reverse().find((stop) => stop.kind === "delivery");
+  const billed = Boolean(row.tms_invoice_number || row.qbo_invoice_id);
+  return {
+    id: row.id,
+    customerName: row.customer_name,
+    loadNumber: row.load_number,
+    statusLabel: labelForLoadStatus(row.status),
+    invoiceNumber: row.tms_invoice_number || row.invoiceLabel,
+    unbilled: !billed,
+    reference: row.customer_reference || row.po_number || row.reference_number || "—",
+    deliveryDate: formatMdYDisplay(row.delivery_end || row.delivery_start),
+    sentStatus: qbo.sent ? "Sent" : "Unsent",
+    invoiceDate: billed && invoiceIso ? formatMdYFull(invoiceIso) : "Unsent",
+    dueDate: dueIso ? formatMdYFull(dueIso) : "Not Available",
+    totalLabel: formatMoney(total, settings.currency),
+    balanceLabel: formatMoney(row.paid ? 0 : total, settings.currency),
+    qboInvoiceLine: qbo.invoiceLine,
+    qboPaymentsLine: qbo.paymentsLine,
+    alreadySent: qbo.sent,
+    sendLabel: qbo.sent ? "Send again to QuickBooks" : qboConnected ? "Send to QuickBooks" : "Record demo invoice",
+    paid: row.paid,
+    email: row.contact_email.trim(),
+    pick: stopLabel(pick, row.origin),
+    drop: stopLabel(drop, row.destination),
+    paperwork: [
+      { label: "Client Rate Confirmation (Signed)", found: attachments.some((file) => file.kind === "rate_con") },
+      { label: "BOL (Bill Of Lading)", found: attachments.some((file) => file.kind === "bol") },
+      { label: "POD (Proof Of Delivery)", found: attachments.some((file) => file.kind === "pod") },
+    ],
+  };
+}
+
+function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const qboConnected = hasQuickbooksSession();
-  const rows = listReceivables().filter((row) => matchesQuery(row, q) && matchesBranch(row, branch));
+  const rows = listReceivables()
+    .filter((row) => matchesQuery(row, q) && matchesBranch(row, branch))
+    .map((row) => toInvoiceAcctRow(row, qboConnected));
   return (
     <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
-      <table className="table-grid min-w-max">
-        <thead>
-          <tr>
-            <th>Company Name</th>
-            <th>Invoice #</th>
-            <th>Reference #</th>
-            <th>Delivery Date</th>
-            <th>Sent Status</th>
-            <th>Invoice Date</th>
-            <th>Due Date</th>
-            <th>Invoice Total</th>
-            <th>Balance</th>
-            <th>QB Export</th>
-            <th className="sticky right-0 z-10 min-w-[12rem] bg-slate-50">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={11} className="px-4 py-6 text-sm text-slate-500">
-                No loads in Accounting yet. Send a delivered load from Financials.
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => {
-              const tax = taxOnAmount(row.rate);
-              const total = (row.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
-              const email = row.contact_email.trim();
-              return (
-                <tr key={row.id}>
-                  <td>
-                    <Link href={`/loads/${row.id}?tab=financials`} className="font-semibold underline">
-                      {row.customer_name}
-                    </Link>
-                    <div className="font-mono text-xs text-slate-500">{row.load_number}</div>
-                    <LoadStatusBadge status={row.status} />
-                  </td>
-                  <td>{row.tms_invoice_number || row.invoiceLabel}</td>
-                  <td>{row.customer_reference || row.po_number || row.reference_number || "—"}</td>
-                  <td>{formatMdYDisplay(row.delivery_end || row.delivery_start)}</td>
-                  <td>{row.qbo_invoice_id ? "Sent" : "Not sent"}</td>
-                  <td>{row.tms_invoice_at ? formatMdYDisplay(row.tms_invoice_at) : "—"}</td>
-                  <td>—</td>
-                  <td>{formatMoney(total, settings.currency)}</td>
-                  <td>{row.paid ? formatMoney(0, settings.currency) : formatMoney(total, settings.currency)}</td>
-                  <td>
-                    <QboInvoiceSendButton
-                      loadId={row.id}
-                      alreadySent={Boolean(row.qbo_invoice_id)}
-                      label={
-                        row.qbo_invoice_id
-                          ? "Send again to QuickBooks"
-                          : qboConnected
-                            ? "Send to QuickBooks"
-                            : "Record demo invoice"
-                      }
-                    />
-                  </td>
-                  <HubActions>
-                    <a className="btn btn-secondary" href={`/api/loads/${row.id}/invoice`}>
-                      Invoice PDF
-                    </a>
-                    {email ? (
-                      <a
-                        className="btn btn-secondary"
-                        href={`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`Invoice ${row.load_number}`)}`}
-                      >
-                        Email invoice
-                      </a>
-                    ) : null}
-                    {row.paid ? null : (
-                      <form action={markReceivablePaidAction}>
-                        <input type="hidden" name="load_id" value={row.id} />
-                        <button className="btn btn-secondary" type="submit">
-                          Record payment
-                        </button>
-                      </form>
-                    )}
-                    <form action={returnLoadToOperationsFormAction}>
-                      <input type="hidden" name="load_id" value={row.id} />
-                      <button
-                        className="btn btn-secondary"
-                        type="submit"
-                        title="Send back to Load Management"
-                      >
-                        Send back
-                      </button>
-                    </form>
-                  </HubActions>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+      <InvoicesAcctTable rows={rows} />
     </HubTableCard>
   );
 }
@@ -319,7 +285,7 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
         </button>
       </form>
       <HubTableCard>
-        <table className="table-grid min-w-max">
+        <table className="table-grid table-grid-acct min-w-max">
           <thead>
             <tr>
               <th>Company Name</th>
@@ -413,7 +379,7 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
         </>
       }
     >
-      <table className="table-grid min-w-max">
+      <table className="table-grid table-grid-acct min-w-max">
         <thead>
           <tr>
             <th>Load #</th>
@@ -485,7 +451,7 @@ function ArchivedTab({ q, branch, branches }: { q: string; branch: string; branc
   );
   return (
     <HubTableCard toolbar={<SearchBox q={q} tab="archived" branch={branch} branches={branches} />}>
-      <table className="table-grid min-w-max">
+      <table className="table-grid table-grid-acct min-w-max">
         <thead>
           <tr>
             <th>Load #</th>
@@ -582,7 +548,7 @@ function PayTab({ from, to, driver }: { from: string; to: string; driver: string
                   Open {formatMoney(group.openTotal)} · Paid {formatMoney(group.paidTotal)}
                 </p>
               </header>
-              <table className="table-grid">
+              <table className="table-grid table-grid-acct">
                 <thead>
                   <tr>
                     <th>Load</th>
@@ -620,7 +586,7 @@ function ApproveTab() {
   );
   return (
     <HubTableCard>
-      <table className="table-grid min-w-max">
+      <table className="table-grid table-grid-acct min-w-max">
         <thead>
           <tr>
             <th>Load ID</th>

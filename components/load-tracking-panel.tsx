@@ -10,7 +10,7 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
     Promise.resolve(mapsBrowserKey()),
   ]);
   return (
-    <section id="load-map" data-load-tab="log" className="card p-5">
+    <section id="load-map" data-load-tab="log" className="card p-3">
       <h2 className="text-sm font-semibold">Load map</h2>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="overflow-hidden rounded-lg border border-slate-200">

@@ -14,6 +14,7 @@ export default async function InvoicesPage({
   return (
     <>
       <PageHeader
+        dense
         title="Invoices / Bills"
         actions={
           <a className="btn btn-secondary" href="/api/accounting/invoices/export">

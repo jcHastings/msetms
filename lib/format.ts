@@ -41,6 +41,42 @@ function formatMdYParts(year: number, month: number, day: number): string {
   return `${pad2(month)}/${pad2(day)}/${String(year).slice(-2)}`;
 }
 
+export function formatMdYFull(iso: string): string {
+  const parts = dateOnlyParts(iso);
+  if (parts) return `${pad2(parts.month)}/${pad2(parts.day)}/${parts.year}`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const month = bits.find((part) => part.type === "month")?.value ?? "01";
+  const day = bits.find((part) => part.type === "day")?.value ?? "01";
+  const year = bits.find((part) => part.type === "year")?.value ?? "0000";
+  return `${month}/${day}/${year}`;
+}
+
+export function formatAccountingDateTime(iso: string): string {
+  try {
+    const raw = String(iso ?? "").trim();
+    if (!raw) return "—";
+    if (dateOnlyParts(raw)) return formatMdYFull(raw);
+    const date = parseDisplayDate(raw);
+    if (!date) return "—";
+    const datePart = formatMdYFull(date.toISOString());
+    const timePart = date.toLocaleTimeString("en-US", {
+      timeZone: DISPLAY_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${datePart} ${timePart}`;
+  } catch {
+    return "—";
+  }
+}
+
 export function formatMdYDisplay(iso: string): string {
   const parts = dateOnlyParts(iso);
   if (parts) return formatMdYParts(parts.year, parts.month, parts.day);

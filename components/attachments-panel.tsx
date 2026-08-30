@@ -27,7 +27,7 @@ export function AttachmentsPanel({
   const extraKinds = ATTACHMENT_KINDS.filter((kind) => !PRIMARY.has(kind.value));
 
   return (
-    <section id="load-documents" className="card mt-6 p-6">
+    <section id="load-documents" className="card mt-3 p-3">
       <h2 className="text-sm font-semibold">Load documents</h2>
       <form action={attachFileFormAction} className="mt-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="load_id" value={loadId} />

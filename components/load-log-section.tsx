@@ -6,10 +6,10 @@ import { labelForLoadStatus } from "@/lib/types";
 export function LoadLogSection({ loadId }: { loadId: number }) {
   const rows = listLoadLog(loadId);
   return (
-    <div className="space-y-4">
-      <section id="load-check-call" className="card p-5">
-        <h2 className="text-sm font-semibold">Log check call</h2>
-        <form action={logCheckCallFormAction} className="mt-3 grid gap-3 md:grid-cols-3">
+    <div className="space-y-3">
+      <section id="load-check-call" className="card p-3">
+        <h2 className="text-[12.5px] font-semibold">Log check call</h2>
+        <form action={logCheckCallFormAction} className="mt-2 grid gap-2 md:grid-cols-3">
           <input type="hidden" name="load_id" value={loadId} />
           <div className="field">
             <label htmlFor="called_at">When</label>
@@ -31,15 +31,15 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
       </section>
 
       <section id="load-log" className="card overflow-hidden">
-        <header className="border-b border-slate-100 px-5 py-3">
-          <h2 className="text-sm font-semibold">Load log</h2>
+        <header className="border-b border-slate-100 px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Load log</h2>
         </header>
         {rows.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-slate-500">No status changes or check calls yet.</p>
+          <p className="px-3 py-3 text-[12.5px] text-slate-500">No status changes or check calls yet.</p>
         ) : (
           <ol className="divide-y divide-slate-100">
             {rows.map((row) => (
-              <li key={row.id} className="px-5 py-3 text-sm">
+              <li key={row.id} className="px-3 py-1.5 text-[12.5px]">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-semibold capitalize">{row.action.replaceAll("_", " ")}</span>
                   <span className="text-xs text-slate-500">
