@@ -5056,7 +5056,7 @@ Continuous reefer. Two load locks.
   workflow.requireAssignmentHardBlock({ driver: tyrell }, DEFAULT_WORKFLOW_SETTINGS);
   const settingsStore = await import("../lib/settings");
   const previousWorkflow = settingsStore.getWorkflowSettings();
-  const { addStop, stampStopTime } = await import("../lib/stops");
+  const { addStop } = await import("../lib/stops");
   const workflowLoadId = queries.createLoad({
     customer_id: customerId,
     origin: "Hastings, NE",
