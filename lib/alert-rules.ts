@@ -402,14 +402,5 @@ export async function deliverAlertEmails(emails: OutgoingMail[]): Promise<void> 
 
 export function alertCatalogHasNoBrokerageTriggers(): boolean {
   const blob = ALERT_TRIGGERS.map((item) => `${item.key} ${item.label} ${item.watching}`).join(" ").toLowerCase();
-  return ![
-    "hazmat",
-    "twic",
-    "fast",
-    "passport",
-    "edi",
-    "convoy",
-    "tender",
-    "ltl",
-  ].some((word) => blob.includes(word));
+  return !/\b(hazmat|twic|fast|passport|edi|convoy|tender|ltl)\b/.test(blob);
 }
