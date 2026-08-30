@@ -64,7 +64,9 @@ export function DispatcherUserForm({
         <div className="field">
           <label>2-step verification</label>
           <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            {user.totp_enrolled ? "On" : "Off"}
+            {user.email?.trim()
+              ? "Sign-in emails a code to this user’s email."
+              : "Add an email on this user. Sign-in cannot send a code without one."}
           </p>
         </div>
       ) : null}

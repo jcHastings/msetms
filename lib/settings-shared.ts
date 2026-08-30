@@ -80,7 +80,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/security",
         label: "2-step verification",
-        hint: "Authenticator app for dispatcher login",
+        hint: "Email sign-in code after PIN",
       },
     ],
   },

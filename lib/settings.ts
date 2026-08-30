@@ -134,7 +134,7 @@ const SETTINGS_DEFAULTS: CompanySettings = {
   load_number_prefix: "MSE",
   load_number_next: 1001,
   show_sample_data: 1,
-  require_dispatcher_2fa: 0,
+  require_dispatcher_2fa: 1,
 };
 
 const SETTINGS_COLUMNS = [

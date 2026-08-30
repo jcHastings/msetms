@@ -116,8 +116,11 @@ export function TotpSetupPanel({
 export function TwoFactorPolicyForm({ required, canEdit }: { required: boolean; canEdit: boolean }) {
   const [state, action, pending] = useActionState(saveTwoFactorPolicyAction, null);
   return (
-    <section className="card mt-6 p-6">
+    <section className="card p-6" data-email-otp-policy="">
       <h2 className="text-sm font-semibold">Require 2-step for all dispatchers</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        After PIN, send a one-time email code. Users with no email are told to add one.
+      </p>
       <form action={action} className="mt-4 space-y-3">
         <FormBanner result={state} />
         <label className="flex items-start gap-2 text-sm">

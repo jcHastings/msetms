@@ -321,10 +321,12 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /2-step verification/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Set up 2-step/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Require 2-step for all dispatchers/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Authenticator code/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /email_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign-in code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Resend code/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code|Authenticator code/);
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
-  assert.doesNotMatch(driverLoginPage, /totp|authenticator/i);
+  assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
   assert.match(driverLoginPage, /listDriversForLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
@@ -10581,6 +10583,7 @@ Continuous reefer. Two load locks.
   assert.match(userForm, /defaultValue=""/);
   assert.match(userForm, /leave blank to keep/);
   assert.match(userForm, /2-step verification/);
+  assert.match(userForm, /Add an email on this user/);
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) =>
       section.items.some((item) => item.href === "/settings/quickbooks"),
@@ -10706,11 +10709,47 @@ Continuous reefer. Two load locks.
   assert.ok(casey);
   assert.equal(casey.role, "accounting");
   assert.equal(session.roleLabel(casey.role), "Accounting");
-  assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 0);
-  assert.equal(settings.isDispatcherTwoFactorRequired(), false);
+  assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 1);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), true);
   settings.updateTwoFactorPolicy(true);
   assert.equal(settings.isDispatcherTwoFactorRequired(), true);
   settings.updateTwoFactorPolicy(false);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), false);
+  const emailOtp = await import("../lib/dispatcher-email-otp");
+  assert.equal(emailOtp.maskEmail("ana@msloads.com"), "a••@msloads.com");
+  const signInMail = emailOtp.composeSignInCodeEmail({ code: "482193", officePhone: "402-302-0097" });
+  assert.match(signInMail.subject, /MS Express TMS sign-in code/);
+  assert.match(signInMail.text, /482193/);
+  assert.match(signInMail.text, /Do not reply/);
+  assert.match(signInMail.text, /not monitored/);
+  assert.match(signInMail.text, /402-302-0097/);
+  assert.doesNotMatch(signInMail.text, /Twilio|SendGrid|SMTP_/);
+  const otpUserId = settings.createDispatcherUser({
+    name: "Email Code Desk",
+    pin: "3344",
+    role: "dispatcher",
+    email: "otp-desk@msloads.com",
+  });
+  const issued = emailOtp.issueEmailOtp(otpUserId);
+  assert.match(issued.code, /^\d{6}$/);
+  assert.equal(issued.email, "otp-desk@msloads.com");
+  assert.throws(() => emailOtp.issueEmailOtp(otpUserId, { resend: true }), /Wait before/);
+  emailOtp.verifyEmailOtp(otpUserId, issued.code);
+  assert.throws(() => emailOtp.verifyEmailOtp(otpUserId, issued.code), /expired|not valid/);
+  const noMailId = settings.createDispatcherUser({
+    name: "No Email Desk",
+    pin: "5566",
+    role: "dispatcher",
+    email: "",
+  });
+  assert.throws(() => emailOtp.issueEmailOtp(noMailId), /Add an email on this user/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /needsEmailCode/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /sendMail/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /console\.log/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-email-otp.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /one-time code/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /mustEnroll|2-step setup/);
+  settings.updateTwoFactorPolicy(true);
   const totp = await import("../lib/totp");
   const dispatcherTotp = await import("../lib/dispatcher-totp");
   const generatedSecret = totp.generateTotpSecret();

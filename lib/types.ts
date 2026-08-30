@@ -634,7 +634,15 @@ export type DashboardStats = {
 };
 
 export type ActionResult =
-  | { ok: true; id?: number; message?: string; needsTotp?: boolean; recoveryCodes?: string[] }
+  | {
+      ok: true;
+      id?: number;
+      message?: string;
+      needsTotp?: boolean;
+      needsEmailCode?: boolean;
+      maskedEmail?: string;
+      recoveryCodes?: string[];
+    }
   | { ok: false; error: string; duplicate?: boolean; existingId?: number };
 
 export function labelForLoadStatus(status: string): string {

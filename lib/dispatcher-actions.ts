@@ -15,6 +15,7 @@ import {
   authenticateDispatcher,
   clearDispatcherSession,
   getPendingTwoFactorDispatcherId,
+  isTwoFactorRequired,
   requireCapability,
   requireLoadAssigner,
   requireLoadEditor,
@@ -26,7 +27,14 @@ import {
   canLogCheckCall,
   canSendSms,
 } from "./settings-shared";
-import { consumeRecoveryCode, isDispatcherTotpEnrolled, verifyDispatcherTotp } from "./dispatcher-totp";
+import {
+  composeSignInCodeEmail,
+  EMAIL_OTP_NO_EMAIL,
+  issueEmailOtp,
+  maskEmail,
+  verifyEmailOtp,
+} from "./dispatcher-email-otp";
+import { isUsableEmail } from "./mail-shared";
 import {
   assignLoadDispatcher,
   cloneLoad,
@@ -70,24 +78,32 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
 }
 
+async function sendSignInCode(dispatcherId: number, resend = false): Promise<ActionResult> {
+  const issued = issueEmailOtp(dispatcherId, { resend });
+  const mail = composeSignInCodeEmail({ code: issued.code });
+  const { sendMail } = await import("./integrations/mail");
+  await sendMail({ to: issued.email, subject: mail.subject, text: mail.text });
+  await setPendingTwoFactor(dispatcherId);
+  return {
+    ok: true,
+    needsEmailCode: true,
+    maskedEmail: maskEmail(issued.email),
+    message: `We sent a sign-in code to ${maskEmail(issued.email)}.`,
+  };
+}
+
 export async function dispatcherLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    const totp = String(formData.get("totp") ?? "").trim();
-    const recoveryCode = String(formData.get("recovery_code") ?? "").trim();
-    if (totp || recoveryCode) {
+    const emailCode = String(formData.get("email_code") ?? "").trim();
+    const resend = String(formData.get("resend") ?? "") === "1";
+    if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
       if (!pendingId) throw new Error("PIN step expired. Sign in again.");
-      if (!isDispatcherTotpEnrolled(pendingId)) throw new Error("2-step is not on for this user.");
-      if (totp) {
-        if (!verifyDispatcherTotp(pendingId, totp)) {
-          throw new Error("That authenticator code is not valid.");
-        }
-      } else {
-        consumeRecoveryCode(pendingId, recoveryCode);
-      }
+      if (resend) return await sendSignInCode(pendingId, true);
+      verifyEmailOtp(pendingId, emailCode);
       await setDispatcherSession(pendingId);
       refresh();
       redirect("/");
@@ -97,17 +113,15 @@ export async function dispatcherLoginAction(
     const pin = String(formData.get("pin") ?? "").trim();
     if (!dispatcherId || !pin) throw new Error("Pick your name and enter your PIN.");
     const dispatcher = authenticateDispatcher(dispatcherId, pin);
-    if (isDispatcherTotpEnrolled(dispatcher.id)) {
-      await setPendingTwoFactor(dispatcher.id);
-      return {
-        ok: true,
-        needsTotp: true,
-        message: "Enter the 6-digit code from your authenticator app.",
-      };
+    if (!isTwoFactorRequired()) {
+      await setDispatcherSession(dispatcher.id);
+      refresh();
+      redirect("/");
     }
-    await setDispatcherSession(dispatcher.id);
-    refresh();
-    redirect("/");
+    if (!isUsableEmail(dispatcher.email)) {
+      return { ok: false, error: EMAIL_OTP_NO_EMAIL };
+    }
+    return await sendSignInCode(dispatcher.id);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);

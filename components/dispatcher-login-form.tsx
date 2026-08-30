@@ -14,32 +14,41 @@ export function DispatcherLoginForm({
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
-  const needsTotp = Boolean(state?.ok && state.needsTotp);
+  const needsEmailCode = Boolean(state?.ok && state.needsEmailCode);
   return (
     <form action={formAction} className="card space-y-4 p-6">
-      <FormBanner result={state} hideOk={needsTotp} />
-      {needsTotp ? (
+      <FormBanner result={state} hideOk={needsEmailCode} />
+      {needsEmailCode ? (
         <>
           <p className="text-sm text-slate-600">
-            {state && state.ok ? state.message : "Enter the 6-digit code from your authenticator app."}
+            {state && state.ok
+              ? state.message
+              : "Enter the sign-in code we emailed you."}
           </p>
           <div className="field">
-            <label htmlFor="totp">Authenticator code</label>
+            <label htmlFor="email_code">Sign-in code</label>
             <input
-              id="totp"
-              name="totp"
+              id="email_code"
+              name="email_code"
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
               pattern="[0-9]{6}"
+              required
             />
-          </div>
-          <div className="field">
-            <label htmlFor="recovery_code">Or recovery code</label>
-            <input id="recovery_code" name="recovery_code" autoComplete="off" />
           </div>
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Checking…" : "Continue"}
+          </button>
+          <button
+            className="btn btn-ghost w-full"
+            type="submit"
+            name="resend"
+            value="1"
+            formNoValidate
+            disabled={pending}
+          >
+            {pending ? "Sending…" : "Resend code"}
           </button>
         </>
       ) : (

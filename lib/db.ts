@@ -657,7 +657,8 @@ export function migrate(db: Database): void {
     ["load_number_prefix", "TEXT NOT NULL DEFAULT 'MSE'"],
     ["load_number_next", "INTEGER NOT NULL DEFAULT 1001"],
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
-    ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 0"],
+    ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 1"],
+    ["email_otp_shipped", "INTEGER NOT NULL DEFAULT 0"],
     ["alert_gps_quiet_hours", "REAL NOT NULL DEFAULT 2"],
     ["document_font_family", "TEXT NOT NULL DEFAULT 'helvetica'"],
     ["document_font_scale", "INTEGER NOT NULL DEFAULT 100"],
@@ -691,6 +692,25 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_totp_recovery_dispatcher
       ON dispatcher_totp_recovery_codes(dispatcher_id, used_at);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatcher_email_otp (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_otp_dispatcher
+      ON dispatcher_email_otp(dispatcher_id, used_at);
+  `);
+  const otpShip = db.prepare("SELECT email_otp_shipped AS shipped FROM company_profile WHERE id = 1").get() as
+    | { shipped?: number }
+    | undefined;
+  if (!Number(otpShip?.shipped)) {
+    db.prepare("UPDATE company_profile SET require_dispatcher_2fa = 1, email_otp_shipped = 1 WHERE id = 1").run();
+  }
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "route_miles", "REAL");
   ensureColumn(db, "locations", "call_before", "INTEGER NOT NULL DEFAULT 0");

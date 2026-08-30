@@ -55,8 +55,8 @@ export function UsersTable({
                   </Link>
                   <div className="text-xs text-slate-500">{user.email || "No email"}</div>
                   <div className="mt-1 text-xs text-slate-600">
-                    {roleLabel(user.role)} · {user.active ? "Active" : "Inactive"} · 2-step{" "}
-                    {user.totp_enrolled ? "On" : "Off"}
+                    {roleLabel(user.role)} · {user.active ? "Active" : "Inactive"} ·{" "}
+                    {user.email?.trim() ? "Email on file" : "Add an email"}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
