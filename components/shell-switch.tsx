@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import type { MikeMessage } from "@/lib/mike-shared";
 import type { PublicDispatcher } from "@/lib/settings-shared";
 
@@ -12,12 +13,14 @@ export function ShellSwitch({
   requireTwoFactor = false,
   mikeConfigured = false,
   mikeMessages = [],
+  officeNotifications = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher | null;
   requireTwoFactor?: boolean;
   mikeConfigured?: boolean;
   mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -56,6 +59,7 @@ export function ShellSwitch({
       requireTwoFactor={requireTwoFactor}
       mikeConfigured={mikeConfigured}
       mikeMessages={mikeMessages}
+      officeNotifications={officeNotifications}
     >
       {children}
     </AppShell>

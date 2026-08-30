@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
+import { OfficeNotificationBell } from "@/components/office-notification-bell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
 import type { MikeMessage } from "@/lib/mike-shared";
 import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
@@ -15,12 +17,14 @@ export function AppShell({
   dispatcher,
   mikeConfigured = false,
   mikeMessages = [],
+  officeNotifications = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher;
   requireTwoFactor?: boolean;
   mikeConfigured?: boolean;
   mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
@@ -74,6 +78,7 @@ export function AppShell({
         </div>
         <NavLinks role={dispatcher.role} />
         <div className="desk-sidebar-user shrink-0 border-t border-white/10 px-3 py-3 text-xs text-slate-400">
+          <OfficeNotificationBell items={officeNotifications} />
           <div className="font-medium text-slate-200" title={dispatcher.name}>
             {dispatcher.name}
           </div>

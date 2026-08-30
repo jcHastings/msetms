@@ -794,6 +794,37 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_sent_mail_load ON sent_mail(load_id, kind, id);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alert_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      trigger_key TEXT NOT NULL,
+      recipient_ids TEXT NOT NULL DEFAULT '[]',
+      message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS alert_rule_fires (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+      subject_key TEXT NOT NULL,
+      expires_on TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(rule_id, subject_key, expires_on)
+    );
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      href TEXT NOT NULL DEFAULT '',
+      read_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_notifications_user
+      ON user_notifications(dispatcher_id, id);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

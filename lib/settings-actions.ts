@@ -10,6 +10,7 @@ import {
   confirmTotpEnrollment,
   resetDispatcherTotp,
 } from "./dispatcher-totp";
+import { createAlertRule, deleteAlertRule, markAllOfficeNotificationsRead, markOfficeNotificationRead } from "./alert-rules";
 import {
   addDropdownOption,
   clearCompanyLogo,
@@ -118,6 +119,50 @@ export async function saveTaxAction(
   } catch (error) {
     return fail(error);
   }
+}
+
+export async function createAlertRuleAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    const recipientIds = formData
+      .getAll("recipient_ids")
+      .map((value) => Number(value))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    createAlertRule({
+      name: requiredString(formData.get("name"), "Name of alert"),
+      triggerKey: String(formData.get("trigger_key") ?? ""),
+      recipientIds,
+      message: String(formData.get("message") ?? ""),
+    });
+    refresh();
+    return { ok: true, message: "Alert created." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteAlertRuleAction(formData: FormData): Promise<void> {
+  await requireSettingsEditor();
+  const id = parseOptionalInt(formData.get("rule_id"));
+  if (!id) throw new Error("Alert is missing.");
+  deleteAlertRule(id);
+  refresh();
+}
+
+export async function markOfficeNotificationReadAction(formData: FormData): Promise<void> {
+  const dispatcher = await requireSignedInDispatcher();
+  const id = parseOptionalInt(formData.get("notification_id"));
+  if (id) markOfficeNotificationRead(id, dispatcher.id);
+  refresh();
+}
+
+export async function markAllOfficeNotificationsReadAction(): Promise<void> {
+  const dispatcher = await requireSignedInDispatcher();
+  markAllOfficeNotificationsRead(dispatcher.id);
+  refresh();
 }
 
 export async function saveAlertsAction(

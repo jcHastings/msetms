@@ -29,8 +29,8 @@ export const SETTINGS_SECTIONS = [
       },
       {
         href: "/settings/alerts",
-        label: "Alerts",
-        hint: "30/60 day compliance windows",
+        label: "Automated Alerting",
+        hint: "Rules on driver and unit expiry dates",
       },
       {
         href: "/settings/routing",

@@ -884,7 +884,25 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8"), /GPS quiet window/);
+  const alertsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8");
+  assert.match(alertsPage, /GPS quiet window/);
+  assert.match(alertsPage, /Automated Alerting/);
+  const alertsUi = fs.readFileSync(path.join(process.cwd(), "components/alert-rules-panel.tsx"), "utf8");
+  assert.match(alertsUi, /\+ Add Alert/);
+  assert.match(alertsUi, /Create New Alert/);
+  assert.match(alertsUi, /Add a rule to get started/);
+  assert.match(alertsUi, /Alert On/);
+  assert.match(alertsUi, /Alert People/);
+  assert.doesNotMatch(alertsUi, /hazmat|TWIC|Convoy|Incoming 810|tender/i);
+  const alertCatalog = fs.readFileSync(path.join(process.cwd(), "lib/alert-rules-shared.ts"), "utf8");
+  assert.match(alertCatalog, /driver_license/);
+  assert.match(alertCatalog, /driver_insurance/);
+  assert.match(alertCatalog, /driver_medical/);
+  assert.match(alertCatalog, /driver_drug_test/);
+  assert.match(alertCatalog, /truck_registration/);
+  assert.match(alertCatalog, /truck_dot/);
+  assert.match(alertCatalog, /trailer_registration/);
+  assert.match(alertCatalog, /trailer_dot/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "components/location-form.tsx"), "utf8"),
     /liftgate|inside pickup/i,
@@ -10200,6 +10218,29 @@ Continuous reefer. Two load locks.
     alert_emails_enabled: true,
   });
   assert.equal(settings.getCompanySettings().alert_driver_days, 14);
+  const alertRules = await import("../lib/alert-rules");
+  assert.equal(alertRules.alertCatalogHasNoBrokerageTriggers(), true);
+  const officeUsers = settings.listDispatcherUsers(false);
+  assert.ok(officeUsers.length >= 1);
+  const createdRule = alertRules.createAlertRule({
+    name: "License watch",
+    triggerKey: "driver_license",
+    recipientIds: [officeUsers[0].id],
+    message: "Call safety.",
+  });
+  assert.equal(createdRule.name, "License watch");
+  assert.ok(alertRules.listAlertRules().some((rule) => rule.id === createdRule.id));
+  assert.ok(
+    alertRules.alertRuleListRows().some((row) => row.watching === "Driver license" && row.name === "License watch"),
+  );
+  const fired = alertRules.syncAlertNotifications();
+  assert.ok(fired.created >= 1, "expired or due license should notify the selected office user");
+  const notices = alertRules.listOfficeNotifications(officeUsers[0].id);
+  assert.ok(notices.some((item) => item.title === "License watch" && /license/i.test(item.body)));
+  assert.throws(
+    () => alertRules.createAlertRule({ name: "EDI watch", triggerKey: "incoming_810", recipientIds: [officeUsers[0].id] }),
+    /trucking alert trigger/,
+  );
   settings.updateRoutingNotes("Call 30 minutes out.");
   settings.updatePaySettings({
     default_oo_percent: 80,
