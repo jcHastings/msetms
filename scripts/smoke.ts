@@ -4792,15 +4792,15 @@ Continuous reefer. Two load locks.
   assert.match(dropMasterText, /355 Food Center Dr/);
   assert.match(dropMasterText, /The Chef's Kingdom/);
   assert.match(dropMasterText, /Kayco-Bayonne/);
-  const westside = dropDocs.find((row) => row.key === "bol_third_party" && row.source.includes("Westside Foods"));
-  assert.ok(westside);
-  const westsideBol = await generateDefaultedDocument(bolDropId, "bol_third_party", westside.stopId);
-  const westsideText = String(
-    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(westsideBol))), { mergePages: true }))
+  const westsideLane = dropDocs.find((row) => row.key === "bol_third_party" && row.source.includes("Westside Foods"));
+  assert.ok(westsideLane);
+  const westsideLaneBol = await generateDefaultedDocument(bolDropId, "bol_third_party", westsideLane.stopId);
+  const westsideLaneText = String(
+    (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(westsideLaneBol))), { mergePages: true }))
       .text ?? "",
   );
-  assert.match(westsideText, /Westside Foods - KOSHER/);
-  assert.doesNotMatch(westsideText, /Kayco-Bayonne/);
+  assert.match(westsideLaneText, /Westside Foods - KOSHER/);
+  assert.doesNotMatch(westsideLaneText, /Kayco-Bayonne/);
   const dropBlind = await generateDefaultedDocument(bolDropId, "bol_blind");
   const dropBlindText = String(
     (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(dropBlind))), { mergePages: true })).text ??
@@ -4811,7 +4811,7 @@ Continuous reefer. Two load locks.
   assert.match(dropBlindText, /Chestnut Ridge, NY/);
   assert.match(dropBlindText, /Bayonne, NJ/);
   assert.doesNotMatch(dropBlindText, /Westside Foods|Kayco-Bayonne|Nebraska Cold Storage/);
-  assert.doesNotMatch(dropBlindText, /600 E 39th|355 Food Center|72 New Hook/);
+  assert.doesNotMatch(dropBlindText, /355 Food Center|72 New Hook|1 Alpine/);
   const dropSigned = await generateDefaultedDocument(bolDropId, "bol_signatures");
   const dropSignedText = String(
     (await extractText(new Uint8Array(fs.readFileSync(filesMod.getAttachmentPath(dropSigned))), { mergePages: true })).text ??
