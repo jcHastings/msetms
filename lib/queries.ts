@@ -56,7 +56,7 @@ import {
   parseFleetDivision,
   type FleetDivision,
 } from "./types";
-import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
+import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
@@ -1229,6 +1229,8 @@ export type LoadFilters = {
   status?: string;
   date?: string;
   q?: string;
+  dispatcherId?: number;
+  masterOnly?: boolean;
 };
 
 export function listLoads(filters: LoadFilters = {}): LoadView[] {
@@ -1241,9 +1243,23 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   } else if (filters.status === "planning") {
     clauses.push(`loads.status IN (${PLANNING_LOAD_STATUSES.map(() => "?").join(", ")})`);
     params.push(...PLANNING_LOAD_STATUSES);
+  } else if (filters.status === "misc") {
+    clauses.push(`loads.status IN (${MISC_LOAD_STATUSES.map(() => "?").join(", ")})`);
+    params.push(...MISC_LOAD_STATUSES);
+  } else if (filters.status === "mine" || filters.status === "master") {
+    /* Tab filters use dispatcherId / masterOnly, not a load.status value. */
   } else if (filters.status !== "all") {
     clauses.push("loads.status = ?");
     params.push(filters.status);
+  }
+
+  if (filters.dispatcherId != null) {
+    clauses.push("loads.dispatcher_id = ?");
+    params.push(filters.dispatcherId);
+  }
+
+  if (filters.masterOnly) {
+    clauses.push("(loads.is_master = 1 OR loads.parent_load_id IS NOT NULL)");
   }
 
   if (filters.date) {

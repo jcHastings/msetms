@@ -55,7 +55,7 @@ export function InvoicesAcctTable({ rows }: { rows: InvoiceAcctRow[] }) {
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={11} className="px-4 py-6 text-sm text-slate-500">
+            <td colSpan={11} className="px-3 py-3 text-[12.5px] text-slate-500">
               No loads in Accounting yet. Send a delivered load from Financials.
             </td>
           </tr>
@@ -124,69 +124,69 @@ function InvoiceAcctRowView({
       {open ? (
         <tr>
           <td colSpan={11} className="!p-0">
-            <div className="acct-expand-panel space-y-2">
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <a className="acct-link" href={`/api/loads/${row.id}/invoice`}>
-                  View Invoice as PDF
-                </a>
-                <span>
-                  View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}
-                </span>
-                {row.email ? (
-                  <a
-                    className="acct-link"
-                    href={`mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent(`Invoice ${row.loadNumber}`)}`}
-                  >
-                    Email History
+            <div className="acct-expand-panel">
+              <div className="acct-expand-grid">
+                <div className="space-y-0.5">
+                  <a className="acct-link" href={`/api/loads/${row.id}/invoice`}>
+                    View Invoice as PDF
                   </a>
-                ) : (
-                  <span>Email History: none</span>
-                )}
-                <form action={returnLoadToOperationsFormAction} className="inline">
-                  <input type="hidden" name="load_id" value={row.id} />
-                  <button className="acct-link" type="submit" title="Send back to Load Management">
-                    Send Back to Load Management
-                  </button>
-                </form>
-                <QboInvoiceSendButton
-                  loadId={row.id}
-                  alreadySent={row.alreadySent}
-                  label={row.sendLabel}
-                  variant="link"
-                />
-                {row.paid ? null : (
-                  <form action={markReceivablePaidAction} className="inline">
+                  <div>View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}</div>
+                  {row.email ? (
+                    <a
+                      className="acct-link"
+                      href={`mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent(`Invoice ${row.loadNumber}`)}`}
+                    >
+                      Email History
+                    </a>
+                  ) : (
+                    <div>Email History: none</div>
+                  )}
+                  <form action={returnLoadToOperationsFormAction}>
                     <input type="hidden" name="load_id" value={row.id} />
-                    <button className="acct-link" type="submit">
-                      Record payment
+                    <button className="acct-link" type="submit" title="Send back to Load Management">
+                      Send Back to Load Management
                     </button>
                   </form>
-                )}
-              </div>
-              <div>
-                <div>
-                  <span className="text-slate-500">Pick Location: </span>
-                  {row.pick}
+                  <QboInvoiceSendButton
+                    loadId={row.id}
+                    alreadySent={row.alreadySent}
+                    label={row.sendLabel}
+                    variant="link"
+                  />
+                  {row.paid ? null : (
+                    <form action={markReceivablePaidAction}>
+                      <input type="hidden" name="load_id" value={row.id} />
+                      <button className="acct-link" type="submit">
+                        Record payment
+                      </button>
+                    </form>
+                  )}
                 </div>
                 <div>
-                  <span className="text-slate-500">Drop Location: </span>
-                  {row.drop}
+                  <div>
+                    <span className="text-slate-500">Pick Location: </span>
+                    {row.pick}
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Drop Location: </span>
+                    {row.drop}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <Link href={`/loads/${row.id}?tab=docs`} className="acct-link">
-                  Review/Manage Supporting Docs
-                </Link>
-                <div className={row.paperwork.every((item) => item.found) ? "text-slate-600" : "text-rose-700"}>
-                  Paperwork is {row.paperwork.every((item) => item.found) ? "on file." : "pending review."}
+                <div>
+                  <Link href={`/loads/${row.id}?tab=docs`} className="acct-link">
+                    Review/Manage Supporting Docs
+                  </Link>
+                  <div className={row.paperwork.every((item) => item.found) ? "text-slate-600" : "text-rose-700"}>
+                    Paperwork is {row.paperwork.every((item) => item.found) ? "on file." : "pending review."}
+                  </div>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {row.paperwork.map((item) => (
+                      <li key={item.label}>
+                        {item.label}: {item.found ? "On file" : "No matching docs found"}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="mt-1 space-y-0.5">
-                  {row.paperwork.map((item) => (
-                    <li key={item.label}>
-                      {item.label}: {item.found ? "On file" : "No matching docs found"}
-                    </li>
-                  ))}
-                </ul>
               </div>
             </div>
           </td>

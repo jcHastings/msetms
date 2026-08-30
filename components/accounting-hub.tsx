@@ -91,7 +91,7 @@ export function AccountingHub({
     ...listLoadsOnAccountingDesk("archived"),
   ]);
   return (
-    <div>
+    <div className="acct-page">
       <nav className="acct-hub-tabs">
         {ACCOUNTING_HUB_TABS.map((item) => (
           <Link
@@ -122,7 +122,7 @@ function HubTableCard({
 }) {
   return (
     <section className="card">
-      {toolbar ? <div className="px-4 pt-4">{toolbar}</div> : null}
+      {toolbar ? <div className="hub-table-toolbar">{toolbar}</div> : null}
       <div className="overflow-x-auto">{children}</div>
     </section>
   );
@@ -130,8 +130,8 @@ function HubTableCard({
 
 function HubActions({ children }: { children: ReactNode }) {
   return (
-    <td className="sticky right-0 z-10 min-w-[12rem] bg-white shadow-[-8px_0_12px_-8px_rgba(15,23,42,0.18)]">
-      <div className="flex min-w-[12rem] flex-col items-stretch gap-1">{children}</div>
+    <td className="sticky right-0 z-10 min-w-[7rem] bg-white shadow-[-8px_0_12px_-8px_rgba(15,23,42,0.18)]">
+      <div className="flex min-w-[7rem] flex-col items-start gap-0.5">{children}</div>
     </td>
   );
 }
@@ -164,7 +164,7 @@ function SearchBox({
         placeholder="Customer, invoice #, pick/drop"
         className="min-w-[220px] flex-1 rounded border border-slate-300 px-2 py-1 text-[12.5px]"
       />
-      <button className="btn btn-secondary" type="submit">
+      <button className="acct-link" type="submit">
         Search
       </button>
     </form>
@@ -338,18 +338,25 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
                     <td>{bill.status === "paid" ? formatMoney(0) : formatMoney(bill.amount)}</td>
                     <td>{bill.vendor}</td>
                     <td>
-                      <form action={sendBillToQuickbooksFormAction}>
-                        <input type="hidden" name="bill_id" value={bill.id} />
-                        <button className="btn btn-secondary" type="submit" disabled={Boolean(bill.qbo_bill_id)}>
-                          {bill.qbo_bill_id ? "Sent to QBO" : "Export bill to QBO"}
-                        </button>
-                      </form>
+                      {bill.qbo_bill_id ? (
+                        <span className="qbo-export-status">Bill Exported: {bill.qbo_bill_id}</span>
+                      ) : (
+                        <span className="qbo-export-status">Unsent</span>
+                      )}
                     </td>
                     <HubActions>
+                      {bill.qbo_bill_id ? null : (
+                        <form action={sendBillToQuickbooksFormAction}>
+                          <input type="hidden" name="bill_id" value={bill.id} />
+                          <button className="acct-link" type="submit">
+                            Send to QuickBooks
+                          </button>
+                        </form>
+                      )}
                       {bill.status === "open" ? (
                         <form action={payBillAction}>
                           <input type="hidden" name="bill_id" value={bill.id} />
-                          <button className="btn btn-secondary" type="submit">
+                          <button className="acct-link" type="submit">
                             Record payment
                           </button>
                         </form>

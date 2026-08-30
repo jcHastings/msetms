@@ -21,13 +21,13 @@ export function BoardToolbar({ status, date }: Props) {
   }
 
   return (
-    <div className="card mb-4 border-[#0b1f3a] px-4 py-3" data-load-list-chrome="">
-      <div className="load-tabs flex flex-wrap gap-1 px-2 pt-2">
+    <div className="card mb-3 border-[#0b1f3a] px-2 py-2" data-load-list-chrome="">
+      <div className="load-tabs flex flex-wrap gap-0.5 px-1 pt-1">
         {LOAD_LIST_TABS.map((tab) => (
           <Link
             key={tab.value}
             href={tabHref(tab.value)}
-            className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
+            className={`load-tab rounded-t px-2 py-1 text-xs font-semibold ${
               status === tab.value ? "load-tab-active" : ""
             }`}
             aria-current={status === tab.value ? "page" : undefined}
@@ -36,7 +36,7 @@ export function BoardToolbar({ status, date }: Props) {
           </Link>
         ))}
       </div>
-      <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(event) => event.preventDefault()}>
+      <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => event.preventDefault()}>
         <div className="field min-w-56 flex-1">
           <label htmlFor="load-list-q">Search loads on this tab</label>
           <input

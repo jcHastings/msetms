@@ -113,6 +113,15 @@ export function formatDateTime(iso: string): string {
   }
 }
 
+/** Dispatch board: date on line 1, time on line 2. Do not keep them on one line. */
+export function formatBoardDateTime(iso: string): { date: string; time: string } {
+  const combined = formatDateTime(iso);
+  if (!combined || combined === "—") return { date: "—", time: "" };
+  const match = combined.match(/^(\d{1,2}\/\d{1,2}\/\d{2})(?:\s+(.+))?$/);
+  if (!match) return { date: combined, time: "" };
+  return { date: match[1], time: (match[2] ?? "").trim() };
+}
+
 function parseDisplayDate(raw: string): Date | null {
   const native = new Date(raw);
   if (!Number.isNaN(native.getTime())) return native;

@@ -62,9 +62,24 @@ async function main() {
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
   const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
-  const { loadMatchesListQuery, parseLoadListTab } = await import("../lib/load-list-shared");
+  const { loadMatchesListQuery, parseLoadListTab, filtersForLoadListTab, LOAD_LIST_TABS } = await import(
+    "../lib/load-list-shared"
+  );
   assert.equal(parseLoadListTab(""), "active");
   assert.equal(parseLoadListTab("planning"), "planning");
+  assert.equal(parseLoadListTab("accounting"), "accounting");
+  assert.equal(parseLoadListTab("misc"), "misc");
+  assert.equal(parseLoadListTab("mine"), "mine");
+  assert.equal(parseLoadListTab("master"), "master");
+  assert.equal(parseLoadListTab("all"), "all");
+  assert.deepEqual(
+    LOAD_LIST_TABS.map((tab) => tab.value),
+    ["active", "planning", "accounting", "misc", "all", "mine", "master"],
+  );
+  assert.equal(filtersForLoadListTab("mine", { dispatcherId: 7 }).dispatcherId, 7);
+  assert.equal(filtersForLoadListTab("mine", {}).dispatcherId, -1);
+  assert.equal(filtersForLoadListTab("master").masterOnly, true);
+  assert.equal(filtersForLoadListTab("accounting").status, "accounting");
   assert.equal(
     loadMatchesListQuery(
       {
@@ -86,7 +101,13 @@ async function main() {
     false,
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
-  assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
+  assert.match(boardUi, /listLoads\(filtersForLoadListTab/);
+  assert.match(boardUi, /parseLoadListTab/);
+  assert.match(boardUi, /getSignedInDispatcher/);
+  assert.match(boardUi, /BoardWhenCell/);
+  assert.match(boardUi, /formatBoardDateTime/);
+  assert.match(boardUi, /board-when-cell/);
+  assert.match(boardUi, /status === "accounting" \|\| loadShowsOnDispatchBoard/);
   assert.match(boardUi, /loadShowsOnDispatchBoard/);
   assert.match(boardUi, /data-dispatch-board/);
   assert.match(boardUi, /table-grid-board/);
@@ -111,7 +132,13 @@ async function main() {
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
   assert.match(boardToolbar, /LOAD_LIST_TABS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8"), /Planning/);
+  const loadListShared = fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8");
+  assert.match(loadListShared, /Planning Loads/);
+  assert.match(loadListShared, /Ready for Accounting/);
+  assert.match(loadListShared, /Misc\. Loads/);
+  assert.match(loadListShared, /My Loads/);
+  assert.match(loadListShared, /Master Loads/);
+  assert.doesNotMatch(loadListShared, /AscendLTL|Externally Posted|Post Loads/);
   assert.match(boardUi, /loadStatusRowClass\(load\.status\)/);
   assert.match(dashUiStatus, /loadStatusRowClass\(load\.status\)/);
   const tabSource = fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8");
@@ -796,6 +823,8 @@ async function main() {
   assert.match(hubSource, /hubTabClass/);
   assert.match(hubSource, /acct-hub-tabs/);
   assert.match(hubSource, /InvoicesAcctTable/);
+  assert.match(hubSource, /acct-page/);
+  assert.doesNotMatch(hubSource, /Export bill to QBO/);
   assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
@@ -807,6 +836,7 @@ async function main() {
   assert.match(invoicesTableUi, /title="Send back to Load Management"/);
   assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
   assert.match(invoicesTableUi, /QboInvoiceSendButton/);
+  assert.match(invoicesTableUi, /acct-expand-grid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
@@ -841,6 +871,8 @@ async function main() {
   assert.match(overlayHost, /ms-go/);
   assert.match(overlayHost, /\/accounting/);
   assert.match(overlayHost, /data-overlay-close/);
+  assert.match(overlayHost, /load-overlay-frame/);
+  assert.doesNotMatch(overlayHost, /min-h-\[80vh\]/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
   assert.match(overlayHost, /path.startsWith\("\/api\/"\)/);
@@ -2163,6 +2195,13 @@ async function main() {
   assert.ok(planningIds.length >= 1);
   assert.ok([...planningStatuses].every((status) => status === "available" || status === "hold"));
   assert.equal(planningIds.includes(cancelBoardId), false);
+  const miscLoads = queries.listLoads({ status: "misc" });
+  assert.ok(miscLoads.some((load) => load.id === cancelBoardId));
+  assert.ok(miscLoads.every((load) => load.status === "cancelled" || load.status === "completed"));
+  const masterOnlyLoads = queries.listLoads({ status: "all", masterOnly: true });
+  assert.ok(masterOnlyLoads.every((load) => load.is_master || load.parent_load_id));
+  const mineNone = queries.listLoads({ status: "all", dispatcherId: -1 });
+  assert.equal(mineNone.length, 0);
   const sampleRefLoad = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1042");
   assert.ok(sampleRefLoad);
   assert.ok(
@@ -9662,6 +9701,8 @@ Continuous reefer. Two load locks.
   assert.equal(sentBooks.accounting_desk, "accounting");
   assert.equal(queries.listLoads({ status: "active" }).some((load) => load.id === deliveredForBooks.id), false);
   assert.equal(queries.listLoads().some((load) => load.id === deliveredForBooks.id), false);
+  assert.equal(queries.listLoads({ status: "accounting" }).some((load) => load.id === sentBooks.id), true);
+  assert.equal(queries.listLoads({ status: "misc" }).some((load) => load.id === sentBooks.id), false);
   const { isActiveLoadStatus } = await import("../lib/types");
   const { loadShowsOnDispatchBoard } = await import("../lib/load-list-shared");
   assert.equal(isActiveLoadStatus(sentBooks.status), false);
@@ -11757,9 +11798,14 @@ Continuous reefer. Two load locks.
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
+  const { formatBoardDateTime, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
+  const boardWhen = formatBoardDateTime("2026-08-28T08:00:00-04:00");
+  assert.equal(boardWhen.date, "08/28/26");
+  assert.match(boardWhen.time, /8:00\s*AM/);
+  assert.doesNotMatch(boardWhen.date, /AM|PM/);
+  assert.equal(formatBoardDateTime("2026-08-28").time, "");
   assert.equal(
     formatStopWindow("2026-08-25T11:57:00.000Z", "2026-08-25T11:58:00.000Z", "appointment"),
     formatDateTime("2026-08-25T11:57:00.000Z"),
@@ -12513,6 +12559,14 @@ Continuous reefer. Two load locks.
   assert.match(boardPage, /board-place-cell/);
   assert.match(boardPage, /board-unit-cell/);
   assert.match(boardPage, /board-load-cell/);
+  assert.match(boardPage, /board-when-cell/);
+  assert.match(boardPage, /board-when-date/);
+  assert.match(boardPage, /board-when-time/);
+  assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
+  assert.match(boardCss, /board-when-cell/);
+  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*z-index:\s*60/);
+  assert.match(boardCss, /\.load-overlay-panel[\s\S]*height:\s*100%/);
+  assert.match(boardCss, /acct-expand-grid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   const { criteriaFromSearchParams } = await import("../lib/search");
   assert.equal(criteriaFromSearchParams({ q: "MSE-1055" }).q, "MSE-1055");

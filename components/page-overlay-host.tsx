@@ -96,7 +96,7 @@ export function PageOverlayHost({
       {frameId ? (
         <div className="load-overlay-backdrop" role="dialog" aria-label="Edit load" data-load-overlay="">
           <div className="load-overlay-panel overflow-hidden p-0">
-            <div className="flex justify-end border-b border-slate-200 bg-white px-3 py-2">
+            <div className="flex shrink-0 justify-end border-b border-slate-200 bg-white px-3 py-1.5">
               <button
                 className="btn btn-secondary"
                 type="button"
@@ -110,7 +110,7 @@ export function PageOverlayHost({
             <iframe
               title="Edit load"
               src={src}
-              className={`min-h-[80vh] w-full border-0 ${loaded ? "" : "sr-only"}`}
+              className={`load-overlay-frame ${loaded ? "" : "sr-only"}`}
               onLoad={(event) => {
                 setLoaded(true);
                 try {

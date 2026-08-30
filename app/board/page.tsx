@@ -8,7 +8,7 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
 import {
   getDemoReeferForLoad,
   getReeferSnapshots,
@@ -31,7 +31,12 @@ import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
-import { loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
+import {
+  filtersForLoadListTab,
+  loadShowsOnDispatchBoard,
+  parseLoadListTab,
+} from "@/lib/load-list-shared";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -43,13 +48,16 @@ export default async function BoardPage({
   searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string; tab?: string }>;
 }) {
   const params = await searchParams;
-  const status = params.status ?? "active";
+  const status = parseLoadListTab(params.status);
   const date = params.date ?? "";
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
   const current = { status, date };
+  const dispatcher = await getSignedInDispatcher();
   const loads = sortMasterFamilies(
-    listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status)),
+    listLoads(filtersForLoadListTab(status, { date, dispatcherId: dispatcher?.id })).filter(
+      (load) => status === "accounting" || loadShowsOnDispatchBoard(load.status),
+    ),
   );
   const assignableTrucks = listAssignableTrucks();
   const assignableTrailers = listAssignableTrailers();
@@ -83,6 +91,18 @@ export default async function BoardPage({
       ) : null}
     </BoardFilterProvider>
     </PageOverlayHost>
+  );
+}
+
+function BoardWhenCell({ start, end }: { start: string; end: string }) {
+  const { date, time } = formatBoardDateTime(start);
+  return (
+    <td className="board-when-cell" title={`to ${formatDateTime(end)}`}>
+      <div className="board-when">
+        <div className="board-when-date">{date}</div>
+        {time ? <div className="board-when-time">{time}</div> : null}
+      </div>
+    </td>
   );
 }
 
@@ -133,8 +153,8 @@ async function BoardLiveSection({
                 <tr>
                   <th className="board-load-cell">Load</th>
                   <th>Status</th>
-                  <th>Pickup</th>
-                  <th>Delivery</th>
+                  <th className="board-when-cell">Pickup</th>
+                  <th className="board-when-cell">Delivery</th>
                   <th className="board-unit-cell">Unit</th>
                   <th className="board-place-cell">Tractor</th>
                   <th className="board-place-cell">Trailer</th>
@@ -193,12 +213,8 @@ async function BoardLiveSection({
                     <td>
                       <LoadStatusBadge status={load.status} />
                     </td>
-                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.pickup_end)}`}>
-                      {formatDateTime(load.pickup_start)}
-                    </td>
-                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.delivery_end)}`}>
-                      {formatDateTime(load.delivery_start)}
-                    </td>
+                    <BoardWhenCell start={load.pickup_start} end={load.pickup_end} />
+                    <BoardWhenCell start={load.delivery_start} end={load.delivery_end} />
                     <td
                       className="board-unit-cell leading-tight text-xs"
                       title={[
