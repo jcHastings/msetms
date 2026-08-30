@@ -10117,6 +10117,15 @@ Continuous reefer. Two load locks.
 
   const settings = await import("../lib/settings");
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Company Settings"));
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/alerts" && item.label === "Automated Alerting"),
+    ),
+  );
+  assert.equal(
+    settings.SETTINGS_SECTIONS.some((section) => /Business Center|Pro Plan|Find New Shippers/i.test(section.title)),
+    false,
+  );
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Users"));
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/users")),
