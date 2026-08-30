@@ -17,6 +17,7 @@ import {
   TIE_SHEET_SHIPPER_CITY,
   TIE_SHEET_SHIPPER_NAME,
   TIE_SHEET_SHIPPER_STATE,
+  tieSheetDraftDrops,
   type TieSheetDraft,
 } from "./tie-sheet-shared";
 
@@ -97,6 +98,9 @@ export function saveTieSheetDraft(
     throw new Error("The picture is missing pickup or delivery dates. Nothing was saved.");
   }
   const customerId = findOrCreateCustomer(draft.customer_name || TIE_SHEET_CUSTOMER);
+  const drops = tieSheetDraftDrops(draft);
+  if (!drops.length) throw new Error("The picture is missing a delivery. Nothing was saved.");
+  const lastDrop = drops[drops.length - 1];
   const shipperId = findOrCreateBookLocation({
     name: draft.pickup.name || TIE_SHEET_SHIPPER_NAME,
     city: draft.pickup.city || TIE_SHEET_SHIPPER_CITY,
@@ -104,18 +108,21 @@ export function saveTieSheetDraft(
     role: "shipper",
     schedule_type: "appointment",
   });
-  const consigneeId = findOrCreateBookLocation({
-    name: draft.drop.name,
-    city: draft.drop.city,
-    state: draft.drop.state,
-    role: "receiver",
-    schedule_type: draft.drop.schedule_type,
-  });
+  const dropLocationIds = drops.map((drop) =>
+    findOrCreateBookLocation({
+      name: drop.name,
+      city: drop.city,
+      state: drop.state,
+      role: "receiver",
+      schedule_type: drop.schedule_type,
+    }),
+  );
+  const consigneeId = dropLocationIds[dropLocationIds.length - 1] ?? null;
 
   const input: LoadInput = {
     customer_id: customerId,
     origin: draft.origin,
-    destination: draft.destination,
+    destination: draft.destination || `${lastDrop.city}, ${lastDrop.state}`,
     pickup_start: draft.pickup_start,
     pickup_end: draft.pickup_end || draft.pickup_start,
     delivery_start: draft.delivery_start,
@@ -161,25 +168,25 @@ export function saveTieSheetDraft(
     notes: "",
     schedule_type: "appointment",
   };
-  const drop: StopInput = {
+  const dropStops: StopInput[] = drops.map((drop, index) => ({
     kind: "delivery",
-    location_id: consigneeId,
-    name: draft.drop.name,
+    location_id: dropLocationIds[index],
+    name: drop.name,
     street: "",
-    city: draft.drop.city,
-    state: draft.drop.state,
+    city: drop.city,
+    state: drop.state,
     zip: "",
     phone: "",
-    window_start: draft.drop.window_start || draft.delivery_start,
-    window_end: draft.drop.window_end || draft.delivery_end || draft.delivery_start,
-    confirmation: draft.drop.confirmation,
-    cargo: draft.drop.cargo,
-    reference: draft.drop.reference,
-    instructions: draft.drop.notes,
-    notes: draft.drop.notes,
-    schedule_type: draft.drop.schedule_type,
-  };
-  replaceStops(id, [pickup, drop]);
+    window_start: drop.window_start || draft.delivery_start,
+    window_end: drop.window_end || drop.window_start || draft.delivery_end || draft.delivery_start,
+    confirmation: drop.confirmation,
+    cargo: drop.cargo,
+    reference: drop.reference,
+    instructions: drop.notes,
+    notes: drop.notes,
+    schedule_type: drop.schedule_type,
+  }));
+  replaceStops(id, [pickup, ...dropStops]);
 
   if (options.inboxId) {
     try {

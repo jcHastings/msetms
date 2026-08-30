@@ -33,6 +33,19 @@ Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty
 XK + TOTAL | | | | | | 37,152 |
 `;
 
+export const TIE_SHEET_FIXTURE_0824_4W = `0824-4W
+Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
+74865 | | Rolling Ranch | Ontario, CA | 8/28 | 8/30 | 16,379 | 250 | | FCFS 5am - 1pm
+74846 | | Heartland Kosher - Western Kosher | Los Angeles, CA | 8/28 | 8/30 | 6,636 | 165 | | FCFS 7am - 4pm
+7599 | Email | Western Kosher - Crossdock Deli | Los Angeles, CA | 8/28 | 8/30 | 90 | 10 | 1 pallet | FCFS 7am - 4pm
+7714 | Email | Western Kosher - Deli Crossdock | Los Angeles, CA | 8/28 | 8/30 | 120 | 10 | | FCFS 7am - 4pm
+7621 | Email | Western Kosher - Deli Crossdock | Los Angeles, CA | 8/28 | 8/30 | 100 | 10 | | FCFS 7am - 4pm
+7622 | Email | Western Kosher - Deli Crossdock | Los Angeles, CA | 8/28 | 8/30 | 194 | 15 | | FCFS 7am - 4pm
+74793 | 468128 | Zant | Los Angeles, CA | 8/28 | 8/31 | 16,110 | 313 | | 9am appt 8/31
+XK + TOTAL | | | | | | 39,629 |
+`;
+
+/** Same-receiver trucks (one drop each). 0824-4W is the mixed multi-drop fixture. */
 export const TIE_SHEET_FIXTURES = [
   { id: "0824-14M", text: TIE_SHEET_FIXTURE_0824_14M },
   { id: "0824-19E", text: TIE_SHEET_FIXTURE_0824_19E },

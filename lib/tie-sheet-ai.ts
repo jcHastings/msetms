@@ -32,6 +32,7 @@ Column order is locked: Control# | PO# | Deliver To | City, State | Ship date | 
 Blank row between trucks. Needs XK + TOTAL sits on the line immediately under the last order (no skipped row).
 Ignore Customer Pickup blocks and rows under stars (future-week parks). Those are not delivery trucks.
 Pickup date on the sheet = ship date. Delivery date = delv date. Deliver To is the receiver name.
+Extract every order row. Do not merge Deliver To names. The TMS groups drops: same customer and same dock share one drop; different customers or locations each get their own drop.
 APPT vs FCFS comes from the Appt column ("7:00 AM" is APPT; "FCFS 7am - 4pm" is FCFS window).
 If the picture shows more than one truck, extract only the most complete truck in view.
 Year for 8/28 style dates is 2026 when the year is not printed.

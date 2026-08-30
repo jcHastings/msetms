@@ -1,4 +1,4 @@
-/** Client-safe Tie Sheet mapping. Layout is locked from live snapshots — do not invent columns. */
+/** Client-safe Tie Sheet mapping. One load per truck. One drop per customer+dock. Do not invent columns. */
 
 export const TIE_SHEET_CUSTOMER = "M&S Loads";
 export const TIE_SHEET_SHIPPER_NAME = "Nebraska Cold Storage Inc";
@@ -34,6 +34,22 @@ export type TieSheetExtract = {
   total_qty: number | null;
 };
 
+export type TieSheetDrop = {
+  name: string;
+  city: string;
+  state: string;
+  schedule_type: "appointment" | "fcfs";
+  call_before: boolean;
+  window_start: string;
+  window_end: string;
+  order_numbers: string[];
+  po_numbers: string[];
+  confirmation: string;
+  reference: string;
+  notes: string;
+  cargo: string;
+};
+
 export type TieSheetDraft = {
   customer_name: string;
   tie_sheet_load_id: string;
@@ -58,21 +74,10 @@ export type TieSheetDraft = {
     window_start: string;
     window_end: string;
   };
-  drop: {
-    name: string;
-    city: string;
-    state: string;
-    schedule_type: "appointment" | "fcfs";
-    call_before: boolean;
-    window_start: string;
-    window_end: string;
-    order_numbers: string[];
-    po_numbers: string[];
-    confirmation: string;
-    reference: string;
-    notes: string;
-    cargo: string;
-  };
+  /** First drop. Same-receiver trucks have only this one. */
+  drop: TieSheetDrop;
+  /** One drop per customer + location/dock. Same dock shares a drop. */
+  drops: TieSheetDrop[];
 };
 
 const LOAD_ID_RE = /\b(\d{3,4}-\d{1,2}[A-Za-z])\b/;
@@ -198,6 +203,136 @@ function firstFilled(values: Array<string | null | undefined>): string {
   return "";
 }
 
+const GENERIC_CUSTOMER_TOKENS = new Set([
+  "kosher",
+  "deli",
+  "crossdock",
+  "cross",
+  "dock",
+  "warehouse",
+  "foods",
+  "food",
+  "inc",
+  "llc",
+  "co",
+  "company",
+  "the",
+  "and",
+  "of",
+]);
+
+function nameTokens(name: string): string[] {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function sortedNameKey(name: string): string {
+  return nameTokens(name).slice().sort().join(" ");
+}
+
+function customerCoreTokens(name: string): string[] {
+  return nameTokens(name).filter((token) => token.length >= 4 && !GENERIC_CUSTOMER_TOKENS.has(token));
+}
+
+function placeKey(city: string, state: string): string {
+  return `${city.trim().toLowerCase()}|${state.trim().toUpperCase()}`;
+}
+
+function orderPlace(order: TieSheetOrder): { city: string; state: string } {
+  const split = splitCityState([order.city, order.state].filter(Boolean).join(", "));
+  return {
+    city: split.city || order.city.trim(),
+    state: (split.state || order.state.trim()).toUpperCase(),
+  };
+}
+
+/** Same Deliver To wording (including Deli Crossdock / Crossdock Deli) at the same city. */
+export function tieSheetOrderDockKey(order: TieSheetOrder): string {
+  const place = orderPlace(order);
+  return `${sortedNameKey(order.deliver_to)}|${placeKey(place.city, place.state)}`;
+}
+
+/**
+ * Combine orders onto one drop only when they share a customer and a location/dock.
+ * Word-order variants of the same Deliver To stay together. Different customers
+ * in the same city (Zant vs Western Kosher) stay separate. Heartland/Western Kosher
+ * rows in the same city share a drop.
+ */
+export function groupTieSheetOrdersByDock(orders: TieSheetOrder[]): TieSheetOrder[][] {
+  const groups: Array<{
+    dockKey: string;
+    place: string;
+    core: Set<string>;
+    orders: TieSheetOrder[];
+  }> = [];
+  for (const order of orders) {
+    const place = orderPlace(order);
+    const placeId = placeKey(place.city, place.state);
+    const dockKey = tieSheetOrderDockKey(order);
+    const core = new Set(customerCoreTokens(order.deliver_to));
+    const exact = groups.find((group) => group.dockKey === dockKey);
+    const family =
+      exact ??
+      groups.find((group) => {
+        if (group.place !== placeId) return false;
+        if (!core.size || !group.core.size) return false;
+        for (const token of core) {
+          if (group.core.has(token)) return true;
+        }
+        return false;
+      });
+    if (family) {
+      family.orders.push(order);
+      for (const token of core) family.core.add(token);
+    } else {
+      groups.push({ dockKey, place: placeId, core, orders: [order] });
+    }
+  }
+  return groups.map((group) => group.orders);
+}
+
+function dropFromOrders(group: TieSheetOrder[]): TieSheetDrop {
+  const first = group[0] ?? emptyTieSheetOrder();
+  const receiver = firstFilled(group.map((order) => order.deliver_to)) || first.deliver_to;
+  const place = orderPlace(first);
+  const city = firstFilled(group.map((order) => orderPlace(order).city)) || place.city;
+  const state = (firstFilled(group.map((order) => orderPlace(order).state)) || place.state).toUpperCase();
+  const delvDate = parseTieSheetDate(firstFilled(group.map((order) => order.delv_date)));
+  const appt = parseTieSheetAppt(firstFilled(group.map((order) => order.appts)), delvDate);
+  const orderNumbers = uniqueNonEmpty(group.map((order) => order.control));
+  const poNumbers = uniqueNonEmpty(group.map((order) => order.po));
+  return {
+    name: receiver,
+    city,
+    state,
+    schedule_type: appt.schedule_type,
+    call_before: true,
+    window_start: appt.window_start,
+    window_end: appt.window_end || appt.window_start,
+    order_numbers: orderNumbers,
+    po_numbers: poNumbers,
+    confirmation: orderNumbers.join(", "),
+    reference: poNumbers.join(", "),
+    notes: group.map(formatTieSheetOrderLine).filter(Boolean).join("\n"),
+    cargo: group
+      .map((order) => {
+        const qty = order.qty != null ? String(order.qty) : order.qty_label;
+        return [order.control, qty].filter(Boolean).join(" ");
+      })
+      .filter(Boolean)
+      .join("; "),
+  };
+}
+
+export function tieSheetDraftDrops(draft: Pick<TieSheetDraft, "drops" | "drop">): TieSheetDrop[] {
+  if (Array.isArray(draft.drops) && draft.drops.length) return draft.drops;
+  return draft.drop ? [draft.drop] : [];
+}
+
 function uniqueNonEmpty(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -223,20 +358,13 @@ export function formatTieSheetOrderLine(order: TieSheetOrder): string {
 
 export function draftFromTieSheetExtract(extract: TieSheetExtract): TieSheetDraft {
   const orders = (extract.orders ?? []).filter((order) => order.control.trim() || order.po.trim());
-  const first = orders[0] ?? emptyTieSheetOrder();
-  const receiver = firstFilled(orders.map((order) => order.deliver_to)) || first.deliver_to;
-  const place = splitCityState(
-    firstFilled(orders.map((order) => [order.city, order.state].filter(Boolean).join(", "))) ||
-      `${first.city}, ${first.state}`,
-  );
-  const city = place.city || first.city.trim();
-  const state = (place.state || first.state.trim()).toUpperCase();
+  const groups = groupTieSheetOrdersByDock(orders);
+  const drops = groups.map(dropFromOrders);
+  const firstDrop = drops[0] ?? dropFromOrders([emptyTieSheetOrder()]);
+  const lastDrop = drops[drops.length - 1] ?? firstDrop;
   const shipDate = parseTieSheetDate(firstFilled(orders.map((order) => order.ship_date)));
-  const delvDate = parseTieSheetDate(firstFilled(orders.map((order) => order.delv_date)));
-  const appt = parseTieSheetAppt(firstFilled(orders.map((order) => order.appts)), delvDate);
   const pickupStart = shipDate ? atLocal(shipDate, 8, 0) : "";
-  const orderNumbers = uniqueNonEmpty(orders.map((order) => order.control));
-  const poNumbers = uniqueNonEmpty(orders.map((order) => order.po));
+  const poNumbers = uniqueNonEmpty(drops.flatMap((drop) => drop.po_numbers));
   const numericQty = orders.reduce((sum, order) => sum + (order.qty ?? 0), 0);
   const hasQty = orders.some((order) => order.qty != null);
   const orderWeight = orders.reduce((sum, order) => sum + (order.weight ?? 0), 0);
@@ -244,17 +372,18 @@ export function draftFromTieSheetExtract(extract: TieSheetExtract): TieSheetDraf
   const weight = extract.total_weight ?? (hasWeight ? orderWeight : null);
   const caseCount = extract.total_qty ?? (hasQty ? numericQty : null);
   const loadId = normalizeTieSheetLoadId(extract.load_id);
-  const orderNotes = orders.map(formatTieSheetOrderLine).filter(Boolean).join("\n");
+  const lastPlace =
+    lastDrop.city && lastDrop.state ? `${lastDrop.city}, ${lastDrop.state}` : lastDrop.city || lastDrop.name;
 
   return {
     customer_name: TIE_SHEET_CUSTOMER,
     tie_sheet_load_id: loadId,
     origin: `${TIE_SHEET_SHIPPER_CITY}, ${TIE_SHEET_SHIPPER_STATE}`,
-    destination: city && state ? `${city}, ${state}` : city || receiver,
+    destination: lastPlace,
     pickup_start: pickupStart,
     pickup_end: pickupStart,
-    delivery_start: appt.window_start,
-    delivery_end: appt.window_end || appt.window_start,
+    delivery_start: firstDrop.window_start,
+    delivery_end: lastDrop.window_end || lastDrop.window_start,
     weight,
     case_count: caseCount,
     po_number: poNumbers.join(", "),
@@ -270,42 +399,31 @@ export function draftFromTieSheetExtract(extract: TieSheetExtract): TieSheetDraf
       window_start: pickupStart,
       window_end: pickupStart,
     },
-    drop: {
-      name: receiver,
-      city,
-      state,
-      schedule_type: appt.schedule_type,
-      call_before: true,
-      window_start: appt.window_start,
-      window_end: appt.window_end || appt.window_start,
-      order_numbers: orderNumbers,
-      po_numbers: poNumbers,
-      confirmation: orderNumbers.join(", "),
-      reference: poNumbers.join(", "),
-      notes: orderNotes,
-      cargo: orders
-        .map((order) => {
-          const qty = order.qty != null ? String(order.qty) : order.qty_label;
-          return [order.control, qty].filter(Boolean).join(" ");
-        })
-        .filter(Boolean)
-        .join("; "),
-    },
+    drop: firstDrop,
+    drops,
   };
 }
 
 export function tieSheetDraftPreview(draft: TieSheetDraft): string {
   const qty = draft.case_count != null ? String(draft.case_count) : "—";
   const weight = draft.weight != null ? draft.weight.toLocaleString("en-US") : "—";
-  const when = draft.drop.schedule_type === "fcfs" ? "FCFS" : "APPT";
+  const drops = tieSheetDraftDrops(draft);
+  const dropLines = drops.map((drop, index) => {
+    const when = drop.schedule_type === "fcfs" ? "FCFS" : "APPT";
+    return [
+      `Drop ${index + 1}: ${drop.name}, ${drop.city}, ${drop.state} ${when}`,
+      `  Orders: ${drop.order_numbers.join(", ") || "—"}`,
+      `  POs: ${drop.po_numbers.join(", ") || "—"}`,
+      `  Delv ${formatPreviewDate(drop.window_start)}`,
+    ].join("\n");
+  });
   return [
     `Build load from Tie Sheet ${draft.tie_sheet_load_id || "snapshot"}`,
     `Customer: ${draft.customer_name}`,
     `Pickup: ${draft.pickup.name}, ${draft.pickup.city}, ${draft.pickup.state}`,
-    `Drop: ${draft.drop.name}, ${draft.drop.city}, ${draft.drop.state}`,
-    `Orders: ${draft.drop.order_numbers.join(", ") || "—"}`,
-    `POs: ${draft.drop.po_numbers.join(", ") || "—"}`,
-    `Ship ${formatPreviewDate(draft.pickup_start)} · Delv ${formatPreviewDate(draft.delivery_start)} ${when}`,
+    `${drops.length} drop${drops.length === 1 ? "" : "s"} (same customer+dock share a drop)`,
+    ...dropLines,
+    `Ship ${formatPreviewDate(draft.pickup_start)}`,
     `Qty ${qty} · Weight ${weight}`,
     "Equipment: Reefer / Continuous",
     "Confirm saves. Discard does not.",
@@ -462,8 +580,10 @@ export function decodeTieSheetDraft(raw: string): TieSheetDraft | null {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return null;
     const draft = parsed as TieSheetDraft;
-    if (!draft.customer_name || !draft.pickup || !draft.drop) return null;
-    return draft;
+    if (!draft.customer_name || !draft.pickup) return null;
+    const drops = tieSheetDraftDrops(draft);
+    if (!drops.length) return null;
+    return { ...draft, drop: drops[0], drops };
   } catch {
     return null;
   }

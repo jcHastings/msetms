@@ -70,7 +70,7 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
 
   if (/(tie.?sheet)/.test(lower)) {
     return {
-      reply: "Upload a picture of one Tie Sheet truck. I will draft one load with one drop. Confirm before save.",
+      reply: "Upload a picture of one Tie Sheet truck. I will draft one load. Same customer and dock share a drop. Different locations each get a drop. Confirm before save.",
       proposals: [],
     };
   }
