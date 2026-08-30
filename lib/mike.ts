@@ -14,6 +14,7 @@ import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, 
 import { getSamsaraFleet, isLiveSamsaraGps, resetSamsaraCache } from "./integrations/samsara";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "./mike-shared";
+import { mikePicturePrompt, type MikePictureInput } from "./mike-paste-shared";
 import { mikeWorkReply, proposeMikeWork } from "./mike-work";
 import {
   answerMikeReeferFromOrbcomm,
@@ -420,12 +421,51 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
   });
 }
 
+export type MikeAskPicture = {
+  buffer: Buffer;
+  mime: string;
+  name: string;
+};
+
+async function readPictureText(picture: MikeAskPicture): Promise<string> {
+  try {
+    const { extractDocumentText } = await import("./rate-con");
+    return await extractDocumentText(picture.buffer, picture.mime, picture.name);
+  } catch {
+    return "";
+  }
+}
+
+function toPictureInput(picture: MikeAskPicture, text: string): MikePictureInput {
+  return {
+    mime: picture.mime || "image/png",
+    name: picture.name || "pasted-picture.png",
+    base64: picture.buffer.toString("base64"),
+    text,
+  };
+}
+
+function openaiUserContent(prompt: string, picture: MikePictureInput | null) {
+  if (!picture) return prompt.slice(0, 2000);
+  return [
+    { type: "text" as const, text: prompt },
+    {
+      type: "image_url" as const,
+      image_url: { url: `data:${picture.mime};base64,${picture.base64}` },
+    },
+  ];
+}
+
 export async function askMike(
   question: string,
   history: MikeMessage[],
+  picture?: MikeAskPicture | null,
 ): Promise<{ configured: boolean; reply: string; proposals: MikeProposal[] }> {
   await loadRuntimeEnv();
-  const work = proposeMikeWork(question);
+  const ocr = picture ? await readPictureText(picture) : "";
+  const pictureInput = picture ? toPictureInput(picture, ocr) : null;
+  const prompt = mikePicturePrompt(question, pictureInput);
+  const work = proposeMikeWork(picture ? `${question}\n${ocr}`.trim() : question);
   if (isClosestCityQuestion(question)) {
     const truckRows = listTrucks();
     const tmsLocations = listLocations().slice(0, 120).map((location) => ({
@@ -493,7 +533,7 @@ export async function askMike(
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),
-      { role: "user", content: question.slice(0, 2000) },
+      { role: "user", content: openaiUserContent(prompt, pictureInput) },
     ],
   };
 

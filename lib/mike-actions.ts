@@ -2,6 +2,11 @@
 
 import { requireCapability, requireSignedInDispatcher } from "./dispatcher-session";
 import { askMike, readMikeHistory, writeMikeHistory } from "./mike";
+import {
+  isMikePictureName,
+  mikeHistoryLine,
+  MIKE_PICTURE_MAX_BYTES,
+} from "./mike-paste-shared";
 import type { MikeMessage, MikeProposal, MikeProposalKind } from "./mike-shared";
 import { applyMikeProposal } from "./mike-work";
 import { isOpenAiConfigured, loadRuntimeEnv } from "./env";
@@ -23,13 +28,32 @@ export async function askMikeAction(
   const configured = isOpenAiConfigured();
   const history = await readMikeHistory();
   const question = String(formData.get("question") ?? "").trim();
-  if (!question) {
-    return { ok: false, error: "Type a question for Mike.", messages: history, configured };
+  const uploaded = formData.get("picture");
+  const file = uploaded instanceof File && uploaded.size > 0 ? uploaded : null;
+  if (file && file.size > MIKE_PICTURE_MAX_BYTES) {
+    return { ok: false, error: "That picture is too large.", messages: history, configured };
+  }
+  if (file && !isMikePictureName(file.type, file.name)) {
+    return { ok: false, error: "Paste a picture.", messages: history, configured };
+  }
+  if (!question && !file) {
+    return { ok: false, error: "Type a question or paste a picture.", messages: history, configured };
   }
   try {
-    const result = await askMike(question, history);
+    const picture = file
+      ? {
+          buffer: Buffer.from(await file.arrayBuffer()),
+          mime: file.type || "image/png",
+          name: file.name || "pasted-picture.png",
+        }
+      : null;
+    const result = await askMike(question, history, picture);
     const messages: MikeMessage[] = (
-      [...history, { role: "user" as const, content: question }, { role: "assistant" as const, content: result.reply }]
+      [
+        ...history,
+        { role: "user" as const, content: mikeHistoryLine(question, Boolean(file)) },
+        { role: "assistant" as const, content: result.reply },
+      ]
     ).slice(-8);
     await writeMikeHistory(messages);
     return { ok: true, messages, configured: result.configured, proposals: result.proposals };
