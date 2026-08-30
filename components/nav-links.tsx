@@ -45,7 +45,7 @@ const SECTIONS: Array<{
     items: [
       { href: "/accounting", label: "AR/AP Report", short: "AR/AP", icon: "books" },
       { href: "/accounting/invoices", label: "Invoices/Bills", short: "Invoices/Bills", icon: "ar" },
-      { href: "/accounting/pay", label: "Driver Pay", short: "Driver Pay", icon: "pay" },
+      { href: "/accounting/pay", label: "Driver Pay Mgt", short: "Driver Pay Mgt", icon: "pay" },
       { href: "/accounting/commissions", label: "Commissions", short: "Comm", icon: "comm" },
       { href: "/accounting/quickbooks", label: "QuickBooks", short: "QBO", icon: "qbo" },
     ],

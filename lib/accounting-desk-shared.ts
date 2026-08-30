@@ -29,6 +29,11 @@ export function parseAccountingHubTab(value: string | null | undefined): Account
   return match?.value ?? "invoices";
 }
 
+export function hrefForAccountingHubTab(tab: AccountingHubTab): string {
+  if (tab === "pay") return "/accounting/pay";
+  return `/accounting/invoices?tab=${tab}`;
+}
+
 export function parseQboMapTab(value: string | null | undefined): QboMapTab {
   const match = QBO_MAP_TABS.find((tab) => tab.value === value);
   return match?.value ?? "connection";

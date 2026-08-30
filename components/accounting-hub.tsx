@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ACCOUNTING_HUB_TABS, hubTabClass, parseAccountingHubTab } from "@/lib/accounting-desk-shared";
+import {
+  ACCOUNTING_HUB_TABS,
+  hrefForAccountingHubTab,
+  hubTabClass,
+  parseAccountingHubTab,
+} from "@/lib/accounting-desk-shared";
 import {
   archiveAccountingLoadFormAction,
   closeDriverPayPeriodAction,
@@ -96,7 +101,7 @@ export function AccountingHub({
         {ACCOUNTING_HUB_TABS.map((item) => (
           <Link
             key={item.value}
-            href={`/accounting/invoices?tab=${item.value}`}
+            href={hrefForAccountingHubTab(item.value)}
             className={hubTabClass(current === item.value)}
           >
             <span className="hub-tab-label">{item.label}</span>
@@ -507,8 +512,7 @@ function PayTab({ from, to, driver }: { from: string; to: string; driver: string
   return (
     <div>
       <div className="card mb-4 flex flex-wrap items-end gap-3 px-4 py-3">
-        <form className="flex flex-wrap items-end gap-3" method="get">
-          <input type="hidden" name="tab" value="pay" />
+        <form className="flex flex-wrap items-end gap-3" method="get" action="/accounting/pay">
           <div className="field">
             <label htmlFor="from">Period start</label>
             <input id="from" name="from" type="date" defaultValue={from} />
