@@ -79,7 +79,7 @@ export function RateConImport({
           </div>
         ) : null}
         {serverError ? <FormBanner result={serverError} /> : null}
-        {state && "warning" in state && state.warning ? (
+        {!parsed && state && "warning" in state && state.warning ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {state.warning}
           </div>
@@ -167,7 +167,9 @@ function RateConImportedLoad({
   return (
     <div data-rate-con-draft="">
       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-        Review the AI draft, fix anything wrong, then confirm. The load is not saved until you confirm.
+        {parsed.reader === "ai"
+          ? "Review the AI draft, fix anything wrong, then confirm. The load is not saved until you confirm."
+          : "Review the guessed fields, fix anything wrong, then confirm. The load is not saved until you confirm."}{" "}
         The original file stays on the load as a rate confirmation attachment.
         {fileName ? <span className="mt-1 block font-mono text-xs">{fileName}</span> : null}
       </div>

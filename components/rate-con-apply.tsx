@@ -75,7 +75,7 @@ export function RateConApply({
           </div>
         ) : null}
         {serverError ? <FormBanner result={serverError} /> : null}
-        {state && "warning" in state && state.warning ? (
+        {!parsed && state && "warning" in state && state.warning ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {state.warning}
           </div>
