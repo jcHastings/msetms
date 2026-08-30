@@ -314,7 +314,7 @@ function parseAscendWeight(text: string, loadNumber: string): number | null {
 function parseAscendCustomer(text: string): string {
   const block = captureBlockRaw(
     text,
-    /customer(?:\s+information)?/i,
+    /(?:^|\n)\s*customer(?:\s+information)?\s*(?:\n|:)/i,
     /primary\s+contact|stops\s*\/\s*actions|notes and references|pay items|ship from|ship to|pickup|delivery|carrier\b|bill of lading/i,
   );
   const lines = block
@@ -325,6 +325,7 @@ function parseAscendCustomer(text: string): string {
   for (const line of lines) {
     if (isOwnPaperworkName(line)) continue;
     if (/^\d/.test(line)) continue;
+    if (/^(or|and|the|note|not|this|responsibility)\b/i.test(line)) continue;
     if (/^[A-Za-z .'-]+,\s*[A-Z]{2}\b/.test(line)) continue;
     if (line.length < 3 || line.length > 80) continue;
     return line;

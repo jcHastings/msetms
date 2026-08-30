@@ -3231,7 +3231,7 @@ async function main() {
   assert.ok(listFleetDocuments("driver", otherDriverId).some((file) => file.kind === "cdl"));
   assert.ok(listFleetDocuments("truck", truckId).some((file) => file.kind === "registration"));
 
-  const { parseRateConText } = await import("../lib/rate-con");
+  const { parseRateConText, extractDocumentText } = await import("../lib/rate-con");
   const parsed = parseRateConText(
     `RATE CONFIRMATION
 Customer: Delta Cold Storage
@@ -3489,6 +3489,24 @@ Continuous reefer.
 `,
   );
   assert.equal(agreedAmount.rate, 5869, "printed agreed amount is the customer rate");
+
+  const real52309Text = await extractDocumentText(
+    fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/Load_Confirmation_52309.pdf")),
+    "application/pdf",
+    "Load_Confirmation_52309_20260830013800.pdf",
+  );
+  const real52309 = parseRateConText(
+    real52309Text,
+    queries.listCustomers(),
+    "Load_Confirmation_52309_20260830013800.pdf",
+  );
+  assert.equal(real52309.rate, 5869, "Ascend 52309 Flat Rate total is the customer rate");
+  assert.equal(real52309.weight, 21000);
+  assert.match(real52309.commodity, /FRESH BEEF/i);
+  assert.equal(real52309.reference_number, "52309");
+  assert.equal(real52309.customer_name, "", "carrier packet has no Customer Information block");
+  assert.match(real52309.shipper.name, /Nebraska Cold Storage/i);
+  assert.match(real52309.origin, /Hastings/i);
 
   const threeStopAscend = parseRateConText(
     `
