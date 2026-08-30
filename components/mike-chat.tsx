@@ -1,8 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { askMikeAction, confirmMikeProposalAction } from "@/lib/mike-actions";
-import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "@/lib/mike-shared";
+import {
+  imageFileFromDataTransfer,
+  MIKE_MISSING_KEY_MESSAGE,
+  namedTieSheetImage,
+  type MikeMessage,
+  type MikeProposal,
+} from "@/lib/mike-shared";
 
 export function MikeChat({
   configured,
@@ -16,9 +22,30 @@ export function MikeChat({
   const [confirmNotice, setConfirmNotice] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [discarded, setDiscarded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messages = state?.messages ?? initialMessages;
   const proposals = discarded ? [] : state?.proposals ?? [];
   const ready = state?.configured ?? liveConfigured ?? configured;
+
+  const receiveImage = useCallback((file: File) => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    const named = namedTieSheetImage(file);
+    const transfer = new DataTransfer();
+    transfer.items.add(named);
+    input.files = transfer.files;
+    setFileName(named.name);
+  }, []);
+
+  const takeImageFromTransfer = useCallback(
+    (data: DataTransfer | null | undefined) => {
+      const image = imageFileFromDataTransfer(data);
+      if (!image) return false;
+      receiveImage(image);
+      return true;
+    },
+    [receiveImage],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +68,15 @@ export function MikeChat({
     setDiscarded(false);
   }, [state]);
 
+  useEffect(() => {
+    const onWindowPaste = (event: ClipboardEvent) => {
+      if (!takeImageFromTransfer(event.clipboardData)) return;
+      event.preventDefault();
+    };
+    document.addEventListener("paste", onWindowPaste, true);
+    return () => document.removeEventListener("paste", onWindowPaste, true);
+  }, [takeImageFromTransfer]);
+
   return (
     <aside className="card flex h-full min-h-[24rem] w-full flex-col">
       <header className="border-b border-slate-200 px-4 py-3">
@@ -55,8 +91,8 @@ export function MikeChat({
         ) : null}
         {messages.length === 0 && ready ? (
           <p className="text-slate-500">
-            Ask who is empty, draft a detention email, start a load from a rate-con, or upload a Tie Sheet truck
-            picture. Confirm before anything saves.
+            Ask who is empty, draft a detention email, start a load from a rate-con, or paste or upload a Tie Sheet
+            truck picture. Confirm before anything saves.
           </p>
         ) : null}
         {messages.map((message, index) => (
@@ -90,7 +126,20 @@ export function MikeChat({
           <p className="text-sm text-rose-700">{state.error}</p>
         ) : null}
       </div>
-      <form action={formAction} className="border-t border-slate-200 p-3">
+      <form
+        action={formAction}
+        className="border-t border-slate-200 p-3"
+        data-mike-composer=""
+        onPaste={(event) => {
+          if (takeImageFromTransfer(event.clipboardData)) event.preventDefault();
+        }}
+        onDragOver={(event) => {
+          if (imageFileFromDataTransfer(event.dataTransfer)) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          if (takeImageFromTransfer(event.dataTransfer)) event.preventDefault();
+        }}
+      >
         <label htmlFor="mike-question" className="sr-only">
           Ask Mike
         </label>
@@ -98,13 +147,14 @@ export function MikeChat({
           id="mike-question"
           name="question"
           rows={2}
-          placeholder="Ask Mike, or upload a Tie Sheet picture"
+          placeholder="Ask Mike, or paste a Tie Sheet picture"
           className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <label className="mt-2 block text-xs font-medium text-slate-600" htmlFor="mike-tie-sheet-image">
           Tie Sheet picture
         </label>
         <input
+          ref={fileInputRef}
           id="mike-tie-sheet-image"
           name="tie_sheet_image"
           type="file"

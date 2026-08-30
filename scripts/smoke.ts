@@ -1636,8 +1636,31 @@ async function main() {
   assert.match(mikeChatUi, /data-tie-sheet-discard/);
   assert.match(mikeChatUi, /build_tie_sheet/);
   assert.match(mikeChatUi, /Confirm saves the load\. Discard does not/);
+  assert.match(mikeChatUi, /imageFileFromDataTransfer/);
+  assert.match(mikeChatUi, /addEventListener\("paste"/);
+  assert.match(mikeChatUi, /data-mike-composer/);
   assert.doesNotMatch(mikeChatUi, /paste the truck|markdown paste|From Tie Sheet/);
   assert.doesNotMatch(mikeChatUi, /Grok Bot|Google Sheet|file watcher|shared folder/);
+  const { imageFileFromDataTransfer, namedTieSheetImage } = await import("../lib/mike-shared");
+  const phoneSnap = new File([Uint8Array.from([1, 2, 3, 4])], "IMG_2041.PNG", { type: "image/png" });
+  assert.equal(imageFileFromDataTransfer({ files: [phoneSnap], items: [] })?.name, "IMG_2041.PNG");
+  assert.equal(
+    imageFileFromDataTransfer({
+      files: [],
+      items: [{ kind: "file", type: "image/jpeg", getAsFile: () => phoneSnap }],
+    })?.name,
+    "IMG_2041.PNG",
+  );
+  assert.equal(
+    imageFileFromDataTransfer({
+      files: [],
+      items: [{ kind: "string", type: "text/plain", getAsFile: () => null }],
+    }),
+    null,
+  );
+  const clipboardBlob = new File([Uint8Array.from([9, 8, 7])], "", { type: "image/png" });
+  assert.equal(namedTieSheetImage(clipboardBlob).name, "tie-sheet.png");
+  assert.equal(namedTieSheetImage(clipboardBlob).type, "image/png");
   const newLoadNoTieSheetPaste = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
   assert.doesNotMatch(newLoadNoTieSheetPaste, /From Tie Sheet|tie.sheet paste|paste a Tie Sheet/);
   const tieSheetAiSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8");
