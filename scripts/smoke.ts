@@ -5637,11 +5637,11 @@ Continuous reefer. Two load locks.
   assert.equal((await PDFDocument.load(bolBuf)).getPageCount(), 1, "BOL must be one page");
   const bolText = String((await extractText(new Uint8Array(bolBuf), { mergePages: true })).text ?? "");
   assert.match(bolText, /Bill Of Lading/);
-  assert.match(bolText, /Dedicated trailer number|Seal numbers and piece counts/);
+  assert.match(bolText, /Smoke BOL terms stay on the form/);
+  assert.match(bolText, /Smoke BOL footer/);
   assert.doesNotMatch(bolText, /Bill Of LadingLoad Number/);
   assert.doesNotMatch(bolText, /Smoke Bill of Lading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/bol.ts"), "utf8"), /text\("Bill Of Lading", LEFT, 24/);
-  assert.doesNotMatch(bolText, /Smoke BOL footer|Smoke BOL terms/);
   assert.match(bolText, /# of pieces|of pieces/);
   assert.match(bolText, /Description of the goods/);
   assert.match(bolText, /Weight in LBS/);
