@@ -6,16 +6,19 @@ import { useEffect, useState } from "react";
 import { deskNavSectionForPath, isDeskNavActive, nextDeskNavOpenSection } from "@/lib/desk-nav-shared";
 import { canSeeNavHref } from "@/lib/settings-shared";
 
-const SECTIONS: Array<{
-  title: string;
-  items: Array<{ href: string; label: string; short: string; icon: string }>;
-}> = [
+type NavItem = { href: string; label: string; short: string; icon: string };
+type NavEntry =
+  | { kind: "link"; item: NavItem }
+  | { kind: "section"; title: string; items: NavItem[] };
+
+const NAV: NavEntry[] = [
+  { kind: "link", item: { href: "/", label: "Dashboard", short: "Dashboard", icon: "home" } },
+  { kind: "link", item: { href: "/search", label: "Search", short: "Search", icon: "search" } },
   {
     title: "Dispatch",
+    kind: "section",
     items: [
-      { href: "/", label: "Dashboard", short: "Home", icon: "home" },
       { href: "/board", label: "Dispatch board", short: "Board", icon: "board" },
-      { href: "/search", label: "Search", short: "Search", icon: "search" },
       { href: "/loads/new", label: "New load", short: "+ New", icon: "new" },
       { href: "/loads/import-sheet", label: "Import loads", short: "Import", icon: "import" },
       { href: "/loads/templates", label: "Templates", short: "Templates", icon: "templates" },
@@ -24,6 +27,7 @@ const SECTIONS: Array<{
     ],
   },
   {
+    kind: "section",
     title: "Fleet",
     items: [
       { href: "/fleet", label: "Fleet", short: "Fleet", icon: "fleet" },
@@ -39,10 +43,12 @@ const SECTIONS: Array<{
     ],
   },
   {
+    kind: "section",
     title: "Customers",
     items: [{ href: "/customers", label: "Customers", short: "Customers", icon: "customers" }],
   },
   {
+    kind: "section",
     title: "Accounting",
     items: [
       { href: "/accounting", label: "AR/AP Report", short: "AR/AP", icon: "books" },
@@ -53,25 +59,49 @@ const SECTIONS: Array<{
     ],
   },
   {
-    title: "More",
+    kind: "section",
+    title: "Reports",
     items: [
-      { href: "/users", label: "Users", short: "Users", icon: "users" },
-      { href: "/claims", label: "Claims", short: "Claims", icon: "claims" },
       { href: "/reports", label: "Reports", short: "Reports", icon: "reports" },
       { href: "/reports/manage", label: "Manage reports", short: "Manage", icon: "manage" },
       { href: "/reports/statistics", label: "Statistics", short: "Stats", icon: "stats" },
+      { href: "/claims", label: "Claims", short: "Claims", icon: "claims" },
+      { href: "/users", label: "Users", short: "Users", icon: "users" },
       { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
       { href: "/driver/login", label: "Driver app", short: "Driver", icon: "driver" },
     ],
   },
 ];
 
+function visibleNav(role: string): NavEntry[] {
+  return NAV.map((entry) => {
+    if (entry.kind === "link") return entry;
+    return { ...entry, items: entry.items.filter((item) => canSeeNavHref(role, item.href)) };
+  }).filter((entry) => (entry.kind === "link" ? canSeeNavHref(role, entry.item.href) : entry.items.length > 0));
+}
+
+function NavItemLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = isDeskNavActive(item.href, pathname);
+  return (
+    <Link
+      href={item.href}
+      title={item.label}
+      data-nav-href={item.href}
+      prefetch={item.href === "/claims" ? false : undefined}
+      className={`desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
+        active ? "desk-nav-link-active" : ""
+      }`}
+    >
+      <NavIcon name={item.icon} />
+      <span className="text-xs font-semibold leading-tight">{item.short}</span>
+    </Link>
+  );
+}
+
 export function NavLinks({ role }: { role: string }) {
   const pathname = usePathname();
-  const sections = SECTIONS.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => canSeeNavHref(role, item.href)),
-  })).filter((section) => section.items.length > 0);
+  const entries = visibleNav(role);
+  const sections = entries.filter((entry): entry is Extract<NavEntry, { kind: "section" }> => entry.kind === "section");
   const currentSection = deskNavSectionForPath(pathname, sections);
   const [openSection, setOpenSection] = useState<string | null>(currentSection);
 
@@ -81,43 +111,33 @@ export function NavLinks({ role }: { role: string }) {
 
   return (
     <nav className="desk-nav-icons flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3">
-      {sections.map((section) => {
-        const open = openSection === section.title;
-        const sectionActive = currentSection === section.title;
+      {entries.map((entry) => {
+        if (entry.kind === "link") {
+          if (!canSeeNavHref(role, entry.item.href)) return null;
+          return <NavItemLink key={entry.item.href} item={entry.item} pathname={pathname} />;
+        }
+        const open = openSection === entry.title;
+        const sectionActive = currentSection === entry.title;
         return (
-          <div key={section.title} data-nav-section={section.title} data-nav-open={open ? "true" : "false"}>
+          <div key={entry.title} data-nav-section={entry.title} data-nav-open={open ? "true" : "false"}>
             <button
               type="button"
-              className={`desk-nav-parent desk-nav-section ${sectionActive ? "desk-nav-parent-active" : ""}`}
+              className={`desk-nav-parent desk-nav-section ${sectionActive ? "desk-nav-parent-active" : ""} ${
+                open ? "desk-nav-parent-open" : ""
+              }`}
               aria-expanded={open}
-              onClick={() => setOpenSection((current) => nextDeskNavOpenSection(current, section.title))}
+              onClick={() => setOpenSection((current) => nextDeskNavOpenSection(current, entry.title))}
             >
-              <span>{section.title}</span>
+              <span>{entry.title}</span>
               <span className="desk-nav-chevron" aria-hidden>
                 {open ? "▾" : "▸"}
               </span>
             </button>
             {open ? (
-              <div className="flex flex-col gap-0.5 pb-1">
-                {section.items.map((item) => {
-                  const active = isDeskNavActive(item.href, pathname);
-                  const className = `desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
-                    active ? "desk-nav-link-active" : ""
-                  }`;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={item.label}
-                      data-nav-href={item.href}
-                      prefetch={item.href === "/claims" ? false : undefined}
-                      className={className}
-                    >
-                      <NavIcon name={item.icon} />
-                      <span className="text-xs font-semibold leading-tight">{item.short}</span>
-                    </Link>
-                  );
-                })}
+              <div className="desk-nav-children flex flex-col gap-0.5 pb-1">
+                {entry.items.map((item) => (
+                  <NavItemLink key={item.href} item={item} pathname={pathname} />
+                ))}
               </div>
             ) : null}
           </div>

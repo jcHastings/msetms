@@ -61,8 +61,19 @@ async function main() {
   assert.equal(nextDeskNavOpenSection(null, "Accounting"), "Accounting");
   assert.equal(nextDeskNavOpenSection("Accounting", "Fleet"), "Fleet");
   assert.equal(nextDeskNavOpenSection("Accounting", "Accounting"), null);
+  assert.equal(
+    deskNavSectionForPath("/reports/manage", [
+      { title: "Fleet", items: [{ href: "/fleet" }] },
+      { title: "Reports", items: [{ href: "/reports" }, { href: "/reports/manage" }] },
+    ]),
+    "Reports",
+  );
   assert.match(navSource, /nextDeskNavOpenSection/);
   assert.match(navSource, /aria-expanded/);
+  assert.match(navSource, /kind: "link"/);
+  assert.match(navSource, /title: "Reports"/);
+  assert.match(navSource, /\{open \?/);
+  assert.doesNotMatch(navSource, /LTL Orders|Find New Shippers|EDI \/ Tenders|AscendAI Load/);
   const claimsPage = fs.readFileSync(path.join(process.cwd(), "app/claims/page.tsx"), "utf8");
   assert.match(claimsPage, /data-claims-desk/);
   assert.match(claimsPage, /Claims \/ OS&D/);
