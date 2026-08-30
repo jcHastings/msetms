@@ -7459,7 +7459,13 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Average paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekPaidStats/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /fuel_receipt/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-fuel-receipt.tsx"), "utf8"), /fuel_receipt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-upload.tsx"), "utf8"), /fuel_receipt/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-upload.tsx"), "utf8"), /Document type/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-upload.tsx"), "utf8"), /data-driver-upload/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/driver-upload.tsx"), "utf8"),
+    /Or upload a file you already have|Take a document photo/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /REPORT_EXPORT_COLUMNS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/manage-report-form.tsx"), "utf8"), /data-column-chooser/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /buildStatistics/);
@@ -10979,6 +10985,8 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(driverLoadPage, /formatMoney\(load\.rate\)/);
   assert.match(driverLoadPage, /id="fuel"/);
   assert.match(driverLoadPage, /id="upload"/);
+  assert.doesNotMatch(driverLoadPage, /DriverFuelReceipt|DriverCameraPdf/);
+  assert.match(driverLoadPage, /DriverLoadActions/);
   assert.match(driverLoadPage, /id="bol"/);
   assert.match(driverLoadPage, /packet=internal/);
   assert.match(driverLoadPage, /driver-sheet-value/);
@@ -11961,15 +11969,19 @@ Continuous reefer. Two load locks.
   );
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /stop\.kind !== "pickup"/);
 
-  const { isDriverUploadKind, DRIVER_UPLOAD_KINDS } = await import("../lib/driver-docs");
+  const { isDriverUploadKind, DRIVER_UPLOAD_KINDS, labelForDriverUploadKind } = await import("../lib/driver-docs");
   assert.equal(DRIVER_UPLOAD_KINDS.some((item) => item.value === "other"), false);
   assert.equal(isDriverUploadKind("other"), false);
   assert.equal(isDriverUploadKind("pod"), true);
   assert.equal(isDriverUploadKind("fuel_receipt"), true);
+  assert.equal(isDriverUploadKind("carrier_invoice"), true);
+  assert.equal(labelForDriverUploadKind("carrier_invoice"), "Billing");
+  assert.equal(labelForDriverUploadKind("fuel_receipt"), "Fuel receipt");
   const driverActionsSource = fs.readFileSync(path.join(process.cwd(), "components/driver-load-actions.tsx"), "utf8");
   assert.match(driverActionsSource, /Check In/);
   assert.match(driverActionsSource, /Check Out/);
-  assert.doesNotMatch(driverActionsSource, /Unclassified|ATTACHMENT_KINDS/);
+  assert.match(driverActionsSource, /DriverUpload/);
+  assert.doesNotMatch(driverActionsSource, /Unclassified|ATTACHMENT_KINDS|DriverCameraPdf|DriverFuelReceipt|Or upload a file/);
 
   const { driverStopButtons } = await import("../lib/driver-stops");
   const checkButtons = driverStopButtons([

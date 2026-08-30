@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DriverFuelReceipt } from "@/components/driver-fuel-receipt";
 import { DriverLoadActions } from "@/components/driver-load-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
@@ -183,6 +182,9 @@ export default async function DriverLoadPage({
       ) : null}
 
       <div id="upload">
+        <span id="fuel" className="sr-only">
+          Fuel
+        </span>
         <DriverLoadActions
           loadId={load.id}
           loadNumber={load.load_number}
@@ -190,9 +192,6 @@ export default async function DriverLoadPage({
           closed={isClosedStatus(load.status)}
           stops={stops}
         />
-      </div>
-      <div id="fuel">
-        <DriverFuelReceipt loadId={load.id} />
       </div>
 
       <DriverDocClassify files={attachments} />

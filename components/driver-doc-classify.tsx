@@ -16,7 +16,7 @@ export function DriverDocClassify({
     <section className="mt-5 rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10">
       <h2 className="text-base font-semibold text-white">Files on this load</h2>
       {files.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400">None yet. Upload first, then pick a type.</p>
+        <p className="mt-2 text-sm text-slate-400">None yet.</p>
       ) : (
         <ul className="mt-3 space-y-3">
           {files.map((file) => (

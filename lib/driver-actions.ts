@@ -112,10 +112,10 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
       throw new Error("Choose a photo or PDF.");
     }
     const kindRaw = String(formData.get("kind") ?? "").trim();
-    const kind = isDriverUploadKind(kindRaw) ? kindRaw : "unclassified";
-    if (!ATTACHMENT_KINDS.some((item) => item.value === kind)) {
+    if (!isDriverUploadKind(kindRaw) || !ATTACHMENT_KINDS.some((item) => item.value === kindRaw)) {
       throw new Error("Pick a document type.");
     }
+    const kind = kindRaw;
     const { addAttachment, fileToBuffer } = await import("./files");
     const attachment = await addAttachment({
       loadId,
@@ -152,7 +152,7 @@ export async function driverClassifyAction(formData: FormData): Promise<ActionRe
       if (!attachmentId) throw new Error("File is missing.");
       const kind = String(formData.get("kind") ?? "");
       if (!isDriverUploadKind(kind)) {
-        throw new Error("Classify as Receipt, Scale Ticket, Bill of Lading, or Proof of Delivery.");
+        throw new Error("Pick a document type.");
       }
       const { getAttachment, updateAttachmentKind } = await import("./files");
       const file = getAttachment(attachmentId);
