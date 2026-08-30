@@ -79,7 +79,7 @@ export function WorkflowEngine({ settings, canEdit }: { settings: WorkflowSettin
     <div className="grid gap-4">
       <WorkflowCard
         title="Assign current user when building or copying a load"
-        note="The signed-in dispatcher is written on the load. Skip assign-a-carrier — this TMS is company drivers and owner-operators."
+        note="The signed-in dispatcher is written on the load. Skip assign-a-carrier — this TMS assigns a company driver or an owner-operator."
         submitLabel="Save user assignment rule"
         canEdit={canEdit}
       >
@@ -277,7 +277,7 @@ export function WorkflowEngine({ settings, canEdit }: { settings: WorkflowSettin
 
       <WorkflowCard
         title="Set Load / Truck Status based on Document Actions"
-        note="Invoice sent is the QuickBooks customer invoice. Signature / docs requested is the driver BOL / POD request. No Highway or EDI 214."
+        note="Invoice sent is the QuickBooks billed-rate invoice. Signature / docs requested is the driver BOL / POD request. No Highway or EDI 214."
         submitLabel="Save document action rules"
         canEdit={canEdit}
       >
