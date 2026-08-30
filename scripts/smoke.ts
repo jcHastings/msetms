@@ -277,6 +277,9 @@ async function main() {
   assert.match(workspaceSource, /closeLoadOverlay/);
   assert.match(workspaceSource, /event\.key !== "Escape"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /LoadOverlayFrame/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /LoadOverlayPortal/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-portal.tsx"), "utf8"), /createPortal/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-portal.tsx"), "utf8"), /document\.body/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-frame.tsx"), "utf8"), /ms-open-load/);
   assert.match(workspaceSource, /Load Actions/);
   assert.match(workspaceSource, /load-tabs/);
@@ -882,6 +885,7 @@ async function main() {
   assert.match(overlayHost, /\/accounting/);
   assert.match(overlayHost, /data-overlay-close/);
   assert.match(overlayHost, /load-overlay-frame/);
+  assert.match(overlayHost, /LoadOverlayPortal/);
   assert.doesNotMatch(overlayHost, /min-h-\[80vh\]/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
@@ -12574,8 +12578,11 @@ Continuous reefer. Two load locks.
   assert.match(boardPage, /board-when-time/);
   assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
   assert.match(boardCss, /board-when-cell/);
-  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*z-index:\s*60/);
+  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*z-index:\s*80/);
+  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*100dvh/);
   assert.match(boardCss, /\.load-overlay-panel[\s\S]*height:\s*100%/);
+  assert.doesNotMatch(boardCss, /\.load-overlay-panel,\s*\n\.pay-item-dialog/);
+  assert.doesNotMatch(boardCss, /load-overlay-panel[\s\S]{0,80}min\(1100px/);
   assert.match(boardCss, /acct-expand-grid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   const { criteriaFromSearchParams } = await import("../lib/search");

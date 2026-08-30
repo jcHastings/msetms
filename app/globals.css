@@ -644,13 +644,13 @@ button {
     max-width: 100%;
   }
 
-  .load-overlay-backdrop {
-    padding: 0;
-  }
-
+  .load-overlay-backdrop,
   .load-overlay-panel {
-    max-height: 100vh;
-    height: 100%;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    padding: 0;
     border-radius: 0;
   }
 }
@@ -1099,7 +1099,6 @@ summary.btn.load-action-btn:hover {
   background: #f3e6b8;
 }
 
-.load-overlay-backdrop,
 .pay-item-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -1113,10 +1112,22 @@ summary.btn.load-action-btn:hover {
 }
 
 .load-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
   padding: 0;
-  align-items: stretch;
-  justify-content: stretch;
-  z-index: 60;
+  background: #eef2f6;
+  overflow: auto;
+}
+
+html:has(.load-overlay-backdrop) {
+  overflow: hidden;
 }
 
 html:has([data-load-embed]) [data-desk-chrome] {
@@ -1132,24 +1143,34 @@ html:has([data-load-embed]) body {
   background: #eef2f6;
 }
 
-.load-overlay-panel,
 .pay-item-dialog {
-  width: min(1100px, 100%);
+  width: min(520px, 100%);
   max-height: calc(100vh - 2.5rem);
   overflow: auto;
-  background: #eef2f6;
+  background: #ffffff;
   border-radius: 0.85rem;
   box-shadow: 0 18px 50px rgba(11, 31, 58, 0.28);
+  margin-top: 3rem;
 }
 
 .load-overlay-panel {
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: 100%;
   max-width: none;
-  max-height: 100vh;
   height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0.65rem 0.85rem 1rem;
+  overflow: auto;
+  background: #eef2f6;
   border-radius: 0;
+  box-shadow: none;
+}
+
+.load-overlay-panel.overflow-hidden {
+  padding: 0;
 }
 
 .load-overlay-frame {
@@ -1157,12 +1178,6 @@ html:has([data-load-embed]) body {
   min-height: 0;
   width: 100%;
   border: 0;
-}
-
-.pay-item-dialog {
-  width: min(520px, 100%);
-  background: #ffffff;
-  margin-top: 3rem;
 }
 
 .stats-toolbar {
