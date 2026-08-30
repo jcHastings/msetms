@@ -4084,6 +4084,221 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /console\.log/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /redactRateConSecrets/);
 
+  const { extractDocumentText: extractBrokerText } = await import("../lib/rate-con");
+  const { parsedStopHasDetails } = await import("../lib/rate-con-shared");
+  const comparisonFixtures = [
+    {
+      file: "tql-po-36817888.pdf",
+      needle: /TQL PO#\s*36817888/i,
+      hintMustMissStops: true,
+      hintRate: null as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "TQL",
+        "customer_confidence": "high",
+        "rate": null,
+        "rate_confidence": "low",
+        "commodity": "Canned food",
+        "weight": 44000,
+        "load_number": "36817888",
+        "po_number": "50826",
+        "equipment": "reefer",
+        "reefer_mode": "continuous",
+        "special_instructions": "Must accept TQL tracking. Food grade trailer. Do not break the seal.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "Indel Food Products Inc",
+            "street": "9515 Plaza Circle",
+            "city": "El Paso",
+            "state": "TX",
+            "zip": "79927",
+            "phone": "915-590-5914",
+            "schedule_type": "fcfs",
+            "window_start": "2026-05-18T08:00",
+            "window_end": "2026-05-18T17:00",
+            "confirmation": "50826",
+            "notes": "FCFS 08:00 to 17:00 MST",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "Cox Marketing",
+            "street": "10150 Pilot Ave",
+            "city": "Midland",
+            "state": "TX",
+            "zip": "79706",
+            "schedule_type": "fcfs",
+            "window_start": "2026-05-19T06:00",
+            "window_end": "2026-05-19T14:00",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+    {
+      file: "bmm-load-confirmation-056299.pdf",
+      needle: /LOAD CONFIRMATION AND PAYMENT AGREEMENT/i,
+      hintMustMissStops: true,
+      hintRate: 2000 as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "BMM Logistics",
+        "customer_confidence": "high",
+        "rate": 2000,
+        "rate_confidence": "high",
+        "commodity": "CANDY",
+        "weight": 20000,
+        "load_number": "056299",
+        "po_number": "H20279911",
+        "equipment": "reefer",
+        "reefer_setpoint_f": 60,
+        "reefer_mode": "continuous",
+        "special_instructions": "PRECOOL TO 60F. FOLLOW TEMP ON BOL. 2 LOAD LOCKS REQUIRED.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "FERRERO",
+            "street": "600 Cottontail LN",
+            "city": "Somerset",
+            "state": "NJ",
+            "zip": "08873",
+            "schedule_type": "appointment",
+            "window_start": "2025-12-05T16:30",
+            "window_end": "2025-12-05T16:30",
+            "confirmation": "H20279911",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "SP DEKALB DC",
+            "street": "801 E GURLER RD",
+            "city": "DeKalb",
+            "state": "IL",
+            "zip": "60115",
+            "schedule_type": "appointment",
+            "window_start": "2025-12-07T12:00",
+            "window_end": "2025-12-07T12:00",
+            "confirmation": "1155538327",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+    {
+      file: "cei-load-confirmation-0502830.pdf",
+      needle: /CEI LOGISTICS/i,
+      hintMustMissStops: true,
+      hintRate: null as number | null,
+      draft: parseRateConAiJson(`{
+        "customer_name": "CEI Logistics",
+        "customer_confidence": "high",
+        "rate": 4000,
+        "rate_confidence": "high",
+        "commodity": "Fresh Product",
+        "weight": 28000,
+        "load_number": "0502830",
+        "po_number": "49596555",
+        "equipment": "reefer",
+        "reefer_mode": "continuous",
+        "special_instructions": "Verify rate confirmation temperature matches the BOL before leaving shipper. Four Kites tracking required.",
+        "stops": [
+          {
+            "kind": "pickup",
+            "name": "DFA DAIRY BRANDS",
+            "street": "1188 LINCOLN ST SW",
+            "city": "Le Mars",
+            "state": "IA",
+            "zip": "51031",
+            "phone": "712-548-2200",
+            "schedule_type": "appointment",
+            "window_start": "2026-07-14T23:59",
+            "confirmation": "49596555",
+            "notes": "No driver loading. ck temp on bol b4 leaving shpr",
+            "confidence": "high"
+          },
+          {
+            "kind": "delivery",
+            "name": "MCLANE COMMERCE CITY",
+            "street": "17100 EAST 81ST AVE",
+            "city": "Commerce City",
+            "state": "CO",
+            "zip": "80022",
+            "phone": "720-374-5080",
+            "schedule_type": "appointment",
+            "window_start": "2026-07-16T01:00",
+            "confirmation": "49596555",
+            "notes": "No driver unloading",
+            "confidence": "high"
+          }
+        ]
+      }`),
+    },
+  ];
+  for (const fixture of comparisonFixtures) {
+    const pdfPath = path.join(process.cwd(), "scripts/fixtures", fixture.file);
+    assert.equal(fs.existsSync(pdfPath), true, fixture.file);
+    const text = await extractBrokerText(fs.readFileSync(pdfPath), "application/pdf", fixture.file);
+    assert.match(text, fixture.needle, `${fixture.file} must extract readable text`);
+    const hintOnly = parseRateConText(text, [], fixture.file);
+    assert.equal(parsedStopHasDetails(hintOnly.shipper), false, `${fixture.file} layout helper misses pickup`);
+    assert.equal(parsedStopHasDetails(hintOnly.consignee), false, `${fixture.file} layout helper misses delivery`);
+    assert.equal(hintOnly.extra_stops.length, 0);
+    assert.equal(hintOnly.rate, fixture.hintRate, `${fixture.file} hint rate`);
+    const tqlCustomer = queries.listCustomers().find((row) => row.name === fixture.draft.customer_name);
+    const customerId =
+      tqlCustomer?.id ??
+      queries.createCustomer({ name: String(fixture.draft.customer_name ?? ""), billing_notes: "", contacts: [] });
+    const aiDraft = applyAiRateCon(fixture.draft, queries.listCustomers(), hintOnly, text);
+    assert.equal(aiDraft.reader, "ai");
+    assert.equal(aiDraft.customer_id, customerId);
+    assert.ok(parsedStopHasDetails(aiDraft.shipper), `${fixture.file} AI fills pickup`);
+    assert.ok(parsedStopHasDetails(aiDraft.consignee), `${fixture.file} AI fills delivery`);
+    assert.match(aiDraft.shipper.street, /\d/);
+    assert.match(aiDraft.consignee.street, /\d/);
+    if (fixture.file.startsWith("tql")) {
+      assert.equal(aiDraft.rate, null, "TQL sheet has no freight $ — do not invent a rate");
+      assert.ok(aiDraft.field_flags.some((flag) => flag.key === "rate"));
+      assert.equal(aiDraft.weight, 44000);
+      assert.match(aiDraft.commodity, /canned food/i);
+      assert.equal(aiDraft.shipper.schedule_type, "fcfs");
+      assert.equal(aiDraft.consignee.schedule_type, "fcfs");
+      assert.equal(aiDraft.consignee.city, "Midland");
+    }
+    if (fixture.file.startsWith("bmm")) {
+      assert.equal(aiDraft.rate, 2000);
+      assert.equal(aiDraft.weight, 20000);
+      assert.match(aiDraft.commodity, /^CANDY$/i);
+      assert.equal(aiDraft.reefer_setpoint_f, 60);
+      assert.match(aiDraft.shipper.name, /FERRERO/i);
+      assert.match(aiDraft.consignee.city, /DeKalb/i);
+    }
+    if (fixture.file.startsWith("cei")) {
+      assert.equal(aiDraft.rate, 4000);
+      assert.equal(aiDraft.weight, 28000);
+      assert.match(aiDraft.shipper.name, /DFA DAIRY/i);
+      assert.match(aiDraft.consignee.name, /MCLANE/i);
+      assert.equal(aiDraft.load_number_hint, "0502830");
+    }
+  }
+  const tqlPath = path.join(process.cwd(), "scripts/fixtures", "tql-po-36817888.pdf");
+  const tqlDraft = comparisonFixtures[0]?.draft;
+  setRateConAiTestClient(async () => JSON.stringify(tqlDraft));
+  const tqlForm = new FormData();
+  tqlForm.set(
+    "rate_con",
+    new File([new Uint8Array(fs.readFileSync(tqlPath))], "tql-po-36817888.pdf", { type: "application/pdf" }),
+  );
+  const tqlExtract = await (await import("../lib/actions")).parseRateConAction(null, tqlForm);
+  setRateConAiTestClient(null);
+  assert.equal(tqlExtract.ok, true);
+  if (tqlExtract.ok && "parsed" in tqlExtract) {
+    assert.equal(tqlExtract.parsed.reader, "ai");
+    assert.equal(tqlExtract.parsed.rate, null, "confirm-before-save: TQL rate stays empty");
+    assert.match(tqlExtract.parsed.shipper.street, /9515 Plaza/i);
+    assert.match(tqlExtract.parsed.consignee.city, /Midland/i);
+    const loadsAfterTql = queries.listLoads().length;
+    assert.equal(queries.listLoads().length, loadsAfterTql, "reading TQL must not save a load");
+  }
+
   const sampleAscendPdf = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
   if (fs.existsSync(sampleAscendPdf)) {
     const { extractDocumentText } = await import("../lib/rate-con");

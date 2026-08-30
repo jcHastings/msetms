@@ -76,10 +76,13 @@ export function redactRateConSecrets(text: string): string {
 const SYSTEM_PROMPT = `You read trucking rate confirmations (any broker layout) and extract a load draft for MS Express TMS.
 Return JSON only. Do not invent money or customer identity. If a field is not clearly printed, use null or "" and set confidence to low.
 Extract every pickup and delivery stop in order. Do not drop extra stops.
-Customer is the broker/bill-to, not the shipper warehouse and not MS Express / M&S Loads.
-Rate is the billed / agreed / total freight pay to the carrier — not quantity 1, not fuel-per-mile, not a load number.
-Load number is the customer's rate-con / load # (store as customer reference). Never invent an MSE trip number.
-schedule_type is "appointment" or "fcfs". confirmation is the stop PO / confirmation / PU number.
+Customer is the broker/bill-to (TQL, BMM Logistics, CEI Logistics, RXO, Allen Lund, etc.), not the shipper warehouse and not MS Express / M&S Loads.
+Rate is the billed / agreed / total freight pay to the carrier — Carrier Freight Pay, Flat Rate / TOTAL, all-in. Not quantity 1, not fuel-per-mile, not a load number, not TONU/detention, not $0.00 next to a real total.
+If no freight dollar amount is printed (TQL carrier information sheet), leave rate null and confidence low. Do not invent one.
+Load number is the customer's rate-con / load # / TQL PO# / Order # (store as customer reference). Never invent an MSE trip number.
+Stops may be labeled Pickup At / Deliver To, PICKUPS / DROPS, PU 1 / SO 2, Shipper / Consignee. Read every one.
+schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/U number.
+PRECOOL TO 60F and similar lines are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
 Confidence is high, medium, or low. Money and customer must be low when guessed.
