@@ -7,10 +7,8 @@ export const dynamic = "force-dynamic";
 export default function ClaimsPage() {
   const claims = listClaims();
   return (
-    <>
-      <PageHeader
-        title="Claims / OS&D"
-      />
+    <div data-claims-desk="">
+      <PageHeader title="Claims / OS&D" />
       <div className="card overflow-hidden">
         {claims.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">No claims yet. Open one from a load page.</p>
@@ -43,6 +41,6 @@ export default function ClaimsPage() {
           </table>
         )}
       </div>
-    </>
+    </div>
   );
 }

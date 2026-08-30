@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isDeskNavActive } from "@/lib/desk-nav-shared";
 import { canSeeNavHref } from "@/lib/settings-shared";
 
 const SECTIONS: Array<{
@@ -80,15 +81,14 @@ export function NavLinks({ role }: { role: string }) {
           </div>
           <div className="flex flex-col gap-0.5">
             {section.items.map((item) => {
-              const active =
-                item.href === "/" || item.href === "/accounting" || item.href === "/fleet"
-                  ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = isDeskNavActive(item.href, pathname);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   title={item.label}
+                  data-nav-href={item.href}
+                  prefetch={item.href === "/claims" ? false : undefined}
                   className={`desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
                     active ? "desk-nav-link-active" : ""
                   }`}
