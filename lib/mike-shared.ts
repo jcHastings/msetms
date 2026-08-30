@@ -5,6 +5,7 @@ export type MikeProposalKind =
   | "classify_document"
   | "status_update"
   | "start_ratecon"
+  | "build_tie_sheet"
   | "flag_issue"
   | "driver_message";
 

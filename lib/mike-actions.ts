@@ -6,6 +6,7 @@ import type { MikeMessage, MikeProposal, MikeProposalKind } from "./mike-shared"
 import { applyMikeProposal } from "./mike-work";
 import { isOpenAiConfigured, loadRuntimeEnv } from "./env";
 import { canSendSms } from "./settings-shared";
+import { isTieSheetImageName } from "./tie-sheet-shared";
 import type { ActionResult } from "./types";
 
 export type MikeChatState = ActionResult & {
@@ -23,13 +24,50 @@ export async function askMikeAction(
   const configured = isOpenAiConfigured();
   const history = await readMikeHistory();
   const question = String(formData.get("question") ?? "").trim();
-  if (!question) {
-    return { ok: false, error: "Type a question for Mike.", messages: history, configured };
+  const file = formData.get("tie_sheet_image");
+  const hasImage = file instanceof File && file.size > 0;
+  if (!question && !hasImage) {
+    return {
+      ok: false,
+      error: "Type a question or upload a Tie Sheet picture.",
+      messages: history,
+      configured,
+    };
   }
   try {
-    const result = await askMike(question, history);
+    let image: { mimeType: string; buffer: Buffer; filename?: string; inboxId?: string } | null = null;
+    let userLine = question;
+    if (hasImage && file instanceof File) {
+      if (file.size > 8 * 1024 * 1024) {
+        return {
+          ok: false,
+          error: "That picture is over 8 MB. Upload a smaller Tie Sheet snapshot.",
+          messages: history,
+          configured,
+        };
+      }
+      if (!isTieSheetImageName(file.name, file.type)) {
+        return {
+          ok: false,
+          error: "Upload a picture of the Tie Sheet truck.",
+          messages: history,
+          configured,
+        };
+      }
+      const { fileToBuffer, saveInboxFile } = await import("./files");
+      const buffer = await fileToBuffer(file);
+      const { inboxId } = saveInboxFile(file, buffer);
+      image = {
+        mimeType: file.type || "image/jpeg",
+        buffer,
+        filename: file.name,
+        inboxId,
+      };
+      userLine = question || `Uploaded a Tie Sheet picture (${file.name})`;
+    }
+    const result = await askMike(question, history, image);
     const messages: MikeMessage[] = (
-      [...history, { role: "user" as const, content: question }, { role: "assistant" as const, content: result.reply }]
+      [...history, { role: "user" as const, content: userLine }, { role: "assistant" as const, content: result.reply }]
     ).slice(-8);
     await writeMikeHistory(messages);
     return { ok: true, messages, configured: result.configured, proposals: result.proposals };
@@ -66,7 +104,11 @@ export async function confirmMikeProposalAction(formData: FormData): Promise<Act
       return { ok: true, id: loadId, message: "Text sent." };
     }
     const result = applyMikeProposal(payload, kind);
-    return { ok: true, message: result.message, id: payload.load_id ? Number(payload.load_id) : undefined };
+    return {
+      ok: true,
+      message: result.message,
+      id: result.id ?? (payload.load_id ? Number(payload.load_id) : undefined),
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not confirm that." };
   }
