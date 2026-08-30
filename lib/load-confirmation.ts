@@ -522,6 +522,7 @@ function confirmationTitle(model: ConfirmationModel, headerText: string): string
 }
 
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
+  doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const pageW = 612;
   const left = 36;
   const width = 540;
@@ -619,28 +620,20 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
   const pageLimit = 640;
-  const stopHeight = 108;
-
-  function addContentPage() {
-    doc.addPage();
-    y = 48;
-  }
-
-  function ensureSpace(needed: number) {
-    if (y + needed <= pageLimit) return;
-    addContentPage();
-  }
+  const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
+  const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
+  const payH = model.packet === "internal" && model.style === "owner_operator" ? 68 : 0;
+  const gaps = 10 + Math.max(0, stopBoxes.length - 1) * 8;
+  const reservedAfter = 8 + 12 + notesH + 6 + legsH + payH;
+  const stopBudget = Math.max(72, pageLimit - y - reservedAfter - gaps);
+  const stopHeight = Math.min(108, Math.max(72, Math.floor(stopBudget / Math.max(1, stopBoxes.length))));
 
   for (let index = 0; index < stopBoxes.length; index += 1) {
     const gap = index === 0 ? 10 : 8;
-    ensureSpace(gap + stopHeight);
-    y = drawStop(doc, left, y + gap, width, stopBoxes[index]);
+    y = drawStop(doc, left, y + gap, width, stopBoxes[index], stopHeight);
   }
 
   y += 8;
-  const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
-  const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
-  ensureSpace(12 + notesH + 6 + legsH);
   doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
     lineBreak: false,
   });
@@ -662,7 +655,6 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   }
 
   if (model.packet === "internal" && model.style === "owner_operator") {
-    ensureSpace(68);
     doc.font("Helvetica-Bold").fontSize(9).text("Carrier Pay:", left, y, { lineBreak: false });
     y += 12;
     const haul = formatUsd(model.agreedAmount) || "$0.00 USD";
@@ -878,8 +870,8 @@ function drawStop(
   y: number,
   width: number,
   stop: ConfirmationStop,
+  height = 108,
 ): number {
-  const height = 108;
   doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
   const leftW = 220;
   doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text(stop.title, x + 6, y + 6, {
