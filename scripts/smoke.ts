@@ -3386,6 +3386,45 @@ Load #45090 | Powered by AscendTMS.com
   assert.equal(stackedAscend.consignee_location_id, null, "parse must not invent a location id");
   assert.deepEqual(stackedAscend.extra_stops, []);
 
+  const noahId = queries.createCustomer({
+    name: "Noah's Ark Processors",
+    billing_notes: "1 University Plaza, Hackensack, NJ 07601",
+    contacts: [],
+  });
+  const noahParsed = parseRateConText(
+    `
+LOAD CONFIRMATION
+Load # 52309
+Date 08/30/2026
+Customer Information
+NOAH'S ARK PROCESSORS
+1 UNIVERSITY PLAZA
+SUITE 206
+HACKENSACK, NJ 07601
+201-488-6789
+Weight 21000 lbs
+Commodity FRESH BEEF
+Rate $5869 / Flat Rate
+1
+Pickup
+08/21/26
+Nebraska Cold Storage
+600 E 39th St
+Hastings, NE 68901
+2
+Delivery
+08/24/26
+Westside Foods - KOSHER
+355 Food Center Dr
+Bronx, NY 10474
+`,
+    queries.listCustomers(),
+  );
+  assert.equal(noahParsed.customer_name, "NOAH'S ARK PROCESSORS");
+  assert.equal(noahParsed.customer_id, noahId);
+  assert.equal(noahParsed.rate, 5869);
+  assert.equal(noahParsed.weight, 21000);
+
   const threeStopAscend = parseRateConText(
     `
 LOAD CONFIRMATION

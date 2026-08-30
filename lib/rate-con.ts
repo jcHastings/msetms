@@ -260,7 +260,7 @@ function parseAscendConfirmation(text: string): {
     .join(", ");
 
   return {
-    customer_name: "",
+    customer_name: parseAscendCustomer(text),
     origin: cityStateFromStop(pickup.stop) || cityStateFromAddress(pickup.address),
     destination: cityStateFromStop(delivery.stop) || cityStateFromAddress(delivery.address),
     pickup_start: pickup.start,
@@ -309,6 +309,41 @@ function parseAscendWeight(text: string, loadNumber: string): number | null {
     return value;
   }
   return null;
+}
+
+function parseAscendCustomer(text: string): string {
+  const block = captureBlockRaw(
+    text,
+    /customer(?:\s+information)?/i,
+    /primary\s+contact|stops\s*\/\s*actions|notes and references|pay items|ship from|ship to|pickup|delivery|carrier\b|bill of lading/i,
+  );
+  const lines = block
+    .split(/\n/)
+    .map((line) => clean(line))
+    .filter(Boolean)
+    .filter((line) => !/^(information|customer information|primary contact|phone|fax|email|tel)$/i.test(line));
+  for (const line of lines) {
+    if (isOwnPaperworkName(line)) continue;
+    if (/^\d/.test(line)) continue;
+    if (/^[A-Za-z .'-]+,\s*[A-Z]{2}\b/.test(line)) continue;
+    if (line.length < 3 || line.length > 80) continue;
+    return line;
+  }
+  return "";
+}
+
+function isOwnPaperworkName(name: string): boolean {
+  return /m\s*&\s*s\s+loads|ms\s*express|msloads/i.test(name);
+}
+
+function normalizePartyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(llc|inc|incorporated|co|corp|ltd|company)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseAscendRate(text: string): number | null {
@@ -637,13 +672,14 @@ function cityStateOrEmpty(address: string): string {
 
 function matchCustomer(name: string, customers: Customer[]): number | null {
   if (!name) return null;
-  const needle = name.toLowerCase();
-  const exact = customers.find((customer) => customer.name.toLowerCase() === needle);
+  const needle = normalizePartyName(name);
+  if (!needle || isOwnPaperworkName(name)) return null;
+  const exact = customers.find((customer) => normalizePartyName(customer.name) === needle);
   if (exact) return exact.id;
-  const partial = customers.find(
-    (customer) =>
-      customer.name.toLowerCase().includes(needle) || needle.includes(customer.name.toLowerCase()),
-  );
+  const partial = customers.find((customer) => {
+    const hay = normalizePartyName(customer.name);
+    return Boolean(hay) && (hay.includes(needle) || needle.includes(hay));
+  });
   return partial?.id ?? null;
 }
 
