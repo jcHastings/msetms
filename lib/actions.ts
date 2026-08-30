@@ -699,6 +699,15 @@ export async function parseRateConAction(
     const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
     const { extractDocumentText, parseRateConText, emptyParsedRateCon, textLooksLikeFilenameOnly } = await import("./rate-con");
     const { attachParsedLocationMatches } = await import("./rate-con-shared");
+    const {
+      RATE_CON_AI_FAILED,
+      RATE_CON_AI_MISSING_KEY,
+      applyAiRateCon,
+      decorateHintRateCon,
+      rateConAiShouldRun,
+      readRateConWithAi,
+    } = await import("./rate-con-ai");
+    const { isOpenAiConfigured } = await import("./env");
     const { listCustomers, listLocations } = await import("./queries");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
@@ -709,7 +718,8 @@ export async function parseRateConAction(
     } catch (error) {
       warning = error instanceof Error ? error.message : "Could not read that file.";
     }
-    if (!text || textLooksLikeFilenameOnly(text, file.name)) {
+    const unreadable = !text || textLooksLikeFilenameOnly(text, file.name);
+    if (unreadable && !looksImage) {
       const parsed = emptyParsedRateCon();
       writeInboxParse(inboxId, parsed);
       return {
@@ -720,17 +730,40 @@ export async function parseRateConAction(
         parsed,
       };
     }
-    const parsed = attachParsedLocationMatches(parseRateConText(text, listCustomers(), file.name), listLocations());
+    const customers = listCustomers();
+    const hint = decorateHintRateCon(parseRateConText(text, customers, file.name));
+    let parsed = hint;
+    if (!isOpenAiConfigured() && !rateConAiShouldRun()) {
+      warning = [warning, RATE_CON_AI_MISSING_KEY].filter(Boolean).join(" ");
+    } else if (rateConAiShouldRun()) {
+      try {
+        const draft = await readRateConWithAi({
+          text,
+          filename: file.name,
+          customers,
+          hint,
+          image: looksImage ? { mimeType: mime || file.type || "image/jpeg", buffer } : null,
+        });
+        parsed = applyAiRateCon(draft, customers, hint, text);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : RATE_CON_AI_FAILED;
+        warning = [warning, message.includes("not connected") ? RATE_CON_AI_MISSING_KEY : RATE_CON_AI_FAILED].filter(Boolean).join(" ");
+        parsed = hint;
+      }
+    }
+    parsed = attachParsedLocationMatches(parsed, listLocations());
     const thin =
       !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
+    if (thin && !warning) {
+      warning =
+        "Read the file, but almost no load fields were in the text. Finish the form by hand — the original file stays attached. Nothing was saved.";
+    }
     writeInboxParse(inboxId, parsed);
     return {
       ok: true,
       inboxId,
       fileName: file.name,
-      warning: thin
-        ? "Read the file, but almost no load fields were in the text. Finish the form by hand — the original file stays attached."
-        : undefined,
+      warning: warning || undefined,
       parsed,
     };
   } catch (error) {

@@ -36,8 +36,21 @@ export type LoadFormDefaults = Partial<{
   consignee: { name: string; street: string; city: string; state: string; zip: string; phone: string };
   extra_stops: Array<{
     kind: "pickup" | "delivery";
-    stop: { name: string; street: string; city: string; state: string; zip: string; phone: string };
+    stop: {
+      name: string;
+      street: string;
+      city: string;
+      state: string;
+      zip: string;
+      phone: string;
+      schedule_type?: string;
+      window_start?: string;
+      window_end?: string;
+      confirmation?: string;
+      notes?: string;
+    };
   }>;
+  equipment: string;
 }>;
 
 export function LoadBasicsScreen({
@@ -206,7 +219,7 @@ export function LoadBasicsScreen({
         <select
           id="equipment"
           name="equipment"
-          defaultValue={load?.equipment || DEFAULT_LOAD_EQUIPMENT}
+          defaultValue={load?.equipment || defaults.equipment || DEFAULT_LOAD_EQUIPMENT}
           data-autosave=""
           data-first-assign={load?.equipment ? undefined : ""}
           onChange={(event) => {

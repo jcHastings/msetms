@@ -4,6 +4,8 @@ import {
   cityStateFromStop,
   emptyParsedRateCon,
   emptyParsedStop,
+  isOwnPaperworkName,
+  matchCustomerName,
   parseAddressBlob,
   parsedStopHasDetails,
   type ParsedExtraStop,
@@ -119,7 +121,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
     ascend.customer_name ||
     printed.customer_name ||
     "";
-  const matched = matchCustomer(customerName, customers);
+  const matched = matchCustomerName(customerName, customers);
 
   const special =
     section(text, /special instructions?/i) ||
@@ -190,6 +192,9 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       extra_stops: dedupeExtraStops([...ascend.extra_stops, ...printed.extra_stops]),
       shipper_location_id: null,
       consignee_location_id: null,
+      equipment: "",
+      field_flags: [],
+      reader: "hint",
     },
     filename,
   );
@@ -342,20 +347,6 @@ function parseAscendCustomer(text: string): string {
     return line;
   }
   return "";
-}
-
-function isOwnPaperworkName(name: string): boolean {
-  return /m\s*&\s*s\s+loads|ms\s*express|msloads/i.test(name);
-}
-
-function normalizePartyName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(llc|inc|incorporated|co|corp|ltd|company)\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function parseAscendRate(text: string): number | null {
@@ -751,19 +742,6 @@ function cityStateOrEmpty(address: string): string {
     .slice(-2)
     .join(" ");
   return city ? `${city}, ${match[2]}` : "";
-}
-
-function matchCustomer(name: string, customers: Customer[]): number | null {
-  if (!name) return null;
-  const needle = normalizePartyName(name);
-  if (!needle || isOwnPaperworkName(name)) return null;
-  const exact = customers.find((customer) => normalizePartyName(customer.name) === needle);
-  if (exact) return exact.id;
-  const partial = customers.find((customer) => {
-    const hay = normalizePartyName(customer.name);
-    return Boolean(hay) && (hay.includes(needle) || needle.includes(hay));
-  });
-  return partial?.id ?? null;
 }
 
 function labeled(text: string, labels: string[]): string | null {

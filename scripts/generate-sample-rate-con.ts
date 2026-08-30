@@ -112,11 +112,58 @@ function writeAscendSample(): Promise<void> {
   });
 }
 
+const brokerOut = path.join(process.cwd(), "public", "samples", "sample-broker-rate-con.pdf");
+
+function writeBrokerSample(): Promise<void> {
+  const broker = new PDFDocument({ size: "LETTER", margin: 48 });
+  const stream = fs.createWriteStream(brokerOut);
+  broker.pipe(stream);
+  broker.fontSize(16).text("RXO Carrier Tender");
+  broker.fontSize(10).text("This is not an Ascend confirmation.");
+  broker.moveDown();
+  broker.fontSize(11);
+  broker.text("Tender ID  RXO-77241");
+  broker.text("Bill-to party  Allen Lund Company");
+  broker.text("All-in freight  USD 4,250.00");
+  broker.text("Product  Fresh beef trimmings");
+  broker.text("Gross lbs  38,400");
+  broker.text("Trailer  53 ft refrigerated / continuous");
+  broker.text("Setpoint  28 F");
+  broker.moveDown();
+  broker.text("Collect at");
+  broker.text("Hastings Packing");
+  broker.text("100 Packer Rd");
+  broker.text("Hastings NE 68901");
+  broker.text("Appt window  08/21/2026 06:00-10:00");
+  broker.text("PU#  HST-441");
+  broker.text("Call the yard before arrival.");
+  broker.moveDown();
+  broker.text("Deliver to");
+  broker.text("Westside Foods - KOSHER");
+  broker.text("355 Food Center Dr");
+  broker.text("Bronx NY 10474");
+  broker.text("FCFS  08/24/2026 07:00-15:00");
+  broker.text("PO  WSF-8891");
+  broker.moveDown();
+  broker.text("Second drop");
+  broker.text("Kayco Bayonne");
+  broker.text("72 New Hook Rd");
+  broker.text("Bayonne NJ 07002");
+  broker.text("Appointment  08/24/2026 16:00");
+  broker.end();
+  return new Promise((resolve, reject) => {
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+}
+
 main()
   .then(() => writeAscendSample())
+  .then(() => writeBrokerSample())
   .then(() => {
     console.log(`Wrote ${out}`);
     console.log(`Wrote ${ascendOut}`);
+    console.log(`Wrote ${brokerOut}`);
   })
   .catch((error) => {
     console.error(error);

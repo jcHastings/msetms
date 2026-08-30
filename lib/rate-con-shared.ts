@@ -1,5 +1,16 @@
 import { locationMatchesRole } from "./locations";
-import type { Location } from "./types";
+import type { Customer, Location } from "./types";
+
+export type RateConFieldStatus = "ok" | "missing" | "low";
+
+export type RateConFieldFlag = {
+  key: string;
+  label: string;
+  status: RateConFieldStatus;
+  message: string;
+};
+
+export type RateConReader = "ai" | "hint" | "none";
 
 export type ParsedStop = {
   name: string;
@@ -8,6 +19,11 @@ export type ParsedStop = {
   state: string;
   zip: string;
   phone: string;
+  schedule_type: string;
+  window_start: string;
+  window_end: string;
+  confirmation: string;
+  notes: string;
 };
 
 export type ParsedExtraStop = {
@@ -33,6 +49,7 @@ export type ParsedRateCon = {
   appointment_notes: string;
   reefer_setpoint_f: number | null;
   reefer_mode: string;
+  equipment: string;
   load_number_hint: string;
   raw_text: string;
   shipper: ParsedStop;
@@ -40,6 +57,8 @@ export type ParsedRateCon = {
   extra_stops: ParsedExtraStop[];
   shipper_location_id: number | null;
   consignee_location_id: number | null;
+  field_flags: RateConFieldFlag[];
+  reader: RateConReader;
 };
 
 const STREET_SUFFIX =
@@ -50,7 +69,37 @@ const STREET_IN_LINE =
   /\b(\d{1,6}(?:\s+[A-Za-z0-9.#\-']+){1,6}\s+(?:st|street|rd|road|ave|avenue|blvd|boulevard|dr|drive|ln|lane|hwy|highway|way|ct|court|pl|place|pkwy|parkway|cir|circle|trl|trail)\.?)\s*$/i;
 
 export function emptyParsedStop(): ParsedStop {
-  return { name: "", street: "", city: "", state: "", zip: "", phone: "" };
+  return {
+    name: "",
+    street: "",
+    city: "",
+    state: "",
+    zip: "",
+    phone: "",
+    schedule_type: "",
+    window_start: "",
+    window_end: "",
+    confirmation: "",
+    notes: "",
+  };
+}
+
+export function normalizeParsedStop(stop: Partial<ParsedStop> | null | undefined): ParsedStop {
+  const empty = emptyParsedStop();
+  if (!stop) return empty;
+  return {
+    name: String(stop.name ?? "").trim(),
+    street: String(stop.street ?? "").trim(),
+    city: String(stop.city ?? "").trim(),
+    state: String(stop.state ?? "").trim().toUpperCase(),
+    zip: String(stop.zip ?? "").trim(),
+    phone: String(stop.phone ?? "").trim(),
+    schedule_type: String(stop.schedule_type ?? "").trim().toLowerCase(),
+    window_start: String(stop.window_start ?? "").trim(),
+    window_end: String(stop.window_end ?? "").trim(),
+    confirmation: String(stop.confirmation ?? "").trim(),
+    notes: String(stop.notes ?? "").trim(),
+  };
 }
 
 /** Rate-con "Load #" is the customer's reference, not the TMS MSE number. */
@@ -79,6 +128,7 @@ export function emptyParsedRateCon(): ParsedRateCon {
     appointment_notes: "",
     reefer_setpoint_f: null,
     reefer_mode: "",
+    equipment: "",
     load_number_hint: "",
     raw_text: "",
     shipper: emptyParsedStop(),
@@ -86,12 +136,98 @@ export function emptyParsedRateCon(): ParsedRateCon {
     extra_stops: [],
     shipper_location_id: null,
     consignee_location_id: null,
+    field_flags: [],
+    reader: "none",
   };
 }
 
 export function parsedStopHasDetails(stop: ParsedStop | null | undefined): stop is ParsedStop {
   if (!stop) return false;
   return Boolean(stop.name.trim() || stop.street.trim());
+}
+
+export function isOwnPaperworkName(name: string): boolean {
+  return /m\s*&\s*s\s+loads|ms\s*express|msloads/i.test(name);
+}
+
+export function normalizePartyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(llc|inc|incorporated|co|corp|ltd|company)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function matchCustomerName(name: string, customers: Customer[]): number | null {
+  if (!name) return null;
+  const needle = normalizePartyName(name);
+  if (!needle || isOwnPaperworkName(name)) return null;
+  const exact = customers.find((customer) => normalizePartyName(customer.name) === needle);
+  if (exact) return exact.id;
+  const partial = customers.find((customer) => {
+    const hay = normalizePartyName(customer.name);
+    return Boolean(hay) && (hay.includes(needle) || needle.includes(hay));
+  });
+  return partial?.id ?? null;
+}
+
+export function rateConNeedsReview(parsed: ParsedRateCon): boolean {
+  return parsed.field_flags.some((flag) => flag.status === "missing" || flag.status === "low");
+}
+
+export function flagsFromParsedGaps(parsed: ParsedRateCon): RateConFieldFlag[] {
+  const flags: RateConFieldFlag[] = [];
+  if (!parsed.customer_name.trim() && parsed.customer_id == null) {
+    flags.push({
+      key: "customer",
+      label: "Customer",
+      status: "missing",
+      message: "Customer was not on the rate con. Pick one before save.",
+    });
+  }
+  if (parsed.rate == null) {
+    flags.push({
+      key: "rate",
+      label: "Customer rate",
+      status: "missing",
+      message: "Billed rate was not clear. Enter it — it is not guessed.",
+    });
+  }
+  if (!parsedStopHasDetails(parsed.shipper) && !parsed.origin.trim()) {
+    flags.push({
+      key: "pickup",
+      label: "Pickup",
+      status: "missing",
+      message: "No pickup stop was read. Add the shipper.",
+    });
+  }
+  if (!parsedStopHasDetails(parsed.consignee) && !parsed.destination.trim()) {
+    flags.push({
+      key: "delivery",
+      label: "Delivery",
+      status: "missing",
+      message: "No delivery stop was read. Add the consignee.",
+    });
+  }
+  if (!parsed.commodity.trim()) {
+    flags.push({
+      key: "commodity",
+      label: "Commodity",
+      status: "missing",
+      message: "Commodity was not on the rate con.",
+    });
+  }
+  if (parsed.weight == null) {
+    flags.push({
+      key: "weight",
+      label: "Weight",
+      status: "missing",
+      message: "Weight was not on the rate con.",
+    });
+  }
+  return flags;
 }
 
 export function formatParsedStop(stop: ParsedStop): string {
