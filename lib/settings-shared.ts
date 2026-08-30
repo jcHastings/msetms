@@ -267,6 +267,22 @@ export function canManageUsers(role: string): boolean {
   return isAdminRole(role);
 }
 
+export function canDeleteDispatcherUser(input: {
+  targetId: number;
+  targetRole: string;
+  targetActive: boolean | number;
+  actorId?: number | null;
+  otherActiveAdmins: number;
+}): { ok: true } | { ok: false; reason: string } {
+  if (input.actorId != null && input.actorId === input.targetId) {
+    return { ok: false, reason: "You cannot delete your own login." };
+  }
+  if (input.targetActive && isAdminRole(input.targetRole) && input.otherActiveAdmins < 1) {
+    return { ok: false, reason: "Keep at least one active Administrator." };
+  }
+  return { ok: true };
+}
+
 export function canAccessAccounting(role: string): boolean {
   return isAdminRole(role) || isAccountingRole(role);
 }

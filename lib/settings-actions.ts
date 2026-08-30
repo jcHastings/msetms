@@ -16,6 +16,7 @@ import {
   clearCompanyLogo,
   createDispatcherUser,
   defaultPermissionGroupForRole,
+  deleteDispatcherUser,
   deleteDropdownOption,
   saveCompanyLogo,
   setDropdownOptionActive,
@@ -530,6 +531,23 @@ export async function updateDispatcherUserAction(
     refresh();
     return { ok: true, id };
   } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteDispatcherUserAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const admin = await requireUserAdmin();
+    const id = parseOptionalInt(formData.get("user_id"));
+    if (!id) throw new Error("User is missing.");
+    deleteDispatcherUser(id, admin.id);
+    refresh();
+    redirect("/users");
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }

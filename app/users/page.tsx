@@ -23,7 +23,7 @@ export default async function UsersPage() {
           ) : null
         }
       />
-      <UsersTable users={users} canManage={canManage} />
+      <UsersTable users={users} canManage={canManage} currentUserId={dispatcher?.id ?? null} />
     </>
   );
 }

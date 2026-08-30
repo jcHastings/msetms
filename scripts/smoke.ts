@@ -10470,6 +10470,61 @@ Continuous reefer. Two load locks.
   const usersPage = fs.readFileSync(path.join(process.cwd(), "app/users/page.tsx"), "utf8");
   assert.match(usersPage, /Add user/);
   assert.match(usersPage, /listDispatcherUsers/);
+  assert.match(usersPage, /currentUserId/);
+  const usersTable = fs.readFileSync(path.join(process.cwd(), "components/users-table.tsx"), "utf8");
+  assert.match(usersTable, />Edit</);
+  assert.match(usersTable, /DeleteUserForm/);
+  assert.match(usersTable, /data-users-list/);
+  assert.doesNotMatch(usersTable, /overflow-hidden/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/delete-user-form.tsx"), "utf8"), /deleteDispatcherUserAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/users/[id]/page.tsx"), "utf8"), /Delete user/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-actions.ts"), "utf8"), /deleteDispatcherUserAction/);
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 1,
+      targetRole: "admin",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 2,
+    }).ok,
+    false,
+  );
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 2,
+      targetRole: "admin",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 0,
+    }).ok,
+    false,
+  );
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 3,
+      targetRole: "dispatcher",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 2,
+    }).ok,
+    true,
+  );
+  const removableUserId = settings.createDispatcherUser({
+    name: "Temp Desk User",
+    pin: "2468",
+    role: "dispatcher",
+    email: "temp-desk@msloads.com",
+  });
+  settings.deleteDispatcherUser(removableUserId);
+  assert.equal(settings.getDispatcherUser(removableUserId), null);
+  const selfId = settings.createDispatcherUser({
+    name: "Self Desk User",
+    pin: "1357",
+    role: "dispatcher",
+    email: "self-desk@msloads.com",
+  });
+  assert.throws(() => settings.deleteDispatcherUser(selfId, selfId), /your own login/);
+  settings.deleteDispatcherUser(selfId);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/users/page.tsx"), "utf8"), /redirect\("\/users"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8"), /SettingsAdminGate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/settings-admin-gate.tsx"), "utf8"), /Only an Administrator can change Settings/);

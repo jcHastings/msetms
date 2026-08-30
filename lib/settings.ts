@@ -12,6 +12,7 @@ import {
   DOCUMENT_TYPES,
   PAY_METHODS,
   PERMISSION_GROUPS,
+  canDeleteDispatcherUser,
   defaultPermissionGroupForRole,
   isAdminRole,
   type ComplianceWindows,
@@ -768,6 +769,38 @@ export function updateDispatcherUser(
        WHERE id = ?`,
     )
     .run(name, pin, role, (input.email ?? "").trim(), active, group, id);
+}
+
+export function deleteDispatcherUser(id: number, actorId?: number | null): void {
+  const existing = getDispatcherUser(id);
+  if (!existing) throw new Error("User was not found.");
+  const allowed = canDeleteDispatcherUser({
+    targetId: id,
+    targetRole: existing.role,
+    targetActive: existing.active,
+    actorId,
+    otherActiveAdmins: countAdmins(id),
+  });
+  if (!allowed.ok) throw new Error(allowed.reason);
+  const db = getDb();
+  db.prepare("UPDATE loads SET dispatcher_id = NULL WHERE dispatcher_id = ?").run(id);
+  const rules = db.prepare("SELECT id, recipient_ids FROM alert_rules").all() as Array<{
+    id: number;
+    recipient_ids: string;
+  }>;
+  const rewrite = db.prepare("UPDATE alert_rules SET recipient_ids = ? WHERE id = ?");
+  for (const rule of rules) {
+    let ids: number[] = [];
+    try {
+      const parsed = JSON.parse(rule.recipient_ids) as unknown;
+      ids = Array.isArray(parsed) ? parsed.map(Number).filter((value) => Number.isInteger(value) && value > 0) : [];
+    } catch {
+      ids = [];
+    }
+    if (!ids.includes(id)) continue;
+    rewrite.run(JSON.stringify(ids.filter((value) => value !== id)), rule.id);
+  }
+  db.prepare("DELETE FROM dispatchers WHERE id = ?").run(id);
 }
 
 export function getDocumentFont(): { family: DocumentFontFamily; scale: number } {
