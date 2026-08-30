@@ -54,9 +54,14 @@ export function AppShell({
         >
           Menu
         </button>
-        <Link href="/" className="desk-phone-brand min-w-0">
+        <Link href="/" className="desk-phone-brand min-w-0 flex-1">
           <BrandMark variant="dark" size="sm" />
         </Link>
+        <form action={dispatcherLogoutAction}>
+          <button className="desk-phone-signout" type="submit">
+            Sign out
+          </button>
+        </form>
       </header>
       {navOpen ? (
         <button
@@ -68,7 +73,7 @@ export function AppShell({
       ) : null}
       <aside
         id="desk-sidebar"
-        className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-x-hidden"
+        className="desk-sidebar sticky top-0 flex h-dvh max-h-dvh min-h-0 w-60 shrink-0 flex-col overflow-x-hidden"
         data-desk-chrome=""
       >
         <div className="desk-sidebar-brand shrink-0 border-b border-white/10 px-3 py-3">

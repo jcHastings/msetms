@@ -111,7 +111,7 @@ export function NavLinks({ role }: { role: string }) {
 
   return (
     <nav
-      className="desk-nav-icons flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3"
+      className="desk-nav-icons flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 py-3"
       data-nav-accordion={DESK_NAV_ACCORDION}
     >
       {entries.map((entry) => {

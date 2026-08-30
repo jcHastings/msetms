@@ -374,6 +374,11 @@ async function main() {
   assert.match(shellSource, /desk-sidebar-user/);
   assert.match(shellSource, /desk-phone-bar/);
   assert.match(shellSource, /desk-phone-menu/);
+  assert.match(shellSource, /desk-phone-signout/);
+  assert.match(shellSource, /dispatcherLogoutAction/);
+  assert.match(shellSource, /h-dvh/);
+  assert.match(cssSource, /desk-phone-signout/);
+  assert.match(cssSource, /max-height: 100dvh/);
   assert.match(cssSource, /min-width: 15rem/);
   assert.match(cssSource, /@media \(max-width: 47\.99rem\)/);
   assert.match(cssSource, /desk-phone-bar/);
