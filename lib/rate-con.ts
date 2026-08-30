@@ -241,16 +241,23 @@ function parseAscendConfirmation(text: string): {
     text.match(/load\s*#\s*[:#]?\s*\n\s*(\d{3,8})\b/i)?.[1] ??
     "";
 
-  const pickup = firstStop(
-    parseAscendStop(text, "pickup"),
-    parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
-    parseStopBlock(text, /pick(?:\s*up)?(?:\s+date)?/i),
-  );
-  const delivery = firstStop(
-    parseAscendStop(text, "delivery"),
-    parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
-    parseStopBlock(text, /deliv(?:ery)?(?:\s+date)?/i),
-  );
+  const actions = parseAscendActionStops(text);
+  const pickupAction = actions.find((item) => item.kind === "pickup");
+  const deliveryAction = actions.find((item) => item.kind === "delivery");
+  const pickup = pickupAction
+    ? stopParseFromAction(pickupAction)
+    : firstStop(
+        parseAscendStop(text, "pickup"),
+        parseStopLine(text, /pick(?:up)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
+        parseStopBlock(text, /pick(?:\s*up)?(?:\s+date)?/i),
+      );
+  const delivery = deliveryAction
+    ? stopParseFromAction(deliveryAction)
+    : firstStop(
+        parseAscendStop(text, "delivery"),
+        parseStopLine(text, /deliv(?:ery)?\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+(.+)/i),
+        parseStopBlock(text, /deliv(?:ery)?(?:\s+date)?/i),
+      );
 
   const equipment = [
     fieldAfterLabel(text, ["equipment"])?.replace(/equipment length/i, "").trim(),
@@ -274,7 +281,11 @@ function parseAscendConfirmation(text: string): {
     special_instructions: parseAscendInstructions(text, equipment),
     shipper: pickup.stop,
     consignee: delivery.stop,
-    extra_stops: parseAscendExtraStops(text, pickup.stop, delivery.stop),
+    extra_stops: actions.length
+      ? actions
+          .filter((item) => item !== pickupAction && item !== deliveryAction)
+          .map((item) => ({ kind: item.kind, stop: item.stop }))
+      : parseAscendExtraStops(text, pickup.stop, delivery.stop),
   };
 }
 
@@ -413,29 +424,81 @@ function isUsefulExtraStop(stop: ParsedStop, shipper: ParsedStop, consignee: Par
   return true;
 }
 
+type ActionStop = { kind: "pickup" | "delivery"; date: string; stop: ParsedStop };
+
+function stopParseFromAction(action: ActionStop): StopParse {
+  return {
+    start: toIso(action.date, "08:00"),
+    end: toIso(action.date, "17:00"),
+    address: [action.stop.name, action.stop.street, cityStateFromStop(action.stop)].filter(Boolean).join(", "),
+    stop: action.stop,
+  };
+}
+
+const ACTION_LINE =
+  /^\s*(?:\d+\s+)?(pick(?:\s*up)?|pickup|delivery|deliver|drop)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})(?:\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\s*(.*)$/i;
+
+function parseAscendActionStops(text: string): ActionStop[] {
+  const sectionMatch = text.match(/stops\s*\/\s*actions([\s\S]*?)(?=\n\s*pay items\b|\n\s*terms of load|$)/i);
+  const section = sectionMatch?.[1] ?? text;
+  const lined = parseLinedActionStops(section);
+  if (lined.length) return lined;
+  return parseStackedActionStops(section === text ? text : section);
+}
+
+function parseLinedActionStops(text: string): ActionStop[] {
+  const lines = text.split(/\n/);
+  const stops: ActionStop[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = lines[index].match(ACTION_LINE);
+    if (!header) continue;
+    const body = [header[3] ?? ""];
+    let cursor = index + 1;
+    while (cursor < lines.length) {
+      if (ACTION_LINE.test(lines[cursor])) break;
+      if (/^\s*(?:pay items|terms of load)\b/i.test(lines[cursor])) break;
+      body.push(lines[cursor]);
+      cursor += 1;
+    }
+    const stop = parseAddressBlob(body.join("\n"));
+    if (parsedStopHasDetails(stop) && (stop.street.trim() || stop.city.trim() || stop.name.trim())) {
+      stops.push({
+        kind: /deliver|drop/i.test(header[1]) ? "delivery" : "pickup",
+        date: header[2],
+        stop,
+      });
+    }
+    index = cursor - 1;
+  }
+  return stops;
+}
+
+function parseStackedActionStops(text: string): ActionStop[] {
+  const matches = [
+    ...text.matchAll(
+      /(?:^|\n)\s*(?:\d+\s*\n\s*)?(pickup|pick\s*up|delivery|deliver|drop)\s*\n\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*\n([\s\S]{0,400}?)(?=\n\s*(?:\d+\s*\n\s*)?(?:delivery|deliver|drop|pickup|pick\s*up|pay items|terms of load)|$)/gi,
+    ),
+  ];
+  return matches.flatMap((match) => {
+    const stop = parseAddressBlob(match[3] ?? "");
+    if (!parsedStopHasDetails(stop)) return [];
+    return [
+      {
+        kind: /deliver|drop/i.test(match[1]) ? "delivery" : "pickup",
+        date: match[2],
+        stop,
+      } satisfies ActionStop,
+    ];
+  });
+}
+
 function parseAscendExtraStops(text: string, shipper: ParsedStop, consignee: ParsedStop): ParsedExtraStop[] {
   const seen = new Set([stopKey(shipper), stopKey(consignee)].filter(Boolean));
   const extras: ParsedExtraStop[] = [];
-  const stacked = [...text.matchAll(
-    /(?:^|\n)\s*(?:\d+\s*\n\s*)?(pickup|pick\s*up|delivery|deliver|drop)\s*\n\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*\n([\s\S]{0,320}?)(?=\n\s*(?:\d+\s*\n\s*)?(?:delivery|deliver|drop|pickup|pick\s*up|pay items|terms of load)|$)/gi,
-  )];
-  for (const match of stacked) {
-    const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
-    const stop = parseAddressBlob(match[3] ?? "");
-    if (!isUsefulExtraStop(stop, shipper, consignee, seen)) continue;
-    seen.add(stopKey(stop));
-    extras.push({ kind, stop });
-  }
-  if (stacked.length) return extras;
-  const lined = text.matchAll(
-    /(?:^|\n)\s*(?:\d+\s+)?(pickup|pick\s*up|delivery|deliver|drop)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})(?:\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\s+(.+)/gi,
-  );
-  for (const match of lined) {
-    const kind = /deliver|drop/i.test(match[1]) ? "delivery" : "pickup";
-    const stop = parseAddressBlob(match[3] ?? "");
-    if (!isUsefulExtraStop(stop, shipper, consignee, seen)) continue;
-    seen.add(stopKey(stop));
-    extras.push({ kind, stop });
+  for (const action of parseAscendActionStops(text)) {
+    if (!isUsefulExtraStop(action.stop, shipper, consignee, seen)) continue;
+    seen.add(stopKey(action.stop));
+    extras.push({ kind: action.kind, stop: action.stop });
   }
   return extras;
 }

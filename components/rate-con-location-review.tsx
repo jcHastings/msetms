@@ -73,13 +73,14 @@ function RateConLocationReview({
 }) {
   const showShipper = parsedStopHasDetails(parsed.shipper);
   const showConsignee = parsedStopHasDetails(parsed.consignee);
-  if (!showShipper && !showConsignee) return null;
+  const extras = parsed.extra_stops.filter((extra) => parsedStopHasDetails(extra.stop));
+  if (!showShipper && !showConsignee && extras.length === 0) return null;
 
   return (
     <div className="mb-4 grid gap-3 md:grid-cols-2">
       {showShipper ? (
         <StopReviewCard
-          title="Pickup location"
+          title="Pickup 1"
           role="shipper"
           stop={parsed.shipper}
           book={book}
@@ -91,7 +92,7 @@ function RateConLocationReview({
       ) : null}
       {showConsignee ? (
         <StopReviewCard
-          title="Delivery location"
+          title="Delivery 1"
           role="receiver"
           stop={parsed.consignee}
           book={book}
@@ -101,7 +102,29 @@ function RateConLocationReview({
           onPick={onPick}
         />
       ) : null}
+      {extras.map((extra, index) => (
+        <ExtraStopCard
+          key={`${extra.kind}-${index}-${extra.stop.name}-${extra.stop.city}`}
+          title={extraStopTitle(parsed, extra.kind, index)}
+          stop={extra.stop}
+        />
+      ))}
     </div>
+  );
+}
+
+function extraStopTitle(parsed: ParsedRateCon, kind: "pickup" | "delivery", index: number): string {
+  const prior = parsed.extra_stops.slice(0, index + 1).filter((extra) => extra.kind === kind).length;
+  const label = kind === "pickup" ? "Pickup" : "Delivery";
+  return `${label} ${prior + 1}`;
+}
+
+function ExtraStopCard({ title, stop }: { title: string; stop: ParsedStop }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm" data-extra-stop="">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">{title}</div>
+      <p className="mt-1 font-medium">{formatParsedStop(stop)}</p>
+    </section>
   );
 }
 
