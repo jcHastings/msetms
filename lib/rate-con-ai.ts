@@ -156,11 +156,11 @@ export async function readRateConWithAi(input: {
   image?: { mimeType: string; buffer: Buffer } | null;
 }): Promise<RateConAiDraft> {
   await loadRuntimeEnv();
-  if (!isOpenAiConfigured()) {
+  if (!testClient && !isOpenAiConfigured()) {
     throw new Error(RATE_CON_AI_MISSING_KEY);
   }
   const key = getOpenAiApiKey();
-  if (!key) {
+  if (!testClient && !key) {
     throw new Error(RATE_CON_AI_MISSING_KEY);
   }
 

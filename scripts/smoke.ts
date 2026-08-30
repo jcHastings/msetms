@@ -4074,12 +4074,12 @@ Continuous reefer. Two load locks.
     assert.equal(queries.listLoads().length, loadsBeforeConfirm, "AI read must not save a load");
   }
 
-  const importUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
-  assert.match(importUi, /Confirm and save load/);
-  assert.match(importUi, /Discard draft/);
-  assert.match(importUi, /data-rate-con-discard/);
-  assert.match(importUi, /RateConFieldFlags/);
-  assert.doesNotMatch(importUi, /Liftgate|Inside Pickup|Inside Delivery/);
+  const rateConImportUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConImportUi, /Confirm and save load/);
+  assert.match(rateConImportUi, /Discard draft/);
+  assert.match(rateConImportUi, /data-rate-con-discard/);
+  assert.match(rateConImportUi, /RateConFieldFlags/);
+  assert.doesNotMatch(rateConImportUi, /Liftgate|Inside Pickup|Inside Delivery/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /gpt-4o-mini|MIKE_OPENAI_MODEL/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /console\.log/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /redactRateConSecrets/);
