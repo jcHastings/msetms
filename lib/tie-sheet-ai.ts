@@ -89,7 +89,7 @@ function tieSheetAiRequestBody(input: {
 }): Record<string, unknown> {
   const mime = input.image.mimeType.startsWith("image/") ? input.image.mimeType : "image/jpeg";
   const userText = [
-    `Filename: ${input.filename || "tie-sheet.png"}`,
+    `Filename: ${input.image.filename || "tie-sheet.png"}`,
     "Read this Tie Sheet truck picture. Extract one truck. Do not invent missing fields.",
   ].join("\n\n");
   return {
@@ -148,7 +148,7 @@ export async function draftTieSheetFromImage(input: {
   image: { mimeType: string; buffer: Buffer; filename?: string };
 }): Promise<TieSheetDraft> {
   const extract = await readTieSheetWithAi(input);
-  const loadId = extract.load_id || normalizeTieSheetLoadId(input.filename || "");
+  const loadId = extract.load_id || normalizeTieSheetLoadId(input.image.filename || "");
   const known = knownTieSheetExtract(loadId);
   const filled = known ? fillAmbiguousTieSheetFields({ ...extract, load_id: loadId }, known) : extract;
   if (!filled.orders.length) throw new Error(TIE_SHEET_READ_FAILED);
