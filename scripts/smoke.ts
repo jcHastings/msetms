@@ -10450,12 +10450,12 @@ Continuous reefer. Two load locks.
   settings.updateTaxSettings({ tax_enabled: true, tax_kind: "gst", tax_rate: 5 });
   assert.equal(settings.taxOnAmount(200).tax, 10);
   settings.updateAlertSettings({
-    alert_driver_days: 14,
+    alert_driver_days: 30,
     alert_registration_days: 45,
     alert_dot_days: 21,
     alert_emails_enabled: true,
   });
-  assert.equal(settings.getCompanySettings().alert_driver_days, 14);
+  assert.equal(settings.getCompanySettings().alert_driver_days, 30);
   const alertRules = await import("../lib/alert-rules");
   assert.equal(alertRules.alertCatalogHasNoBrokerageTriggers(), true);
   const officeUsers = settings.listDispatcherUsers(false);
