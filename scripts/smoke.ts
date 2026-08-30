@@ -1526,6 +1526,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /DefaultedDocuments/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/open-attachment-link.tsx"), "utf8"), /useDocumentPreview/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /bol_third_party/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /isCustomerRateDocument/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /generateDefaultedDocument/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/documents/route.ts"), "utf8"), /generateDefaultedDocument/);
   const { cityStateOnly } = await import("../lib/load-documents-shared");
