@@ -10976,10 +10976,11 @@ Continuous reefer. Two load locks.
   assert.match(driverCss, /\.driver-dest-off[\s\S]*#334155/);
   assert.match(driverCss, /\.driver-app a\.btn-secondary/);
   assert.match(driverHome, /Dispatch/);
-  assert.match(driverHome, /Fuel/);
   assert.match(driverHome, /Upload/);
-  assert.match(driverHome, /BOL/);
   assert.match(driverHome, /Confirmation/);
+  assert.doesNotMatch(driverHome, /label: "Fuel"/);
+  assert.doesNotMatch(driverHome, /label: "BOL"/);
+  assert.doesNotMatch(driverHome, /#fuel|#bol/);
   assert.match(driverHome, /pickDriverDestinationLoad/);
   const { pickDriverDestinationLoad } = await import("../lib/driver-destinations-shared");
   assert.equal(pickDriverDestinationLoad([{ id: 11 }], [{ id: 22, delivery_end: "2026-08-01T00:00:00.000Z" }])?.id, 11);
