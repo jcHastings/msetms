@@ -2,31 +2,27 @@
 
 import { toInputDateTime } from "@/lib/format";
 import type { LoadFormDefaults } from "@/components/load-basics-screen";
-import { LocationPicker } from "@/components/location-picker";
-import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import type { Load, Location } from "@/lib/types";
 
 export function LoadLaneFields({
   load,
   defaults = {},
-  locations = [],
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
   locations?: Location[];
 }) {
-  const { handleAssign } = useLoadAssignPersist(load?.id);
+  const origin = load?.origin ?? defaults.origin ?? "";
+  const destination = load?.destination ?? defaults.destination ?? "";
+  const shipperId = String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "");
+  const consigneeId = String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "");
   return (
     <section data-load-tab="lane" className="card grid gap-4 p-6 md:grid-cols-2">
-      <h2 className="md:col-span-2 text-sm font-semibold">Lane from rate con</h2>
-      <div className="field">
-        <label htmlFor="origin">Origin</label>
-        <input id="origin" name="origin" defaultValue={load?.origin ?? defaults.origin ?? ""} />
-      </div>
-      <div className="field">
-        <label htmlFor="destination">Destination</label>
-        <input id="destination" name="destination" defaultValue={load?.destination ?? defaults.destination ?? ""} />
-      </div>
+      <h2 className="md:col-span-2 text-sm font-semibold">Pickup and delivery windows</h2>
+      <input type="hidden" name="origin" value={origin} />
+      <input type="hidden" name="destination" value={destination} />
+      <input type="hidden" name="shipper_location_id" value={shipperId} />
+      <input type="hidden" name="consignee_location_id" value={consigneeId} />
       <div className="field">
         <label htmlFor="pickup_start">Pickup start</label>
         <input
@@ -61,34 +57,6 @@ export function LoadLaneFields({
           name="delivery_end"
           type="datetime-local"
           defaultValue={load ? toInputDateTime(load.delivery_end) : defaults.delivery_end ?? ""}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="shipper_location_id-search">Shipper location</label>
-        <LocationPicker
-          id="shipper_location_id-search"
-          name="shipper_location_id"
-          locations={locations}
-          defaultValue={String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "")}
-          emptyLabel="No saved location"
-          placeholder="Type any name or address"
-          onChange={(next) => {
-            if (load) handleAssign(load.shipper_location_id, next, "shipper_location_id");
-          }}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="consignee_location_id-search">Consignee location</label>
-        <LocationPicker
-          id="consignee_location_id-search"
-          name="consignee_location_id"
-          locations={locations}
-          defaultValue={String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "")}
-          emptyLabel="No saved location"
-          placeholder="Type any name or address"
-          onChange={(next) => {
-            if (load) handleAssign(load.consignee_location_id, next, "consignee_location_id");
-          }}
         />
       </div>
       <div className="field md:col-span-2">

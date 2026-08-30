@@ -103,7 +103,7 @@ export function LoadBasicsScreen({
               </option>
             ))}
           </select>
-          {status ? <LoadStatusBadge status={status} /> : null}
+          {load && status ? <LoadStatusBadge status={status} /> : null}
         </div>
       </div>
       <div className="field">

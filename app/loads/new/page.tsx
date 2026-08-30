@@ -51,46 +51,45 @@ export default async function NewLoadPage() {
         </div>
       ) : (
         <>
-        <div className="mb-4">
-          <RateConImport
-            customers={customers}
-            trucks={trucks}
-            trailers={listTrailers()}
-            locations={listLocations()}
-            drivers={drivers}
-            formSettings={loadFormSettings()}
-          />
-        </div>
-        <LoadWorkspace
-          loadId={null}
-          status="available"
-          initialTab="basics"
-          loadSummary=""
-          driverAssigned={false}
-          driverPhone=""
-          dispatcherId={null}
-          dispatchers={[]}
-          docsRequested={false}
-          smsConfigured={false}
-          role={role}
-          returnTo="/board"
-          create
+        <RateConImport
+          customers={customers}
+          trucks={trucks}
+          trailers={listTrailers()}
+          locations={listLocations()}
+          drivers={drivers}
+          formSettings={loadFormSettings()}
         >
-          <LoadForm
-            screen="all"
-            customers={customers}
-            trucks={trucks}
-            trailers={listTrailers()}
-            locations={listLocations()}
-            drivers={drivers}
-            defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
-            equipmentChoices={equipmentChoices}
+          <LoadWorkspace
+            loadId={null}
+            status="available"
+            initialTab="basics"
+            loadSummary=""
+            driverAssigned={false}
+            driverPhone=""
+            dispatcherId={null}
+            dispatchers={[]}
+            docsRequested={false}
+            smsConfigured={false}
+            role={role}
             returnTo="/board"
-            {...loadFormSettings()}
-            action={createLoadAction}
-            submitLabel="Create load"
-          />
-        </LoadWorkspace>
+            create
+          >
+            <LoadForm
+              screen="all"
+              customers={customers}
+              trucks={trucks}
+              trailers={listTrailers()}
+              locations={listLocations()}
+              drivers={drivers}
+              defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
+              equipmentChoices={equipmentChoices}
+              returnTo="/board"
+              {...loadFormSettings()}
+              action={createLoadAction}
+              submitLabel="Create load"
+            />
+          </LoadWorkspace>
+        </RateConImport>
         </>
       )}
     </>

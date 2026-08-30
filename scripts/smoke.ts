@@ -686,9 +686,10 @@ async function main() {
   assert.doesNotMatch(stopsSource, /<select[^>]*name="location_id"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/stops.ts"), "utf8"), /export function reorderStops/);
   const laneSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
-  assert.match(laneSource, /LocationPicker/);
-  assert.match(laneSource, /useLoadAssignPersist/);
+  assert.match(laneSource, /Pickup and delivery windows/);
+  assert.doesNotMatch(laneSource, /LocationPicker|useLoadAssignPersist|Lane from rate con/);
   assert.doesNotMatch(laneSource, /<select[^>]*name="shipper_location_id"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-location-review.tsx"), "utf8"), /LocationPicker/);
   const pickerSource = fs.readFileSync(path.join(process.cwd(), "components/location-picker.tsx"), "utf8");
   assert.match(pickerSource, /data-location-picker/);
   assert.match(pickerSource, /filterLocationsForPicker/);
@@ -12997,6 +12998,18 @@ Continuous reefer. Two load locks.
 
   const newLoadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
   assert.match(newLoadPage, /RateConImport/);
+  assert.match(newLoadPage, /<RateConImport[\s\S]*<LoadWorkspace[\s\S]*<\/RateConImport>/);
+  const laneFieldsSource = fs.readFileSync(path.join(process.cwd(), "components/load-lane-fields.tsx"), "utf8");
+  assert.match(laneFieldsSource, /Pickup and delivery windows/);
+  assert.doesNotMatch(laneFieldsSource, /Lane from rate con|Shipper location|Consignee location|htmlFor="origin"|htmlFor="destination"/);
+  assert.match(laneFieldsSource, /type="hidden" name="origin"/);
+  const locationReviewSource = fs.readFileSync(path.join(process.cwd(), "components/rate-con-location-review.tsx"), "utf8");
+  assert.doesNotMatch(locationReviewSource, /Matched existing location —/);
+  assert.match(locationReviewSource, /Matched a saved location/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8"),
+    /inboxId" in state \?[\s\S]*RateConImportedLoad[\s\S]*: \(\s*children/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/assign-dialog.tsx"), "utf8"), /Assign & Dispatch/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /Customer rate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-money-box.tsx"), "utf8"), /billedCustomerRate/);
