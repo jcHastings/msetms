@@ -5,7 +5,7 @@ import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
 import { CustomerRateField, OwnerOperatorPayFields } from "@/components/load-rate-fields";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { formatMoney } from "@/lib/format";
-import { officeSharePercent } from "@/lib/settlement";
+import { officeSharePercentForOoLoad } from "@/lib/settlement";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
 import { isOwnerOperator, type Load } from "@/lib/types";
@@ -48,7 +48,12 @@ export function LoadPayItems({
   const ooAmount = ownerOperator && !hasFlatExpense ? (load.oo_pay ?? 0) : 0;
   const expenseTotal = Math.round((sumItems(expenses) + ooAmount) * 100) / 100;
   const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
-  const officePercent = ownerOperator ? officeSharePercent(ooPercent ?? load.oo_percent) : null;
+  const officePercent = officeSharePercentForOoLoad({
+    ownerOperator,
+    ooPercent: ooPercent ?? load.oo_percent,
+    ooPay: load.oo_pay,
+    billedRate: Number.isFinite(rateAmount) ? rateAmount : load.rate,
+  });
   const ooNames = ownerOperators.filter(Boolean);
   return (
     <section data-load-tab="financials" className="space-y-3">
@@ -63,10 +68,10 @@ export function LoadPayItems({
         </div>
         <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
-          <div className="mt-0.5 text-sm font-semibold text-slate-900">
-            {formatMoney(profit)}
+          <div className="mt-0.5 flex items-baseline gap-2 text-sm font-semibold text-slate-900">
+            <span>{formatMoney(profit)}</span>
             {officePercent != null ? (
-              <span className="ml-1.5 text-[12px] font-semibold text-slate-600" data-oo-office-percent="">
+              <span className="text-slate-700" data-oo-office-percent="">
                 {officePercent}%
               </span>
             ) : null}

@@ -30,6 +30,19 @@ export function officeSharePercent(ooPercent: number | null | undefined): number
   return Math.round((100 - Number(ooPercent)) * 10) / 10;
 }
 
+/** OO Financials Gross Profit % — company leftover after driver %. Company drivers stay blank. */
+export function officeSharePercentForOoLoad(input: {
+  ownerOperator: boolean;
+  ooPercent?: number | null;
+  ooPay?: number | null;
+  billedRate?: number | null;
+}): number | null {
+  if (!input.ownerOperator) return null;
+  return officeSharePercent(
+    input.ooPercent ?? impliedOwnerOperatorPercent(input.ooPay, input.billedRate),
+  );
+}
+
 export function impliedOwnerOperatorPercent(
   pay: number | null | undefined,
   rate: number | null | undefined,
