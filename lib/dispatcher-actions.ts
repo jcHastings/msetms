@@ -14,6 +14,7 @@ import { assertNyBoroughState } from "./places-shared";
 import {
   authenticateDispatcher,
   clearDispatcherSession,
+  getDispatcher,
   getPendingTwoFactorDispatcherId,
   isTwoFactorRequired,
   requireCapability,
@@ -29,7 +30,6 @@ import {
 } from "./settings-shared";
 import {
   composeSignInCodeEmail,
-  EMAIL_OTP_NO_EMAIL,
   issueEmailOtp,
   maskEmail,
   verifyEmailOtp,
@@ -106,20 +106,20 @@ export async function dispatcherLoginAction(
       verifyEmailOtp(pendingId, emailCode);
       await setDispatcherSession(pendingId);
       refresh();
-      redirect("/");
+      redirect(getDispatcher(pendingId)?.must_change_password ? "/login/change-password" : "/");
     }
 
     const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
     const password = String(formData.get("password") ?? "");
     if (!dispatcherId || !password) throw new Error("Pick your name and enter your password.");
     const dispatcher = authenticateDispatcher(dispatcherId, password);
-    if (!isTwoFactorRequired()) {
+    const afterPassword = () => {
+      return dispatcher.must_change_password ? "/login/change-password" : "/";
+    };
+    if (!isTwoFactorRequired() || !isUsableEmail(dispatcher.email)) {
       await setDispatcherSession(dispatcher.id);
       refresh();
-      redirect("/");
-    }
-    if (!isUsableEmail(dispatcher.email)) {
-      return { ok: false, error: EMAIL_OTP_NO_EMAIL };
+      redirect(afterPassword());
     }
     return await sendSignInCode(dispatcher.id);
   } catch (error) {

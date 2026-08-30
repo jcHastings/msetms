@@ -93,6 +93,7 @@ const SCRIPT_ACTOR: Dispatcher = {
   permission_group: "all",
   totp_enrolled: false,
   has_password: false,
+  must_change_password: false,
 };
 
 async function sessionCookieValue(): Promise<string | undefined | "no-request"> {

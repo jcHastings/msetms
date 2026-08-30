@@ -119,7 +119,8 @@ export function TwoFactorPolicyForm({ required, canEdit }: { required: boolean; 
     <section className="card p-6" data-email-otp-policy="">
       <h2 className="text-sm font-semibold">Require 2-step for all dispatchers</h2>
       <p className="mt-1 text-sm text-slate-600">
-        After the password, send a one-time email code. Users with no email are told to add one.
+        After the password, send a one-time email code when the user has an email. Users with no email sign in with
+        password only until one is added.
       </p>
       <form action={action} className="mt-4 space-y-3">
         <FormBanner result={state} />

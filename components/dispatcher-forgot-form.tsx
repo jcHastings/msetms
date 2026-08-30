@@ -12,6 +12,7 @@ export function DispatcherForgotForm() {
       <FormBanner result={state} />
       <p className="text-sm text-slate-600">
         Enter the email on your user record. If it matches, we send a reset link there — not by text.
+        If this user has no email, ask an Administrator to set a temporary password on Users.
       </p>
       <div className="field">
         <label htmlFor="email">Email</label>

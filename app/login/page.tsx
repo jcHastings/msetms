@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DispatcherLoginPage() {
   const signedIn = await getSignedInDispatcher();
+  if (signedIn?.must_change_password) redirect("/login/change-password");
   if (signedIn) redirect("/");
 
   return (
@@ -16,8 +17,9 @@ export default async function DispatcherLoginPage() {
         <BrandMark size="lg" />
         <h1 className="mt-4 text-3xl font-semibold">Dispatcher desk</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Sign in with your password. We then email a one-time code to the address on your user record.
-          First time here? Use Forgot password to set one.
+          Sign in with your password. If this user has an email, we then send a one-time code there.
+          No email yet? Use the temporary password an Administrator set on Users — you will choose a
+          new password next. Forgot password only works when an email is on the user.
         </p>
       </div>
       <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />

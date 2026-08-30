@@ -659,6 +659,7 @@ export function migrate(db: Database): void {
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
     ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 1"],
     ["email_otp_shipped", "INTEGER NOT NULL DEFAULT 0"],
+    ["password_change_gate_shipped", "INTEGER NOT NULL DEFAULT 0"],
     ["alert_gps_quiet_hours", "REAL NOT NULL DEFAULT 2"],
     ["document_font_family", "TEXT NOT NULL DEFAULT 'helvetica'"],
     ["document_font_scale", "INTEGER NOT NULL DEFAULT 100"],
@@ -707,6 +708,17 @@ export function migrate(db: Database): void {
   `);
   ensureColumn(db, "dispatchers", "password_hash", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "phone", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "company_profile", "password_change_gate_shipped", "INTEGER NOT NULL DEFAULT 0");
+  const changeGate = db.prepare("SELECT password_change_gate_shipped AS shipped FROM company_profile WHERE id = 1").get() as
+    | { shipped?: number }
+    | undefined;
+  if (!Number(changeGate?.shipped)) {
+    db.prepare(
+      "UPDATE dispatchers SET must_change_password = 1 WHERE length(trim(password_hash)) > 0",
+    ).run();
+    db.prepare("UPDATE company_profile SET password_change_gate_shipped = 1 WHERE id = 1").run();
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS dispatcher_password_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

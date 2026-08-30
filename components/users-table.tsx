@@ -57,7 +57,8 @@ export function UsersTable({
                   <div className="mt-1 text-xs text-slate-600">
                     {roleLabel(user.role)} · {user.active ? "Active" : "Inactive"} ·{" "}
                     {user.email?.trim() ? "Email on file" : "Add an email"}
-                    {user.has_password ? "" : " · Set a password"}
+                    {user.has_password ? "" : " · Set a temporary password"}
+                    {user.must_change_password ? " · Must change password" : ""}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

@@ -13,7 +13,8 @@ export const PASSWORD_SMS_RESEND_MS = 45 * 1000;
 export const PASSWORD_SMS_MAX_ATTEMPTS = 5;
 export const PASSWORD_SMS_DIGITS = 6;
 
-export const PASSWORD_UNSET = "Use Forgot password to set a password before you can sign in.";
+export const PASSWORD_UNSET =
+  "Ask an Administrator to set a temporary password on Users. Forgot password only works if this user has an email.";
 export const PASSWORD_NOT_RECOGNIZED = "Dispatcher or password is not recognized.";
 export const PASSWORD_REUSED = "That password was used before. Choose a new password.";
 export const PASSWORD_RESET_INVALID = "That reset link is not valid or expired.";
@@ -121,7 +122,11 @@ export function passwordWasUsed(dispatcherId: number, password: string): boolean
   return history.some((row) => passwordHashMatches(password, row.password_hash));
 }
 
-export function setDispatcherPassword(dispatcherId: number, password: string): void {
+export function setDispatcherPassword(
+  dispatcherId: number,
+  password: string,
+  opts?: { requireChange?: boolean },
+): void {
   const policy = dispatcherPasswordError(password);
   if (policy) throw new Error(policy);
   if (!isQualifyingDispatcherPassword(password)) throw new Error(DISPATCHER_PASSWORD_HINT);
@@ -135,8 +140,9 @@ export function setDispatcherPassword(dispatcherId: number, password: string): v
        VALUES (?, ?, ?)`,
     ).run(dispatcherId, current.password_hash, new Date().toISOString());
   }
-  db.prepare("UPDATE dispatchers SET password_hash = ? WHERE id = ?").run(
+  db.prepare("UPDATE dispatchers SET password_hash = ?, must_change_password = ? WHERE id = ?").run(
     hashDispatcherPassword(password),
+    opts?.requireChange ? 1 : 0,
     dispatcherId,
   );
 }

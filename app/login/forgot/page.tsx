@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ForgotPasswordPage() {
   const signedIn = await getSignedInDispatcher();
+  if (signedIn?.must_change_password) redirect("/login/change-password");
   if (signedIn) redirect("/settings/security");
 
   return (

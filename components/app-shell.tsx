@@ -100,6 +100,15 @@ export function AppShell({
           <div data-desk-chrome="">
           <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
           </div>
+          {!dispatcher.email?.trim() ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add an email on this user. Sign-in uses your password only until then. After an email is
+              saved, the next sign-in emails a one-time code.{" "}
+              <Link href="/settings/security" className="font-semibold underline">
+                Add email
+              </Link>
+            </div>
+          ) : null}
           {children}
         </div>
       </div>

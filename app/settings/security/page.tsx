@@ -1,4 +1,5 @@
 import { DispatcherChangePasswordForm } from "@/components/dispatcher-change-password-form";
+import { DispatcherOwnEmailForm } from "@/components/dispatcher-own-email-form";
 import { TotpSetupPanel, TwoFactorPolicyForm } from "@/components/totp-setup-panel";
 import { PageHeader } from "@/components/page-header";
 import { SettingsBack } from "@/components/settings-nav";
@@ -21,9 +22,13 @@ export default async function SecuritySettingsPage() {
         title="2-step verification"
       />
       <p className="mb-4 text-sm text-slate-600">
-        When this is on, dispatcher sign-in emails a one-time code after the password. Add an email on the user if they
-        do not have one. Changing your password texts a code to the phone on your user record.
+        When this is on, dispatcher sign-in emails a one-time code after the password — only if that user has an email.
+        Users with no email sign in with password only until one is added. Changing your password texts a code only when
+        a phone is on the user record.
       </p>
+      <div className="mb-4">
+        <DispatcherOwnEmailForm email={dispatcher.email} phone={dispatcher.phone} />
+      </div>
       <div className="mb-4">
         <DispatcherChangePasswordForm
           hasPhone={Boolean(dispatcher.phone?.trim())}

@@ -80,7 +80,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/security",
         label: "2-step verification",
-        hint: "Email sign-in code after password",
+        hint: "Email sign-in code after password, when the user has an email",
       },
     ],
   },
@@ -176,6 +176,7 @@ export type DispatcherUser = {
   permission_group: string;
   totp_enrolled: number;
   has_password: number;
+  must_change_password: number;
 };
 
 export type PublicDispatcher = {
@@ -188,12 +189,22 @@ export type PublicDispatcher = {
   permission_group: string;
   totp_enrolled: boolean;
   has_password: boolean;
+  must_change_password: boolean;
 };
 
 export function toPublicDispatcher(
   user: Pick<
     DispatcherUser,
-    "id" | "name" | "role" | "email" | "phone" | "active" | "permission_group" | "totp_enrolled" | "has_password"
+    | "id"
+    | "name"
+    | "role"
+    | "email"
+    | "phone"
+    | "active"
+    | "permission_group"
+    | "totp_enrolled"
+    | "has_password"
+    | "must_change_password"
   >,
 ): PublicDispatcher {
   return {
@@ -206,6 +217,7 @@ export function toPublicDispatcher(
     permission_group: user.permission_group,
     totp_enrolled: Boolean(user.totp_enrolled),
     has_password: Boolean(user.has_password),
+    must_change_password: Boolean(user.must_change_password),
   };
 }
 

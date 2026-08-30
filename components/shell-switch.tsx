@@ -25,15 +25,26 @@ export function ShellSwitch({
   const pathname = usePathname();
   const router = useRouter();
   const publicPath = pathname.startsWith("/driver") || pathname === "/login" || pathname.startsWith("/login/");
+  const changePath = pathname === "/login/change-password";
 
   useEffect(() => {
     if (!publicPath && !dispatcher) {
       router.replace("/login");
     }
-  }, [publicPath, dispatcher, router]);
+    if (dispatcher?.must_change_password && !changePath && !pathname.startsWith("/driver")) {
+      router.replace("/login/change-password");
+    }
+  }, [publicPath, changePath, dispatcher, pathname, router]);
 
   if (publicPath) {
     return <>{children}</>;
+  }
+  if (dispatcher?.must_change_password) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Redirecting to set your password…
+      </div>
+    );
   }
   if (!dispatcher) {
     return (

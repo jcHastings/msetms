@@ -343,6 +343,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /temporary password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G|Demo PIN|4020|4410/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/forgot/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/reset/page.tsx"), "utf8"), /Set password/);
@@ -10071,8 +10072,8 @@ Continuous reefer. Two load locks.
   assert.equal("pin" in msTest, false);
   assert.equal("password_hash" in msTest, false);
   assert.equal("totp_secret" in msTest, false);
-  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /Forgot password|not recognized/);
-  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"), /Forgot password|not recognized/);
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /Administrator|Forgot password|not recognized/);
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"), /Administrator|Forgot password|not recognized/);
   settingsMod.updateDispatcherUser(msTest.id, {
     name: msTest.name,
     role: msTest.role,
@@ -10599,6 +10600,7 @@ Continuous reefer. Two load locks.
   assert.match(userForm, /name="phone"/);
   assert.match(userForm, /defaultValue=""/);
   assert.match(userForm, /leave blank to keep/);
+  assert.match(userForm, /temporary password/);
   assert.match(userForm, /2-step verification/);
   assert.match(userForm, /Add an email on this user/);
   assert.ok(
@@ -10839,8 +10841,26 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password.ts"), "utf8"), /console\.log/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /console\.log/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /sms_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /No phone is on this user/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("password"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /login\/change-password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /EMAIL_OTP_NO_EMAIL/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("pin"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/change-password/page.tsx"), "utf8"), /Set your password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-forgot-form.tsx"), "utf8"), /temporary password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /must_change_password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /Add an email on this user/);
+  assert.equal(settings.getDispatcherUser(noMailId)?.must_change_password, 1);
+  assert.equal(session.authenticateDispatcher(noMailId, "None1$ab").id, noMailId);
+  assert.equal(session.authenticateDispatcher(noMailId, "None1$ab").must_change_password, true);
+  passwords.setDispatcherPassword(noMailId, "None2$cd");
+  assert.equal(settings.getDispatcherUser(noMailId)?.must_change_password, 0);
+  assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").id, noMailId);
+  assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").must_change_password, false);
+  settings.updateOwnDispatcherContact(noMailId, { email: "none2@msloads.com", phone: "" });
+  assert.equal(settings.getDispatcherUser(noMailId)?.email, "none2@msloads.com");
+  const afterEmail = emailOtp.issueEmailOtp(noMailId);
+  emailOtp.verifyEmailOtp(noMailId, afterEmail.code);
   const pinDriver = queries.listDrivers().find((driver) => driver.pin);
   assert.ok(pinDriver, "driver PIN login stays on the driver record");
   assert.equal(queries.authenticateDriver(pinDriver.id, pinDriver.pin).id, pinDriver.id);

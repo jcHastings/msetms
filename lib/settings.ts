@@ -671,7 +671,7 @@ export function clearCompanyLogo(): CompanySettings {
   return patchSettings({ logo_stored_name: "", logo_original_name: "", logo_mime_type: "" });
 }
 
-const DISPATCHER_SAFE_COLUMNS = `id, name, role, email, phone, active, permission_group, totp_enrolled,
+const DISPATCHER_SAFE_COLUMNS = `id, name, role, email, phone, active, permission_group, totp_enrolled, must_change_password,
   CASE WHEN length(trim(password_hash)) > 0 THEN 1 ELSE 0 END AS has_password`;
 
 export function listDispatcherUsers(includeInactive = true): DispatcherUser[] {
@@ -748,7 +748,7 @@ export function createDispatcherUser(input: {
       group,
     );
   const id = Number(result.lastInsertRowid);
-  setDispatcherPassword(id, password);
+  setDispatcherPassword(id, password, { requireChange: true });
   return id;
 }
 
@@ -782,7 +782,18 @@ export function updateDispatcherUser(
     )
     .run(name, role, (input.email ?? "").trim(), (input.phone ?? existing.phone ?? "").trim(), active, group, id);
   const password = input.password?.trim() ?? "";
-  if (password) setDispatcherPassword(id, password);
+  if (password) setDispatcherPassword(id, password, { requireChange: true });
+}
+
+export function updateOwnDispatcherContact(
+  id: number,
+  input: { email?: string; phone?: string },
+): void {
+  const existing = getDispatcherUser(id);
+  if (!existing) throw new Error("User was not found.");
+  getDb()
+    .prepare("UPDATE dispatchers SET email = ?, phone = ? WHERE id = ?")
+    .run((input.email ?? existing.email ?? "").trim(), (input.phone ?? existing.phone ?? "").trim(), id);
 }
 
 export function deleteDispatcherUser(id: number, actorId?: number | null): void {

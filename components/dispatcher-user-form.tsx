@@ -30,7 +30,10 @@ export function DispatcherUserForm({
       <div className="field">
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" defaultValue={user?.email ?? ""} disabled={!canEdit} />
-        <p className="mt-1 text-xs text-slate-500">Sign-in codes and password resets go here.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Sign-in codes and password resets go here. Until an email is on the user they can still sign
+          in with a temporary password.
+        </p>
       </div>
       <div className="field">
         <label htmlFor="phone">Phone</label>
@@ -50,7 +53,10 @@ export function DispatcherUserForm({
           autoComplete="new-password"
           disabled={!canEdit}
         />
-        <p className="mt-1 text-xs text-slate-500">{DISPATCHER_PASSWORD_HINT}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {user ? "Setting a password here is a temporary password. They must change it at next sign-in. " : "This is a temporary password. They must change it at first sign-in. "}
+          {DISPATCHER_PASSWORD_HINT}
+        </p>
       </div>
       <div className="field">
         <label htmlFor="role">Role</label>
@@ -75,12 +81,14 @@ export function DispatcherUserForm({
           <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             {user.email?.trim()
               ? "Sign-in emails a code to this user’s email."
-              : "Add an email on this user. Sign-in cannot send a code without one."}
+              : "Add an email on this user. Until then they sign in with password only."}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             {user.has_password
-              ? "A password is set. Leave the password field blank to keep it."
-              : "No password yet. They must use Forgot password, or set one here."}
+              ? user.must_change_password
+                ? "A temporary password is set. They must change it at next sign-in."
+                : "A password is set. Leave the password field blank to keep it."
+              : "No password yet. Set a temporary password here, or use Forgot password if they have an email."}
           </p>
         </div>
       ) : null}

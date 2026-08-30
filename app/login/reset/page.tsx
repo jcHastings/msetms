@@ -12,6 +12,7 @@ export default async function ResetPasswordPage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const signedIn = await getSignedInDispatcher();
+  if (signedIn?.must_change_password) redirect("/login/change-password");
   if (signedIn) redirect("/settings/security");
   const token = String((await searchParams).token ?? "").trim();
 
