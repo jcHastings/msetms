@@ -682,7 +682,8 @@ async function main() {
   assert.match(paySource, /Gross profit/);
   assert.match(paySource, /officeSharePercent/);
   assert.match(paySource, /data-oo-office-percent/);
-  const { officeSharePercent, officeSharePercentForOoLoad, impliedOwnerOperatorPercent } = await import("../lib/settlement");
+  const { officeSharePercent, officeSharePercentForOoLoad, impliedOwnerOperatorPercent: impliedOoPercentFromPay } =
+    await import("../lib/settlement");
   assert.equal(officeSharePercent(85), 15);
   assert.equal(officeSharePercent(75), 25);
   assert.equal(officeSharePercent(null), null);
@@ -700,7 +701,7 @@ async function main() {
     }),
     15,
   );
-  assert.equal(impliedOwnerOperatorPercent(mse1059Expenses, mse1059Income), 85);
+  assert.equal(impliedOoPercentFromPay(mse1059Expenses, mse1059Income), 85);
   assert.equal(officeSharePercentForOoLoad({ ownerOperator: false, ooPercent: 85 }), null);
   assert.match(paySource, /officeSharePercentForOoLoad/);
   assert.doesNotMatch(paySource, /ViewInvoiceButton/);
