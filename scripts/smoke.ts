@@ -10544,9 +10544,9 @@ Continuous reefer. Two load locks.
   });
   queries.deleteCustomer(tempCustomerId);
   assert.equal(queries.getCustomer(tempCustomerId), null);
-  const billedCustomer = queries.listCustomers().find((row) => queries.countLoadsForCustomer(row.id) > 0);
-  assert.ok(billedCustomer);
-  assert.throws(() => queries.deleteCustomer(billedCustomer.id), /has loads/);
+  const customerWithLoads = queries.listCustomers().find((row) => queries.countLoadsForCustomer(row.id) > 0);
+  assert.ok(customerWithLoads);
+  assert.throws(() => queries.deleteCustomer(customerWithLoads.id), /has loads/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/users/page.tsx"), "utf8"), /redirect\("\/users"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8"), /SettingsAdminGate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/settings-admin-gate.tsx"), "utf8"), /Only an Administrator can change Settings/);
