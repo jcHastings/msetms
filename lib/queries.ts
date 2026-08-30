@@ -366,6 +366,34 @@ export function updateCustomer(
   replaceContacts(id, input.contacts);
 }
 
+export const CUSTOMER_HAS_LOADS_DELETE =
+  "This customer has loads. Move those loads to another customer first.";
+
+export function countLoadsForCustomer(customerId: number): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM loads WHERE customer_id = ?")
+    .get(customerId) as { count: number };
+  return Number(row.count) || 0;
+}
+
+export function loadCountsByCustomer(): Map<number, number> {
+  const rows = getDb()
+    .prepare("SELECT customer_id AS id, COUNT(*) AS count FROM loads GROUP BY customer_id")
+    .all() as Array<{ id: number; count: number }>;
+  return new Map(rows.map((row) => [row.id, Number(row.count) || 0]));
+}
+
+export function deleteCustomer(id: number): void {
+  if (!getCustomer(id)) throw new Error("Customer not found.");
+  if (countLoadsForCustomer(id) > 0) throw new Error(CUSTOMER_HAS_LOADS_DELETE);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("UPDATE load_templates SET customer_id = NULL WHERE customer_id = ?").run(id);
+    db.prepare("DELETE FROM contacts WHERE customer_id = ?").run(id);
+    db.prepare("DELETE FROM customers WHERE id = ?").run(id);
+  })();
+}
+
 function replaceContacts(
   customerId: number,
   contacts: Array<{ name: string; role: string; phone: string; email: string }>,

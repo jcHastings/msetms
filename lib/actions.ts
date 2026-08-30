@@ -19,6 +19,7 @@ import {
   createSavedReport,
   createTrailer,
   createTruck,
+  deleteCustomer,
   deleteDriver,
   deleteLocation,
   deleteSavedReport,
@@ -259,6 +260,23 @@ export async function updateCustomerAction(
     refresh();
     return { ok: true, id };
   } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteCustomerAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("customer_id"));
+    if (id == null) throw new Error("Customer not found.");
+    deleteCustomer(id);
+    refresh();
+    redirect("/customers");
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }
