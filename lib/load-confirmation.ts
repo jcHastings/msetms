@@ -17,7 +17,8 @@ import { locationRuleLabels } from "./location-rules-shared";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
-import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
+import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
+import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults, getDocumentFont } from "./settings";
 import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
@@ -525,7 +526,9 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const left = 36;
   const width = 540;
   const defaults = getDocumentDefaults(model.packet === "customer" ? "customer_confirmation" : "load_confirmation");
-  const bodySize = defaults.font_size || 10;
+  const font = getDocumentFont();
+  const bodySize = scaledFontSize(defaults.font_size || 10, font.scale);
+  doc.font(pdfFontName(font.family));
   const title = confirmationTitle(model, defaults.header_text);
   const contactRows: Array<[string, string]> = [
     [confirmLabel(model, "Dispatcher", "Despachador"), model.company.dispatcher_name],
@@ -696,11 +699,21 @@ function stampConfirmationFooter(
   pageCount: number,
 ): void {
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
-  if (defaults.terms_text && model.packet !== "customer") {
+  const tagCtx = {
+    orgName: model.company.company_name,
+    userName: model.company.dispatcher_name,
+    userEmail: model.company.dispatcher_email,
+    userPhone: model.company.dispatcher_phone,
+    loadId: model.loadNumber,
+    customerName: model.customerName,
+    customerPhone: model.customerPhone,
+  };
+  const terms = expandDocumentTags(defaults.terms_text, tagCtx).trim();
+  if (terms) {
     doc.font("Helvetica").fontSize(7).fillColor("#374151");
-    doc.text(defaults.terms_text, left, 718, { width, height: 16, lineBreak: true });
+    doc.text(terms, left, 718, { width, height: 16, lineBreak: true });
   }
-  const footer = defaults.footer_text.trim();
+  const footer = expandDocumentTags(defaults.footer_text, tagCtx).trim();
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
   if (footer) {
     doc.text(footer, left, 738, { width: width - 100, height: 12, lineBreak: false });

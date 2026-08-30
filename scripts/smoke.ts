@@ -884,6 +884,18 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
+  const documentsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/documents/page.tsx"), "utf8");
+  assert.match(documentsPage, /Driver confirmation/);
+  assert.match(documentsPage, /Customer confirmation/);
+  assert.match(documentsPage, /Bill of Lading/);
+  assert.match(documentsPage, /Font for generated documents/);
+  assert.doesNotMatch(documentsPage, /LTL Quote|3rd Party BOL|Powered by Ascend/i);
+  const workflowPage = fs.readFileSync(path.join(process.cwd(), "app/settings/workflow/page.tsx"), "utf8");
+  assert.match(workflowPage, /Automated Workflow/);
+  assert.match(workflowPage, /Block assign/);
+  assert.match(workflowPage, /Samsara arrive and depart/);
+  assert.match(workflowPage, /Late pickup or delivery/);
+  assert.doesNotMatch(workflowPage, /Highway|EDI 214|Setup Packet Sent To Carrier|MyCarrierPortal/i);
   const alertsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8");
   assert.match(alertsPage, /GPS quiet window/);
   assert.match(alertsPage, /Automated Alerting/);
@@ -5000,6 +5012,19 @@ Continuous reefer. Two load locks.
   assert.match(deniseLicense.message, /driver license/);
   assert.throws(() => requireAssignmentOverride(tyrellAlerts, false), /Expired documents/);
   requireAssignmentOverride(tyrellAlerts, true);
+  const workflow = await import("../lib/workflow");
+  const { DEFAULT_WORKFLOW_SETTINGS } = await import("../lib/workflow-shared");
+  assert.throws(
+    () =>
+      workflow.requireAssignmentHardBlock(
+        { driver: tyrell },
+        { ...DEFAULT_WORKFLOW_SETTINGS, blockAssignExpiredDriver: true },
+      ),
+    /Cannot assign/,
+  );
+  workflow.requireAssignmentHardBlock({ driver: tyrell }, DEFAULT_WORKFLOW_SETTINGS);
+  const { expandDocumentTags } = await import("../lib/document-tags");
+  assert.equal(expandDocumentTags("Load [load_id] for [customer_name]", { loadId: "MSE-1", customerName: "Acme" }), "Load MSE-1 for Acme");
   const upcoming = queries.listUpcomingCompliance();
   assert.ok(upcoming.length >= 3, "seed should surface expiring/expired documents");
   const truck210 = queries.listTrucks().find((truck) => truck.unit_number === "210");
@@ -5041,9 +5066,13 @@ Continuous reefer. Two load locks.
   assert.equal(header.company_name, "M&S Loads");
   const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo } = await import("../lib/settings");
   assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
-  assert.equal(getDocumentDefaults("load_confirmation").terms_text, "");
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /Continuous/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /load locks/);
+  assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /TriumphPay/i);
   assert.equal(getDocumentDefaults("invoice").footer_text, "");
   assert.equal(getDocumentDefaults("invoice").terms_text, "");
+  assert.match(getDocumentDefaults("customer_confirmation").terms_text, /billing@msloads.com/);
+  assert.match(getDocumentDefaults("bol").terms_text, /Seal numbers/);
   assert.equal(hasCustomCompanyLogo(), false);
   assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
   assert.equal(companyLogoPath(), defaultCompanyLogoPath());

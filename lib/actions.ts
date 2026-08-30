@@ -43,6 +43,7 @@ import {
   type LoadInput,
 } from "./queries";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
+import { applyWorkflowOnDriverAssign, assetsForAssignment, requireAssignmentHardBlock } from "./workflow";
 import {
   DRIVER_STATUSES,
   DRIVER_TYPES,
@@ -191,14 +192,9 @@ function parseDateField(value: FormDataEntryValue | null): string {
 
 function enforceAssignmentCompliance(formData: FormData, truckId: number | null, driverId: number | null, trailerId: number | null): void {
   if (!truckId && !driverId && !trailerId) return;
-  const alerts = collectAssignmentAlerts(
-    {
-      truck: truckId ? getTruck(truckId) : null,
-      driver: driverId ? getDriver(driverId) : null,
-      trailer: trailerId ? getTrailer(trailerId) : null,
-    },
-    complianceWindows(),
-  );
+  const assets = assetsForAssignment(truckId, driverId, trailerId);
+  requireAssignmentHardBlock(assets);
+  const alerts = collectAssignmentAlerts(assets, complianceWindows());
   const confirmed = String(formData.get("confirm_expired") ?? "") === "1";
   requireAssignmentOverride(alerts, confirmed);
 }
@@ -459,6 +455,7 @@ export async function createLoadAction(
       const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       const id = createLoad(input);
+      if (input.driver_id) applyWorkflowOnDriverAssign(id);
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
         const { attachInboxToLoad } = await import("./files");
@@ -493,6 +490,7 @@ export async function updateLoadAction(
       const input = applyLoadPermissions(parseLoadInput(formData, true, existing), actor.role, existing ?? undefined);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
+      if (input.driver_id && input.driver_id !== existing?.driver_id) applyWorkflowOnDriverAssign(id);
       if (String(formData.get("save_load_details") ?? "") === "1") {
         updateLoadDetails(id, {
           status_reason: String(formData.get("status_reason") ?? ""),
@@ -556,6 +554,7 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
         oo_percent: parseOptionalFloat(formData.get("oo_percent")),
         dispatch: String(formData.get("dispatch") ?? "") === "1",
       });
+      applyWorkflowOnDriverAssign(loadId);
       const { refreshEmptyMilesAround } = await import("./empty-miles");
       await refreshEmptyMilesAround(loadId, previousDriverId);
       refresh();

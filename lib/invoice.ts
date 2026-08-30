@@ -7,7 +7,8 @@ import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } fro
 import { customerInvoicePayItems } from "./pay-items";
 import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
-import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
+import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
+import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults, getDocumentFont } from "./settings";
 import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
@@ -487,16 +488,28 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     y += 14;
   }
 
-  const termsCopy = defaults.terms_text.trim();
-  const footerCopy = defaults.footer_text.trim();
+  const font = getDocumentFont();
+  const bodyFont = pdfFontName(font.family);
+  const copySize = scaledFontSize(defaults.font_size || 10, font.scale);
+  const tagCtx = {
+    orgName: model.companyName,
+    userName: model.dispatcherName,
+    userEmail: model.companyEmail,
+    userPhone: model.companyPhone,
+    loadId: model.loadNumber,
+    customerName: model.customerName,
+    customerPhone: model.customerPhone,
+  };
+  const termsCopy = expandDocumentTags(defaults.terms_text, tagCtx).trim();
+  const footerCopy = expandDocumentTags(defaults.footer_text, tagCtx).trim();
   if (termsCopy) {
     ensureSpace(24);
-    doc.font("Helvetica").fontSize(8).fillColor(ink).text(termsCopy, left, y, { width });
+    doc.font(bodyFont).fontSize(Math.max(7, copySize - 2)).fillColor(ink).text(termsCopy, left, y, { width });
     y += 12;
   }
   if (footerCopy) {
     ensureSpace(24);
-    doc.font("Helvetica").fontSize(8).fillColor("#374151").text(footerCopy, left, y, { width });
+    doc.font(bodyFont).fontSize(Math.max(7, copySize - 2)).fillColor("#374151").text(footerCopy, left, y, { width });
   }
 
   const range = doc.bufferedPageRange();

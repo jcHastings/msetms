@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BOL_TERMS, CUSTOMER_CONFIRMATION_TERMS, DRIVER_CONFIRMATION_TERMS } from "./document-copy";
 import { Database } from "./sqlite";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
@@ -653,6 +654,9 @@ export function migrate(db: Database): void {
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
     ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 0"],
     ["alert_gps_quiet_hours", "REAL NOT NULL DEFAULT 2"],
+    ["document_font_family", "TEXT NOT NULL DEFAULT 'helvetica'"],
+    ["document_font_scale", "INTEGER NOT NULL DEFAULT 100"],
+    ["workflow_json", "TEXT NOT NULL DEFAULT ''"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
@@ -978,10 +982,17 @@ function backfillDocumentDefaults(db: Database): void {
          OR lower(terms_text) LIKE '%thank you for hauling with us%'
          OR lower(terms_text) LIKE '%carrier is responsible for cargo%'
          OR lower(terms_text) LIKE '%report exceptions at pickup%'
+         OR lower(terms_text) LIKE '%customer portal%'
        THEN ''
        ELSE terms_text
      END`,
   ).run();
+  const fill = db.prepare(
+    "UPDATE document_defaults SET terms_text = ? WHERE doc_type = ? AND trim(terms_text) = ''",
+  );
+  fill.run(DRIVER_CONFIRMATION_TERMS, "load_confirmation");
+  fill.run(CUSTOMER_CONFIRMATION_TERMS, "customer_confirmation");
+  fill.run(BOL_TERMS, "bol");
 }
 
 function backfillDemoAccounting(db: Database): void {

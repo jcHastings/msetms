@@ -33,6 +33,11 @@ export const SETTINGS_SECTIONS = [
         hint: "Rules on driver and unit expiry dates",
       },
       {
+        href: "/settings/workflow",
+        label: "Automated Workflow",
+        hint: "Assign blocks and live load status rules",
+      },
+      {
         href: "/settings/routing",
         label: "Default routing notes",
         hint: "Prefill special instructions on a new load",
@@ -50,7 +55,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/documents",
         label: "Document defaults",
-        hint: "Header, footer, terms, and font size",
+        hint: "Driver confirmation, invoice, customer confirmation, BOL",
       },
     ],
   },

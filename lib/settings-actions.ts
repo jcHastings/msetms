@@ -30,8 +30,12 @@ import {
   updateTaxSettings,
   updateTwoFactorPolicy,
   updateUnitSettings,
+  updateDocumentFont,
+  updateWorkflowSettings,
+  getWorkflowSettings,
   type DocumentType,
 } from "./settings";
+import type { WorkflowLateKind } from "./workflow-shared";
 import { fileToBuffer } from "./files";
 import type { ActionResult } from "./types";
 
@@ -251,6 +255,55 @@ export async function saveDocumentDefaultsAction(
     });
     refresh();
     return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveDocumentFontAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    updateDocumentFont({
+      family: String(formData.get("document_font_family") ?? "helvetica"),
+      scale: parseOptionalInt(formData.get("document_font_scale")) ?? 100,
+    });
+    refresh();
+    return { ok: true, message: "Font settings saved." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveWorkflowAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    const lateKind = String(formData.get("late_kind") ?? "either") as WorkflowLateKind;
+    updateWorkflowSettings({
+      ...getWorkflowSettings(),
+      blockAssignExpiredDriver: String(formData.get("block_driver") ?? "") === "1",
+      blockAssignExpiredTruck: String(formData.get("block_truck") ?? "") === "1",
+      blockAssignExpiredTrailer: String(formData.get("block_trailer") ?? "") === "1",
+      arrivePickupLoadStatus: String(formData.get("arrive_pu_load") ?? ""),
+      arrivePickupTruckStatus: String(formData.get("arrive_pu_truck") ?? ""),
+      departPickupLoadStatus: String(formData.get("depart_pu_load") ?? ""),
+      departPickupTruckStatus: String(formData.get("depart_pu_truck") ?? ""),
+      arriveDeliveryLoadStatus: String(formData.get("arrive_del_load") ?? ""),
+      arriveDeliveryTruckStatus: String(formData.get("arrive_del_truck") ?? ""),
+      driverAssignLoadStatus: String(formData.get("driver_assign_load") ?? ""),
+      driverAssignTruckStatus: String(formData.get("driver_assign_truck") ?? ""),
+      lateStopKind: lateKind === "pickup" || lateKind === "delivery" ? lateKind : "either",
+      lateStopMinutes: parseOptionalInt(formData.get("late_minutes")) ?? 60,
+      lateStopLoadStatus: String(formData.get("late_load") ?? ""),
+      lateStopOnlyStatuses: formData.getAll("late_only").map(String),
+    });
+    refresh();
+    return { ok: true, message: "Workflow saved." };
   } catch (error) {
     return fail(error);
   }

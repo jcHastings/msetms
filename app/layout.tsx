@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ShellSwitch } from "@/components/shell-switch";
 import { deliverAlertEmails, listOfficeNotifications, syncAlertNotifications } from "@/lib/alert-rules";
+import { runWorkflowTick } from "@/lib/workflow";
 import { getSignedInDispatcher, isTwoFactorRequired } from "@/lib/dispatcher-session";
 import { isOpenAiConfigured, loadRuntimeEnv } from "@/lib/env";
 import { readMikeHistory } from "@/lib/mike";
@@ -40,6 +41,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     try {
       const sync = syncAlertNotifications();
       if (sync.emails.length) void deliverAlertEmails(sync.emails);
+      runWorkflowTick();
       officeNotifications = listOfficeNotifications(dispatcher.id);
     } catch {
       officeNotifications = [];

@@ -3,7 +3,8 @@ import { getDb } from "./db";
 import { formatLocationAddress } from "./locations";
 import { getLoad, getLocation } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
-import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, withOfficeAddress } from "./settings";
+import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
+import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, getDocumentDefaults, getDocumentFont, withOfficeAddress } from "./settings";
 import type { LoadView } from "./types";
 import {
   BOL_PAPERWORK_NAME,
@@ -257,6 +258,29 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel, pageCount = 1): vo
   y = drawTotalsRow(doc, LEFT, y, WIDTH, model);
   y = drawNotesAndMoney(doc, LEFT, y + 4, WIDTH, model);
   drawSignatures(doc, LEFT, y + 4, WIDTH);
+  const defaults = getDocumentDefaults("bol");
+  const font = getDocumentFont();
+  const company = getCompanySettings();
+  const tagCtx = {
+    orgName: company.company_name,
+    userName: company.dispatcher_name,
+    userEmail: company.dispatcher_email,
+    userPhone: company.dispatcher_phone,
+    loadId: model.loadNumber,
+  };
+  const terms = expandDocumentTags(defaults.terms_text, tagCtx).trim();
+  const footer = expandDocumentTags(defaults.footer_text, tagCtx).trim();
+  const copySize = Math.max(7, scaledFontSize(defaults.font_size || 8, font.scale) - 2);
+  let copyY = 700;
+  if (terms) {
+    doc.font(pdfFontName(font.family)).fontSize(copySize).fillColor(INK);
+    doc.text(terms, LEFT, copyY, { width: WIDTH, height: 22, lineBreak: true });
+    copyY += 20;
+  }
+  if (footer) {
+    doc.font(pdfFontName(font.family)).fontSize(copySize).fillColor(INK);
+    doc.text(footer, LEFT, copyY, { width: WIDTH, height: 14, lineBreak: true });
+  }
   doc.font("Helvetica").fontSize(8).fillColor(INK);
   doc.text(`Page 1 of ${pageCount}`, LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
 }

@@ -19,7 +19,10 @@ import {
   type DocumentType,
   type DropdownKind,
 } from "./settings-shared";
+import { DRIVER_CONFIRMATION_TERMS, CUSTOMER_CONFIRMATION_TERMS, BOL_TERMS } from "./document-copy";
+import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
+import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
 
 export * from "./settings-shared";
 
@@ -760,4 +763,55 @@ export function updateDispatcherUser(
        WHERE id = ?`,
     )
     .run(name, pin, role, (input.email ?? "").trim(), active, group, id);
+}
+
+export function getDocumentFont(): { family: DocumentFontFamily; scale: number } {
+  const row = getDb()
+    .prepare("SELECT document_font_family, document_font_scale FROM company_profile WHERE id = 1")
+    .get() as { document_font_family?: string; document_font_scale?: number } | undefined;
+  const family = DOCUMENT_FONTS.some((item) => item.value === row?.document_font_family)
+    ? (row?.document_font_family as DocumentFontFamily)
+    : "helvetica";
+  const scale = Number(row?.document_font_scale) || 100;
+  return { family, scale: Math.min(160, Math.max(80, scale)) };
+}
+
+export function updateDocumentFont(input: { family: string; scale: number }): void {
+  if (!DOCUMENT_FONTS.some((item) => item.value === input.family)) {
+    throw new Error("Pick Arial, Times, or Courier.");
+  }
+  const scale = Number(input.scale);
+  if (!Number.isFinite(scale) || scale < 80 || scale > 160) {
+    throw new Error("Font scale must be between 80% and 160%.");
+  }
+  getDb()
+    .prepare("UPDATE company_profile SET document_font_family = ?, document_font_scale = ? WHERE id = 1")
+    .run(input.family, Math.round(scale));
+}
+
+export function getWorkflowSettings(): WorkflowSettings {
+  const row = getDb()
+    .prepare("SELECT workflow_json FROM company_profile WHERE id = 1")
+    .get() as { workflow_json?: string } | undefined;
+  return parseWorkflowSettings(row?.workflow_json);
+}
+
+export function updateWorkflowSettings(input: WorkflowSettings): WorkflowSettings {
+  const next = parseWorkflowSettings(JSON.stringify(input));
+  getDb().prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  return next;
+}
+
+export function seedDocumentTermsIfEmpty(): void {
+  const updates: Array<[DocumentType, string]> = [
+    ["load_confirmation", DRIVER_CONFIRMATION_TERMS],
+    ["customer_confirmation", CUSTOMER_CONFIRMATION_TERMS],
+    ["bol", BOL_TERMS],
+  ];
+  const read = getDb().prepare("SELECT terms_text FROM document_defaults WHERE doc_type = ?");
+  const write = getDb().prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ? AND trim(terms_text) = ''");
+  for (const [docType, terms] of updates) {
+    const row = read.get(docType) as { terms_text?: string } | undefined;
+    if (row && !String(row.terms_text ?? "").trim()) write.run(terms, docType);
+  }
 }
