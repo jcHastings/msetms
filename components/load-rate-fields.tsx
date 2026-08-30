@@ -72,6 +72,11 @@ export function LoadRateFields({
             if (load && String(load.rate ?? "") !== rate) persistMoney({ rate });
           }}
         />
+        {!load ? (
+          <p className="mt-1 text-xs text-slate-500" data-create-rate-note="">
+            This becomes the customer rate on Financials.
+          </p>
+        ) : null}
       </div>
       {ooPercent != null ? (
         <div className="field md:col-span-2" data-oo-pay-pair="">
