@@ -19,7 +19,12 @@ import {
   type DocumentType,
   type DropdownKind,
 } from "./settings-shared";
-import { DRIVER_CONFIRMATION_TERMS, CUSTOMER_CONFIRMATION_TERMS, BOL_TERMS } from "./document-copy";
+import {
+  BOL_TERMS,
+  CUSTOMER_CONFIRMATION_TERMS,
+  DRIVER_CONFIRMATION_TERMS,
+  shouldReplaceStoredTerms,
+} from "./document-copy";
 import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
 import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
@@ -809,9 +814,9 @@ export function seedDocumentTermsIfEmpty(): void {
     ["bol", BOL_TERMS],
   ];
   const read = getDb().prepare("SELECT terms_text FROM document_defaults WHERE doc_type = ?");
-  const write = getDb().prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ? AND trim(terms_text) = ''");
+  const write = getDb().prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ?");
   for (const [docType, terms] of updates) {
     const row = read.get(docType) as { terms_text?: string } | undefined;
-    if (row && !String(row.terms_text ?? "").trim()) write.run(terms, docType);
+    if (shouldReplaceStoredTerms(docType, row?.terms_text ?? "")) write.run(terms, docType);
   }
 }

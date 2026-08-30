@@ -618,7 +618,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   }
 
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
-  const pageLimit = 704;
+  const pageLimit = 640;
   const stopHeight = 108;
 
   function addContentPage() {
@@ -710,8 +710,8 @@ function stampConfirmationFooter(
   };
   const terms = expandDocumentTags(defaults.terms_text, tagCtx).trim();
   if (terms) {
-    doc.font("Helvetica").fontSize(7).fillColor("#374151");
-    doc.text(terms, left, 718, { width, height: 16, lineBreak: true });
+    doc.font(pdfFontName(getDocumentFont().family)).fontSize(6.5).fillColor("#374151");
+    doc.text(terms, left, 648, { width, height: 64, lineBreak: true });
   }
   const footer = expandDocumentTags(defaults.footer_text, tagCtx).trim();
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");

@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { BOL_TERMS, CUSTOMER_CONFIRMATION_TERMS, DRIVER_CONFIRMATION_TERMS } from "./document-copy";
+import {
+  BOL_TERMS,
+  CUSTOMER_CONFIRMATION_TERMS,
+  DRIVER_CONFIRMATION_TERMS,
+  shouldReplaceStoredTerms,
+} from "./document-copy";
 import { Database } from "./sqlite";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
@@ -987,12 +992,16 @@ function backfillDocumentDefaults(db: Database): void {
        ELSE terms_text
      END`,
   ).run();
-  const fill = db.prepare(
-    "UPDATE document_defaults SET terms_text = ? WHERE doc_type = ? AND trim(terms_text) = ''",
-  );
-  fill.run(DRIVER_CONFIRMATION_TERMS, "load_confirmation");
-  fill.run(CUSTOMER_CONFIRMATION_TERMS, "customer_confirmation");
-  fill.run(BOL_TERMS, "bol");
+  const fill = db.prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ?");
+  const current = db.prepare("SELECT terms_text FROM document_defaults WHERE doc_type = ?");
+  for (const [docType, terms] of [
+    ["load_confirmation", DRIVER_CONFIRMATION_TERMS],
+    ["customer_confirmation", CUSTOMER_CONFIRMATION_TERMS],
+    ["bol", BOL_TERMS],
+  ] as const) {
+    const row = current.get(docType) as { terms_text?: string } | undefined;
+    if (shouldReplaceStoredTerms(docType, row?.terms_text ?? "")) fill.run(terms, docType);
+  }
 }
 
 function backfillDemoAccounting(db: Database): void {

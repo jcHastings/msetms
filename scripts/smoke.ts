@@ -906,7 +906,9 @@ async function main() {
   const documentsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/documents/page.tsx"), "utf8");
   assert.match(documentsPage, /SETTINGS_DOCUMENT_EDITORS/);
   assert.match(documentsPage, /Font for generated documents/);
-  assert.doesNotMatch(documentsPage, /LTL Quote|3rd Party BOL|Powered by Ascend/i);
+  assert.match(documentsPage, /DocumentFontForm/);
+  assert.match(documentsPage, /DocumentTagHints/);
+  assert.doesNotMatch(documentsPage, /LTL Quote|3rd Party BOL|Powered by Ascend|Legal Center/i);
   const documentCopy = fs.readFileSync(path.join(process.cwd(), "lib/document-copy.ts"), "utf8");
   assert.match(documentCopy, /Driver confirmation/);
   assert.match(documentCopy, /Customer confirmation/);
@@ -5089,7 +5091,9 @@ Continuous reefer. Two load locks.
   const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo } = await import("../lib/settings");
   assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /Continuous/);
-  assert.match(getDocumentDefaults("load_confirmation").terms_text, /load locks/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /Two load locks are required/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /claim number/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /MS Express load number/);
   assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /TriumphPay/i);
   assert.equal(getDocumentDefaults("invoice").footer_text, "");
   assert.equal(getDocumentDefaults("invoice").terms_text, "");
@@ -5156,6 +5160,11 @@ Continuous reefer. Two load locks.
     (await extractText(new Uint8Array(deniseDriverPdf), { mergePages: true })).text ?? "",
   );
   assert.match(deniseDriverText, /Load Confirmation/);
+  assert.match(deniseDriverText, /Continuous/);
+  assert.match(deniseDriverText, /load locks/i);
+  assert.match(deniseDriverText, /claim number/);
+  assert.doesNotMatch(deniseDriverText, /TriumphPay/i);
+  assert.match(deniseText, /billing@msloads.com/);
   assert.doesNotMatch(deniseDriverText, /Customer Confirmation/);
   assert.doesNotMatch(deniseDriverText, /Thank you for hauling with us/);
   assert.doesNotMatch(deniseDriverText, /Carrier is responsible for cargo/);
@@ -5460,6 +5469,7 @@ Continuous reefer. Two load locks.
   assert.equal((await PDFDocument.load(bolBuf)).getPageCount(), 1, "BOL must be one page");
   const bolText = String((await extractText(new Uint8Array(bolBuf), { mergePages: true })).text ?? "");
   assert.match(bolText, /Bill Of Lading/);
+  assert.match(bolText, /Dedicated trailer number|Seal numbers and piece counts/);
   assert.doesNotMatch(bolText, /Bill Of LadingLoad Number/);
   assert.doesNotMatch(bolText, /Smoke Bill of Lading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/bol.ts"), "utf8"), /text\("Bill Of Lading", LEFT, 24/);
