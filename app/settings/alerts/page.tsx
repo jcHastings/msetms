@@ -28,11 +28,7 @@ export default async function AlertsSettingsPage() {
     <SettingsAdminGate>
       <div className="settings-page">
         <SettingsBack />
-        <PageHeader
-          title="Automated Alerting"
-          subtitle="Watch driver, truck, and trailer dates already on Safety and fleet records. Detention and GPS quiet stay separate."
-          dense
-        />
+        <PageHeader title="Automated Alerting" dense />
         <AlertRulesPanel rules={rules} users={users} canEdit={canEdit} />
         <section className="card mt-4 p-4">
           <h2 className="mb-3 text-sm font-semibold">Windows and email</h2>
