@@ -3231,7 +3231,7 @@ async function main() {
   assert.ok(listFleetDocuments("driver", otherDriverId).some((file) => file.kind === "cdl"));
   assert.ok(listFleetDocuments("truck", truckId).some((file) => file.kind === "registration"));
 
-  const { parseRateConText, extractDocumentText } = await import("../lib/rate-con");
+  const { parseRateConText } = await import("../lib/rate-con");
   const parsed = parseRateConText(
     `RATE CONFIRMATION
 Customer: Delta Cold Storage
@@ -3490,7 +3490,8 @@ Continuous reefer.
   );
   assert.equal(agreedAmount.rate, 5869, "printed agreed amount is the customer rate");
 
-  const real52309Text = await extractDocumentText(
+  const { extractDocumentText: extract52309Text } = await import("../lib/rate-con");
+  const real52309Text = await extract52309Text(
     fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/Load_Confirmation_52309.pdf")),
     "application/pdf",
     "Load_Confirmation_52309_20260830013800.pdf",
