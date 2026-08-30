@@ -914,7 +914,11 @@ async function main() {
   assert.match(documentCopy, /Driver confirmation/);
   assert.match(documentCopy, /Customer confirmation/);
   assert.match(documentCopy, /Bill of Lading/);
-  assert.doesNotMatch(documentCopy, /TriumphPay/);
+  assert.match(documentCopy, /No TriumphPay/);
+  const printedTerms = await import("../lib/document-copy");
+  assert.doesNotMatch(printedTerms.DRIVER_CONFIRMATION_TERMS, /TriumphPay/);
+  assert.doesNotMatch(printedTerms.CUSTOMER_CONFIRMATION_TERMS, /TriumphPay/);
+  assert.doesNotMatch(printedTerms.BOL_TERMS, /TriumphPay/);
   const workflowPage = fs.readFileSync(path.join(process.cwd(), "app/settings/workflow/page.tsx"), "utf8");
   assert.match(workflowPage, /Automated Workflow/);
   assert.match(workflowPage, /Heads up/);
