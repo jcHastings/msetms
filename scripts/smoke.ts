@@ -11002,6 +11002,27 @@ Continuous reefer. Two load locks.
   assert.match(driverLoadPage, /DriverLoadActions/);
   assert.match(driverLoadPage, /id="bol"/);
   assert.match(driverLoadPage, /packet=internal/);
+  assert.match(driverLoadPage, /isCustomerRateDocument/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/driver-doc-classify.tsx"), "utf8"),
+    /isCustomerRateDocument/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/api/attachments/[id]/route.ts"), "utf8"),
+    /driver && isCustomerRateDocument/,
+  );
+  const { isCustomerRateDocument } = await import("../lib/load-documents-shared");
+  assert.equal(isCustomerRateDocument({ kind: "rate_con", original_name: "rate.pdf" }), true);
+  assert.equal(isCustomerRateDocument({ kind: "invoice", original_name: "inv.pdf" }), true);
+  assert.equal(
+    isCustomerRateDocument({ kind: "other", original_name: "MSE-1051-customer-confirmation.pdf" }),
+    true,
+  );
+  assert.equal(isCustomerRateDocument({ kind: "bol", original_name: "MSE-1051-BOL.pdf" }), false);
+  assert.equal(
+    isCustomerRateDocument({ kind: "other", original_name: "MSE-1051-carrier-confirmation.pdf" }),
+    false,
+  );
   assert.match(driverLoadPage, /driver-sheet-value/);
   assert.match(driverLoadPage, /driverStopWhen/);
   assert.doesNotMatch(driverLoadPage, /text-white\}>\{value\}/);

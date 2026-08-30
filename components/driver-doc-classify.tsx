@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { driverClassifyAction } from "@/lib/driver-actions";
 import { DRIVER_UPLOAD_KINDS, isUnclassifiedUpload, labelForDriverUploadKind } from "@/lib/driver-docs";
+import { isCustomerRateDocument } from "@/lib/load-documents-shared";
 import { labelForAttachmentKind } from "@/lib/types";
 
 export function DriverDocClassify({
@@ -11,15 +12,16 @@ export function DriverDocClassify({
   files: Array<{ id: number; kind: string; original_name: string }>;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const needsType = files.filter((file) => isUnclassifiedUpload(file.kind));
+  const visible = files.filter((file) => !isCustomerRateDocument(file));
+  const needsType = visible.filter((file) => isUnclassifiedUpload(file.kind));
   return (
     <section className="mt-5 rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10">
       <h2 className="text-base font-semibold text-white">Files on this load</h2>
-      {files.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="mt-2 text-sm text-slate-400">None yet.</p>
       ) : (
         <ul className="mt-3 space-y-3">
-          {files.map((file) => (
+          {visible.map((file) => (
             <li key={file.id} className="rounded-xl bg-slate-800 px-3 py-2">
               <a href={`/api/attachments/${file.id}`} className="text-base font-medium text-amber-300 underline">
                 {file.original_name}
