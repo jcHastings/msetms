@@ -1449,7 +1449,12 @@ async function main() {
   assert.doesNotMatch(fixtureSrc, /googleusercontent|Drive auto-pull|Grok Bot/);
   assert.match(tieSheetAiSrc, /do not group by city/);
   assert.match(tieSheetAiSrc, /Heartland Kosher and Western Kosher/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /tie-sheet-0824-14M\.png/);
+  assert.match(fixtureSrc, /tie-sheet-0824-14M\.png/);
+  assert.match(fixtureSrc, /green load-ID cell/);
+  assert.match(fixtureSrc, /often no header/);
+  assert.match(fixtureSrc, /no TOTAL line/);
+  assert.match(tieSheetAiSrc, /often NO header row/);
+  assert.match(tieSheetAiSrc, /green load-ID cell/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8"), /Order# \/ Control#/);
   assert.doesNotMatch(tieSheetSharedSrc, /Liftgate|Inside Pickup|Inside Delivery/);
   assert.doesNotMatch(tieSheetSharedSrc, /one drop per truck/);
@@ -14015,6 +14020,15 @@ parked for next week
   assert.equal(ambiguous14M.orders.length, 3, "known snapshot supplies the other two orders when the crop is thin");
 
   assert.equal(TIE_SHEET_PICTURE_FILES.length, 4);
+  const liveCrops = TIE_SHEET_PICTURE_FILES.map((row) => ({ id: row.id, picture: readTieSheetPictureFixture(row.id) }));
+  const livePresent = liveCrops.filter((row) => row.picture);
+  if (livePresent.length) {
+    assert.equal(livePresent.length, 4, "all four live 8.24.26 crops must be present together");
+    for (const row of liveCrops) {
+      assert.ok(row.picture && row.picture.buffer.length > 5000, `${row.id} live crop is a real photo`);
+      assert.equal(row.picture?.buffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    }
+  }
   const pictureTrucks = [
     { id: "0824-14M", receiver: /MBL/, city: "Hammond", orders: ["74774", "74775", "74929"], pos: ["89676G", "89784", "Kosher 89786"] },
     { id: "0824-19E", receiver: /Westside Nonkosher/, city: "Bronx", orders: ["74480", "74795"], pos: ["288167", "289281"] },

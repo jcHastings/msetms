@@ -30,9 +30,10 @@ export function redactTieSheetSecrets(text: string): string {
 
 const SYSTEM_PROMPT = `You read a PICTURE of one MS Express / M&S Loads Tie Sheet truck and extract that truck only.
 Return JSON only. Do not invent money, addresses, order numbers, POs, dates, qty, or weight.
-The picture may be a cropped table with the truck ID in the title (0824-14M 8.24.26 Midwest) or a green load-ID cell in column A. Same truck.
-Column order is locked: Order# / Control# | PO# | Deliver To | City, State | Ship | Delv | Weight | Qty | Comments | Appts
-Header may say Order# or Control#. Ship is ship date. Delv is delivery date.
+A dispatcher photo is usually a live Google Sheet crop: a bright green load-ID cell in column A (0824-14M), then order rows under it. There is often NO header row in the crop. Some trucks have a TOTAL weight under the last order; some (0824-9E) have no TOTAL line.
+The picture may also be a title-bar crop (0824-14M 8.24.26 Midwest). Same truck.
+Column order is locked even when the header is missing: Order# / Control# | PO# | Deliver To | City, State | Ship | Delv | Weight | Qty | Comments | Appts
+If a header is present it may say Order# or Control#. Ship is ship date. Delv is delivery date. Empty spacer columns may sit between fields.
 Extract every order row. Do not merge Deliver To names and do not group by city. The TMS groups drops after extract: same customer and same dock share one drop (Heartland Kosher and Western Kosher deli/crossdock are the same dock). Different customers in the same city (Zant vs Western Kosher) each get their own drop.
 Ignore Customer Pickup blocks and rows under stars (future-week parks). Those are not delivery trucks.
 Pickup date on the sheet = ship date. Delivery date = delv date. Deliver To is the receiver name.

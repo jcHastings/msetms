@@ -2,11 +2,12 @@
  * Test-only markdown/text of the example trucks, plus known-snapshot fill
  * when a picture is ambiguous. Do not import from dispatcher UI.
  *
- * Picture-upload fixtures (unchanged):
- *   tie-sheet-0824-14M.png — 3 orders, one drop MBL Hammond IN
- *   tie-sheet-0824-19E.png — 2 orders, one drop Westside Nonkosher Bronx NY, FCFS
- *   tie-sheet-0824-5W.png — 2 orders, one drop Zant Los Angeles CA
- *   tie-sheet-0824-9E.png — single order Bertolino Peabody MA
+ * Live 8.24.26 Google Sheet crops (picture-upload fixtures):
+ *   green load-ID cell in column A, then order rows, often no header.
+ *   scripts/fixtures/tie-sheet/tie-sheet-0824-14M.png — 3 MBL Hammond, TOTAL 36,533
+ *   scripts/fixtures/tie-sheet/tie-sheet-0824-19E.png — 2 Westside Nonkosher Bronx, FCFS
+ *   scripts/fixtures/tie-sheet/tie-sheet-0824-5W.png — 2 Zant Los Angeles
+ *   scripts/fixtures/tie-sheet/tie-sheet-0824-9E.png — 1 Bertolino Peabody, no TOTAL line
  * Optional extra (markdown only, not a product path): 0824-10E Bozzutos North Haven CT.
  * 0824-4W is mixed receivers/cities — not a happy-path same-drop example.
  * Ignore unnumbered 0831- PFG rows.
@@ -96,10 +97,10 @@ export const TIE_SHEET_FIXTURES = [
 ] as const;
 
 export const TIE_SHEET_PICTURE_FILES = [
-  { id: "0824-14M", file: "tie-sheet-0824-14M.png" },
-  { id: "0824-19E", file: "tie-sheet-0824-19E.png" },
-  { id: "0824-5W", file: "tie-sheet-0824-5W.png" },
-  { id: "0824-9E", file: "tie-sheet-0824-9E.png" },
+  { id: "0824-14M", file: "scripts/fixtures/tie-sheet/tie-sheet-0824-14M.png" },
+  { id: "0824-19E", file: "scripts/fixtures/tie-sheet/tie-sheet-0824-19E.png" },
+  { id: "0824-5W", file: "scripts/fixtures/tie-sheet/tie-sheet-0824-5W.png" },
+  { id: "0824-9E", file: "scripts/fixtures/tie-sheet/tie-sheet-0824-9E.png" },
 ] as const;
 
 const KNOWN_TEXTS: Record<string, string> = {
@@ -126,7 +127,9 @@ export function readTieSheetPictureFixture(
   const row = TIE_SHEET_PICTURE_FILES.find((item) => item.id === id);
   const names = [
     row?.file,
+    path.join("scripts", "fixtures", "tie-sheet", `tie-sheet-${id}.png`),
     path.join("scripts", "fixtures", "tie-sheet", `${id}.png`),
+    `tie-sheet-${id}.png`,
     path.join("lib", "tie-sheet-pictures", `${id}.png`),
   ].filter((name): name is string => Boolean(name));
   for (const name of names) {
