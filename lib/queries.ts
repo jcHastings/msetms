@@ -122,6 +122,7 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     bol_json: row.bol_json || "",
     parent_load_id: row.parent_load_id ?? null,
     master_suffix: row.master_suffix || "",
+    is_master: row.is_master ? 1 : 0,
   };
 }
 

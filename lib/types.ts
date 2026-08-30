@@ -484,6 +484,7 @@ export type Load = {
   cloned_from_id: number | null;
   parent_load_id: number | null;
   master_suffix: string;
+  is_master: number;
   invoice_paid: number;
   dispatcher_id: number | null;
   docs_requested: number;
