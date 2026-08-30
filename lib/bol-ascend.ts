@@ -289,8 +289,8 @@ function writePageNumbers(doc: PDFKit.PDFDocument, loadNumber: string): void {
   for (let i = 0; i < range.count; i += 1) {
     doc.switchToPage(range.start + i);
     doc.font("Helvetica").fontSize(8).fillColor(INK);
-    doc.text(`Load #${loadNumber}`, LEFT, 760, { width: 200, lineBreak: false });
-    doc.text(`Page ${i + 1} of ${range.count}`, LEFT, 760, { width: WIDTH, align: "right", lineBreak: false });
+    doc.text(`Load #${loadNumber}`, LEFT, 748, { width: 200, lineBreak: false });
+    doc.text(`Page ${i + 1} of ${range.count}`, LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
   }
 }
 
