@@ -853,9 +853,14 @@ async function main() {
   const parentColAt = dbMigrateSource.indexOf('ensureColumn(db, "loads", "parent_load_id"');
   const parentIdxAt = dbMigrateSource.indexOf("idx_loads_parent");
   assert.ok(parentColAt >= 0 && parentIdxAt > parentColAt, "add parent_load_id before indexing it");
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8"), /Master load/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8"), /stop_ids/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Split as master load/);
+  const masterPanelSource = fs.readFileSync(path.join(process.cwd(), "components/master-load-panel.tsx"), "utf8");
+  assert.match(masterPanelSource, /Master load/);
+  assert.match(masterPanelSource, /stop_ids/);
+  assert.match(masterPanelSource, /data-master-opt-in/);
+  assert.match(masterPanelSource, /data-master-turn-on/);
+  assert.match(masterPanelSource, /Turn into a master load/);
+  assert.doesNotMatch(masterPanelSource, /One trip, more than one customer|same as Ascend|Bill and paperwork live on the child|Dispatch stays on the master/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /Turn into a master load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/page-overlay-host.tsx"), "utf8"), /ms-open-load/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/master-load.ts"), "utf8"), /createMasterChild/);
   const { childLoadNumber, nextChildSuffix, sortMasterFamilies } = await import("../lib/master-load-shared");

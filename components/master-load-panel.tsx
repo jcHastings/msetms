@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { addMasterChildAction } from "@/lib/dispatcher-actions";
 import { overlayHref } from "@/lib/load-page-shared";
@@ -37,7 +37,9 @@ export function MasterLoadPanel({
   defaultCustomerId: number;
 }) {
   const [state, formAction, pending] = useActionState(addMasterChildAction, null);
+  const [turnedOn, setTurnedOn] = useState(false);
   const children = family.filter((row) => row.parent_load_id);
+  const isMaster = isChild || children.length > 0 || turnedOn;
   let nextSuffix = "A";
   try {
     nextSuffix = nextChildSuffix(children.map((row) => row.master_suffix));
@@ -46,6 +48,11 @@ export function MasterLoadPanel({
   }
   const nextNumber = nextSuffix ? childLoadNumber(masterNumber, nextSuffix) : "";
   const masterId = family.find((row) => !row.parent_load_id)?.id ?? loadId;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash.replace(/^#/, "") === "master-load") setTurnedOn(true);
+  }, []);
 
   function openMember(id: number) {
     const embed = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -66,13 +73,15 @@ export function MasterLoadPanel({
         <h2 className="text-sm font-semibold">Master load</h2>
       </div>
       <div className="space-y-4 p-5 text-sm">
-        <p className="text-slate-600">
-          One trip, more than one customer — same as Ascend. The trip stays{" "}
-          <span className="font-mono font-semibold">{masterNumber}</span>. Each customer gets{" "}
-          <span className="font-mono">{masterNumber}-A</span>, <span className="font-mono">-B</span>,{" "}
-          <span className="font-mono">-C</span>. Pick the stops that belong to that customer. Bill and
-          paperwork live on the child. Dispatch stays on the master.
-        </p>
+        {!isMaster ? (
+          <div className="space-y-3" data-master-opt-in="">
+            <p className="text-slate-600">This load is not a master. Turn it into one to bill more than one customer on the same trip.</p>
+            <button className="btn btn-secondary" type="button" data-master-turn-on="" onClick={() => setTurnedOn(true)}>
+              Turn into a master load
+            </button>
+          </div>
+        ) : (
+          <>
         <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
           {family.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
@@ -86,7 +95,11 @@ export function MasterLoadPanel({
                   {row.load_number}
                 </button>
                 <div className="text-xs text-slate-500">
-                  {row.parent_load_id ? `Customer split ${row.master_suffix}` : "Master · trip"}
+                  {row.parent_load_id
+                    ? `Customer split ${row.master_suffix}`
+                    : children.length
+                      ? "Master · trip"
+                      : "This trip"}
                   {row.customer_name ? ` · ${row.customer_name}` : ""}
                   {row.rate != null ? ` · ${formatMoney(row.rate)}` : ""}
                 </div>
@@ -158,6 +171,8 @@ export function MasterLoadPanel({
               {pending ? "Adding…" : nextNumber ? `Add ${nextNumber}` : "A through Z are used"}
             </button>
           </form>
+        )}
+          </>
         )}
       </div>
     </section>
