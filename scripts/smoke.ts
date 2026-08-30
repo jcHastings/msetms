@@ -900,11 +900,14 @@ async function main() {
   assert.match(qboSendButtonUi, /data-qbo-send-notice/);
   assert.match(qboSendButtonUi, /confirm_resend/);
   assert.match(qboSendButtonUi, /Invoice sent again to QuickBooks/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /Invoice sent again to QuickBooks/);
-  assert.doesNotMatch(
-    fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"),
-    /if \(!result\.ok\) throw new Error\(result\.error\)/,
+  const qboActionsSrc = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
+  const qboFormSrc = qboActionsSrc.slice(
+    qboActionsSrc.indexOf("export async function sendToQuickbooksFormAction"),
+    qboActionsSrc.indexOf("export async function sendToQuickbooksAction"),
   );
+  assert.match(qboFormSrc, /await sendToQuickbooksAction/);
+  assert.doesNotMatch(qboFormSrc, /throw new Error/);
+  assert.match(qboActionsSrc, /Invoice sent again to QuickBooks/);
   assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
   assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
   assert.match(docsPage, /when="assets"/);
