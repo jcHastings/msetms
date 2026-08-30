@@ -293,11 +293,17 @@ async function main() {
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
   assert.match(workspaceSource, /Text dispatch to driver/);
+  assert.match(workspaceSource, /data-text-dispatch/);
+  assert.match(workspaceSource, /tab !== "docs"/);
   assert.match(workspaceSource, /Assign a driver first/);
   assert.match(workspaceSource, /The assigned driver needs a mobile number/);
   assert.match(workspaceSource, /Send text/);
   assert.doesNotMatch(workspaceSource, /window\.confirm\(`Text dispatch/);
   assert.doesNotMatch(workspaceSource, /Text Load Information/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"),
+    /Text dispatch to driver/,
+  );
   assert.match(workspaceSource, /Upload a Document/);
   assert.match(workspaceSource, /Request Documents From Driver/);
   const sendBooksUi = fs.readFileSync(path.join(process.cwd(), "components/send-to-accounting.tsx"), "utf8");

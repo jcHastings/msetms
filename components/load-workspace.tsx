@@ -302,10 +302,11 @@ export function LoadWorkspace({
       <div className="load-actions mb-4 px-4 py-3">
         <div className="load-actions-label mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]">Load Actions</div>
         <div className="flex flex-wrap items-center gap-2">
-        {canSendSms(role) ? (
+        {canSendSms(role) && tab !== "docs" ? (
           <button
             type="button"
             className="btn load-action-btn"
+            data-text-dispatch=""
             onClick={() => {
               if (!requireDriverPhone()) return;
               setSmsNotice(null);
@@ -315,7 +316,7 @@ export function LoadWorkspace({
             Text dispatch to driver
           </button>
         ) : null}
-        {canSendSms(role) && whatsappConfigured ? (
+        {canSendSms(role) && whatsappConfigured && tab !== "docs" ? (
           <button
             type="button"
             className="btn load-action-btn"
