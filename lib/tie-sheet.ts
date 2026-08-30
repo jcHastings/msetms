@@ -5,8 +5,10 @@ import {
   createLocation,
   findOrCreateCustomer,
   getLoad,
+  getLocation,
   listLocations,
   updateLoadDetails,
+  updateLocation,
   type LoadInput,
 } from "./queries";
 import { replaceStops, type StopInput } from "./stops";
@@ -42,7 +44,10 @@ function findOrCreateBookLocation(input: {
     city: input.city,
     state: input.state,
   });
-  if (existing) return existing.id;
+  if (existing) {
+    keepAppointmentAndCallBefore(existing.id, input.role === "shipper" ? "appointment" : input.schedule_type);
+    return existing.id;
+  }
   if (!input.name.trim() || !input.city.trim()) return null;
   return createLocation({
     name: input.name.trim(),
@@ -57,6 +62,30 @@ function findOrCreateBookLocation(input: {
     hours: "",
     scheduling_notes: "",
     call_before: 1,
+  });
+}
+
+function keepAppointmentAndCallBefore(id: number, scheduleType: "appointment" | "fcfs"): void {
+  const location = getLocation(id);
+  if (!location) return;
+  const nextSchedule = location.role === "shipper" || scheduleType === "appointment" ? "appointment" : location.scheduling_type || scheduleType;
+  if (location.call_before && location.scheduling_type === nextSchedule) return;
+  updateLocation(id, {
+    name: location.name,
+    street: location.street,
+    city: location.city,
+    state: location.state,
+    zip: location.zip,
+    phone: location.phone,
+    notes: location.notes,
+    role: location.role,
+    scheduling_type: nextSchedule === "fcfs" ? "fcfs" : "appointment",
+    hours: location.hours,
+    scheduling_notes: location.scheduling_notes,
+    call_before: 1,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    google_place_id: location.google_place_id,
   });
 }
 

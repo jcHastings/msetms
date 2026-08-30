@@ -1426,8 +1426,8 @@ async function main() {
   assert.match(mikeChatUi, /Confirm saves the load\. Discard does not/);
   assert.doesNotMatch(mikeChatUi, /paste the truck|markdown paste|From Tie Sheet/);
   assert.doesNotMatch(mikeChatUi, /Grok Bot|Google Sheet|file watcher|shared folder/);
-  const newLoadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
-  assert.doesNotMatch(newLoadPage, /From Tie Sheet|tie.sheet paste|paste a Tie Sheet/);
+  const newLoadNoTieSheetPaste = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
+  assert.doesNotMatch(newLoadNoTieSheetPaste, /From Tie Sheet|tie.sheet paste|paste a Tie Sheet/);
   const tieSheetAiSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8");
   assert.match(tieSheetAiSrc, /MIKE_OPENAI_MODEL/);
   assert.match(tieSheetAiSrc, /redactTieSheetSecrets/);
