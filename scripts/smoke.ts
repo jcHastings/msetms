@@ -39,6 +39,7 @@ async function main() {
   assert.doesNotMatch(navSource, /href: "\/reports", label: "Claims"|href: "\/claims".*\/reports/);
   assert.match(navSource, /data-nav-href=\{item\.href\}/);
   assert.match(navSource, /isDeskNavActive/);
+  assert.match(navSource, /prefetch=\{item\.href === "\/claims"/);
   const { isDeskNavActive } = await import("../lib/desk-nav-shared");
   assert.equal(isDeskNavActive("/claims", "/claims"), true);
   assert.equal(isDeskNavActive("/claims", "/reports"), false);

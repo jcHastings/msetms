@@ -82,6 +82,9 @@ export function NavLinks({ role }: { role: string }) {
           <div className="flex flex-col gap-0.5">
             {section.items.map((item) => {
               const active = isDeskNavActive(item.href, pathname);
+              const className = `desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
+                active ? "desk-nav-link-active" : ""
+              }`;
               return (
                 <Link
                   key={item.href}
@@ -89,9 +92,7 @@ export function NavLinks({ role }: { role: string }) {
                   title={item.label}
                   data-nav-href={item.href}
                   prefetch={item.href === "/claims" ? false : undefined}
-                  className={`desk-nav-link flex items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 ${
-                    active ? "desk-nav-link-active" : ""
-                  }`}
+                  className={className}
                 >
                   <NavIcon name={item.icon} />
                   <span className="text-xs font-semibold leading-tight">{item.short}</span>
