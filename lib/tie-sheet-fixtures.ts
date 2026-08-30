@@ -43,6 +43,12 @@ Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty
 XK + TOTAL | | | | | | 37,152 |
 `;
 
+/**
+ * JC locked mixed acceptance. One load, THREE drops — not 7 orders, not 2 cities.
+ * 1. Rolling Ranch, Ontario CA — 74865 only
+ * 2. Western Kosher / Heartland, same dock — 74846 + 7599 + 7714 + 7621 + 7622
+ * 3. Zant, Los Angeles — 74793 only (different customer; city is also LA)
+ */
 export const TIE_SHEET_FIXTURE_0824_4W = `0824-4W
 Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty | Comments | Appts
 74865 | | Rolling Ranch | Ontario, CA | 8/28 | 8/30 | 16,379 | 250 | | FCFS 5am - 1pm
@@ -55,7 +61,20 @@ Control# | PO# | Deliver To | City, State | Ship date | Delv date | Weight | Qty
 XK + TOTAL | | | | | | 39,629 |
 `;
 
-/** Same-receiver trucks (one drop each). 0824-4W is the mixed multi-drop fixture. */
+/** JC locked 0824-4W drop map. Every order # and PO for a drop stays on that drop. */
+export const TIE_SHEET_0824_4W_DROPS = [
+  { label: "Rolling Ranch", city: "Ontario", state: "CA", orders: ["74865"], pos: [] as string[] },
+  {
+    label: "Western Kosher / Heartland",
+    city: "Los Angeles",
+    state: "CA",
+    orders: ["74846", "7599", "7714", "7621", "7622"],
+    pos: ["Email"],
+  },
+  { label: "Zant", city: "Los Angeles", state: "CA", orders: ["74793"], pos: ["468128"] },
+] as const;
+
+/** Same-receiver trucks (one drop each). 0824-4W is the locked mixed three-drop fixture. */
 export const TIE_SHEET_FIXTURES = [
   { id: "0824-14M", text: TIE_SHEET_FIXTURE_0824_14M },
   { id: "0824-19E", text: TIE_SHEET_FIXTURE_0824_19E },

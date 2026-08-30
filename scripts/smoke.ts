@@ -1437,7 +1437,13 @@ async function main() {
   assert.match(tieSheetSharedSrc, /Nebraska Cold Storage Inc/);
   assert.match(tieSheetSharedSrc, /M&S Loads/);
   assert.match(tieSheetSharedSrc, /groupTieSheetOrdersByDock/);
+  assert.match(tieSheetSharedSrc, /tieSheetSameDockFamily/);
+  assert.match(tieSheetSharedSrc, /Never group by city alone/);
+  assert.match(tieSheetSharedSrc, /western-kosher-heartland/);
   assert.match(tieSheetSharedSrc, /fillAmbiguousTieSheetFields/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /THREE drops/);
+  assert.match(tieSheetAiSrc, /do not group by city/);
+  assert.match(tieSheetAiSrc, /Heartland Kosher and Western Kosher/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8"), /tie-sheet-0824-14M\.png/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8"), /Order# \/ Control#/);
   assert.doesNotMatch(tieSheetSharedSrc, /Liftgate|Inside Pickup|Inside Delivery/);
@@ -13690,6 +13696,7 @@ Continuous reefer. Two load locks.
     TIE_SHEET_FIXTURE_0824_5W,
     TIE_SHEET_FIXTURE_0824_9E,
     TIE_SHEET_FIXTURE_0824_4W,
+    TIE_SHEET_0824_4W_DROPS,
     TIE_SHEET_PICTURE_FILES,
     knownTieSheetExtract,
     readTieSheetPictureFixture,
@@ -13698,7 +13705,10 @@ Continuous reefer. Two load locks.
     draftFromTieSheetExtract,
     encodeTieSheetDraft,
     fillAmbiguousTieSheetFields,
+    groupTieSheetOrdersByDock,
     parseTieSheetText,
+    tieSheetDraftPreview,
+    tieSheetSameDockFamily,
     TIE_SHEET_CUSTOMER,
     TIE_SHEET_MISSING_KEY_MESSAGE,
     TIE_SHEET_SHIPPER_NAME,
@@ -13851,23 +13861,49 @@ parked for next week
 
   const mixedExtract = parseTieSheetText(TIE_SHEET_FIXTURE_0824_4W);
   assert.equal(mixedExtract.load_id, "0824-4W");
-  assert.equal(mixedExtract.orders.length, 7);
+  assert.equal(mixedExtract.orders.length, 7, "sheet has 7 order rows; that is not 7 drops");
+  assert.equal(tieSheetSameDockFamily("Heartland Kosher - Western Kosher"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Heartland Kosher"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Western Kosher - Deli Crossdock"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Zant"), "");
+  assert.equal(tieSheetSameDockFamily("Rolling Ranch"), "");
+  const heartlandOnly = groupTieSheetOrdersByDock([
+    { ...mixedExtract.orders[1], deliver_to: "Heartland Kosher" },
+    mixedExtract.orders[2],
+    mixedExtract.orders[6],
+  ]);
+  assert.equal(heartlandOnly.length, 2, "Heartland still shares the Western Kosher dock; Zant does not");
+  assert.deepEqual(heartlandOnly[0]?.map((order) => order.control), ["74846", "7599"]);
+  assert.deepEqual(heartlandOnly[1]?.map((order) => order.control), ["74793"]);
   const mixedDraft = draftFromTieSheetExtract(mixedExtract);
   assert.equal(mixedDraft.customer_name, TIE_SHEET_CUSTOMER);
   assert.equal(mixedDraft.pickup.name, TIE_SHEET_SHIPPER_NAME);
-  assert.equal(mixedDraft.drops.length, 3, "0824-4W is one load with one drop per customer/dock");
-  assert.match(mixedDraft.drops[0]?.name ?? "", /Rolling Ranch/i);
-  assert.equal(mixedDraft.drops[0]?.city, "Ontario");
-  assert.equal(mixedDraft.drops[0]?.state, "CA");
-  assert.deepEqual(mixedDraft.drops[0]?.order_numbers, ["74865"]);
-  assert.match(mixedDraft.drops[1]?.name ?? "", /Heartland|Western Kosher/i);
-  assert.equal(mixedDraft.drops[1]?.city, "Los Angeles");
-  assert.deepEqual(mixedDraft.drops[1]?.order_numbers, ["74846", "7599", "7714", "7621", "7622"]);
-  assert.ok(mixedDraft.drops[1]?.po_numbers.includes("Email"));
-  assert.match(mixedDraft.drops[2]?.name ?? "", /Zant/i);
-  assert.equal(mixedDraft.drops[2]?.city, "Los Angeles");
-  assert.deepEqual(mixedDraft.drops[2]?.order_numbers, ["74793"]);
-  assert.deepEqual(mixedDraft.drops[2]?.po_numbers, ["468128"]);
+  assert.notEqual(mixedDraft.drops.length, 7, "0824-4W is not one drop per order");
+  assert.notEqual(mixedDraft.drops.length, 2, "0824-4W is not one drop per city");
+  assert.equal(mixedDraft.drops.length, 3, "0824-4W is one load with three customer/dock drops");
+  assert.equal(TIE_SHEET_0824_4W_DROPS.length, 3);
+  const mixedPreview = tieSheetDraftPreview(mixedDraft);
+  assert.match(mixedPreview, /3 drops/);
+  for (const [index, expected] of TIE_SHEET_0824_4W_DROPS.entries()) {
+    const drop = mixedDraft.drops[index];
+    assert.ok(drop, `0824-4W drop ${index + 1} ${expected.label}`);
+    if (index === 0) assert.match(drop.name, /Rolling Ranch/i);
+    if (index === 1) assert.match(drop.name, /Heartland|Western Kosher/i);
+    if (index === 2) assert.match(drop.name, /Zant/i);
+    assert.equal(drop.city, expected.city);
+    assert.equal(drop.state, expected.state);
+    assert.deepEqual(drop.order_numbers, [...expected.orders]);
+    for (const order of expected.orders) {
+      assert.match(`${drop.confirmation} ${drop.notes}`, new RegExp(order));
+      assert.match(mixedPreview, new RegExp(order));
+    }
+    for (const po of expected.pos) {
+      assert.ok(drop.po_numbers.includes(po), `${expected.label} must keep PO ${po} on that drop`);
+      assert.match(`${drop.reference} ${drop.notes}`, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(mixedPreview, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+  }
+  assert.equal(mixedDraft.drops.filter((drop) => drop.city === "Los Angeles").length, 2, "LA city alone is not one drop");
   assert.equal(mixedDraft.weight, 39629);
   const mixedBefore = queries.listLoads({ status: "all" }).length;
   const mixedSaved = saveTieSheetDraft(mixedDraft);
@@ -13881,18 +13917,26 @@ parked for next week
   assert.equal(mixedStops.filter((stop) => stop.kind === "delivery").length, 3);
   assert.match(mixedStops.find((stop) => stop.kind === "pickup")?.name ?? "", /Nebraska Cold Storage/i);
   const mixedDrops = mixedStops.filter((stop) => stop.kind === "delivery");
-  assert.match(mixedDrops[0]?.name ?? "", /Rolling Ranch/i);
-  assert.equal(mixedDrops[0]?.city, "Ontario");
-  assert.match(`${mixedDrops[0]?.confirmation} ${mixedDrops[0]?.notes}`, /74865/);
-  assert.match(mixedDrops[1]?.name ?? "", /Heartland|Western Kosher/i);
-  assert.equal(mixedDrops[1]?.city, "Los Angeles");
-  for (const order of ["74846", "7599", "7714", "7621", "7622"]) {
-    assert.match(`${mixedDrops[1]?.confirmation} ${mixedDrops[1]?.notes}`, new RegExp(order));
+  assert.notEqual(mixedDrops.length, 7);
+  assert.notEqual(mixedDrops.length, 2);
+  assert.equal(mixedDrops.length, 3);
+  for (const [index, expected] of TIE_SHEET_0824_4W_DROPS.entries()) {
+    const drop = mixedDrops[index];
+    assert.equal(drop?.city, expected.city);
+    assert.equal(drop?.state, expected.state);
+    for (const order of expected.orders) {
+      assert.match(`${drop?.confirmation} ${drop?.notes}`, new RegExp(order));
+    }
+    for (const po of expected.pos) {
+      assert.match(
+        `${drop?.reference} ${drop?.notes} ${mixedLoad.po_number}`,
+        new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
   }
-  assert.match(`${mixedDrops[1]?.reference} ${mixedDrops[1]?.notes}`, /Email/);
+  assert.match(mixedDrops[0]?.name ?? "", /Rolling Ranch/i);
+  assert.match(mixedDrops[1]?.name ?? "", /Heartland|Western Kosher/i);
   assert.match(mixedDrops[2]?.name ?? "", /Zant/i);
-  assert.match(`${mixedDrops[2]?.confirmation} ${mixedDrops[2]?.notes}`, /74793/);
-  assert.match(`${mixedDrops[2]?.reference} ${mixedLoad.po_number}`, /468128/);
   assert.equal(queries.listLoads({ status: "all" }).length, mixedBefore + 1, "mixed truck is still one load");
 
   const discardedCount = queries.listLoads({ status: "all" }).length;
@@ -13989,6 +14033,47 @@ parked for next week
       );
     }
   }
+
+  const known4W = knownTieSheetExtract("0824-4W");
+  assert.ok(known4W);
+  setTieSheetAiTestClient(async () =>
+    JSON.stringify({
+      load_id: "0824-4W",
+      orders: known4W.orders.map((order) => ({ control: order.control })),
+    }),
+  );
+  const mixedPicture = readTieSheetPictureFixture("0824-4W") ?? {
+    buffer: tinyPng,
+    filename: "tie-sheet-0824-4W.png",
+    mimeType: "image/png",
+  };
+  const mixedPictureBefore = queries.listLoads({ status: "all" }).length;
+  const mixedPictureRead = await askMike("", [], {
+    mimeType: mixedPicture.mimeType,
+    buffer: mixedPicture.buffer,
+    filename: mixedPicture.filename,
+  });
+  setTieSheetAiTestClient(null);
+  assert.equal(mixedPictureRead.proposals.length, 1, "0824-4W picture drafts one load");
+  assert.equal(mixedPictureRead.proposals[0]?.kind, "build_tie_sheet");
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /3 drop/);
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /Rolling Ranch/);
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /Zant/);
+  for (const expected of TIE_SHEET_0824_4W_DROPS) {
+    for (const order of expected.orders) {
+      assert.match(mixedPictureRead.proposals[0]?.preview ?? "", new RegExp(order));
+    }
+  }
+  assert.equal(queries.listLoads({ status: "all" }).length, mixedPictureBefore, "0824-4W vision must not save until confirm");
+  const mixedPictureConfirm = applyMikeProposal(mixedPictureRead.proposals[0]?.payload ?? {}, "build_tie_sheet");
+  assert.ok(mixedPictureConfirm.id);
+  const mixedPictureStops = (await import("../lib/stops")).listStops(mixedPictureConfirm.id!);
+  assert.equal(mixedPictureStops.filter((stop) => stop.kind === "pickup").length, 1);
+  assert.equal(
+    mixedPictureStops.filter((stop) => stop.kind === "delivery").length,
+    3,
+    "0824-4W picture is three drops, not seven orders or two cities",
+  );
 
   const whatsappEnvKeys = [
     "TWILIO_ACCOUNT_SID",

@@ -33,7 +33,7 @@ Return JSON only. Do not invent money, addresses, order numbers, POs, dates, qty
 The picture may be a cropped table with the truck ID in the title (0824-14M 8.24.26 Midwest) or a green load-ID cell in column A. Same truck.
 Column order is locked: Order# / Control# | PO# | Deliver To | City, State | Ship | Delv | Weight | Qty | Comments | Appts
 Header may say Order# or Control#. Ship is ship date. Delv is delivery date.
-Extract every order row. Do not merge Deliver To names. The TMS groups drops: same customer and same dock share one drop; different customers or locations each get their own drop.
+Extract every order row. Do not merge Deliver To names and do not group by city. The TMS groups drops after extract: same customer and same dock share one drop (Heartland Kosher and Western Kosher deli/crossdock are the same dock). Different customers in the same city (Zant vs Western Kosher) each get their own drop.
 Ignore Customer Pickup blocks and rows under stars (future-week parks). Those are not delivery trucks.
 Pickup date on the sheet = ship date. Delivery date = delv date. Deliver To is the receiver name.
 APPT vs FCFS comes from the Appt column ("7:00 AM" is APPT; "FCFS 7am-4pm" or "FCFS 7am - 4pm" is FCFS window).

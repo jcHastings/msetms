@@ -1,4 +1,4 @@
-/** Client-safe Tie Sheet mapping. One load per truck. One drop per customer+dock. Do not invent columns. */
+/** Client-safe Tie Sheet mapping. One load per truck. One drop per customer+dock. Never group by city alone. Do not invent columns. */
 
 export const TIE_SHEET_CUSTOMER = "M&S Loads";
 export const TIE_SHEET_SHIPPER_NAME = "Nebraska Cold Storage Inc";
@@ -257,15 +257,28 @@ export function tieSheetOrderDockKey(order: TieSheetOrder): string {
 }
 
 /**
+ * JC locked 0824-4W: Heartland Kosher and Western Kosher deli/crossdock are the
+ * same dock. Do not key this on city — Zant is also Los Angeles and stays separate.
+ */
+export function tieSheetSameDockFamily(name: string): string {
+  const tokens = new Set(nameTokens(name));
+  if (tokens.has("heartland") || (tokens.has("western") && tokens.has("kosher"))) {
+    return "western-kosher-heartland";
+  }
+  return "";
+}
+
+/**
  * Combine orders onto one drop only when they share a customer and a location/dock.
- * Word-order variants of the same Deliver To stay together. Different customers
- * in the same city (Zant vs Western Kosher) stay separate. Heartland/Western Kosher
- * rows in the same city share a drop.
+ * Never group by city alone. Word-order variants of the same Deliver To stay
+ * together. Different customers in the same city (Zant vs Western Kosher) stay
+ * separate. Heartland / Western Kosher deli crossdock rows share one drop.
  */
 export function groupTieSheetOrdersByDock(orders: TieSheetOrder[]): TieSheetOrder[][] {
   const groups: Array<{
     dockKey: string;
     place: string;
+    family: string;
     core: Set<string>;
     orders: TieSheetOrder[];
   }> = [];
@@ -273,23 +286,26 @@ export function groupTieSheetOrdersByDock(orders: TieSheetOrder[]): TieSheetOrde
     const place = orderPlace(order);
     const placeId = placeKey(place.city, place.state);
     const dockKey = tieSheetOrderDockKey(order);
+    const family = tieSheetSameDockFamily(order.deliver_to);
     const core = new Set(customerCoreTokens(order.deliver_to));
     const exact = groups.find((group) => group.dockKey === dockKey);
-    const family =
+    const sameDock =
       exact ??
       groups.find((group) => {
         if (group.place !== placeId) return false;
+        if (family && group.family && family === group.family) return true;
         if (!core.size || !group.core.size) return false;
         for (const token of core) {
           if (group.core.has(token)) return true;
         }
         return false;
       });
-    if (family) {
-      family.orders.push(order);
-      for (const token of core) family.core.add(token);
+    if (sameDock) {
+      sameDock.orders.push(order);
+      if (family) sameDock.family = family;
+      for (const token of core) sameDock.core.add(token);
     } else {
-      groups.push({ dockKey, place: placeId, core, orders: [order] });
+      groups.push({ dockKey, place: placeId, family, core, orders: [order] });
     }
   }
   return groups.map((group) => group.orders);
