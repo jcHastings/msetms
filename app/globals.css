@@ -308,9 +308,17 @@ button {
   font-size: 0.9rem;
 }
 
+.board-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
 .table-grid.table-grid-board {
   table-layout: fixed;
-  width: max(100%, 96rem);
+  width: 100rem;
+  min-width: 100rem;
+  max-width: none;
 }
 
 .table-grid-board th {
@@ -322,29 +330,33 @@ button {
   vertical-align: top;
   font-size: 0.8rem;
   line-height: 1.2;
+  overflow: hidden;
 }
 
-/* Fixed layout makes overflow:hidden on <td> actually clip. Auto layout
-   let Unit/Tractor text paint over Trailer and hide Hastings / Melbourne.
-   Pickup/Delivery stack date then time so we do not squeeze other columns. */
+/* Explicit widths so the board scrolls instead of stacking text on the next column.
+   Pickup/Delivery keep date then time on two lines. Do not RTL-ellipsis cities. */
 .table-grid-board .board-load-cell {
   width: 13rem;
-  overflow: hidden;
+}
+
+.table-grid-board .board-status-cell {
+  width: 7.25rem;
 }
 
 .table-grid-board .board-when-cell {
   width: 5.75rem;
-  min-width: 5.75rem;
-  overflow: hidden;
 }
 
 .board-when-date,
-.board-when-time {
+.board-when-time,
+.board-lane-line {
   display: block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .board-when-time {
@@ -353,14 +365,26 @@ button {
 
 .table-grid-board .board-unit-cell {
   width: 8.75rem;
-  overflow: hidden;
 }
 
 .table-grid-board .board-place-cell {
   width: 10.5rem;
-  min-width: 10.5rem;
-  max-width: 10.5rem;
-  overflow: hidden;
+}
+
+.table-grid-board .board-hos-cell {
+  width: 5rem;
+}
+
+.table-grid-board .board-reefer-cell {
+  width: 5.5rem;
+}
+
+.table-grid-board .board-rate-cell {
+  width: 5.25rem;
+}
+
+.table-grid-board .board-move-cell {
+  width: 9.5rem;
 }
 
 .board-place {
@@ -386,7 +410,9 @@ button {
   position: sticky;
   right: 0;
   z-index: 2;
-  min-width: 9.5rem;
+  width: 11rem;
+  min-width: 11rem;
+  overflow: visible;
   box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
 }
 

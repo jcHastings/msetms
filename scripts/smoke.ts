@@ -12576,8 +12576,13 @@ Continuous reefer. Two load locks.
   assert.match(boardPage, /board-when-cell/);
   assert.match(boardPage, /board-when-date/);
   assert.match(boardPage, /board-when-time/);
+  assert.match(boardPage, /board-lane-line/);
+  assert.match(boardPage, /board-scroll/);
   assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
   assert.match(boardCss, /board-when-cell/);
+  assert.match(boardCss, /board-scroll/);
+  assert.match(boardCss, /min-width:\s*100rem/);
+  assert.doesNotMatch(boardCss.match(/\.board-when-date[\s\S]*?\}/)?.[0] ?? "", /direction:\s*rtl/);
   assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*z-index:\s*80/);
   assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*100dvh/);
   assert.match(boardCss, /\.load-overlay-panel[\s\S]*height:\s*100%/);

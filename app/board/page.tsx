@@ -143,21 +143,21 @@ async function BoardLiveSection({
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="board-scroll">
             <table className="table-grid table-grid-board" data-dispatch-board="">
               <thead>
                 <tr>
                   <th className="board-load-cell">Load</th>
-                  <th>Status</th>
+                  <th className="board-status-cell">Status</th>
                   <th className="board-when-cell">Pickup</th>
                   <th className="board-when-cell">Delivery</th>
                   <th className="board-unit-cell">Unit</th>
                   <th className="board-place-cell">Tractor</th>
                   <th className="board-place-cell">Trailer</th>
-                  <th>HOS</th>
-                  <th>Reefer</th>
-                  <th>Rate</th>
-                  <th>Move</th>
+                  <th className="board-hos-cell">HOS</th>
+                  <th className="board-reefer-cell">Reefer</th>
+                  <th className="board-rate-cell">Rate</th>
+                  <th className="board-move-cell">Move</th>
                   <th className="board-edit-head"></th>
                 </tr>
               </thead>
@@ -197,16 +197,12 @@ async function BoardLiveSection({
                       ) : loads.some((row) => row.parent_load_id === load.id) ? (
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Master</div>
                       ) : null}
-                      <div
-                        className="truncate whitespace-nowrap text-xs"
-                        title={`${load.origin} → ${load.destination}`}
-                      >
-                        {load.origin}
-                        <span className="mx-1 text-slate-400">→</span>
-                        {load.destination}
+                      <div className="board-lane" title={`${load.origin} → ${load.destination}`}>
+                        <div className="board-lane-line">{load.origin}</div>
+                        <div className="board-lane-line text-slate-500">→ {load.destination}</div>
                       </div>
                     </td>
-                    <td>
+                    <td className="board-status-cell">
                       <LoadStatusBadge status={load.status} />
                     </td>
                     <BoardWhenCell start={load.pickup_start} end={load.pickup_end} />
@@ -252,17 +248,20 @@ async function BoardLiveSection({
                         }
                       />
                     </td>
-                    <td title={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}>
+                    <td
+                      className="board-hos-cell"
+                      title={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+                    >
                       <HosBadge hos={driverHos} empty="—" />
                     </td>
-                    <td>
+                    <td className="board-reefer-cell">
                       <ReeferBadge
                         setpoint={load.reefer_setpoint_f}
                         reading={reeferByLoad.get(load.id) ?? null}
                       />
                     </td>
-                    <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>
-                    <td>
+                    <td className="board-rate-cell whitespace-nowrap">{formatMoney(load.rate)}</td>
+                    <td className="board-move-cell">
                       <LoadStatusSelect
                         loadId={load.id}
                         status={load.status}
