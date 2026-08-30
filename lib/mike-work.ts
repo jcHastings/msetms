@@ -140,7 +140,7 @@ export function applyMikeProposal(payload: Record<string, string>, kind: MikePro
   if (kind === "classify_document") {
     const id = Number(payload.attachment_id);
     const nextKind = payload.kind;
-    if (!id || !isDriverUploadKind(nextKind)) throw new Error("Pick Receipt, Scale Ticket, BOL, or Proof of Delivery.");
+    if (!id || !isDriverUploadKind(nextKind)) throw new Error("Pick a document type.");
     updateAttachmentKind(id, nextKind as AttachmentKind);
     return { message: "Document typed." };
   }
