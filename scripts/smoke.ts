@@ -8862,10 +8862,10 @@ Continuous reefer. Two load locks.
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
-    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
-    `${fuelDate},00:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
-    `${fuelDate},00:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
-    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},14:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},14:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
