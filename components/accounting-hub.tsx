@@ -33,7 +33,7 @@ import {
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
-import { resolveLoadCustomerEmail } from "@/lib/load-mail";
+import { invoiceMailExtraDocs, resolveLoadCustomerEmail } from "@/lib/load-mail";
 import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
@@ -223,6 +223,7 @@ function toInvoiceAcctRow(
       const sent = lastSentMail(row.id, "customer_invoice");
       return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
     })(),
+    extras: invoiceMailExtraDocs(row.id),
     pick: stopLabel(pick, row.origin),
     drop: stopLabel(drop, row.destination),
     paperwork: [

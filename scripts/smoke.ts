@@ -987,6 +987,9 @@ async function main() {
   assert.match(emailInvoiceUi, /Email invoice/);
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
+  assert.match(emailInvoiceUi, /extra_id/);
+  assert.match(emailInvoiceUi, /Attach load documents/);
+  assert.match(emailInvoiceUi, /Attach all/);
   const deskShared = fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8");
   assert.match(deskShared, /Driver Pay Mgmt/);
   assert.match(deskShared, /hrefForAccountingHubTab/);
@@ -3285,6 +3288,13 @@ async function main() {
   assert.match(invoiceDraft.text, /Accounts Receivable/);
   assert.doesNotMatch(invoiceDraft.text, /Do not reply|not monitored/);
   assert.doesNotMatch(invoiceDraft.replyTo, /noreply@|dispatch@/);
+  const invoiceDraftWithDocs = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    extraLabels: ["BOL", "Lumper"],
+  });
+  assert.match(invoiceDraftWithDocs.text, /Also attached: BOL, Lumper/);
+  assert.doesNotMatch(invoiceDraft.text, /Also attached/);
   assert.equal(
     loadMail.customerFacingLoadNumber({
       load_number: "MSE-1055",
@@ -3528,6 +3538,37 @@ async function main() {
   assert.equal(invoiceMailReplyTo, "ar@msloads.com");
   assert.equal(invoiceMailHasPdf, true);
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "ap.mail@customer.example");
+  const lumperReceipt = addAttachment({
+    loadId: mailLoadId,
+    kind: "lumper",
+    originalName: "lumper-receipt.pdf",
+    buffer: Buffer.from("%PDF-1.4 lumper"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const bolScan = addAttachment({
+    loadId: mailLoadId,
+    kind: "bol",
+    originalName: "bol.pdf",
+    buffer: Buffer.from("%PDF-1.4 bol"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const extraDocs = loadMail.invoiceMailExtraDocs(mailLoadId);
+  assert.ok(extraDocs.some((file) => file.id === lumperReceipt.id && file.kindLabel === "Lumper"));
+  assert.ok(extraDocs.some((file) => file.id === bolScan.id && file.kindLabel === "BOL"));
+  assert.equal(extraDocs.some((file) => file.kind === "invoice"), false);
+  assert.throws(() => loadMail.mailFilesForLoadDocs(mailLoadId, [999999]), /not on this load/);
+  await loadMail.sendCustomerInvoiceMail(
+    mailLoadId,
+    async (input) => {
+      assert.equal(input.attachments?.length, 3);
+      assert.ok(input.attachments?.some((file) => file.filename === "lumper-receipt.pdf"));
+      assert.ok(input.attachments?.some((file) => file.filename === "bol.pdf"));
+      assert.match(input.text, /Also attached: Lumper, BOL/);
+    },
+    { extraIds: [lumperReceipt.id, bolScan.id] },
+  );
   const noInvoiceMail = new FormData();
   noInvoiceMail.set("load_id", String(noEmailLoadId));
   const { sendCustomerInvoiceMailAction } = await import("../lib/dispatcher-actions");

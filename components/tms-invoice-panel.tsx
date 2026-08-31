@@ -7,6 +7,7 @@ import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
+import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 import { isBillableStatus, labelForUploader, type Attachment } from "@/lib/types";
 import { EmailInvoiceButton } from "@/components/email-invoice-button";
 
@@ -18,6 +19,7 @@ export function TmsInvoicePanel({
   invoices = [],
   customerEmail = "",
   lastInvoiceSent = "",
+  extras = [],
 }: {
   loadId: number;
   status: string;
@@ -26,6 +28,7 @@ export function TmsInvoicePanel({
   invoices?: Attachment[];
   customerEmail?: string;
   lastInvoiceSent?: string;
+  extras?: InvoiceMailExtraDoc[];
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -137,7 +140,12 @@ export function TmsInvoicePanel({
           </button>
         </form>
         {canInvoice ? (
-          <EmailInvoiceButton loadId={loadId} email={customerEmail} lastSent={lastInvoiceSent} />
+          <EmailInvoiceButton
+            loadId={loadId}
+            email={customerEmail}
+            lastSent={lastInvoiceSent}
+            extras={extras}
+          />
         ) : null}
       </div>
       {invoices.length > 0 ? (

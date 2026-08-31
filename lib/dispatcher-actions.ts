@@ -965,7 +965,11 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
       if (blocked) throw new Error(blocked);
       if (!mailConfigured()) throw new Error(MAIL_MISSING);
       await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
-      const sent = await sendCustomerInvoiceMail(loadId);
+      const extraIds = formData
+        .getAll("extra_id")
+        .map((value) => parseOptionalInt(value))
+        .filter((id): id is number => id != null);
+      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds });
       recordLoadAudit({
         loadId,
         action: "email",

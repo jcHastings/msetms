@@ -8,6 +8,7 @@ import {
 } from "@/lib/dispatcher-actions";
 import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
 import { EmailInvoiceButton } from "@/components/email-invoice-button";
+import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
 export type InvoiceAcctRow = {
   id: number;
@@ -30,6 +31,7 @@ export type InvoiceAcctRow = {
   paid: boolean;
   email: string;
   lastInvoiceSent: string;
+  extras: InvoiceMailExtraDoc[];
   pick: string;
   drop: string;
   paperwork: Array<{ label: string; found: boolean }>;
@@ -137,6 +139,7 @@ function InvoiceAcctRowView({
                     loadId={row.id}
                     email={row.email}
                     lastSent={row.lastInvoiceSent}
+                    extras={row.extras}
                     variant="link"
                   />
                   <form action={returnLoadToOperationsFormAction}>

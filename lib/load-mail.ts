@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import path from "node:path";
 import { agreedAmountForLoad, buildConfirmationForLoad, formatUsd, renderConfirmationPdf } from "./load-confirmation";
 import { formatInvoiceMoney, formatStopWindow } from "./format";
-import { getAttachmentPath, listAttachments } from "./files";
+import { getAttachment, getAttachmentPath, guessMime, listAttachments, sanitizeName } from "./files";
 import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
 import { buildTmsInvoice, createTmsInvoice } from "./invoice";
@@ -21,7 +22,7 @@ import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { listStops } from "./stops";
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
-import { isOwnerOperator, labelForLoadStatus, type LoadView } from "./types";
+import { isOwnerOperator, labelForAttachmentKind, labelForLoadStatus, type LoadView } from "./types";
 import {
   driverLoadGreeting,
   parseDriverMessageLocale,
@@ -48,6 +49,13 @@ export type CustomerInvoiceMailDraft = {
   subject: string;
   text: string;
   replyTo: string;
+};
+
+export type InvoiceMailExtraDoc = {
+  id: number;
+  name: string;
+  kind: string;
+  kindLabel: string;
 };
 
 export function resolveLoadDriverEmail(load: Pick<LoadView, "driver_id">): string {
@@ -371,15 +379,73 @@ export async function sendCustomerUpdateMail(
   return { to: draft.to, subject: draft.subject };
 }
 
+export function invoiceMailExtraDocs(loadId: number): InvoiceMailExtraDoc[] {
+  return listAttachments(loadId)
+    .filter((file) => file.kind !== "invoice")
+    .map((file) => ({
+      id: file.id,
+      name: file.original_name,
+      kind: file.kind,
+      kindLabel: labelForAttachmentKind(file.kind),
+    }));
+}
+
+function uniqueMailFilename(name: string, used: Set<string>): string {
+  const safe = sanitizeName(name);
+  const key = safe.toLowerCase();
+  if (!used.has(key)) {
+    used.add(key);
+    return safe;
+  }
+  const ext = path.extname(safe);
+  const stem = ext ? safe.slice(0, -ext.length) : safe;
+  let n = 2;
+  let next = `${stem}-${n}${ext}`;
+  while (used.has(next.toLowerCase())) {
+    n += 1;
+    next = `${stem}-${n}${ext}`;
+  }
+  used.add(next.toLowerCase());
+  return next;
+}
+
+export function mailFilesForLoadDocs(loadId: number, ids: number[]): Array<{
+  filename: string;
+  contentType: string;
+  content: Buffer;
+  label: string;
+}> {
+  const extras = invoiceMailExtraDocs(loadId);
+  const byId = new Map(extras.map((row) => [row.id, row]));
+  const used = new Set<string>();
+  return ids.map((id) => {
+    const extra = byId.get(id);
+    const file = getAttachment(id);
+    if (!extra || !file || file.load_id !== loadId || file.kind === "invoice") {
+      throw new Error("That document is not on this load.");
+    }
+    const stored = getAttachmentPath(file);
+    if (!fs.existsSync(stored)) throw new Error(`${file.original_name} is missing.`);
+    return {
+      filename: uniqueMailFilename(file.original_name, used),
+      contentType: file.mime_type || guessMime(file.original_name),
+      content: fs.readFileSync(stored),
+      label: extra.kindLabel,
+    };
+  });
+}
+
 export function composeCustomerInvoiceEmail(input: {
   invoiceNumber: string;
   loadNumber: string;
   customerName?: string;
   totalLabel?: string;
+  extraLabels?: string[];
 }): CustomerInvoiceMailDraft {
   const invoiceNumber = input.invoiceNumber.trim();
   const loadNumber = input.loadNumber.trim();
   const from = invoiceFromAddress();
+  const extras = (input.extraLabels ?? []).map((label) => label.trim()).filter(Boolean);
   const subject = invoiceNumber
     ? `Invoice ${invoiceNumber}${loadNumber ? ` — Load ${loadNumber}` : ""}`
     : loadNumber
@@ -396,6 +462,7 @@ export function composeCustomerInvoiceEmail(input: {
     input.customerName?.trim() ? `Bill to: ${input.customerName.trim()}` : "",
     input.totalLabel?.trim() ? `Total: ${input.totalLabel.trim()}` : "",
     "The invoice PDF is attached.",
+    extras.length ? `Also attached: ${extras.join(", ")}.` : "",
     "Questions? Reply to this email.",
     "",
     "M & S Loads LLC · Accounts Receivable",
@@ -440,10 +507,12 @@ async function invoicePdfForMail(load: LoadView): Promise<{
 export async function sendCustomerInvoiceMail(
   loadId: number,
   send: typeof sendMail = sendMail,
+  options: { extraIds?: number[] } = {},
 ): Promise<{ to: string; subject: string }> {
   const load = getLoad(loadId);
   const blocked = customerMailBlockReason(load);
   if (!load || blocked) throw new Error(blocked || "Load not found.");
+  const extras = mailFilesForLoadDocs(loadId, options.extraIds ?? []);
   const invoice = await invoicePdfForMail(load);
   const shown = customerFacingLoadNumber(load) || load.load_number;
   const draft = composeCustomerInvoiceEmail({
@@ -451,8 +520,10 @@ export async function sendCustomerInvoiceMail(
     loadNumber: shown,
     customerName: load.customer_name,
     totalLabel: formatInvoiceMoney(invoice.total),
+    extraLabels: extras.map((file) => file.label),
   });
   const to = resolveLoadCustomerEmail(load);
+  const usedNames = new Set([invoice.filename.toLowerCase()]);
   const mail: OutgoingMail = {
     to,
     from: draft.from || invoiceFromAddress(),
@@ -465,6 +536,11 @@ export async function sendCustomerInvoiceMail(
         contentType: "application/pdf",
         content: invoice.buffer,
       },
+      ...extras.map((file) => ({
+        filename: uniqueMailFilename(file.filename, usedNames),
+        contentType: file.contentType,
+        content: file.content,
+      })),
     ],
   };
   await send(mail);
