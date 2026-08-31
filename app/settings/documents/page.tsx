@@ -22,9 +22,6 @@ export default async function DocumentSettingsPage() {
       <div className="settings-page">
         <SettingsBack />
         <PageHeader title="Document defaults" dense />
-        <div className="mb-3 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-[12.5px] text-sky-950">
-          Only an Administrator can change these defaults. Skip LTL quotes and 3rd-party BOL — this is company-truck paperwork.
-        </div>
         <section className="card mb-4 p-4">
           <h2 className="text-sm font-semibold">Font for generated documents</h2>
           <div className="mt-3">

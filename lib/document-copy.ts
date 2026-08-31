@@ -41,21 +41,21 @@ export const SETTINGS_DOCUMENT_EDITORS = [
   {
     value: "load_confirmation" as const,
     label: "Driver confirmation",
-    hint: "Dispatch sheet for company drivers. Internal MSE load number. No TriumphPay.",
+    hint: "Dispatch sheet the driver receives.",
   },
   {
     value: "invoice" as const,
     label: "Invoice",
-    hint: "Customer billed-rate invoice. No owner-operator pay. Tags like [load_id] are optional.",
+    hint: "Customer invoice for the billed rate.",
   },
   {
     value: "customer_confirmation" as const,
     label: "Customer confirmation",
-    hint: "English customer confirmation. No driver greeting.",
+    hint: "Confirmation sent to the customer.",
   },
   {
     value: "bol" as const,
     label: "Bill of Lading",
-    hint: "ITS-style BOL terms and footer. No 3rd-party BOL or LTL quote.",
+    hint: "BOL title, terms, and footer.",
   },
 ];

@@ -981,13 +981,16 @@ async function main() {
   assert.match(documentsPage, /Font for generated documents/);
   assert.match(documentsPage, /DocumentFontForm/);
   assert.match(documentsPage, /DocumentTagHints/);
-  assert.match(documentsPage, /Skip LTL quotes and 3rd-party BOL/);
+  assert.doesNotMatch(documentsPage, /Skip LTL|3rd-party BOL|company-truck paperwork|Only an Administrator can change these defaults/);
   assert.doesNotMatch(documentsPage, /Powered by Ascend|Legal Center/i);
   const documentCopy = fs.readFileSync(path.join(process.cwd(), "lib/document-copy.ts"), "utf8");
   assert.match(documentCopy, /Driver confirmation/);
   assert.match(documentCopy, /Customer confirmation/);
   assert.match(documentCopy, /Bill of Lading/);
-  assert.match(documentCopy, /No TriumphPay/);
+  assert.doesNotMatch(
+    documentCopy.slice(documentCopy.indexOf("SETTINGS_DOCUMENT_EDITORS")),
+    /TriumphPay|3rd-party BOL|LTL quote|No owner-operator|No driver greeting/,
+  );
   const printedTerms = await import("../lib/document-copy");
   assert.doesNotMatch(printedTerms.DRIVER_CONFIRMATION_TERMS, /TriumphPay/);
   assert.doesNotMatch(printedTerms.CUSTOMER_CONFIRMATION_TERMS, /TriumphPay/);
