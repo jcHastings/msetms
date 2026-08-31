@@ -793,7 +793,11 @@ async function cmdBrowser(subcommand, flags) {
     const out = resolveOutPath(flags, `screenshot-${Date.now()}.png`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
     const { url } = await withPage(state, async (cdp) => {
-      const shot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+      const shot = await cdp.send("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+        captureBeyondViewport: true,
+      });
       fs.writeFileSync(out, Buffer.from(shot.data, "base64"));
       const href = await evalExpr(cdp, "location.href");
       return { url: href.value };

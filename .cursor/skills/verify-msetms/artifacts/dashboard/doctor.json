@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "runId": "proof",
+  "url": "http://127.0.0.1:3456",
+  "port": 3456,
+  "dbPath": "/tmp/msetms-verify/proof/tms.db",
+  "nextPid": 2197,
+  "nextAlive": true,
+  "chromePid": 2334,
+  "chromeAlive": true,
+  "nextLog": "/tmp/msetms-verify/proof/next.log",
+  "checks": [
+    {
+      "name": "next-pid",
+      "ok": true,
+      "detail": "2197"
+    },
+    {
+      "name": "port",
+      "ok": true,
+      "detail": "3456"
+    },
+    {
+      "name": "home",
+      "ok": true,
+      "detail": "HTTP 200 identity=true"
+    },
+    {
+      "name": "db-file",
+      "ok": true,
+      "detail": "/tmp/msetms-verify/proof/tms.db"
+    },
+    {
+      "name": "seed-loads",
+      "ok": true,
+      "detail": "12"
+    }
+  ],
+  "loadCount": 12,
+  "healthy": true
+}
