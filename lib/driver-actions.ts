@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
 import { parseOptionalInt } from "./format";
+import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import { authenticateDriver, updateDriverProgress } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
@@ -23,16 +24,29 @@ export async function driverLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const driverId = parseOptionalInt(formData.get("driver_id"));
   try {
-    const driverId = parseOptionalInt(formData.get("driver_id"));
     const pin = String(formData.get("pin") ?? "").trim();
     if (!driverId || !pin) throw new Error("Pick your name and enter your PIN.");
     const driver = authenticateDriver(driverId, pin);
+    await recordLoginAttemptFromRequest({
+      kind: "driver",
+      outcome: "success",
+      step: "pin",
+      userId: driver.id,
+    });
     await setDriverSession(driver.id);
     refresh();
     redirect("/driver");
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    await recordLoginAttemptFromRequest({
+      kind: "driver",
+      outcome: "failure",
+      step: "pin",
+      userId: driverId,
+      detail: publicLoginFailureDetail(error),
+    });
     return fail(error);
   }
 }

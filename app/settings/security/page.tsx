@@ -20,6 +20,13 @@ export default async function SecuritySettingsPage() {
       <SettingsBack />
       <PageHeader
         title="2-step verification"
+        actions={
+          canManageUsers(dispatcher.role) ? (
+            <a href="/settings/sign-in" className="btn btn-secondary">
+              Sign-in log
+            </a>
+          ) : null
+        }
       />
       <p className="mb-4 text-sm text-slate-600">
         When this is on, dispatcher sign-in emails a one-time code after the password — only if that user has an email.

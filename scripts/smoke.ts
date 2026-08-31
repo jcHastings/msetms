@@ -89,6 +89,8 @@ async function main() {
   const settingsNavBlock = navSource.slice(navSource.indexOf('title: "Settings"'));
   assert.match(settingsNavBlock, /href: "\/settings"/);
   assert.match(settingsNavBlock, /href: "\/users"/);
+  assert.match(settingsNavBlock, /href: "\/settings\/sign-in"/);
+  assert.match(settingsNavBlock, /Sign-in log/);
   assert.equal(
     deskNavSectionForPath("/users", [
       { title: "Reports", items: [{ href: "/reports" }, { href: "/claims" }] },
@@ -10534,6 +10536,9 @@ Continuous reefer. Two load locks.
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/users")),
   );
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/settings/sign-in")),
+  );
   assert.equal(settings.roleLabel("admin"), "Administrator");
   assert.equal(settings.roleLabel("manager"), "Administrator");
   assert.equal(settings.roleLabel("dispatcher"), "Standard");
@@ -10563,6 +10568,9 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canSeeNavHref("dispatcher", "/accounting"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/settings"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/users"), false);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/settings/sign-in"), false);
+  assert.equal(settings.canSeeNavHref("accounting", "/settings/sign-in"), false);
+  assert.equal(settings.canSeeNavHref("manager", "/settings/sign-in"), true);
   assert.equal(settings.canSeeNavHref("dispatcher", "/audit"), false);
   assert.equal(settings.canSeeNavHref("accounting", "/accounting"), true);
   assert.equal(settings.canSeeNavHref("accounting", "/settings"), false);
@@ -10580,8 +10588,14 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canSeeNavHref("manager", "/claims"), true);
   assert.equal(settings.canSeeNavHref("dispatcher", "/claims"), true);
   assert.equal(session.roleLabel("manager"), "Administrator");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/sign-in/page.tsx"), "utf8"), /data-sign-in-log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/sign-in/page.tsx"), "utf8"), /Sign-in log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/sign-in-audit-table.tsx"), "utf8"), /data-sign-in-outcome/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /recordLoginAttemptFromRequest/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /recordLoginAttemptFromRequest/);
   const usersPage = fs.readFileSync(path.join(process.cwd(), "app/users/page.tsx"), "utf8");
   assert.match(usersPage, /Add user/);
+  assert.match(usersPage, /Sign-in log/);
   assert.match(usersPage, /listDispatcherUsers/);
   assert.match(usersPage, /currentUserId/);
   const usersTable = fs.readFileSync(path.join(process.cwd(), "components/users-table.tsx"), "utf8");
@@ -10926,12 +10940,57 @@ Continuous reefer. Two load locks.
   assert.equal(settings.getDispatcherUser(noMailId)?.must_change_password, 0);
   assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").id, noMailId);
   assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").must_change_password, false);
+  const pinDriver = queries.listDrivers().find((driver) => driver.pin);
+  assert.ok(pinDriver, "driver PIN login stays on the driver record");
+  const loginAudit = await import("../lib/login-audit");
+  const failedLogin = loginAudit.recordLoginAttempt({
+    kind: "office",
+    outcome: "failure",
+    step: "password",
+    userId: noMailId,
+    ipAddress: "203.0.113.44",
+    detail: "password=Office1$ab",
+  });
+  assert.equal(failedLogin.user_name, "No Email Desk");
+  assert.equal(failedLogin.ip_address, "203.0.113.44");
+  assert.equal(failedLogin.detail, "[redacted]");
+  assert.doesNotMatch(failedLogin.detail, /Office1\$ab/);
+  const signedIn = loginAudit.recordLoginAttempt({
+    kind: "office",
+    outcome: "success",
+    step: "password",
+    userId: noMailId,
+    ipAddress: "198.51.100.10",
+  });
+  assert.equal(signedIn.outcome, "success");
+  const driverFail = loginAudit.recordLoginAttempt({
+    kind: "driver",
+    outcome: "failure",
+    step: "pin",
+    userId: pinDriver.id,
+    ipAddress: "192.0.2.8",
+    detail: "Driver or PIN is not recognized.",
+  });
+  assert.equal(driverFail.kind, "driver");
+  assert.match(driverFail.detail, /not recognized/);
+  const listed = loginAudit.listLoginAudit({ user: "No Email Desk", outcome: "failure" });
+  assert.ok(listed.some((row) => row.ip_address === "203.0.113.44" && row.outcome === "failure"));
+  const byIp = loginAudit.listLoginAudit({ outcome: "success" }).find((row) => row.ip_address === "198.51.100.10");
+  assert.ok(byIp);
+  const { dispatcherLoginAction } = await import("../lib/dispatcher-actions");
+  const badLogin = new FormData();
+  badLogin.set("dispatcher_id", String(noMailId));
+  badLogin.set("password", "Wrong1$zz");
+  const badResult = await dispatcherLoginAction(null, badLogin);
+  assert.equal(badResult.ok, false);
+  assert.ok(
+    loginAudit.listLoginAudit({ user: "No Email Desk", outcome: "failure" }).some((row) => row.step === "password"),
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/audit/page.tsx"), "utf8"), /settings\/sign-in/);
   settings.updateOwnDispatcherContact(noMailId, { email: "none2@msloads.com", phone: "" });
   assert.equal(settings.getDispatcherUser(noMailId)?.email, "none2@msloads.com");
   const afterEmail = emailOtp.issueEmailOtp(noMailId);
   emailOtp.verifyEmailOtp(noMailId, afterEmail.code);
-  const pinDriver = queries.listDrivers().find((driver) => driver.pin);
-  assert.ok(pinDriver, "driver PIN login stays on the driver record");
   assert.equal(queries.authenticateDriver(pinDriver.id, pinDriver.pin).id, pinDriver.id);
   assert.throws(() => queries.authenticateDriver(pinDriver.id, "0000"));
   settings.updateTwoFactorPolicy(true);

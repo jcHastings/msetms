@@ -82,6 +82,11 @@ export const SETTINGS_SECTIONS = [
         label: "2-step verification",
         hint: "Email sign-in code after password, when the user has an email",
       },
+      {
+        href: "/settings/sign-in",
+        label: "Sign-in log",
+        hint: "Successful and failed sign-ins, with time and IP",
+      },
     ],
   },
   {
@@ -381,6 +386,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   }
   if (href === "/locations") return canEditLocations(role) || accessRole(role) === "read_only";
   if (href === "/audit") return canViewAudit(role);
+  if (href === "/settings/sign-in") return canManageUsers(role);
   if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href === "/safety") {
     return canEditFleet(role);
   }

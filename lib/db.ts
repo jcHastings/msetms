@@ -635,6 +635,20 @@ export function migrate(db: Database): void {
       tx_count INTEGER NOT NULL DEFAULT 0,
       saved_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS login_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      step TEXT NOT NULL,
+      user_id INTEGER,
+      user_name TEXT NOT NULL DEFAULT '',
+      ip_address TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit(created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_login_audit_user ON login_audit(user_name, created_at DESC);
   `);
 
   for (const [column, definition] of [

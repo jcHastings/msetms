@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
+import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import {
   fromInputDateTime,
   isAppointmentSchedule,
@@ -96,20 +97,26 @@ export async function dispatcherLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const emailCode = String(formData.get("email_code") ?? "").trim();
+  const resend = String(formData.get("resend") ?? "") === "1";
+  const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
   try {
-    const emailCode = String(formData.get("email_code") ?? "").trim();
-    const resend = String(formData.get("resend") ?? "") === "1";
     if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
       if (!pendingId) throw new Error("Password step expired. Sign in again.");
       if (resend) return await sendSignInCode(pendingId, true);
       verifyEmailOtp(pendingId, emailCode);
+      await recordLoginAttemptFromRequest({
+        kind: "office",
+        outcome: "success",
+        step: "email_code",
+        userId: pendingId,
+      });
       await setDispatcherSession(pendingId);
       refresh();
       redirect(getDispatcher(pendingId)?.must_change_password ? "/login/change-password" : "/");
     }
 
-    const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
     const password = String(formData.get("password") ?? "");
     if (!dispatcherId || !password) throw new Error("Pick your name and enter your password.");
     const dispatcher = authenticateDispatcher(dispatcherId, password);
@@ -117,6 +124,12 @@ export async function dispatcherLoginAction(
       return dispatcher.must_change_password ? "/login/change-password" : "/";
     };
     if (!isTwoFactorRequired() || !isUsableEmail(dispatcher.email)) {
+      await recordLoginAttemptFromRequest({
+        kind: "office",
+        outcome: "success",
+        step: "password",
+        userId: dispatcher.id,
+      });
       await setDispatcherSession(dispatcher.id);
       refresh();
       redirect(afterPassword());
@@ -124,6 +137,14 @@ export async function dispatcherLoginAction(
     return await sendSignInCode(dispatcher.id);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    const pendingId = emailCode || resend ? await getPendingTwoFactorDispatcherId() : null;
+    await recordLoginAttemptFromRequest({
+      kind: "office",
+      outcome: "failure",
+      step: emailCode || resend ? "email_code" : "password",
+      userId: pendingId ?? dispatcherId,
+      detail: publicLoginFailureDetail(error),
+    });
     return fail(error);
   }
 }

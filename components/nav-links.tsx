@@ -75,6 +75,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
       { href: "/users", label: "Users", short: "Users", icon: "users" },
+      { href: "/settings/sign-in", label: "Sign-in log", short: "Sign-in", icon: "audit" },
     ],
   },
 ];
