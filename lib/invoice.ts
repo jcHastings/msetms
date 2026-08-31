@@ -86,21 +86,29 @@ export function isCompanyCustomerName(customerName: string, companyName: string)
   return Boolean(company) && (customerCore === company || customerCore.includes(company) || company.includes(customerCore));
 }
 
+function invoiceLineFromPayItem(item: { category: string; notes: string; total: number | null; qty: number | null; rate: number | null }): TmsInvoiceLine {
+  return {
+    name: labelForPayCategory(item.category),
+    description: item.notes.trim(),
+    amount: item.total ?? 0,
+    qty: item.qty,
+    rate: item.rate,
+  };
+}
+
+/** Customer freight (rate or Flat Rate) plus extras such as detention. Lumper stays off. */
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
-  if (payItems.length) {
-    return payItems.map((item) => ({
-      name: labelForPayCategory(item.category),
-      description: item.notes.trim(),
-      amount: item.total ?? 0,
-      qty: item.qty,
-      rate: item.rate,
-    }));
+  const flats = payItems.filter((item) => item.category === "flat_rate");
+  const extras = payItems.filter((item) => item.category !== "flat_rate");
+  const lines: TmsInvoiceLine[] = [];
+  if (flats.length) {
+    lines.push(...flats.map(invoiceLineFromPayItem));
+  } else if (load.rate != null && load.rate > 0) {
+    lines.push({ name: "Flat Rate", description: "", amount: load.rate, qty: 1, rate: load.rate });
   }
-  if (load.rate != null && load.rate > 0) {
-    return [{ name: "Flat Rate", description: "", amount: load.rate, qty: 1, rate: load.rate }];
-  }
-  return [];
+  lines.push(...extras.map(invoiceLineFromPayItem));
+  return lines;
 }
 
 function fillStopFromLocationBook(stop: LoadStop, locations: Location[]): LoadStop {

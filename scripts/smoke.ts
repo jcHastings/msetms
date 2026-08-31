@@ -11809,6 +11809,59 @@ Continuous reefer. Two load locks.
   assert.equal(invoiceLines[0]?.amount, 1500);
   assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
   assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
+  const freightPlusDetentionId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Kansas City, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 5869,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  payItemsMod.addPayItem(freightPlusDetentionId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Customer",
+    category: "detention",
+    rate: 100,
+    qty: 1,
+    total: 100,
+    notes: "",
+  });
+  const freightPlusDetentionLoad = queries.getLoad(freightPlusDetentionId)!;
+  assert.equal(freightPlusDetentionLoad.rate, 5869);
+  const freightPlusDetentionLines = tmsCustomerInvoiceLines(freightPlusDetentionLoad);
+  assert.deepEqual(
+    freightPlusDetentionLines.map((line) => [line.name, line.amount]),
+    [
+      ["Flat Rate", 5869],
+      ["Detention", 100],
+    ],
+  );
+  assert.equal(buildTmsInvoice(freightPlusDetentionLoad).total, 5969);
+  const freightPlusDetentionQbo = (await import("../lib/integrations/quickbooks")).buildInvoiceLines(
+    freightPlusDetentionLoad,
+  );
+  assert.deepEqual(
+    freightPlusDetentionQbo.map((line) => [line.name, line.amount]),
+    [
+      ["Line Haul", 5869],
+      ["Detention", 100],
+    ],
+  );
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
   assert.equal(tmsInvoiceModel.companyEmail, "ar@msloads.com");
   assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");

@@ -138,12 +138,25 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
+  const qboLine = (item: { category: string; payee: string; notes: string; total: number | null }): QboInvoiceLine => ({
+    name: labelForPayCategory(item.category),
+    description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+    amount: item.total ?? 0,
+  });
   if (payItems.length) {
-    return payItems.map((item) => ({
-      name: labelForPayCategory(item.category),
-      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
-      amount: item.total ?? 0,
-    }));
+    const flats = payItems.filter((item) => item.category === "flat_rate");
+    const extras = payItems.filter((item) => item.category !== "flat_rate" && item.category !== "lumper");
+    const lines: QboInvoiceLine[] = [];
+    if (flats.length) {
+      lines.push(...flats.map(qboLine));
+    } else {
+      const rate = customerBilledRate(load);
+      if (rate != null) {
+        lines.push({ name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate });
+      }
+    }
+    lines.push(...extras.map(qboLine));
+    return lines;
   }
   const rate = customerBilledRate(load);
   if (rate == null) return [];
