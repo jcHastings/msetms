@@ -1,0 +1,29 @@
+heading: Dispatch desk
+heading: Needs a unit
+heading: Fleet snapshot
+heading: Upcoming / expired documents
+heading: In transit
+link: MSE TransportTMS
+link: Dashboard
+link: Dispatch board
+link: New load
+link: Fleet
+link: Customers
+link: Settings
+link: Driver app
+link: New load
+link: Open loads9Available, assigned, in transit
+link: In transit2Rolling now
+link: Available trucks38 in the fleet
+link: Unassigned loads5Need a truck and driver
+link: Open board
+link: Open
+link: Open
+link: Open
+link: Open
+link: Open
+link: All moving loads
+link: MSE-1045
+link: MSE-1046
+--- text ---
+MSE TRANSPORT TMS Local dispatch for a small fleet Dashboard Dispatch board New load Fleet Customers Settings Driver app Single-tenant local v1 No login required Dispatch desk Open work, trucks on the road, and loads that still need a unit. New load OPEN LOADS 9 Available, assigned, in transit IN TRANSIT 2 Rolling now AVAILABLE TRUCKS 3 8 in the fleet UNASSIGNED LOADS 5 Need a truck and driver Needs a unit Open board LOAD LANE PICKUP MSE-1043 River City Produce Memphis, TN→Atlanta, GA Aug 31, 6:00 AM Open MSE-1053 Blue Ridge Appliances Nashville, TN→Memphis, TN Aug 31, 1:00 PM Open MSE-1042 Heartland Foods Co. Chicago, IL→Indianapolis, IN Sep 1, 8:00 AM Open MSE-1052 Apex Auto Parts Cincinnati, OH→Detroit, MI Sep 2, 9:00 AM Open MSE-1050 Heartland Foods Co. Indianapolis, IN→Chicago, IL Sep 3, 7:00 AM Open Fleet snapshot Trucks available 3 Drivers on duty 4 In maintenance 1 Unit 101 Dry Van Unit 108 Reefer Unit 301 Box Truck Upcoming / expired documents License and medical card: 30 days. Registration: 60 days. DOT inspection: 30 days. Tyrell Brooks: medical card expired Fri, Aug 21. Unit 108: DOT inspection expires Sun, Sep 20 (20 days). Trailer TR-2204: DOT inspection expires Tue, Sep 22 (22 days). Denise Ortega: driver license expires Fri, Sep 25 (25 days). Unit 210: registration expires Sat, Oct 10 (40 days). Trailer TR-8801: registration expires Thu, Oct 15 (45 days). In transit All moving loads LOAD STATUS LANE UNIT DELIVERY MSE-1045 River City Produce IN TRANSIT Nashville, TN→Dallas, TX Unit 112 Denise Ortega Aug 31, 10:00 PM MSE-1046 Prairie Grain Cooperative IN TRANSIT Kansas City, MO→St. Louis, MO Unit 118 James Whitaker Aug 31, 12:00 PM

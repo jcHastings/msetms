@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "runId": "proof",
+  "query": "SELECT load_number, status FROM loads WHERE load_number IN ('MSE-1042','MSE-1045') ORDER BY load_number",
+  "rows": [
+    {
+      "load_number": "MSE-1042",
+      "status": "available"
+    },
+    {
+      "load_number": "MSE-1045",
+      "status": "in_transit"
+    }
+  ]
+}
