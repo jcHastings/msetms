@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordField } from "@/components/password-field";
 import { SettingsForm } from "@/components/settings-form";
 import { DISPATCHER_PASSWORD_HINT } from "@/lib/dispatcher-password-shared";
 import {
@@ -44,10 +45,9 @@ export function DispatcherUserForm({
       </div>
       <div className="field">
         <label htmlFor="password">Password {user ? "(leave blank to keep)" : ""}</label>
-        <input
+        <PasswordField
           id="password"
           name="password"
-          type="password"
           required={!user}
           defaultValue=""
           autoComplete="new-password"

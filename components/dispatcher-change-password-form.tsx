@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
 import { changeOwnPasswordAction } from "@/lib/dispatcher-password-actions";
 import { DISPATCHER_PASSWORD_HINT } from "@/lib/dispatcher-password-shared";
 
@@ -64,11 +65,11 @@ export function DispatcherChangePasswordForm({
             ) : null}
             <div className="field">
               <label htmlFor="password">New password</label>
-              <input id="password" name="password" type="password" required autoComplete="new-password" />
+              <PasswordField id="password" name="password" required autoComplete="new-password" />
             </div>
             <div className="field">
               <label htmlFor="confirm">Confirm password</label>
-              <input id="confirm" name="confirm" type="password" required autoComplete="new-password" />
+              <PasswordField id="confirm" name="confirm" required autoComplete="new-password" />
             </div>
             <button className="btn btn-primary" type="submit" disabled={pending}>
               {pending ? "Saving…" : forced ? "Save and continue" : "Save password"}

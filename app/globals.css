@@ -485,6 +485,33 @@ button {
   box-shadow: 0 0 0 3px rgba(29, 79, 145, 0.12);
 }
 
+.password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.password-field-toggle {
+  border: 1px solid #cfd8e3;
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1d4f91;
+  cursor: pointer;
+}
+
+.password-field-toggle:hover:not(:disabled) {
+  background: #f3f6f9;
+}
+
+.password-field-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1558,6 +1585,11 @@ html:has([data-load-embed]) body {
 .settings-page .field textarea {
   padding: 0.28rem 0.45rem;
   font-size: 13px;
+}
+
+.settings-page .password-field-toggle {
+  padding: 0.28rem 0.45rem;
+  font-size: 12px;
 }
 
 .settings-alert-dialog {

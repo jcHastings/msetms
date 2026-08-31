@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
 import type { PublicDispatcher } from "@/lib/settings-shared";
 import { roleLabel } from "@/lib/settings-shared";
 import type { ActionResult } from "@/lib/types";
@@ -67,10 +68,9 @@ export function DispatcherLoginForm({
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
-            <input
+            <PasswordField
               id="password"
               name="password"
-              type="password"
               required
               autoComplete="current-password"
             />

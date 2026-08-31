@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
 import { resetDispatcherPasswordAction } from "@/lib/dispatcher-password-actions";
 import { DISPATCHER_PASSWORD_HINT } from "@/lib/dispatcher-password-shared";
 
@@ -15,20 +16,18 @@ export function DispatcherResetForm({ token }: { token: string }) {
       <p className="text-sm text-slate-600">{DISPATCHER_PASSWORD_HINT}</p>
       <div className="field">
         <label htmlFor="password">New password</label>
-        <input
+        <PasswordField
           id="password"
           name="password"
-          type="password"
           required
           autoComplete="new-password"
         />
       </div>
       <div className="field">
         <label htmlFor="confirm">Confirm password</label>
-        <input
+        <PasswordField
           id="confirm"
           name="confirm"
-          type="password"
           required
           autoComplete="new-password"
         />
