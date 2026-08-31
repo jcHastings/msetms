@@ -11851,7 +11851,18 @@ Continuous reefer. Two load locks.
       ["Detention", 100],
     ],
   );
-  assert.equal(buildTmsInvoice(freightPlusDetentionLoad).total, 5969);
+  const freightPlusDetentionModel = buildTmsInvoice(freightPlusDetentionLoad);
+  assert.equal(freightPlusDetentionModel.total, 5969);
+  const freightPlusDetentionPdf = await renderTmsInvoicePdf(freightPlusDetentionModel);
+  const { extractText: extractInvoiceText } = await import("unpdf");
+  const freightPlusDetentionText = String(
+    (await extractInvoiceText(new Uint8Array(freightPlusDetentionPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(freightPlusDetentionText, /Flat Rate/);
+  assert.match(freightPlusDetentionText, /5,869/);
+  assert.match(freightPlusDetentionText, /Detention/);
+  assert.match(freightPlusDetentionText, /100/);
+  assert.match(freightPlusDetentionText, /5,969/);
   const freightPlusDetentionQbo = (await import("../lib/integrations/quickbooks")).buildInvoiceLines(
     freightPlusDetentionLoad,
   );
