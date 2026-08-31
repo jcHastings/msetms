@@ -16,6 +16,8 @@ export type DocumentTagContext = {
   loadId?: string;
   customerName?: string;
   customerPhone?: string;
+  invoiceNumber?: string;
+  invoiceTotal?: string;
 };
 
 export function expandDocumentTags(text: string, ctx: DocumentTagContext = {}): string {
@@ -27,6 +29,8 @@ export function expandDocumentTags(text: string, ctx: DocumentTagContext = {}): 
     load_id: ctx.loadId ?? "",
     customer_name: ctx.customerName ?? "",
     customer_phone: ctx.customerPhone ?? "",
+    invoice_number: ctx.invoiceNumber ?? "",
+    invoice_total: ctx.invoiceTotal ?? "",
   };
   return String(text ?? "").replace(/\[([a-z0-9_]+)\]/gi, (full, key: string) => {
     const mapped = values[key.toLowerCase()];

@@ -687,6 +687,7 @@ export function migrate(db: Database): void {
     ["document_font_family", "TEXT NOT NULL DEFAULT 'helvetica'"],
     ["document_font_scale", "INTEGER NOT NULL DEFAULT 100"],
     ["workflow_json", "TEXT NOT NULL DEFAULT ''"],
+    ["invoice_email_body", "TEXT NOT NULL DEFAULT ''"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }

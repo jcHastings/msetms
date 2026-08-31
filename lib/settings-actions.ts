@@ -32,6 +32,7 @@ import {
   updateTwoFactorPolicy,
   updateUnitSettings,
   updateDocumentFont,
+  updateInvoiceEmailBody,
   updateWorkflowSettings,
   getWorkflowSettings,
   type DocumentType,
@@ -242,6 +243,20 @@ export async function saveLoadManagementAction(
     });
     refresh();
     return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveInvoiceEmailAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    updateInvoiceEmailBody(String(formData.get("invoice_email_body") ?? ""));
+    refresh();
+    return { ok: true, message: "Invoice email saved." };
   } catch (error) {
     return fail(error);
   }

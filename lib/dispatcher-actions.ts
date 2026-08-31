@@ -969,7 +969,8 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
         .getAll("extra_id")
         .map((value) => parseOptionalInt(value))
         .filter((id): id is number => id != null);
-      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds });
+      const body = formData.has("body") ? String(formData.get("body") ?? "") : undefined;
+      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds, body });
       recordLoadAudit({
         loadId,
         action: "email",

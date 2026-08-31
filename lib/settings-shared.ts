@@ -57,6 +57,11 @@ export const SETTINGS_SECTIONS = [
         label: "Document defaults",
         hint: "Driver confirmation, invoice, customer confirmation, BOL",
       },
+      {
+        href: "/settings/invoice-email",
+        label: "Invoice email",
+        hint: "Body sent with customer invoices",
+      },
     ],
   },
   {

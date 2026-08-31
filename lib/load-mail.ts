@@ -9,6 +9,8 @@ import { buildTmsInvoice, createTmsInvoice } from "./invoice";
 import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
+import { expandDocumentTags } from "./document-tags";
+import { getInvoiceEmailBody } from "./settings";
 import {
   invoiceFromAddress,
   isUsableEmail,
@@ -441,6 +443,8 @@ export function composeCustomerInvoiceEmail(input: {
   customerName?: string;
   totalLabel?: string;
   extraLabels?: string[];
+  body?: string;
+  officePhone?: string;
 }): CustomerInvoiceMailDraft {
   const invoiceNumber = input.invoiceNumber.trim();
   const loadNumber = input.loadNumber.trim();
@@ -451,27 +455,44 @@ export function composeCustomerInvoiceEmail(input: {
     : loadNumber
       ? `Invoice — Load ${loadNumber}`
       : "Invoice";
-  const lines = [
-    invoiceNumber && loadNumber
-      ? `Invoice ${invoiceNumber} for load ${loadNumber}.`
-      : invoiceNumber
-        ? `Invoice ${invoiceNumber}.`
-        : loadNumber
-          ? `Invoice for load ${loadNumber}.`
-          : "Invoice attached.",
-    input.customerName?.trim() ? `Bill to: ${input.customerName.trim()}` : "",
-    input.totalLabel?.trim() ? `Total: ${input.totalLabel.trim()}` : "",
-    "The invoice PDF is attached.",
-    extras.length ? `Also attached: ${extras.join(", ")}.` : "",
-    "Questions? Reply to this email.",
-    "",
-    "M & S Loads LLC · Accounts Receivable",
-  ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
+  const letter = expandDocumentTags(input.body ?? "", {
+    orgName: "M & S Loads LLC",
+    customerName: input.customerName,
+    loadId: loadNumber,
+    invoiceNumber,
+    invoiceTotal: input.totalLabel,
+    userEmail: from,
+    userPhone: input.officePhone,
+  }).trim();
+  const lines = letter
+    ? [
+        letter,
+        extras.length ? `Also attached: ${extras.join(", ")}.` : "",
+        "Questions? Reply to this email.",
+        "",
+        "M & S Loads LLC · Accounts Receivable",
+      ]
+    : [
+        invoiceNumber && loadNumber
+          ? `Invoice ${invoiceNumber} for load ${loadNumber}.`
+          : invoiceNumber
+            ? `Invoice ${invoiceNumber}.`
+            : loadNumber
+              ? `Invoice for load ${loadNumber}.`
+              : "Invoice attached.",
+        input.customerName?.trim() ? `Bill to: ${input.customerName.trim()}` : "",
+        input.totalLabel?.trim() ? `Total: ${input.totalLabel.trim()}` : "",
+        "The invoice PDF is attached.",
+        extras.length ? `Also attached: ${extras.join(", ")}.` : "",
+        "Questions? Reply to this email.",
+        "",
+        "M & S Loads LLC · Accounts Receivable",
+      ];
   return {
     to: "",
     from,
     subject,
-    text: `${lines.join("\n").trim()}\n`,
+    text: `${lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim()}\n`,
     replyTo: from,
   };
 }
@@ -507,7 +528,7 @@ async function invoicePdfForMail(load: LoadView): Promise<{
 export async function sendCustomerInvoiceMail(
   loadId: number,
   send: typeof sendMail = sendMail,
-  options: { extraIds?: number[] } = {},
+  options: { extraIds?: number[]; body?: string } = {},
 ): Promise<{ to: string; subject: string }> {
   const load = getLoad(loadId);
   const blocked = customerMailBlockReason(load);
@@ -521,6 +542,8 @@ export async function sendCustomerInvoiceMail(
     customerName: load.customer_name,
     totalLabel: formatInvoiceMoney(invoice.total),
     extraLabels: extras.map((file) => file.label),
+    body: options.body ?? getInvoiceEmailBody(),
+    officePhone: getCompanyProfile().dispatcher_phone,
   });
   const to = resolveLoadCustomerEmail(load);
   const usedNames = new Set([invoice.filename.toLowerCase()]);

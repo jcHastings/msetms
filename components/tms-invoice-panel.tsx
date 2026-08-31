@@ -20,6 +20,7 @@ export function TmsInvoicePanel({
   customerEmail = "",
   lastInvoiceSent = "",
   extras = [],
+  invoiceEmailBody = "",
 }: {
   loadId: number;
   status: string;
@@ -29,6 +30,7 @@ export function TmsInvoicePanel({
   customerEmail?: string;
   lastInvoiceSent?: string;
   extras?: InvoiceMailExtraDoc[];
+  invoiceEmailBody?: string;
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -145,6 +147,7 @@ export function TmsInvoicePanel({
             email={customerEmail}
             lastSent={lastInvoiceSent}
             extras={extras}
+            defaultBody={invoiceEmailBody}
           />
         ) : null}
       </div>

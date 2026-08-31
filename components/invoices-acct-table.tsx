@@ -32,6 +32,7 @@ export type InvoiceAcctRow = {
   email: string;
   lastInvoiceSent: string;
   extras: InvoiceMailExtraDoc[];
+  invoiceEmailBody: string;
   pick: string;
   drop: string;
   paperwork: Array<{ label: string; found: boolean }>;
@@ -140,6 +141,7 @@ function InvoiceAcctRowView({
                     email={row.email}
                     lastSent={row.lastInvoiceSent}
                     extras={row.extras}
+                    defaultBody={row.invoiceEmailBody}
                     variant="link"
                   />
                   <form action={returnLoadToOperationsFormAction}>

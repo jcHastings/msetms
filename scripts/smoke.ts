@@ -988,8 +988,12 @@ async function main() {
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
   assert.match(emailInvoiceUi, /extra_id/);
+  assert.match(emailInvoiceUi, /name="body"/);
+  assert.match(emailInvoiceUi, /Email body/);
   assert.match(emailInvoiceUi, /Attach load documents/);
   assert.match(emailInvoiceUi, /Attach all/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/invoice-email/page.tsx"), "utf8"), /invoice_email_body/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8"), /\/settings\/invoice-email/);
   const deskShared = fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8");
   assert.match(deskShared, /Driver Pay Mgmt/);
   assert.match(deskShared, /hrefForAccountingHubTab/);
@@ -3295,6 +3299,22 @@ async function main() {
   });
   assert.match(invoiceDraftWithDocs.text, /Also attached: BOL, Lumper/);
   assert.doesNotMatch(invoiceDraft.text, /Also attached/);
+  const { DEFAULT_INVOICE_EMAIL_BODY } = await import("../lib/invoice-email-shared");
+  const invoiceLetter = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    customerName: "Kayco",
+    totalLabel: "$2,200.00",
+    extraLabels: ["BOL"],
+    body: DEFAULT_INVOICE_EMAIL_BODY,
+  });
+  assert.match(invoiceLetter.text, /Dear Kayco/);
+  assert.match(invoiceLetter.text, /INV-12345/);
+  assert.match(invoiceLetter.text, /load 12345/);
+  assert.match(invoiceLetter.text, /\$2,200\.00/);
+  assert.match(invoiceLetter.text, /Thank you for your business/);
+  assert.match(invoiceLetter.text, /Also attached: BOL/);
+  assert.doesNotMatch(invoiceLetter.text, /Do not reply|not monitored/);
   assert.equal(
     loadMail.customerFacingLoadNumber({
       load_number: "MSE-1055",
@@ -3530,7 +3550,7 @@ async function main() {
     invoiceMailReplyTo = input.replyTo ?? "";
     invoiceMailHasPdf = Boolean(input.attachments?.some((file) => file.contentType === "application/pdf"));
     assert.match(input.subject, /Invoice/);
-    assert.match(input.text, /The invoice PDF is attached/);
+    assert.match(input.text, /Thank you for your business|The invoice PDF is attached/);
     assert.doesNotMatch(input.text, /Do not reply|not monitored/);
   });
   assert.equal(invoiceMailTo, "ap.mail@customer.example");
@@ -10659,6 +10679,16 @@ Continuous reefer. Two load locks.
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/settings/sign-in")),
   );
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/invoice-email" && item.label === "Invoice email"),
+    ),
+  );
+  assert.match(settings.getInvoiceEmailBody(), /Dear \[customer_name\]/);
+  settings.updateInvoiceEmailBody("Hello [customer_name].");
+  assert.equal(settings.getInvoiceEmailBody(), "Hello [customer_name].");
+  settings.updateInvoiceEmailBody("");
+  assert.match(settings.getInvoiceEmailBody(), /Dear \[customer_name\]/);
   assert.equal(settings.roleLabel("admin"), "Administrator");
   assert.equal(settings.roleLabel("manager"), "Administrator");
   assert.equal(settings.roleLabel("dispatcher"), "Standard");

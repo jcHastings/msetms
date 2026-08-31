@@ -38,7 +38,7 @@ import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCustomer } from "@/lib/queries";
-import { getCompanySettings, taxOnAmount } from "@/lib/settings";
+import { getCompanySettings, getInvoiceEmailBody, taxOnAmount } from "@/lib/settings";
 import { listStops } from "@/lib/stops";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForLoadStatus, type LoadView } from "@/lib/types";
@@ -224,6 +224,7 @@ function toInvoiceAcctRow(
       return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
     })(),
     extras: invoiceMailExtraDocs(row.id),
+    invoiceEmailBody: getInvoiceEmailBody(),
     pick: stopLabel(pick, row.origin),
     drop: stopLabel(drop, row.destination),
     paperwork: [

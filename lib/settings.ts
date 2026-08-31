@@ -29,6 +29,7 @@ import {
   shouldReplaceStoredTerms,
 } from "./document-copy";
 import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
+import { DEFAULT_INVOICE_EMAIL_BODY } from "./invoice-email-shared";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
 import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
 
@@ -176,6 +177,20 @@ const SETTINGS_COLUMNS = [
   "show_sample_data",
   "require_dispatcher_2fa",
 ] as const;
+
+export function getInvoiceEmailBody(): string {
+  const row = getDb()
+    .prepare("SELECT invoice_email_body FROM company_profile WHERE id = 1")
+    .get() as { invoice_email_body?: string } | undefined;
+  const text = String(row?.invoice_email_body ?? "").trim();
+  return text || DEFAULT_INVOICE_EMAIL_BODY;
+}
+
+export function updateInvoiceEmailBody(text: string): string {
+  const next = String(text ?? "").trim() || DEFAULT_INVOICE_EMAIL_BODY;
+  getDb().prepare("UPDATE company_profile SET invoice_email_body = ? WHERE id = 1").run(next);
+  return next;
+}
 
 export function getCompanySettings(): CompanySettings {
   const row = getDb()

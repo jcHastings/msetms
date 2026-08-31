@@ -10,16 +10,19 @@ export function EmailInvoiceButton({
   email,
   lastSent,
   extras = [],
+  defaultBody = "",
   variant = "button",
 }: {
   loadId: number;
   email: string;
   lastSent?: string;
   extras?: InvoiceMailExtraDoc[];
+  defaultBody?: string;
   variant?: "button" | "link";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [body, setBody] = useState(defaultBody);
   const [selected, setSelected] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -30,10 +33,7 @@ export function EmailInvoiceButton({
       setNotice({ ok: false, text: "This load has no customer email." });
       return;
     }
-    if (extras.length === 0) {
-      void send([]);
-      return;
-    }
+    setBody(defaultBody);
     setNotice(null);
     setOpen(true);
   }
@@ -53,6 +53,7 @@ export function EmailInvoiceButton({
     setNotice(null);
     const form = new FormData();
     form.set("load_id", String(loadId));
+    form.set("body", body);
     for (const id of ids) form.append("extra_id", String(id));
     const result = await sendCustomerInvoiceMailAction(form);
     setPending(false);
@@ -78,41 +79,58 @@ export function EmailInvoiceButton({
       </button>
       {open ? (
         <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm" data-email-invoice-docs="">
-          <div className="font-medium text-slate-800">Attach load documents</div>
-          <p className="text-xs text-slate-500">Invoice PDF is always attached.</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="acct-link"
-              type="button"
+          <div className="field">
+            <label htmlFor={`invoice-email-body-${loadId}`}>Email body</label>
+            <textarea
+              id={`invoice-email-body-${loadId}`}
+              name="body"
+              rows={6}
+              value={body}
               disabled={pending}
-              onClick={() => setSelected(extras.map((file) => file.id))}
-            >
-              Attach all
-            </button>
-            <button className="acct-link" type="button" disabled={pending} onClick={() => setSelected([])}>
-              Clear
-            </button>
+              onChange={(event) => setBody(event.target.value)}
+            />
           </div>
-          <ul className="max-h-48 space-y-1 overflow-auto">
-            {extras.map((file) => (
-              <li key={file.id}>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    name="extra_id"
-                    value={file.id}
-                    checked={selected.includes(file.id)}
-                    disabled={pending}
-                    onChange={() => toggle(file.id)}
-                  />
-                  <span>
-                    <span className="font-medium">{file.kindLabel}</span>
-                    <span className="text-slate-500"> · {file.name}</span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+          {extras.length > 0 ? (
+            <>
+              <div className="font-medium text-slate-800">Attach load documents</div>
+              <p className="text-xs text-slate-500">Invoice PDF is always attached.</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="acct-link"
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setSelected(extras.map((file) => file.id))}
+                >
+                  Attach all
+                </button>
+                <button className="acct-link" type="button" disabled={pending} onClick={() => setSelected([])}>
+                  Clear
+                </button>
+              </div>
+              <ul className="max-h-48 space-y-1 overflow-auto">
+                {extras.map((file) => (
+                  <li key={file.id}>
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        name="extra_id"
+                        value={file.id}
+                        checked={selected.includes(file.id)}
+                        disabled={pending}
+                        onChange={() => toggle(file.id)}
+                      />
+                      <span>
+                        <span className="font-medium">{file.kindLabel}</span>
+                        <span className="text-slate-500"> · {file.name}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">Invoice PDF is always attached.</p>
+          )}
           <button className="acct-link" type="button" disabled={pending} onClick={() => setOpen(false)}>
             Cancel
           </button>
