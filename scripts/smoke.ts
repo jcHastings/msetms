@@ -9710,6 +9710,11 @@ Continuous reefer. Two load locks.
     headingDeg: 10,
     engineOn: true,
   });
+  queries.saveTruckOdometer(fleetMapTruckId, {
+    miles: 188432,
+    recordedAt: "2026-08-31T12:00:00.000Z",
+    source: "samsara",
+  });
   const fleetMapMoveId = queries.createTruck({
     unit_number: "FM-SAM-GO",
     type: "reefer",
@@ -9825,6 +9830,13 @@ Continuous reefer. Two load locks.
     "deactivated trucks stay off the live Samsara map",
   );
   assert.ok(samsaraFleetMap.missing.some((item) => item.label === "FM-EMPTY" && item.id === fleetMapEmptyId));
+  const samsaraStatus = samsaraFleetMap.truckStatusRows?.find((row) => row.truck === "FM-SAM-1");
+  assert.ok(samsaraStatus, "Samsara page lists every active truck under the map");
+  assert.match(samsaraStatus.location, /Omaha/);
+  assert.equal(samsaraStatus.miles, 188432);
+  assert.equal(samsaraStatus.driver, "");
+  assert.ok(samsaraFleetMap.truckStatusRows?.some((row) => row.truck === "FM-EMPTY" && !row.location && row.miles == null));
+  assert.equal(samsaraFleetMap.truckStatusRows?.some((row) => row.truck === "FM-OLD"), false);
   queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId);
   const assignedSamsaraMap = await fleetMap.buildSamsaraFleetMap();
   assert.equal(
@@ -12493,6 +12505,23 @@ Continuous reefer. Two load locks.
     }).headingDeg,
     85,
   );
+  assert.equal(
+    samsara.formatSamsaraStatusHos({
+      driverId: 1,
+      loadId: null,
+      samsaraDriverId: "d1",
+      driverName: "Test",
+      dutyStatus: "driving",
+      driveRemainingMs: 6.2 * 3600000,
+      shiftRemainingMs: null,
+      cycleRemainingMs: null,
+      timeUntilBreakMs: null,
+      recordedAt: "2026-08-31T12:00:00.000Z",
+      source: "samsara",
+    }),
+    "Driving · 6h 12m",
+  );
+  assert.equal(samsara.formatSamsaraStatusHos(null), "");
   const odometerMiles = samsara.extractSamsaraOdometerMiles({
     obdOdometerMeters: { time: "2026-08-26T12:00:00.000Z", value: 160934.4 },
   }).miles;
@@ -13577,6 +13606,13 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Truck</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Mileage</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Driver</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />HOS</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /truckStatusRows/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /formatSamsaraStatusHos/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);

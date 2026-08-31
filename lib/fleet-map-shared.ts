@@ -97,12 +97,24 @@ export type FleetStatusRow = {
   messageAt: string;
 };
 
+export type SamsaraStatusRow = {
+  id: string;
+  truck: string;
+  href: string;
+  location: string;
+  miles: number | null;
+  driver: string;
+  driverHref: string;
+  hos: string;
+};
+
 export type FleetMapModel = {
   title: string;
   sourceNote: string;
   pins: FleetMapPin[];
   missing: FleetMapMissing[];
   statusRows?: FleetStatusRow[];
+  truckStatusRows?: SamsaraStatusRow[];
 };
 
 export function motionFromSpeedMph(speedMph: number | null | undefined): FleetMapMotion | "" {

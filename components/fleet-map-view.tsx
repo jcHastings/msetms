@@ -11,6 +11,11 @@ import {
 } from "@/lib/fleet-map-shared";
 import { formatDateTime, shortPlaceLabel } from "@/lib/format";
 
+function formatTruckMiles(miles: number | null): string {
+  if (miles == null || Number.isNaN(miles)) return "—";
+  return miles.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
 const REEFER_PIN_LABEL: Record<OrbcommReeferPinStatus, string> = {
   running: "Running",
   off: "Off",
@@ -178,6 +183,46 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     {shortPlaceLabel(row.location) || row.location || "—"}
                   </td>
                   <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+      {model.truckStatusRows?.length ? (
+        <section className="card mt-4 overflow-x-auto" data-samsara-status-table="">
+          <table className="table-grid">
+            <thead>
+              <tr>
+                <th>Truck</th>
+                <th>Location</th>
+                <th>Mileage</th>
+                <th>Driver</th>
+                <th>HOS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.truckStatusRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <Link href={row.href} className="font-semibold underline">
+                      {row.truck}
+                    </Link>
+                  </td>
+                  <td className="whitespace-nowrap text-left">
+                    {shortPlaceLabel(row.location) || row.location || "—"}
+                  </td>
+                  <td className="tabular-nums">{formatTruckMiles(row.miles)}</td>
+                  <td>
+                    {row.driverHref && row.driver ? (
+                      <Link href={row.driverHref} className="underline">
+                        {row.driver}
+                      </Link>
+                    ) : (
+                      row.driver || "—"
+                    )}
+                  </td>
+                  <td className="tabular-nums">{row.hos || "—"}</td>
                 </tr>
               ))}
             </tbody>
