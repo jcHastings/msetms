@@ -19,4 +19,22 @@ export async function register() {
   } catch {
     /* keep the desk up */
   }
+  try {
+    const http = await import(/* webpackIgnore: true */ "node:http");
+    const { stripInvalidFlightRouterState } = await import(/* webpackIgnore: true */ "./lib/rsc-router-state");
+    const emit = http.Server.prototype.emit;
+    if (!("_tmsStripRouterState" in emit)) {
+      function patchedEmit(this: unknown, event: string | symbol, ...args: unknown[]) {
+        if (event === "request") {
+          const req = args[0] as { headers?: Record<string, string | string[] | undefined> };
+          if (req?.headers) stripInvalidFlightRouterState(req.headers);
+        }
+        return emit.apply(this, [event, ...args] as never);
+      }
+      Object.defineProperty(patchedEmit, "_tmsStripRouterState", { value: true });
+      http.Server.prototype.emit = patchedEmit as typeof emit;
+    }
+  } catch {
+    /* keep the desk up if the Node http hook cannot be installed */
+  }
 }
