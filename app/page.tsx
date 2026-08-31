@@ -38,6 +38,7 @@ import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-s
 import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -46,10 +47,11 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ kind?: string; q?: string; open?: string }>;
 }) {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) redirect("/login");
   const params = await searchParams;
   const openId = parseOpenLoadId(params.open);
   const current = { kind: params.kind, q: params.q };
-  const dispatcher = await getSignedInDispatcher();
   const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
   const stats = getDashboardStats();
   const unassigned = listAttentionLoads().filter((load) => loadTouchesToday(load));

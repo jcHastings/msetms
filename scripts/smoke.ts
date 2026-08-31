@@ -343,6 +343,12 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
+  const dashHome = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(dashHome, /if \(!dispatcher\) redirect\("\/login"\)/);
+  assert.ok(
+    dashHome.indexOf('if (!dispatcher) redirect("/login")') < dashHome.indexOf("listCustomers()"),
+    "unauthenticated / must redirect before loading the customer directory",
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /temporary password/);
