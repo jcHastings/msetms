@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { DEVICE_COOKIE, DEVICE_TTL_MS } from "./dispatcher-device";
 import { PASSWORD_NOT_RECOGNIZED, PASSWORD_UNSET, verifyDispatcherPassword } from "./dispatcher-password";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
@@ -175,6 +176,25 @@ export async function clearDispatcherSession(): Promise<void> {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   jar.delete(PENDING_COOKIE);
+}
+
+export async function readTrustedDeviceCookie(): Promise<string> {
+  try {
+    const jar = await cookies();
+    return jar.get(DEVICE_COOKIE)?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function writeTrustedDeviceCookie(value: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(DEVICE_COOKIE, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: DEVICE_TTL_MS / 1000,
+  });
 }
 
 export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {

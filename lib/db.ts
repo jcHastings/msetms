@@ -728,6 +728,15 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_email_otp_dispatcher
       ON dispatcher_email_otp(dispatcher_id, used_at);
+    CREATE TABLE IF NOT EXISTS dispatcher_trusted_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_trusted_devices_dispatcher
+      ON dispatcher_trusted_devices(dispatcher_id, expires_at);
   `);
   ensureColumn(db, "dispatchers", "password_hash", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "phone", "TEXT NOT NULL DEFAULT ''");

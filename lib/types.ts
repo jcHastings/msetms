@@ -640,6 +640,7 @@ export type ActionResult =
       message?: string;
       needsTotp?: boolean;
       needsEmailCode?: boolean;
+      rememberDevice?: boolean;
       maskedEmail?: string;
       needsSmsCode?: boolean;
       maskedPhone?: string;

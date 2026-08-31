@@ -18,12 +18,15 @@ import {
   getDispatcher,
   getPendingTwoFactorDispatcherId,
   isTwoFactorRequired,
+  readTrustedDeviceCookie,
   requireCapability,
   requireLoadAssigner,
   requireLoadEditor,
   setDispatcherSession,
   setPendingTwoFactor,
+  writeTrustedDeviceCookie,
 } from "./dispatcher-session";
+import { findTrustedDevice, isRememberDeviceRequested, rememberTrustedDevice } from "./dispatcher-device";
 import {
   canAccessAccounting,
   canEmailInvoice,
@@ -80,7 +83,11 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
 }
 
-async function sendSignInCode(dispatcherId: number, resend = false): Promise<ActionResult> {
+async function sendSignInCode(
+  dispatcherId: number,
+  resend = false,
+  rememberDevice = false,
+): Promise<ActionResult> {
   const issued = issueEmailOtp(dispatcherId, { resend });
   const mail = composeSignInCodeEmail({ code: issued.code });
   const { sendMail } = await import("./integrations/mail");
@@ -89,9 +96,18 @@ async function sendSignInCode(dispatcherId: number, resend = false): Promise<Act
   return {
     ok: true,
     needsEmailCode: true,
+    rememberDevice,
     maskedEmail: maskEmail(issued.email),
     message: `We sent a sign-in code to ${maskEmail(issued.email)}.`,
   };
+}
+
+async function finishOfficeLogin(dispatcherId: number, remember: boolean): Promise<void> {
+  if (remember) {
+    const cookie = rememberTrustedDevice(dispatcherId, await readTrustedDeviceCookie());
+    await writeTrustedDeviceCookie(cookie);
+  }
+  await setDispatcherSession(dispatcherId);
 }
 
 export async function dispatcherLoginAction(
@@ -100,12 +116,13 @@ export async function dispatcherLoginAction(
 ): Promise<ActionResult> {
   const emailCode = String(formData.get("email_code") ?? "").trim();
   const resend = String(formData.get("resend") ?? "") === "1";
+  const remember = isRememberDeviceRequested(formData);
   const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
   try {
     if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
       if (!pendingId) throw new Error("Password step expired. Sign in again.");
-      if (resend) return await sendSignInCode(pendingId, true);
+      if (resend) return await sendSignInCode(pendingId, true, remember);
       verifyEmailOtp(pendingId, emailCode);
       await recordLoginAttemptFromRequest({
         kind: "office",
@@ -113,7 +130,7 @@ export async function dispatcherLoginAction(
         step: "email_code",
         userId: pendingId,
       });
-      await setDispatcherSession(pendingId);
+      await finishOfficeLogin(pendingId, remember);
       refresh();
       redirect(getDispatcher(pendingId)?.must_change_password ? "/login/change-password" : "/");
     }
@@ -124,18 +141,20 @@ export async function dispatcherLoginAction(
     const afterPassword = () => {
       return dispatcher.must_change_password ? "/login/change-password" : "/";
     };
-    if (!isTwoFactorRequired() || !isUsableEmail(dispatcher.email)) {
+    const trusted = Boolean(findTrustedDevice(await readTrustedDeviceCookie(), dispatcher.id));
+    const skipEmailCode = !isTwoFactorRequired() || !isUsableEmail(dispatcher.email) || trusted;
+    if (skipEmailCode) {
       await recordLoginAttemptFromRequest({
         kind: "office",
         outcome: "success",
         step: "password",
         userId: dispatcher.id,
       });
-      await setDispatcherSession(dispatcher.id);
+      await finishOfficeLogin(dispatcher.id, remember || trusted);
       refresh();
       redirect(afterPassword());
     }
-    return await sendSignInCode(dispatcher.id);
+    return await sendSignInCode(dispatcher.id, false, remember);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     const pendingId = emailCode || resend ? await getPendingTwoFactorDispatcherId() : null;

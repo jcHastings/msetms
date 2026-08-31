@@ -329,12 +329,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="password"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /remember_device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Remember this device for 30 days/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code|Authenticator code|name="pin"|Demo PIN/);
   const passwordField = fs.readFileSync(path.join(process.cwd(), "components/password-field.tsx"), "utf8");
   assert.match(passwordField, /Show password/);
   assert.match(passwordField, /Hide password/);
   assert.match(passwordField, /type=\{visible \? "text" : "password"\}/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password|remember_device|Remember this device/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-reset-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
@@ -11065,6 +11067,38 @@ Continuous reefer. Two load locks.
   badLogin.set("password", "Wrong1$zz");
   const badResult = await dispatcherLoginAction(null, badLogin);
   assert.equal(badResult.ok, false);
+  const devices = await import("../lib/dispatcher-device");
+  assert.equal(devices.DEVICE_TTL_MS, 30 * 24 * 60 * 60 * 1000);
+  assert.equal(devices.DEVICE_COOKIE, "tms_device");
+  const rememberOn = new FormData();
+  rememberOn.set("remember_device", "1");
+  assert.equal(devices.isRememberDeviceRequested(rememberOn), true);
+  assert.equal(devices.isRememberDeviceRequested(new FormData()), false);
+  const issuedDevice = devices.createTrustedDevice(noMailId);
+  assert.match(issuedDevice.cookie, new RegExp(`^${noMailId}\\.[0-9a-f]{64}$`));
+  assert.ok(devices.findTrustedDevice(issuedDevice.cookie, noMailId));
+  assert.equal(devices.findTrustedDevice(issuedDevice.cookie, noMailId + 999), null);
+  assert.equal(devices.findTrustedDevice(`${noMailId}.deadbeef`, noMailId), null);
+  assert.equal(devices.countTrustedDevices(noMailId), 1);
+  const storedDevice = getDb()
+    .prepare("SELECT token_hash FROM dispatcher_trusted_devices WHERE dispatcher_id = ?")
+    .get(noMailId) as { token_hash: string };
+  assert.doesNotMatch(storedDevice.token_hash, /[.][0-9a-f]{64}$/);
+  assert.doesNotMatch(issuedDevice.cookie.split(".")[1] ?? "", storedDevice.token_hash);
+  getDb()
+    .prepare("UPDATE dispatcher_trusted_devices SET expires_at = ? WHERE dispatcher_id = ?")
+    .run("2000-01-01T00:00:00.000Z", noMailId);
+  assert.equal(devices.findTrustedDevice(issuedDevice.cookie, noMailId), null);
+  const liveDevice = devices.createTrustedDevice(noMailId);
+  assert.ok(devices.findTrustedDevice(liveDevice.cookie, noMailId));
+  passwords.setDispatcherPassword(noMailId, "None3$ef");
+  assert.equal(devices.countTrustedDevices(noMailId), 0);
+  assert.equal(devices.findTrustedDevice(liveDevice.cookie, noMailId), null);
+  assert.equal(session.authenticateDispatcher(noMailId, "None3$ef").id, noMailId);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /remember_device|isRememberDeviceRequested/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /findTrustedDevice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /dispatcher_trusted_devices/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-device.ts"), "utf8"), /console\.log/);
   assert.ok(
     loginAudit.listLoginAudit({ user: "No Email Desk", outcome: "failure" }).some((row) => row.step === "password"),
   );

@@ -5,6 +5,7 @@ import {
   dispatcherPasswordError,
   isQualifyingDispatcherPassword,
 } from "./dispatcher-password-shared";
+import { revokeTrustedDevices } from "./dispatcher-device";
 import { isUsableEmail, normalizeEmail } from "./mail-shared";
 
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
@@ -145,6 +146,7 @@ export function setDispatcherPassword(
     opts?.requireChange ? 1 : 0,
     dispatcherId,
   );
+  revokeTrustedDevices(dispatcherId);
 }
 
 export function hashResetToken(token: string): string {

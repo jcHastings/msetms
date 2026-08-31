@@ -17,6 +17,7 @@ export function DispatcherLoginForm({
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const needsEmailCode = Boolean(state?.ok && state.needsEmailCode);
+  const rememberDevice = Boolean(state && state.ok && state.rememberDevice);
   return (
     <form action={formAction} className="card space-y-4 p-6">
       <FormBanner result={state} hideOk={needsEmailCode} />
@@ -39,6 +40,7 @@ export function DispatcherLoginForm({
               required
             />
           </div>
+          <RememberDeviceCheck defaultChecked={rememberDevice} />
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Checking…" : "Continue"}
           </button>
@@ -75,6 +77,7 @@ export function DispatcherLoginForm({
               autoComplete="current-password"
             />
           </div>
+          <RememberDeviceCheck />
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Signing in…" : "Sign in"}
           </button>
@@ -86,5 +89,20 @@ export function DispatcherLoginForm({
         </>
       )}
     </form>
+  );
+}
+
+function RememberDeviceCheck({ defaultChecked = false }: { defaultChecked?: boolean }) {
+  return (
+    <label className="flex items-start gap-2 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        name="remember_device"
+        value="1"
+        defaultChecked={defaultChecked}
+        className="mt-0.5"
+      />
+      <span>Remember this device for 30 days</span>
+    </label>
   );
 }
