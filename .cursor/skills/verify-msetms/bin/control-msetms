@@ -1,0 +1,843 @@
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createConnection } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SKILL_DIR = path.resolve(SCRIPT_DIR, "..");
+const DEFAULT_ARTIFACTS = path.join(SKILL_DIR, "artifacts");
+const HELP = `control-msetms — drive a disposable MSE TMS instance
+
+Usage:
+  control-msetms <command> [flags]
+
+Commands:
+  launch              Start Next.js on an isolated port and SQLite file
+  doctor              Read-only health check (process, URL, seed DB)
+  browser open        Navigate Chrome to a path on this instance
+  browser click       Click a control by role + accessible name
+  browser fill        Type into a field by its visible label
+  browser select      Choose a <select> option by label + option text
+  browser file        Set a file input by label
+  browser wait        Wait until the page contains text
+  browser url         Print the current page URL
+  browser screenshot  Capture a PNG
+  browser snapshot    Capture a text/ARIA-ish dump
+  sql                 Run a read-only SELECT against the instance DB
+  cleanup             Stop processes this run started (keeps artifacts)
+
+Global flags:
+  --help              Print this help (or command help)
+  --run-id <id>       Instance id (default: $MSETMS_VERIFY_RUN_ID or "default")
+  --json              Force JSON (already the default for every command)
+
+launch flags:
+  --port <n>          Listen port (default: 3456)
+
+cleanup flags:
+  --dry-run           Print what would be stopped or deleted. Do not change anything.
+
+browser flags:
+  --path <route>      App path for open, or output file for screenshot/snapshot
+  --role <role>       link | button | textbox | combobox | heading
+  --name <text>       Accessible name (substring, case-insensitive)
+  --label <text>      Visible <label> text
+  --value <text>      Fill value
+  --option <text>     Select option text
+  --file <path>       Local file for browser file
+  --text <text>       Text to wait for
+  --timeout-ms <n>    Per-command wait (default: 30000)
+
+sql flags:
+  --query <sql>       SELECT or PRAGMA only
+
+Every command prints one JSON object to stdout. Non-zero exit means ok=false.
+Never kill by process name. cleanup only signals pids recorded in this run's state.
+`;
+
+function fail(error, extra = {}) {
+  process.stdout.write(`${JSON.stringify({ ok: false, error, ...extra }, null, 2)}\n`);
+  process.exit(1);
+}
+
+function ok(payload) {
+  process.stdout.write(`${JSON.stringify({ ok: true, ...payload }, null, 2)}\n`);
+}
+
+function parseArgs(argv) {
+  const flags = {};
+  const positional = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (token === "--help" || token === "-h") {
+      flags.help = true;
+      continue;
+    }
+    if (token === "--dry-run") {
+      flags.dryRun = true;
+      continue;
+    }
+    if (token === "--json") {
+      flags.json = true;
+      continue;
+    }
+    if (token.startsWith("--")) {
+      const key = token.slice(2).replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith("--")) {
+        flags[key] = next;
+        i += 1;
+      } else {
+        flags[key] = true;
+      }
+      continue;
+    }
+    positional.push(token);
+  }
+  return { flags, positional };
+}
+
+function findRepoRoot() {
+  let dir = process.cwd();
+  for (let i = 0; i < 12; i += 1) {
+    const pkg = path.join(dir, "package.json");
+    if (fs.existsSync(pkg)) {
+      const parsed = JSON.parse(fs.readFileSync(pkg, "utf8"));
+      if (parsed.name === "msetms") return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const fromSkill = path.resolve(SKILL_DIR, "../../..");
+  const pkg = path.join(fromSkill, "package.json");
+  if (fs.existsSync(pkg) && JSON.parse(fs.readFileSync(pkg, "utf8")).name === "msetms") {
+    return fromSkill;
+  }
+  throw new Error("Could not find the msetms repo root (package.json name=msetms).");
+}
+
+function runIdFrom(flags) {
+  return String(flags.runId || process.env.MSETMS_VERIFY_RUN_ID || "default");
+}
+
+function stateDir(runId) {
+  return path.join(os.tmpdir(), "msetms-verify", runId);
+}
+
+function statePath(runId) {
+  return path.join(stateDir(runId), "state.json");
+}
+
+function readState(runId) {
+  const file = statePath(runId);
+  if (!fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function writeState(state) {
+  fs.mkdirSync(stateDir(state.runId), { recursive: true });
+  fs.writeFileSync(statePath(state.runId), `${JSON.stringify(state, null, 2)}\n`);
+}
+
+function pidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function portOpen(port, host = "127.0.0.1") {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host });
+    socket.once("connect", () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
+  });
+}
+
+async function fetchText(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
+    const body = await res.text();
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function chromeBin() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    "/usr/local/bin/google-chrome",
+    "/usr/bin/google-chrome",
+    "/opt/google/chrome/chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error("Chrome/Chromium not found. Set CHROME_PATH.");
+}
+
+function nextBin(repoRoot) {
+  const local = path.join(repoRoot, "node_modules", ".bin", "next");
+  if (!fs.existsSync(local)) {
+    throw new Error("next is not installed. Run npm install in the repo root.");
+  }
+  return local;
+}
+
+async function waitForHttp(url, needle, timeoutMs) {
+  const start = Date.now();
+  let last = "";
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const { status, body } = await fetchText(url, 4000);
+      last = `HTTP ${status} (${body.length} bytes)`;
+      if (status === 200 && (!needle || body.includes(needle))) {
+        return { status, body };
+      }
+    } catch (err) {
+      last = err instanceof Error ? err.message : String(err);
+    }
+    await delay(400);
+  }
+  throw new Error(`Timed out waiting for ${url} to serve ${needle || "HTTP 200"}. Last: ${last}`);
+}
+
+class Cdp {
+  constructor(wsUrl) {
+    this.wsUrl = wsUrl;
+    this.ws = null;
+    this.nextId = 1;
+    this.pending = new Map();
+    this.sessionId = null;
+  }
+
+  async connect() {
+    this.ws = new WebSocket(this.wsUrl);
+    await new Promise((resolve, reject) => {
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", () => reject(new Error(`CDP connect failed: ${this.wsUrl}`)), {
+        once: true,
+      });
+    });
+    this.ws.addEventListener("message", (event) => {
+      const msg = JSON.parse(String(event.data));
+      if (msg.id && this.pending.has(msg.id)) {
+        const { resolve, reject } = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+        else resolve(msg.result);
+      }
+    });
+  }
+
+  send(method, params = {}) {
+    const id = this.nextId;
+    this.nextId += 1;
+    const payload = { id, method, params };
+    if (this.sessionId && !method.startsWith("Target.")) payload.sessionId = this.sessionId;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.ws.send(JSON.stringify(payload));
+    });
+  }
+
+  close() {
+    if (this.ws) this.ws.close();
+  }
+}
+
+async function attachPage(chromePort) {
+  const listRes = await fetch(`http://127.0.0.1:${chromePort}/json/list`);
+  if (!listRes.ok) throw new Error(`CDP list failed: HTTP ${listRes.status}`);
+  const targets = await listRes.json();
+  const page =
+    targets.find((item) => item.type === "page" && !item.url.startsWith("devtools://")) ||
+    targets.find((item) => item.type === "page");
+  if (!page?.webSocketDebuggerUrl) throw new Error("Chrome has no page target.");
+  const cdp = new Cdp(page.webSocketDebuggerUrl);
+  await cdp.connect();
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("DOM.enable");
+  return cdp;
+}
+
+async function ensureChrome(state) {
+  if (state.chromePid && pidAlive(state.chromePid) && (await portOpen(state.chromePort))) {
+    return state;
+  }
+  const dir = stateDir(state.runId);
+  const userData = path.join(dir, "chrome-profile");
+  fs.rmSync(userData, { recursive: true, force: true });
+  fs.mkdirSync(userData, { recursive: true });
+  const chromePort = state.chromePort || state.port + 2000;
+  const logFile = path.join(dir, "chrome.log");
+  const logFd = fs.openSync(logFile, "a");
+  const child = spawn(
+    chromeBin(),
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-extensions",
+      "--window-size=1440,900",
+      `--remote-debugging-port=${chromePort}`,
+      `--user-data-dir=${userData}`,
+      "about:blank",
+    ],
+    { detached: true, stdio: ["ignore", logFd, logFd] },
+  );
+  fs.closeSync(logFd);
+  child.unref();
+  const start = Date.now();
+  while (Date.now() - start < 15000) {
+    if (await portOpen(chromePort)) break;
+    await delay(200);
+  }
+  if (!(await portOpen(chromePort))) {
+    throw new Error(`Chrome debug port ${chromePort} did not open. See ${logFile}`);
+  }
+  state.chromePid = child.pid;
+  state.chromePort = chromePort;
+  state.chromeUserData = userData;
+  state.chromeLog = logFile;
+  writeState(state);
+  return state;
+}
+
+const PAGE_HELPERS = `(() => {
+  function norm(value) {
+    return String(value || "").replace(/\\s+/g, " ").trim();
+  }
+  function visible(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0;
+  }
+  function nameOf(el) {
+    const labelled = el.getAttribute("aria-labelledby");
+    if (labelled) {
+      const parts = labelled.split(/\\s+/).map((id) => document.getElementById(id)?.textContent || "");
+      const joined = norm(parts.join(" "));
+      if (joined) return joined;
+    }
+    return norm(
+      el.getAttribute("aria-label") ||
+      el.getAttribute("title") ||
+      (el.labels && el.labels[0] && el.labels[0].textContent) ||
+      el.textContent
+    );
+  }
+  function matchName(el, name) {
+    return nameOf(el).toLowerCase().includes(String(name).toLowerCase());
+  }
+  function byRole(role, name) {
+    let nodes = [];
+    if (role === "link") nodes = [...document.querySelectorAll("a")];
+    else if (role === "button") nodes = [...document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')];
+    else if (role === "textbox") nodes = [...document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea')];
+    else if (role === "combobox") nodes = [...document.querySelectorAll("select")];
+    else if (role === "heading") nodes = [...document.querySelectorAll("h1,h2,h3,h4")];
+    else throw new Error("Unsupported role: " + role);
+    const hit = nodes.find((el) => visible(el) && matchName(el, name));
+    if (!hit) throw new Error("No visible " + role + " named " + JSON.stringify(name));
+    return hit;
+  }
+  function byLabel(labelText) {
+    const wanted = String(labelText).toLowerCase();
+    const labels = [...document.querySelectorAll("label")].filter(visible);
+    const label = labels.find((el) => norm(el.textContent).toLowerCase() === wanted)
+      || labels.find((el) => norm(el.textContent).toLowerCase().includes(wanted));
+    if (!label) throw new Error("No label " + JSON.stringify(labelText));
+    const id = label.getAttribute("for");
+    if (id) {
+      const target = document.getElementById(id);
+      if (target) return target;
+    }
+    const nested = label.querySelector("input, select, textarea");
+    if (nested) return nested;
+    throw new Error("Label has no control: " + JSON.stringify(labelText));
+  }
+  function snapshot() {
+    const lines = [];
+    const title = document.querySelector("h1");
+    if (title) lines.push("heading: " + norm(title.textContent));
+    for (const el of document.querySelectorAll("h2,h3")) {
+      if (visible(el)) lines.push("heading: " + norm(el.textContent));
+    }
+    for (const el of document.querySelectorAll("a")) {
+      if (visible(el) && norm(el.textContent)) lines.push("link: " + norm(el.textContent));
+    }
+    for (const el of document.querySelectorAll("button, [role='button']")) {
+      if (visible(el) && nameOf(el)) lines.push("button: " + nameOf(el));
+    }
+    for (const el of document.querySelectorAll("label")) {
+      if (visible(el) && norm(el.textContent)) lines.push("label: " + norm(el.textContent));
+    }
+    const main = document.body.innerText || "";
+    lines.push("--- text ---");
+    lines.push(norm(main).slice(0, 8000));
+    return lines.join("\\n");
+  }
+  window.__msetms = { byRole, byLabel, snapshot, nameOf, norm };
+})()`;
+
+async function evalExpr(cdp, expression, opts = {}) {
+  const result = await cdp.send("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: opts.returnByValue !== false,
+    userGesture: true,
+  });
+  if (result.exceptionDetails) {
+    const desc = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
+    throw new Error(desc);
+  }
+  return result.result;
+}
+
+async function withPage(state, fn) {
+  const ready = await ensureChrome(state);
+  const cdp = await attachPage(ready.chromePort);
+  try {
+    await evalExpr(cdp, PAGE_HELPERS);
+    return await fn(cdp, ready);
+  } finally {
+    cdp.close();
+  }
+}
+
+function resolveOutPath(flags, fallbackName) {
+  const raw = flags.path || fallbackName;
+  if (path.isAbsolute(raw)) return raw;
+  return path.join(DEFAULT_ARTIFACTS, raw);
+}
+
+async function cmdLaunch(flags) {
+  const repoRoot = findRepoRoot();
+  const runId = runIdFrom(flags);
+  const port = Number(flags.port || process.env.MSETMS_VERIFY_PORT || 3456);
+  if (!Number.isInteger(port) || port < 1) fail("Invalid --port");
+  const existing = readState(runId);
+  if (existing?.nextPid && pidAlive(existing.nextPid)) {
+    fail("An instance for this --run-id is already running. doctor it, or cleanup first.", {
+      runId,
+      url: existing.url,
+      nextPid: existing.nextPid,
+    });
+  }
+  if ((await portOpen(port)) && !(existing?.nextPid && pidAlive(existing.nextPid))) {
+    fail(`Port ${port} is already in use by something this run did not start.`);
+  }
+  const dir = stateDir(runId);
+  fs.mkdirSync(dir, { recursive: true });
+  const dbPath = path.join(dir, "tms.db");
+  const nextLog = path.join(dir, "next.log");
+  const logFd = fs.openSync(nextLog, "w");
+  const child = spawn(
+    nextBin(repoRoot),
+    ["dev", "--port", String(port), "--hostname", "127.0.0.1"],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        TMS_DB_PATH: dbPath,
+        BROWSER: "none",
+      },
+      detached: true,
+      stdio: ["ignore", logFd, logFd],
+    },
+  );
+  fs.closeSync(logFd);
+  child.unref();
+  const url = `http://127.0.0.1:${port}`;
+  const state = {
+    runId,
+    repoRoot,
+    port,
+    url,
+    dbPath,
+    nextPid: child.pid,
+    nextLog,
+    startedAt: new Date().toISOString(),
+  };
+  writeState(state);
+  try {
+    await waitForHttp(`${url}/`, "MSE Transport", 90000);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err), { nextLog, runId });
+  }
+  ok({
+    runId,
+    url,
+    dbPath,
+    nextPid: child.pid,
+    nextLog,
+    ready: true,
+  });
+}
+
+function doctorPayload(state) {
+  return {
+    runId: state.runId,
+    url: state.url,
+    port: state.port,
+    dbPath: state.dbPath,
+    nextPid: state.nextPid,
+    nextAlive: pidAlive(state.nextPid),
+    chromePid: state.chromePid || null,
+    chromeAlive: pidAlive(state.chromePid),
+    nextLog: state.nextLog,
+  };
+}
+
+async function cmdDoctor(flags) {
+  const runId = runIdFrom(flags);
+  const state = readState(runId);
+  if (!state) fail("No instance state. Run launch first.", { runId, statePath: statePath(runId) });
+  const checks = [];
+  const nextAlive = pidAlive(state.nextPid);
+  checks.push({ name: "next-pid", ok: nextAlive, detail: String(state.nextPid) });
+  const listening = await portOpen(state.port);
+  checks.push({ name: "port", ok: listening, detail: String(state.port) });
+  let home = { status: 0, body: "" };
+  try {
+    home = await fetchText(`${state.url}/`, 8000);
+  } catch (err) {
+    home = { status: 0, body: err instanceof Error ? err.message : String(err) };
+  }
+  const homeOk = home.status === 200 && home.body.includes("MSE Transport") && home.body.includes("Dispatch desk");
+  checks.push({
+    name: "home",
+    ok: homeOk,
+    detail: `HTTP ${home.status} identity=${home.body.includes("MSE Transport")}`,
+  });
+  const dbExists = fs.existsSync(state.dbPath);
+  checks.push({ name: "db-file", ok: dbExists, detail: state.dbPath });
+  let loadCount = null;
+  if (dbExists) {
+    try {
+      const { createRequire } = await import("node:module");
+      const require = createRequire(path.join(state.repoRoot, "package.json"));
+      const Database = require("better-sqlite3");
+      const db = new Database(state.dbPath, { readonly: true, fileMustExist: true });
+      loadCount = db.prepare("SELECT COUNT(*) AS n FROM loads").get().n;
+      db.close();
+    } catch (err) {
+      checks.push({ name: "db-query", ok: false, detail: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  if (loadCount !== null) {
+    checks.push({ name: "seed-loads", ok: loadCount >= 1, detail: String(loadCount) });
+  }
+  const healthy = checks.every((item) => item.ok);
+  const payload = { ...doctorPayload(state), checks, loadCount, healthy };
+  if (!healthy) {
+    process.stdout.write(`${JSON.stringify({ ok: false, error: "doctor failed", ...payload }, null, 2)}\n`);
+    process.exit(1);
+  }
+  ok(payload);
+}
+
+async function cmdSql(flags) {
+  const runId = runIdFrom(flags);
+  const state = readState(runId);
+  if (!state) fail("No instance state. Run launch first.");
+  const query = String(flags.query || "").trim();
+  if (!query) fail("Pass --query with a SELECT or PRAGMA.");
+  if (!/^(select|pragma)\b/i.test(query)) fail("sql is read-only. Use SELECT or PRAGMA.");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(path.join(state.repoRoot, "package.json"));
+  const Database = require("better-sqlite3");
+  const db = new Database(state.dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const rows = db.prepare(query).all();
+    ok({ runId, query, rows });
+  } finally {
+    db.close();
+  }
+}
+
+function killPid(pid) {
+  if (!pid || !pidAlive(pid)) return false;
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function cmdCleanup(flags) {
+  const runId = runIdFrom(flags);
+  const state = readState(runId);
+  if (!state) {
+    ok({ runId, dryRun: Boolean(flags.dryRun), actions: [], note: "No state file. Nothing to clean." });
+    return;
+  }
+  const actions = [];
+  if (state.chromePid) {
+    actions.push({
+      kind: "signal",
+      pid: state.chromePid,
+      group: "chrome",
+      alive: pidAlive(state.chromePid),
+    });
+  }
+  if (state.nextPid) {
+    actions.push({
+      kind: "signal",
+      pid: state.nextPid,
+      group: "next",
+      alive: pidAlive(state.nextPid),
+    });
+  }
+  const scratch = stateDir(runId);
+  actions.push({ kind: "rm", path: scratch, note: "temp db, logs, chrome profile, state.json" });
+  actions.push({
+    kind: "keep",
+    path: DEFAULT_ARTIFACTS,
+    note: "proof artifacts are not deleted",
+  });
+  if (flags.dryRun) {
+    ok({ runId, dryRun: true, actions });
+    return;
+  }
+  killPid(state.chromePid);
+  killPid(state.nextPid);
+  const start = Date.now();
+  while (Date.now() - start < 4000) {
+    if (!pidAlive(state.nextPid) && !pidAlive(state.chromePid)) break;
+    await delay(150);
+  }
+  if (pidAlive(state.nextPid)) {
+    try {
+      process.kill(state.nextPid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  if (pidAlive(state.chromePid)) {
+    try {
+      process.kill(state.chromePid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  fs.rmSync(scratch, { recursive: true, force: true });
+  ok({
+    runId,
+    dryRun: false,
+    actions,
+    artifacts: DEFAULT_ARTIFACTS,
+    nextAlive: pidAlive(state.nextPid),
+    chromeAlive: pidAlive(state.chromePid),
+  });
+}
+
+async function cmdBrowser(subcommand, flags) {
+  const runId = runIdFrom(flags);
+  const state = readState(runId);
+  if (!state) fail("No instance state. Run launch first.");
+  if (!pidAlive(state.nextPid)) fail("Next.js pid is dead. launch again.", doctorPayload(state));
+  const timeoutMs = Number(flags.timeoutMs || 30000);
+
+  if (subcommand === "open") {
+    const route = flags.path || "/";
+    const url = new URL(route, state.url).toString();
+    await withPage(state, async (cdp) => {
+      await cdp.send("Page.navigate", { url });
+      await delay(800);
+      await waitForHttp(url, "MSE Transport", timeoutMs);
+    });
+    ok({ runId, command: "browser open", url });
+    return;
+  }
+
+  if (subcommand === "url") {
+    const href = await withPage(state, async (cdp) => {
+      const result = await evalExpr(cdp, "location.href");
+      return result.value;
+    });
+    ok({ runId, command: "browser url", url: href });
+    return;
+  }
+
+  if (subcommand === "click") {
+    if (!flags.role || !flags.name) fail("browser click needs --role and --name");
+    await withPage(state, async (cdp) => {
+      await evalExpr(
+        cdp,
+        `window.__msetms.byRole(${JSON.stringify(flags.role)}, ${JSON.stringify(flags.name)}).click()`,
+      );
+      await delay(400);
+    });
+    ok({ runId, command: "browser click", role: flags.role, name: flags.name });
+    return;
+  }
+
+  if (subcommand === "fill") {
+    if (!flags.label) fail("browser fill needs --label and --value");
+    await withPage(state, async (cdp) => {
+      await evalExpr(
+        cdp,
+        `(() => {
+          const el = window.__msetms.byLabel(${JSON.stringify(flags.label)});
+          el.focus();
+          if ("value" in el) {
+            const proto = el instanceof HTMLTextAreaElement
+              ? HTMLTextAreaElement.prototype
+              : HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+            if (setter) setter.call(el, ${JSON.stringify(String(flags.value ?? ""))});
+            else el.value = ${JSON.stringify(String(flags.value ?? ""))};
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          return window.__msetms.nameOf(el);
+        })()`,
+      );
+    });
+    ok({ runId, command: "browser fill", label: flags.label, value: flags.value ?? "" });
+    return;
+  }
+
+  if (subcommand === "select") {
+    if (!flags.label || flags.option === undefined) fail("browser select needs --label and --option");
+    const selected = await withPage(state, async (cdp) => {
+      const result = await evalExpr(
+        cdp,
+        `(() => {
+          const el = window.__msetms.byLabel(${JSON.stringify(flags.label)});
+          if (!(el instanceof HTMLSelectElement)) throw new Error("Control is not a select");
+          const wanted = ${JSON.stringify(String(flags.option))}.toLowerCase();
+          const opt = [...el.options].find((item) => item.text.toLowerCase().includes(wanted));
+          if (!opt) throw new Error("No option matching " + ${JSON.stringify(String(flags.option))});
+          el.value = opt.value;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          return { value: el.value, text: opt.text };
+        })()`,
+      );
+      return result.value;
+    });
+    ok({ runId, command: "browser select", label: flags.label, option: flags.option, selected });
+    return;
+  }
+
+  if (subcommand === "file") {
+    if (!flags.label || !flags.file) fail("browser file needs --label and --file");
+    const filePath = path.resolve(String(flags.file));
+    if (!fs.existsSync(filePath)) fail(`File not found: ${filePath}`);
+    await withPage(state, async (cdp) => {
+      const remote = await evalExpr(
+        cdp,
+        `(() => { const el = window.__msetms.byLabel(${JSON.stringify(flags.label)}); return el; })()`,
+        { returnByValue: false },
+      );
+      if (!remote.objectId) throw new Error("Could not resolve file input");
+      const node = await cdp.send("DOM.requestNode", { objectId: remote.objectId });
+      await cdp.send("DOM.setFileInputFiles", { nodeId: node.nodeId, files: [filePath] });
+    });
+    ok({ runId, command: "browser file", label: flags.label, file: filePath });
+    return;
+  }
+
+  if (subcommand === "wait") {
+    if (!flags.text) fail("browser wait needs --text");
+    const start = Date.now();
+    let found = false;
+    while (Date.now() - start < timeoutMs) {
+      const body = await withPage(state, async (cdp) => {
+        const result = await evalExpr(cdp, "document.body ? document.body.innerText : ''");
+        return result.value || "";
+      });
+      if (body.includes(String(flags.text))) {
+        found = true;
+        break;
+      }
+      await delay(300);
+    }
+    if (!found) fail(`Timed out waiting for text ${JSON.stringify(flags.text)}`);
+    ok({ runId, command: "browser wait", text: flags.text });
+    return;
+  }
+
+  if (subcommand === "screenshot") {
+    const out = resolveOutPath(flags, `screenshot-${Date.now()}.png`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const { url } = await withPage(state, async (cdp) => {
+      const shot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+      fs.writeFileSync(out, Buffer.from(shot.data, "base64"));
+      const href = await evalExpr(cdp, "location.href");
+      return { url: href.value };
+    });
+    ok({ runId, command: "browser screenshot", path: out, url });
+    return;
+  }
+
+  if (subcommand === "snapshot") {
+    const out = resolveOutPath(flags, `snapshot-${Date.now()}.txt`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const { text, url } = await withPage(state, async (cdp) => {
+      await evalExpr(cdp, PAGE_HELPERS);
+      const result = await evalExpr(cdp, "window.__msetms.snapshot()");
+      const href = await evalExpr(cdp, "location.href");
+      return { text: result.value, url: href.value };
+    });
+    fs.writeFileSync(out, text);
+    ok({ runId, command: "browser snapshot", path: out, url, bytes: Buffer.byteLength(text) });
+    return;
+  }
+
+  fail(`Unknown browser subcommand: ${subcommand || "(missing)"}`);
+}
+
+async function main() {
+  const { flags, positional } = parseArgs(process.argv.slice(2));
+  const [command, subcommand] = positional;
+
+  if (flags.help || !command || command === "help") {
+    process.stdout.write(HELP);
+    process.exit(0);
+  }
+
+  try {
+    if (command === "launch") await cmdLaunch(flags);
+    else if (command === "doctor") await cmdDoctor(flags);
+    else if (command === "sql") await cmdSql(flags);
+    else if (command === "cleanup") await cmdCleanup(flags);
+    else if (command === "browser") await cmdBrowser(subcommand, flags);
+    else fail(`Unknown command: ${command}`);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+await main();

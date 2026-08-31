@@ -47,3 +47,6 @@ next-env.d.ts
 /data/*.db-shm
 /data/uploads/
 /data/qbo-refresh.json
+
+# verification instance state (proof artifacts stay in the skill)
+.cursor/skills/verify-msetms/.state/
