@@ -11083,8 +11083,9 @@ Continuous reefer. Two load locks.
   const storedDevice = getDb()
     .prepare("SELECT token_hash FROM dispatcher_trusted_devices WHERE dispatcher_id = ?")
     .get(noMailId) as { token_hash: string };
-  assert.doesNotMatch(storedDevice.token_hash, /[.][0-9a-f]{64}$/);
-  assert.doesNotMatch(issuedDevice.cookie.split(".")[1] ?? "", storedDevice.token_hash);
+  assert.equal(storedDevice.token_hash.length, 64);
+  assert.notEqual(storedDevice.token_hash, issuedDevice.cookie.split(".")[1]);
+  assert.equal(storedDevice.token_hash, devices.hashDeviceToken(issuedDevice.cookie.split(".")[1] ?? ""));
   getDb()
     .prepare("UPDATE dispatcher_trusted_devices SET expires_at = ? WHERE dispatcher_id = ?")
     .run("2000-01-01T00:00:00.000Z", noMailId);
