@@ -8688,6 +8688,11 @@ Continuous reefer. Two load locks.
   assert.match(fuelMatchUi, /data-fuel-match-queue/);
   assert.match(fuelMatchUi, /Receipt match/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-reports/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Saved weeks/);
+  assert.match(fuelPage, /loadFuelWeekView/);
+  assert.match(fuelPage, /week\?:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Highest paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Average paid/);
@@ -8740,6 +8745,7 @@ Continuous reefer. Two load locks.
     matchFuelDriver,
     classifyFuelCategory,
     fuelWeekPaidStats,
+    fuelWeekPaidStatsForWeek,
     isTruckDieselCategory,
     fuelTxListKind,
     parseEfsFuelText,
@@ -8749,8 +8755,10 @@ Continuous reefer. Two load locks.
     parseFuelCsv,
     parseFuelReport,
     parseFuelWhen,
+    parseFuelWeekStart,
     renderFuelExportCsv,
     renderFuelTemplate,
+    localWeekRange,
     startOfLocalWeek,
     FUEL_CSV_HEADERS,
     FUEL_BUCKETS,
@@ -8792,6 +8800,52 @@ Continuous reefer. Two load locks.
   assert.equal(weekPaid.minPpg, 3);
   assert.equal(weekPaid.maxPpg, 3.5);
   assert.equal(weekPaid.avgPpg, 3.25);
+  assert.equal(parseFuelWeekStart("2026-08-20", wedNy), "2026-08-17");
+  assert.equal(parseFuelWeekStart(undefined, wedNy), "2026-08-24");
+  assert.equal(parseFuelWeekStart("nope", wedNy), "2026-08-24");
+  const priorWeekPaid = fuelWeekPaidStatsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100, price_per_gallon: 3 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50, price_per_gallon: 2 },
+    ],
+    "2026-08-17",
+  );
+  assert.equal(priorWeekPaid.count, 1);
+  assert.equal(priorWeekPaid.minAmount, 50);
+  assert.equal(priorWeekPaid.weekStartYmd, "2026-08-17");
+  assert.equal(priorWeekPaid.weekEndYmd, "2026-08-23");
+  const { fuelPageHref } = await import("../components/fuel-transaction-lists");
+  assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
+  assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
+  fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
+      "07/02/2026,10:00,Denise Ortega,112,Diesel,11,3.00,33.00,WEEK-SAVE-1",
+    ].join("\n"),
+    "saved-week.csv",
+  );
+  const savedWeekStart = localWeekRange("2026-07-02").startYmd;
+  assert.equal(savedWeekStart, "2026-06-29");
+  const savedWeekRows = fuelStore.listFuelTransactions({
+    fromIso: localWeekRange(savedWeekStart).start.toISOString(),
+    toIso: localWeekRange(savedWeekStart).end.toISOString(),
+  });
+  assert.ok(savedWeekRows.some((row) => row.source_file === "saved-week.csv"));
+  const syncedWeeks = fuelStore.syncFuelWeekReports(wedNy);
+  const savedWeek = syncedWeeks.find((row) => row.weekStartYmd === savedWeekStart);
+  assert.ok(savedWeek);
+  assert.equal(savedWeek.weekEndYmd, "2026-07-05");
+  assert.ok(savedWeek.txCount >= 1);
+  assert.equal(savedWeek.stats.minAmount, 33);
+  const savedWeekTx = fuelStore.listFuelTransactions().find((row) => row.source_file === "saved-week.csv");
+  assert.ok(savedWeekTx);
+  fuelStore.deleteFuelTransaction(savedWeekTx.id);
+  fuelStore.syncFuelWeekReports(wedNy);
+  const keptWeek = fuelStore.getFuelWeekReport(savedWeekStart);
+  assert.ok(keptWeek);
+  assert.equal(keptWeek.txCount, savedWeek.txCount);
+  assert.equal(keptWeek.stats.minAmount, 33);
+  assert.equal(fuelStore.getFuelWeekPaidStats(savedWeekStart, wedNy).minAmount, 33);
   assert.equal(isTruckDieselCategory("truck_diesel"), true);
   assert.equal(isTruckDieselCategory("Truck diesel"), true);
   assert.equal(isTruckDieselCategory("reefer_diesel"), false);

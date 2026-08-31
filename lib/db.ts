@@ -626,6 +626,15 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
+    CREATE TABLE IF NOT EXISTS fuel_week_reports (
+      week_start_ymd TEXT PRIMARY KEY,
+      week_end_ymd TEXT NOT NULL,
+      stats_json TEXT NOT NULL,
+      driver_rollups_json TEXT NOT NULL DEFAULT '[]',
+      truck_rollups_json TEXT NOT NULL DEFAULT '[]',
+      tx_count INTEGER NOT NULL DEFAULT 0,
+      saved_at TEXT NOT NULL
+    );
   `);
 
   for (const [column, definition] of [
