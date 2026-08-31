@@ -1,11 +1,22 @@
+import fs from "node:fs";
 import { agreedAmountForLoad, buildConfirmationForLoad, formatUsd, renderConfirmationPdf } from "./load-confirmation";
-import { formatStopWindow } from "./format";
+import { formatInvoiceMoney, formatStopWindow } from "./format";
+import { getAttachmentPath, listAttachments } from "./files";
 import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
+import { buildTmsInvoice, createTmsInvoice } from "./invoice";
 import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
-import { isUsableEmail, MAIL_NOREPLY, normalizeEmail, type LoadMailKind, type SentMailRow } from "./mail-shared";
+import {
+  invoiceFromAddress,
+  isUsableEmail,
+  MAIL_NOREPLY,
+  normalizeEmail,
+  type LoadMailKind,
+  type OutgoingMail,
+  type SentMailRow,
+} from "./mail-shared";
 import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { listStops } from "./stops";
@@ -26,6 +37,14 @@ export type DriverLoadMailDraft = {
 
 export type CustomerUpdateMailDraft = {
   to: string;
+  subject: string;
+  text: string;
+  replyTo: string;
+};
+
+export type CustomerInvoiceMailDraft = {
+  to: string;
+  from: string;
   subject: string;
   text: string;
   replyTo: string;
@@ -350,6 +369,107 @@ export async function sendCustomerUpdateMail(
   });
   recordSentMail({ loadId, kind: "customer_update", to: draft.to, subject: draft.subject });
   return { to: draft.to, subject: draft.subject };
+}
+
+export function composeCustomerInvoiceEmail(input: {
+  invoiceNumber: string;
+  loadNumber: string;
+  customerName?: string;
+  totalLabel?: string;
+}): CustomerInvoiceMailDraft {
+  const invoiceNumber = input.invoiceNumber.trim();
+  const loadNumber = input.loadNumber.trim();
+  const from = invoiceFromAddress();
+  const subject = invoiceNumber
+    ? `Invoice ${invoiceNumber}${loadNumber ? ` — Load ${loadNumber}` : ""}`
+    : loadNumber
+      ? `Invoice — Load ${loadNumber}`
+      : "Invoice";
+  const lines = [
+    invoiceNumber && loadNumber
+      ? `Invoice ${invoiceNumber} for load ${loadNumber}.`
+      : invoiceNumber
+        ? `Invoice ${invoiceNumber}.`
+        : loadNumber
+          ? `Invoice for load ${loadNumber}.`
+          : "Invoice attached.",
+    input.customerName?.trim() ? `Bill to: ${input.customerName.trim()}` : "",
+    input.totalLabel?.trim() ? `Total: ${input.totalLabel.trim()}` : "",
+    "The invoice PDF is attached.",
+    "Questions? Reply to this email.",
+    "",
+    "M & S Loads LLC · Accounts Receivable",
+  ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
+  return {
+    to: "",
+    from,
+    subject,
+    text: `${lines.join("\n").trim()}\n`,
+    replyTo: from,
+  };
+}
+
+async function invoicePdfForMail(load: LoadView): Promise<{
+  invoiceNumber: string;
+  filename: string;
+  buffer: Buffer;
+  total: number;
+}> {
+  const model = buildTmsInvoice(load);
+  const existing = listAttachments(load.id).find((file) => file.kind === "invoice");
+  if (existing) {
+    const stored = getAttachmentPath(existing);
+    if (fs.existsSync(stored)) {
+      return {
+        invoiceNumber: load.tms_invoice_number || model.invoiceNumber,
+        filename: existing.original_name || `${model.invoiceNumber}.pdf`,
+        buffer: fs.readFileSync(stored),
+        total: model.total,
+      };
+    }
+  }
+  const made = await createTmsInvoice(load.id);
+  return {
+    invoiceNumber: made.invoiceNumber,
+    filename: made.filename,
+    buffer: made.buffer,
+    total: model.total,
+  };
+}
+
+export async function sendCustomerInvoiceMail(
+  loadId: number,
+  send: typeof sendMail = sendMail,
+): Promise<{ to: string; subject: string }> {
+  const load = getLoad(loadId);
+  const blocked = customerMailBlockReason(load);
+  if (!load || blocked) throw new Error(blocked || "Load not found.");
+  const invoice = await invoicePdfForMail(load);
+  const shown = customerFacingLoadNumber(load) || load.load_number;
+  const draft = composeCustomerInvoiceEmail({
+    invoiceNumber: invoice.invoiceNumber,
+    loadNumber: shown,
+    customerName: load.customer_name,
+    totalLabel: formatInvoiceMoney(invoice.total),
+  });
+  const to = resolveLoadCustomerEmail(load);
+  const mail: OutgoingMail = {
+    to,
+    from: draft.from || invoiceFromAddress(),
+    subject: draft.subject,
+    text: draft.text,
+    replyTo: draft.replyTo || invoiceFromAddress(),
+    attachments: [
+      {
+        filename: invoice.filename,
+        contentType: "application/pdf",
+        content: invoice.buffer,
+      },
+    ],
+  };
+  await send(mail);
+  recordSentMail({ loadId, kind: "customer_invoice", to, subject: draft.subject });
+  return { to, subject: draft.subject };
 }
 
 export function lastLoadMail(loadId: number, kind: LoadMailKind): SentMailRow | null {

@@ -7,6 +7,7 @@ import {
   returnLoadToOperationsFormAction,
 } from "@/lib/dispatcher-actions";
 import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
+import { EmailInvoiceButton } from "@/components/email-invoice-button";
 
 export type InvoiceAcctRow = {
   id: number;
@@ -28,6 +29,7 @@ export type InvoiceAcctRow = {
   sendLabel: string;
   paid: boolean;
   email: string;
+  lastInvoiceSent: string;
   pick: string;
   drop: string;
   paperwork: Array<{ label: string; found: boolean }>;
@@ -131,16 +133,12 @@ function InvoiceAcctRowView({
                     View Invoice as PDF
                   </a>
                   <div>View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}</div>
-                  {row.email ? (
-                    <a
-                      className="acct-link"
-                      href={`mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent(`Invoice ${row.loadNumber}`)}`}
-                    >
-                      Email History
-                    </a>
-                  ) : (
-                    <div>Email History: none</div>
-                  )}
+                  <EmailInvoiceButton
+                    loadId={row.id}
+                    email={row.email}
+                    lastSent={row.lastInvoiceSent}
+                    variant="link"
+                  />
                   <form action={returnLoadToOperationsFormAction}>
                     <input type="hidden" name="load_id" value={row.id} />
                     <button className="acct-link" type="submit" title="Send back to Load Management">

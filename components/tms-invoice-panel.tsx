@@ -8,6 +8,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
 import { isBillableStatus, labelForUploader, type Attachment } from "@/lib/types";
+import { EmailInvoiceButton } from "@/components/email-invoice-button";
 
 export function TmsInvoicePanel({
   loadId,
@@ -15,12 +16,16 @@ export function TmsInvoicePanel({
   invoice,
   saved = false,
   invoices = [],
+  customerEmail = "",
+  lastInvoiceSent = "",
 }: {
   loadId: number;
   status: string;
   invoice: TmsInvoiceModel | null;
   saved?: boolean;
   invoices?: Attachment[];
+  customerEmail?: string;
+  lastInvoiceSent?: string;
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -120,17 +125,21 @@ export function TmsInvoicePanel({
           {error}
         </p>
       ) : null}
-      <form
-        action={`/api/loads/${loadId}/invoice`}
-        method="POST"
-        target="_blank"
-        onSubmit={onSubmit}
-        className="mt-4"
-      >
-        <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
-          {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
-        </button>
-      </form>
+      <div className="mt-4 flex flex-wrap items-start gap-3">
+        <form
+          action={`/api/loads/${loadId}/invoice`}
+          method="POST"
+          target="_blank"
+          onSubmit={onSubmit}
+        >
+          <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
+            {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
+          </button>
+        </form>
+        {canInvoice ? (
+          <EmailInvoiceButton loadId={loadId} email={customerEmail} lastSent={lastInvoiceSent} />
+        ) : null}
+      </div>
       {invoices.length > 0 ? (
         <ul className="mt-4 divide-y divide-slate-100">
           {invoices.map((file) => (

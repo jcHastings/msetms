@@ -374,6 +374,10 @@ export function canSendSms(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+export function canEmailInvoice(role: string): boolean {
+  return canEditLoads(role);
+}
+
 export function canLogCheckCall(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }

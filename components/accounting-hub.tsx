@@ -32,7 +32,9 @@ import {
 } from "@/lib/accounting";
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { listAttachments } from "@/lib/files";
-import { formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
+import { formatDateTime, formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
+import { resolveLoadCustomerEmail } from "@/lib/load-mail";
+import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCustomer } from "@/lib/queries";
@@ -216,7 +218,11 @@ function toInvoiceAcctRow(
     alreadySent: qbo.sent,
     sendLabel: qbo.sent ? "Send again to QuickBooks" : qboConnected ? "Send to QuickBooks" : "Record demo invoice",
     paid: row.paid,
-    email: row.contact_email.trim(),
+    email: resolveLoadCustomerEmail(row),
+    lastInvoiceSent: (() => {
+      const sent = lastSentMail(row.id, "customer_invoice");
+      return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
+    })(),
     pick: stopLabel(pick, row.origin),
     drop: stopLabel(drop, row.destination),
     paperwork: [

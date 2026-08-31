@@ -968,7 +968,14 @@ async function main() {
   assert.match(invoicesTableUi, /title="Send back to Load Management"/);
   assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
   assert.match(invoicesTableUi, /QboInvoiceSendButton/);
+  assert.match(invoicesTableUi, /EmailInvoiceButton/);
+  assert.doesNotMatch(invoicesTableUi, /Email History/);
+  assert.doesNotMatch(invoicesTableUi, /mailto:/);
   assert.match(invoicesTableUi, /acct-expand-grid/);
+  const emailInvoiceUi = fs.readFileSync(path.join(process.cwd(), "components/email-invoice-button.tsx"), "utf8");
+  assert.match(emailInvoiceUi, /Email invoice/);
+  assert.match(emailInvoiceUi, /ar@msloads\.com/);
+  assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
   const deskShared = fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8");
   assert.match(deskShared, /Driver Pay Mgmt/);
   assert.match(deskShared, /hrefForAccountingHubTab/);
@@ -1418,6 +1425,7 @@ async function main() {
   assert.match(envExample, /SMTP_FROM=dispatch@msloads.com/);
   assert.match(envExample, /SMTP_USER=dispatch@msloads.com/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_FROM_DEFAULT = "dispatch@msloads.com"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_INVOICE_FROM = "ar@msloads.com"/);
   assert.match(envExample, /SENDGRID_API_KEY=/);
   for (const file of [
     "app/fleet/layout.tsx",
@@ -3248,6 +3256,24 @@ async function main() {
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
   assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
+  const invoiceDraft = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    customerName: "Kayco",
+    totalLabel: "$2,200.00",
+  });
+  assert.equal(invoiceDraft.from, "ar@msloads.com");
+  assert.equal(invoiceDraft.replyTo, "ar@msloads.com");
+  assert.match(invoiceDraft.subject, /INV-12345/);
+  assert.match(invoiceDraft.subject, /12345/);
+  assert.match(invoiceDraft.text, /Invoice INV-12345 for load 12345/);
+  assert.match(invoiceDraft.text, /Bill to: Kayco/);
+  assert.match(invoiceDraft.text, /\$2,200\.00/);
+  assert.match(invoiceDraft.text, /The invoice PDF is attached/);
+  assert.match(invoiceDraft.text, /Reply to this email/);
+  assert.match(invoiceDraft.text, /Accounts Receivable/);
+  assert.doesNotMatch(invoiceDraft.text, /Do not reply|not monitored/);
+  assert.doesNotMatch(invoiceDraft.replyTo, /noreply@|dispatch@/);
   assert.equal(
     loadMail.customerFacingLoadNumber({
       load_number: "MSE-1055",
@@ -3432,6 +3458,23 @@ async function main() {
   assert.doesNotMatch(sendgridBody, /info@msloads\.com/);
   assert.match(sendgridBody, /"reply_to":\{"email":"noreply@msloads.com"\}/);
   assert.doesNotMatch(sendgridBody, /ana@/);
+  let invoiceSendgridBody = "";
+  await mailer.sendMail(
+    {
+      to: "ap.mail@customer.example",
+      from: "ar@msloads.com",
+      subject: "Invoice INV-12345",
+      text: "Invoice attached.",
+      replyTo: "ar@msloads.com",
+    },
+    (async (_url, init) => {
+      invoiceSendgridBody = String(init && typeof init === "object" && "body" in init ? init.body : "");
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+  );
+  assert.match(invoiceSendgridBody, /"email":"ar@msloads.com"/);
+  assert.match(invoiceSendgridBody, /"reply_to":\{"email":"ar@msloads.com"\}/);
+  assert.doesNotMatch(invoiceSendgridBody, /dispatch@msloads\.com|noreply@msloads\.com/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
     assert.equal(input.to, "ap.mail@customer.example");
     assert.equal(input.replyTo, "noreply@msloads.com");
@@ -3455,6 +3498,31 @@ async function main() {
     assert.doesNotMatch(input.text, /\$|settlement|relay|oo pay/i);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
+  queries.updateLoadStatus(mailLoadId, "delivered");
+  let invoiceMailTo = "";
+  let invoiceMailFrom = "";
+  let invoiceMailReplyTo = "";
+  let invoiceMailHasPdf = false;
+  await loadMail.sendCustomerInvoiceMail(mailLoadId, async (input) => {
+    invoiceMailTo = input.to;
+    invoiceMailFrom = input.from ?? "";
+    invoiceMailReplyTo = input.replyTo ?? "";
+    invoiceMailHasPdf = Boolean(input.attachments?.some((file) => file.contentType === "application/pdf"));
+    assert.match(input.subject, /Invoice/);
+    assert.match(input.text, /The invoice PDF is attached/);
+    assert.doesNotMatch(input.text, /Do not reply|not monitored/);
+  });
+  assert.equal(invoiceMailTo, "ap.mail@customer.example");
+  assert.equal(invoiceMailFrom, "ar@msloads.com");
+  assert.equal(invoiceMailReplyTo, "ar@msloads.com");
+  assert.equal(invoiceMailHasPdf, true);
+  assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "ap.mail@customer.example");
+  const noInvoiceMail = new FormData();
+  noInvoiceMail.set("load_id", String(noEmailLoadId));
+  const { sendCustomerInvoiceMailAction } = await import("../lib/dispatcher-actions");
+  const noInvoiceMailResult = await sendCustomerInvoiceMailAction(noInvoiceMail);
+  assert.equal(noInvoiceMailResult.ok, false);
+  if (!noInvoiceMailResult.ok) assert.match(noInvoiceMailResult.error, /no customer email/);
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
@@ -10551,6 +10619,10 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canAssignLoads("dispatcher"), true);
   assert.equal(settings.canAssignLoads("accounting"), false);
   assert.equal(settings.canEditLoads("accounting"), true);
+  assert.equal(settings.canEmailInvoice("accounting"), true);
+  assert.equal(settings.canEmailInvoice("dispatcher"), true);
+  assert.equal(settings.canEmailInvoice("admin"), true);
+  assert.equal(settings.canEmailInvoice("read_only"), false);
   assert.equal(settings.canEditSettings("dispatcher"), false);
   assert.equal(settings.canEditSettings("accounting"), false);
   assert.equal(settings.canEditSettings("manager"), true);
@@ -11622,6 +11694,7 @@ Continuous reefer. Two load locks.
   assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
   assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
+  assert.equal(tmsInvoiceModel.companyEmail, "ar@msloads.com");
   assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");
   assert.match(tmsInvoiceModel.companyLegalName, /LLC/);
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
@@ -11676,6 +11749,7 @@ Continuous reefer. Two load locks.
   assert.ok(recoveredConfirm);
   assert.equal(recoveredConfirm.buffer.subarray(0, 4).toString(), "%PDF");
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
+  assert.match(invoicePdfText, /ar@msloads\.com/);
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
   assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
@@ -11843,6 +11917,7 @@ Continuous reefer. Two load locks.
   assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));
   const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
   assert.match(invoicePanel, /Create invoice/);
+  assert.match(invoicePanel, /EmailInvoiceButton/);
   assert.match(invoicePanel, /companyLegalName/);
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(invoicePanel, /method="POST"/);

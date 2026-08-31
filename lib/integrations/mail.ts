@@ -39,7 +39,7 @@ export async function sendMail(
   const subject = input.subject.trim();
   const text = input.text.trim();
   if (!subject || !text) throw new Error("Email is empty.");
-  const from = mailFromAddress();
+  const from = input.from?.trim() || mailFromAddress();
   const replyTo = input.replyTo?.trim() || undefined;
   if (transport === "smtp") {
     await sendSmtpMail({ from, to, subject, text, replyTo, attachments: input.attachments ?? [] });

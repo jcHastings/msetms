@@ -12,6 +12,7 @@ import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentD
 import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
+import { invoiceFromAddress } from "./mail-shared";
 
 export type TmsInvoiceLine = {
   name: string;
@@ -250,7 +251,7 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     companyLegalName: paperworkCompanyName(company.company_name),
     companyAddress: formatCompanyAddress(settings),
     companyPhone: company.dispatcher_phone,
-    companyEmail: company.dispatcher_email,
+    companyEmail: invoiceFromAddress(),
     weight: load.weight != null ? formatWeight(load.weight, settings.weight_unit) : "",
     miles: (() => {
       const total = routeGuideFromLoad(load, { stopCount: listStops(load.id).length }).totalMiles;
@@ -371,6 +372,10 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   }
   if (model.companyPhone) {
     doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, left, companyY, { width: 250 });
+    companyY += 12;
+  }
+  if (model.companyEmail) {
+    doc.font("Helvetica").fontSize(9).text(model.companyEmail, left, companyY, { width: 250 });
     companyY += 12;
   }
 

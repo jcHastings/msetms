@@ -26,6 +26,7 @@ import {
 } from "./dispatcher-session";
 import {
   canAccessAccounting,
+  canEmailInvoice,
   canLogCheckCall,
   canSendSms,
 } from "./settings-shared";
@@ -924,6 +925,39 @@ export async function sendLoadMailAction(formData: FormData): Promise<ActionResu
           kind === "driver_load"
             ? `Load information emailed to ${sent.to}.`
             : `Tracking update emailed to ${sent.to}.`,
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function sendCustomerInvoiceMailAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      const { customerMailBlockReason, sendCustomerInvoiceMail } = await import("./load-mail");
+      const { MAIL_MISSING } = await import("./mail-shared");
+      const { mailConfigured } = await import("./integrations/mail");
+      const blocked = customerMailBlockReason(load);
+      if (blocked) throw new Error(blocked);
+      if (!mailConfigured()) throw new Error(MAIL_MISSING);
+      await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
+      const sent = await sendCustomerInvoiceMail(loadId);
+      recordLoadAudit({
+        loadId,
+        action: "email",
+        field: "customer_invoice",
+        newValue: sent.to,
+      });
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message: `Invoice emailed to ${sent.to} from ar@msloads.com.`,
       };
     } catch (error) {
       return fail(error);

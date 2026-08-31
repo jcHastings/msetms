@@ -44,7 +44,8 @@ import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
-import { resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
+import { lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
+import { formatDateTime } from "@/lib/format";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
@@ -262,6 +263,11 @@ export async function LoadEditor({
                 status={load.status}
                 saved={Boolean(load.tms_invoice_number)}
                 invoices={attachments.filter((file) => file.kind === "invoice")}
+                customerEmail={resolveLoadCustomerEmail(load)}
+                lastInvoiceSent={(() => {
+                  const sent = lastLoadMail(load.id, "customer_invoice");
+                  return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
+                })()}
                 invoice={(() => {
                   try {
                     return buildTmsInvoice(load);
