@@ -24,7 +24,11 @@ export function ShellSwitch({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const publicPath = pathname.startsWith("/driver") || pathname === "/login" || pathname.startsWith("/login/");
+  const publicPath =
+    pathname.startsWith("/driver") ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/t/");
   const changePath = pathname === "/login/change-password";
 
   useEffect(() => {

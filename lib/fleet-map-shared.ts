@@ -88,6 +88,7 @@ export type FleetMapMissing = {
 export type FleetStatusRow = {
   id: string;
   trailer: string;
+  trailerId: number;
   href: string;
   power: string;
   setpointF: number | null;
@@ -95,6 +96,8 @@ export type FleetStatusRow = {
   alarm: string;
   location: string;
   messageAt: string;
+  sharePath: string;
+  shareExpiresAt: string;
 };
 
 export type SamsaraStatusRow = {

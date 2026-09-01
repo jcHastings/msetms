@@ -932,6 +932,17 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_user_notifications_user
       ON user_notifications(dispatcher_id, id);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trailer_share_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      trailer_id INTEGER NOT NULL REFERENCES trailers(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trailer_share_token ON trailer_share_links(token);
+    CREATE INDEX IF NOT EXISTS idx_trailer_share_trailer ON trailer_share_links(trailer_id, id DESC);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

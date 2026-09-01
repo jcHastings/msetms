@@ -9,6 +9,7 @@ import {
   type FleetMapModel,
   type OrbcommReeferPinStatus,
 } from "@/lib/fleet-map-shared";
+import { TrailerShareLinkPanel } from "@/components/trailer-share-link";
 import { formatDateTime, shortPlaceLabel } from "@/lib/format";
 
 function formatTruckMiles(miles: number | null): string {
@@ -163,6 +164,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                 <th>Alarm</th>
                 <th>Location</th>
                 <th>Message</th>
+                <th>Customer link</th>
               </tr>
             </thead>
             <tbody>
@@ -183,6 +185,16 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     {shortPlaceLabel(row.location) || row.location || "—"}
                   </td>
                   <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
+                  <td>
+                    {row.trailerId ? (
+                      <TrailerShareLinkPanel
+                        trailerId={row.trailerId}
+                        sharePath={row.sharePath}
+                        expiresAt={row.shareExpiresAt}
+                        compact
+                      />
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

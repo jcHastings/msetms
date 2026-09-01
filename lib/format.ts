@@ -25,6 +25,60 @@ export function fromInputDateTime(value: string): string {
 
 export const DISPLAY_TIME_ZONE = "America/New_York";
 
+function officeOffsetMs(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const num = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const asUtc = Date.UTC(num("year"), num("month") - 1, num("day"), num("hour"), num("minute"), num("second"));
+  return asUtc - instant.getTime();
+}
+
+export function officeWallToUtc(ymd: string, hours: number, minutes: number, seconds = 0): Date {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day, hours, minutes, seconds);
+  const offset1 = officeOffsetMs(new Date(utcGuess));
+  const instant = utcGuess - offset1;
+  const offset2 = officeOffsetMs(new Date(instant));
+  return new Date(utcGuess - offset2);
+}
+
+/** datetime-local value as America/New_York wall time. */
+export function fromOfficeDateTime(value: string): string {
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) throw new Error("Enter a date and time.");
+  return officeWallToUtc(
+    `${match[1]}-${match[2]}-${match[3]}`,
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] ?? 0),
+  ).toISOString();
+}
+
+export function toOfficeDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const ymd = ymdInTimeZone(date, DISPLAY_TIME_ZONE);
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = bits.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = bits.find((part) => part.type === "minute")?.value ?? "00";
+  return `${ymd}T${hour}:${minute}`;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }

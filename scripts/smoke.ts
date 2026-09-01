@@ -1479,6 +1479,7 @@ async function main() {
     "app/fleet/drivers/[id]/page.tsx",
     "app/fleet/samsara/page.tsx",
     "app/fleet/orbcomm/page.tsx",
+    "app/t/[token]/page.tsx",
     "app/locations/new/page.tsx",
     "app/customers/new/page.tsx",
   ]) {
@@ -1702,6 +1703,22 @@ async function main() {
   assert.match(orbcommAuth, /setpointTemp/);
   assert.match(orbcommAuth, /Authorization: token/);
   assert.doesNotMatch(orbcommAuth, /Bearer \$\{token\}/);
+  const trailerShareUi = fs.readFileSync(path.join(process.cwd(), "components/trailer-share-link.tsx"), "utf8");
+  assert.match(trailerShareUi, /Create customer link/);
+  assert.match(trailerShareUi, /Copy link/);
+  assert.match(trailerShareUi, /datetime-local/);
+  assert.match(trailerShareUi, /name="expires_at"/);
+  assert.match(trailerShareUi, /data-trailer-share-expires-input/);
+  assert.doesNotMatch(trailerShareUi, /sendMail|mailto:|Email customer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /This link has expired/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-expired/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /Trailer location is no longer available/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/[id]/page.tsx"), "utf8"), /TrailerShareLinkPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
@@ -5035,6 +5052,92 @@ Continuous reefer. Two load locks.
   assert.ok(trailerLocation, "demo ORBCOMM snapshot should include trailer location");
   assert.equal(trailerLocation.source, "demo");
   assert.ok(trailerLocation.latitude != null && trailerLocation.longitude != null);
+
+  const trailerShare = await import("../lib/trailer-share");
+  const { fromOfficeDateTime, toOfficeDateTime } = await import("../lib/format");
+  const shareLater = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const shareExpiresInput = toOfficeDateTime(shareLater.toISOString());
+  assert.match(shareExpiresInput, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  assert.ok(Math.abs(Date.parse(fromOfficeDateTime(shareExpiresInput)) - shareLater.getTime()) < 60_000);
+  const shareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-1",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-1",
+  });
+  assert.throws(() => trailerShare.createTrailerShareLink(shareTrailerId, ""), /date and time/);
+  assert.throws(
+    () => trailerShare.createTrailerShareLink(shareTrailerId, toOfficeDateTime(new Date(Date.now() - 60 * 60 * 1000).toISOString())),
+    /future/,
+  );
+  const noOrbcommShareId = queries.createTrailer({ unit_number: "TR-SHARE-DRY", type: "dry_van" });
+  assert.throws(() => trailerShare.createTrailerShareLink(noOrbcommShareId, shareExpiresInput), /Orbcomm/);
+  const shareCreatedAt = new Date("2026-09-01T16:00:00.000Z");
+  const firstShare = trailerShare.createTrailerShareLink(shareTrailerId, shareExpiresInput, shareCreatedAt);
+  const secondShare = trailerShare.createTrailerShareLink(shareTrailerId, shareExpiresInput, shareCreatedAt);
+  assert.notEqual(firstShare.token, secondShare.token);
+  assert.ok(firstShare.token.length >= 24);
+  assert.notEqual(firstShare.token, String(shareTrailerId));
+  assert.equal(trailerShare.getTrailerShareLink("1"), null);
+  assert.equal(trailerShare.getTrailerShareLink("abc"), null);
+  assert.equal(firstShare.created_at, shareCreatedAt.toISOString());
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-SHARE-1",
+    setpoint_f: 34,
+    temperature_f: 10,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.7,
+    longitude: -74,
+    address: "Before create",
+    source: "orbcomm",
+    recorded_at: "2026-09-01T15:00:00.000Z",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "orbcomm-tr-share-1",
+    setpoint_f: 34,
+    temperature_f: 36,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.8,
+    longitude: -74.1,
+    address: "After create",
+    source: "orbcomm",
+    recorded_at: "2026-09-01T16:05:00.000Z",
+  });
+  const shareNow = new Date("2026-09-01T16:10:00.000Z");
+  const shareReadings = trailerShare.listTrailerShareReadings(
+    { unit_number: "TR-SHARE-1", orbcomm_asset_id: "orbcomm-tr-share-1" },
+    firstShare.created_at,
+    shareNow,
+  );
+  assert.equal(shareReadings.length, 1);
+  assert.equal(shareReadings[0]?.temperature_f, 36);
+  assert.equal(shareReadings.some((row) => row.address === "Before create"), false);
+  const liveShareView = trailerShare.trailerShareView(firstShare.token, shareNow);
+  assert.equal(liveShareView.found, true);
+  assert.equal(liveShareView.expired, false);
+  assert.equal(liveShareView.temperatureF, 36);
+  assert.equal(liveShareView.points.length, 1);
+  const expiredShareView = trailerShare.trailerShareView(
+    firstShare.token,
+    new Date(Date.parse(firstShare.expires_at) + 1000),
+  );
+  assert.equal(expiredShareView.found, true);
+  assert.equal(expiredShareView.expired, true);
+  assert.equal(expiredShareView.temperatureF, null);
+  assert.equal(expiredShareView.address, "");
+  assert.equal(expiredShareView.points.length, 0);
+  assert.doesNotMatch(JSON.stringify(expiredShareView), /After create|40\.8|36/);
 
   const mappedGps = samsara.mapVehicleLocations({
     vehicles: [

@@ -1113,6 +1113,23 @@ export async function toggleTrailerActiveAction(
   }
 }
 
+export async function createTrailerShareLinkAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("trailer_id"));
+    if (id == null) throw new Error("Trailer not found.");
+    const { createTrailerShareLink } = await import("./trailer-share");
+    const link = createTrailerShareLink(id, String(formData.get("expires_at") ?? ""));
+    refresh();
+    return { ok: true, id: link.id, message: `Customer link created. Expires ${link.expires_at}.` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function attachFleetDocFormAction(formData: FormData): Promise<void> {
   const result = await attachFleetDocAction(formData);
   if (!result.ok) throw new Error(result.error);

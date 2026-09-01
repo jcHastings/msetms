@@ -15,6 +15,7 @@ import {
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
+import { latestTrailerShareLink, trailerSharePath } from "./trailer-share";
 import {
   driverForTruck,
   formatSamsaraStatusHos,
@@ -393,9 +394,11 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
         : snapshot && "recorded_at" in snapshot && snapshot.recorded_at
           ? String(snapshot.recorded_at)
           : persistedTrailerLocation(trailer)?.recordedAt ?? "";
+    const share = latestTrailerShareLink(trailer.id);
     return {
       id: `status-${trailer.id}`,
       trailer: trailer.unit_number,
+      trailerId: trailer.id,
       href: trailerHref(trailer, loads),
       power,
       setpointF: setpointF ?? null,
@@ -403,6 +406,8 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       alarm,
       location,
       messageAt,
+      sharePath: share ? trailerSharePath(share.token) : "",
+      shareExpiresAt: share?.expires_at ?? "",
     };
   });
 
