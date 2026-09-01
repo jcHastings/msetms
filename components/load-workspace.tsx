@@ -17,7 +17,7 @@ import {
   sendLoadWhatsAppAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
-import { LoadMailMenuItems } from "@/components/load-mail-panel";
+import { EmailCustomerUpdateButton, LoadMailMenuItems } from "@/components/load-mail-panel";
 import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
@@ -333,6 +333,15 @@ export function LoadWorkspace({
             WhatsApp load
           </button>
         ) : null}
+        {canSendSms(role) && loadId ? (
+          <EmailCustomerUpdateButton
+            loadId={loadId}
+            loadNumber={loadNumber}
+            customerEmail={contactEmail}
+            onNotice={setSmsNotice}
+            appearance="action"
+          />
+        ) : null}
         {canEmailInvoice(role) && loadId ? (
           <button
             type="button"
@@ -360,6 +369,15 @@ export function LoadWorkspace({
           <button type="button" className="menu-item" onClick={() => setTab("log")}>
             Tracking and status
           </button>
+          {canSendSms(role) && loadId ? (
+            <EmailCustomerUpdateButton
+              loadId={loadId}
+              loadNumber={loadNumber}
+              customerEmail={contactEmail}
+              onNotice={setSmsNotice}
+              appearance="menu"
+            />
+          ) : null}
           {canSendSms(role) ? (
             <>
               <button

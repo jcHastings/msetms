@@ -492,12 +492,15 @@ async function main() {
   assert.match(workspaceSource, /data-email-invoice-action/);
   assert.match(workspaceSource, /setTab\("financials", "email-invoice"\)/);
   assert.match(workspaceSource, /LoadMailMenuItems/);
+  assert.match(workspaceSource, /EmailCustomerUpdateButton/);
   assert.doesNotMatch(workspaceSource, /SendToAccountingControls/);
   assert.match(workspaceSource, /Spanish/);
   assert.match(workspaceSource, /driver-locale|driverLocale/);
   const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
   assert.match(mailPanelSource, /data-load-mail/);
   assert.match(mailPanelSource, /Email customer update/);
+  assert.match(mailPanelSource, /EmailCustomerUpdateButton/);
+  assert.match(mailPanelSource, /data-email-customer-update/);
   assert.match(mailPanelSource, /Send load information/);
   assert.doesNotMatch(workspaceSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);
   assert.doesNotMatch(mailPanelSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);

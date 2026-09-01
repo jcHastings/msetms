@@ -80,17 +80,42 @@ export function LoadMailMenuItems({
         confirm={`Send load information to ${driverEmail}?`}
         onNotice={onNotice}
       />
-      <LoadMailMenuItem
+      <EmailCustomerUpdateButton
         loadId={loadId}
         loadNumber={loadNumber}
-        kind="customer_update"
-        label="Email customer update"
-        email={customerEmail}
-        missing="This load has no customer email."
-        confirm={`Send tracking update to ${customerEmail}?`}
+        customerEmail={customerEmail}
         onNotice={onNotice}
+        appearance="menu"
       />
     </>
+  );
+}
+
+export function EmailCustomerUpdateButton({
+  loadId,
+  loadNumber,
+  customerEmail,
+  onNotice,
+  appearance = "action",
+}: {
+  loadId: number;
+  loadNumber: string;
+  customerEmail: string;
+  onNotice: (notice: { tone: "error" | "ok"; text: string }) => void;
+  appearance?: "action" | "menu";
+}) {
+  return (
+    <LoadMailMenuItem
+      loadId={loadId}
+      loadNumber={loadNumber}
+      kind="customer_update"
+      label="Email customer update"
+      email={customerEmail}
+      missing="This load has no customer email."
+      confirm={`Send tracking update to ${customerEmail}?`}
+      onNotice={onNotice}
+      appearance={appearance}
+    />
   );
 }
 
@@ -183,6 +208,7 @@ function LoadMailMenuItem({
   missing,
   confirm,
   onNotice,
+  appearance = "menu",
 }: {
   loadId: number;
   loadNumber: string;
@@ -192,6 +218,7 @@ function LoadMailMenuItem({
   missing: string;
   confirm: string;
   onNotice: (notice: { tone: "error" | "ok"; text: string }) => void;
+  appearance?: "action" | "menu";
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -199,7 +226,12 @@ function LoadMailMenuItem({
   return (
     <button
       type="button"
-      className="menu-item w-full text-left disabled:opacity-50"
+      className={
+        appearance === "action"
+          ? "btn load-action-btn disabled:opacity-50"
+          : "menu-item w-full text-left disabled:opacity-50"
+      }
+      data-email-customer-update={kind === "customer_update" ? "" : undefined}
       disabled={pending}
       onClick={async () => {
         if (!email.trim()) {
