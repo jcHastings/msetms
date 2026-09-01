@@ -15,7 +15,7 @@ export function PasswordField(props: Omit<InputHTMLAttributes<HTMLInputElement>,
         disabled={props.disabled}
         onClick={() => setVisible((open) => !open)}
       >
-        {visible ? "Hide" : "Show"}
+        {visible ? "Hide password" : "Show password"}
       </button>
     </div>
   );

@@ -94,13 +94,13 @@ export function DispatcherLoginForm({
 
 function RememberDeviceCheck({ defaultChecked = false }: { defaultChecked?: boolean }) {
   return (
-    <label className="flex items-start gap-2 text-sm text-slate-700">
+    <label className="remember-device">
       <input
         type="checkbox"
         name="remember_device"
         value="1"
         defaultChecked={defaultChecked}
-        className="mt-0.5"
+        className="remember-device-check"
       />
       <span>Remember this device for 30 days</span>
     </label>

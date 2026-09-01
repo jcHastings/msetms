@@ -492,7 +492,16 @@ button {
   align-items: stretch;
 }
 
+.field .password-field input,
+.password-field input {
+  width: auto;
+  min-width: 0;
+}
+
 .password-field-toggle {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
   border: 1px solid #cfd8e3;
   background: #fff;
   border-radius: 0.5rem;
@@ -501,6 +510,27 @@ button {
   font-weight: 600;
   color: #1d4f91;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.remember-device {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  border: 1px solid #cfd8e3;
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  background: #f8fafc;
+  color: #122033;
+  font-size: 0.9rem;
+}
+
+.remember-device-check {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  accent-color: #1d4f91;
 }
 
 .password-field-toggle:hover:not(:disabled) {
