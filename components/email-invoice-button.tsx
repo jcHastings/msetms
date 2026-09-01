@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendCustomerInvoiceMailAction } from "@/lib/dispatcher-actions";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
@@ -12,6 +12,7 @@ export function EmailInvoiceButton({
   extras = [],
   defaultBody = "",
   variant = "button",
+  anchorId,
 }: {
   loadId: number;
   email: string;
@@ -19,6 +20,7 @@ export function EmailInvoiceButton({
   extras?: InvoiceMailExtraDoc[];
   defaultBody?: string;
   variant?: "button" | "link";
+  anchorId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -37,6 +39,19 @@ export function EmailInvoiceButton({
     setNotice(null);
     setOpen(true);
   }
+
+  useEffect(() => {
+    if (!anchorId || typeof window === "undefined") return;
+    if (window.location.hash.replace(/^#/, "") !== anchorId) return;
+    if (!email.trim()) {
+      setNotice({ ok: false, text: "This load has no customer email." });
+      return;
+    }
+    setBody(defaultBody);
+    setNotice(null);
+    setOpen(true);
+    window.setTimeout(() => document.getElementById(anchorId)?.scrollIntoView({ block: "start" }), 0);
+  }, [anchorId, defaultBody, email]);
 
   function toggle(id: number) {
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -67,7 +82,7 @@ export function EmailInvoiceButton({
   }
 
   return (
-    <div className={variant === "link" ? "space-y-1" : "space-y-1"}>
+    <div id={anchorId} className={variant === "link" ? "space-y-1" : "space-y-1"}>
       <button
         className={variant === "link" ? "acct-link" : "btn btn-secondary"}
         type="button"

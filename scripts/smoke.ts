@@ -488,6 +488,9 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
+  assert.match(workspaceSource, /Email invoice/);
+  assert.match(workspaceSource, /data-email-invoice-action/);
+  assert.match(workspaceSource, /setTab\("financials", "email-invoice"\)/);
   assert.match(workspaceSource, /LoadMailMenuItems/);
   assert.doesNotMatch(workspaceSource, /SendToAccountingControls/);
   assert.match(workspaceSource, /Spanish/);
@@ -980,11 +983,14 @@ async function main() {
   assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
   assert.match(invoicesTableUi, /QboInvoiceSendButton/);
   assert.match(invoicesTableUi, /EmailInvoiceButton/);
+  assert.match(invoicesTableUi, /variant="link"/);
   assert.doesNotMatch(invoicesTableUi, /Email History/);
   assert.doesNotMatch(invoicesTableUi, /mailto:/);
   assert.match(invoicesTableUi, /acct-expand-grid/);
   const emailInvoiceUi = fs.readFileSync(path.join(process.cwd(), "components/email-invoice-button.tsx"), "utf8");
   assert.match(emailInvoiceUi, /Email invoice/);
+  assert.match(emailInvoiceUi, /anchorId/);
+  assert.match(emailInvoiceUi, /id=\{anchorId\}/);
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
   assert.match(emailInvoiceUi, /extra_id/);
@@ -12098,6 +12104,9 @@ Continuous reefer. Two load locks.
   const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
   assert.match(invoicePanel, /Create invoice/);
   assert.match(invoicePanel, /EmailInvoiceButton/);
+  assert.match(invoicePanel, /id="invoice-panel"/);
+  assert.match(invoicePanel, /anchorId="email-invoice"/);
+  assert.match(invoicePanel, /Email invoice after Delivered/);
   assert.match(invoicePanel, /companyLegalName/);
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(invoicePanel, /method="POST"/);

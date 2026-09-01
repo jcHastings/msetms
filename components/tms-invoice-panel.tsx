@@ -79,11 +79,40 @@ export function TmsInvoicePanel({
   }
 
   return (
-    <section className="card mb-4 overflow-hidden" data-invoice-panel="" data-load-tab="financials">
+    <section
+      id="invoice-panel"
+      className="card mb-4 overflow-hidden"
+      data-invoice-panel=""
+      data-load-tab="financials"
+    >
       <div className="section-head px-3 py-1.5">
         <h2 className="text-[12.5px] font-semibold">Invoice</h2>
       </div>
       <div className="p-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <form
+          action={`/api/loads/${loadId}/invoice`}
+          method="POST"
+          target="_blank"
+          onSubmit={onSubmit}
+        >
+          <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
+            {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
+          </button>
+        </form>
+        {canInvoice ? (
+          <EmailInvoiceButton
+            loadId={loadId}
+            email={customerEmail}
+            lastSent={lastInvoiceSent}
+            extras={extras}
+            defaultBody={invoiceEmailBody}
+            anchorId="email-invoice"
+          />
+        ) : (
+          <span className="pt-1.5 text-[12.5px] text-slate-600">Email invoice after Delivered</span>
+        )}
+      </div>
       {invoice ? (
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
@@ -130,27 +159,6 @@ export function TmsInvoicePanel({
           {error}
         </p>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-start gap-3">
-        <form
-          action={`/api/loads/${loadId}/invoice`}
-          method="POST"
-          target="_blank"
-          onSubmit={onSubmit}
-        >
-          <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
-            {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
-          </button>
-        </form>
-        {canInvoice ? (
-          <EmailInvoiceButton
-            loadId={loadId}
-            email={customerEmail}
-            lastSent={lastInvoiceSent}
-            extras={extras}
-            defaultBody={invoiceEmailBody}
-          />
-        ) : null}
-      </div>
       {invoices.length > 0 ? (
         <ul className="mt-4 divide-y divide-slate-100">
           {invoices.map((file) => (

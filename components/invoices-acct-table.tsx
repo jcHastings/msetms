@@ -111,7 +111,17 @@ function InvoiceAcctRowView({
           <div className="font-mono text-[11px] text-slate-500">{row.loadNumber}</div>
           <div className="text-[11px] text-slate-500">{row.statusLabel}</div>
         </td>
-        <td className={row.unbilled ? "text-rose-700" : undefined}>{row.invoiceNumber}</td>
+        <td className={row.unbilled ? "text-rose-700" : undefined}>
+          <div>{row.invoiceNumber}</div>
+          <EmailInvoiceButton
+            loadId={row.id}
+            email={row.email}
+            lastSent={row.lastInvoiceSent}
+            extras={row.extras}
+            defaultBody={row.invoiceEmailBody}
+            variant="link"
+          />
+        </td>
         <td>{row.reference}</td>
         <td>{row.deliveryDate}</td>
         <td className={row.sentStatus === "Sent" ? "text-emerald-700" : "text-sky-800"}>{row.sentStatus}</td>

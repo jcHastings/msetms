@@ -25,6 +25,7 @@ import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
 import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
+  canEmailInvoice,
   canLogCheckCall,
   canSendSms,
   canViewAudit,
@@ -332,6 +333,16 @@ export function LoadWorkspace({
             WhatsApp load
           </button>
         ) : null}
+        {canEmailInvoice(role) && loadId ? (
+          <button
+            type="button"
+            className="btn load-action-btn"
+            data-email-invoice-action=""
+            onClick={() => setTab("financials", "email-invoice")}
+          >
+            Email invoice
+          </button>
+        ) : null}
         <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
@@ -434,9 +445,29 @@ export function LoadWorkspace({
               onNotice={setSmsNotice}
             />
           ) : null}
+          {canEmailInvoice(role) && loadId ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-email-invoice-menu=""
+              onClick={() => setTab("financials", "email-invoice")}
+            >
+              Email invoice
+            </button>
+          ) : null}
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
         <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+          {canEmailInvoice(role) && loadId ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-email-invoice-menu=""
+              onClick={() => setTab("financials", "email-invoice")}
+            >
+              Email invoice
+            </button>
+          ) : null}
           {canViewAudit(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
               View Accountability Log
