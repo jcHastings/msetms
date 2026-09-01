@@ -821,6 +821,10 @@ export function parseFuelWhen(dateRaw: string, timeRaw: string): Date | null {
   const meridiem = (match[7] ?? "").toLowerCase();
   if (meridiem === "pm" && hours < 12) hours += 12;
   if (meridiem === "am" && hours === 12) hours = 0;
+  if (!match[4]) {
+    const ymd = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return zonedWallToUtc(ymd, 0, 0, 0);
+  }
   const date = new Date(year, month - 1, day, hours, minutes, seconds);
   return Number.isNaN(date.getTime()) ? null : date;
 }

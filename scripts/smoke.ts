@@ -8944,6 +8944,7 @@ Continuous reefer. Two load locks.
     renderFuelExportCsv,
     renderFuelTemplate,
     localWeekRange,
+    startOfLocalMonth,
     startOfLocalWeek,
     FUEL_CSV_HEADERS,
     FUEL_BUCKETS,
@@ -9042,15 +9043,16 @@ Continuous reefer. Two load locks.
   assert.equal(fuelTxListKind("cash advance"), "money_code");
   assert.equal(fuelTxListKind("def"), "def");
   assert.equal(fuelTxListKind("DATE DB CATEGORY"), null);
-  const fuelWhen = new Date();
+  const fuelWhen = new Date(Date.now() - 2 * 60 * 60 * 1000);
   const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
+  const fuelHour = String(fuelWhen.getHours()).padStart(2, "0");
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
-    `${fuelDate},14:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
-    `${fuelDate},14:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
-    `${fuelDate},14:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},${fuelHour}:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
@@ -9268,25 +9270,40 @@ Continuous reefer. Two load locks.
     ["truck_diesel", "reefer_diesel", "def", "scale"],
   );
 
+  const efsNow = new Date();
+  const [efsYear, efsMonth, efsDay] = ymdInTimeZone(efsNow, DISPLAY_TIME_ZONE).split("-").map(Number);
+  const efsStamp = `${String(efsMonth).padStart(2, "0")}/${String(efsDay).padStart(2, "0")}/${String(efsYear).slice(-2)}`;
+  const efsReportDate = `${String(efsMonth).padStart(2, "0")}/${String(efsDay).padStart(2, "0")}/${efsYear}`;
   const efsReport = [
     "/Dm201902",
     "M&S LOADS",
     "CUSTOMER 3770001903818",
     "TRANSACTION ACTIVITY REPORT",
-    "REPORT DATE 08/21/2026",
+    `REPORT DATE ${efsReportDate}`,
     "",
     "NName: HOWELL, CHRISTOPHER",
-    "08/21/26 556712341111 DIESEL ULTRA LOW SULFUR DIESEL 32 32 900111 1011 MEMPHIS TN LOVES 102.340 3.459 8.20 353.90 0.00 1.00 355.10",
-    "08/21/26 556712341111 REEFER REEFER ULTRA LOW SULFUR 32 32 900112 1011 MEMPHIS TN LOVES 20.000 3.459 1.50 69.18 0.00 0.00 69.18",
-    "08/21/26 556712341111 DEF DIESEL EXHAUST FLUID 32 32 900113 1011 MEMPHIS TN LOVES 5.000 4.199 0.40 21.00 0.00 0.00 21.00",
+    `${efsStamp} 556712341111 DIESEL ULTRA LOW SULFUR DIESEL 32 32 900111 1011 MEMPHIS TN LOVES 102.340 3.459 8.20 353.90 0.00 1.00 355.10`,
+    `${efsStamp} 556712341111 REEFER REEFER ULTRA LOW SULFUR 32 32 900112 1011 MEMPHIS TN LOVES 20.000 3.459 1.50 69.18 0.00 0.00 69.18`,
+    `${efsStamp} 556712341111 DEF DIESEL EXHAUST FLUID 32 32 900113 1011 MEMPHIS TN LOVES 5.000 4.199 0.40 21.00 0.00 0.00 21.00`,
     "",
     "NName: ELLER, STEVE",
-    "08/21/26 556712342222 SCALE CAT SCALES 26 26 900221 2022 JACKSON MS CAT SCALE 1.000 0.000 0.00 18.50 0.00 0.00 18.50",
+    `${efsStamp} 556712342222 SCALE CAT SCALES 26 26 900221 2022 JACKSON MS CAT SCALE 1.000 0.000 0.00 18.50 0.00 0.00 18.50`,
     "",
     "NName: WHALEY, KELVIN",
-    "08/21/26 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45",
+    `${efsStamp} 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45`,
   ].join("\n");
   const efsParsed = parseEfsFuelText(efsReport);
+  const efsWhen = parseFuelWhen(efsStamp, "");
+  assert.ok(efsWhen);
+  assert.equal(
+    ymdInTimeZone(efsWhen, DISPLAY_TIME_ZONE),
+    `${efsYear}-${String(efsMonth).padStart(2, "0")}-${String(efsDay).padStart(2, "0")}`,
+  );
+  assert.ok(efsWhen.getTime() <= Date.now(), "date-only EFS stamp must not be in the future");
+  assert.ok(
+    efsWhen.getTime() >= startOfLocalMonth(efsNow).getTime(),
+    "date-only EFS stamp must stay in the current office month",
+  );
   assert.equal(looksLikeEfsReport(efsReport), true);
   const { looksLikeFleetOneReport } = await import("../lib/fuel-fleetone");
   assert.equal(looksLikeFleetOneReport(efsReport), false, "EFS nname / report id must stay on the EFS path");
