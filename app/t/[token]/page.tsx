@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { mapsBrowserKey } from "@/lib/load-map";
-import { formatDateTime } from "@/lib/format";
 import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { trailerShareView } from "@/lib/trailer-share";
 
@@ -49,16 +48,8 @@ export default async function TrailerSharePage({
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500">Setpoint</dt>
-          <dd>{view.setpointF == null ? "—" : `${view.setpointF}°F`}</dd>
-        </div>
-        <div>
           <dt className="text-slate-500">Location</dt>
           <dd data-trailer-share-location="">{view.address || "No updates yet"}</dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Last update</dt>
-          <dd>{view.recordedAt ? formatDateTime(view.recordedAt) : "—"}</dd>
         </div>
       </dl>
       <section className="card mt-6 overflow-hidden">
@@ -70,16 +61,6 @@ export default async function TrailerSharePage({
           emptyMessage="No location updates yet."
         />
       </section>
-      {view.points.length > 0 ? (
-        <ol className="mt-4 space-y-1 text-sm text-slate-600" data-trailer-share-pins="">
-          {view.points.map((point) => (
-            <li key={point.id}>
-              {point.label}
-              {point.detail ? ` · ${point.detail}` : ""}
-            </li>
-          ))}
-        </ol>
-      ) : null}
     </main>
   );
 }

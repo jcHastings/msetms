@@ -1714,6 +1714,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /This link has expired/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-expired/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /Trailer location is no longer available/);
+  const trailerSharePage = fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8");
+  assert.match(trailerSharePage, /data-trailer-share-temp/);
+  assert.match(trailerSharePage, /data-trailer-share-location/);
+  assert.match(trailerSharePage, /LoadMapCanvas/);
+  assert.doesNotMatch(trailerSharePage, /data-trailer-share-pins|<ol |Setpoint|Last update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/[id]/page.tsx"), "utf8"), /TrailerShareLinkPanel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
@@ -5059,24 +5064,24 @@ Continuous reefer. Two load locks.
   const shareExpiresInput = toOfficeDateTime(shareLater.toISOString());
   assert.match(shareExpiresInput, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   assert.ok(Math.abs(Date.parse(fromOfficeDateTime(shareExpiresInput)) - shareLater.getTime()) < 60_000);
-  const shareTrailerId = queries.createTrailer({
+  const orbcommShareTrailerId = queries.createTrailer({
     unit_number: "TR-SHARE-1",
     type: "reefer",
     orbcomm_asset_id: "orbcomm-tr-share-1",
   });
-  assert.throws(() => trailerShare.createTrailerShareLink(shareTrailerId, ""), /date and time/);
+  assert.throws(() => trailerShare.createTrailerShareLink(orbcommShareTrailerId, ""), /date and time/);
   assert.throws(
-    () => trailerShare.createTrailerShareLink(shareTrailerId, toOfficeDateTime(new Date(Date.now() - 60 * 60 * 1000).toISOString())),
+    () => trailerShare.createTrailerShareLink(orbcommShareTrailerId, toOfficeDateTime(new Date(Date.now() - 60 * 60 * 1000).toISOString())),
     /future/,
   );
   const noOrbcommShareId = queries.createTrailer({ unit_number: "TR-SHARE-DRY", type: "dry_van" });
   assert.throws(() => trailerShare.createTrailerShareLink(noOrbcommShareId, shareExpiresInput), /Orbcomm/);
   const shareCreatedAt = new Date("2026-09-01T16:00:00.000Z");
-  const firstShare = trailerShare.createTrailerShareLink(shareTrailerId, shareExpiresInput, shareCreatedAt);
-  const secondShare = trailerShare.createTrailerShareLink(shareTrailerId, shareExpiresInput, shareCreatedAt);
+  const firstShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
+  const secondShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
   assert.notEqual(firstShare.token, secondShare.token);
   assert.ok(firstShare.token.length >= 24);
-  assert.notEqual(firstShare.token, String(shareTrailerId));
+  assert.notEqual(firstShare.token, String(orbcommShareTrailerId));
   assert.equal(trailerShare.getTrailerShareLink("1"), null);
   assert.equal(trailerShare.getTrailerShareLink("abc"), null);
   assert.equal(firstShare.created_at, shareCreatedAt.toISOString());

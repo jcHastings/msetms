@@ -136,7 +136,6 @@ export function trailerShareMapPoints(readings: ReeferReading[]): LoadMapPoint[]
     label: formatDateTime(row.recorded_at),
     lat: row.latitude as number,
     lng: row.longitude as number,
-    detail: row.temperature_f != null ? `${row.temperature_f}°F` : row.address || undefined,
   }));
 }
 
