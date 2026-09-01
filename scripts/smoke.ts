@@ -5133,10 +5133,8 @@ Continuous reefer. Two load locks.
   assert.equal(liveShareView.expired, false);
   assert.equal(liveShareView.temperatureF, 36);
   assert.equal(liveShareView.points.length, 1);
-  const expiredShareView = trailerShare.trailerShareView(
-    firstShare.token,
-    new Date(Date.parse(firstShare.expires_at) + 1000),
-  );
+  assert.equal(trailerShare.trailerShareIsExpired(firstShare, new Date(firstShare.expires_at)), true);
+  const expiredShareView = trailerShare.trailerShareView(firstShare.token, new Date(firstShare.expires_at));
   assert.equal(expiredShareView.found, true);
   assert.equal(expiredShareView.expired, true);
   assert.equal(expiredShareView.temperatureF, null);
