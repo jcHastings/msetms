@@ -25,17 +25,15 @@ export function EmailInvoiceButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(defaultBody);
+  const [typedTo, setTypedTo] = useState("");
   const [selected, setSelected] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const to = email.trim();
+  const storedTo = email.trim();
 
   function start() {
-    if (!to) {
-      setNotice({ ok: false, text: "This load has no customer email." });
-      return;
-    }
     setBody(defaultBody);
+    setTypedTo("");
     setNotice(null);
     setOpen(true);
   }
@@ -43,23 +41,21 @@ export function EmailInvoiceButton({
   useEffect(() => {
     if (!anchorId || typeof window === "undefined") return;
     if (window.location.hash.replace(/^#/, "") !== anchorId) return;
-    if (!email.trim()) {
-      setNotice({ ok: false, text: "This load has no customer email." });
-      return;
-    }
     setBody(defaultBody);
+    setTypedTo("");
     setNotice(null);
     setOpen(true);
     window.setTimeout(() => document.getElementById(anchorId)?.scrollIntoView({ block: "start" }), 0);
-  }, [anchorId, defaultBody, email]);
+  }, [anchorId, defaultBody]);
 
   function toggle(id: number) {
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
   async function send(ids: number[]) {
+    const to = storedTo || typedTo.trim();
     if (!to) {
-      setNotice({ ok: false, text: "This load has no customer email." });
+      setNotice({ ok: false, text: "Enter an email to send this invoice." });
       return;
     }
     const extraNote = ids.length ? ` and ${ids.length} document${ids.length === 1 ? "" : "s"}` : "";
@@ -69,6 +65,7 @@ export function EmailInvoiceButton({
     const form = new FormData();
     form.set("load_id", String(loadId));
     form.set("body", body);
+    if (!storedTo) form.set("to", to);
     for (const id of ids) form.append("extra_id", String(id));
     const result = await sendCustomerInvoiceMailAction(form);
     setPending(false);
@@ -94,6 +91,26 @@ export function EmailInvoiceButton({
       </button>
       {open ? (
         <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm" data-email-invoice-docs="">
+          {storedTo ? (
+            <p className="text-xs text-slate-600" data-email-invoice-to="">
+              To {storedTo}
+            </p>
+          ) : (
+            <div className="field">
+              <label htmlFor={`invoice-email-to-${loadId}`}>Send to</label>
+              <input
+                id={`invoice-email-to-${loadId}`}
+                name="to"
+                type="email"
+                autoComplete="email"
+                value={typedTo}
+                disabled={pending}
+                placeholder="Customer email"
+                data-email-invoice-to-input=""
+                onChange={(event) => setTypedTo(event.target.value)}
+              />
+            </div>
+          )}
           <div className="field">
             <label htmlFor={`invoice-email-body-${loadId}`}>Email body</label>
             <textarea

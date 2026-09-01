@@ -966,11 +966,9 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);
       if (!load) throw new Error("Load not found.");
-      const { customerMailBlockReason, sendCustomerInvoiceMail } = await import("./load-mail");
+      const { sendCustomerInvoiceMail } = await import("./load-mail");
       const { MAIL_MISSING } = await import("./mail-shared");
       const { mailConfigured } = await import("./integrations/mail");
-      const blocked = customerMailBlockReason(load);
-      if (blocked) throw new Error(blocked);
       if (!mailConfigured()) throw new Error(MAIL_MISSING);
       await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
       const extraIds = formData
@@ -978,7 +976,8 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
         .map((value) => parseOptionalInt(value))
         .filter((id): id is number => id != null);
       const body = formData.has("body") ? String(formData.get("body") ?? "") : undefined;
-      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds, body });
+      const to = formData.has("to") ? String(formData.get("to") ?? "") : undefined;
+      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds, body, to });
       recordLoadAudit({
         loadId,
         action: "email",

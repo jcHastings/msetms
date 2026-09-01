@@ -525,14 +525,21 @@ async function invoicePdfForMail(load: LoadView): Promise<{
   };
 }
 
+export function invoiceMailTo(load: LoadView, typedTo = ""): string {
+  const stored = resolveLoadCustomerEmail(load);
+  if (isUsableEmail(stored)) return normalizeEmail(stored);
+  return normalizeEmail(typedTo);
+}
+
 export async function sendCustomerInvoiceMail(
   loadId: number,
   send: typeof sendMail = sendMail,
-  options: { extraIds?: number[]; body?: string } = {},
+  options: { extraIds?: number[]; body?: string; to?: string } = {},
 ): Promise<{ to: string; subject: string }> {
   const load = getLoad(loadId);
-  const blocked = customerMailBlockReason(load);
-  if (!load || blocked) throw new Error(blocked || "Load not found.");
+  if (!load) throw new Error("Load not found.");
+  const to = invoiceMailTo(load, options.to);
+  if (!isUsableEmail(to)) throw new Error("Enter an email to send this invoice.");
   const extras = mailFilesForLoadDocs(loadId, options.extraIds ?? []);
   const invoice = await invoicePdfForMail(load);
   const shown = customerFacingLoadNumber(load) || load.load_number;
@@ -545,7 +552,6 @@ export async function sendCustomerInvoiceMail(
     body: options.body ?? getInvoiceEmailBody(),
     officePhone: getCompanyProfile().dispatcher_phone,
   });
-  const to = resolveLoadCustomerEmail(load);
   const usedNames = new Set([invoice.filename.toLowerCase()]);
   const mail: OutgoingMail = {
     to,

@@ -1004,9 +1004,16 @@ async function main() {
   assert.match(emailInvoiceUi, /id=\{anchorId\}/);
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceMailTo/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /Enter an email to send this invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("to"\)/);
   assert.match(emailInvoiceUi, /extra_id/);
   assert.match(emailInvoiceUi, /name="body"/);
   assert.match(emailInvoiceUi, /Email body/);
+  assert.match(emailInvoiceUi, /Send to/);
+  assert.match(emailInvoiceUi, /data-email-invoice-to-input/);
+  assert.match(emailInvoiceUi, /Enter an email to send this invoice/);
+  assert.doesNotMatch(emailInvoiceUi, /This load has no customer email/);
   assert.match(emailInvoiceUi, /Attach load documents/);
   assert.match(emailInvoiceUi, /Attach all/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/invoice-email/page.tsx"), "utf8"), /invoice_email_body/);
@@ -3611,7 +3618,26 @@ async function main() {
   const { sendCustomerInvoiceMailAction } = await import("../lib/dispatcher-actions");
   const noInvoiceMailResult = await sendCustomerInvoiceMailAction(noInvoiceMail);
   assert.equal(noInvoiceMailResult.ok, false);
-  if (!noInvoiceMailResult.ok) assert.match(noInvoiceMailResult.error, /no customer email/);
+  if (!noInvoiceMailResult.ok) assert.match(noInvoiceMailResult.error, /Enter an email to send this invoice/);
+  assert.doesNotMatch(noInvoiceMailResult.ok ? "" : noInvoiceMailResult.error, /no customer email/);
+  queries.updateLoadStatus(noEmailLoadId, "delivered");
+  let typedInvoiceTo = "";
+  await loadMail.sendCustomerInvoiceMail(
+    noEmailLoadId,
+    async (input) => {
+      typedInvoiceTo = input.to;
+    },
+    { to: "typed.invoice@example.com" },
+  );
+  assert.equal(typedInvoiceTo, "typed.invoice@example.com");
+  assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(noEmailLoadId)!), "");
+  await loadMail.sendCustomerInvoiceMail(
+    mailLoadId,
+    async (input) => {
+      assert.equal(input.to, "ap.mail@customer.example");
+    },
+    { to: "ignore-override@example.com" },
+  );
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
