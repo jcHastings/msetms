@@ -17,9 +17,9 @@ export default async function DispatcherLoginPage() {
         <BrandMark size="lg" />
         <h1 className="mt-4 text-3xl font-semibold">Dispatcher desk</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Sign in with your password. If this user has an email, we then send a one-time code there.
-          No email yet? Use the temporary password an Administrator set on Users — you will choose a
-          new password next. Forgot password only works when an email is on the user.
+          Sign in with your email and password. If this user has an email, we then send a one-time
+          code there. No email on your user? Sign in with your name, or ask an Administrator for a
+          temporary password. Forgot password only works when an email is on the user.
         </p>
       </div>
       <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />

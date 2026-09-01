@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { PasswordField } from "@/components/password-field";
 import type { PublicDispatcher } from "@/lib/settings-shared";
@@ -16,10 +16,11 @@ export function DispatcherLoginForm({
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
+  const [useName, setUseName] = useState(false);
   const needsEmailCode = Boolean(state?.ok && state.needsEmailCode);
   const rememberDevice = Boolean(state && state.ok && state.rememberDevice);
   return (
-    <form action={formAction} className="card space-y-4 p-6">
+    <form action={formAction} className="card space-y-4 p-6" data-office-login="">
       <FormBanner result={state} hideOk={needsEmailCode} />
       {needsEmailCode ? (
         <>
@@ -57,17 +58,24 @@ export function DispatcherLoginForm({
         </>
       ) : (
         <>
-          <div className="field">
-            <label htmlFor="dispatcher_id">Dispatcher</label>
-            <select id="dispatcher_id" name="dispatcher_id" required defaultValue="">
-              <option value="">Select name</option>
-              {dispatchers.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name} · {roleLabel(person.role)}
-                </option>
-              ))}
-            </select>
-          </div>
+          {useName ? (
+            <div className="field">
+              <label htmlFor="dispatcher_id">Dispatcher</label>
+              <select id="dispatcher_id" name="dispatcher_id" required defaultValue="">
+                <option value="">Select name</option>
+                {dispatchers.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name} · {roleLabel(person.role)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" name="email" type="email" required autoComplete="username" />
+            </div>
+          )}
           <div className="field">
             <label htmlFor="password">Password</label>
             <PasswordField
@@ -80,6 +88,14 @@ export function DispatcherLoginForm({
           <RememberDeviceCheck />
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Signing in…" : "Sign in"}
+          </button>
+          <button
+            className="btn btn-ghost w-full"
+            type="button"
+            data-login-name-toggle=""
+            onClick={() => setUseName((open) => !open)}
+          >
+            {useName ? "Sign in with email" : "No email on your user? Sign in with your name"}
           </button>
           <p className="text-center text-sm">
             <Link href="/login/forgot" className="font-semibold underline">

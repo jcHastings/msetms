@@ -327,6 +327,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign-in code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Resend code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="password"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="email"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign in with email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /No email on your user\? Sign in with your name/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /remember_device/);
@@ -335,6 +338,7 @@ async function main() {
   const passwordField = fs.readFileSync(path.join(process.cwd(), "components/password-field.tsx"), "utf8");
   assert.match(passwordField, /Show password/);
   assert.match(passwordField, /Hide password/);
+  assert.match(passwordField, /visible \? "Hide password" : "Show password"/);
   assert.match(passwordField, /type=\{visible \? "text" : "password"\}/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password|remember_device|Remember this device/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-reset-form.tsx"), "utf8"), /PasswordField/);
@@ -342,6 +346,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /remember-device/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.field \.password-field input/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle \{[\s\S]*min-height: 2\.75rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname.startsWith\("\/login\/"\)/);
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
@@ -359,6 +364,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /temporary password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /email and password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G|Demo PIN|4020|4410/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/forgot/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/reset/page.tsx"), "utf8"), /Set password/);
@@ -10304,6 +10310,14 @@ Continuous reefer. Two load locks.
     password: "Office1$ab",
   });
   assert.equal(session.authenticateDispatcher(msTest.id, "Office1$ab").role, "manager");
+  settingsMod.updateDispatcherUser(msTest.id, {
+    name: msTest.name,
+    role: msTest.role,
+    email: "office.login@msloads.com",
+    phone: "4025550100",
+  });
+  assert.equal(session.authenticateDispatcherByEmail("office.login@msloads.com", "Office1$ab").id, msTest.id);
+  assert.throws(() => session.authenticateDispatcherByEmail("nobody@msloads.com", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
   assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
   assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
@@ -11092,6 +11106,8 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /sms_code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /No phone is on this user/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("password"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /authenticateDispatcherByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("email"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /login\/change-password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /EMAIL_OTP_NO_EMAIL/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("pin"\)/);

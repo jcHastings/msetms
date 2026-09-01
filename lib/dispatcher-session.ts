@@ -1,6 +1,11 @@
 import { cookies } from "next/headers";
 import { DEVICE_COOKIE, DEVICE_TTL_MS } from "./dispatcher-device";
-import { PASSWORD_NOT_RECOGNIZED, PASSWORD_UNSET, verifyDispatcherPassword } from "./dispatcher-password";
+import {
+  PASSWORD_NOT_RECOGNIZED,
+  PASSWORD_UNSET,
+  findActiveDispatcherByEmail,
+  verifyDispatcherPassword,
+} from "./dispatcher-password";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
   canAccessAccounting,
@@ -82,6 +87,12 @@ export function authenticateDispatcher(dispatcherId: number, password: string): 
     throw new Error(PASSWORD_NOT_RECOGNIZED);
   }
   return toPublicDispatcher(user);
+}
+
+export function authenticateDispatcherByEmail(email: string, password: string): Dispatcher {
+  const row = findActiveDispatcherByEmail(email);
+  if (!row) throw new Error(PASSWORD_NOT_RECOGNIZED);
+  return authenticateDispatcher(row.id, password);
 }
 
 const SCRIPT_ACTOR: Dispatcher = {

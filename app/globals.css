@@ -664,6 +664,20 @@ button {
     overflow-x: auto;
   }
 
+  .password-field {
+    grid-template-columns: 1fr;
+  }
+
+  .password-field-toggle {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .remember-device {
+    min-height: 2.75rem;
+    align-items: center;
+  }
+
   .desk-shell {
     flex-direction: column;
   }
