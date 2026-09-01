@@ -5076,7 +5076,7 @@ Continuous reefer. Two load locks.
   );
   const noOrbcommShareId = queries.createTrailer({ unit_number: "TR-SHARE-DRY", type: "dry_van" });
   assert.throws(() => trailerShare.createTrailerShareLink(noOrbcommShareId, shareExpiresInput), /Orbcomm/);
-  const shareCreatedAt = new Date("2026-09-01T16:00:00.000Z");
+  const shareCreatedAt = new Date("2026-08-20T16:00:00.000Z");
   const firstShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
   const secondShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
   assert.notEqual(firstShare.token, secondShare.token);
@@ -5100,7 +5100,7 @@ Continuous reefer. Two load locks.
     longitude: -74,
     address: "Before create",
     source: "orbcomm",
-    recorded_at: "2026-09-01T15:00:00.000Z",
+    recorded_at: "2026-08-20T15:00:00.000Z",
   });
   orbcomm.insertReeferReading({
     load_id: null,
@@ -5117,9 +5117,9 @@ Continuous reefer. Two load locks.
     longitude: -74.1,
     address: "After create",
     source: "orbcomm",
-    recorded_at: "2026-09-01T16:05:00.000Z",
+    recorded_at: "2026-08-20T16:05:00.000Z",
   });
-  const shareNow = new Date("2026-09-01T16:10:00.000Z");
+  const shareNow = new Date("2026-08-20T16:10:00.000Z");
   const shareReadings = trailerShare.listTrailerShareReadings(
     { unit_number: "TR-SHARE-1", orbcomm_asset_id: "orbcomm-tr-share-1" },
     firstShare.created_at,
