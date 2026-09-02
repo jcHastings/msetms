@@ -2,12 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  CLUSTER_PIN_SIZE,
   clusterLoadMapPoints,
   clusterPinIconUrl,
   shouldClusterMapPoints,
 } from "@/lib/map-cluster";
 import {
-  LOAD_MAP_PIN_SIZE,
+  LOAD_MAP_PIN_HEIGHT,
+  LOAD_MAP_PIN_TIP_X,
+  LOAD_MAP_PIN_TIP_Y,
+  LOAD_MAP_PIN_WIDTH,
+  defaultLoadMapLabelOrigin,
   loadMapPinIconUrl,
   type LoadMapPathPoint,
   type LoadMapPoint,
@@ -42,7 +47,7 @@ declare global {
   }
 }
 
-const PIN_ANCHOR = LOAD_MAP_PIN_SIZE / 2;
+const CLUSTER_ANCHOR = CLUSTER_PIN_SIZE / 2;
 
 function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
   if (window.google?.maps) return Promise.resolve(window.google.maps);
@@ -112,7 +117,10 @@ export function LoadMapCanvas({
         const start = points[0] ?? route[0];
         const map = new maps.Map(host.current, {
           center: { lat: start.lat, lng: start.lng },
-          zoom: points.length + route.length === 1 ? 8 : 5,
+          zoom: points.length + route.length === 1 ? 15 : 5,
+          maxZoom: 20,
+          gestureHandling: "greedy",
+          zoomControl: true,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
@@ -151,9 +159,9 @@ export function LoadMapCanvas({
                 title: `${item.count} pins`,
                 icon: {
                   url: clusterPinIconUrl(item.count),
-                  size: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-                  scaledSize: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-                  anchor: new maps.Point(PIN_ANCHOR, PIN_ANCHOR),
+                  size: new maps.Size(CLUSTER_PIN_SIZE, CLUSTER_PIN_SIZE),
+                  scaledSize: new maps.Size(CLUSTER_PIN_SIZE, CLUSTER_PIN_SIZE),
+                  anchor: new maps.Point(CLUSTER_ANCHOR, CLUSTER_ANCHOR),
                 },
               });
               marker.addListener("click", () => {
@@ -181,12 +189,12 @@ export function LoadMapCanvas({
                 : undefined,
               icon: {
                 url: loadMapPinIconUrl(point),
-                size: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-                scaledSize: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-                anchor: new maps.Point(PIN_ANCHOR, PIN_ANCHOR),
+                size: new maps.Size(LOAD_MAP_PIN_WIDTH, LOAD_MAP_PIN_HEIGHT),
+                scaledSize: new maps.Size(LOAD_MAP_PIN_WIDTH, LOAD_MAP_PIN_HEIGHT),
+                anchor: new maps.Point(LOAD_MAP_PIN_TIP_X, LOAD_MAP_PIN_TIP_Y),
                 labelOrigin: point.labelOrigin
                   ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
-                  : new maps.Point(PIN_ANCHOR, -2),
+                  : new maps.Point(defaultLoadMapLabelOrigin().x, defaultLoadMapLabelOrigin().y),
               },
             });
             marker.addListener("click", () => {

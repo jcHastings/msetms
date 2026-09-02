@@ -912,7 +912,9 @@ async function main() {
   assert.match(mapCanvasSource, /markerText/);
   assert.match(mapCanvasSource, /labelOrigin/);
   assert.match(mapCanvasSource, /point\.labelOrigin/);
-  assert.match(mapCanvasSource, /new maps\.Point\(PIN_ANCHOR, -2\)/);
+  assert.match(mapCanvasSource, /LOAD_MAP_PIN_TIP_X|LOAD_MAP_PIN_TIP_Y/);
+  assert.match(mapCanvasSource, /gestureHandling: "greedy"/);
+  assert.match(mapCanvasSource, /defaultLoadMapLabelOrigin/);
   assert.match(mapCanvasSource, /loadMapPinIconUrl/);
   assert.doesNotMatch(mapCanvasSource, /SymbolPath|FORWARD_CLOSED_ARROW/);
   assert.match(mapCanvasSource, /featureType: "poi"/);
@@ -10410,6 +10412,8 @@ Continuous reefer. Two load locks.
   assert.equal(liveTruckPin?.pinShape, "circle");
   assert.equal(liveTruckPin?.motion, "Parked");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#22c55e/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /M11 1.4/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /circle cx="14" cy="14" r="9"/);
   assert.equal(loadMapPinFill({ kind: "truck", pinColor: liveTruckPin?.pinColor }), SAMSARA_TRUCK_ON_COLOR);
   const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
   assert.equal(movingTruckPin?.pinShape, "arrow");
@@ -13387,6 +13391,8 @@ Continuous reefer. Two load locks.
   assert.match(driverHome, /Dispatch/);
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /Confirmation/);
+  assert.match(driverHome, /label: "Trailer"/);
+  assert.match(driverHome, /driverLoadHasAssignedTrailer/);
   assert.doesNotMatch(driverHome, /label: "Fuel"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
@@ -13404,6 +13410,81 @@ Continuous reefer. Two load locks.
     33,
   );
   assert.equal(pickDriverDestinationLoad([], []), null);
+  const { driverLoadHasAssignedTrailer, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
+  assert.equal(driverLoadHasAssignedTrailer({ trailer_id: null }), false);
+  assert.equal(driverLoadHasAssignedTrailer({ trailer_id: 9 }), true);
+  const driverPinTrailerId = queries.createTrailer({
+    unit_number: "TR-DRV-PIN",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-drv-pin",
+  });
+  queries.saveTrailerGps(driverPinTrailerId, {
+    latitude: 41.11,
+    longitude: -96.22,
+    address: "Driver trailer pin",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  const driverPinCustomerId = queries.createCustomer({
+    name: "Driver Trailer Pin Co",
+    billing_notes: "",
+    contacts: [],
+  });
+  const driverPinLoadId = queries.createLoad({
+    customer_id: driverPinCustomerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    trailer_id: driverPinTrailerId,
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const driverPinView = await driverAssignedTrailerMap(queries.getLoad(driverPinLoadId)!);
+  assert.equal(driverPinView.trailerNumber, "TR-DRV-PIN");
+  assert.equal(driverPinView.point?.lat, 41.11);
+  assert.equal(driverPinView.point?.lng, -96.22);
+  const emptyTrailerLoadId = queries.createLoad({
+    customer_id: driverPinCustomerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const emptyTrailerView = await driverAssignedTrailerMap(queries.getLoad(emptyTrailerLoadId)!);
+  assert.equal(emptyTrailerView.point, null);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /data-driver-trailer-map/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /cluster=\{false\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /LOAD_MAP_PIN_TIP_Y/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /r="9"/);
   const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
   assert.match(driverLoadPage, /driverFacingPay/);
   assert.doesNotMatch(driverLoadPage, /formatMoney\(load\.rate\)/);
@@ -13412,6 +13493,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(driverLoadPage, /DriverFuelReceipt|DriverCameraPdf/);
   assert.match(driverLoadPage, /DriverLoadActions/);
   assert.match(driverLoadPage, /id="bol"/);
+  assert.match(driverLoadPage, /data-driver-trailer-tab/);
   assert.match(driverLoadPage, /packet=internal/);
   assert.match(driverLoadPage, /isCustomerRateDocument/);
   assert.match(

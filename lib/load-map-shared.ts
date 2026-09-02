@@ -13,7 +13,14 @@ export const LOAD_MAP_MARKER_COLOR: Record<LoadMapPointKind, string> = {
 
 export const SAMSARA_TRUCK_PIN_COLOR = LOAD_MAP_MARKER_COLOR.truck;
 
-export const LOAD_MAP_PIN_SIZE = 28;
+/** Small classic teardrop. The tip is the exact lat/lng — not a fat circle. */
+export const LOAD_MAP_PIN_WIDTH = 22;
+export const LOAD_MAP_PIN_HEIGHT = 32;
+export const LOAD_MAP_PIN_SIZE = LOAD_MAP_PIN_HEIGHT;
+export const LOAD_MAP_PIN_TIP_X = LOAD_MAP_PIN_WIDTH / 2;
+export const LOAD_MAP_PIN_TIP_Y = LOAD_MAP_PIN_HEIGHT;
+export const LOAD_MAP_PIN_HEAD_X = 11;
+export const LOAD_MAP_PIN_HEAD_Y = 10;
 
 export type LoadMapLabelOrigin = { x: number; y: number };
 
@@ -55,17 +62,21 @@ export function loadMapPinFill(point: Pick<LoadMapPoint, "kind" | "pinColor">): 
 
 export function loadMapPinSvg(point: Pick<LoadMapPoint, "kind" | "pinColor" | "pinShape" | "headingDeg">): string {
   const fill = loadMapPinFill(point);
-  if (point.pinShape === "arrow") {
-    const rotation = Number(point.headingDeg);
-    const deg = Number.isFinite(rotation) ? rotation : 0;
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_SIZE}" height="${LOAD_MAP_PIN_SIZE}" viewBox="0 0 ${LOAD_MAP_PIN_SIZE} ${LOAD_MAP_PIN_SIZE}"><g transform="rotate(${deg} 14 14)"><path d="M14 4 L22 24 L14 19 L6 24 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></g></svg>`;
-  }
-  const radius = point.kind === "track" ? 5 : 9;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_SIZE}" height="${LOAD_MAP_PIN_SIZE}" viewBox="0 0 ${LOAD_MAP_PIN_SIZE} ${LOAD_MAP_PIN_SIZE}"><circle cx="14" cy="14" r="${radius}" fill="${fill}" stroke="#ffffff" stroke-width="2"/></svg>`;
+  const heading = Number(point.headingDeg);
+  const deg = point.pinShape === "arrow" && Number.isFinite(heading) ? heading : 0;
+  const headingCue =
+    point.pinShape === "arrow"
+      ? `<g transform="rotate(${deg} ${LOAD_MAP_PIN_HEAD_X} ${LOAD_MAP_PIN_HEAD_Y})"><path d="M11 3.2 L13.1 6.8 L8.9 6.8 Z" fill="#ffffff"/></g>`
+      : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_WIDTH}" height="${LOAD_MAP_PIN_HEIGHT}" viewBox="0 0 ${LOAD_MAP_PIN_WIDTH} ${LOAD_MAP_PIN_HEIGHT}"><path d="M11 1.4 C6.2 1.4 2.6 5.1 2.6 10 C2.6 17.4 11 30.6 11 30.6 C11 30.6 19.4 17.4 19.4 10 C19.4 5.1 15.8 1.4 11 1.4 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/><circle cx="${LOAD_MAP_PIN_HEAD_X}" cy="${LOAD_MAP_PIN_HEAD_Y}" r="3" fill="#ffffff" fill-opacity="0.35"/>${headingCue}</svg>`;
 }
 
 export function loadMapPinIconUrl(point: Pick<LoadMapPoint, "kind" | "pinColor" | "pinShape" | "headingDeg">): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(loadMapPinSvg(point))}`;
+}
+
+export function defaultLoadMapLabelOrigin(): LoadMapLabelOrigin {
+  return { x: LOAD_MAP_PIN_HEAD_X, y: -2 };
 }
 
 export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
