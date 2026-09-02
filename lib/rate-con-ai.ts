@@ -82,16 +82,16 @@ export function redactRateConSecrets(text: string): string {
 const SYSTEM_PROMPT = `You read trucking rate confirmations (any broker layout) and extract a load draft for MS Express TMS.
 Return JSON only. Do not invent money or customer identity. If a field is not clearly printed, use null or "" and set confidence to low.
 Extract every pickup and delivery stop in order. Do not drop extra stops.
-Customer is the broker/bill-to (TQL, BMM Logistics, CEI Logistics, RXO, Allen Lund, etc.), not the shipper warehouse and not MS Express / M&S Loads.
+Customer is the broker/bill-to printed on this packet, not the shipper warehouse and not MS Express / M&S Loads. Never assume a broker name.
 Rate is the billed / agreed / total freight pay to the carrier — Carrier Freight Pay, Flat Rate / TOTAL, all-in. Not quantity 1, not fuel-per-mile, not a load number, not TONU/detention, not $0.00 next to a real total.
-If no freight dollar amount is printed (TQL carrier information sheet), leave rate null and confidence low. Do not invent one.
-Load number is the customer's rate-con / load # / TQL PO# / Order # (store as customer reference). Never invent an MSE trip number.
+If no freight dollar amount is printed, leave rate null and confidence low. Do not invent one.
+Load number is the customer's rate-con / load # / PO# / Order # (store as customer reference). Never invent an MSE trip number.
 Stops may be labeled Pickup At / Deliver To, PICKUPS / DROPS, PU 1 / SO 2, Shipper / Consignee. Read every one.
 schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/U number.
 PRECOOL TO 60F and similar lines are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
-Broker/load contact is the person who booked the load: Name, email, phone, and extension from the document's contact-info block (any broker). One common layout is a Name | Phone (with xEXT) | Email | Fax table; the section title may sit above or below that row. Copy only what is printed. Leave blank when missing. Never invent an address or phone.
+Broker/load contact is the person who booked the load: Name, email, phone, and extension from THIS document's contact-info block. Brokers label that block differently. One layout is a Name | Phone (with xEXT) | Email | Fax table; the section title may sit above or below that row. Copy only what is printed on this packet. Leave blank when missing. Never invent a name, email, domain, or phone. Never reuse a contact from another load.
 Do not use CARRIER CONTACT (the trucking company / driver). Do not use shipper or receiver phones in stop notes. Do not use "send POD to" billing lines unless that email is the same as the contact-info email.
 Do not write this contact onto the customer card — it belongs on this load only.
 Confidence is high, medium, or low. Money and customer must be low when guessed.

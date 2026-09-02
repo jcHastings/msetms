@@ -551,6 +551,7 @@ function contactBlocksFromHeaders(text: string): string[] {
   return blocks;
 }
 
+/** Copy name/email/phone/ext from the packet in front of you. Do not assume a broker. */
 export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
   const text = String(raw ?? "").replace(/\r/g, "");
   if (!text.trim()) return emptyBrokerContact();

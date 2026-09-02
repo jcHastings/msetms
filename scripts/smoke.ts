@@ -1019,6 +1019,21 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-per-load-ext/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-contact.ts"), "utf8"), /resolveLoadCustomerPhone/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /resolveCustomerMainPhone/);
+  for (const file of [
+    "lib/rate-con-shared.ts",
+    "lib/rate-con-ai.ts",
+    "lib/rate-con.ts",
+    "lib/load-mail.ts",
+    "lib/load-contact.ts",
+    "components/load-customer-screen.tsx",
+    "components/customer-form.tsx",
+    "components/rate-con-apply.tsx",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.doesNotMatch(source, /Gerard Borne|Caitlyn Will|GBorne@|CWill@/i, `${file} must not hardcode example contacts`);
+    assert.doesNotMatch(source, /800-580-3101|36765942|36817888/, `${file} must not hardcode example phones or PO#s`);
+    assert.doesNotMatch(source, /@tql\.com/i, `${file} must not assume a broker domain`);
+  }
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /SMTP_FROM\s*=\s*["']ar@/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("to"\)/);
   assert.match(emailInvoiceUi, /extra_id/);
@@ -4699,20 +4714,26 @@ send POD to billing.pod@broker.example
   assert.equal(tqlContact.contact_phone, "800-555-3101");
   assert.equal(tqlContact.contact_ext, "47010");
   assert.doesNotMatch(tqlContact.contact_email, /billing\.pod|jc@|indel/i);
-  const gerardSheet = fs.readFileSync(
-    path.join(process.cwd(), "scripts/fixtures/tql-po-36765942-page1.txt"),
+  const aboveTitleSheet = fs.readFileSync(
+    path.join(process.cwd(), "scripts/fixtures/contact-table-above-title.txt"),
     "utf8",
   );
-  const gerardContact = parseBrokerContactFromText(gerardSheet);
-  assert.equal(gerardContact.contact_name, "Gerard Borne");
-  assert.equal(gerardContact.contact_email, "GBorne@TQL.com");
-  assert.equal(gerardContact.contact_phone, "800-580-3101");
-  assert.equal(gerardContact.contact_ext, "47010");
-  assert.doesNotMatch(gerardContact.contact_email, /billing\.pod|jc@/i);
-  assert.doesNotMatch(`${gerardContact.contact_phone} ${gerardContact.contact_ext}`, /60666|7177828/);
-  const gerardCustomerId = queries.createCustomer({ name: "TQL Sheet Customer", billing_notes: "", contacts: [] });
-  const gerardLoadId = queries.createLoad({
-    customer_id: gerardCustomerId,
+  const aboveTitleContact = parseBrokerContactFromText(aboveTitleSheet);
+  assert.equal(aboveTitleContact.contact_name, "Morgan Hale");
+  assert.equal(aboveTitleContact.contact_email, "morgan.hale@broker.example");
+  assert.equal(aboveTitleContact.contact_phone, "312-555-0144");
+  assert.equal(aboveTitleContact.contact_ext, "8821");
+  assert.doesNotMatch(aboveTitleContact.contact_email, /leftover\.pod|jc@|tql/i);
+  assert.doesNotMatch(`${aboveTitleContact.contact_phone} ${aboveTitleContact.contact_ext}`, /60666|7177828|915|580-3101/);
+  const sheetCustomerId = queries.createCustomer({
+    name: "Sheet Customer",
+    billing_notes: "",
+    main_email: "desk@shipper.example",
+    billing_email: "ap@shipper.example",
+    contacts: [{ name: "Desk", role: "Office", phone: "402-555-0100", email: "desk@shipper.example" }],
+  });
+  const sheetLoadId = queries.createLoad({
+    customer_id: sheetCustomerId,
     origin: "Chicago, IL",
     destination: "Lenexa, KS",
     pickup_start: pickup.toISOString(),
@@ -4732,19 +4753,23 @@ send POD to billing.pod@broker.example
     status: "available",
     truck_id: null,
     driver_id: null,
-    contact_name: gerardContact.contact_name,
-    contact_email: gerardContact.contact_email,
-    contact_phone: gerardContact.contact_phone,
-    contact_ext: gerardContact.contact_ext,
+    contact_name: aboveTitleContact.contact_name,
+    contact_email: aboveTitleContact.contact_email,
+    contact_phone: aboveTitleContact.contact_phone,
+    contact_ext: aboveTitleContact.contact_ext,
   });
-  const gerardLoad = queries.getLoad(gerardLoadId)!;
-  assert.equal(gerardLoad.contact_name, "Gerard Borne");
-  assert.equal(gerardLoad.contact_email, "GBorne@TQL.com");
-  assert.equal(gerardLoad.contact_phone, "800-580-3101");
-  assert.equal(gerardLoad.contact_ext, "47010");
-  assert.equal(queries.getCustomer(gerardCustomerId)?.contacts.length, 0);
-  assert.equal(loadMail.resolveInvoiceCustomerEmail(gerardLoad), "");
-  assert.equal(loadMail.resolveLoadCustomerEmail(gerardLoad), "GBorne@TQL.com");
+  const sheetLoad = queries.getLoad(sheetLoadId)!;
+  assert.equal(sheetLoad.contact_name, "Morgan Hale");
+  assert.equal(sheetLoad.contact_email, "morgan.hale@broker.example");
+  assert.equal(sheetLoad.contact_phone, "312-555-0144");
+  assert.equal(sheetLoad.contact_ext, "8821");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.main_email, "desk@shipper.example");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.billing_email, "ap@shipper.example");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.contacts[0]?.phone, "402-555-0100");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(sheetLoad), "ap@shipper.example");
+  assert.equal(loadMail.resolveLoadCustomerEmail(sheetLoad), "morgan.hale@broker.example");
+  assert.equal(loadContact.resolveLoadCustomerPhone(sheetLoad), "312-555-0144");
+  assert.equal(loadContact.resolveCustomerMainPhone(sheetCustomerId), "402-555-0100");
   const noContactBlock = parseBrokerContactFromText(`
 LOAD INFORMATION
 Pickup Chicago IL
