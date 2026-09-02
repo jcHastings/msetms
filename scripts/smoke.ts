@@ -1723,6 +1723,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /lastKnownOrbcommSnapshot/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /snapshot_latitude/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
@@ -5076,15 +5078,47 @@ Continuous reefer. Two load locks.
   );
   const noOrbcommShareId = queries.createTrailer({ unit_number: "TR-SHARE-DRY", type: "dry_van" });
   assert.throws(() => trailerShare.createTrailerShareLink(noOrbcommShareId, shareExpiresInput), /Orbcomm/);
-  const shareCreatedAt = new Date("2026-08-20T16:00:00.000Z");
-  const firstShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
-  const secondShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
-  assert.notEqual(firstShare.token, secondShare.token);
-  assert.ok(firstShare.token.length >= 24);
-  assert.notEqual(firstShare.token, String(orbcommShareTrailerId));
-  assert.equal(trailerShare.getTrailerShareLink("1"), null);
-  assert.equal(trailerShare.getTrailerShareLink("abc"), null);
-  assert.equal(firstShare.created_at, shareCreatedAt.toISOString());
+  const emptyShareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-EMPTY",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-empty",
+  });
+  const emptyShare = trailerShare.createTrailerShareLink(
+    emptyShareTrailerId,
+    shareExpiresInput,
+    new Date("2026-08-20T16:00:00.000Z"),
+  );
+  const emptyShareView = trailerShare.trailerShareView(emptyShare.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(emptyShareView.found, true);
+  assert.equal(emptyShareView.expired, false);
+  assert.equal(emptyShareView.temperatureF, null);
+  assert.equal(emptyShareView.address, "");
+  assert.equal(emptyShareView.points.length, 0);
+  const gpsOnlyShareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-GPS",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-gps",
+  });
+  queries.saveTrailerGps(gpsOnlyShareTrailerId, {
+    latitude: 41.2,
+    longitude: -73.8,
+    address: "GPS only last known",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  const gpsOnlyShare = trailerShare.createTrailerShareLink(
+    gpsOnlyShareTrailerId,
+    shareExpiresInput,
+    new Date("2026-08-20T16:00:00.000Z"),
+  );
+  assert.equal(gpsOnlyShare.snapshot_latitude, 41.2);
+  assert.equal(gpsOnlyShare.snapshot_address, "GPS only last known");
+  assert.equal(gpsOnlyShare.snapshot_temperature_f, null);
+  const gpsOnlyView = trailerShare.trailerShareView(gpsOnlyShare.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(gpsOnlyView.temperatureF, null);
+  assert.equal(gpsOnlyView.address, "GPS only last known");
+  assert.equal(gpsOnlyView.points.length, 1);
+  assert.equal(gpsOnlyView.points[0]?.lat, 41.2);
   orbcomm.insertReeferReading({
     load_id: null,
     truck_id: null,
@@ -5102,6 +5136,24 @@ Continuous reefer. Two load locks.
     source: "orbcomm",
     recorded_at: "2026-08-20T15:00:00.000Z",
   });
+  const shareCreatedAt = new Date("2026-08-20T16:00:00.000Z");
+  const firstShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
+  const secondShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
+  assert.notEqual(firstShare.token, secondShare.token);
+  assert.ok(firstShare.token.length >= 24);
+  assert.notEqual(firstShare.token, String(orbcommShareTrailerId));
+  assert.equal(trailerShare.getTrailerShareLink("1"), null);
+  assert.equal(trailerShare.getTrailerShareLink("abc"), null);
+  assert.equal(firstShare.created_at, shareCreatedAt.toISOString());
+  assert.equal(firstShare.snapshot_temperature_f, 10);
+  assert.equal(firstShare.snapshot_address, "Before create");
+  assert.equal(firstShare.snapshot_latitude, 40.7);
+  const justMintedView = trailerShare.trailerShareView(firstShare.token, shareCreatedAt);
+  assert.equal(justMintedView.expired, false);
+  assert.equal(justMintedView.temperatureF, 10);
+  assert.equal(justMintedView.address, "Before create");
+  assert.equal(justMintedView.points.length, 1);
+  assert.equal(justMintedView.points[0]?.lat, 40.7);
   orbcomm.insertReeferReading({
     load_id: null,
     truck_id: null,
@@ -5132,7 +5184,10 @@ Continuous reefer. Two load locks.
   assert.equal(liveShareView.found, true);
   assert.equal(liveShareView.expired, false);
   assert.equal(liveShareView.temperatureF, 36);
-  assert.equal(liveShareView.points.length, 1);
+  assert.equal(liveShareView.address, "After create");
+  assert.equal(liveShareView.points.length, 2);
+  assert.equal(liveShareView.points[0]?.lat, 40.7);
+  assert.equal(liveShareView.points[1]?.lat, 40.8);
   assert.equal(trailerShare.trailerShareIsExpired(firstShare, new Date(firstShare.expires_at)), true);
   const expiredShareView = trailerShare.trailerShareView(firstShare.token, new Date(firstShare.expires_at));
   assert.equal(expiredShareView.found, true);
@@ -5140,7 +5195,15 @@ Continuous reefer. Two load locks.
   assert.equal(expiredShareView.temperatureF, null);
   assert.equal(expiredShareView.address, "");
   assert.equal(expiredShareView.points.length, 0);
-  assert.doesNotMatch(JSON.stringify(expiredShareView), /After create|40\.8|36/);
+  assert.doesNotMatch(
+    JSON.stringify({
+      temperatureF: expiredShareView.temperatureF,
+      address: expiredShareView.address,
+      recordedAt: expiredShareView.recordedAt,
+      points: expiredShareView.points,
+    }),
+    /After create|40\.8|36/,
+  );
 
   const mappedGps = samsara.mapVehicleLocations({
     vehicles: [

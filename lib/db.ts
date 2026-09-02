@@ -938,11 +938,23 @@ export function migrate(db: Database): void {
       token TEXT NOT NULL UNIQUE,
       trailer_id INTEGER NOT NULL REFERENCES trailers(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL
+      expires_at TEXT NOT NULL,
+      snapshot_latitude REAL,
+      snapshot_longitude REAL,
+      snapshot_address TEXT NOT NULL DEFAULT '',
+      snapshot_temperature_f REAL,
+      snapshot_setpoint_f REAL,
+      snapshot_recorded_at TEXT NOT NULL DEFAULT ''
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_trailer_share_token ON trailer_share_links(token);
     CREATE INDEX IF NOT EXISTS idx_trailer_share_trailer ON trailer_share_links(trailer_id, id DESC);
   `);
+  ensureColumn(db, "trailer_share_links", "snapshot_latitude", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_longitude", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_address", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailer_share_links", "snapshot_temperature_f", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_setpoint_f", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_recorded_at", "TEXT NOT NULL DEFAULT ''");
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
