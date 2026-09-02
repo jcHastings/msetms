@@ -5208,6 +5208,20 @@ JoJo Schwartz 402-302-0097 jojo@msloads.com
   assert.doesNotMatch(cbBrokerContact.contact_name, /JoJo|MS Test/i);
   assert.doesNotMatch(cbBrokerContact.contact_phone, /402-302-0097/);
   assert.doesNotMatch(cbBrokerContact.contact_email, /jojo@msloads|msloads/i);
+  const twoColumnCarrierSheet = `
+CB Logistics Group M&S LOADS LLC
+2704 Adobe Drive HASTINGS, NE
+Imperial, MO Ph (402) 302-0097
+P: 314-459-1752 Attn JoJo Schwartz
+DISPATCH CONFIRMATION
+Load Number 106361
+`;
+  const twoColumnContact = parseCbBrokerContact(twoColumnCarrierSheet);
+  assert.match(twoColumnContact.contact_name, /CB Logistics/i);
+  assert.equal(twoColumnContact.contact_phone, "314-459-1752");
+  assert.doesNotMatch(twoColumnContact.contact_name, /JoJo|MS Test|M&S|Express/i);
+  assert.doesNotMatch(twoColumnContact.contact_phone, /402-302-0097/);
+  assert.ok(twoColumnContact.contact_name && twoColumnContact.contact_phone, "broker contact must not be blank");
   assert.match(cbHint.shipper.name, /North Bay/i);
   assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
   assert.equal(cbHint.shipper.reference, "N25504");

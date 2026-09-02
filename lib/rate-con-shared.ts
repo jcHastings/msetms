@@ -606,23 +606,42 @@ export function rejectCarrierSideContact(contact: ParsedBrokerContact, raw: stri
   return isCarrierSideContact(contact, raw) ? emptyBrokerContact() : contact;
 }
 
+function stripOwnCarrierTokens(text: string): string {
+  let out = String(text ?? "");
+  for (const chunk of carrierChunks(out)) {
+    out = out.replace(chunk, "\n");
+  }
+  return out
+    .replace(/m\s*&\s*s\s+loads(?:\s+llc)?/gi, " ")
+    .replace(/ms\s*express(?:\s+tms)?/gi, " ")
+    .replace(/attn\s*:?\s*[A-Za-z][A-Za-z .'-]{1,40}/gi, " ")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+function looksLikeHeaderPartyName(line: string): boolean {
+  const text = collapse(line);
+  if (!text) return false;
+  if (/^(carrier|contact|dispatch confirmation|load\s+|name\b|phone\b|fax\b|p:|pickup|delivery|stop\s+\d|mc:|dot)/i.test(text)) {
+    return false;
+  }
+  if (/^\d/.test(text) || STREET_SUFFIX.test(text) || isOwnPaperworkName(text)) return false;
+  return /[A-Za-z]{3,}/.test(text);
+}
+
 function parseHeaderBrokerContact(text: string): ParsedBrokerContact {
   const cut = text.search(HEADER_CUT_RE);
-  const head = (cut >= 0 ? text.slice(0, cut) : text.slice(0, 800)).trim();
+  const rawHead = (cut >= 0 ? text.slice(0, cut) : text.slice(0, 800)).trim();
+  const head = stripOwnCarrierTokens(rawHead).trim();
   if (!head) return emptyBrokerContact();
   const fields = parseContactFields(head);
-  const firstLine = head.split(/\n/).map((line) => line.trim()).find(Boolean) ?? "";
-  if (
-    !firstLine ||
-    /^(carrier|contact|dispatch confirmation|load\s+|name\b|phone\b|pickup|delivery|stop\s+\d)/i.test(firstLine)
-  ) {
-    return emptyBrokerContact();
-  }
-  if (/^\d/.test(firstLine) || STREET_SUFFIX.test(firstLine) || isOwnPaperworkName(firstLine)) {
-    return fields;
-  }
+  const nameLine =
+    head
+      .split(/\n/)
+      .map((line) => collapse(line.replace(/[,\s]+$/, "")))
+      .find((line) => looksLikeHeaderPartyName(line)) ?? "";
+  if (!nameLine && !fields.contact_phone) return emptyBrokerContact();
   return {
-    contact_name: collapse(firstLine.replace(/[,\s]+$/, "")),
+    contact_name: nameLine || fields.contact_name,
     contact_email: fields.contact_email,
     contact_phone: fields.contact_phone,
     contact_ext: fields.contact_ext,
