@@ -22,7 +22,7 @@ const LEGAL_HEADING =
   /(?:^|\n)\s*(?:fines?\s+schedule|back[\s-]*solicit(?:ation)?|attorney\s+fees|lawyer\s+fees|remit\s+to|terms\s+(?:and|&)\s+conditions|indemnif)/i;
 
 const STOP_HEADER =
-  /(?:^|\n)\s*(?:stop\s+\d+\s*[:.\-]?\s*)?(?:pickup(?:\s*\(\s*pu\s*\))?|delivery(?:\s*\(\s*del\s*\))?)\b/gi;
+  /(?:^|\n)\s*(?:stop\s+\d+\s*[:.\-]\s*(?:pickup|delivery|pu|del)\b|(?:pickup|delivery)\s*\(\s*(?:pu|del)\s*\))/gi;
 
 export function parseStopPaperwork(text: string): StopPaperwork {
   const raw = String(text ?? "");
