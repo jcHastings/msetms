@@ -488,11 +488,11 @@ const CARRIER_STOP_RE =
   /\n(?:[^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)|CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO|STOP\s+\d|DRIVER\b)\b/i;
 const HEADER_CUT_RE = /\n\s*(?:carrier\b|stop\s+\d|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
 const NAME_STOPWORDS =
-  /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info)$/i;
+  /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info|ph|ext)$/i;
 
 function looksLikePersonName(value: string): boolean {
   const text = collapse(value);
-  if (!text || NAME_STOPWORDS.test(text)) return false;
+  if (!text || text.length < 3 || NAME_STOPWORDS.test(text)) return false;
   if (text.split(/\s+/).every((part) => NAME_STOPWORDS.test(part))) return false;
   return /^[A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,3}$/.test(text);
 }
