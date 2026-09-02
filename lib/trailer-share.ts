@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./db";
+import { orbcommMapPinFromReading } from "./fleet-map-shared";
 import { DISPLAY_TIME_ZONE, formatDateTime, fromOfficeDateTime } from "./format";
-import { normalizeKey } from "./integrations/orbcomm";
+import { latestReeferForTrailer, normalizeKey } from "./integrations/orbcomm";
 import { getTrailer, persistedTrailerLocation } from "./queries";
 import type { LoadMapPoint } from "./load-map-shared";
 import type { ReeferReading, Trailer } from "./types";
@@ -227,13 +228,17 @@ export function trailerShareMapPoints(readings: ReeferReading[]): LoadMapPoint[]
       Number.isFinite(row.latitude) &&
       Number.isFinite(row.longitude),
   );
-  return withGps.map((row, index) => ({
-    id: `ping-${row.id}`,
-    kind: index === withGps.length - 1 ? "trailer" : "track",
-    label: formatDateTime(row.recorded_at),
-    lat: row.latitude as number,
-    lng: row.longitude as number,
-  }));
+  return withGps.map((row, index) => {
+    const current = index === withGps.length - 1;
+    return {
+      id: `ping-${row.id}`,
+      kind: current ? "trailer" : "track",
+      label: formatDateTime(row.recorded_at),
+      lat: row.latitude as number,
+      lng: row.longitude as number,
+      ...(current ? orbcommMapPinFromReading(row) : {}),
+    };
+  });
 }
 
 export type TrailerShareView = {
@@ -301,7 +306,14 @@ export function trailerShareView(token: string, now = new Date()): TrailerShareV
     });
   }
   points.push(...trailerShareMapPoints(later));
-  if (points.length) points[points.length - 1] = { ...points[points.length - 1], kind: "trailer" };
+  if (points.length) {
+    const currentReading = later.at(-1) ?? latestReeferForTrailer(trailer);
+    points[points.length - 1] = {
+      ...points[points.length - 1],
+      kind: "trailer",
+      ...orbcommMapPinFromReading(currentReading),
+    };
+  }
   return {
     ...base,
     temperatureF: lastDefined([snapshot.temperature_f, ...later.map((row) => row.temperature_f)]),

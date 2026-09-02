@@ -2,6 +2,7 @@ import {
   parsePlaceState,
   type ControlCenterItem,
 } from "./control-center-shared";
+import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
 import { coordsForStop } from "./geofence";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getSamsaraFleet } from "./integrations/samsara";
@@ -42,25 +43,34 @@ function loadCoords(load: LoadView, truck: Truck | undefined, trailer: Trailer |
   lng: number | null;
   address: string;
   state: string;
+  pinColor?: string;
+  pinShape?: "circle" | "arrow";
+  headingDeg?: number | null;
 } {
   const truckGps = truck ? persistedTruckLocation(truck) : null;
   const trailerGps = trailer ? persistedTrailerLocation(trailer) : null;
   const truckPoint = plottable(truckGps?.latitude, truckGps?.longitude);
-  if (truckPoint) {
+  if (truckPoint && truckGps) {
+    const style = samsaraTruckPinStyle({ speedMph: truckGps.speedMph, engineOn: truckGps.engineOn });
     return {
       lat: truckPoint.lat,
       lng: truckPoint.lng,
-      address: truckGps?.address ?? "",
-      state: parsePlaceState(truckGps?.address ?? "") || parsePlaceState(load.origin),
+      address: truckGps.address ?? "",
+      state: parsePlaceState(truckGps.address ?? "") || parsePlaceState(load.origin),
+      pinColor: style.pinColor,
+      pinShape: style.pinShape,
+      headingDeg: truckGps.headingDeg,
     };
   }
   const trailerPoint = plottable(trailerGps?.latitude, trailerGps?.longitude);
   if (trailerPoint) {
+    const pin = orbcommMapPinFromReading(trailer ? latestReeferForTrailer(trailer) : null);
     return {
       lat: trailerPoint.lat,
       lng: trailerPoint.lng,
       address: trailerGps?.address ?? "",
       state: parsePlaceState(trailerGps?.address ?? "") || parsePlaceState(load.origin),
+      ...pin,
     };
   }
   const pickup = listStops(load.id).find((stop) => stop.kind === "pickup");
@@ -71,9 +81,10 @@ function loadCoords(load: LoadView, truck: Truck | undefined, trailer: Trailer |
       lng: stopPoint.longitude,
       address: [pickup?.city, pickup?.state].filter(Boolean).join(", "),
       state: String(pickup?.state ?? "").trim().toUpperCase() || parsePlaceState(load.origin),
+      pinColor: "#0b1f3a",
     };
   }
-  return { lat: null, lng: null, address: "", state: parsePlaceState(load.origin) };
+  return { lat: null, lng: null, address: "", state: parsePlaceState(load.origin), pinColor: "#0b1f3a" };
 }
 
 function loadEquipment(load: LoadView, trailer: Trailer | undefined): string {
@@ -105,6 +116,9 @@ function orderItem(load: LoadView, trucks: Truck[], trailers: Trailer[]): Contro
     lat: here.lat,
     lng: here.lng,
     href: `/board?open=${load.id}`,
+    pinColor: here.pinColor,
+    pinShape: here.pinShape,
+    headingDeg: here.headingDeg,
   };
 }
 
@@ -116,6 +130,7 @@ function trailerItem(
   const stored = persistedTrailerLocation(trailer);
   const point = plottable(stored?.latitude, stored?.longitude);
   const onLoad = busy.has(trailer.id);
+  const pin = orbcommMapPinFromReading(reading);
   return {
     id: `trailer-${trailer.id}`,
     kind: "trailer",
@@ -134,6 +149,7 @@ function trailerItem(
     lat: point?.lat ?? null,
     lng: point?.lng ?? null,
     href: `/fleet/trailers/${trailer.id}`,
+    ...pin,
   };
 }
 
@@ -141,6 +157,9 @@ function truckItem(truck: Truck, busy: Set<number>): ControlCenterItem {
   const stored = persistedTruckLocation(truck);
   const point = plottable(stored?.latitude, stored?.longitude);
   const onLoad = busy.has(truck.id);
+  const style = stored
+    ? samsaraTruckPinStyle({ speedMph: stored.speedMph, engineOn: stored.engineOn })
+    : null;
   return {
     id: `truck-${truck.id}`,
     kind: "truck",
@@ -159,6 +178,9 @@ function truckItem(truck: Truck, busy: Set<number>): ControlCenterItem {
     lat: point?.lat ?? null,
     lng: point?.lng ?? null,
     href: `/fleet/trucks/${truck.id}`,
+    pinColor: style?.pinColor,
+    pinShape: style?.pinShape,
+    headingDeg: stored?.headingDeg ?? null,
   };
 }
 

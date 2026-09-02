@@ -1734,6 +1734,24 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /data-load-share-expired/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /sendMail|mailto:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-live/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /samsaraTruckPinStyle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/control-center.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/control-center.ts"), "utf8"), /samsaraTruckPinStyle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-share.ts"), "utf8"), /trailerPinColor/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /pinColor: view.trailerPinColor/);
+  for (const file of [
+    "app/t/[token]/page.tsx",
+    "app/l/[token]/page.tsx",
+    "app/driver/loads/[id]/trailer/page.tsx",
+    "components/fleet-map-view.tsx",
+    "components/control-center-view.tsx",
+    "components/load-tracking-panel.tsx",
+    "components/load-stops-map.tsx",
+  ]) {
+    assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /LoadMapCanvas/, `${file} must use the shared teardrop pin map`);
+  }
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /clusterLoadMapPoints/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /data-control-filter-strip/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /Orders/);
@@ -5136,6 +5154,7 @@ Continuous reefer. Two load locks.
   assert.equal(gpsOnlyView.address, "GPS only last known");
   assert.equal(gpsOnlyView.points.length, 1);
   assert.equal(gpsOnlyView.points[0]?.lat, 41.2);
+  assert.equal(gpsOnlyView.points[0]?.pinColor, "#64748b");
   orbcomm.insertReeferReading({
     load_id: null,
     truck_id: null,
@@ -5171,6 +5190,7 @@ Continuous reefer. Two load locks.
   assert.equal(justMintedView.address, "Before create");
   assert.equal(justMintedView.points.length, 1);
   assert.equal(justMintedView.points[0]?.lat, 40.7);
+  assert.equal(justMintedView.points[0]?.pinColor, "#16a34a");
   orbcomm.insertReeferReading({
     load_id: null,
     truck_id: null,
@@ -5205,6 +5225,8 @@ Continuous reefer. Two load locks.
   assert.equal(liveShareView.points.length, 2);
   assert.equal(liveShareView.points[0]?.lat, 40.7);
   assert.equal(liveShareView.points[1]?.lat, 40.8);
+  assert.equal(liveShareView.points[1]?.kind, "trailer");
+  assert.equal(liveShareView.points[1]?.pinColor, "#16a34a");
   assert.equal(trailerShare.trailerShareIsExpired(firstShare, new Date(firstShare.expires_at)), true);
   const expiredShareView = trailerShare.trailerShareView(firstShare.token, new Date(firstShare.expires_at));
   assert.equal(expiredShareView.found, true);
@@ -5414,9 +5436,29 @@ Continuous reefer. Two load locks.
     recordedAt: "2026-08-20T14:00:00.000Z",
     source: "orbcomm",
   });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-CTRL-IDLE",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 41.25,
+    longitude: -96.0,
+    address: "Lincoln, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:00:00.000Z",
+  });
   const center = await controlCenter.buildControlCenter();
   assert.ok(center.orders.some((item) => item.refId === controlOrderId && item.origin.includes("Omaha")));
   assert.ok(center.resources.some((item) => item.refId === idleShareTrailer && item.status === "idle"));
+  const idleControl = center.resources.find((item) => item.refId === idleShareTrailer);
+  assert.equal(idleControl?.pinColor, "#16a34a");
+  assert.equal(controlShared.controlCenterPoints([idleControl!])[0]?.pinColor, "#16a34a");
   const neOnly = controlShared.filterControlCenterItems(center.resources, {
     state: "NE",
     equipment: "reefer",
@@ -10279,6 +10321,76 @@ Continuous reefer. Two load locks.
   assert.ok(truckPin);
   assert.equal(truckPin?.lat, 41.25);
   assert.equal(truckPin?.lng, -95.93);
+  const { ORBCOMM_REEFER_PIN_COLOR: loadMapReeferColor, SAMSARA_TRUCK_OFF_COLOR: loadMapTruckOff, SAMSARA_TRUCK_ON_COLOR: loadMapTruckOn } =
+    await import("../lib/fleet-map-shared");
+  assert.equal(truckPin?.pinColor, loadMapTruckOff);
+  queries.saveTruckGps(mapTruckId, {
+    latitude: 41.25,
+    longitude: -95.93,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+    speedMph: 0,
+    engineOn: true,
+  });
+  const truckOnPin = (await mapLib.buildLoadMapPoints(mapLoadId)).find((point) => point.kind === "truck");
+  assert.equal(truckOnPin?.pinColor, loadMapTruckOn);
+  const mapTrailerId = queries.createTrailer({
+    unit_number: "MAP-TR-PIN",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-map-tr-pin",
+  });
+  queries.saveTrailerGps(mapTrailerId, {
+    latitude: 40.81,
+    longitude: -96.7,
+    address: "Lincoln, NE",
+    recordedAt: "2026-08-20T14:30:00.000Z",
+    source: "orbcomm",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "MAP-TR-PIN",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Shutdown",
+    latitude: 40.81,
+    longitude: -96.7,
+    address: "Lincoln, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:30:00.000Z",
+  });
+  const mapTrailerLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    trailer_id: mapTrailerId,
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const loadTrailerPin = (await mapLib.buildLoadMapPoints(mapTrailerLoadId)).find((point) => point.kind === "trailer");
+  assert.equal(loadTrailerPin?.lat, 40.81);
+  assert.equal(loadTrailerPin?.pinColor, loadMapReeferColor.shutdown);
+  assert.equal(loadTrailerPin?.pinColor, "#dc2626");
 
   const previousOrbcommUser = process.env.ORBCOMM_USERNAME;
   const previousOrbcommPass = process.env.ORBCOMM_PASSWORD;
@@ -13425,6 +13537,23 @@ Continuous reefer. Two load locks.
     recordedAt: "2026-08-20T14:00:00.000Z",
     source: "orbcomm",
   });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-DRV-PIN",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Off",
+    latitude: 41.11,
+    longitude: -96.22,
+    address: "Driver trailer pin",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:00:00.000Z",
+  });
   const driverPinCustomerId = queries.createCustomer({
     name: "Driver Trailer Pin Co",
     billing_notes: "",
@@ -13457,6 +13586,7 @@ Continuous reefer. Two load locks.
   assert.equal(driverPinView.trailerNumber, "TR-DRV-PIN");
   assert.equal(driverPinView.point?.lat, 41.11);
   assert.equal(driverPinView.point?.lng, -96.22);
+  assert.equal(driverPinView.point?.pinColor, "#eab308");
   const emptyTrailerLoadId = queries.createLoad({
     customer_id: driverPinCustomerId,
     origin: "Omaha, NE",
@@ -14481,8 +14611,8 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-reefer-pin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Arrow = moving/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Circle = stopped/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Heading mark = moving/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Still = stopped/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="on"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="moving"/);

@@ -20,6 +20,9 @@ export type ControlCenterItem = {
   lat: number | null;
   lng: number | null;
   href: string;
+  pinColor?: string;
+  pinShape?: "circle" | "arrow";
+  headingDeg?: number | null;
 };
 
 export type ControlCenterFilters = {
@@ -80,6 +83,8 @@ export function controlCenterPoints(items: ControlCenterItem[]): Array<{
   lng: number;
   detail: string;
   pinColor?: string;
+  pinShape?: "circle" | "arrow";
+  headingDeg?: number | null;
 }> {
   return items
     .filter((item) => item.lat != null && item.lng != null)
@@ -90,7 +95,9 @@ export function controlCenterPoints(items: ControlCenterItem[]): Array<{
       lat: item.lat as number,
       lng: item.lng as number,
       detail: item.subtitle,
-      pinColor: item.kind === "load" ? "#0b1f3a" : undefined,
+      pinColor: item.pinColor ?? (item.kind === "load" ? "#0b1f3a" : undefined),
+      pinShape: item.pinShape,
+      headingDeg: item.headingDeg,
     }));
 }
 

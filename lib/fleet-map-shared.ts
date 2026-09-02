@@ -186,3 +186,40 @@ export function reeferPinStatusFromSnapshot(input: {
 export function orbcommReeferPinColor(status: OrbcommReeferPinStatus): string {
   return ORBCOMM_REEFER_PIN_COLOR[status];
 }
+
+export function orbcommMapPinStyle(input: {
+  operatingMode?: string | null;
+  powerOn?: boolean | null;
+  speedMph?: number | null;
+  headingDeg?: number | null;
+}): { pinColor: string; pinShape: FleetMapPinShape; headingDeg: number | null } {
+  return {
+    pinColor: orbcommReeferPinColor(
+      reeferPinStatusFromSnapshot({
+        operatingMode: input.operatingMode,
+        powerOn: input.powerOn,
+      }),
+    ),
+    pinShape: orbcommPinShape(input.speedMph),
+    headingDeg: input.headingDeg ?? null,
+  };
+}
+
+export function orbcommMapPinFromReading(
+  row?: {
+    operating_mode?: string | null;
+    operatingMode?: string | null;
+    powerOn?: boolean | null;
+    speed_mph?: number | null;
+    speedMph?: number | null;
+    heading_deg?: number | null;
+    headingDeg?: number | null;
+  } | null,
+): { pinColor: string; pinShape: FleetMapPinShape; headingDeg: number | null } {
+  return orbcommMapPinStyle({
+    operatingMode: row?.operatingMode ?? row?.operating_mode,
+    powerOn: row?.powerOn,
+    speedMph: row?.speedMph ?? row?.speed_mph,
+    headingDeg: row?.headingDeg ?? row?.heading_deg,
+  });
+}

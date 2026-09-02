@@ -1,7 +1,8 @@
 import { listLoadLog } from "./audit";
 import { getDb } from "./db";
 import { getGoogleMapsApiKey } from "./env";
-import { getTrailerLocationForLoad } from "./integrations/orbcomm";
+import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
+import { getTrailerLocationForLoad, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getLocationForLoad } from "./integrations/samsara";
 import {
   stopAddressLine,
@@ -119,6 +120,7 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
 
   const truck = await truckGpsForLoad(loadId, load.truck_id);
   if (truck) {
+    const style = samsaraTruckPinStyle({ speedMph: truck.speedMph, engineOn: truck.engineOn });
     points.push({
       id: "truck",
       kind: "truck",
@@ -126,11 +128,16 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
       lat: truck.latitude as number,
       lng: truck.longitude as number,
       detail: [truck.address, truck.recordedAt].filter(Boolean).join(" · ") || undefined,
+      pinColor: style.pinColor,
+      pinShape: style.pinShape,
+      headingDeg: truck.headingDeg ?? null,
     });
   }
 
   const trailer = await trailerGpsForLoad(loadId, load.trailer_id);
   if (trailer) {
+    const trailerRow = load.trailer_id != null ? getTrailer(load.trailer_id) : null;
+    const pin = orbcommMapPinFromReading(trailerRow ? latestReeferForTrailer(trailerRow) : null);
     points.push({
       id: "trailer",
       kind: "trailer",
@@ -138,6 +145,7 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
       lat: trailer.latitude as number,
       lng: trailer.longitude as number,
       detail: [trailer.address, trailer.recordedAt].filter(Boolean).join(" · ") || undefined,
+      ...pin,
     });
   }
 

@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./db";
+import { ORBCOMM_REEFER_PIN_COLOR, orbcommMapPinFromReading } from "./fleet-map-shared";
 import { DISPLAY_TIME_ZONE, formatDateTime, fromOfficeDateTime } from "./format";
+import { latestReeferForTrailer } from "./integrations/orbcomm";
 import { lastSentMail } from "./mail-store";
 import { getLoad, getTrailer } from "./queries";
 import { listStops } from "./stops";
@@ -180,6 +182,7 @@ export type LoadShareView = {
   address: string;
   trailerLat: number | null;
   trailerLng: number | null;
+  trailerPinColor: string;
 };
 
 export function loadShareView(token: string, now = new Date()): LoadShareView {
@@ -199,6 +202,7 @@ export function loadShareView(token: string, now = new Date()): LoadShareView {
     address: "",
     trailerLat: null,
     trailerLng: null,
+    trailerPinColor: ORBCOMM_REEFER_PIN_COLOR.unknown,
   };
   const link = getLoadShareLink(token);
   if (!link) return empty;
@@ -221,10 +225,12 @@ export function loadShareView(token: string, now = new Date()): LoadShareView {
     address: "",
     trailerLat: null as number | null,
     trailerLng: null as number | null,
+    trailerPinColor: ORBCOMM_REEFER_PIN_COLOR.unknown,
   };
   if (expired) return base;
   const trailer = load.trailer_id != null ? getTrailer(load.trailer_id) : null;
   const snapshot = trailer?.orbcomm_asset_id.trim() ? lastKnownOrbcommSnapshot(trailer) : null;
+  const pin = orbcommMapPinFromReading(trailer ? latestReeferForTrailer(trailer) : null);
   return {
     ...base,
     milestones: loadShareMilestones(load),
@@ -232,5 +238,6 @@ export function loadShareView(token: string, now = new Date()): LoadShareView {
     address: snapshot?.address ?? "",
     trailerLat: snapshot?.latitude ?? null,
     trailerLng: snapshot?.longitude ?? null,
+    trailerPinColor: pin.pinColor,
   };
 }

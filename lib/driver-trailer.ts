@@ -1,5 +1,5 @@
 import { getTrailerLocationForLoad, latestReeferForTrailer } from "./integrations/orbcomm";
-import { orbcommReeferPinColor, plottableCoord, reeferPinStatusFromSnapshot } from "./fleet-map-shared";
+import { orbcommMapPinFromReading, plottableCoord } from "./fleet-map-shared";
 import type { LoadMapPoint } from "./load-map-shared";
 import { getTrailer, persistedTrailerLocation } from "./queries";
 import type { LoadView } from "./types";
@@ -27,12 +27,7 @@ export async function driverAssignedTrailerMap(load: LoadView): Promise<{
   const coord = plottableCoord(lat, lng);
   const address = String(usableLive?.address || stored?.address || "").trim();
   const recordedAt = String(usableLive?.recordedAt || stored?.recordedAt || "").trim();
-  const reading = latestReeferForTrailer(trailer);
-  const pinColor = orbcommReeferPinColor(
-    reeferPinStatusFromSnapshot({
-      operatingMode: reading?.operating_mode,
-    }),
-  );
+  const pin = orbcommMapPinFromReading(latestReeferForTrailer(trailer));
   return {
     trailerNumber: trailer.unit_number,
     address,
@@ -45,7 +40,7 @@ export async function driverAssignedTrailerMap(load: LoadView): Promise<{
           lat: coord.lat,
           lng: coord.lng,
           detail: address,
-          pinColor,
+          ...pin,
         }
       : null,
   };

@@ -37,6 +37,7 @@ export default async function LoadSharePage({
             label: view.trailerNumber || "Trailer",
             lat: view.trailerLat,
             lng: view.trailerLng,
+            pinColor: view.trailerPinColor,
           },
         ]
       : [];
