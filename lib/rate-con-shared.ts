@@ -501,11 +501,15 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
     .replace(/billing instructions?[\s\S]{0,120}/gi, " ");
   const email = skipBilling.match(BROKER_EMAIL_RE)?.[0]?.trim() ?? "";
   const withExt = skipBilling.match(PHONE_EXT_RE);
-  const phoneRaw = withExt?.[1] ?? skipBilling.match(/(?:phone|tel|office)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ?? "";
+  const phoneRaw =
+    withExt?.[1] ??
+    skipBilling.match(/(?:phone|tel|office)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
+    skipBilling.match(PHONE_ONLY_RE)?.[1] ??
+    "";
   const ext = (withExt?.[2] ?? skipBilling.match(/(?:x|ext\.?|#)\s*(\d{2,8})/i)?.[1] ?? "").trim();
   const phoneDigits = digitsPhone(phoneRaw || (withExt ? withExt[1] : ""));
   const labeledName = skipBilling.match(/(?:^|\n)\s*name\s*[:|]\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1] ?? "";
-  const phoneAt = skipBilling.search(PHONE_EXT_RE);
+  const phoneAt = withExt ? skipBilling.search(PHONE_EXT_RE) : skipBilling.search(PHONE_ONLY_RE);
   const beforePhone =
     phoneAt > 0
       ? skipBilling

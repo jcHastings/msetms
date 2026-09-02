@@ -141,11 +141,12 @@ export function LoadCustomerScreen({
         />
       </div>
       <div className="field">
-        <label htmlFor="contact_phone">Contact phone</label>
+        <label htmlFor="contact_phone">Per-load phone</label>
         <input
           id="contact_phone"
           name="contact_phone"
           data-autosave=""
+          data-per-load-phone=""
           defaultValue={load?.contact_phone || defaults.contact_phone || ""}
           onBlur={blurPersist("contact_phone", load?.contact_phone || defaults.contact_phone || "")}
         />
@@ -156,6 +157,7 @@ export function LoadCustomerScreen({
           id="contact_ext"
           name="contact_ext"
           data-autosave=""
+          data-per-load-ext=""
           defaultValue={load?.contact_ext || defaults.contact_ext || ""}
           onBlur={blurPersist("contact_ext", load?.contact_ext || defaults.contact_ext || "")}
         />

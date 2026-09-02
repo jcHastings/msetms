@@ -11,6 +11,7 @@ import {
   matchLocationForStop,
   normalizeLocationName,
 } from "./locations";
+import { resolveLoadCustomerPhoneLine } from "./load-contact";
 import { getCustomer, getLoad, getLocation, getTrailer, listLocations } from "./queries";
 import { listStops, stopTypeNumber, type LoadStop } from "./stops";
 import { locationRuleLabels } from "./location-rules-shared";
@@ -248,7 +249,7 @@ function confirmationCustomer(load: LoadView): {
     name: load.customer_name.trim(),
     billing,
     contact: (load.contact_name || contact?.name || "").trim(),
-    phone: (load.contact_phone || contact?.phone || "").trim(),
+    phone: resolveLoadCustomerPhoneLine(load),
     email: (load.contact_email || contact?.email || "").trim(),
     reference: (load.customer_reference || load.po_number || load.reference_number || "").trim(),
   };

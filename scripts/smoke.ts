@@ -1014,6 +1014,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Main email/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Billing email/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /Per-load email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /Per-load phone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-per-load-phone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-per-load-ext/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-contact.ts"), "utf8"), /resolveLoadCustomerPhone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /resolveCustomerMainPhone/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /SMTP_FROM\s*=\s*["']ar@/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("to"\)/);
   assert.match(emailInvoiceUi, /extra_id/);
@@ -3757,6 +3762,30 @@ async function main() {
   assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(slotLoadId)!), "ana@slots.example");
   assert.equal(queries.getCustomer(slotCustomerId)?.main_email, "");
   assert.equal(queries.getCustomer(slotCustomerId)?.billing_email, "");
+  const loadContact = await import("../lib/load-contact");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "2210", slotLoadId);
+  const slotPhoneLoad = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadPerLoadPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadPerLoadExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotPhoneLoad), "800-555-0142 x2210");
+  assert.equal(loadContact.resolveCustomerMainPhone(slotCustomerId), "555-0100");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotPhoneLoad), "");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "", slotLoadId);
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(queries.getLoad(slotLoadId)!), "800-555-0142");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("", "9999", slotLoadId);
+  const slotFallback = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotFallback), "555-0100");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotFallback), "");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotFallback), "555-0100");
+  assert.equal(queries.getCustomer(slotCustomerId)?.contacts[0]?.phone, "555-0100");
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
@@ -4632,6 +4661,7 @@ Continuous reefer. Two load locks.
   assert.equal(brokerParsed.contact_ext, "2210");
   assert.equal(queries.getCustomer(allenId)?.main_email, "");
   assert.equal(queries.getCustomer(allenId)?.billing_email, "");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
   assert.equal(brokerParsed.rate, 4250);
   assert.equal(brokerParsed.weight, 38400);
   assert.match(brokerParsed.commodity, /Fresh beef/i);
@@ -4679,7 +4709,63 @@ send POD to billing.pod@broker.example
     tqlContactText,
   );
   assert.equal(fromTextOnly.contact_email, "riley.booker@broker.example");
+  assert.equal(fromTextOnly.contact_phone, "800-555-3101");
+  assert.equal(fromTextOnly.contact_ext, "47010");
   assert.equal(queries.getCustomer(allenId)?.main_email, "");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
+  const phoneOnlyContact = parseBrokerContactFromText(`
+BROKER CONTACT
+Name: Dana Desk
+Phone: 402-555-0188
+Email: dana.desk@broker.example
+`);
+  assert.equal(phoneOnlyContact.contact_phone, "402-555-0188");
+  assert.equal(phoneOnlyContact.contact_ext, "");
+  assert.equal(phoneOnlyContact.contact_email, "dana.desk@broker.example");
+  const noPhoneContact = parseBrokerContactFromText(`
+BROKER CONTACT
+Name: No Phone
+Email: nophone@broker.example
+`);
+  assert.equal(noPhoneContact.contact_phone, "");
+  assert.equal(noPhoneContact.contact_ext, "");
+  assert.equal(noPhoneContact.contact_email, "nophone@broker.example");
+  const appliedPhoneLoadId = queries.createLoad({
+    customer_id: allenId,
+    origin: "Hastings, NE",
+    destination: "Bronx, NY",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 38400,
+    commodity: "Fresh beef trimmings",
+    rate: 4250,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 28,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    contact_name: brokerParsed.contact_name,
+    contact_email: brokerParsed.contact_email,
+    contact_phone: brokerParsed.contact_phone,
+    contact_ext: brokerParsed.contact_ext,
+  });
+  const appliedPhoneLoad = queries.getLoad(appliedPhoneLoadId)!;
+  assert.equal(appliedPhoneLoad.contact_phone, "402-555-0199");
+  assert.equal(appliedPhoneLoad.contact_ext, "2210");
+  assert.equal(appliedPhoneLoad.contact_email, "alex.broker@example.com");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
+  assert.equal(queries.getCustomer(allenId)?.contacts[0]?.phone, undefined);
+  const { resolveLoadCustomerPhoneLine, resolveCustomerMainPhone } = await import("../lib/load-contact");
+  assert.equal(resolveLoadCustomerPhoneLine(appliedPhoneLoad), "402-555-0199 x2210");
+  assert.equal(resolveCustomerMainPhone(allenId), "");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(appliedPhoneLoad), "");
 
   const lowMoney = applyAiRateCon(
     {
@@ -6894,6 +6980,7 @@ send POD to billing.pod@broker.example
     driver_id: null,
     contact_name: "Jordan Buyer",
     contact_phone: "816-555-0199",
+    contact_ext: "4401",
     contact_email: "jordan@westside-smoke.example",
     customer_reference: "WSF-1006153",
   });
@@ -6954,7 +7041,8 @@ send POD to billing.pod@broker.example
   assert.match(billedPacket.customerBilling, /4400 Packer Ave/);
   assert.match(billedPacket.customerBilling, /Kansas City, MO 64120/);
   assert.equal(billedPacket.customerContact, "Jordan Buyer");
-  assert.equal(billedPacket.customerPhone, "816-555-0199");
+  assert.equal(billedPacket.customerPhone, "816-555-0199 x4401");
+  assert.equal(queries.getCustomer(billedCustomerId)?.contacts[0]?.phone, "816-555-0101");
   assert.equal(billedPacket.customerEmail, "jordan@westside-smoke.example");
   assert.equal(billedPacket.customerReference, "WSF-1006153");
   assert.equal(billedPacket.customerRate, 2150);
@@ -12561,6 +12649,12 @@ send POD to billing.pod@broker.example
   assert.equal(tmsInvoiceModel.customerStreet, settings.getCompanySettings().street);
   assert.match(tmsInvoiceModel.customerCityStateZip, /NE/);
   assert.match(tmsInvoiceModel.customerPhone, /402-302-0097/);
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "2210", invoiceLoadId);
+  const invoiceIgnoresBrokerPhone = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
+  assert.match(invoiceIgnoresBrokerPhone.customerPhone, /402-302-0097/);
+  assert.doesNotMatch(invoiceIgnoresBrokerPhone.customerPhone, /800-555-0142/);
   assert.match(tmsInvoiceModel.companyAddress, /100 Fleet Way|600 E 39th/);
   assert.equal(settings.withOfficeAddress({ street: "", city: "", state: "", zip: "" }).street, "600 E 39th St");
   assert.equal(settings.withOfficeAddress({ street: "100 Fleet Way", city: "Omaha", state: "NE", zip: "68102" }).street, "100 Fleet Way");

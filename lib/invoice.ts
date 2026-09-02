@@ -12,6 +12,7 @@ import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentD
 import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
+import { resolveCustomerMainPhone } from "./load-contact";
 import { invoiceFromAddress } from "./mail-shared";
 
 export type TmsInvoiceLine = {
@@ -174,9 +175,9 @@ function customerBlock(load: LoadView): {
   const company = getCompanyProfile();
   const customer = getCustomer(load.customer_id);
   const contact = customer?.contacts[0];
-  const billPhone = (load.contact_phone || contact?.phone || "").trim();
+  const billPhone = resolveCustomerMainPhone(load.customer_id);
   const contactName = (load.contact_name || contact?.name || "").trim();
-  const contactPhone = (contact?.phone || load.contact_phone || "").trim();
+  const contactPhone = billPhone;
   const terms = (customer?.payment_terms ?? "").trim();
   if (isCompanyCustomerName(load.customer_name, company.company_name)) {
     return {
