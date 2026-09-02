@@ -483,6 +483,9 @@ const CONTACT_HEADER_RE =
 const CONTACT_TABLE_RE = /(?:^|\n)\s*Name\s+Phone\s+Email(?:\s+Fax)?\s*\n([^\n]+)/i;
 const NEXT_SECTION_RE =
   /\n(?:CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO)\b/i;
+const CARRIER_CHUNK_RE =
+  /(?:^|\n)\s*(?:carrier(?:\s+contact)?\s*:?|attn\b)[^\n]*(?:\n[^\n]*){0,6}/gi;
+const HEADER_CUT_RE = /\n\s*(?:carrier\b|stop\s+\d|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
 const NAME_STOPWORDS =
   /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info)$/i;
 
@@ -517,7 +520,7 @@ function parseContactFields(block: string): ParsedBrokerContact {
   const withExt = skipBilling.match(PHONE_EXT_RE);
   const phoneRaw =
     withExt?.[1] ??
-    skipBilling.match(/(?:phone|tel|office)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
+    skipBilling.match(/(?:phone|tel|office|(?:^|\n)\s*p)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
     skipBilling.match(PHONE_ONLY_RE)?.[1] ??
     "";
   const ext = (withExt?.[2] ?? (phoneRaw ? skipBilling.match(STANDALONE_EXT_RE)?.[1] : "") ?? "").trim();
@@ -560,28 +563,92 @@ function contactBlocksFromHeaders(text: string): string[] {
   return blocks;
 }
 
+function carrierSideIdentity(text: string): { names: string[]; phones: string[] } {
+  const names: string[] = [];
+  const phones: string[] = [];
+  for (const chunk of String(text ?? "").matchAll(CARRIER_CHUNK_RE)) {
+    const block = chunk[0] ?? "";
+    for (const phone of block.matchAll(new RegExp(PHONE_ONLY_RE, "g"))) {
+      const digits = digitsPhone(phone[1] ?? "");
+      if (digits.length >= 10) phones.push(digits);
+    }
+    const attn = block.match(/attn\s*:?\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1];
+    if (attn) names.push(collapse(attn).toLowerCase());
+    const carrierName = block.match(/carrier(?:\s+contact)?\s*:?\s*([^\n,/]+)/i)?.[1];
+    if (carrierName) names.push(collapse(carrierName).toLowerCase());
+  }
+  return { names, phones };
+}
+
+export function isCarrierSideContact(contact: ParsedBrokerContact, raw: string): boolean {
+  const name = collapse(contact.contact_name);
+  const email = collapse(contact.contact_email);
+  if (isOwnPaperworkName(name) || isOwnPaperworkName(email)) return true;
+  const side = carrierSideIdentity(raw);
+  const nameKey = name.toLowerCase();
+  if (nameKey && side.names.some((item) => item.includes(nameKey) || nameKey.includes(item))) return true;
+  const phone = digitsPhone(contact.contact_phone);
+  return Boolean(phone.length >= 10 && side.phones.includes(phone));
+}
+
+export function rejectCarrierSideContact(contact: ParsedBrokerContact, raw: string): ParsedBrokerContact {
+  return isCarrierSideContact(contact, raw) ? emptyBrokerContact() : contact;
+}
+
+function parseHeaderBrokerContact(text: string): ParsedBrokerContact {
+  const cut = text.search(HEADER_CUT_RE);
+  const head = (cut >= 0 ? text.slice(0, cut) : text.slice(0, 800)).trim();
+  if (!head) return emptyBrokerContact();
+  const fields = parseContactFields(head);
+  const firstLine = head.split(/\n/).map((line) => line.trim()).find(Boolean) ?? "";
+  if (!firstLine || /^(carrier|contact|dispatch confirmation|load number|name|phone)/i.test(firstLine)) {
+    return fields;
+  }
+  if (/^\d/.test(firstLine) || STREET_SUFFIX.test(firstLine) || isOwnPaperworkName(firstLine)) {
+    return fields;
+  }
+  return {
+    contact_name: collapse(firstLine.replace(/[,\s]+$/, "")),
+    contact_email: fields.contact_email,
+    contact_phone: fields.contact_phone,
+    contact_ext: fields.contact_ext,
+  };
+}
+
 /** Copy name/email/phone/ext from the packet in front of you. Do not assume a broker. */
 export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
   const text = String(raw ?? "").replace(/\r/g, "");
   if (!text.trim()) return emptyBrokerContact();
   const tableRow = text.match(CONTACT_TABLE_RE)?.[1] ?? "";
-  const fromTable = parseContactFields(tableRow);
+  const fromTable = rejectCarrierSideContact(parseContactFields(tableRow), text);
   if (usableContact(fromTable)) return fromTable;
   for (const block of contactBlocksFromHeaders(text)) {
-    const parsed = parseContactFields(block);
+    const parsed = rejectCarrierSideContact(parseContactFields(block), text);
     if (usableContact(parsed)) return parsed;
   }
+  const header = rejectCarrierSideContact(parseHeaderBrokerContact(text), text);
+  if (usableContact(header)) return header;
   return emptyBrokerContact();
 }
 
 export function mergeBrokerContact(
   preferred: Partial<ParsedBrokerContact> | null | undefined,
   fallback: ParsedBrokerContact,
+  raw = "",
 ): ParsedBrokerContact {
+  const left = rejectCarrierSideContact(
+    {
+      contact_name: String(preferred?.contact_name ?? "").trim(),
+      contact_email: String(preferred?.contact_email ?? "").trim(),
+      contact_phone: String(preferred?.contact_phone ?? "").trim(),
+      contact_ext: String(preferred?.contact_ext ?? "").trim(),
+    },
+    raw,
+  );
   return {
-    contact_name: String(preferred?.contact_name ?? "").trim() || fallback.contact_name,
-    contact_email: String(preferred?.contact_email ?? "").trim() || fallback.contact_email,
-    contact_phone: String(preferred?.contact_phone ?? "").trim() || fallback.contact_phone,
-    contact_ext: String(preferred?.contact_ext ?? "").trim() || fallback.contact_ext,
+    contact_name: left.contact_name || fallback.contact_name,
+    contact_email: left.contact_email || fallback.contact_email,
+    contact_phone: left.contact_phone || fallback.contact_phone,
+    contact_ext: left.contact_ext || fallback.contact_ext,
   };
 }
