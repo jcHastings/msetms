@@ -612,8 +612,11 @@ function parseHeaderBrokerContact(text: string): ParsedBrokerContact {
   if (!head) return emptyBrokerContact();
   const fields = parseContactFields(head);
   const firstLine = head.split(/\n/).map((line) => line.trim()).find(Boolean) ?? "";
-  if (!firstLine || /^(carrier|contact|dispatch confirmation|load number|name|phone)/i.test(firstLine)) {
-    return fields;
+  if (
+    !firstLine ||
+    /^(carrier|contact|dispatch confirmation|load\s+|name\b|phone\b|pickup|delivery|stop\s+\d)/i.test(firstLine)
+  ) {
+    return emptyBrokerContact();
   }
   if (/^\d/.test(firstLine) || STREET_SUFFIX.test(firstLine) || isOwnPaperworkName(firstLine)) {
     return fields;
