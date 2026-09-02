@@ -197,6 +197,10 @@ function RateConAppliedLoad({
           reefer_setpoint_f: parsed.reefer_setpoint_f ?? load.reefer_setpoint_f,
           shipper_location_id: book.defaults.shipper_location_id ?? load.shipper_location_id,
           consignee_location_id: book.defaults.consignee_location_id ?? load.consignee_location_id,
+          contact_name: parsed.contact_name || load.contact_name,
+          contact_email: parsed.contact_email || load.contact_email,
+          contact_phone: parsed.contact_phone || load.contact_phone,
+          contact_ext: parsed.contact_ext || load.contact_ext,
         }}
         inboxId={inboxId}
         defaults={book.defaults}

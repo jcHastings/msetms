@@ -37,6 +37,10 @@ export type LoadFormDefaults = Partial<{
   consignee: ParsedStop;
   extra_stops: ParsedExtraStop[];
   equipment: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_ext: string;
 }>;
 
 export function LoadBasicsScreen({

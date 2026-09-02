@@ -57,6 +57,10 @@ export type ParsedRateCon = {
   extra_stops: ParsedExtraStop[];
   shipper_location_id: number | null;
   consignee_location_id: number | null;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_ext: string;
   field_flags: RateConFieldFlag[];
   reader: RateConReader;
 };
@@ -136,6 +140,10 @@ export function emptyParsedRateCon(): ParsedRateCon {
     extra_stops: [],
     shipper_location_id: null,
     consignee_location_id: null,
+    contact_name: "",
+    contact_email: "",
+    contact_phone: "",
+    contact_ext: "",
     field_flags: [],
     reader: "none",
   };
@@ -443,4 +451,86 @@ function normalizeStreet(value: string): string {
 
 function collapse(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+export type ParsedBrokerContact = {
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_ext: string;
+};
+
+export function emptyBrokerContact(): ParsedBrokerContact {
+  return { contact_name: "", contact_email: "", contact_phone: "", contact_ext: "" };
+}
+
+const BROKER_EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const PHONE_EXT_RE =
+  /(\+?1?\s*(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4})\s*(?:x|ext\.?|#)\s*(\d{2,8})/i;
+const PHONE_ONLY_RE = /(\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/;
+
+function looksLikePersonName(value: string): boolean {
+  const text = collapse(value);
+  return /^[A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,3}$/.test(text);
+}
+
+function digitsPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return digits.length === 10 ? digits : value.replace(/\s+/g, " ").trim();
+}
+
+function formatTenDigitPhone(digits: string): string {
+  if (digits.length !== 10) return digits;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
+  const text = String(raw ?? "").replace(/\r/g, "");
+  if (!text.trim()) return emptyBrokerContact();
+  const blocks = [
+    ...text.matchAll(
+      /(?:^|\n)([^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)[^\n]*)\n([\s\S]{0,800})/gi,
+    ),
+  ];
+  const labeled = blocks.find((row) => !/CARRIER\s+CONTACT/i.test(row[1] ?? ""));
+  const block = labeled?.[2]?.trim() ?? "";
+  if (!block) return emptyBrokerContact();
+  const skipBilling = block
+    .replace(/send\s+pod[\s\S]{0,120}/gi, " ")
+    .replace(/billing instructions?[\s\S]{0,120}/gi, " ");
+  const email = skipBilling.match(BROKER_EMAIL_RE)?.[0]?.trim() ?? "";
+  const withExt = skipBilling.match(PHONE_EXT_RE);
+  const phoneRaw = withExt?.[1] ?? skipBilling.match(/(?:phone|tel|office)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ?? "";
+  const ext = (withExt?.[2] ?? skipBilling.match(/(?:x|ext\.?|#)\s*(\d{2,8})/i)?.[1] ?? "").trim();
+  const phoneDigits = digitsPhone(phoneRaw || (withExt ? withExt[1] : ""));
+  const labeledName = skipBilling.match(/(?:^|\n)\s*name\s*[:|]\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1] ?? "";
+  const phoneAt = skipBilling.search(PHONE_EXT_RE);
+  const beforePhone =
+    phoneAt > 0
+      ? skipBilling
+          .slice(Math.max(0, phoneAt - 48), phoneAt)
+          .match(/([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+)?)\s*$/)?.[1] ?? ""
+      : "";
+  const named = labeledName || beforePhone;
+  const contact_name = looksLikePersonName(named) ? collapse(named) : "";
+  const contact_phone = phoneDigits.length === 10 ? formatTenDigitPhone(phoneDigits) : collapse(phoneRaw);
+  return {
+    contact_name,
+    contact_email: email,
+    contact_phone: contact_phone && /\d{7,}/.test(contact_phone.replace(/\D/g, "")) ? contact_phone : "",
+    contact_ext: ext,
+  };
+}
+
+export function mergeBrokerContact(
+  preferred: Partial<ParsedBrokerContact> | null | undefined,
+  fallback: ParsedBrokerContact,
+): ParsedBrokerContact {
+  return {
+    contact_name: String(preferred?.contact_name ?? "").trim() || fallback.contact_name,
+    contact_email: String(preferred?.contact_email ?? "").trim() || fallback.contact_email,
+    contact_phone: String(preferred?.contact_phone ?? "").trim() || fallback.contact_phone,
+    contact_ext: String(preferred?.contact_ext ?? "").trim() || fallback.contact_ext,
+  };
 }

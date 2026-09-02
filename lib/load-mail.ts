@@ -65,12 +65,36 @@ export function resolveLoadDriverEmail(load: Pick<LoadView, "driver_id">): strin
   return normalizeEmail(getDriver(load.driver_id)?.email);
 }
 
-export function resolveLoadCustomerEmail(load: Pick<LoadView, "contact_email" | "customer_id">): string {
-  const onLoad = normalizeEmail(load.contact_email);
-  if (isUsableEmail(onLoad)) return onLoad;
-  const customer = getCustomer(load.customer_id);
+export function resolveCustomerMainEmail(customerId: number): string {
+  const customer = getCustomer(customerId);
+  const main = normalizeEmail(customer?.main_email);
+  if (isUsableEmail(main)) return main;
   const fromContact = customer?.contacts.map((row) => normalizeEmail(row.email)).find((email) => isUsableEmail(email));
   return fromContact ?? "";
+}
+
+export function resolveCustomerBillingEmail(customerId: number): string {
+  const customer = getCustomer(customerId);
+  return isUsableEmail(customer?.billing_email) ? normalizeEmail(customer?.billing_email) : "";
+}
+
+export function resolveLoadPerLoadEmail(load: Pick<LoadView, "contact_email">): string {
+  const onLoad = normalizeEmail(load.contact_email);
+  return isUsableEmail(onLoad) ? onLoad : "";
+}
+
+/** Email customer update / load comms: per-load broker email, else customer main. Never billing-only. */
+export function resolveLoadCustomerEmail(load: Pick<LoadView, "contact_email" | "customer_id">): string {
+  const perLoad = resolveLoadPerLoadEmail(load);
+  if (perLoad) return perLoad;
+  return resolveCustomerMainEmail(load.customer_id);
+}
+
+/** Invoice send: billing, else main. Never the per-load broker address. */
+export function resolveInvoiceCustomerEmail(load: Pick<LoadView, "customer_id">): string {
+  const billing = resolveCustomerBillingEmail(load.customer_id);
+  if (billing) return billing;
+  return resolveCustomerMainEmail(load.customer_id);
 }
 
 export function driverMailBlockReason(load: LoadView | null): string {
@@ -526,7 +550,7 @@ async function invoicePdfForMail(load: LoadView): Promise<{
 }
 
 export function invoiceMailTo(load: LoadView, typedTo = ""): string {
-  const stored = resolveLoadCustomerEmail(load);
+  const stored = resolveInvoiceCustomerEmail(load);
   if (isUsableEmail(stored)) return normalizeEmail(stored);
   return normalizeEmail(typedTo);
 }

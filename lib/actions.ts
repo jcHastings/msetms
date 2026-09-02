@@ -234,6 +234,8 @@ export async function createCustomerAction(
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
       credit_hold: String(formData.get("credit_hold") ?? "") === "1",
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
+      main_email: String(formData.get("main_email") ?? "").trim(),
+      billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -256,6 +258,8 @@ export async function updateCustomerAction(
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
       credit_hold: String(formData.get("credit_hold") ?? "") === "1",
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
+      main_email: String(formData.get("main_email") ?? "").trim(),
+      billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();

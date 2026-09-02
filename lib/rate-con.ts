@@ -7,6 +7,7 @@ import {
   isOwnPaperworkName,
   matchCustomerName,
   parseAddressBlob,
+  parseBrokerContactFromText,
   parsedStopHasDetails,
   type ParsedExtraStop,
   type ParsedRateCon,
@@ -135,6 +136,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
     linesMatching(special, /appointment|call \d+ minutes/i).join("\n");
   const pickup = parseWindow(text, "pickup");
   const delivery = parseWindow(text, "delivery");
+  const brokerContact = parseBrokerContactFromText(text);
 
   const shipper = parsedStopHasDetails(ascend.shipper)
     ? ascend.shipper
@@ -192,6 +194,10 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       extra_stops: dedupeExtraStops([...ascend.extra_stops, ...printed.extra_stops]),
       shipper_location_id: null,
       consignee_location_id: null,
+      contact_name: brokerContact.contact_name,
+      contact_email: brokerContact.contact_email,
+      contact_phone: brokerContact.contact_phone,
+      contact_ext: brokerContact.contact_ext,
       equipment: "",
       field_flags: [],
       reader: "hint",

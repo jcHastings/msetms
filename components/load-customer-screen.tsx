@@ -124,19 +124,20 @@ export function LoadCustomerScreen({
           id="contact_name"
           name="contact_name"
           data-autosave=""
-          defaultValue={load?.contact_name ?? ""}
-          onBlur={blurPersist("contact_name", load?.contact_name ?? "")}
+          defaultValue={load?.contact_name || defaults.contact_name || ""}
+          onBlur={blurPersist("contact_name", load?.contact_name || defaults.contact_name || "")}
         />
       </div>
       <div className="field">
-        <label htmlFor="contact_email">Contact email</label>
+        <label htmlFor="contact_email">Per-load email</label>
         <input
           id="contact_email"
           name="contact_email"
           type="email"
           data-autosave=""
-          defaultValue={load?.contact_email ?? ""}
-          onBlur={blurPersist("contact_email", load?.contact_email ?? "")}
+          data-per-load-email=""
+          defaultValue={load?.contact_email || defaults.contact_email || ""}
+          onBlur={blurPersist("contact_email", load?.contact_email || defaults.contact_email || "")}
         />
       </div>
       <div className="field">
@@ -145,8 +146,8 @@ export function LoadCustomerScreen({
           id="contact_phone"
           name="contact_phone"
           data-autosave=""
-          defaultValue={load?.contact_phone ?? ""}
-          onBlur={blurPersist("contact_phone", load?.contact_phone ?? "")}
+          defaultValue={load?.contact_phone || defaults.contact_phone || ""}
+          onBlur={blurPersist("contact_phone", load?.contact_phone || defaults.contact_phone || "")}
         />
       </div>
       <div className="field">
@@ -155,8 +156,8 @@ export function LoadCustomerScreen({
           id="contact_ext"
           name="contact_ext"
           data-autosave=""
-          defaultValue={load?.contact_ext ?? ""}
-          onBlur={blurPersist("contact_ext", load?.contact_ext ?? "")}
+          defaultValue={load?.contact_ext || defaults.contact_ext || ""}
+          onBlur={blurPersist("contact_ext", load?.contact_ext || defaults.contact_ext || "")}
         />
       </div>
       <div className="field md:col-span-2">

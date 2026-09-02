@@ -4,7 +4,7 @@ import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-cl
 import { coordsForStop, gpsPingsForLoad, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
-import { resolveLoadCustomerEmail } from "./load-mail";
+import { resolveInvoiceCustomerEmail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
@@ -431,7 +431,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     }
     if (
       load.tms_invoice_number &&
-      !isUsableEmail(resolveLoadCustomerEmail(load)) &&
+      !isUsableEmail(resolveInvoiceCustomerEmail(load)) &&
       !lastSentMail(load.id, "customer_invoice")
     ) {
       items.push(

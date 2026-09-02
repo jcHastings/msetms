@@ -58,6 +58,7 @@ export function getDb(): Database {
   backfillDemoAccounting(db);
   backfillSampleLoads(db);
   backfillLoadNumbering(db);
+  backfillCustomerMainEmail(db);
 
   connection = db;
   connectedPath = dbPath;
@@ -379,6 +380,9 @@ export function migrate(db: Database): void {
   ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "customers", "qbo_customer_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "customers", "qbo_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "main_email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "billing_email", "TEXT NOT NULL DEFAULT ''");
+  backfillCustomerMainEmail(db);
   ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate_state", "TEXT NOT NULL DEFAULT ''");
@@ -1300,4 +1304,20 @@ function ensureColumn(
   if (!columns.some((item) => item.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+}
+
+function backfillCustomerMainEmail(db: Database): void {
+  db.exec(`
+    UPDATE customers
+    SET main_email = COALESCE((
+      SELECT TRIM(contacts.email)
+      FROM contacts
+      WHERE contacts.customer_id = customers.id
+        AND TRIM(contacts.email) != ''
+        AND TRIM(contacts.email) LIKE '%@%.%'
+      ORDER BY contacts.id
+      LIMIT 1
+    ), '')
+    WHERE TRIM(main_email) = ''
+  `);
 }

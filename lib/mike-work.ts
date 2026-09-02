@@ -1,6 +1,7 @@
 import { recordLoadAudit } from "./audit";
 import { isDriverUploadKind, UNCLASSIFIED_UPLOAD_KIND } from "./driver-docs";
 import { listAttachments, updateAttachmentKind } from "./files";
+import { resolveLoadCustomerEmail } from "./load-mail";
 import { formatLoadSummary } from "./load-summary";
 import { placeholderLane } from "./load-page-shared";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeProposal, type MikeProposalKind } from "./mike-shared";
@@ -34,7 +35,7 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
     proposals.push(
       makeProposal("detention_email", "Draft detention email", body, {
         load_id: String(load.id),
-        to: load.contact_email || "",
+        to: resolveLoadCustomerEmail(load),
         subject,
         body,
       }),

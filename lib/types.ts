@@ -190,6 +190,8 @@ export type Customer = {
   payment_terms: string;
   qbo_customer_id: string;
   qbo_status: string;
+  main_email: string;
+  billing_email: string;
   created_at: string;
   updated_at: string;
 };

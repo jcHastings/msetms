@@ -6,7 +6,9 @@ import {
   emptyParsedStop,
   flagsFromParsedGaps,
   matchCustomerName,
+  mergeBrokerContact,
   normalizeParsedStop,
+  parseBrokerContactFromText,
   parsedStopHasDetails,
   type ParsedExtraStop,
   type ParsedRateCon,
@@ -56,6 +58,10 @@ export type RateConAiDraft = {
   appointment_notes?: string;
   stops?: RateConAiStop[];
   missing_fields?: string[];
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_ext?: string;
 };
 
 type RateConAiClient = (body: Record<string, unknown>) => Promise<string>;
@@ -85,6 +91,9 @@ schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/
 PRECOOL TO 60F and similar lines are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
+Broker/load contact is the person who booked the load: Name, email, phone, and extension from the document's contact-info block (any broker). Copy only what is printed. Leave blank when missing. Never invent an address or phone.
+Do not use CARRIER CONTACT (the trucking company / driver). Do not use shipper or receiver phones in stop notes. Do not use "send POD to" billing lines unless that email is the same as the contact-info email.
+Do not write this contact onto the customer card — it belongs on this load only.
 Confidence is high, medium, or low. Money and customer must be low when guessed.
 JSON shape:
 {
@@ -101,6 +110,10 @@ JSON shape:
   "reefer_mode": "continuous",
   "special_instructions": "",
   "appointment_notes": "",
+  "contact_name": "",
+  "contact_email": "",
+  "contact_phone": "",
+  "contact_ext": "",
   "stops": [
     {
       "kind": "pickup",
@@ -300,6 +313,15 @@ export function applyAiRateCon(
     extra_stops: extraStops,
     shipper_location_id: null,
     consignee_location_id: null,
+    ...mergeBrokerContact(
+      {
+        contact_name: String(draft.contact_name ?? "").trim(),
+        contact_email: String(draft.contact_email ?? "").trim(),
+        contact_phone: String(draft.contact_phone ?? "").trim(),
+        contact_ext: String(draft.contact_ext ?? "").trim(),
+      },
+      parseBrokerContactFromText(rawText || hint.raw_text),
+    ),
     field_flags: [],
     reader: "ai",
   };

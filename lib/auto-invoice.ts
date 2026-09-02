@@ -1,7 +1,7 @@
 import { listAttachments } from "./files";
 import { sendMail } from "./integrations/mail";
 import { createTmsInvoice } from "./invoice";
-import { resolveLoadCustomerEmail, sendCustomerInvoiceMail } from "./load-mail";
+import { resolveInvoiceCustomerEmail, sendCustomerInvoiceMail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getLoad } from "./queries";
@@ -25,7 +25,7 @@ export function loadNeedsInvoiceEmail(loadId: number): boolean {
   const load = getLoad(loadId);
   if (!load || !isBillableStatus(load.status) || !loadHasPod(loadId)) return false;
   if (!load.tms_invoice_number && !loadHasInvoicePdf(loadId)) return false;
-  if (isUsableEmail(resolveLoadCustomerEmail(load))) return false;
+  if (isUsableEmail(resolveInvoiceCustomerEmail(load))) return false;
   return lastSentMail(loadId, "customer_invoice") == null;
 }
 
@@ -54,7 +54,7 @@ export async function maybeAutoInvoiceLoad(
   }
 
   const fresh = getLoad(loadId) ?? load;
-  const email = resolveLoadCustomerEmail(fresh);
+  const email = resolveInvoiceCustomerEmail(fresh);
   if (!isUsableEmail(email)) {
     return { created, sent: false, skipped: "no_email" };
   }

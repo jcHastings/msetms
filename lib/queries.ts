@@ -317,25 +317,35 @@ export function createCustomer(input: {
   billing_notes: string;
   credit_hold?: boolean;
   payment_terms?: string;
+  main_email?: string;
+  billing_email?: string;
   contacts: Array<{ name: string; role: string; phone: string; email: string }>;
 }): number {
   const db = getDb();
   const timestamp = now();
   const result = db
     .prepare(
-      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, main_email, billing_email, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
       input.billing_notes,
       input.credit_hold ? 1 : 0,
       input.payment_terms ?? "",
+      String(input.main_email ?? "").trim(),
+      String(input.billing_email ?? "").trim(),
       timestamp,
       timestamp,
     );
   const id = Number(result.lastInsertRowid);
   replaceContacts(id, input.contacts);
+  if (!String(input.main_email ?? "").trim()) {
+    const firstEmail = input.contacts.map((row) => row.email.trim()).find((email) => email.includes("@"));
+    if (firstEmail) {
+      db.prepare("UPDATE customers SET main_email = ? WHERE id = ? AND TRIM(main_email) = ''").run(firstEmail, id);
+    }
+  }
   return id;
 }
 
@@ -346,6 +356,8 @@ export function updateCustomer(
     billing_notes: string;
     credit_hold?: boolean;
     payment_terms?: string;
+    main_email?: string;
+    billing_email?: string;
     contacts: Array<{ name: string; role: string; phone: string; email: string }>;
   },
 ): void {
@@ -353,13 +365,15 @@ export function updateCustomer(
   if (!existing) throw new Error("Customer not found.");
   getDb()
     .prepare(
-      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, updated_at = ? WHERE id = ?",
+      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, main_email = ?, billing_email = ?, updated_at = ? WHERE id = ?",
     )
     .run(
       input.name,
       input.billing_notes,
       input.credit_hold ? 1 : 0,
       input.payment_terms ?? existing.payment_terms ?? "",
+      String(input.main_email ?? existing.main_email ?? "").trim(),
+      String(input.billing_email ?? existing.billing_email ?? "").trim(),
       now(),
       id,
     );

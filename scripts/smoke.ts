@@ -1009,7 +1009,12 @@ async function main() {
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceMailTo/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /resolveInvoiceCustomerEmail/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /Enter an email to send this invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Main email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Billing email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /Per-load email/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /SMTP_FROM\s*=\s*["']ar@/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("to"\)/);
   assert.match(emailInvoiceUi, /extra_id/);
   assert.match(emailInvoiceUi, /name="body"/);
@@ -3636,11 +3641,11 @@ async function main() {
     assert.match(input.text, /Thank you for your business|The invoice PDF is attached/);
     assert.doesNotMatch(input.text, /Do not reply|not monitored/);
   });
-  assert.equal(invoiceMailTo, "ap.mail@customer.example");
+  assert.equal(invoiceMailTo, "pat@example.com");
   assert.equal(invoiceMailFrom, "ar@msloads.com");
   assert.equal(invoiceMailReplyTo, "ar@msloads.com");
   assert.equal(invoiceMailHasPdf, true);
-  assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "ap.mail@customer.example");
+  assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "pat@example.com");
   const lumperReceipt = addAttachment({
     loadId: mailLoadId,
     kind: "lumper",
@@ -3693,10 +3698,65 @@ async function main() {
   await loadMail.sendCustomerInvoiceMail(
     mailLoadId,
     async (input) => {
-      assert.equal(input.to, "ap.mail@customer.example");
+      assert.equal(input.to, "pat@example.com");
     },
     { to: "ignore-override@example.com" },
   );
+  const slotCustomerId = queries.createCustomer({
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "info@slots.example",
+    billing_email: "billing@slots.example",
+    contacts: [{ name: "Desk", role: "Office", phone: "555-0100", email: "info@slots.example" }],
+  });
+  const slotLoadId = queries.createLoad({
+    customer_id: slotCustomerId,
+    origin: "Omaha, NE",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET contact_email = ? WHERE id = ?").run("ana@slots.example", slotLoadId);
+  const slotLoad = queries.getLoad(slotLoadId)!;
+  assert.equal(loadMail.resolveLoadCustomerEmail(slotLoad), "ana@slots.example");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotLoad), "billing@slots.example");
+  assert.equal(loadMail.invoiceMailTo(slotLoad, "typed@slots.example"), "billing@slots.example");
+  assert.notEqual(loadMail.resolveInvoiceCustomerEmail(slotLoad), "ana@slots.example");
+  queries.updateCustomer(slotCustomerId, {
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "info@slots.example",
+    billing_email: "",
+    contacts: [{ name: "Desk", role: "Office", phone: "555-0100", email: "info@slots.example" }],
+  });
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(queries.getLoad(slotLoadId)!), "info@slots.example");
+  queries.updateCustomer(slotCustomerId, {
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "",
+    billing_email: "",
+    contacts: [],
+  });
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(queries.getLoad(slotLoadId)!), "");
+  assert.equal(loadMail.invoiceMailTo(queries.getLoad(slotLoadId)!, "typed@slots.example"), "typed@slots.example");
+  assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(slotLoadId)!), "ana@slots.example");
+  assert.equal(queries.getCustomer(slotCustomerId)?.main_email, "");
+  assert.equal(queries.getCustomer(slotCustomerId)?.billing_email, "");
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
@@ -4515,6 +4575,10 @@ Continuous reefer. Two load locks.
     "reefer_setpoint_f": 28,
     "reefer_mode": "continuous",
     "special_instructions": "Call the yard before arrival.",
+    "contact_name": "Alex Broker",
+    "contact_email": "alex.broker@example.com",
+    "contact_phone": "402-555-0199",
+    "contact_ext": "2210",
     "stops": [
       {
         "kind": "pickup",
@@ -4562,6 +4626,12 @@ Continuous reefer. Two load locks.
   assert.equal(brokerParsed.reader, "ai");
   assert.equal(brokerParsed.customer_name, "Allen Lund Company");
   assert.equal(brokerParsed.customer_id, allenId);
+  assert.equal(brokerParsed.contact_email, "alex.broker@example.com");
+  assert.equal(brokerParsed.contact_name, "Alex Broker");
+  assert.equal(brokerParsed.contact_phone, "402-555-0199");
+  assert.equal(brokerParsed.contact_ext, "2210");
+  assert.equal(queries.getCustomer(allenId)?.main_email, "");
+  assert.equal(queries.getCustomer(allenId)?.billing_email, "");
   assert.equal(brokerParsed.rate, 4250);
   assert.equal(brokerParsed.weight, 38400);
   assert.match(brokerParsed.commodity, /Fresh beef/i);
@@ -4580,6 +4650,36 @@ Continuous reefer. Two load locks.
   assert.equal(brokerParsed.extra_stops[0]?.kind, "delivery");
   assert.match(brokerParsed.extra_stops[0]?.stop.name ?? "", /Kayco/i);
   assert.equal(brokerParsed.field_flags.some((flag) => flag.key === "rate" && flag.status === "low"), false);
+
+  const { parseBrokerContactFromText } = await import("../lib/rate-con-shared");
+  const tqlContactText = `
+CARRIER CONTACT
+MS Express
+jc 402-555-0100
+TQL CONTACT INFO
+Name Phone Email Fax
+Riley Booker 800-555-3101 x47010 riley.booker@broker.example 5135554273
+PICKUP
+Indel (915) 590-5914
+send POD to billing.pod@broker.example
+`;
+  const tqlContact = parseBrokerContactFromText(tqlContactText);
+  assert.equal(tqlContact.contact_email, "riley.booker@broker.example");
+  assert.match(tqlContact.contact_name, /Riley Booker/);
+  assert.equal(tqlContact.contact_phone, "800-555-3101");
+  assert.equal(tqlContact.contact_ext, "47010");
+  assert.doesNotMatch(tqlContact.contact_email, /billing\.pod|jc@|indel/i);
+  const tqlHint = parseRateConText(tqlContactText);
+  assert.equal(tqlHint.contact_email, "riley.booker@broker.example");
+  assert.equal(tqlHint.contact_ext, "47010");
+  const fromTextOnly = applyAiRateCon(
+    { customer_name: "Allen Lund Company", customer_confidence: "high", stops: [] },
+    queries.listCustomers(),
+    emptyParsedRateCon(),
+    tqlContactText,
+  );
+  assert.equal(fromTextOnly.contact_email, "riley.booker@broker.example");
+  assert.equal(queries.getCustomer(allenId)?.main_email, "");
 
   const lowMoney = applyAiRateCon(
     {

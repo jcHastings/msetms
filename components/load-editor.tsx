@@ -48,7 +48,13 @@ import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
-import { invoiceMailExtraDocs, lastLoadMail, resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
+import {
+  invoiceMailExtraDocs,
+  lastLoadMail,
+  resolveInvoiceCustomerEmail,
+  resolveLoadCustomerEmail,
+  resolveLoadDriverEmail,
+} from "@/lib/load-mail";
 import { formatDateTime } from "@/lib/format";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatLoadLaneFromStops } from "@/lib/locations";
@@ -278,7 +284,7 @@ export async function LoadEditor({
                 status={load.status}
                 saved={Boolean(load.tms_invoice_number)}
                 invoices={attachments.filter((file) => file.kind === "invoice")}
-                customerEmail={resolveLoadCustomerEmail(load)}
+                customerEmail={resolveInvoiceCustomerEmail(load)}
                 extras={invoiceMailExtraDocs(load.id)}
                 invoiceEmailBody={getInvoiceEmailBody()}
                 lastInvoiceSent={(() => {
