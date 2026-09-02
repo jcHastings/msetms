@@ -24,7 +24,7 @@ import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
 import { cityStateOnly } from "./load-documents-shared";
-import { expandTruncatedDispatchNotes, joinUniqueNotes } from "./rate-con-paperwork";
+import { expandTruncatedDispatchNotes, joinUniqueNotes, parseStopPaperwork } from "./rate-con-paperwork";
 import { driverFacingTermsText } from "./document-copy";
 
 export type ConfirmationStop = {
