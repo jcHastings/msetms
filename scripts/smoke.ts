@@ -5248,6 +5248,7 @@ Attn: JoJo Schwartz
   assert.equal(brokerContactPersonName("CB Logistics Group"), "");
   assert.equal(brokerContactPersonName("106361"), "");
   assert.equal(brokerContactPersonName("Riley Booker"), "Riley Booker");
+  assert.equal(brokerContactPersonName("Ph"), "");
   const gluedHeaderName = parseCbBrokerContact(`
 Imperial, MO 63052 106361
 P: 314-459-1752
