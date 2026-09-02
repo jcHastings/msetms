@@ -316,8 +316,8 @@ button {
 
 .table-grid.table-grid-board {
   table-layout: fixed;
-  width: 100rem;
-  min-width: 100rem;
+  width: 103rem;
+  min-width: 103rem;
   max-width: none;
 }
 
@@ -371,6 +371,12 @@ button {
   width: 10.5rem;
 }
 
+.table-grid-board td.board-trailer-cell,
+.table-grid-board th.board-trailer-cell {
+  width: 13rem;
+  overflow: visible;
+}
+
 .table-grid-board .board-hos-cell {
   width: 5rem;
 }
@@ -403,6 +409,38 @@ button {
   white-space: nowrap;
   direction: ltr;
   unicode-bidi: isolate;
+}
+
+/* Pin sits above the city so it cannot cover the first letters. City wraps. */
+.board-place-with-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  overflow: visible;
+}
+
+.board-place-pin {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 23px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.board-place-copy {
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+}
+
+.board-place-with-pin .board-place-line {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 
 .table-grid-board .board-edit-head,

@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
+import { orbcommMapPinFromReading } from "@/lib/fleet-map-shared";
 import {
   getDemoReeferForLoad,
   getReeferSnapshots,
@@ -153,7 +154,7 @@ async function BoardLiveSection({
                   <th className="board-when-cell">Delivery</th>
                   <th className="board-unit-cell">Unit</th>
                   <th className="board-place-cell">Tractor</th>
-                  <th className="board-place-cell">Trailer</th>
+                  <th className="board-place-cell board-trailer-cell">Trailer</th>
                   <th className="board-hos-cell">HOS</th>
                   <th className="board-reefer-cell">Reefer</th>
                   <th className="board-rate-cell">Rate</th>
@@ -238,7 +239,7 @@ async function BoardLiveSection({
                     >
                       <LocationBadge location={tractorLocation} empty="—" />
                     </td>
-                    <td className="board-place-cell">
+                    <td className="board-place-cell board-trailer-cell">
                       <TrailerLocationBadge
                         location={
                           reefers.readings
@@ -246,6 +247,9 @@ async function BoardLiveSection({
                             .map(snapshotToTrailerLocation)
                             .find(Boolean) ?? null
                         }
+                        pinColor={orbcommMapPinFromReading(
+                          reefers.readings.find((item) => item.loadId === load.id),
+                        ).pinColor}
                       />
                     </td>
                     <td
