@@ -5222,6 +5222,26 @@ Load Number 106361
   assert.doesNotMatch(twoColumnContact.contact_name, /JoJo|MS Test|M&S|Express/i);
   assert.doesNotMatch(twoColumnContact.contact_phone, /402-302-0097/);
   assert.ok(twoColumnContact.contact_name && twoColumnContact.contact_phone, "broker contact must not be blank");
+  const titledHeaderSheet = `
+RATE CONFIRMATION
+CB Logistics Group
+2704 Adobe Drive
+Imperial, MO
+P: 314-459-1752
+F: 314-555-0199
+CARRIER
+M&S LOADS LLC
+HASTINGS, NE
+Ph (402) 302-0097
+Fax (402) 302-0098
+Attn: JoJo Schwartz
+`;
+  const titledHeaderContact = parseCbBrokerContact(titledHeaderSheet);
+  assert.match(titledHeaderContact.contact_name, /CB Logistics/i);
+  assert.equal(titledHeaderContact.contact_phone, "314-459-1752");
+  assert.doesNotMatch(titledHeaderContact.contact_name, /JoJo|RATE CONFIRMATION|MS Test/i);
+  assert.doesNotMatch(titledHeaderContact.contact_phone, /402-302-0097|314-555-0199/);
+  assert.ok(titledHeaderContact.contact_name && titledHeaderContact.contact_phone);
   assert.match(cbHint.shipper.name, /North Bay/i);
   assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
   assert.equal(cbHint.shipper.reference, "N25504");
@@ -5367,6 +5387,49 @@ Load Number 106361
   applyCbStops(cbLoadId, cbStopForm);
   assert.match(queries.getLoad(cbLoadId)!.contact_name, /CB Logistics/i);
   assert.equal(queries.getLoad(cbLoadId)!.contact_phone, "314-459-1752");
+  const blankReapplyId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-REAPPLY",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN",
+    appointment_notes: "",
+    contact_name: "",
+    contact_phone: "",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_name, "");
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "");
+  const { parseLoadInput: parseCbReapplyInput } = await import("../lib/load-input");
+  const blankExisting = queries.getLoad(blankReapplyId)!;
+  const reapplyForm = new FormData();
+  reapplyForm.set("customer_id", String(cbCustomerId));
+  reapplyForm.set("origin", blankExisting.origin);
+  reapplyForm.set("destination", blankExisting.destination);
+  reapplyForm.set("contact_name", cbHint.contact_name);
+  reapplyForm.set("contact_phone", cbHint.contact_phone);
+  queries.updateLoad(blankReapplyId, parseCbReapplyInput(reapplyForm, true, blankExisting));
+  assert.match(queries.getLoad(blankReapplyId)!.contact_name, /CB Logistics/i);
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "314-459-1752");
+  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_name, /JoJo|MS Test/i);
+  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_phone, /402-302-0097/);
   const confirmationLib = await import("../lib/load-confirmation");
   const cbDriver = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "internal" });
   assert.equal(cbDriver.loadNumber, "MSE-1065-SMOKE");

@@ -621,9 +621,14 @@ function stripOwnCarrierTokens(text: string): string {
 function looksLikeHeaderPartyName(line: string): boolean {
   const text = collapse(line);
   if (!text) return false;
-  if (/^(carrier|contact|dispatch confirmation|load\s+|name\b|phone\b|fax\b|p:|pickup|delivery|stop\s+\d|mc:|dot)/i.test(text)) {
+  if (
+    /^(carrier|contact|dispatch confirmation|rate confirmation|load\s+|name\b|phone\b|fax\b|p:|pickup|delivery|stop\s+\d|mc:|dot)/i.test(
+      text,
+    )
+  ) {
     return false;
   }
+  if (/\bconfirmation\b/i.test(text) && !/logistics|group|llc|inc|co\b/i.test(text)) return false;
   if (/^\d/.test(text) || STREET_SUFFIX.test(text) || isOwnPaperworkName(text)) return false;
   return /[A-Za-z]{3,}/.test(text);
 }
