@@ -239,19 +239,33 @@ async function main() {
   const tabSource = fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8");
   assert.match(tabSource, /basics/);
   assert.match(tabSource, /financials/);
-  const { parseLoadTab, confirmationPacketForTab } = await import("../lib/load-tabs");
+  const { parseLoadTab, confirmationPacketForTab, confirmationDownloadLabel } = await import("../lib/load-tabs");
   assert.equal(parseLoadTab("history"), "log");
   assert.equal(parseLoadTab("documents"), "docs");
   assert.equal(parseLoadTab("carrier"), "assets");
   assert.equal(parseLoadTab("tracking"), "assets");
   assert.equal(parseLoadTab(""), "basics");
   assert.equal(confirmationPacketForTab("customer"), "customer");
-  assert.equal(confirmationPacketForTab("financials"), "customer");
+  assert.equal(confirmationPacketForTab("financials"), "internal");
   assert.equal(confirmationPacketForTab("assets"), "internal");
-  assert.equal(confirmationPacketForTab("basics"), "customer");
+  assert.equal(confirmationPacketForTab("basics"), "internal");
+  assert.equal(confirmationPacketForTab("stops"), "internal");
+  assert.equal(confirmationPacketForTab("log"), "internal");
+  assert.equal(confirmationPacketForTab("docs"), "internal");
+  assert.equal(
+    confirmationDownloadLabel("MSE-1067", "internal"),
+    "Download MSE-1067 driver confirmation",
+  );
+  assert.equal(
+    confirmationDownloadLabel("MSE-1067", "customer"),
+    "Download MSE-1067 customer confirmation",
+  );
+  assert.doesNotMatch(confirmationDownloadLabel("MSE-1067", "internal"), /106361|broker/);
   const confirmationLinkSource = fs.readFileSync(path.join(process.cwd(), "components/load-confirmation-link.tsx"), "utf8");
   assert.match(confirmationLinkSource, /confirmationPacketForTab/);
+  assert.match(confirmationLinkSource, /confirmationDownloadLabel/);
   assert.match(confirmationLinkSource, /data-confirmation-packet/);
+  assert.doesNotMatch(confirmationLinkSource, /customer_reference/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /header/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /header=\{/);
   const loadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");

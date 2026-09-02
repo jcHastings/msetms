@@ -1,7 +1,7 @@
 "use client";
 
 import { useLoadEdit } from "@/components/load-edit-context";
-import { confirmationPacketForTab } from "@/lib/load-tabs";
+import { confirmationDownloadLabel, confirmationPacketForTab } from "@/lib/load-tabs";
 
 export function LoadConfirmationLink({
   loadId,
@@ -24,7 +24,7 @@ export function LoadConfirmationLink({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <a className={className} href={href} data-confirmation-packet={packet} data-load-confirmation-tab={tab}>
-        {variant === "driver" ? "Download load confirmation" : `Download ${loadNumber} confirmation`}
+        {variant === "driver" ? "Download load confirmation" : confirmationDownloadLabel(loadNumber, packet)}
       </a>
       {variant === "dispatcher" && hasRelays && packet !== "internal" ? (
         <a className="btn btn-secondary" href={`/api/loads/${loadId}/confirmation?packet=internal`}>

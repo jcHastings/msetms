@@ -54,9 +54,19 @@ export function isSaveTab(tab: LoadTab): boolean {
   return isFormTab(tab) || tab === "stops" || tab === "financials";
 }
 
-/** Customer Info and Financials get the customer sheet. Carrier and Driver Info gets the driver sheet. */
+/** Customer Info gets the customer sheet. Every other load tab gets the driver sheet. */
 export function confirmationPacketForTab(tab: LoadTab): "customer" | "internal" {
-  return tab === "assets" ? "internal" : "customer";
+  return tab === "customer" ? "customer" : "internal";
+}
+
+/** Dispatcher download label: MSE load number plus which sheet. */
+export function confirmationDownloadLabel(
+  loadNumber: string,
+  packet: "customer" | "internal",
+): string {
+  const number = String(loadNumber ?? "").trim();
+  const sheet = packet === "customer" ? "customer confirmation" : "driver confirmation";
+  return number ? `Download ${number} ${sheet}` : `Download ${sheet}`;
 }
 
 /** Kept for older callers. Tab switches stay on the client so the editor does not remount. */
