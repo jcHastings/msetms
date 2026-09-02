@@ -631,15 +631,22 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
   const text = String(raw ?? "").replace(/\r/g, "");
   if (!text.trim()) return emptyBrokerContact();
   const tableRow = text.match(CONTACT_TABLE_RE)?.[1] ?? "";
-  const fromTable = rejectCarrierSideContact(parseContactFields(tableRow), text);
-  if (usableContact(fromTable)) return fromTable;
-  for (const block of contactBlocksFromHeaders(text)) {
-    const parsed = rejectCarrierSideContact(parseContactFields(block), text);
-    if (usableContact(parsed)) return parsed;
+  let found = rejectCarrierSideContact(parseContactFields(tableRow), text);
+  if (!usableContact(found)) {
+    for (const block of contactBlocksFromHeaders(text)) {
+      const parsed = rejectCarrierSideContact(parseContactFields(block), text);
+      if (usableContact(parsed)) {
+        found = parsed;
+        break;
+      }
+    }
   }
   const header = rejectCarrierSideContact(parseHeaderBrokerContact(text), text);
-  if (usableContact(header)) return header;
-  return emptyBrokerContact();
+  if (!usableContact(found)) return header;
+  if (!found.contact_name && header.contact_name) {
+    return { ...found, contact_name: header.contact_name };
+  }
+  return found;
 }
 
 export function mergeBrokerContact(
