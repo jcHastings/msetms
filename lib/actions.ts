@@ -60,6 +60,7 @@ import {
   isSchedulingType,
   parseCdlEndorsements,
   parseFleetDivision,
+  isBillableStatus,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
@@ -657,6 +658,10 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
         assertCanEditLoadRecord(existing, actor.role);
       }
       updateLoadStatus(loadId, status);
+      if (isBillableStatus(status)) {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       if (status === "cancelled") {
         redirect(safeReturnTo(formData.get("return_to"), "/board"));
@@ -859,6 +864,10 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
         mimeType: file.type,
         uploadedBy: "dispatcher",
       });
+      if (kind === "pod") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -1125,6 +1134,65 @@ export async function createTrailerShareLinkAction(
     const link = createTrailerShareLink(id, String(formData.get("expires_at") ?? ""));
     refresh();
     return { ok: true, id: link.id, message: `Customer link created. Expires ${link.expires_at}.` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createLoadShareLinkAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("load_id"));
+    if (id == null) throw new Error("Load not found.");
+    const { createLoadShareLink } = await import("./load-share");
+    const link = createLoadShareLink(id, String(formData.get("expires_at") ?? ""));
+    refresh();
+    return { ok: true, id: link.id, message: `Status link created. Expires ${link.expires_at}.` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function postLoadChatAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const body = String(formData.get("body") ?? "");
+    const role = String(formData.get("role") ?? "");
+    const { postLoadChatMessage } = await import("./load-chat");
+    if (role === "driver") {
+      const { requireDriver } = await import("./driver-session");
+      const { driverAssignedToLoad } = await import("./relay-store");
+      const driver = await requireDriver();
+      const load = getLoad(loadId);
+      if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
+        throw new Error("This load is not on your dispatch.");
+      }
+      postLoadChatMessage({
+        loadId,
+        authorRole: "driver",
+        authorId: driver.id,
+        authorName: driver.name,
+        body,
+      });
+    } else {
+      const actor = await requireLoadEditor();
+      postLoadChatMessage({
+        loadId,
+        authorRole: "dispatcher",
+        authorId: actor.id,
+        authorName: actor.name,
+        body,
+      });
+    }
+    refresh();
+    return { ok: true, id: loadId };
   } catch (error) {
     return fail(error);
   }

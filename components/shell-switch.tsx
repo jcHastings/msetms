@@ -28,7 +28,8 @@ export function ShellSwitch({
     pathname.startsWith("/driver") ||
     pathname === "/login" ||
     pathname.startsWith("/login/") ||
-    pathname.startsWith("/t/");
+    pathname.startsWith("/t/") ||
+    pathname.startsWith("/l/");
   const changePath = pathname === "/login/change-password";
 
   useEffect(() => {

@@ -13,6 +13,7 @@ type NavEntry =
 
 const NAV: NavEntry[] = [
   { kind: "link", item: { href: "/", label: "Dashboard", short: "Dashboard", icon: "home" } },
+  { kind: "link", item: { href: "/control", label: "Control Center", short: "Control", icon: "places" } },
   { kind: "link", item: { href: "/search", label: "Search", short: "Search", icon: "search" } },
   {
     title: "Dispatch",

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DriverLoadActions } from "@/components/driver-load-actions";
+import { LoadChatPanel } from "@/components/load-chat-panel";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { driverLaneEnds, driverStopWhen } from "@/lib/driver-load-display";
@@ -9,6 +10,7 @@ import { driverFacingPay } from "@/lib/settlement";
 import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
+import { listLoadChatMessages } from "@/lib/load-chat";
 import { getLoad, locationsForLoad } from "@/lib/queries";
 import { ensureDefaultStops } from "@/lib/stops";
 import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
@@ -181,6 +183,8 @@ export default async function DriverLoadPage({
           <p className="driver-sheet-value mt-1 whitespace-pre-wrap">{load.public_notes}</p>
         </section>
       ) : null}
+
+      <LoadChatPanel loadId={load.id} messages={listLoadChatMessages(load.id)} role="driver" />
 
       <div id="upload">
         <span id="fuel" className="sr-only">

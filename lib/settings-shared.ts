@@ -389,7 +389,7 @@ export function canLogCheckCall(role: string): boolean {
 
 export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/driver/login") return true;
-  if (href === "/" || href === "/board" || href === "/search") return true;
+  if (href === "/" || href === "/board" || href === "/search" || href === "/control") return true;
   if (href === "/loads/new" || href === "/loads/templates" || href === "/loads/import-sheet") {
     return canEditLoads(role);
   }

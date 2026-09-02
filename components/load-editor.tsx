@@ -5,6 +5,8 @@ import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/flee
 import { IftaPanel } from "@/components/ifta-panel";
 import { LoadExtraDetails } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
+import { LoadChatPanel } from "@/components/load-chat-panel";
+import { LoadShareLinkPanel } from "@/components/load-share-link";
 import { LoadTrackingPanel } from "@/components/load-tracking-panel";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
@@ -35,6 +37,8 @@ import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { buildTmsInvoice } from "@/lib/invoice";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { listLoadChatMessages } from "@/lib/load-chat";
+import { latestLoadShareLink, loadSharePath } from "@/lib/load-share";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
@@ -183,6 +187,17 @@ export async function LoadEditor({
               This load is in Accounting. Ask Accounting to send it back before changing it.
             </p>
           ) : null}
+          <div className="mb-4 grid gap-3 lg:grid-cols-2">
+            <LoadShareLinkPanel
+              loadId={load.id}
+              sharePath={(() => {
+                const share = latestLoadShareLink(load.id);
+                return share ? loadSharePath(share.token) : "";
+              })()}
+              expiresAt={latestLoadShareLink(load.id)?.expires_at ?? ""}
+            />
+            <LoadChatPanel loadId={load.id} messages={listLoadChatMessages(load.id)} role="dispatcher" />
+          </div>
           <LoadForm
             customers={customers}
             trucks={trucks}

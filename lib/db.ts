@@ -955,6 +955,27 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trailer_share_links", "snapshot_temperature_f", "REAL");
   ensureColumn(db, "trailer_share_links", "snapshot_setpoint_f", "REAL");
   ensureColumn(db, "trailer_share_links", "snapshot_recorded_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_share_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_load_share_token ON load_share_links(token);
+    CREATE INDEX IF NOT EXISTS idx_load_share_load ON load_share_links(load_id, id DESC);
+    CREATE TABLE IF NOT EXISTS load_chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      author_role TEXT NOT NULL,
+      author_id INTEGER NOT NULL,
+      author_name TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_chat_load ON load_chat_messages(load_id, id);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);

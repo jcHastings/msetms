@@ -15,6 +15,11 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
 ## Dispatch
 
+- **Control Center** (`/control`) is one map of work and assets: unassigned/active loads plus idle Orbcomm trailers (and Samsara trucks when GPS is already on file). Left lists are Orders and Resources. Filter pills: state, equipment/reefer, status. Overlapping pins cluster. Click a pin or row for a side panel (origin/dest/status/temp). Navy/gold MS Express chrome — not another brand’s colors.
+- Desk graphics are tighter: color status pills, cleaner tables, load details slide in from the right on a wide screen so the list stays put.
+- **Customer load-status link** (`/l/…`) is minted from the load. Vertical timeline shows only steps that happened: Booked → Pickup → In Transit → Delivered → Invoice sent. If that load has an Orbcomm trailer, a second section shows last-known temp/location. You copy and send the link — it is not emailed. Trailer temp links (`/t/…`) are unchanged.
+- **Load chat** stays on that load. Dispatcher sees it on the load; the driver sees it on that load in `/driver`. Stored forever. Not SMS or email.
+- **Auto-invoice the day POD hits:** when a POD is on the load and the load is Delivered, the TMS invoice PDF is created that day (customer rate + extras; lumper/OO pay off). If a customer email exists, it sends from ar@msloads.com. If not, the invoice stays ready and the inbox asks you to use Send to. Same invoice is not emailed twice. Tracking links are never auto-emailed.
 - **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver. Mass upload from JC’s Ascend blank location CSV (template download + UTF-8 import; duplicate name+address updates). **Download all locations** uses the same Ascend headers so a backup can be edited and re-imported.
 - **Search** in nav — criteria, live/archived/cancelled, saved reports.
 - Richer load statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.

@@ -103,6 +103,10 @@ export async function driverProgressAction(formData: FormData): Promise<ActionRe
       if (!loadId) throw new Error("Load is missing.");
       if (!isDriverProgress(progress)) throw new Error("Pick a status.");
       updateDriverProgress(loadId, driver.id, progress);
+      if (progress === "delivered") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -141,6 +145,10 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
       mimeType: file.type,
       uploadedBy: "driver",
     });
+    if (kind === "pod") {
+      const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+      await maybeAutoInvoiceLoad(loadId);
+    }
     if (kind === "fuel_receipt") {
       const { addFuelReceipt } = await import("./fuel-receipts");
       addFuelReceipt({
@@ -180,6 +188,10 @@ export async function driverClassifyAction(formData: FormData): Promise<ActionRe
         throw new Error("This load is not on your dispatch.");
       }
       updateAttachmentKind(attachmentId, kind);
+      if (kind === "pod") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(load.id);
+      }
       if (kind === "fuel_receipt") {
         const { addFuelReceipt, listFuelReceipts } = await import("./fuel-receipts");
         const already = listFuelReceipts(load.id).some((row) => row.attachment_id === attachmentId);

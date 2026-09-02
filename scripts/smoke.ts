@@ -18,6 +18,8 @@ async function main() {
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
   assert.match(navSource, /label: "Search"/);
+  assert.match(navSource, /href: "\/control"/);
+  assert.match(navSource, /Control Center/);
   assert.match(navSource, /title: "Accounting"/);
   assert.match(navSource, /href: "\/accounting"/);
   assert.match(navSource, /AR\/AP Report/);
@@ -133,7 +135,7 @@ async function main() {
   assert.match(loadStatusBadgeClass("available"), /amber/);
   assert.doesNotMatch(loadStatusBadgeClass("assigned"), /amber/);
   assert.match(loadStatusBadgeClass("assigned"), /sky/);
-  assert.match(loadStatusBadgeClass("delivered"), /slate/);
+  assert.match(loadStatusBadgeClass("delivered"), /emerald/);
   assert.match(loadStatusRowClass("available"), /inset_4px/);
   assert.match(loadStatusRowClass("in_transit"), /inset_4px/);
   assert.ok(LOAD_STATUSES.every((status) => loadStatusBadgeClass(status) && loadStatusRowClass(status)));
@@ -1725,6 +1727,19 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /lastKnownOrbcommSnapshot/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /snapshot_latitude/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/l\/"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /data-load-share-timeline/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /data-load-share-expired/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /sendMail|mailto:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-live/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /clusterLoadMapPoints/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /data-control-filter-strip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /Orders/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /Resources/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-chat-panel.tsx"), "utf8"), /data-load-chat/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /data-load-share-create/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /sendMail|mailto:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/auto-invoice.ts"), "utf8"), /maybeAutoInvoiceLoad/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
@@ -5203,6 +5218,214 @@ Continuous reefer. Two load locks.
       points: expiredShareView.points,
     }),
     /After create|40\.8|36/,
+  );
+
+  const { clusterLoadMapPoints } = await import("../lib/map-cluster");
+  const clusteredPins = clusterLoadMapPoints(
+    [
+      { id: "a", kind: "trailer", label: "A", lat: 40.7, lng: -74 },
+      { id: "b", kind: "trailer", label: "B", lat: 40.7004, lng: -74.0004 },
+      { id: "c", kind: "truck", label: "C", lat: 41.5, lng: -75 },
+    ],
+    5,
+  );
+  assert.equal(clusteredPins.some((item) => item.type === "cluster" && item.count === 2), true);
+  assert.equal(clusterLoadMapPoints(
+    [
+      { id: "a", kind: "trailer", label: "A", lat: 40.7, lng: -74 },
+      { id: "b", kind: "trailer", label: "B", lat: 40.7004, lng: -74.0004 },
+    ],
+    14,
+  ).every((item) => item.type === "point"), true);
+
+  const loadShare = await import("../lib/load-share");
+  const chat = await import("../lib/load-chat");
+  const autoInvoice = await import("../lib/auto-invoice");
+  const controlCenter = await import("../lib/control-center");
+  const controlShared = await import("../lib/control-center-shared");
+  const shareLoadCustomerId = queries.createCustomer({
+    name: "Share Timeline Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0199", email: "share.ap@customer.example" }],
+  });
+  const shareLoadId = queries.createLoad({
+    customer_id: shareLoadCustomerId,
+    origin: "Omaha, NE",
+    destination: "Dallas, TX",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 2200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-SHARE",
+    po_number: "PO-SHARE",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const bookedOnly = loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!);
+  assert.deepEqual(bookedOnly.map((step) => step.key), ["booked"]);
+  queries.updateLoadStatus(shareLoadId, "picked_up");
+  assert.deepEqual(loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key), ["booked", "pickup"]);
+  queries.updateLoadStatus(shareLoadId, "in_transit");
+  assert.deepEqual(
+    loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key),
+    ["booked", "pickup", "in_transit"],
+  );
+  queries.updateLoadStatus(shareLoadId, "delivered");
+  assert.deepEqual(
+    loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key),
+    ["booked", "pickup", "in_transit", "delivered"],
+  );
+  const loadShareExpires = toOfficeDateTime(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
+  const loadLink = loadShare.createLoadShareLink(shareLoadId, loadShareExpires, new Date("2026-08-20T16:00:00.000Z"));
+  const liveLoadView = loadShare.loadShareView(loadLink.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(liveLoadView.found, true);
+  assert.equal(liveLoadView.expired, false);
+  assert.equal(liveLoadView.milestones.some((step) => step.key === "delivered"), true);
+  assert.equal(loadShare.loadShareView(loadLink.token, new Date(loadLink.expires_at)).expired, true);
+  assert.equal(loadShare.loadShareView(loadLink.token, new Date(loadLink.expires_at)).milestones.length, 0);
+  chat.postLoadChatMessage({
+    loadId: shareLoadId,
+    authorRole: "dispatcher",
+    authorId: 1,
+    authorName: "Dispatch",
+    body: "Call when empty",
+    now: new Date("2026-08-20T16:02:00.000Z"),
+  });
+  chat.postLoadChatMessage({
+    loadId: shareLoadId,
+    authorRole: "driver",
+    authorId: 2,
+    authorName: "Driver",
+    body: "Rolling",
+    now: new Date("2026-08-20T16:03:00.000Z"),
+  });
+  const chatRows = chat.listLoadChatMessages(shareLoadId);
+  assert.equal(chatRows.length, 2);
+  assert.equal(chatRows[0]?.body, "Call when empty");
+  assert.equal(chatRows[1]?.author_role, "driver");
+
+  addAttachment({
+    loadId: shareLoadId,
+    kind: "pod",
+    originalName: "pod-share.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  let autoInvoiceTo = "";
+  const autoFirst = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async (input) => {
+    autoInvoiceTo = input.to;
+  });
+  assert.equal(autoFirst.created, true);
+  assert.equal(autoFirst.sent, true);
+  assert.equal(autoInvoiceTo, "share.ap@customer.example");
+  const autoSecond = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async () => {
+    throw new Error("should not send twice");
+  });
+  assert.equal(autoSecond.sent, false);
+  assert.equal(autoSecond.skipped, "already_sent");
+
+  const noEmailInvoiceCustomer = queries.createCustomer({
+    name: "No Email Invoice Co",
+    billing_notes: "",
+    contacts: [],
+  });
+  const noEmailInvoiceLoad = queries.createLoad({
+    customer_id: noEmailInvoiceCustomer,
+    origin: "Lincoln, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 38000,
+    commodity: "Pork",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  addAttachment({
+    loadId: noEmailInvoiceLoad,
+    kind: "pod",
+    originalName: "pod-no-email.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const noEmailAuto = await autoInvoice.maybeAutoInvoiceLoad(noEmailInvoiceLoad, async () => {
+    throw new Error("do not invent an email");
+  });
+  assert.equal(noEmailAuto.created, true);
+  assert.equal(noEmailAuto.sent, false);
+  assert.equal(noEmailAuto.skipped, "no_email");
+  const invoiceInbox = (await import("../lib/exceptions")).listExceptionInbox(new Date("2026-08-21T12:00:00.000Z"));
+  assert.ok(invoiceInbox.items.some((item) => item.loadId === noEmailInvoiceLoad && item.kind === "invoice_send"));
+
+  const controlOrderId = queries.createLoad({
+    customer_id: shareLoadCustomerId,
+    origin: "Omaha, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-08-22T12:00:00.000Z",
+    pickup_end: "2026-08-22T16:00:00.000Z",
+    delivery_start: "2026-08-23T12:00:00.000Z",
+    delivery_end: "2026-08-23T20:00:00.000Z",
+    weight: 36000,
+    commodity: "Beef",
+    rate: 1900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const idleShareTrailer = queries.createTrailer({
+    unit_number: "TR-CTRL-IDLE",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-ctrl-idle",
+  });
+  queries.saveTrailerGps(idleShareTrailer, {
+    latitude: 41.25,
+    longitude: -96.0,
+    address: "Lincoln, NE",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  const center = await controlCenter.buildControlCenter();
+  assert.ok(center.orders.some((item) => item.refId === controlOrderId && item.origin.includes("Omaha")));
+  assert.ok(center.resources.some((item) => item.refId === idleShareTrailer && item.status === "idle"));
+  const neOnly = controlShared.filterControlCenterItems(center.resources, {
+    state: "NE",
+    equipment: "reefer",
+    status: "idle",
+  });
+  assert.ok(neOnly.some((item) => item.refId === idleShareTrailer));
+  assert.equal(
+    controlShared.filterControlCenterItems(center.resources, { state: "TX", equipment: "", status: "" }).some(
+      (item) => item.refId === idleShareTrailer,
+    ),
+    false,
   );
 
   const mappedGps = samsara.mapVehicleLocations({

@@ -45,6 +45,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
           <LoadMapCanvas
             apiKey={apiKey}
             points={fleetMapDisplayPoints(model.pins)}
+            cluster
             className="h-[36rem] w-full bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No GPS pins."

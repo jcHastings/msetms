@@ -4,6 +4,9 @@ import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-cl
 import { coordsForStop, gpsPingsForLoad, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
+import { resolveLoadCustomerEmail } from "./load-mail";
+import { isUsableEmail } from "./mail-shared";
+import { lastSentMail } from "./mail-store";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
 import { listStops } from "./stops";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
@@ -11,7 +14,7 @@ import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, t
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
 
-export const EXCEPTION_KINDS = ["reefer", "late", "detention", "gps_quiet", "missing_pod", "compliance", "unassigned"] as const;
+export const EXCEPTION_KINDS = ["reefer", "late", "detention", "gps_quiet", "missing_pod", "invoice_send", "compliance", "unassigned"] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export type InboxException = {
@@ -57,8 +60,9 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   detention: 2,
   gps_quiet: 3,
   missing_pod: 4,
-  compliance: 5,
-  unassigned: 6,
+  invoice_send: 5,
+  compliance: 6,
+  unassigned: 7,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -413,16 +417,33 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   }
 
   for (const load of delivered) {
-    if (pods.has(load.id)) continue;
-    items.push(
-      withLoad(
-        load,
-        "missing_pod",
-        "HIGH",
-        "Missing POD",
-        `${load.customer_name} — delivered, no proof of delivery on file.`,
-      ),
-    );
+    if (!pods.has(load.id)) {
+      items.push(
+        withLoad(
+          load,
+          "missing_pod",
+          "HIGH",
+          "Missing POD",
+          `${load.customer_name} — delivered, no proof of delivery on file.`,
+        ),
+      );
+      continue;
+    }
+    if (
+      load.tms_invoice_number &&
+      !isUsableEmail(resolveLoadCustomerEmail(load)) &&
+      !lastSentMail(load.id, "customer_invoice")
+    ) {
+      items.push(
+        withLoad(
+          load,
+          "invoice_send",
+          "HIGH",
+          "Invoice ready — send to",
+          `${load.customer_name} — invoice is on the load. Type the send-to address on Email invoice.`,
+        ),
+      );
+    }
   }
 
   items.sort((a, b) => {
@@ -451,6 +472,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "GPS quiet";
     case "missing_pod":
       return "POD";
+    case "invoice_send":
+      return "Invoice";
     case "compliance":
       return "Compliance";
     case "unassigned":
