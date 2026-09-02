@@ -483,8 +483,9 @@ const CONTACT_HEADER_RE =
 const CONTACT_TABLE_RE = /(?:^|\n)\s*Name\s+Phone\s+Email(?:\s+Fax)?\s*\n([^\n]+)/i;
 const NEXT_SECTION_RE =
   /\n(?:CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO)\b/i;
-const CARRIER_CHUNK_RE =
-  /(?:^|\n)\s*(?:carrier(?:\s+contact)?\s*:?|attn\b)[^\n]*(?:\n[^\n]*){0,6}/gi;
+const CARRIER_LINE_RE = /(?:^|\n)\s*(?:carrier(?:\s+contact)?\s*:?|attn\b)[^\n]*/gi;
+const CARRIER_STOP_RE =
+  /\n(?:[^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)|CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO|STOP\s+\d|DRIVER\b)\b/i;
 const HEADER_CUT_RE = /\n\s*(?:carrier\b|stop\s+\d|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
 const NAME_STOPWORDS =
   /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info)$/i;
@@ -563,12 +564,22 @@ function contactBlocksFromHeaders(text: string): string[] {
   return blocks;
 }
 
+function carrierChunks(text: string): string[] {
+  const chunks: string[] = [];
+  for (const row of String(text ?? "").matchAll(CARRIER_LINE_RE)) {
+    const start = row.index ?? 0;
+    const after = text.slice(start + row[0].length);
+    const cut = after.search(CARRIER_STOP_RE);
+    chunks.push(row[0] + (cut >= 0 ? after.slice(0, cut) : after.slice(0, 240)));
+  }
+  return chunks;
+}
+
 function carrierSideIdentity(text: string): { names: string[]; phones: string[] } {
   const names: string[] = [];
   const phones: string[] = [];
-  for (const chunk of String(text ?? "").matchAll(CARRIER_CHUNK_RE)) {
-    const block = chunk[0] ?? "";
-    for (const phone of block.matchAll(new RegExp(PHONE_ONLY_RE, "g"))) {
+  for (const block of carrierChunks(text)) {
+    for (const phone of block.matchAll(new RegExp(PHONE_ONLY_RE.source, "g"))) {
       const digits = digitsPhone(phone[1] ?? "");
       if (digits.length >= 10) phones.push(digits);
     }
