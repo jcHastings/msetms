@@ -5185,9 +5185,9 @@ Email: nophone@broker.example
   assert.equal(norfolkPaper.reference, "110247187");
   assert.equal(norfolkPaper.confirmation, "61713982");
   const cbHint = parseRateConText(cbText, [], "cb-logistics-106361.txt");
-  assert.match(cbHint.contact_name, /CB Logistics/i);
+  assert.equal(cbHint.contact_name, "");
   assert.equal(cbHint.contact_phone, "314-459-1752");
-  assert.doesNotMatch(cbHint.contact_name, /JoJo|MS Test|M&S|Express/i);
+  assert.doesNotMatch(cbHint.contact_name, /Imperial|63052|106361|JoJo|MS Test|M&S|Express/i);
   assert.doesNotMatch(cbHint.contact_phone, /402-302-0097|3217709078/);
   const liveCarrierSheet = `
 CB Logistics Group
@@ -5203,9 +5203,9 @@ JoJo Schwartz 402-302-0097 jojo@msloads.com
 `;
   const { parseBrokerContactFromText: parseCbBrokerContact } = await import("../lib/rate-con-shared");
   const cbBrokerContact = parseCbBrokerContact(liveCarrierSheet);
-  assert.match(cbBrokerContact.contact_name, /CB Logistics/i);
+  assert.equal(cbBrokerContact.contact_name, "");
   assert.equal(cbBrokerContact.contact_phone, "314-459-1752");
-  assert.doesNotMatch(cbBrokerContact.contact_name, /JoJo|MS Test/i);
+  assert.doesNotMatch(cbBrokerContact.contact_name, /Imperial|63052|106361|JoJo|MS Test/i);
   assert.doesNotMatch(cbBrokerContact.contact_phone, /402-302-0097/);
   assert.doesNotMatch(cbBrokerContact.contact_email, /jojo@msloads|msloads/i);
   const twoColumnCarrierSheet = `
@@ -5217,11 +5217,11 @@ DISPATCH CONFIRMATION
 Load Number 106361
 `;
   const twoColumnContact = parseCbBrokerContact(twoColumnCarrierSheet);
-  assert.match(twoColumnContact.contact_name, /CB Logistics/i);
+  assert.equal(twoColumnContact.contact_name, "");
   assert.equal(twoColumnContact.contact_phone, "314-459-1752");
-  assert.doesNotMatch(twoColumnContact.contact_name, /JoJo|MS Test|M&S|Express/i);
+  assert.doesNotMatch(twoColumnContact.contact_name, /JoJo|MS Test|M&S|Express|Imperial|106361/i);
   assert.doesNotMatch(twoColumnContact.contact_phone, /402-302-0097/);
-  assert.ok(twoColumnContact.contact_name && twoColumnContact.contact_phone, "broker contact must not be blank");
+  assert.ok(twoColumnContact.contact_phone, "broker phone must not be blank");
   const titledHeaderSheet = `
 RATE CONFIRMATION
 CB Logistics Group
@@ -5237,11 +5237,23 @@ Fax (402) 302-0098
 Attn: JoJo Schwartz
 `;
   const titledHeaderContact = parseCbBrokerContact(titledHeaderSheet);
-  assert.match(titledHeaderContact.contact_name, /CB Logistics/i);
+  assert.equal(titledHeaderContact.contact_name, "");
   assert.equal(titledHeaderContact.contact_phone, "314-459-1752");
-  assert.doesNotMatch(titledHeaderContact.contact_name, /JoJo|RATE CONFIRMATION|MS Test/i);
+  assert.doesNotMatch(titledHeaderContact.contact_name, /JoJo|RATE CONFIRMATION|MS Test|Imperial|106361/i);
   assert.doesNotMatch(titledHeaderContact.contact_phone, /402-302-0097|314-555-0199/);
-  assert.ok(titledHeaderContact.contact_name && titledHeaderContact.contact_phone);
+  assert.ok(titledHeaderContact.contact_phone);
+  const { brokerContactPersonName } = await import("../lib/rate-con-shared");
+  assert.equal(brokerContactPersonName("Imperial, MO 63052 106361"), "");
+  assert.equal(brokerContactPersonName("2704 Adobe Drive"), "");
+  assert.equal(brokerContactPersonName("CB Logistics Group"), "");
+  assert.equal(brokerContactPersonName("106361"), "");
+  assert.equal(brokerContactPersonName("Riley Booker"), "Riley Booker");
+  const gluedHeaderName = parseCbBrokerContact(`
+Imperial, MO 63052 106361
+P: 314-459-1752
+`);
+  assert.equal(gluedHeaderName.contact_name, "");
+  assert.equal(gluedHeaderName.contact_phone, "314-459-1752");
   assert.match(cbHint.shipper.name, /North Bay/i);
   assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
   assert.equal(cbHint.shipper.reference, "N25504");
@@ -5326,9 +5338,9 @@ Attn: JoJo Schwartz
   assert.notEqual(mixedAi.consignee.reference, mixedAi.consignee.confirmation);
   assert.match(mixedAi.special_instructions, /MUST CHECK IN WITH ALL PU#s/);
   assert.match(mixedAi.special_instructions, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
-  assert.match(mixedAi.contact_name, /CB Logistics/i);
+  assert.equal(mixedAi.contact_name, "");
   assert.equal(mixedAi.contact_phone, "314-459-1752");
-  assert.doesNotMatch(mixedAi.contact_name, /JoJo|MS Test/i);
+  assert.doesNotMatch(mixedAi.contact_name, /JoJo|MS Test|Imperial|106361/i);
   assert.doesNotMatch(mixedAi.contact_phone, /402-302-0097/);
   const cbCustomerId =
     queries.listCustomers().find((row) => /CB Logistics/i.test(row.name))?.id ??
@@ -5385,8 +5397,10 @@ Attn: JoJo Schwartz
   cbStopForm.set("extra_stops_json", JSON.stringify(mixedAi.extra_stops));
   const { applyRateConStopsToLoad: applyCbStops } = await import("../lib/rate-con-stops");
   applyCbStops(cbLoadId, cbStopForm);
-  assert.match(queries.getLoad(cbLoadId)!.contact_name, /CB Logistics/i);
+  assert.equal(queries.getLoad(cbLoadId)!.contact_name, "");
   assert.equal(queries.getLoad(cbLoadId)!.contact_phone, "314-459-1752");
+  assert.match(queries.getCustomer(cbCustomerId)?.name ?? "", /CB Logistics/i);
+  assert.equal(queries.getLoad(cbLoadId)!.customer_reference, "106361");
   const blankReapplyId = queries.createLoad({
     customer_id: cbCustomerId,
     load_number: "MSE-1065-REAPPLY",
@@ -5426,9 +5440,10 @@ Attn: JoJo Schwartz
   reapplyForm.set("contact_name", cbHint.contact_name);
   reapplyForm.set("contact_phone", cbHint.contact_phone);
   queries.updateLoad(blankReapplyId, parseCbReapplyInput(reapplyForm, true, blankExisting));
-  assert.match(queries.getLoad(blankReapplyId)!.contact_name, /CB Logistics/i);
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_name, "");
   assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "314-459-1752");
-  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_name, /JoJo|MS Test/i);
+  assert.equal(queries.getLoad(blankReapplyId)!.customer_reference, "106361");
+  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_name, /Imperial|63052|106361|JoJo|MS Test/i);
   assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_phone, /402-302-0097/);
   const confirmationLib = await import("../lib/load-confirmation");
   const cbDriver = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "internal" });

@@ -497,6 +497,29 @@ function looksLikePersonName(value: string): boolean {
   return /^[A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,3}$/.test(text);
 }
 
+function looksLikePlaceOrLoadNumber(value: string): boolean {
+  const text = collapse(value);
+  if (!text) return false;
+  if (/\d{4,}/.test(text)) return true;
+  if (/\b[A-Za-z].*,\s*[A-Z]{2}\b/.test(text)) return true;
+  if (STREET_SUFFIX.test(text) || /^\d/.test(text)) return true;
+  return false;
+}
+
+function looksLikeCompanyName(value: string): boolean {
+  return /\b(llc|inc|incorporated|corp|ltd|company|group|logistics|express|loads|transport|trucking)\b/i.test(
+    value,
+  );
+}
+
+/** Contact name is a person only — never city/state/zip, street, load #, or a company line. */
+export function brokerContactPersonName(value: string): string {
+  const text = collapse(value);
+  if (!text) return "";
+  if (looksLikePlaceOrLoadNumber(text) || looksLikeCompanyName(text) || isOwnPaperworkName(text)) return "";
+  return looksLikePersonName(text) ? text : "";
+}
+
 function digitsPhone(value: string): string {
   const digits = value.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
@@ -536,7 +559,7 @@ function parseContactFields(block: string): ParsedBrokerContact {
           .match(/([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+)?)\s*$/)?.[1] ?? ""
       : "";
   const named = labeledName || beforePhone;
-  const contact_name = looksLikePersonName(named) ? collapse(named) : "";
+  const contact_name = brokerContactPersonName(named);
   const formatted = phoneDigits.length === 10 ? formatTenDigitPhone(phoneDigits) : collapse(phoneRaw);
   const contact_phone = formatted && /\d{7,}/.test(formatted.replace(/\D/g, "")) ? formatted : "";
   return {
@@ -618,35 +641,14 @@ function stripOwnCarrierTokens(text: string): string {
     .replace(/[ \t]{2,}/g, " ");
 }
 
-function looksLikeHeaderPartyName(line: string): boolean {
-  const text = collapse(line);
-  if (!text) return false;
-  if (
-    /^(carrier|contact|dispatch confirmation|rate confirmation|load\s+|name\b|phone\b|fax\b|p:|pickup|delivery|stop\s+\d|mc:|dot)/i.test(
-      text,
-    )
-  ) {
-    return false;
-  }
-  if (/\bconfirmation\b/i.test(text) && !/logistics|group|llc|inc|co\b/i.test(text)) return false;
-  if (/^\d/.test(text) || STREET_SUFFIX.test(text) || isOwnPaperworkName(text)) return false;
-  return /[A-Za-z]{3,}/.test(text);
-}
-
 function parseHeaderBrokerContact(text: string): ParsedBrokerContact {
   const cut = text.search(HEADER_CUT_RE);
   const rawHead = (cut >= 0 ? text.slice(0, cut) : text.slice(0, 800)).trim();
   const head = stripOwnCarrierTokens(rawHead).trim();
   if (!head) return emptyBrokerContact();
   const fields = parseContactFields(head);
-  const nameLine =
-    head
-      .split(/\n/)
-      .map((line) => collapse(line.replace(/[,\s]+$/, "")))
-      .find((line) => looksLikeHeaderPartyName(line)) ?? "";
-  if (!nameLine && !fields.contact_phone) return emptyBrokerContact();
   return {
-    contact_name: nameLine || fields.contact_name,
+    contact_name: brokerContactPersonName(fields.contact_name),
     contact_email: fields.contact_email,
     contact_phone: fields.contact_phone,
     contact_ext: fields.contact_ext,
@@ -669,11 +671,16 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
     }
   }
   const header = rejectCarrierSideContact(parseHeaderBrokerContact(text), text);
-  if (!usableContact(found)) return header;
-  if (!found.contact_name && header.contact_name) {
-    return { ...found, contact_name: header.contact_name };
-  }
-  return found;
+  const merged = !usableContact(found)
+    ? header
+    : {
+        ...found,
+        contact_name: found.contact_name || header.contact_name,
+      };
+  return {
+    ...merged,
+    contact_name: brokerContactPersonName(merged.contact_name),
+  };
 }
 
 export function mergeBrokerContact(
@@ -691,7 +698,7 @@ export function mergeBrokerContact(
     raw,
   );
   return {
-    contact_name: left.contact_name || fallback.contact_name,
+    contact_name: brokerContactPersonName(left.contact_name || fallback.contact_name),
     contact_email: left.contact_email || fallback.contact_email,
     contact_phone: left.contact_phone || fallback.contact_phone,
     contact_ext: left.contact_ext || fallback.contact_ext,
