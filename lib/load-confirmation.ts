@@ -24,7 +24,8 @@ import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
 import { cityStateOnly } from "./load-documents-shared";
-import { parseStopPaperwork } from "./rate-con-paperwork";
+import { expandTruncatedDispatchNotes, joinUniqueNotes } from "./rate-con-paperwork";
+import { driverFacingTermsText } from "./document-copy";
 
 export type ConfirmationStop = {
   title: string;
@@ -447,14 +448,27 @@ export function buildConfirmationModel(
   const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
     load.public_notes,
-    load.special_instructions,
+    expandTruncatedDispatchNotes(load.special_instructions),
     load.appointment_notes,
     shipperParty.location ? `Pickup: ${formatSchedulingSummary(shipperParty.location)}` : "",
     lastDeliveryParty.location ? `Delivery: ${formatSchedulingSummary(lastDeliveryParty.location)}` : "",
+    packet === "internal"
+      ? stops
+          .map((stop) =>
+            [stop.notes, stop.instructions]
+              .filter((part) => /food.?grade|pre-?cool|load locks|verify counts|\$100 fine|detention is not paid|air chute|gate fees|lumper|pulp product/i.test(part))
+              .join("\n"),
+          )
+          .filter(Boolean)
+          .join("\n")
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
-  const dispatchNotes = packet === "internal" ? stripCustomerLoadNumber(notes, load) : notes;
+  const dispatchNotes =
+    packet === "internal"
+      ? stripCustomerLoadNumber(expandTruncatedDispatchNotes(joinUniqueNotes(notes)), load)
+      : notes;
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
@@ -588,6 +602,67 @@ function confirmationTitle(model: ConfirmationModel, headerText: string): string
     : stock;
 }
 
+/** Wrap onto following lines/pages. Never pass a clipping height — live reprints were still cut that way. */
+function wrapPdfLines(doc: PDFKit.PDFDocument, text: string, width: number): string[] {
+  const tokens = String(text).split(/(\s+)/);
+  const lines: string[] = [];
+  let current = "";
+  const flush = () => {
+    if (current) lines.push(current);
+    current = "";
+  };
+  const hardBreak = (token: string) => {
+    let chunk = "";
+    for (const ch of token) {
+      const next = chunk + ch;
+      if (chunk && doc.widthOfString(next) > width) {
+        lines.push(chunk);
+        chunk = ch;
+      } else {
+        chunk = next;
+      }
+    }
+    current = chunk;
+  };
+  for (const token of tokens) {
+    if (!token) continue;
+    if (/^\s+$/.test(token)) continue;
+    const trial = current ? `${current} ${token}` : token;
+    if (doc.widthOfString(trial) <= width) {
+      current = trial;
+      continue;
+    }
+    if (current) flush();
+    if (doc.widthOfString(token) <= width) current = token;
+    else hardBreak(token);
+  }
+  flush();
+  return lines.length ? lines : [""];
+}
+
+function drawFlowingText(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  pageLimit: number,
+  addPage: () => void,
+): number {
+  const lineH = Math.max(11, Number(doc.currentLineHeight(true)) + 1);
+  for (const paragraph of String(text).replace(/\r\n/g, "\n").split("\n")) {
+    for (const line of wrapPdfLines(doc, paragraph, width)) {
+      if (y + lineH > pageLimit) {
+        addPage();
+        y = 48;
+      }
+      doc.text(line, x, y, { width, lineBreak: false, ellipsis: false });
+      y += lineH;
+    }
+  }
+  return y;
+}
+
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const pageW = 612;
@@ -719,22 +794,23 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   y += 8;
   const noteFont = Math.max(8, bodySize - 1);
-  doc.font("Helvetica").fontSize(noteFont);
-  const notesNeeded = clipNotes
-    ? notesH
-    : Math.max(notesH, doc.heightOfString(model.dispatchNotes || " ", { width }));
-  ensureSpace(12 + notesNeeded + 6 + legsH);
-  doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
-    lineBreak: false,
-  });
-  y += 12;
-  doc.font("Helvetica").fontSize(noteFont).fillColor("#111827");
   if (clipNotes) {
+    ensureSpace(12 + notesH + 6 + legsH);
+    doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
+      lineBreak: false,
+    });
+    y += 12;
+    doc.font("Helvetica").fontSize(noteFont).fillColor("#111827");
     doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
     y += notesH + 6;
   } else {
-    doc.text(model.dispatchNotes || " ", left, y, { width, lineBreak: true });
-    y += notesNeeded + 6;
+    ensureSpace(24);
+    doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
+      lineBreak: false,
+    });
+    y += 12;
+    doc.font("Helvetica").fontSize(noteFont).fillColor("#111827");
+    y = drawFlowingText(doc, model.dispatchNotes || " ", left, y, width, pageLimit, addContentPage) + 6;
   }
   if (model.packet === "internal" && model.internalLegs) {
     doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
@@ -796,12 +872,15 @@ function stampConfirmationFooter(
     customerName: model.customerName,
     customerPhone: model.customerPhone,
   };
-  const terms = expandDocumentTags(defaults.terms_text, tagCtx).trim();
-  if (terms) {
+  const rawTerms = expandDocumentTags(defaults.terms_text, tagCtx);
+  const printedTerms =
+    model.packet === "internal" ? driverFacingTermsText(rawTerms).trim() : rawTerms.trim();
+  if (printedTerms) {
     doc.font(pdfFontName(getDocumentFont().family)).fontSize(6.5).fillColor("#374151");
-    doc.text(terms, left, 648, { width, height: 64, lineBreak: true });
+    doc.text(printedTerms, left, 648, { width, height: 64, lineBreak: true });
   }
-  const footer = expandDocumentTags(defaults.footer_text, tagCtx).trim();
+  const rawFooter = expandDocumentTags(defaults.footer_text, tagCtx).trim();
+  const footer = model.packet === "internal" ? driverFacingTermsText(rawFooter) : rawFooter;
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
   if (footer) {
     doc.text(footer, left, 738, { width: width - 100, height: 12, lineBreak: false });

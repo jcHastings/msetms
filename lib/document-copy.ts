@@ -25,10 +25,23 @@ export const BOL_TERMS =
 export const DRIVER_CONFIRMATION_TERMS_STUB =
   "Temperature-controlled loads run Continuous. Use two load locks. Check the setpoint with the shipper before you leave. Record every seal number on the BOL. Paperwork is required for every PO. Shortages or damages need a claim number before leaving the receiver. Notify dispatch one hour before detention starts. This sheet uses the MS Express load number, not the customer load number. Receiving load texts is consent to SMS from dispatch.";
 
+/** Billing email lines belong on the customer/invoice sheet, not the driver packet. */
+export function driverFacingTermsText(terms: string): string {
+  return String(terms ?? "")
+    .replace(/Email invoices,[^.]*\./gi, "")
+    .replace(/Include the load number in the subject line\.?/gi, "")
+    .replace(/[^.]*billing@msloads\.com[^.]*\.?/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+\./g, ".")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function shouldReplaceStoredTerms(docType: string, current: string): boolean {
   const text = String(current ?? "").trim();
   if (!text) return true;
   if (docType === "load_confirmation") {
+    if (/billing@msloads\.com|email invoices/i.test(text)) return true;
     if (/triumph\s*pay/i.test(text)) return true;
     if (text === DRIVER_CONFIRMATION_TERMS_STUB) return true;
     if (!/Two load locks are required/i.test(text) && /Use two load locks/i.test(text)) return true;

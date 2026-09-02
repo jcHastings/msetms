@@ -1,4 +1,5 @@
 import { cleanDateInput, fromInputDateTime, parseOptionalFloat, parseOptionalInt } from "./format";
+import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { placeholderLane } from "./load-page-shared";
 import { findOrCreateCustomer, getDriver, type LoadInput } from "./queries";
 import { isReeferMode } from "./reefer-shared";
@@ -181,7 +182,9 @@ export function parseLoadInput(
     commodity: keptString(formData, "commodity", existing?.commodity),
     rate: keptOptionalFloat(formData, "rate", existing?.rate),
     notes: keptString(formData, "notes", existing?.notes),
-    special_instructions: keptString(formData, "special_instructions", existing?.special_instructions),
+    special_instructions: expandTruncatedDispatchNotes(
+      keptString(formData, "special_instructions", existing?.special_instructions),
+    ),
     appointment_notes: keptString(formData, "appointment_notes", existing?.appointment_notes),
     reference_number: keptString(formData, "reference_number", existing?.reference_number),
     po_number: refs.po_number,

@@ -18,6 +18,9 @@ export type StopPaperwork = {
   schedule_type: string;
 };
 
+export const PULP_TEMP_LINE_FULL =
+  "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN WITH ALL PU#s.....HAVE DRIVERS PAY ALL GATE FEES AND LUMPER FEES AND SUBMIT RECEIPTS FOR REIMBURSEMENT";
+
 const LEGAL_HEADING =
   /(?:^|\n)\s*(?:fines?\s+schedule|back[\s-]*solicit(?:ation)?|attorney\s+fees|lawyer\s+fees|remit\s+to|terms\s+(?:and|&)\s+conditions|indemnif)/i;
 
@@ -36,6 +39,29 @@ export function parseStopPaperwork(text: string): StopPaperwork {
     quantity: cases ? `${cases} cases` : "",
     schedule_type: /set\s+appt|appointment\s+required|strict\s+loading\s+appts/i.test(raw) ? "appointment" : "",
   };
+}
+
+/** Restore the rest of the pulp/temp line when a rate-con or load field was cut at MUST CHECK IN. */
+export function expandTruncatedDispatchNotes(text: string): string {
+  const raw = String(text ?? "");
+  if (!raw.trim()) return raw;
+  if (/WITH ALL PU#s/i.test(raw) && /SUBMIT RECEIPTS FOR REIMBURSEMENT/i.test(raw)) return raw;
+  if (!/MUST PULP PRODUCT-TAKE TEMP WHEN LOADING/i.test(raw) || !/MUST CHECK IN/i.test(raw)) return raw;
+  if (/WITH ALL PU#s/i.test(raw)) return raw;
+  const restored = raw.replace(
+    /MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!+[.\u2026]+MUST CHECK IN(?!\s+WITH ALL PU#s)[.\s]*/gi,
+    `${PULP_TEMP_LINE_FULL} `,
+  );
+  if (/WITH ALL PU#s/i.test(restored) && /SUBMIT RECEIPTS FOR REIMBURSEMENT/i.test(restored)) {
+    return restored.trimEnd();
+  }
+  if (/MUST CHECK IN\s*$/i.test(raw.trim())) {
+    return raw.replace(/MUST CHECK IN\s*$/i, PULP_TEMP_LINE_FULL.replace(/^[\s\S]*?(MUST CHECK IN)/i, "$1"));
+  }
+  return raw.replace(
+    /MUST PULP PRODUCT-TAKE TEMP WHEN LOADING[\s\S]*?MUST CHECK IN/i,
+    PULP_TEMP_LINE_FULL,
+  );
 }
 
 export function joinUniqueNotes(...parts: Array<string | null | undefined>): string {
@@ -284,7 +310,7 @@ export function enrichParsedRateConFromText(parsed: ParsedRateCon, rawText = "")
       special = joinUniqueNotes(special, ops);
     }
   }
-  special = stripLegalBoilerplate(special);
+  special = expandTruncatedDispatchNotes(stripLegalBoilerplate(special));
 
   return {
     ...parsed,

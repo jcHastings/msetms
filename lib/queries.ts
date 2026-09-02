@@ -16,6 +16,7 @@ import {
 import { getDb } from "./db";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
+import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { driverAssignedToLoad } from "./relay-store";
 import { flatCustomerRate, importCreateRateToFinancials } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
@@ -1584,7 +1585,7 @@ export function createLoad(input: LoadInput): number {
         input.commodity,
         input.rate,
         input.notes,
-        input.special_instructions,
+        expandTruncatedDispatchNotes(input.special_instructions),
         input.appointment_notes,
         input.reference_number,
         input.po_number,
@@ -1615,7 +1616,7 @@ export function createLoad(input: LoadInput): number {
     { field: "origin", newValue: input.origin },
     { field: "destination", newValue: input.destination },
     { field: "rate", newValue: input.rate },
-    { field: "special_instructions", newValue: input.special_instructions },
+    { field: "special_instructions", newValue: expandTruncatedDispatchNotes(input.special_instructions) },
     { field: "driver", newValue: driverName(input.driver_id) },
     { field: "truck", newValue: truckUnit(input.truck_id) },
     { field: "trailer", newValue: trailerUnit(input.trailer_id ?? null) },
@@ -1652,7 +1653,7 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.commodity,
       input.rate,
       input.notes,
-      input.special_instructions,
+      expandTruncatedDispatchNotes(input.special_instructions),
       input.appointment_notes,
       input.reference_number,
       input.po_number,
@@ -1685,7 +1686,11 @@ export function updateLoad(id: number, input: LoadInput): void {
     { field: "commodity", oldValue: existing.commodity, newValue: input.commodity },
     { field: "rate", oldValue: existing.rate, newValue: input.rate },
     { field: "notes", oldValue: existing.notes, newValue: input.notes },
-    { field: "special_instructions", oldValue: existing.special_instructions, newValue: input.special_instructions },
+    {
+      field: "special_instructions",
+      oldValue: existing.special_instructions,
+      newValue: expandTruncatedDispatchNotes(input.special_instructions),
+    },
     { field: "status", oldValue: existing.status, newValue: input.status },
     { field: "driver", oldValue: driverName(existing.driver_id), newValue: driverName(input.driver_id) },
     { field: "truck", oldValue: truckUnit(existing.truck_id), newValue: truckUnit(input.truck_id) },

@@ -6,6 +6,7 @@ import {
   DRIVER_CONFIRMATION_TERMS,
   shouldReplaceStoredTerms,
 } from "./document-copy";
+import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database } from "./sqlite";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
@@ -985,6 +986,7 @@ export function migrate(db: Database): void {
   backfillSettingsUsers(db);
   backfillDropdownLists(db);
   backfillDocumentDefaults(db);
+  backfillTruncatedDispatchNotes(db);
   backfillLoadNumbering(db);
   backfillSampleLoads(db);
 }
@@ -1143,6 +1145,23 @@ function backfillDocumentDefaults(db: Database): void {
   ] as const) {
     const row = current.get(docType) as { terms_text?: string } | undefined;
     if (shouldReplaceStoredTerms(docType, row?.terms_text ?? "")) fill.run(terms, docType);
+  }
+}
+
+function backfillTruncatedDispatchNotes(db: Database): void {
+  const rows = db
+    .prepare(
+      `SELECT id, special_instructions FROM loads
+       WHERE special_instructions LIKE '%MUST PULP PRODUCT%'
+         AND special_instructions LIKE '%MUST CHECK IN%'
+         AND special_instructions NOT LIKE '%WITH ALL PU#s%'`,
+    )
+    .all() as Array<{ id: number; special_instructions: string }>;
+  if (!rows.length) return;
+  const write = db.prepare("UPDATE loads SET special_instructions = ? WHERE id = ?");
+  for (const row of rows) {
+    const next = expandTruncatedDispatchNotes(row.special_instructions);
+    if (next !== row.special_instructions) write.run(next, row.id);
   }
 }
 

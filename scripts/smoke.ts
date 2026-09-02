@@ -5338,16 +5338,120 @@ Email: nophone@broker.example
     (await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(cbDriver)), { mergePages: true }))
       .text ?? "",
   );
+  const cbDriverFlat = cbDriverText.replace(/\s+/g, " ");
   assert.match(cbDriverText, /N25504/);
   assert.match(cbDriverText, /000250476/);
   assert.match(cbDriverText, /110247187/);
   assert.match(cbDriverText, /61511545/);
   assert.match(cbDriverText, /61713982/);
-  assert.match(cbDriverText, /MUST CHECK IN WITH ALL PU#s/);
-  assert.match(cbDriverText, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriverFlat, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbDriverFlat, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriverFlat, /MUST CHECK IN[\s\S]*WITH ALL PU#s[\s\S]*SUBMIT RECEIPTS FOR REIMBURSEMENT/);
   assert.match(cbDriverText, /34\s*°\s*F/);
   assert.doesNotMatch(cbDriverText, /106361/);
+  assert.doesNotMatch(cbDriverText, /billing@msloads\.com/);
+  assert.doesNotMatch(cbDriverText, /Email invoices, the rate confirmation/);
   assert.doesNotMatch(cbDriverText, /turn left|google maps|head north on/i);
+  const { expandTruncatedDispatchNotes: expandPulpNotes } = await import("../lib/rate-con-paperwork");
+  const liveTruncatedPulp = "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN";
+  assert.match(expandPulpNotes(liveTruncatedPulp), /WITH ALL PU#s/);
+  assert.match(expandPulpNotes(liveTruncatedPulp), /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.doesNotMatch(expandPulpNotes(liveTruncatedPulp).trim(), /MUST CHECK IN$/);
+  const {
+    CUSTOMER_CONFIRMATION_TERMS: customerTermsCopy,
+    DRIVER_CONFIRMATION_TERMS: driverTermsCopy,
+    driverFacingTermsText,
+    shouldReplaceStoredTerms,
+  } = await import("../lib/document-copy");
+  assert.doesNotMatch(driverFacingTermsText(customerTermsCopy), /billing@msloads\.com/);
+  assert.match(driverFacingTermsText(customerTermsCopy), /Temperature-controlled loads run Continuous/);
+  assert.match(driverFacingTermsText(customerTermsCopy), /claim number/);
+  assert.equal(shouldReplaceStoredTerms("load_confirmation", customerTermsCopy), true);
+  const truncatedPersistId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-TRUNC",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: liveTruncatedPulp,
+    appointment_notes: "",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.match(queries.getLoad(truncatedPersistId)!.special_instructions, /WITH ALL PU#s/);
+  assert.match(queries.getLoad(truncatedPersistId)!.special_instructions, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  const { getDb: getSmokeDb } = await import("../lib/db");
+  getSmokeDb()
+    .prepare("UPDATE loads SET special_instructions = ? WHERE id = ?")
+    .run(liveTruncatedPulp, truncatedPersistId);
+  const liveReprint = confirmationLib.buildConfirmationForLoad(truncatedPersistId, { packet: "internal" });
+  assert.match(liveReprint.dispatchNotes, /WITH ALL PU#s/);
+  assert.match(liveReprint.dispatchNotes, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  const liveReprintText = String(
+    (
+      await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(liveReprint)), {
+        mergePages: true,
+      })
+    ).text ?? "",
+  ).replace(/\s+/g, " ");
+  assert.match(liveReprintText, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(liveReprintText, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.doesNotMatch(liveReprintText, /billing@msloads\.com/);
+  const liveCustomerText = String(
+    (
+      await extractCbPdfText(
+        new Uint8Array(
+          await confirmationLib.renderConfirmationPdf(
+            confirmationLib.buildConfirmationForLoad(truncatedPersistId, { packet: "customer" }),
+          ),
+        ),
+        { mergePages: true },
+      )
+    ).text ?? "",
+  );
+  assert.match(liveCustomerText, /billing@msloads\.com/);
+  const settingsForTerms = await import("../lib/settings");
+  const priorDriverDefaults = settingsForTerms.getDocumentDefaults("load_confirmation");
+  settingsForTerms.updateDocumentDefaults({
+    ...priorDriverDefaults,
+    terms_text: customerTermsCopy,
+    footer_text: "Questions? Call dispatch.",
+  });
+  try {
+    const pollutedDriverText = String(
+      (
+        await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(liveReprint)), {
+          mergePages: true,
+        })
+      ).text ?? "",
+    );
+    assert.doesNotMatch(pollutedDriverText, /billing@msloads\.com/);
+    assert.doesNotMatch(pollutedDriverText, /Email invoices, the rate confirmation/);
+    assert.match(pollutedDriverText, /Questions\? Call dispatch/);
+    assert.match(pollutedDriverText, /Continuous/);
+    assert.match(pollutedDriverText, /claim number/);
+  } finally {
+    settingsForTerms.updateDocumentDefaults({
+      ...priorDriverDefaults,
+      terms_text: driverTermsCopy,
+      footer_text: priorDriverDefaults.footer_text,
+    });
+  }
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /reference \(also called po/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"),
@@ -6587,6 +6691,8 @@ Email: nophone@broker.example
   assert.match(deniseDriverText, /load locks/i);
   assert.match(deniseDriverText, /claim number/);
   assert.doesNotMatch(deniseDriverText, /TriumphPay/i);
+  assert.doesNotMatch(deniseDriverText, /billing@msloads\.com/);
+  assert.doesNotMatch(deniseDriverText, /Email invoices, the rate confirmation/);
   assert.match(deniseText, /billing@msloads.com/);
   assert.doesNotMatch(deniseDriverText, /Customer Confirmation/);
   assert.doesNotMatch(deniseDriverText, /Thank you for hauling with us/);
