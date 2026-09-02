@@ -4699,6 +4699,62 @@ send POD to billing.pod@broker.example
   assert.equal(tqlContact.contact_phone, "800-555-3101");
   assert.equal(tqlContact.contact_ext, "47010");
   assert.doesNotMatch(tqlContact.contact_email, /billing\.pod|jc@|indel/i);
+  const gerardSheet = fs.readFileSync(
+    path.join(process.cwd(), "scripts/fixtures/tql-po-36765942-page1.txt"),
+    "utf8",
+  );
+  const gerardContact = parseBrokerContactFromText(gerardSheet);
+  assert.equal(gerardContact.contact_name, "Gerard Borne");
+  assert.equal(gerardContact.contact_email, "GBorne@TQL.com");
+  assert.equal(gerardContact.contact_phone, "800-580-3101");
+  assert.equal(gerardContact.contact_ext, "47010");
+  assert.doesNotMatch(gerardContact.contact_email, /billing\.pod|jc@/i);
+  assert.doesNotMatch(`${gerardContact.contact_phone} ${gerardContact.contact_ext}`, /60666|7177828/);
+  const gerardCustomerId = queries.createCustomer({ name: "TQL Sheet Customer", billing_notes: "", contacts: [] });
+  const gerardLoadId = queries.createLoad({
+    customer_id: gerardCustomerId,
+    origin: "Chicago, IL",
+    destination: "Lenexa, KS",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 2699,
+    commodity: "Epoxy",
+    rate: null,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 0,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    contact_name: gerardContact.contact_name,
+    contact_email: gerardContact.contact_email,
+    contact_phone: gerardContact.contact_phone,
+    contact_ext: gerardContact.contact_ext,
+  });
+  const gerardLoad = queries.getLoad(gerardLoadId)!;
+  assert.equal(gerardLoad.contact_name, "Gerard Borne");
+  assert.equal(gerardLoad.contact_email, "GBorne@TQL.com");
+  assert.equal(gerardLoad.contact_phone, "800-580-3101");
+  assert.equal(gerardLoad.contact_ext, "47010");
+  assert.equal(queries.getCustomer(gerardCustomerId)?.contacts.length, 0);
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(gerardLoad), "");
+  assert.equal(loadMail.resolveLoadCustomerEmail(gerardLoad), "GBorne@TQL.com");
+  const noContactBlock = parseBrokerContactFromText(`
+LOAD INFORMATION
+Pickup Chicago IL
+Phone: (915) 590-5914
+send POD to leftover@broker.example
+`);
+  assert.equal(noContactBlock.contact_name, "");
+  assert.equal(noContactBlock.contact_email, "");
+  assert.equal(noContactBlock.contact_phone, "");
+  assert.equal(noContactBlock.contact_ext, "");
   const tqlHint = parseRateConText(tqlContactText);
   assert.equal(tqlHint.contact_email, "riley.booker@broker.example");
   assert.equal(tqlHint.contact_ext, "47010");
@@ -5014,6 +5070,19 @@ Email: nophone@broker.example
       assert.equal(aiDraft.shipper.schedule_type, "fcfs");
       assert.equal(aiDraft.consignee.schedule_type, "fcfs");
       assert.equal(aiDraft.consignee.city, "Midland");
+      const tqlHintContact = parseRateConText(text, [], fixture.file);
+      assert.equal(tqlHintContact.contact_name, "Caitlyn Will");
+      assert.equal(tqlHintContact.contact_email, "CWill@TQL.com");
+      assert.equal(tqlHintContact.contact_phone, "800-580-3101");
+      assert.equal(tqlHintContact.contact_ext, "43088");
+      assert.doesNotMatch(tqlHintContact.contact_phone, /915|590-5914/);
+      assert.doesNotMatch(tqlHintContact.contact_name, /Pike|Express|jc/i);
+      assert.equal(aiDraft.contact_name, "Caitlyn Will");
+      assert.equal(aiDraft.contact_email, "CWill@TQL.com");
+      assert.equal(aiDraft.contact_phone, "800-580-3101");
+      assert.equal(aiDraft.contact_ext, "43088");
+      assert.equal(queries.getCustomer(customerId)?.contacts.length, 0);
+      assert.equal(loadMail.resolveInvoiceCustomerEmail({ contact_email: aiDraft.contact_email, customer_id: customerId }), "");
     }
     if (fixture.file.startsWith("bmm")) {
       assert.equal(aiDraft.rate, 2000);

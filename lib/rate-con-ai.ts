@@ -91,7 +91,7 @@ schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/
 PRECOOL TO 60F and similar lines are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
-Broker/load contact is the person who booked the load: Name, email, phone, and extension from the document's contact-info block (any broker). Copy only what is printed. Leave blank when missing. Never invent an address or phone.
+Broker/load contact is the person who booked the load: Name, email, phone, and extension from the document's contact-info block (any broker). One common layout is a Name | Phone (with xEXT) | Email | Fax table; the section title may sit above or below that row. Copy only what is printed. Leave blank when missing. Never invent an address or phone.
 Do not use CARRIER CONTACT (the trucking company / driver). Do not use shipper or receiver phones in stop notes. Do not use "send POD to" billing lines unless that email is the same as the contact-info email.
 Do not write this contact onto the customer card — it belongs on this load only.
 Confidence is high, medium, or low. Money and customer must be low when guessed.

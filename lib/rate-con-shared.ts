@@ -466,11 +466,21 @@ export function emptyBrokerContact(): ParsedBrokerContact {
 
 const BROKER_EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_EXT_RE =
-  /(\+?1?\s*(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4})\s*(?:x|ext\.?|#)\s*(\d{2,8})/i;
+  /(\+?1?\s*(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4})\s*(?:x|ext\.?)\s*(\d{2,8})/i;
 const PHONE_ONLY_RE = /(\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/;
+const STANDALONE_EXT_RE = /(?<![A-Za-z])(?:x|ext\.?)\s*(\d{2,8})/i;
+const CONTACT_HEADER_RE =
+  /(?:^|\n)([^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)[^\n]*)/gi;
+const CONTACT_TABLE_RE = /(?:^|\n)\s*Name\s+Phone\s+Email(?:\s+Fax)?\s*\n([^\n]+)/i;
+const NEXT_SECTION_RE =
+  /\n(?:CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO)\b/i;
+const NAME_STOPWORDS =
+  /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info)$/i;
 
 function looksLikePersonName(value: string): boolean {
   const text = collapse(value);
+  if (!text || NAME_STOPWORDS.test(text)) return false;
+  if (text.split(/\s+/).every((part) => NAME_STOPWORDS.test(part))) return false;
   return /^[A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,3}$/.test(text);
 }
 
@@ -485,20 +495,15 @@ function formatTenDigitPhone(digits: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
-  const text = String(raw ?? "").replace(/\r/g, "");
-  if (!text.trim()) return emptyBrokerContact();
-  const blocks = [
-    ...text.matchAll(
-      /(?:^|\n)([^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)[^\n]*)\n([\s\S]{0,800})/gi,
-    ),
-  ];
-  const labeled = blocks.find((row) => !/CARRIER\s+CONTACT/i.test(row[1] ?? ""));
-  const block = labeled?.[2]?.trim() ?? "";
-  if (!block) return emptyBrokerContact();
-  const skipBilling = block
+function usableContact(contact: ParsedBrokerContact): boolean {
+  return Boolean(contact.contact_email || contact.contact_phone);
+}
+
+function parseContactFields(block: string): ParsedBrokerContact {
+  const skipBilling = String(block ?? "")
     .replace(/send\s+pod[\s\S]{0,120}/gi, " ")
     .replace(/billing instructions?[\s\S]{0,120}/gi, " ");
+  if (!skipBilling.trim()) return emptyBrokerContact();
   const email = skipBilling.match(BROKER_EMAIL_RE)?.[0]?.trim() ?? "";
   const withExt = skipBilling.match(PHONE_EXT_RE);
   const phoneRaw =
@@ -506,9 +511,10 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
     skipBilling.match(/(?:phone|tel|office)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
     skipBilling.match(PHONE_ONLY_RE)?.[1] ??
     "";
-  const ext = (withExt?.[2] ?? skipBilling.match(/(?:x|ext\.?|#)\s*(\d{2,8})/i)?.[1] ?? "").trim();
+  const ext = (withExt?.[2] ?? (phoneRaw ? skipBilling.match(STANDALONE_EXT_RE)?.[1] : "") ?? "").trim();
   const phoneDigits = digitsPhone(phoneRaw || (withExt ? withExt[1] : ""));
-  const labeledName = skipBilling.match(/(?:^|\n)\s*name\s*[:|]\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1] ?? "";
+  const labeledName =
+    skipBilling.match(/(?:^|\n)\s*name\s*(?:\n|:|\|)\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1] ?? "";
   const phoneAt = withExt ? skipBilling.search(PHONE_EXT_RE) : skipBilling.search(PHONE_ONLY_RE);
   const beforePhone =
     phoneAt > 0
@@ -518,13 +524,44 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
       : "";
   const named = labeledName || beforePhone;
   const contact_name = looksLikePersonName(named) ? collapse(named) : "";
-  const contact_phone = phoneDigits.length === 10 ? formatTenDigitPhone(phoneDigits) : collapse(phoneRaw);
+  const formatted = phoneDigits.length === 10 ? formatTenDigitPhone(phoneDigits) : collapse(phoneRaw);
+  const contact_phone = formatted && /\d{7,}/.test(formatted.replace(/\D/g, "")) ? formatted : "";
   return {
     contact_name,
     contact_email: email,
-    contact_phone: contact_phone && /\d{7,}/.test(contact_phone.replace(/\D/g, "")) ? contact_phone : "",
-    contact_ext: ext,
+    contact_phone,
+    contact_ext: contact_phone ? ext : "",
   };
+}
+
+function contactBlocksFromHeaders(text: string): string[] {
+  const blocks: string[] = [];
+  for (const row of text.matchAll(CONTACT_HEADER_RE)) {
+    const header = row[1] ?? "";
+    if (/CARRIER\s+CONTACT/i.test(header)) continue;
+    const start = row.index ?? 0;
+    const headerEnd = start + row[0].length;
+    const before = text.slice(Math.max(0, start - 500), start);
+    const afterFull = text.slice(headerEnd);
+    const cut = afterFull.search(NEXT_SECTION_RE);
+    const after = (cut >= 0 ? afterFull.slice(0, cut) : afterFull).slice(0, 800);
+    if (before.trim()) blocks.push(before);
+    if (after.trim()) blocks.push(after);
+  }
+  return blocks;
+}
+
+export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
+  const text = String(raw ?? "").replace(/\r/g, "");
+  if (!text.trim()) return emptyBrokerContact();
+  const tableRow = text.match(CONTACT_TABLE_RE)?.[1] ?? "";
+  const fromTable = parseContactFields(tableRow);
+  if (usableContact(fromTable)) return fromTable;
+  for (const block of contactBlocksFromHeaders(text)) {
+    const parsed = parseContactFields(block);
+    if (usableContact(parsed)) return parsed;
+  }
+  return emptyBrokerContact();
 }
 
 export function mergeBrokerContact(

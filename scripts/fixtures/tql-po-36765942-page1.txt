@@ -1,0 +1,27 @@
+DRIVER/CARRIER INFORMATION SHEET TQL PO# 36765942
+Name Phone Email Fax
+Gerard Borne 800-580-3101 x47010 GBorne@TQL.com
+TQL CONTACT INFO
+Pickup Dates Delivery Dates
+5/14/26 5/15/26
+CARRIER CONTACT
+Name Dispatcher Driver
+Ms Express (ne) jc Chris
+LOAD INFORMATION
+Mode Trailer Type Trailer Size Temperature Pallet/Case Count Hazmat
+FTL Reefer 53 ft 0F 3 pallets / 0 cases Non-Hazardous
+Special Temp Instructions
+Store at 0 Fahrenheit and not below -31 Fahrenheit.
+Estimated Weight 2699
+PICKUPS
+Shed City State Zip PU# Date Time
+United Airlines Chicago IL 60666 PO#7177828 5/14/2026 FCFS 08:00 to 14:00
+Information:
+Address: 630 MAIN CARGO RD., BLDG 630, CHICAGO, IL, 60666, US
+Commodity: 3 Pallets of Epoxy
+DROPS
+Consignee City State Zip Delivery PO Date Time
+Composites ONE LLC Lenexa KS 66219 5/15/2026 Appt 11:00
+Address: 16900 W. 113th ST., Lenexa, KS, 66219, US
+Billing Requirements:
+Carrier must send POD(s) to billing.pod@broker.example immediately after delivery.
