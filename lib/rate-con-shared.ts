@@ -24,6 +24,9 @@ export type ParsedStop = {
   window_end: string;
   confirmation: string;
   notes: string;
+  /** Stop PO / PU# only — never the customer/broker load number. */
+  reference: string;
+  quantity: string;
 };
 
 export type ParsedExtraStop = {
@@ -85,10 +88,14 @@ export function emptyParsedStop(): ParsedStop {
     window_end: "",
     confirmation: "",
     notes: "",
+    reference: "",
+    quantity: "",
   };
 }
 
-export function normalizeParsedStop(stop: Partial<ParsedStop> | null | undefined): ParsedStop {
+export function normalizeParsedStop(
+  stop: (Partial<ParsedStop> & { po?: string }) | null | undefined,
+): ParsedStop {
   const empty = emptyParsedStop();
   if (!stop) return empty;
   return {
@@ -103,6 +110,8 @@ export function normalizeParsedStop(stop: Partial<ParsedStop> | null | undefined
     window_end: String(stop.window_end ?? "").trim(),
     confirmation: String(stop.confirmation ?? "").trim(),
     notes: String(stop.notes ?? "").trim(),
+    reference: String(stop.reference ?? stop.po ?? "").trim(),
+    quantity: String(stop.quantity ?? "").trim(),
   };
 }
 

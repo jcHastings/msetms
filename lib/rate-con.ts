@@ -13,6 +13,7 @@ import {
   type ParsedRateCon,
   type ParsedStop,
 } from "./rate-con-shared";
+import { enrichParsedRateConFromText, stripLegalBoilerplate } from "./rate-con-paperwork";
 import { parseReeferModeFromText, parseReeferSetpointFromText } from "./reefer-shared";
 import type { Customer } from "./types";
 
@@ -124,12 +125,13 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
     "";
   const matched = matchCustomerName(customerName, customers);
 
-  const special =
+  const special = stripLegalBoilerplate(
     section(text, /special instructions?/i) ||
-    section(text, /dispatch notes/i) ||
-    ascend.special_instructions ||
-    printed.special_instructions ||
-    "";
+      section(text, /dispatch notes/i) ||
+      ascend.special_instructions ||
+      printed.special_instructions ||
+      "",
+  );
   const appointment =
     labeled(text, ["appointment"]) ||
     printed.appointment_notes ||
@@ -149,7 +151,8 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       ? printed.consignee
       : emptyParsedStop();
 
-  return sanitizeParsedRateCon(
+  return enrichParsedRateConFromText(
+    sanitizeParsedRateCon(
     {
       customer_name: customerName,
       customer_id: matched,
@@ -203,6 +206,8 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       reader: "hint",
     },
     filename,
+    ),
+    text,
   );
 }
 

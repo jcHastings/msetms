@@ -5157,6 +5157,203 @@ Email: nophone@broker.example
     assert.equal(queries.listLoads().length, loadsAfterTql, "reading TQL must not save a load");
   }
 
+  const cbText = fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.txt"), "utf8");
+  const { parseStopPaperwork } = await import("../lib/rate-con-paperwork");
+  const shipperPaper = parseStopPaperwork("PU# N25504 (1440 CASES)");
+  assert.equal(shipperPaper.reference, "N25504");
+  assert.equal(shipperPaper.confirmation, "");
+  assert.equal(shipperPaper.quantity, "1440 cases");
+  const kcPaper = parseStopPaperwork("CONF# 61511545 PO# 000250476 ( 960 CASES)");
+  assert.equal(kcPaper.reference, "000250476");
+  assert.equal(kcPaper.confirmation, "61511545");
+  assert.equal(kcPaper.quantity, "960 cases");
+  const norfolkPaper = parseStopPaperwork("CONF#61713982 PO# 110247187 (480 CASES)");
+  assert.equal(norfolkPaper.reference, "110247187");
+  assert.equal(norfolkPaper.confirmation, "61713982");
+  const cbHint = parseRateConText(cbText, [], "cb-logistics-106361.txt");
+  assert.match(cbHint.shipper.name, /North Bay/i);
+  assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
+  assert.equal(cbHint.shipper.reference, "N25504");
+  assert.equal(cbHint.shipper.confirmation, "");
+  assert.match(cbHint.shipper.notes, /FOOD GRADE TRAILER REQUIRED/i);
+  assert.match(cbHint.shipper.notes, /DETENTION IS NOT PAID HERE/i);
+  assert.match(cbHint.shipper.notes, /\$100 fine/i);
+  assert.match(cbHint.shipper.notes, /PU# N25504 \(1440 CASES\)/);
+  assert.equal(cbHint.consignee.reference, "000250476");
+  assert.equal(cbHint.consignee.confirmation, "61511545");
+  assert.match(cbHint.consignee.notes, /AWG IS BY SET APPT/);
+  assert.match(cbHint.consignee.notes, /CONF# 61511545 PO# 000250476/);
+  assert.equal(cbHint.consignee.schedule_type, "appointment");
+  const cbNorfolk = cbHint.extra_stops.find((item) => /Norfolk/i.test(item.stop.city) || /Norfolk/i.test(item.stop.name));
+  assert.ok(cbNorfolk, "third stop Norfolk must persist");
+  assert.equal(cbNorfolk?.stop.reference, "110247187");
+  assert.equal(cbNorfolk?.stop.confirmation, "61713982");
+  assert.match(cbHint.special_instructions, /MUST PULP PRODUCT-TAKE TEMP WHEN LOADING/);
+  assert.match(cbHint.special_instructions, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbHint.special_instructions, /GATE FEES AND LUMPER FEES AND SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbHint.special_instructions, /after-hours tracking/);
+  assert.match(cbHint.special_instructions, /air chute/);
+  assert.match(cbHint.special_instructions, /exposed insulation/);
+  assert.doesNotMatch(cbHint.special_instructions, /BACK SOLICIT|REMIT TO|ATTORNEY FEES|FINES SCHEDULE/i);
+  assert.equal(cbHint.reefer_setpoint_f, 34);
+  assert.equal(cbHint.reefer_mode, "continuous");
+  const mixedAi = applyAiRateCon(
+    parseRateConAiJson(`{
+      "customer_name": "CB Logistics Group",
+      "customer_confidence": "high",
+      "rate": 2625,
+      "rate_confidence": "high",
+      "commodity": "Fresh Foods BERRIES",
+      "weight": 12000,
+      "load_number": "106361",
+      "equipment": "reefer",
+      "reefer_mode": "continuous",
+      "special_instructions": "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN",
+      "stops": [
+        {
+          "kind": "pickup",
+          "name": "North Bay Produce - Mascoutah",
+          "street": "8835 Richard Brauer Road",
+          "city": "Mascoutah",
+          "state": "IL",
+          "zip": "62258",
+          "schedule_type": "appointment",
+          "confirmation": "",
+          "notes": ""
+        },
+        {
+          "kind": "delivery",
+          "name": "AWG - Kansas City",
+          "street": "4701 Speaker Road",
+          "city": "Kansas City",
+          "state": "KS",
+          "zip": "66106",
+          "confirmation": "61511545",
+          "notes": "AWG IS BY SET APPT DRIVER TO VERIFY COUNTS RECEIVED, AWG DOES NOT PAY DETENTION, CALL IF BEING DETAINED."
+        },
+        {
+          "kind": "delivery",
+          "name": "AWG - Norfolk",
+          "street": "1301 W Omaha Ave",
+          "city": "Norfolk",
+          "state": "NE",
+          "zip": "68701",
+          "confirmation": "61713982",
+          "notes": "AWG IS BY SET APPT DRIVER TO VERIFY COUNTS RECEIVED, AWG DOES NOT PAY DETENTION, CALL IF BEING DETAINED."
+        }
+      ]
+    }`),
+    queries.listCustomers(),
+    cbHint,
+    cbText,
+  );
+  assert.equal(mixedAi.shipper.reference, "N25504");
+  assert.equal(mixedAi.consignee.reference, "000250476");
+  assert.equal(mixedAi.consignee.confirmation, "61511545");
+  assert.notEqual(mixedAi.consignee.reference, mixedAi.consignee.confirmation);
+  assert.match(mixedAi.special_instructions, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(mixedAi.special_instructions, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  const cbCustomerId =
+    queries.listCustomers().find((row) => /CB Logistics/i.test(row.name))?.id ??
+    queries.createCustomer({ name: "CB Logistics Group", billing_notes: "", contacts: [] });
+  const cbLoadId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-SMOKE",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: mixedAi.special_instructions,
+    appointment_notes: "",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: mixedAi.reefer_setpoint_f,
+    reefer_mode: mixedAi.reefer_mode,
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  const cbStopForm = new FormData();
+  cbStopForm.set("pickup_stop_name", mixedAi.shipper.name);
+  cbStopForm.set("pickup_stop_street", mixedAi.shipper.street);
+  cbStopForm.set("pickup_stop_city", mixedAi.shipper.city);
+  cbStopForm.set("pickup_stop_state", mixedAi.shipper.state);
+  cbStopForm.set("pickup_stop_zip", mixedAi.shipper.zip);
+  cbStopForm.set("pickup_stop_schedule_type", mixedAi.shipper.schedule_type);
+  cbStopForm.set("pickup_stop_confirmation", mixedAi.shipper.confirmation);
+  cbStopForm.set("pickup_stop_reference", mixedAi.shipper.reference);
+  cbStopForm.set("pickup_stop_quantity", mixedAi.shipper.quantity);
+  cbStopForm.set("pickup_stop_notes", mixedAi.shipper.notes);
+  cbStopForm.set("delivery_stop_name", mixedAi.consignee.name);
+  cbStopForm.set("delivery_stop_street", mixedAi.consignee.street);
+  cbStopForm.set("delivery_stop_city", mixedAi.consignee.city);
+  cbStopForm.set("delivery_stop_state", mixedAi.consignee.state);
+  cbStopForm.set("delivery_stop_zip", mixedAi.consignee.zip);
+  cbStopForm.set("delivery_stop_schedule_type", mixedAi.consignee.schedule_type);
+  cbStopForm.set("delivery_stop_confirmation", mixedAi.consignee.confirmation);
+  cbStopForm.set("delivery_stop_reference", mixedAi.consignee.reference);
+  cbStopForm.set("delivery_stop_quantity", mixedAi.consignee.quantity);
+  cbStopForm.set("delivery_stop_notes", mixedAi.consignee.notes);
+  cbStopForm.set("extra_stops_json", JSON.stringify(mixedAi.extra_stops));
+  const { applyRateConStopsToLoad: applyCbStops } = await import("../lib/rate-con-stops");
+  applyCbStops(cbLoadId, cbStopForm);
+  const confirmationLib = await import("../lib/load-confirmation");
+  const cbDriver = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "internal" });
+  assert.equal(cbDriver.loadNumber, "MSE-1065-SMOKE");
+  assert.equal(cbDriver.customerReference, "");
+  assert.equal(cbDriver.reeferSetpoint, "34°F");
+  assert.match(cbDriver.reeferMode, /Continuous/i);
+  const cbShipper = cbDriver.stops.find((stop) => /North Bay/i.test(stop.name));
+  const cbKc = cbDriver.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`));
+  const cbNf = cbDriver.stops.find((stop) => /Norfolk/i.test(`${stop.name} ${stop.address}`));
+  assert.equal(cbShipper?.poNumber, "N25504");
+  assert.equal(cbShipper?.confirmationNumber, "");
+  assert.match(cbShipper?.quantity ?? "", /1440/);
+  assert.match(cbShipper?.extra ?? "", /FOOD GRADE TRAILER REQUIRED/i);
+  assert.match(cbShipper?.extra ?? "", /LOAD LOCKS ARE REQUIRED/i);
+  assert.equal(cbKc?.poNumber, "000250476");
+  assert.equal(cbKc?.confirmationNumber, "61511545");
+  assert.match(cbKc?.quantity ?? "", /960/);
+  assert.equal(cbKc?.appointment, "Yes");
+  assert.match(cbKc?.extra ?? "", /AWG IS BY SET APPT/);
+  assert.equal(cbNf?.poNumber, "110247187");
+  assert.equal(cbNf?.confirmationNumber, "61713982");
+  assert.match(cbNf?.quantity ?? "", /480/);
+  assert.equal(cbNf?.appointment, "Yes");
+  assert.match(cbDriver.dispatchNotes, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbDriver.dispatchNotes, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriver.dispatchNotes, /air chute/);
+  assert.doesNotMatch(cbDriver.dispatchNotes, /106361/);
+  const { extractText: extractCbPdfText } = await import("unpdf");
+  const cbDriverText = String(
+    (await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(cbDriver)), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(cbDriverText, /N25504/);
+  assert.match(cbDriverText, /000250476/);
+  assert.match(cbDriverText, /110247187/);
+  assert.match(cbDriverText, /61511545/);
+  assert.match(cbDriverText, /61713982/);
+  assert.match(cbDriverText, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbDriverText, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriverText, /34\s*°\s*F/);
+  assert.doesNotMatch(cbDriverText, /106361/);
+  assert.doesNotMatch(cbDriverText, /turn left|google maps|head north on/i);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /reference \(also called po/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"),
+    /confirmation is the stop PO/,
+  );
+
   const sampleAscendPdf = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
   if (fs.existsSync(sampleAscendPdf)) {
     const { extractDocumentText } = await import("../lib/rate-con");

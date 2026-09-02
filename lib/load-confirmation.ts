@@ -24,6 +24,7 @@ import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
 import { parseDriverMessageLocale, type DriverMessageLocale } from "./load-summary";
 import { cityStateOnly } from "./load-documents-shared";
+import { parseStopPaperwork } from "./rate-con-paperwork";
 
 export type ConfirmationStop = {
   title: string;
@@ -282,6 +283,69 @@ export function driverFacingStopConfirmation(
   return value;
 }
 
+export function driverSheetStopRefs(
+  stop:
+    | {
+        reference?: string | null;
+        confirmation?: string | null;
+        notes?: string | null;
+        instructions?: string | null;
+        cargo?: string | null;
+      }
+    | undefined,
+  load: Pick<LoadView, "load_number" | "customer_reference">,
+): { poNumber: string; confirmationNumber: string; quantity: string } {
+  const paper = parseStopPaperwork(
+    [stop?.reference, stop?.confirmation, stop?.notes, stop?.instructions, stop?.cargo].filter(Boolean).join("\n"),
+  );
+  let po = String(stop?.reference ?? "").trim();
+  let conf = String(stop?.confirmation ?? "").trim();
+  if (paper.reference && paper.confirmation && paper.reference !== paper.confirmation) {
+    po = paper.reference;
+    conf = paper.confirmation;
+  } else {
+    if (!po) po = paper.reference;
+    if (!conf) conf = paper.confirmation;
+    if (po && po === conf && paper.reference && paper.reference !== (paper.confirmation || po)) {
+      po = paper.reference;
+      conf = paper.confirmation || (conf === paper.reference ? "" : conf);
+    }
+  }
+  return {
+    poNumber: driverFacingStopPo({ reference: po }, load),
+    confirmationNumber: driverFacingStopConfirmation({ confirmation: conf }, load),
+    quantity: String(stop?.cargo ?? "").trim() || paper.quantity,
+  };
+}
+
+function stripCustomerLoadNumber(text: string, load: Pick<LoadView, "load_number" | "customer_reference">): string {
+  const ref = String(load.customer_reference ?? "").trim();
+  if (!ref || ref === String(load.load_number ?? "").trim()) return text;
+  const escaped = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text
+    .replace(new RegExp(`\\bLoad\\s*(?:No\\.?|Number|#)\\s*${escaped}\\b`, "gi"), "")
+    .replace(new RegExp(`\\b${escaped}\\b`, "g"), "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stopAppointmentLabel(
+  stop: LoadStop | undefined,
+  locationType: string,
+  extra: string,
+  loadNotes: string,
+): string {
+  if (isAppointmentSchedule(stop?.schedule_type)) return "Yes";
+  if (/set\s+appt|appointment\s+required|strict\s+loading\s+appts/i.test(`${stop?.notes ?? ""} ${stop?.instructions ?? ""} ${extra}`)) {
+    return "Yes";
+  }
+  if (isFcfsSchedule(stop?.schedule_type)) return "No";
+  if (locationType === "appointment") return "Yes";
+  if (locationType === "No") return "No";
+  return appointmentLabel(loadNotes);
+}
+
 function confirmationStopTitle(kind: string | undefined, typeNumber: number): string {
   const n = typeNumber > 0 ? typeNumber : 1;
   if (kind === "delivery") return `Consignee ${n}`;
@@ -300,6 +364,7 @@ function confirmationStopFromParty(
   const party = confirmationParty(stop, fallbackLocationId, laneFallback, load.customer_name);
   const kind = stop?.kind ?? kindHint;
   const isPickup = kind === "pickup";
+  const refs = driverSheetStopRefs(stop, load);
   return {
     title: confirmationStopTitle(kind, stop ? stopTypeNumber(all, stop.id) : 1),
     name: party.name,
@@ -308,15 +373,15 @@ function confirmationStopFromParty(
     date: formatMdY(stop?.window_start || (isPickup ? load.pickup_start : load.delivery_start)),
     time: formatStopClock(stop, isPickup ? load.pickup_start : load.delivery_start),
     type: "",
-    quantity: "",
+    quantity: refs.quantity,
     weight: load.weight != null ? String(load.weight) : "",
-    poNumber: packet === "internal" ? driverFacingStopPo(stop, load) : stop?.reference.trim() || load.po_number,
+    poNumber: packet === "internal" ? refs.poNumber : stop?.reference.trim() || refs.poNumber || load.po_number,
     confirmationNumber:
-      packet === "internal" ? driverFacingStopConfirmation(stop, load) : (stop?.confirmation ?? "").trim(),
+      packet === "internal" ? refs.confirmationNumber : (stop?.confirmation ?? "").trim() || refs.confirmationNumber,
     extra: party.extra,
     hoursLabel: isPickup ? "Shipping Hours" : "Receiving Hours",
     hours: party.hours,
-    appointment: party.appointment || appointmentLabel(load.appointment_notes),
+    appointment: stopAppointmentLabel(stop, party.appointment, party.extra, load.appointment_notes),
     description: load.commodity,
   };
 }
@@ -389,6 +454,7 @@ export function buildConfirmationModel(
   ]
     .filter(Boolean)
     .join("\n");
+  const dispatchNotes = packet === "internal" ? stripCustomerLoadNumber(notes, load) : notes;
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
@@ -433,7 +499,7 @@ export function buildConfirmationModel(
     shipper,
     consignee,
     stops: listedStops,
-    dispatchNotes: notes,
+    dispatchNotes,
     internalLegs: "",
     reeferSetpoint: reefer.setpointF != null ? formatReeferSetpoint(reefer.setpointF) : "",
     reeferMode: reefer.isReefer ? labelForReeferMode(reefer.mode) || "Continuous" : "",
@@ -621,10 +687,11 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
   const pageLimit = 640;
-  const notesH = model.packet === "customer" ? 24 : model.style === "owner_operator" ? 28 : 40;
+  const clipNotes = model.packet === "customer";
+  const notesH = clipNotes ? 24 : model.style === "owner_operator" ? 28 : 40;
   const legsH = model.packet === "internal" && model.internalLegs ? 41 : 0;
   const payH = model.packet === "internal" && model.style === "owner_operator" ? 68 : 0;
-  const fitOnePage = stopBoxes.length <= 2;
+  const fitOnePage = stopBoxes.length <= 2 && model.packet === "customer";
   const gaps = 10 + Math.max(0, stopBoxes.length - 1) * 8;
   const reservedAfter = 8 + 12 + notesH + 6 + legsH + payH;
   const stopBudget = Math.max(72, pageLimit - y - reservedAfter - gaps);
@@ -645,19 +712,30 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   for (let index = 0; index < stopBoxes.length; index += 1) {
     const gap = index === 0 ? 10 : 8;
-    ensureSpace(gap + stopHeight);
-    y = drawStop(doc, left, y + gap, width, stopBoxes[index], stopHeight);
+    const boxH = stopBoxHeight(doc, stopBoxes[index], stopHeight, model.packet === "internal");
+    ensureSpace(gap + boxH);
+    y = drawStop(doc, left, y + gap, width, stopBoxes[index], boxH, model.packet === "internal");
   }
 
   y += 8;
-  ensureSpace(12 + notesH + 6 + legsH);
+  const noteFont = Math.max(8, bodySize - 1);
+  doc.font("Helvetica").fontSize(noteFont);
+  const notesNeeded = clipNotes
+    ? notesH
+    : Math.max(notesH, doc.heightOfString(model.dispatchNotes || " ", { width }));
+  ensureSpace(12 + notesNeeded + 6 + legsH);
   doc.font("Helvetica-Bold").fontSize(bodySize).fillColor("#111827").text(confirmLabel(model, "Dispatch Notes:", "Notas de despacho:"), left, y, {
     lineBreak: false,
   });
   y += 12;
-  doc.font("Helvetica").fontSize(Math.max(8, bodySize - 1)).fillColor("#111827");
-  doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
-  y += notesH + 6;
+  doc.font("Helvetica").fontSize(noteFont).fillColor("#111827");
+  if (clipNotes) {
+    doc.text(model.dispatchNotes || " ", left, y, { width, height: notesH, lineBreak: true });
+    y += notesH + 6;
+  } else {
+    doc.text(model.dispatchNotes || " ", left, y, { width, lineBreak: true });
+    y += notesNeeded + 6;
+  }
   if (model.packet === "internal" && model.internalLegs) {
     doc.font("Helvetica-Bold").fontSize(Math.max(8, bodySize - 1)).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
       lineBreak: false,
@@ -882,6 +960,13 @@ function drawReeferBar(
   return y + height;
 }
 
+function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop, base: number, expandExtra: boolean): number {
+  if (!expandExtra || !stop.extra.trim()) return base;
+  doc.font("Helvetica").fontSize(7);
+  const extraH = doc.heightOfString(stop.extra, { width: 528 });
+  return base + Math.min(90, Math.max(14, extraH));
+}
+
 function drawStop(
   doc: PDFKit.PDFDocument,
   x: number,
@@ -889,6 +974,7 @@ function drawStop(
   width: number,
   stop: ConfirmationStop,
   height = 108,
+  expandExtra = false,
 ): number {
   doc.rect(x, y, width, height).strokeColor("#9ca3af").lineWidth(0.6).stroke();
   const leftW = 220;
@@ -927,10 +1013,11 @@ function drawStop(
     kv(doc, gridX + col * colW, y + 8 + row * 14, wide ? 74 : 70, wide ? colW + 8 : colW - 4, label, value);
   });
   if (stop.extra) {
-    doc.font("Helvetica").fontSize(7).text(stop.extra, x + 6, y + height - 12, {
+    const extraH = expandExtra ? Math.max(14, height - 98) : 10;
+    doc.font("Helvetica").fontSize(7).text(stop.extra, x + 6, y + height - extraH, {
       width: width - 12,
-      height: 10,
-      lineBreak: false,
+      height: extraH,
+      lineBreak: true,
     });
   }
   return y + height;

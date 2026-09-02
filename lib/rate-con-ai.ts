@@ -14,6 +14,7 @@ import {
   type ParsedRateCon,
   type RateConFieldFlag,
 } from "./rate-con-shared";
+import { enrichParsedRateConFromText } from "./rate-con-paperwork";
 import { isReeferMode } from "./reefer-shared";
 import { DEFAULT_LOAD_EQUIPMENT } from "./types";
 import type { Customer } from "./types";
@@ -37,7 +38,10 @@ export type RateConAiStop = {
   schedule_type?: string;
   window_start?: string;
   window_end?: string;
+  reference?: string;
+  po?: string;
   confirmation?: string;
+  quantity?: string | number;
   notes?: string;
   confidence?: string;
 };
@@ -87,8 +91,13 @@ Rate is the billed / agreed / total freight pay to the carrier — Carrier Freig
 If no freight dollar amount is printed, leave rate null and confidence low. Do not invent one.
 Load number is the customer's rate-con / load # / PO# / Order # (store as customer reference). Never invent an MSE trip number.
 Stops may be labeled Pickup At / Deliver To, PICKUPS / DROPS, PU 1 / SO 2, Shipper / Consignee. Read every one.
-schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/U number.
-PRECOOL TO 60F and similar lines are the reefer setpoint.
+schedule_type is "appointment" or "fcfs". "AWG IS BY SET APPT" / set appointment / appointment required means appointment.
+reference (also called po / PU#) is the unique purchase order or PU# for THAT stop only. Example: PU# N25504 or PO# 000250476. Never put the customer/broker load number (Load No 106361) in reference or confirmation.
+confirmation is the appointment confirmation for that stop only (CONF#). Do not copy CONF# into reference. Do not copy the PO into confirmation.
+quantity is that stop's case/piece count when printed (1440 cases / 960 cases).
+notes must include the stop Notes line AND operational Directions (food-grade, pre-cool, load locks, detention, count vs BOL). On many broker forms "Directions" are operating instructions, not turn-by-turn driving. Copy them. If a packet has real driving directions, copy those too. Do not invent Google/turn-by-turn.
+special_instructions are load-level driver operating notes (pulp/temp, check in with PU#s, pay gate/lumper and submit receipts, after-hours tracking, air chute photos, clean/dry/odor-free, no exposed insulation). Do not truncate. Do not include legal boilerplate (fines schedule, back-solicit, lawyer fees, remit address).
+PRECOOL TO 60F, Temperature 34°F, and "run 34 degrees continuous" are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
 Broker/load contact is the person who booked the load: Name, email, phone, and extension from THIS document's contact-info block. Brokers label that block differently. One layout is a Name | Phone (with xEXT) | Email | Fax table; the section title may sit above or below that row. Copy only what is printed on this packet. Leave blank when missing. Never invent a name, email, domain, or phone. Never reuse a contact from another load.
@@ -126,7 +135,9 @@ JSON shape:
       "schedule_type": "appointment",
       "window_start": "2026-08-21T08:00",
       "window_end": "2026-08-21T17:00",
+      "reference": "",
       "confirmation": "",
+      "quantity": "",
       "notes": "",
       "confidence": "high"
     }
@@ -151,7 +162,7 @@ export function hintForRateConPrompt(hint: ParsedRateCon): Record<string, unknow
     load_number_hint: hint.load_number_hint,
     reefer_setpoint_f: hint.reefer_setpoint_f,
     reefer_mode: hint.reefer_mode,
-    special_instructions: hint.special_instructions.slice(0, 800),
+    special_instructions: hint.special_instructions.slice(0, 4000),
     shipper: hint.shipper,
     consignee: hint.consignee,
     extra_stops: hint.extra_stops,
@@ -326,6 +337,8 @@ export function applyAiRateCon(
     reader: "ai",
   };
 
+  Object.assign(parsed, enrichParsedRateConFromText(parsed, rawText || hint.raw_text));
+
   const flags = flagsFromParsedGaps(parsed);
   if (customerName && customerConfidence === "low") {
     flags.unshift({
@@ -381,7 +394,9 @@ function stopFromAi(row: RateConAiStop): ParsedExtraStop[] {
         : "",
     window_start: normalizeWindow(row.window_start),
     window_end: normalizeWindow(row.window_end),
+    reference: row.reference ?? row.po,
     confirmation: row.confirmation,
+    quantity: row.quantity == null ? "" : String(row.quantity),
     notes: row.notes,
   });
   if (!stop.name.trim() && !stop.street.trim() && !stop.city.trim()) return [];
