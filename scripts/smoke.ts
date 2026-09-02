@@ -1785,6 +1785,13 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /data-load-share-create/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /sendMail|mailto:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/auto-invoice.ts"), "utf8"), /maybeAutoInvoiceLoad/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/auto-invoice.ts"), "utf8"), /resolveInvoiceCustomerEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /data-load-overlay/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /loadStatusBadgeClass/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /driverLoadHasAssignedTrailer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8"), /LoadChatPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-share.ts"), "utf8"), /invoice_sent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "SHIPPED.md"), "utf8"), /Approved spec \(2026-09-02\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
@@ -5681,6 +5688,52 @@ Email: nophone@broker.example
   assert.equal(noEmailAuto.skipped, "no_email");
   const invoiceInbox = (await import("../lib/exceptions")).listExceptionInbox(new Date("2026-08-21T12:00:00.000Z"));
   assert.ok(invoiceInbox.items.some((item) => item.loadId === noEmailInvoiceLoad && item.kind === "invoice_send"));
+  const billingVsBrokerCustomer = queries.createCustomer({
+    name: "Billing Vs Broker Co",
+    billing_notes: "",
+    main_email: "desk@shipper.example",
+    billing_email: "ap@shipper.example",
+    contacts: [],
+  });
+  const billingVsBrokerLoad = queries.createLoad({
+    customer_id: billingVsBrokerCustomer,
+    origin: "Lincoln, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 38000,
+    commodity: "Pork",
+    rate: 1750,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+    contact_email: "broker@packet.example",
+  });
+  addAttachment({
+    loadId: billingVsBrokerLoad,
+    kind: "pod",
+    originalName: "pod-billing.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  let billingAutoTo = "";
+  const billingAuto = await autoInvoice.maybeAutoInvoiceLoad(billingVsBrokerLoad, async (input) => {
+    billingAutoTo = input.to;
+  });
+  assert.equal(billingAuto.created, true);
+  assert.equal(billingAuto.sent, true);
+  assert.equal(billingAutoTo, "ap@shipper.example");
+  assert.notEqual(billingAutoTo, "broker@packet.example");
 
   const controlOrderId = queries.createLoad({
     customer_id: shareLoadCustomerId,

@@ -4,6 +4,24 @@ Working screens and local data — not docs-only menus. Third-party APIs stay st
 
 Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 
+## Approved spec (2026-09-02)
+
+On this PR. Packet names and phones are layout examples only — not hardcoded.
+
+1. Tighter navy/gold desk: status pills, load details slide in from the right.
+2. Overlapping map pins cluster when zoomed out.
+3. Control Center (`/control`): unassigned/active loads + idle Orbcomm (Samsara trucks when GPS exists). Orders / Resources. Click pin → side panel.
+4. Geo / equipment / status filter strip on that map.
+5. Small teardrop pins on every tracking map. Orbcomm head: green running / yellow off / red shutdown / gray unknown. Samsara head: green on / dark off. Tip is the exact lat/lng.
+6. Customer load-status `/l/…` timeline (Booked → Pickup → In Transit → Delivered → Invoice sent, only steps that happened). JC copies. Not emailed.
+7. Driver Trailer tab when a trailer is assigned; hidden when none.
+8. Load chat on the dispatcher load and `/driver` for that load. Not SMS or email.
+9. Auto-invoice the day POD + Delivered. Billing email (then main). Send-to / inbox if none. Not twice. Not the per-load broker email. From ar@msloads.com.
+10. Customer Main email + Billing email. Invoices always billing, then main, then Send-to.
+11. Per-load email from that packet’s contact block. Email customer update uses per-load, then main. Customer card not overwritten.
+12. Per-load phone + ext from that packet. Load comms use per-load, then customer main phone. Customer phone not overwritten.
+13. Rate-con reads the contact block on the packet in front of you (Name | Phone xEXT | Email is one layout). Ignore CARRIER CONTACT and shipper phones. Do not invent.
+
 ## Sign-in
 
 - Default company logo is the official **MS Express** mark (`public/ms-express-logo.png`) on login, the dispatcher header, and load confirmation PDFs. Product name stays **MS Express TMS**. Settings → Company can upload a replacement; remove reverts to the default.
@@ -19,7 +37,7 @@ Catalog items are marked `[v1]` in [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md).
 - Desk graphics are tighter: color status pills, cleaner tables, load details slide in from the right on a wide screen so the list stays put.
 - **Customer load-status link** (`/l/…`) is minted from the load. Vertical timeline shows only steps that happened: Booked → Pickup → In Transit → Delivered → Invoice sent. If that load has an Orbcomm trailer, a second section shows last-known temp/location. You copy and send the link — it is not emailed. Trailer temp links (`/t/…`) are unchanged.
 - **Load chat** stays on that load. Dispatcher sees it on the load; the driver sees it on that load in `/driver`. Stored forever. Not SMS or email.
-- **Auto-invoice the day POD hits:** when a POD is on the load and the load is Delivered, the TMS invoice PDF is created that day (customer rate + extras; lumper/OO pay off). If a customer email exists, it sends from ar@msloads.com. If not, the invoice stays ready and the inbox asks you to use Send to. Same invoice is not emailed twice. Tracking links are never auto-emailed.
+- **Auto-invoice the day POD hits:** when a POD is on the load and the load is Delivered, the TMS invoice PDF is created that day (customer rate + extras; lumper/OO pay off). If a billing (or main) email exists, it sends from ar@msloads.com. If not, the invoice stays ready and the inbox asks you to use Send to. Same invoice is not emailed twice. The per-load broker address is not used. Tracking links are never auto-emailed.
 - **Locations** in nav — shipper/receiver CRUD, pick on a load or type a one-off, scheduling on load + driver. Mass upload from JC’s Ascend blank location CSV (template download + UTF-8 import; duplicate name+address updates). **Download all locations** uses the same Ascend headers so a backup can be edited and re-imported.
 - **Search** in nav — criteria, live/archived/cancelled, saved reports.
 - Richer load statuses: available, hold, assigned, dispatched, at PU, loading, picked up, in transit, at DEL, unloading, delivered, completed, cancelled.
