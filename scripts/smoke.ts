@@ -917,7 +917,7 @@ async function main() {
   assert.match(mapCanvasSource, /markerText/);
   assert.match(mapCanvasSource, /labelOrigin/);
   assert.match(mapCanvasSource, /point\.labelOrigin/);
-  assert.match(mapCanvasSource, /LOAD_MAP_PIN_TIP_X|LOAD_MAP_PIN_TIP_Y/);
+  assert.match(mapCanvasSource, /loadMapIconLayout|LOAD_MAP_PIN_TIP_X|LOAD_MAP_PIN_TIP_Y/);
   assert.match(mapCanvasSource, /gestureHandling: "greedy"/);
   assert.match(mapCanvasSource, /defaultLoadMapLabelOrigin/);
   assert.match(mapCanvasSource, /loadMapPinIconUrl/);
@@ -10866,6 +10866,7 @@ Email: nophone@broker.example
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#22c55e/);
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /M11 1.4/);
   assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /circle cx="14" cy="14" r="9"/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /L13\.1 6\.8|M14 2\.2/);
   assert.equal(loadMapPinFill({ kind: "truck", pinColor: liveTruckPin?.pinColor }), SAMSARA_TRUCK_ON_COLOR);
   const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
   assert.equal(movingTruckPin?.pinShape, "arrow");
@@ -10874,6 +10875,8 @@ Email: nophone@broker.example
   assert.equal(movingTruckPin?.motion, "Moving");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /#22c55e/);
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /rotate\(85/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M14 2\.2 L24\.6 15\.4/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M11 1\.4|L13\.1 6\.8/);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
@@ -14973,8 +14976,8 @@ Email: nophone@broker.example
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-reefer-pin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Heading mark = moving/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Still = stopped/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Arrow = moving/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Pin = stopped/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="on"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="moving"/);

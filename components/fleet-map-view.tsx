@@ -64,8 +64,8 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                       {REEFER_PIN_LABEL[status]}
                     </li>
                   ))}
-                  <li data-orbcomm-pin-shape="arrow">Heading mark = moving</li>
-                  <li data-orbcomm-pin-shape="circle">Still = stopped</li>
+                  <li data-orbcomm-pin-shape="arrow">Arrow = moving</li>
+                  <li data-orbcomm-pin-shape="circle">Pin = stopped</li>
                 </>
               ) : (
                 <>

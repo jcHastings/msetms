@@ -12,7 +12,7 @@ On this PR. Packet names and phones are layout examples only — not hardcoded.
 2. Overlapping map pins cluster when zoomed out.
 3. Control Center (`/control`): unassigned/active loads + idle Orbcomm (Samsara trucks when GPS exists). Orders / Resources. Click pin → side panel.
 4. Geo / equipment / status filter strip on that map.
-5. Small teardrop pins on every tracking map. Orbcomm head: green running / yellow off / red shutdown / gray unknown. Samsara head: green on / dark off. Tip is the exact lat/lng.
+5. Stopped units are a small teardrop pin on every tracking map. Moving units are a full straight arrow rotated to heading — the whole marker is the arrow, not a pin with a side blob. Orbcomm head: green running / yellow off / red shutdown / gray unknown. Samsara head: green on / dark off. Pin tip / arrow center is the exact lat/lng.
 6. Customer load-status `/l/…` timeline (Booked → Pickup → In Transit → Delivered → Invoice sent, only steps that happened). JC copies. Not emailed.
 7. Driver Trailer tab when a trailer is assigned; hidden when none.
 8. Load chat on the dispatcher load and `/driver` for that load. Not SMS or email.
@@ -29,7 +29,7 @@ On this PR. Packet names and phones are layout examples only — not hardcoded.
 - **Users** in the main nav — list + add dispatchers and accounting staff on the same `dispatchers` records as Settings → Users. Roles: **Administrator**, **Standard**, **Accounting**. PIN is never shown after save. Administrator resets 2-step. Nav hides and APIs 401 anything a role cannot use.
 - **Settings → 2-step verification**: QR + secret, confirm, then enrolled. Recovery codes are shown once and stored hashed. Administrator can reset another user’s 2-step. “Require 2-step for all dispatchers” defaults **off** so MS Test / the office PC can still use PIN until they enroll.
 - Dispatcher session lasts 12 hours from sign-in.
-- Driver app unchanged: `/driver/login` with seeded driver PINs. No TOTP. When a load has an assigned trailer, **Trailer** is a tab. It opens a pinch-zoom map with a small teardrop pin at that trailer’s last-known Orbcomm location. No trailer assigned? The tab stays hidden. Every tracking map uses that same small teardrop (tip is the exact lat/lng): Driver Trailer, Orbcomm, Samsara, per-load, customer `/t/…`, load-status `/l/…`, and Control Center. Orbcomm pin heads stay green/yellow/red/gray for reefer running/off/shutdown/unknown. Samsara pin heads stay green when the truck is on and dark when it is off. Moving trucks keep a small heading mark on the pin. Cluster bubbles when zoomed out are fine. Positions are never invented.
+- Driver app unchanged: `/driver/login` with seeded driver PINs. No TOTP. When a load has an assigned trailer, **Trailer** is a tab. It opens a pinch-zoom map with that trailer’s last-known Orbcomm location. No trailer assigned? The tab stays hidden. Every tracking map (Driver Trailer, Orbcomm, Samsara, per-load, customer `/t/…`, load-status `/l/…`, Control Center) uses the same markers: a small teardrop pin when stopped, a high-contrast straight arrow rotated to heading when moving. Orbcomm pin/arrow heads stay green/yellow/red/gray for reefer running/off/shutdown/unknown. Samsara heads stay green when the truck is on and dark when it is off. Cluster bubbles when zoomed out are fine. Positions are never invented.
 
 ## Dispatch
 

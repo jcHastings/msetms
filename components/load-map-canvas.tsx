@@ -8,11 +8,8 @@ import {
   shouldClusterMapPoints,
 } from "@/lib/map-cluster";
 import {
-  LOAD_MAP_PIN_HEIGHT,
-  LOAD_MAP_PIN_TIP_X,
-  LOAD_MAP_PIN_TIP_Y,
-  LOAD_MAP_PIN_WIDTH,
   defaultLoadMapLabelOrigin,
+  loadMapIconLayout,
   loadMapPinIconUrl,
   type LoadMapPathPoint,
   type LoadMapPoint,
@@ -174,6 +171,7 @@ export function LoadMapCanvas({
             }
             const point = item.point;
             const position = { lat: point.lat, lng: point.lng };
+            const layout = loadMapIconLayout(point.pinShape);
             const marker = new maps.Marker({
               map,
               position,
@@ -189,9 +187,9 @@ export function LoadMapCanvas({
                 : undefined,
               icon: {
                 url: loadMapPinIconUrl(point),
-                size: new maps.Size(LOAD_MAP_PIN_WIDTH, LOAD_MAP_PIN_HEIGHT),
-                scaledSize: new maps.Size(LOAD_MAP_PIN_WIDTH, LOAD_MAP_PIN_HEIGHT),
-                anchor: new maps.Point(LOAD_MAP_PIN_TIP_X, LOAD_MAP_PIN_TIP_Y),
+                size: new maps.Size(layout.w, layout.h),
+                scaledSize: new maps.Size(layout.w, layout.h),
+                anchor: new maps.Point(layout.anchorX, layout.anchorY),
                 labelOrigin: point.labelOrigin
                   ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
                   : new maps.Point(defaultLoadMapLabelOrigin().x, defaultLoadMapLabelOrigin().y),
