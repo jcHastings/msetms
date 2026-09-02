@@ -3742,6 +3742,30 @@ async function main() {
   assert.equal(loadMail.resolveInvoiceCustomerEmail(slotLoad), "billing@slots.example");
   assert.equal(loadMail.invoiceMailTo(slotLoad, "typed@slots.example"), "billing@slots.example");
   assert.notEqual(loadMail.resolveInvoiceCustomerEmail(slotLoad), "ana@slots.example");
+  const loadContact = await import("../lib/load-contact");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "2210", slotLoadId);
+  const slotPhoneLoad = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadPerLoadPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadPerLoadExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotPhoneLoad), "800-555-0142 x2210");
+  assert.equal(loadContact.resolveCustomerMainPhone(slotCustomerId), "555-0100");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotPhoneLoad), "billing@slots.example");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "", slotLoadId);
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(queries.getLoad(slotLoadId)!), "800-555-0142");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("", "9999", slotLoadId);
+  const slotFallback = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotFallback), "555-0100");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotFallback), "");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotFallback), "555-0100");
+  assert.equal(queries.getCustomer(slotCustomerId)?.contacts[0]?.phone, "555-0100");
   queries.updateCustomer(slotCustomerId, {
     name: "Three Slot Shipper",
     billing_notes: "",
@@ -3762,30 +3786,6 @@ async function main() {
   assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(slotLoadId)!), "ana@slots.example");
   assert.equal(queries.getCustomer(slotCustomerId)?.main_email, "");
   assert.equal(queries.getCustomer(slotCustomerId)?.billing_email, "");
-  const loadContact = await import("../lib/load-contact");
-  getDb()
-    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
-    .run("800-555-0142", "2210", slotLoadId);
-  const slotPhoneLoad = queries.getLoad(slotLoadId)!;
-  assert.equal(loadContact.resolveLoadPerLoadPhone(slotPhoneLoad), "800-555-0142");
-  assert.equal(loadContact.resolveLoadPerLoadExt(slotPhoneLoad), "2210");
-  assert.equal(loadContact.resolveLoadCustomerPhone(slotPhoneLoad), "800-555-0142");
-  assert.equal(loadContact.resolveLoadCustomerExt(slotPhoneLoad), "2210");
-  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotPhoneLoad), "800-555-0142 x2210");
-  assert.equal(loadContact.resolveCustomerMainPhone(slotCustomerId), "555-0100");
-  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotPhoneLoad), "");
-  getDb()
-    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
-    .run("800-555-0142", "", slotLoadId);
-  assert.equal(loadContact.resolveLoadCustomerPhoneLine(queries.getLoad(slotLoadId)!), "800-555-0142");
-  getDb()
-    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
-    .run("", "9999", slotLoadId);
-  const slotFallback = queries.getLoad(slotLoadId)!;
-  assert.equal(loadContact.resolveLoadCustomerPhone(slotFallback), "555-0100");
-  assert.equal(loadContact.resolveLoadCustomerExt(slotFallback), "");
-  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotFallback), "555-0100");
-  assert.equal(queries.getCustomer(slotCustomerId)?.contacts[0]?.phone, "555-0100");
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
