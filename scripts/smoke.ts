@@ -13609,9 +13609,23 @@ P: 314-459-1752
   assert.match(invoicePanel, /\/api\/attachments\/\$\{attachmentId\}\?download=1/);
   assert.match(invoicePanel, /setTab\("financials"\)/);
   assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /pdfResponseHeaders/);
+  const invoiceRouteSource = fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8");
+  assert.match(invoiceRouteSource, /pdfResponseHeaders/);
+  assert.match(invoiceRouteSource, /X-Attachment-Id/);
+  assert.match(invoiceRouteSource, /export async function GET/);
+  assert.match(invoiceRouteSource, /export async function POST/);
+  assert.doesNotMatch(invoiceRouteSource, /serveGeneratedInvoice/);
+  const invoiceGetSource = invoiceRouteSource.slice(
+    invoiceRouteSource.indexOf("export async function GET"),
+    invoiceRouteSource.indexOf("export async function POST"),
+  );
+  const invoicePostSource = invoiceRouteSource.slice(invoiceRouteSource.indexOf("export async function POST"));
+  assert.match(invoiceGetSource, /listAttachments/);
+  assert.match(invoiceGetSource, /kind === "invoice"/);
+  assert.match(invoiceGetSource, /Create or Rebuild invoice first/);
+  assert.doesNotMatch(invoiceGetSource, /createTmsInvoice/);
+  assert.match(invoicePostSource, /createTmsInvoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Disposition.*attachment/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);
   const openPdf = fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8");
   assert.match(openPdf, /createObjectURL/);
   assert.match(openPdf, /openPdfInNewTab/);
