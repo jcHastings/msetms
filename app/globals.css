@@ -1643,6 +1643,66 @@ html:has([data-load-embed]) body {
   vertical-align: middle;
 }
 
+[data-orbcomm-status-table] td {
+  vertical-align: middle;
+}
+
+[data-orbcomm-status-table] td.trailer-share-compact-cell {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.trailer-share-compact-row,
+.trailer-share-compact-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trailer-share-compact-row {
+  min-height: 32px;
+  max-height: 40px;
+  flex-wrap: nowrap;
+}
+
+.trailer-share-compact-path {
+  display: block;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.trailer-share-compact-exp {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.trailer-share-compact .btn {
+  height: 28px;
+  padding: 0 0.5rem;
+  font-size: 12px;
+  border-radius: var(--r-xs);
+  flex-shrink: 0;
+}
+
+.trailer-share-compact input[type="datetime-local"] {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 0.35rem;
+  font-size: 12px;
+  line-height: 1.2;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: #fff;
+  color: var(--text);
+}
+
 .settings-page .card {
   border-radius: 0.4rem;
 }

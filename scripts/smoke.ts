@@ -1838,6 +1838,23 @@ async function main() {
   assert.match(trailerShareUi, /name="expires_at"/);
   assert.match(trailerShareUi, /data-trailer-share-expires-input/);
   assert.doesNotMatch(trailerShareUi, /sendMail|mailto:|Email customer/);
+  assert.doesNotMatch(trailerShareUi, /You send this link|Pins start when you create it/);
+  assert.match(trailerShareUi, /if \(compact\)/);
+  const compactShareStart = trailerShareUi.indexOf("if (compact)");
+  const compactShareReturn = trailerShareUi.indexOf("return (", compactShareStart);
+  const deskShareReturn = trailerShareUi.indexOf("return (", compactShareReturn + 1);
+  const compactShareUi = trailerShareUi.slice(compactShareStart, deskShareReturn);
+  assert.match(compactShareUi, /trailer-share-compact-row/);
+  assert.match(compactShareUi, /Create link/);
+  assert.match(compactShareUi, /sharePath \? "New" : "Create link"/);
+  assert.match(compactShareUi, /"Copied" : "Copy"/);
+  assert.match(compactShareUi, /formatCompactShareExpiry/);
+  assert.match(compactShareUi, /title=\{sharePath\}/);
+  assert.doesNotMatch(compactShareUi, /space-y-2|break-all|Expires \{formatDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-row,\s*\.trailer-share-compact-form \{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*6px;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-path \{[\s\S]*max-width:\s*9rem;[\s\S]*text-overflow:\s*ellipsis;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\[data-orbcomm-status-table\] td \{[\s\S]*vertical-align:\s*middle;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /trailer-share-compact-cell/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /This link has expired/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-expired/);
@@ -14707,9 +14724,10 @@ DISPATCH CONFIRMATION
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatBoardDateTime, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
+  const { formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
+  assert.equal(formatCompactShareExpiry("2026-09-02T20:04:00-04:00"), "09/02 8:04p");
   const boardWhen = formatBoardDateTime("2026-08-28T08:00:00-04:00");
   assert.equal(boardWhen.date, "08/28/26");
   assert.match(boardWhen.time, /8:00\s*AM/);

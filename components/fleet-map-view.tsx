@@ -186,7 +186,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     {shortPlaceLabel(row.location) || row.location || "—"}
                   </td>
                   <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
-                  <td>
+                  <td className="trailer-share-compact-cell">
                     {row.trailerId ? (
                       <TrailerShareLinkPanel
                         trailerId={row.trailerId}

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTrailerShareLinkAction } from "@/lib/actions";
 import { FormBanner } from "@/components/form-banner";
-import { formatDateTime } from "@/lib/format";
+import { formatCompactShareExpiry, formatDateTime } from "@/lib/format";
 import type { ActionResult } from "@/lib/types";
 
 export function TrailerShareLinkPanel({
@@ -41,9 +41,53 @@ export function TrailerShareLinkPanel({
     }
   }
 
+  if (compact) {
+    return (
+      <div className="trailer-share-compact" data-trailer-share="">
+        <FormBanner result={state} hideOk />
+        <div className="trailer-share-compact-row">
+          {sharePath ? (
+            <>
+              <span className="trailer-share-compact-path" data-trailer-share-url="" title={sharePath}>
+                {sharePath}
+              </span>
+              {expiresAt ? (
+                <span className="trailer-share-compact-exp" data-trailer-share-expires="">
+                  Exp {formatCompactShareExpiry(expiresAt)}
+                </span>
+              ) : null}
+              <button className="btn btn-secondary" type="button" data-trailer-share-copy="" onClick={() => void copy()}>
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </>
+          ) : null}
+          <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">
+            <input type="hidden" name="trailer_id" value={trailerId} />
+            <input
+              id={`trailer-share-expires-${trailerId}`}
+              name="expires_at"
+              type="datetime-local"
+              required
+              aria-label="Expires"
+              data-trailer-share-expires-input=""
+            />
+            <button
+              className={sharePath ? "btn btn-secondary" : "btn btn-primary"}
+              type="submit"
+              disabled={pending}
+              data-trailer-share-create=""
+            >
+              {pending ? "Creating…" : sharePath ? "New" : "Create link"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={compact ? "space-y-2" : "card space-y-3 p-4"} data-trailer-share="">
-      {compact ? null : <h2 className="text-sm font-semibold">Customer link</h2>}
+    <div className="card space-y-3 p-4" data-trailer-share="">
+      <h2 className="text-sm font-semibold">Customer link</h2>
       <FormBanner result={state} />
       {sharePath ? (
         <div className="space-y-1 text-sm">
@@ -59,9 +103,7 @@ export function TrailerShareLinkPanel({
             {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-      ) : (
-        <p className="text-sm text-slate-600">You send this link. Pins start when you create it.</p>
-      )}
+      ) : null}
       <form action={formAction} className="space-y-2" data-trailer-share-form="">
         <input type="hidden" name="trailer_id" value={trailerId} />
         <div className="field">

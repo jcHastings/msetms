@@ -167,6 +167,29 @@ export function formatDateTime(iso: string): string {
   }
 }
 
+/** Orbcomm table: `09/02 8:04p` — no year, single-letter am/pm. */
+export function formatCompactShareExpiry(iso: string): string {
+  try {
+    const raw = String(iso ?? "").trim();
+    if (!raw) return "—";
+    const date = parseDisplayDate(raw);
+    if (!date) return "—";
+    const bits = new Intl.DateTimeFormat("en-US", {
+      timeZone: DISPLAY_TIME_ZONE,
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) => bits.find((item) => item.type === type)?.value ?? "";
+    const period = (part("dayPeriod") || "AM").slice(0, 1).toLowerCase();
+    return `${part("month")}/${part("day")} ${part("hour")}:${part("minute")}${period}`;
+  } catch {
+    return "—";
+  }
+}
+
 /** Dispatch board: date on line 1, time on line 2. Do not keep them on one line. */
 export function formatBoardDateTime(iso: string): { date: string; time: string } {
   const combined = formatDateTime(iso);
