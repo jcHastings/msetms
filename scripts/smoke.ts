@@ -1225,9 +1225,9 @@ async function main() {
     fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"),
     /parsed\.contact_name\s*\|\|\s*load\.contact_name/,
   );
-  const rateConImportUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
-  assert.match(rateConImportUi, /rateConApplyContactFields/);
-  assert.doesNotMatch(rateConImportUi, /parsed\.contact_name\s*\|\|\s*/);
+  const rateConCreateUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConCreateUi, /rateConApplyContactFields/);
+  assert.doesNotMatch(rateConCreateUi, /parsed\.contact_name\s*\|\|\s*/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /createLoadAction[\s\S]*rateConApplyContactFields/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /leftoverCarrierPersonLine/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /carrierRoleWindow/);
