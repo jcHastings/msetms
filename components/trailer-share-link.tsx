@@ -58,30 +58,30 @@ export function TrailerShareLinkPanel({
     }
   }
 
-  const linkState = compactShareState(sharePath, expiresAt);
-  const expiryLabel = expiresAt ? formatCompactShareExpiry(expiresAt) : "—";
-  const copyLabel = copied ? "Copied" : "Copy";
-  const createLabel = pending ? "Creating…" : linkState === "expired" ? "New link" : linkState === "live" ? "New" : "Create link";
-  const createClass = linkState === "live" ? "btn btn-secondary" : "btn btn-primary";
-
-  const compactForm = (
-    <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">
-      <input type="hidden" name="trailer_id" value={trailerId} />
-      <input
-        id={`trailer-share-expires-${trailerId}`}
-        name="expires_at"
-        type="datetime-local"
-        required
-        aria-label="Expires"
-        data-trailer-share-expires-input=""
-      />
-      <button className={createClass} type="submit" disabled={pending} data-trailer-share-create="">
-        {createLabel}
-      </button>
-    </form>
-  );
-
   if (compact) {
+    const linkState = compactShareState(sharePath, expiresAt);
+    const expiryLabel = expiresAt ? formatCompactShareExpiry(expiresAt) : "—";
+    const compactForm = (
+      <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">
+        <input type="hidden" name="trailer_id" value={trailerId} />
+        <input
+          id={`trailer-share-expires-${trailerId}`}
+          name="expires_at"
+          type="datetime-local"
+          required
+          aria-label="Expires"
+          data-trailer-share-expires-input=""
+        />
+        <button
+          className={linkState === "live" ? "btn btn-secondary" : "btn btn-primary"}
+          type="submit"
+          disabled={pending}
+          data-trailer-share-create=""
+        >
+          {pending ? "Creating…" : linkState === "expired" ? "New link" : linkState === "live" ? "New" : "Create link"}
+        </button>
+      </form>
+    );
     return (
       <div className="trailer-share-compact" data-trailer-share="" data-trailer-share-state={linkState}>
         <FormBanner result={state} hideOk />
@@ -107,13 +107,13 @@ export function TrailerShareLinkPanel({
                       {absoluteShareUrl(sharePath)}
                     </span>
                     <button className="btn btn-secondary" type="button" data-trailer-share-copy="" onClick={() => void copy()}>
-                      {copyLabel}
+                      {copied ? "Copied" : "Copy"}
                     </button>
                   </div>
                 ) : null}
               </div>
               <button className="btn btn-secondary" type="button" data-trailer-share-copy="" onClick={() => void copy()}>
-                {copyLabel}
+                {copied ? "Copied" : "Copy"}
               </button>
               {compactForm}
             </>
