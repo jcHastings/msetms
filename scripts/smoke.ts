@@ -2305,6 +2305,7 @@ async function main() {
   assert.match(workbenchCardUi, /mapsBrowserKey/);
   assert.match(workbenchCardUi, /data-workbench-lane-sketch/);
   assert.match(workbenchCardUi, /LoadCardFastActions/);
+  assert.doesNotMatch(workbenchCardUi, /exceptionAction|Snooze 4h/);
   assert.match(workbenchCardUi, /listStopAppointmentTargets/);
   assert.match(workbenchCardUi, /findCityCenter/);
   assert.match(workbenchCardUi, /compact/);
