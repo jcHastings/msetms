@@ -517,7 +517,7 @@ async function main() {
   assert.match(fastActionsUi, /HoverActionMenu/);
   assert.match(boardUi, /LoadCardFastActions/);
   assert.match(boardUi, /AssignDialog/);
-  assert.match(boardUi, />Edit</);
+  assert.match(boardUi, />\s*Edit\s*</);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
@@ -2379,10 +2379,10 @@ async function main() {
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
 
-  const { getDb } = await import("../lib/db");
   const { listLoadTimeline } = await import("../lib/load-timeline");
   const { runWithAuditActor, recordLoadAudit } = await import("../lib/audit");
   const { listWorkbenchInbox, setExceptionState } = await import("../lib/desk");
+  const stopsMod = await import("../lib/stops");
   assert.deepEqual(listLoadTimeline(-1), [], "timeline must not invent events that are not in the system");
   assert.equal(
     listLoadTimeline(loadId).some((row) => row.source === "samsara" || row.source === "orbcomm"),
@@ -2394,8 +2394,7 @@ async function main() {
   const pingAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const missAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const statusAt = new Date().toISOString();
-  const { ensureDefaultStops } = await import("../lib/stops");
-  ensureDefaultStops(loadId);
+  stopsMod.ensureDefaultStops(loadId);
   const pickupStop = getDb()
     .prepare("SELECT id FROM load_stops WHERE load_id = ? AND kind = 'pickup' ORDER BY id LIMIT 1")
     .get(loadId) as { id: number } | undefined;
@@ -13403,13 +13402,15 @@ P: 314-459-1752
   assert.equal(worstSafetyRank(["due_soon", "hos_violation", "expired"]), "expired");
   const tyrellSafety = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrellSafety);
+  const safetyNow = new Date();
+  safetyNow.setDate(safetyNow.getDate() + 15);
   const safetyBoard = buildSafetyBoard({
     drivers: queries.listDrivers(),
     windowDays: 30,
     insurance: { provider: "Great West", policy: "POL-100", expires: "2026-07-01" },
     tokenSet: false,
     hos: [],
-    now: new Date("2026-08-24T12:00:00"),
+    now: safetyNow,
   });
   assert.ok(safetyBoard.rows.some((row) => row.subject === "Denise Ortega"));
   assert.ok(safetyBoard.rows.some((row) => row.subject === "Cole Brennan" && row.driverType === "owner_operator"));
