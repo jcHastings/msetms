@@ -75,7 +75,7 @@ export function ExceptionInboxCard({
           </p>
         ) : (
           <div
-            className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+            className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3"
             data-workbench-cards=""
           >
             {groups.map((group) => (

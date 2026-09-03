@@ -107,9 +107,9 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
       data-workbench-card=""
       data-attention-load={group.loadNumber}
     >
-      <div className="flex items-start gap-2.5 px-3 pt-3">
+      <div className="workbench-card-header flex items-start gap-2.5 px-3 pt-3">
         <div
-          className="h-20 w-20 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
+          className="workbench-map-thumb h-20 w-20 shrink-0 overflow-hidden"
           data-workbench-map-thumb=""
         >
           {apiKey ? (
@@ -117,7 +117,7 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
               apiKey={apiKey}
               points={points}
               path={path}
-              className="h-full w-full bg-slate-100"
+              className="h-full w-full overflow-hidden bg-slate-100"
               missingKeyMessage="Map is off."
               emptyMessage="No map"
             />
@@ -127,12 +127,15 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <Link href={`/loads/${group.loadId}`} className="font-mono text-sm font-semibold tracking-tight hover:underline">
+            <Link
+              href={`/loads/${group.loadId}`}
+              className="desk-link block truncate whitespace-nowrap font-mono text-sm font-semibold tracking-tight"
+            >
               {group.loadNumber}
             </Link>
             <div className="flex shrink-0 items-center gap-1.5" data-workbench-fast-actions="">
               <LoadCardFastActions loadId={group.loadId} loadNumber={group.loadNumber} stops={stops} />
-              <Link href={`/loads/${group.loadId}`} className="text-xs font-medium text-slate-600">
+              <Link href={`/loads/${group.loadId}`} className="desk-link text-xs">
                 Open
               </Link>
             </div>
@@ -145,10 +148,12 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
           </div>
         </div>
       </div>
-      <ul className="mt-2 space-y-2 border-t border-slate-100 px-3 pb-2.5 pt-2">
-        {group.items.map((item) => (
-          <ExceptionIssueLine key={item.id} item={item} compact />
-        ))}
+      <ul className="workbench-card-issues mt-2 space-y-1.5 border-t border-slate-100 px-3 pb-2.5 pt-2">
+        {group.items.length === 0 ? (
+          <li className="text-xs text-slate-500">No open issues</li>
+        ) : (
+          group.items.map((item) => <ExceptionIssueLine key={item.id} item={item} compact />)
+        )}
       </ul>
     </article>
   );
