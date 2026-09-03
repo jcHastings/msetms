@@ -612,10 +612,13 @@ function stripCarrierAndDriverRoles(text: string): string {
 
 function letterheadRegion(text: string): string {
   const raw = String(text ?? "").replace(/\r/g, "");
-  const cut = raw.search(HEADER_ROLE_CUT_RE);
-  const head = (cut >= 0 ? raw.slice(0, cut) : raw.slice(0, 900))
-    .replace(/^\s*(?:dispatch confirmation|rate confirmation)\s*/i, "")
-    .trim();
+  const roleCut = raw.search(HEADER_ROLE_CUT_RE);
+  let head = roleCut >= 0 ? raw.slice(0, roleCut) : raw.slice(0, 900);
+  const bodyCut = head.search(
+    /\b(?:stops?\s*\/\s*actions|special instructions|commodity\b|weight\b|equipment\b|origin\s*:|destination\s*:|pickup\b|delivery\b)/i,
+  );
+  if (bodyCut >= 0) head = head.slice(0, bodyCut);
+  head = head.replace(/^\s*(?:dispatch confirmation|rate confirmation|load confirmation)\s*/i, "").trim();
   return stripCarrierAndDriverRoles(head).trim();
 }
 
