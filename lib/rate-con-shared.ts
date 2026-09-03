@@ -497,8 +497,7 @@ const CONTACT_HEADER_RE =
 const CONTACT_TABLE_RE = /(?:^|\n)\s*Name\s+Phone\s+Email(?:\s+Fax)?\s*\n([^\n]+)/i;
 const NEXT_SECTION_RE =
   /\n(?:CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO)\b/i;
-const HEADER_ROLE_CUT_RE =
-  /\b(?:carrier\s*:|stop\s+\d|pieces\b|pallets\b|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
+const HEADER_ROLE_CUT_RE = /\b(?:carrier\s*:|stop\s+\d|pieces\b|pallets\b)/i;
 const NAME_STOPWORDS =
   /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info|ph|ext)$/i;
 
@@ -639,8 +638,14 @@ export function parseLetterheadCustomer(text: string): string {
 }
 
 export function letterheadOfficeCityState(text: string): string {
-  const match = letterheadRegion(text).match(/\b([A-Z][A-Za-z.'-]+),\s*([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\b/);
-  return match ? `${match[1]}, ${match[2]}` : "";
+  const head = letterheadRegion(text);
+  const withZip = head.match(/\b([A-Z][A-Za-z.'-]+),\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/);
+  if (withZip) return `${withZip[1]}, ${withZip[2]}`;
+  if (!STREET_SUFFIX.test(head)) return "";
+  const afterStreet = head.match(
+    new RegExp(`${STREET_SUFFIX.source}[\\s\\S]{0,80}?\\b([A-Z][A-Za-z.'-]+),\\s*([A-Z]{2})\\b`, "i"),
+  );
+  return afterStreet ? `${afterStreet[1]}, ${afterStreet[2]}` : "";
 }
 
 /** Pickup city. Never the broker office printed in the letterhead. */
@@ -665,7 +670,7 @@ export function pickBrokerCustomerName(text: string, candidates: string[]): stri
     const cleaned = collapse(name);
     if (!cleaned) continue;
     if (isOwnPaperworkName(cleaned, text) || looksLikePlaceOrLoadNumber(cleaned)) continue;
-    if (looksLikeCompanyName(cleaned) || !looksLikePersonName(cleaned)) return cleaned;
+    return cleaned;
   }
   return parseLetterheadCustomer(text);
 }
