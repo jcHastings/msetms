@@ -5752,7 +5752,8 @@ P: 314-459-1752
   const cbShipper = cbDriver.stops.find((stop) => /North Bay/i.test(stop.name));
   const cbKc = cbDriver.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`));
   const cbNf = cbDriver.stops.find((stop) => /Norfolk/i.test(`${stop.name} ${stop.address}`));
-  assert.equal(cbShipper?.poNumber, "N25504");
+  assert.equal(cbShipper?.poNumber, "");
+  assert.equal(cbShipper?.puNumber, "N25504");
   assert.equal(cbShipper?.confirmationNumber, "");
   assert.match(cbShipper?.quantity ?? "", /1440/);
   assert.match(cbShipper?.extra ?? "", /FOOD GRADE TRAILER REQUIRED/i);
@@ -5776,11 +5777,33 @@ P: 314-459-1752
       .text ?? "",
   );
   const cbDriverFlat = cbDriverText.replace(/\s+/g, " ");
+  assert.match(cbDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(cbDriverText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(cbDriverText, /at_pickup/);
+  assert.doesNotMatch(cbDriverText, /MS Test/);
+  assert.doesNotMatch(cbDriverText, /ana@msloads\.com/);
+  assert.doesNotMatch(cbDriverText, /Purchase Order #: s\b|Purchase Order #:\s*s\s/);
   assert.match(cbDriverText, /N25504/);
   assert.match(cbDriverText, /000250476/);
   assert.match(cbDriverText, /110247187/);
   assert.match(cbDriverText, /61511545/);
   assert.match(cbDriverText, /61713982/);
+  const cbCustomer = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "customer" });
+  assert.equal(cbCustomer.stops.find((stop) => /North Bay/i.test(stop.name))?.poNumber, "");
+  assert.equal(cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.poNumber, "000250476");
+  assert.equal(
+    cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.confirmationNumber,
+    "61511545",
+  );
+  const cbCustomerText = String(
+    (await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(cbCustomer)), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(cbCustomerText, /Customer Confirmation/);
+  assert.doesNotMatch(cbCustomerText, /Truck #|Trailer #|Load Status|at_pickup/);
+  assert.doesNotMatch(cbCustomerText, /PO#\s*000250476|CONF#\s*61511545/);
+  assert.match(cbCustomerText, /000250476/);
+  assert.match(cbCustomerText, /61511545/);
   assert.match(cbDriverFlat, /MUST CHECK IN WITH ALL PU#s/);
   assert.match(cbDriverFlat, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
   assert.match(cbDriverFlat, /MUST CHECK IN[\s\S]*WITH ALL PU#s[\s\S]*SUBMIT RECEIPTS FOR REIMBURSEMENT/);
@@ -7057,7 +7080,7 @@ P: 314-459-1752
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /Continuous/);
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /Two load locks are required/);
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /claim number/);
-  assert.match(getDocumentDefaults("load_confirmation").terms_text, /MS Express load number/);
+  assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /MS Express load number/);
   assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /TriumphPay/i);
   assert.equal(getDocumentDefaults("invoice").footer_text, "");
   assert.equal(getDocumentDefaults("invoice").terms_text, "");
@@ -7091,8 +7114,12 @@ P: 314-459-1752
   assert.equal(coleDriver.customerRate, null);
   const coleDriverPdf = await confirmation.renderConfirmationPdf(coleDriver);
   const coleDriverText = String((await extractText(new Uint8Array(coleDriverPdf), { mergePages: true })).text ?? "");
-  assert.match(coleDriverText, /Rate & Load Confirmation/);
+  assert.match(coleDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(coleDriverText, /Rate & Load Confirmation/);
   assert.doesNotMatch(coleDriverText, /Customer Confirmation/);
+  assert.doesNotMatch(coleDriverText, /at_pickup/);
+  assert.doesNotMatch(coleDriverText, /MS Test/);
+  assert.doesNotMatch(coleDriverText, /ana@msloads\.com/);
   assert.doesNotMatch(coleDriverText, /Thank you for hauling with us/);
   assert.doesNotMatch(coleDriverText, /Carrier is responsible for cargo/);
   assert.doesNotMatch(coleDriverText, /Report exceptions at pickup/);
@@ -7123,7 +7150,9 @@ P: 314-459-1752
   const deniseDriverText = String(
     (await extractText(new Uint8Array(deniseDriverPdf), { mergePages: true })).text ?? "",
   );
-  assert.match(deniseDriverText, /Load Confirmation/);
+  assert.match(deniseDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /^Load Confirmation$/m);
   assert.match(deniseDriverText, /Continuous/);
   assert.match(deniseDriverText, /load locks/i);
   assert.match(deniseDriverText, /claim number/);
@@ -7138,7 +7167,8 @@ P: 314-459-1752
   assert.doesNotMatch(deniseDriverText, /Customer Rate|^Rate$/m);
   assert.doesNotMatch(deniseDriverText, /3,100/);
   assert.doesNotMatch(deniseDriverText, /RC-1045/, "customer / rate-con load # must not appear on the driver sheet");
-  assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
+  assert.doesNotMatch(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
+  assert.doesNotMatch(deniseText, /Truck #|Trailer #|Load Status|at_pickup/);
   assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
   assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
   assert.match(deniseText, /REEFER/);
@@ -7452,6 +7482,7 @@ P: 314-459-1752
   assert.match(bolText, /Declared Value/);
   assert.match(bolText, /Number Of Pieces Received/);
   assert.match(bolText, /Page 1 of 1/);
+  assert.match(bolText, /MSE-1045/);
   const { listDefaultedDocuments, generateDefaultedDocument } = await import("../lib/load-documents");
   const defaulted = listDefaultedDocuments(deniseLoad.id);
   assert.ok(defaulted.some((row) => row.key === "bol" && row.status === "ready"));
@@ -13543,14 +13574,13 @@ P: 314-459-1752
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
   assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
   assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
-  assert.equal(tmsInvoiceModel.customerStreet, settings.getCompanySettings().street);
-  assert.match(tmsInvoiceModel.customerCityStateZip, /NE/);
-  assert.match(tmsInvoiceModel.customerPhone, /402-302-0097/);
+  assert.doesNotMatch(tmsInvoiceModel.customerStreet, /600 E 39th|100 Fleet Way/);
+  assert.doesNotMatch(tmsInvoiceModel.customerCityStateZip, /Hastings/);
+  assert.doesNotMatch(tmsInvoiceModel.customerPhone, /402-302-0097/);
   getDb()
     .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
     .run("800-555-0142", "2210", invoiceLoadId);
   const invoiceIgnoresBrokerPhone = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
-  assert.match(invoiceIgnoresBrokerPhone.customerPhone, /402-302-0097/);
   assert.doesNotMatch(invoiceIgnoresBrokerPhone.customerPhone, /800-555-0142/);
   assert.match(tmsInvoiceModel.companyAddress, /100 Fleet Way|600 E 39th/);
   assert.equal(settings.withOfficeAddress({ street: "", city: "", state: "", zip: "" }).street, "600 E 39th St");
@@ -13682,7 +13712,8 @@ P: 314-459-1752
   const onePageText = await extractDocumentText(onePageInvoice, "application/pdf", "INV-1005921-one.pdf");
   assert.match(onePageText, /Page 1 of 1/);
   assert.match(onePageText, /Load #/);
-  assert.match(onePageText, /MS Test \(M&S Loads LLC\)/);
+  assert.doesNotMatch(onePageText, /MS Test \(M&S Loads LLC\)/);
+  assert.doesNotMatch(onePageText, /MS Test/);
   const freightPdf = await renderTmsInvoicePdf({
     ...tmsInvoiceModel,
     invoiceNumber: "INV-1005921",

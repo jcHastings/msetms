@@ -6,7 +6,7 @@ export const DRIVER_CONFIRMATION_TERMS = [
   "3. Any shortages or damage must be reported to dispatch and must get a claim number before leaving the receiver. Failure to do so the driver is responsible for the load value.",
   "4. Driver must check with the shipper to confirm the temperature setting, and monitor equipment through delivery.",
   "5. DETENTION: Notify dispatch one hour before detention will start. No detention on drop-trailer loads. Times must be marked on the POD.",
-  "6. Have paperwork for every PO on this sheet before leaving the shipping dock. This sheet uses the MS Express load number, not the customer load number.",
+  "6. Have paperwork for every PO on this sheet before leaving the shipping dock.",
   "7. All loads must be sealed, with the seal number recorded on the BOL before the driver signs. Keep seal integrity on multi-stop loads and record the new seal on the BOL. Tell dispatch immediately if a seal breaks.",
   "8. Receiving load texts is consent to SMS from dispatch while operating a truck.",
 ].join("\n");
@@ -23,7 +23,7 @@ export const BOL_TERMS =
 
 /** Prior one-line stub. Upgrade it to the numbered driver sheet. */
 export const DRIVER_CONFIRMATION_TERMS_STUB =
-  "Temperature-controlled loads run Continuous. Use two load locks. Check the setpoint with the shipper before you leave. Record every seal number on the BOL. Paperwork is required for every PO. Shortages or damages need a claim number before leaving the receiver. Notify dispatch one hour before detention starts. This sheet uses the MS Express load number, not the customer load number. Receiving load texts is consent to SMS from dispatch.";
+  "Temperature-controlled loads run Continuous. Use two load locks. Check the setpoint with the shipper before you leave. Record every seal number on the BOL. Paperwork is required for every PO. Shortages or damages need a claim number before leaving the receiver. Notify dispatch one hour before detention starts. Receiving load texts is consent to SMS from dispatch.";
 
 /** Billing email lines belong on the customer/invoice sheet, not the driver packet. */
 export function driverFacingTermsText(terms: string): string {
@@ -31,6 +31,7 @@ export function driverFacingTermsText(terms: string): string {
     .replace(/Email invoices,[^.]*\./gi, "")
     .replace(/Include the load number in the subject line\.?/gi, "")
     .replace(/[^.]*billing@msloads\.com[^.]*\.?/gi, "")
+    .replace(/This sheet uses the MS Express load number[^.]*\./gi, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s+\./g, ".")
     .replace(/\n{3,}/g, "\n\n")
@@ -43,6 +44,7 @@ export function shouldReplaceStoredTerms(docType: string, current: string): bool
   if (docType === "load_confirmation") {
     if (/billing@msloads\.com|email invoices/i.test(text)) return true;
     if (/triumph\s*pay/i.test(text)) return true;
+    if (/This sheet uses the MS Express load number/i.test(text)) return true;
     if (text === DRIVER_CONFIRMATION_TERMS_STUB) return true;
     if (!/Two load locks are required/i.test(text) && /Use two load locks/i.test(text)) return true;
   }

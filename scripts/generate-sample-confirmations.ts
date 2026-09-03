@@ -27,6 +27,10 @@ const emptyCustomer = {
   customerReference: "",
   customerRate: null,
   customerRateLines: [],
+  headerCompany: "",
+  headerDispatcher: "",
+  headerPhone: "",
+  headerEmail: "",
 };
 
 const ooSample: ConfirmationModel = {
@@ -58,6 +62,7 @@ const ooSample: ConfirmationModel = {
     weight: "",
     poNumber: "",
     confirmationNumber: "O341180225",
+    puNumber: "",
     extra: "",
     hoursLabel: "Shipping Hours",
     hours: "",
@@ -76,6 +81,7 @@ const ooSample: ConfirmationModel = {
     weight: "",
     poNumber: "",
     confirmationNumber: "",
+    puNumber: "",
     extra: "Released 1073675, CRLU1221060 SG2-019",
     hoursLabel: "Receiving Hours",
     hours: "",
@@ -119,6 +125,7 @@ const companySample: ConfirmationModel = {
     weight: "",
     poNumber: "49404 286713",
     confirmationNumber: "",
+    puNumber: "",
     extra: "",
     hoursLabel: "Shipping Hours",
     hours: "",
@@ -137,6 +144,7 @@ const companySample: ConfirmationModel = {
     weight: "",
     poNumber: "Omaha 56736 8/24 Conf # 42583",
     confirmationNumber: "",
+    puNumber: "",
     extra: "",
     hoursLabel: "Receiving Hours",
     hours: "",

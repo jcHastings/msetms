@@ -163,6 +163,29 @@ function stopLocationBlock(stop: TmsInvoiceStop): string {
   return [stop.name, address].map((line) => line.trim()).filter(Boolean).join("\n");
 }
 
+function looksLikeBillingAddress(value: string): boolean {
+  if (/\d/.test(value) && /\b[A-Z]{2}\b/.test(value)) return true;
+  return /\d/.test(value) && /\b(st|street|ave|rd|blvd|dr|way|ln|ct|hwy|pkwy|box)\b/i.test(value);
+}
+
+function billingFromNotes(notes: string): { street: string; cityStateZip: string } | null {
+  const trimmed = String(notes ?? "").trim();
+  if (!trimmed) return null;
+  if (/created from a rate confirmation/i.test(trimmed)) return null;
+  if (/^net\s*\d+\s*\.?$/i.test(trimmed)) return null;
+  const flattened = trimmed.replace(/\s*\n+\s*/g, ", ");
+  if (!looksLikeBillingAddress(flattened)) return null;
+  const match = flattened.match(/^(.*?)(?:,\s*)?([A-Za-z .'-]+,\s*[A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?)\s*$/);
+  if (match) {
+    return { street: match[1].replace(/,\s*$/, "").trim(), cityStateZip: match[2].trim() };
+  }
+  return { street: flattened, cityStateZip: "" };
+}
+
+function isBlockedInvoiceContact(value: string): boolean {
+  return /^(ms\s*test|jojo(?:\s+schwartz)?|carrier\s*attn|ana(?:\s+g)?)$/i.test(value.trim());
+}
+
 function customerBlock(load: LoadView): {
   street: string;
   cityStateZip: string;
@@ -171,21 +194,32 @@ function customerBlock(load: LoadView): {
   contactPhone: string;
   terms: string;
 } {
-  const settings = getCompanySettings();
   const company = getCompanyProfile();
   const customer = getCustomer(load.customer_id);
   const contact = customer?.contacts[0];
   const billPhone = resolveCustomerMainPhone(load.customer_id);
-  const contactName = (load.contact_name || contact?.name || "").trim();
-  const contactPhone = billPhone;
+  const rawContact = (load.contact_name || contact?.name || "").trim();
+  const contactName = isBlockedInvoiceContact(rawContact) ? "" : rawContact;
   const terms = (customer?.payment_terms ?? "").trim();
-  if (isCompanyCustomerName(load.customer_name, company.company_name)) {
+  const fromNotes = billingFromNotes(String(customer?.billing_notes ?? ""));
+  const selfNamed = isCompanyCustomerName(load.customer_name, company.company_name);
+  if (fromNotes) {
     return {
-      street: settings.street.trim(),
-      cityStateZip: cityStateZipLine(settings.city, settings.state, settings.zip),
-      phone: billPhone || settings.dispatcher_phone.trim(),
+      street: fromNotes.street,
+      cityStateZip: fromNotes.cityStateZip,
+      phone: billPhone,
       contact: contactName,
-      contactPhone,
+      contactPhone: billPhone,
+      terms,
+    };
+  }
+  if (selfNamed) {
+    return {
+      street: "",
+      cityStateZip: "",
+      phone: "",
+      contact: contactName,
+      contactPhone: "",
       terms,
     };
   }
@@ -194,7 +228,7 @@ function customerBlock(load: LoadView): {
     cityStateZip: "",
     phone: billPhone,
     contact: contactName,
-    contactPhone,
+    contactPhone: billPhone,
     terms,
   };
 }
@@ -273,7 +307,7 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     customerContactPhone: customer.contactPhone,
     terms: customer.terms,
     dueDate: dueDateFromTerms(customer.terms, date),
-    dispatcherName: (load.dispatcher_name || company.dispatcher_name || "").trim(),
+    dispatcherName: "",
     companyDocket: "",
     stops: invoiceStops(load),
     publicNotes: (load.public_notes ?? "").trim(),
@@ -556,10 +590,21 @@ function drawContinuationHeader(
   width: number,
   y: number,
 ): number {
-  const ref = model.customerReference || model.poNumber || model.loadNumber;
-  doc.rect(x, y, width, 20).fill("#e5e7eb");
-  doc.font("Helvetica").fontSize(8).fillColor("#111111").text(`References: ${ref}`, x + 8, y + 6, { width: width - 16 });
-  return y + 28;
+  const logo = companyLogoPath();
+  if (logo) {
+    try {
+      doc.image(logo, x, y, { fit: [64, 26] });
+    } catch {
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c").text("MS EXPRESS", x, y + 6);
+    }
+  } else {
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c").text("MS EXPRESS", x, y + 6);
+  }
+  doc.font("Helvetica-Bold").fontSize(12).fillColor("#111111");
+  doc.text("INVOICE", x + 72, y + 6, { width: 200, lineBreak: false });
+  doc.text(`Load #${model.loadNumber}`, x, y + 6, { width, align: "right", lineBreak: false });
+  doc.moveTo(x, y + 32).lineTo(x + width, y + 32).strokeColor("#111111").lineWidth(1).stroke();
+  return y + 42;
 }
 
 function drawPinnedFooter(
@@ -572,11 +617,8 @@ function drawPinnedFooter(
 ): void {
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const top = 748;
-  doc.moveTo(x, top).lineTo(x + width, top).strokeColor("#9ca3af").lineWidth(0.6).stroke();
+  doc.moveTo(x, top).lineTo(x + width, top).strokeColor("#111111").lineWidth(1).stroke();
   doc.moveTo(x + 172, top).lineTo(x + 172, top + 28).stroke();
-  doc.moveTo(x + 344, top).lineTo(x + 344, top + 28).stroke();
-  const dispatcher = (model.dispatcherName ?? "").trim();
-  const right = dispatcher ? `${dispatcher} (${model.companyLegalName})` : model.companyLegalName;
   doc.font("Helvetica").fontSize(8).fillColor("#111111");
   doc.text(`Page ${page} of ${pageCount}`, x + 8, top + 10, {
     width: 156,
@@ -586,12 +628,6 @@ function drawPinnedFooter(
   doc.text(`Load #${model.loadNumber}`, x + 180, top + 10, {
     width: 156,
     align: "center",
-    lineBreak: false,
-    height: 12,
-  });
-  doc.text(right, x + 352, top + 10, {
-    width: 156,
-    align: "right",
     lineBreak: false,
     height: 12,
   });
