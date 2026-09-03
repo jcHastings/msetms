@@ -5,15 +5,8 @@ import { useRouter } from "next/navigation";
 import { createTrailerShareLinkAction } from "@/lib/actions";
 import { FormBanner } from "@/components/form-banner";
 import { useDismissable } from "@/components/use-dismissable";
-import { formatCompactShareExpiry, formatDateTime } from "@/lib/format";
+import { compactTrailerShareState, formatCompactShareExpiry, formatDateTime } from "@/lib/format";
 import type { ActionResult } from "@/lib/types";
-
-function compactShareState(sharePath: string, expiresAt: string, now = Date.now()): "none" | "live" | "expired" {
-  if (!sharePath) return "none";
-  const expires = Date.parse(expiresAt);
-  if (Number.isFinite(expires) && expires > now) return "live";
-  return "expired";
-}
 
 function absoluteShareUrl(sharePath: string): string {
   if (typeof window === "undefined") return sharePath;
@@ -59,7 +52,7 @@ export function TrailerShareLinkPanel({
   }
 
   if (compact) {
-    const linkState = compactShareState(sharePath, expiresAt);
+    const linkState = compactTrailerShareState(sharePath, expiresAt);
     const expiryLabel = expiresAt ? formatCompactShareExpiry(expiresAt) : "—";
     const compactForm = (
       <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">

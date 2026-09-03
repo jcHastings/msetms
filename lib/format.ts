@@ -167,6 +167,18 @@ export function formatDateTime(iso: string): string {
   }
 }
 
+/** Orbcomm compact cell: no path until View. Expired includes a missing/invalid expiry. */
+export function compactTrailerShareState(
+  sharePath: string,
+  expiresAt: string,
+  now = Date.now(),
+): "none" | "live" | "expired" {
+  if (!sharePath) return "none";
+  const expires = Date.parse(expiresAt);
+  if (Number.isFinite(expires) && expires > now) return "live";
+  return "expired";
+}
+
 /** Orbcomm table: `09/02 8:04p` — no year, single-letter am/pm. */
 export function formatCompactShareExpiry(iso: string): string {
   try {

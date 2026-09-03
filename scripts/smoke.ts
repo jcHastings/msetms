@@ -1849,6 +1849,7 @@ async function main() {
   assert.match(compactShareUi, /linkState === "expired" \? "New link" : linkState === "live" \? "New" : "Create link"/);
   assert.match(compactShareUi, /"Copied" : "Copy"/);
   assert.match(compactShareUi, /formatCompactShareExpiry/);
+  assert.match(compactShareUi, /compactTrailerShareState/);
   assert.match(compactShareUi, /Active · Exp/);
   assert.match(compactShareUi, /Expired \{expiryLabel\}/);
   assert.match(compactShareUi, /data-trailer-share-view/);
@@ -14733,10 +14734,14 @@ DISPATCH CONFIRMATION
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
+  const { compactTrailerShareState, formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
   assert.equal(formatCompactShareExpiry("2026-09-02T20:04:00-04:00"), "09/02 8:04p");
+  assert.equal(compactTrailerShareState("", ""), "none");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-04T17:22:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "live");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-02T20:04:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "expired");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-03T12:00:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "expired");
   const boardWhen = formatBoardDateTime("2026-08-28T08:00:00-04:00");
   assert.equal(boardWhen.date, "08/28/26");
   assert.match(boardWhen.time, /8:00\s*AM/);
