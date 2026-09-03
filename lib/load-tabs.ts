@@ -10,7 +10,7 @@ export const LOAD_TABS = [
 
 export const LOAD_VIEW_TABS = [
   ...LOAD_TABS,
-  { value: "log", label: "Load Log" },
+  { value: "log", label: "Load Timeline" },
   { value: "docs", label: "Load Documents" },
 ] as const;
 
@@ -34,6 +34,7 @@ const ALIASES: Record<string, LoadTab> = {
   log: "log",
   history: "log",
   audit: "log",
+  timeline: "log",
   docs: "docs",
   documents: "docs",
   document: "docs",

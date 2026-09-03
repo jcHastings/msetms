@@ -591,6 +591,64 @@ export async function saveManualRouteMilesAction(
   });
 }
 
+export async function flagLoadExceptionAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId || !getLoad(loadId)) throw new Error("Load is missing.");
+    const note = requiredString(formData.get("note"), "Exception note");
+    recordLoadAudit({
+      loadId,
+      action: "exception",
+      field: "note",
+      newValue: note,
+    });
+    refresh();
+  });
+}
+
+export async function setStopAppointmentAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const stopId = parseOptionalInt(formData.get("stop_id"));
+    if (!stopId) throw new Error("Stop is missing.");
+    const stop = getStop(stopId);
+    if (!stop) throw new Error("Stop not found.");
+    const whenRaw = String(formData.get("appointment_at") ?? "").trim();
+    const confirmation = String(formData.get("confirmation") ?? "").trim();
+    const scheduleType = String(formData.get("schedule_type") ?? "appointment").trim() || "appointment";
+    const when = whenRaw ? fromInputDateTime(whenRaw) : stop.window_start;
+    updateStop(stopId, {
+      kind: stop.kind,
+      name: stop.name,
+      street: stop.street,
+      city: stop.city,
+      state: stop.state,
+      zip: stop.zip,
+      phone: stop.phone,
+      window_start: when,
+      window_end: isAppointmentSchedule(scheduleType) ? "" : stop.window_end,
+      confirmation,
+      cargo: stop.cargo,
+      reference: stop.reference,
+      instructions: stop.instructions,
+      notes: stop.notes,
+      location_id: stop.location_id,
+      arrived_at: stop.arrived_at,
+      departed_at: stop.departed_at,
+      schedule_type: scheduleType,
+    });
+    recordLoadAudit({
+      loadId: stop.load_id,
+      action: "appointment",
+      field: `${stop.kind}_appointment`,
+      oldValue: stop.window_start,
+      newValue: when,
+    });
+    refresh();
+  });
+}
+
 export async function exceptionAction(formData: FormData): Promise<void> {
   await requireLoadEditor();
   const key = String(formData.get("exception_key") ?? "").trim();

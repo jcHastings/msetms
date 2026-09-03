@@ -12,7 +12,7 @@ type NavEntry =
   | { kind: "section"; title: string; items: NavItem[] };
 
 const NAV: NavEntry[] = [
-  { kind: "link", item: { href: "/", label: "Dashboard", short: "Dashboard", icon: "home" } },
+  { kind: "link", item: { href: "/", label: "Workbench", short: "Workbench", icon: "home" } },
   { kind: "link", item: { href: "/control", label: "Control Center", short: "Control", icon: "places" } },
   { kind: "link", item: { href: "/search", label: "Search", short: "Search", icon: "search" } },
   {
@@ -20,6 +20,7 @@ const NAV: NavEntry[] = [
     kind: "section",
     items: [
       { href: "/board", label: "Dispatch board", short: "Board", icon: "board" },
+      { href: "/desk", label: "Desk", short: "Desk", icon: "home" },
       { href: "/loads/new", label: "New load", short: "+ New", icon: "new" },
       { href: "/loads/import-sheet", label: "Import loads", short: "Import", icon: "import" },
       { href: "/loads/templates", label: "Templates", short: "Templates", icon: "templates" },

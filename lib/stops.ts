@@ -59,6 +59,33 @@ function hydrateStopFromLocations(
   };
 }
 
+export function listStopAppointmentTargets(loadId: number): Array<{
+  id: number;
+  kind: LoadStopKind;
+  name: string;
+  window_start: string;
+  confirmation: string;
+  schedule_type: string;
+}> {
+  return (
+    getDb()
+      .prepare(
+        `SELECT id, kind, name, window_start, confirmation, schedule_type
+         FROM load_stops
+         WHERE load_id = ?
+         ORDER BY sequence, id`,
+      )
+      .all(loadId) as Array<Record<string, unknown>>
+  ).map((row) => ({
+    id: Number(row.id),
+    kind: asStopKind(String(row.kind ?? "pickup")),
+    name: String(row.name ?? ""),
+    window_start: String(row.window_start ?? ""),
+    confirmation: String(row.confirmation ?? ""),
+    schedule_type: String(row.schedule_type ?? ""),
+  }));
+}
+
 export function listStops(loadId: number): LoadStop[] {
   applyGeofenceArrivals(loadId);
   const locations = listLocations();

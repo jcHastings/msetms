@@ -18,6 +18,9 @@ async function main() {
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
   assert.match(navSource, /label: "Search"/);
+  assert.match(navSource, /label: "Workbench"/);
+  assert.match(navSource, /href: "\/desk"/);
+  assert.doesNotMatch(navSource, /label: "Dashboard"/);
   assert.match(navSource, /href: "\/control"/);
   assert.match(navSource, /Control Center/);
   assert.match(navSource, /title: "Accounting"/);
@@ -141,7 +144,7 @@ async function main() {
   assert.ok(LOAD_STATUSES.every((status) => loadStatusBadgeClass(status) && loadStatusRowClass(status)));
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
-  const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
   const {
     loadMatchesListQuery,
     parseLoadListTab,
@@ -241,6 +244,7 @@ async function main() {
   assert.match(tabSource, /financials/);
   const { parseLoadTab, confirmationPacketForTab, confirmationDownloadLabel } = await import("../lib/load-tabs");
   assert.equal(parseLoadTab("history"), "log");
+  assert.equal(parseLoadTab("timeline"), "log");
   assert.equal(parseLoadTab("documents"), "docs");
   assert.equal(parseLoadTab("carrier"), "assets");
   assert.equal(parseLoadTab("tracking"), "assets");
@@ -481,6 +485,39 @@ async function main() {
   assert.match(workspaceSource, /Admin \/ Financials/);
   assert.match(workspaceSource, /pt-1/);
   assert.doesNotMatch(workspaceSource, /load-action-menu absolute z-20 mt-1/);
+  assert.match(workspaceSource, /createHoverMenuCloser/);
+  assert.match(workspaceSource, /data-hover-action-menu/);
+  assert.match(workspaceSource, /data-hover-menu-bridge/);
+  const hoverMenu = fs.readFileSync(path.join(process.cwd(), "lib/hover-menu.ts"), "utf8");
+  assert.match(hoverMenu, /HOVER_MENU_CLOSE_DELAY_MS/);
+  assert.match(hoverMenu, /createHoverMenuCloser/);
+  const { createHoverMenuCloser, HOVER_MENU_CLOSE_DELAY_MS } = await import("../lib/hover-menu");
+  assert.ok(HOVER_MENU_CLOSE_DELAY_MS >= 150, "hover menus must survive the button-to-menu gap");
+  {
+    const closer = createHoverMenuCloser(30);
+    let closed = false;
+    closer.schedule(() => {
+      closed = true;
+    });
+    assert.equal(closed, false, "mouseleave must not close the menu immediately");
+    closer.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(closed, false, "re-entering the menu cancels the close");
+    closer.schedule(() => {
+      closed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(closed, true, "menu closes after the hover delay");
+    closer.dispose();
+  }
+  const fastActionsUi = fs.readFileSync(path.join(process.cwd(), "components/load-card-fast-actions.tsx"), "utf8");
+  assert.match(fastActionsUi, /Exception/);
+  assert.match(fastActionsUi, /Set appointment/);
+  assert.match(fastActionsUi, /Post update/);
+  assert.match(fastActionsUi, /HoverActionMenu/);
+  assert.match(boardUi, /LoadCardFastActions/);
+  assert.match(boardUi, /AssignDialog/);
+  assert.match(boardUi, />Edit</);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
@@ -1649,8 +1686,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/hos\/clocks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /staticAssignedDriver|mapHosCurrentVehicleDrivers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /LocationBadge/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /On the road/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /On the road/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /LocationBadge/);
+  const workbenchHome = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(workbenchHome, /listWorkbenchInbox/);
+  assert.match(workbenchHome, /Workbench/);
+  assert.match(workbenchHome, /variant="workbench"/);
+  assert.doesNotMatch(workbenchHome, /On the road/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /redirect\("\/"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /samsaraGpsEmptyState/);
   const matchFn =
@@ -2219,7 +2262,22 @@ async function main() {
   assert.match(inboxUi, /groupInboxExceptions/);
   assert.match(inboxUi, /data-attention-load/);
   assert.match(inboxUi, /data-attention-issue/);
+  assert.match(inboxUi, /variant === "workbench"/);
   assert.doesNotMatch(inboxUi, /inbox\.items\.map\(\(item\)/);
+  const { isOutOfToleranceException } = await import("../lib/exceptions");
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "MEDIUM" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "HIGH" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "CRITICAL" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "detention", severity: "HIGH" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "reefer", severity: "MEDIUM" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "missing_contact", severity: "CRITICAL" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "unassigned", severity: "MEDIUM" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "missing_pod", severity: "HIGH" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "compliance", severity: "HIGH" }), false);
+  const workbenchUi = fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8");
+  assert.match(workbenchUi, /listLoadTimeline/);
+  assert.match(workbenchUi, /Load Timeline/);
+  assert.match(workbenchUi, /data-timeline-newest-first/);
 
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
@@ -2320,6 +2378,105 @@ async function main() {
   assert.ok(created);
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
+
+  const { getDb } = await import("../lib/db");
+  const { listLoadTimeline } = await import("../lib/load-timeline");
+  const { runWithAuditActor, recordLoadAudit } = await import("../lib/audit");
+  const { listWorkbenchInbox, setExceptionState } = await import("../lib/desk");
+  assert.deepEqual(listLoadTimeline(-1), [], "timeline must not invent events that are not in the system");
+  assert.equal(
+    listLoadTimeline(loadId).some((row) => row.source === "samsara" || row.source === "orbcomm"),
+    false,
+    "create audit is real; Samsara/Orbcomm stay off until arrive/depart or a material reefer event",
+  );
+  const arriveAt = new Date(Date.now() - 90 * 60 * 1000).toISOString();
+  const departAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const pingAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const missAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const statusAt = new Date().toISOString();
+  const { ensureDefaultStops } = await import("../lib/stops");
+  ensureDefaultStops(loadId);
+  const pickupStop = getDb()
+    .prepare("SELECT id FROM load_stops WHERE load_id = ? AND kind = 'pickup' ORDER BY id LIMIT 1")
+    .get(loadId) as { id: number } | undefined;
+  if (pickupStop) {
+    getDb()
+      .prepare("UPDATE load_stops SET arrived_at = ?, departed_at = ? WHERE id = ?")
+      .run(arriveAt, departAt, pickupStop.id);
+  }
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (?, NULL, '', 34, 34.2, 0, '', 'orbcomm', ?)`,
+    )
+    .run(loadId, pingAt);
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (?, NULL, '', 34, 48.6, 0, 'HIGH TEMP', 'orbcomm', ?)`,
+    )
+    .run(loadId, missAt);
+  runWithAuditActor({ name: "Pat Desk", kind: "dispatcher" }, () => {
+    recordLoadAudit({
+      loadId,
+      action: "status",
+      field: "status",
+      oldValue: "available",
+      newValue: "assigned",
+    });
+  });
+  const timeline = listLoadTimeline(loadId);
+  assert.ok(timeline.length >= 3, "timeline shows real arrive/depart, reefer miss, and dispatcher action");
+  const times = timeline.map((row) => new Date(row.at).getTime());
+  for (let index = 1; index < times.length; index += 1) {
+    assert.ok(times[index] <= times[index - 1], "timeline is newest first");
+  }
+  assert.ok(timeline.some((row) => row.source === "samsara" && /Arrived/.test(row.title)));
+  assert.ok(timeline.some((row) => row.source === "samsara" && /Departed/.test(row.title)));
+  assert.ok(timeline.some((row) => row.source === "orbcomm" && /HIGH TEMP/.test(row.detail)));
+  assert.ok(timeline.some((row) => row.source === "dispatcher" && row.actor === "Pat Desk"));
+  assert.equal(
+    timeline.some((row) => row.at === pingAt && row.source === "orbcomm"),
+    false,
+    "Orbcomm pings that are in tolerance stay off the timeline",
+  );
+  getDb().prepare("DELETE FROM reefer_readings WHERE load_id = ?").run(loadId);
+  if (pickupStop) {
+    getDb().prepare("UPDATE load_stops SET arrived_at = '', departed_at = '' WHERE id = ?").run(pickupStop.id);
+  }
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("Pat Broker", "", loadId);
+  const namedNoPhone = listWorkbenchInbox().items.filter((item) => item.loadId === loadId);
+  assert.ok(
+    namedNoPhone.some((item) => item.kind === "missing_contact"),
+    "blank rate-con phone is out of tolerance",
+  );
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("", "314-555-0100", loadId);
+  const phoneNoName = (await import("../lib/exceptions"))
+    .listExceptionInbox()
+    .items.filter((item) => item.loadId === loadId && item.kind === "missing_contact");
+  assert.equal(phoneNoName.length, 0, "blank name with a phone is in tolerance");
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("Pat Broker", "", loadId);
+  const beforeResolve = listWorkbenchInbox().items.filter((item) => item.loadId === loadId);
+  assert.ok(beforeResolve.length >= 1, "workbench lists the out-of-tolerance load");
+  for (const item of beforeResolve) {
+    setExceptionState(item.id, "resolved", "back in tolerance");
+  }
+  assert.equal(
+    listWorkbenchInbox().items.some((item) => item.loadId === loadId),
+    false,
+    "a load leaves the workbench when it is back in tolerance",
+  );
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("", "", loadId);
 
   const jamesId = queries.createDriver({
     name: "James Whitaker Smoke",
@@ -13033,7 +13190,7 @@ P: 314-459-1752
   assert.match(assignUi, /name="truck_id"[\s\S]*?\{item\.unit_number\}[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /name="truck_id"[\s\S]*?item\.type[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /dry van/i);
-  const dashUi = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const dashUi = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
   assert.match(dashUi, /Unit \{truck\.unit_number\}/);
   assert.doesNotMatch(dashUi, /labelForTruckType/);
 
@@ -15327,7 +15484,7 @@ P: 314-459-1752
   assert.ok(!searchGrid.flat().includes("Not In Results"));
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /Download spreadsheet/);
 
-  const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const dashToday = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
   assert.match(dashToday, /loadTouchesToday/);
   assert.doesNotMatch(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
@@ -16499,7 +16656,7 @@ P: 314-459-1752
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Loaded miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /refreshAction\(form\)/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /data-email-ingest/);
   assert.match(workspaceSource, /WhatsApp load/);
   assert.match(workspaceSource, /Send WhatsApp/);
   assert.match(workspaceSource, /whatsappConfigured/);

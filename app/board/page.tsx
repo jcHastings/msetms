@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
+import { LoadCardFastActions } from "@/components/load-card-fast-actions";
+import { listStopAppointmentTargets } from "@/lib/stops";
 import { BoardFilterProvider, BoardFilterRow } from "@/components/board-filter";
 import { BoardToolbar } from "@/components/board-toolbar";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
@@ -273,7 +275,12 @@ async function BoardLiveSection({
                       />
                     </td>
                     <td className="board-edit-cell whitespace-nowrap">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" data-load-card-actions="">
+                        <LoadCardFastActions
+                          loadId={load.id}
+                          loadNumber={load.load_number}
+                          stops={listStopAppointmentTargets(load.id)}
+                        />
                         {!isClosedStatus(load.status) ? (
                           <AssignDialog
                             loadId={load.id}

@@ -61,27 +61,43 @@ export function ExceptionInboxCard({
   inbox,
   kind,
   q,
+  variant = "inbox",
 }: {
   inbox: ExceptionInbox;
   kind?: string;
   q?: string;
+  variant?: "inbox" | "workbench";
 }) {
   const groups = groupInboxExceptions(inbox.items);
-  const summary =
-    inbox.attentionCount === 0
+  const workbench = variant === "workbench";
+  const summary = workbench
+    ? inbox.attentionCount === 0
+      ? "All loads are in tolerance"
+      : `${inbox.attentionCount} load${inbox.attentionCount === 1 ? "" : "s"} out of tolerance`
+    : inbox.attentionCount === 0
       ? `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine`
       : `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine · ${inbox.attentionCount} need attention`;
 
   return (
-    <section className="card mb-6 overflow-hidden" data-attention-inbox="">
+    <section
+      className="card mb-6 overflow-hidden"
+      data-attention-inbox=""
+      data-workbench={workbench ? "" : undefined}
+    >
       <header className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200 px-5 py-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Requires Attention
+            {workbench ? "Workbench" : "Requires Attention"}
           </p>
           <h2 className="text-sm font-semibold text-slate-900">{summary}</h2>
         </div>
-        <form className="flex flex-wrap items-end gap-2" method="get" action="/">
+        <div className="flex flex-wrap items-end gap-2">
+        {workbench ? (
+          <Link href="/board" className="btn btn-secondary" data-workbench-board="">
+            All trucks
+          </Link>
+        ) : null}
+        <form className="flex flex-wrap items-end gap-2" method="get" action={workbench ? "/" : "/desk"}>
           <div className="field">
             <label htmlFor="inbox-kind">Type</label>
             <select id="inbox-kind" name="kind" defaultValue={kind ?? ""}>
@@ -101,9 +117,12 @@ export function ExceptionInboxCard({
             Filter
           </button>
         </form>
+        </div>
       </header>
       {groups.length === 0 ? (
-        <p className="px-5 py-8 text-sm text-slate-500">All quiet — nothing needs attention.</p>
+        <p className="px-5 py-8 text-sm text-slate-500">
+          {workbench ? "All loads are in tolerance." : "All quiet — nothing needs attention."}
+        </p>
       ) : (
         <ul>
           {groups.map((group) => (
@@ -122,7 +141,10 @@ export function ExceptionInboxCard({
                       {group.destination}
                     </div>
                   </div>
-                  <Link href={`/loads/${group.loadId}`} className="text-sm font-medium text-slate-600">
+                  <Link
+                    href={workbench ? `/loads/${group.loadId}` : `/loads/${group.loadId}`}
+                    className="text-sm font-medium text-slate-600"
+                  >
                     Open
                   </Link>
                 </div>

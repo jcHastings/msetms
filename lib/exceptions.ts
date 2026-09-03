@@ -14,7 +14,17 @@ import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, t
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
 
-export const EXCEPTION_KINDS = ["reefer", "late", "detention", "gps_quiet", "missing_pod", "invoice_send", "compliance", "unassigned"] as const;
+export const EXCEPTION_KINDS = [
+  "reefer",
+  "late",
+  "detention",
+  "missing_contact",
+  "gps_quiet",
+  "missing_pod",
+  "invoice_send",
+  "compliance",
+  "unassigned",
+] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export type InboxException = {
@@ -58,11 +68,12 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   reefer: 0,
   late: 1,
   detention: 2,
-  gps_quiet: 3,
-  missing_pod: 4,
-  invoice_send: 5,
-  compliance: 6,
-  unassigned: 7,
+  missing_contact: 3,
+  gps_quiet: 4,
+  missing_pod: 5,
+  invoice_send: 6,
+  compliance: 7,
+  unassigned: 8,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -107,6 +118,13 @@ function latestReadingByLoad(): Map<number, ReeferReading> {
 function loadIdsWithPod(): Set<number> {
   const rows = getDb()
     .prepare("SELECT DISTINCT load_id FROM attachments WHERE kind = 'pod'")
+    .all() as Array<{ load_id: number }>;
+  return new Set(rows.map((row) => row.load_id));
+}
+
+function loadIdsWithRateCon(): Set<number> {
+  const rows = getDb()
+    .prepare("SELECT DISTINCT load_id FROM attachments WHERE kind = 'rate_con'")
     .all() as Array<{ load_id: number }>;
   return new Set(rows.map((row) => row.load_id));
 }
@@ -200,6 +218,38 @@ function reeferExceptions(load: LoadView, reading: ReeferReading | null): InboxE
     .filter(Boolean)
     .join(" · ");
   return [withLoad(load, "reefer", severity, title, detail, reading?.source !== "orbcomm")];
+}
+
+export function isMaterialReeferReading(load: LoadView, reading: ReeferReading | null): boolean {
+  return reeferExceptions(load, reading).length > 0;
+}
+
+/** Workbench: late/missed, detention, reefer miss, missing rate-con phone, other CRITICAL. */
+export function isOutOfToleranceException(item: Pick<InboxException, "kind" | "severity">): boolean {
+  if (item.severity === "CRITICAL") return true;
+  if (item.kind === "detention" || item.kind === "reefer" || item.kind === "missing_contact") return true;
+  if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return true;
+  return false;
+}
+
+function missingContactExceptions(load: LoadView, hasRateCon: boolean): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  const phone = String(load.contact_phone ?? "").trim();
+  if (phone) return [];
+  const name = String(load.contact_name ?? "").trim();
+  const email = String(load.contact_email ?? "").trim();
+  if (!hasRateCon && !name && !email) return [];
+  return [
+    withLoad(
+      load,
+      "missing_contact",
+      "CRITICAL",
+      "Missing rate-con phone",
+      name
+        ? `${name} is on the load. No broker phone to call.`
+        : "Rate-con contact has no phone. Dispatcher cannot call the broker.",
+    ),
+  ];
 }
 
 export function groupInboxExceptions(items: InboxException[]): InboxExceptionGroup[] {
@@ -403,6 +453,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const delivered = listLoads({ status: "all" }).filter((load) => isBillableStatus(load.status));
   const pods = loadIdsWithPod();
   const readings = latestReadingByLoad();
+  const rateCons = loadIdsWithRateCon();
   const quietHours = getCompanySettings().alert_gps_quiet_hours || 2;
   const items: InboxException[] = [];
 
@@ -414,6 +465,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     items.push(...complianceExceptions(load));
     items.push(...unassignedExceptions(load, now));
     items.push(...detentionExceptions(load, now));
+    items.push(...missingContactExceptions(load, rateCons.has(load.id)));
   }
 
   for (const load of delivered) {
@@ -480,6 +532,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Unassigned";
     case "detention":
       return "Detention";
+    case "missing_contact":
+      return "Rate-con phone";
   }
 }
 

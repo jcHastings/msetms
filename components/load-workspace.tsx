@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { createHoverMenuCloser } from "@/lib/hover-menu";
 import { DocumentPreviewProvider } from "@/components/document-preview";
 import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { LoadEditProvider } from "@/components/load-edit-context";
@@ -89,6 +90,8 @@ export function LoadWorkspace({
   const [canSubmit, setCanSubmit] = useState(true);
   const [pending, setPending] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const menuCloser = useMemo(() => createHoverMenuCloser(), []);
+  useEffect(() => () => menuCloser.dispose(), [menuCloser]);
   const [smsNotice, setSmsNotice] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [smsPending, setSmsPending] = useState(false);
@@ -352,7 +355,7 @@ export function LoadWorkspace({
             Email invoice
           </button>
         ) : null}
-        <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
               Log Check Call
@@ -362,7 +365,7 @@ export function LoadWorkspace({
             View Load Log
           </button>
         </ActionMenu>
-        <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button type="button" className="menu-item" onClick={() => setTab("log", "load-map")}>
             Load map
           </button>
@@ -418,7 +421,7 @@ export function LoadWorkspace({
             </>
           ) : null}
         </ActionMenu>
-        <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button type="button" className="menu-item" onClick={() => setTab("docs", "defaulted-documents")}>
             Your defaulted documents
           </button>
@@ -475,7 +478,7 @@ export function LoadWorkspace({
           ) : null}
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
-        <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           {canEmailInvoice(role) && loadId ? (
             <button
               type="button"
@@ -516,7 +519,7 @@ export function LoadWorkspace({
           ) : null}
         </ActionMenu>
         ) : null}
-        <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button
             type="button"
             className="menu-item w-full text-left"
@@ -683,11 +686,13 @@ function ActionMenu({
   label,
   openMenu,
   setOpenMenu,
+  closer,
   children,
 }: {
   label: string;
   openMenu: string | null;
   setOpenMenu: (label: string | null) => void;
+  closer: ReturnType<typeof createHoverMenuCloser>;
   children: React.ReactNode;
 }) {
   const open = openMenu === label;
@@ -698,24 +703,34 @@ function ActionMenu({
     <div
       ref={rootRef}
       className="relative"
-      onMouseEnter={() => setOpenMenu(label)}
-      onMouseLeave={() => setOpenMenu(null)}
+      data-hover-action-menu=""
+      onMouseEnter={() => {
+        closer.cancel();
+        setOpenMenu(label);
+      }}
+      onMouseLeave={() => closer.schedule(() => setOpenMenu(null))}
     >
       <button
         type="button"
         className="btn load-action-btn"
         aria-expanded={open}
         aria-haspopup="menu"
-        onClick={() => setOpenMenu(open ? null : label)}
+        onClick={() => {
+          closer.cancel();
+          setOpenMenu(open ? null : label);
+        }}
       >
         {label}
       </button>
       {open ? (
         <div
           ref={menuRef}
-          className="absolute z-20 min-w-56 pt-1"
+          className="absolute z-20 min-w-56 pt-1 top-full left-0"
           role="menu"
+          onMouseEnter={() => closer.cancel()}
+          onMouseLeave={() => closer.schedule(() => setOpenMenu(null))}
         >
+          <div className="absolute inset-x-0 -top-2 h-2" aria-hidden data-hover-menu-bridge="" />
           <div className="load-action-menu rounded-lg py-1 shadow-lg">{children}</div>
         </div>
       ) : null}
