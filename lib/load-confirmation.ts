@@ -1216,9 +1216,9 @@ function drawStop(
   const half = rightW / 2;
   kv(doc, rightX, y + 8, 72, half - 4, "Date", stop.date, true);
   kv(doc, rightX + half, y + 8, 72, half - 4, "Time", stop.time, true);
-  kv(doc, rightX, y + 24, 72, half - 4, "Quantity", stopQuantityLabel(stop), true);
-  kv(doc, rightX + half, y + 24, 72, half - 4, "Weight", stop.weight ? `${stop.weight} lbs` : "", true);
-  kv(doc, rightX, y + 40, 88, rightW - 8, "Appointment", stop.appointment, true);
+  kv(doc, rightX, y + 26, 72, half - 4, "Quantity", stopQuantityLabel(stop), true);
+  kv(doc, rightX + half, y + 26, 72, half - 4, "Weight", stop.weight ? `${stop.weight} lbs` : "", true);
+  kv(doc, rightX, y + 56, 88, rightW - 8, "Appointment", stop.appointment, true);
 
   const refsY = y + stopMetaHeight(stop) + 2;
   const refW = width / 3;
