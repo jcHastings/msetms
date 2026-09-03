@@ -1851,7 +1851,8 @@ async function main() {
   assert.match(compactShareUi, /compactTrailerShareState/);
   assert.match(compactShareUi, /linkState === "live"/);
   assert.match(compactShareUi, /data-trailer-share-state=\{isLive \? "live" : "none"\}/);
-  assert.match(compactShareUi, /absoluteShareUrl\(sharePath\)/);
+  assert.match(trailerShareUi, /return `\$\{window\.location\.origin\}\$\{sharePath\}`/);
+  assert.match(trailerShareUi, /absoluteShareUrl\(sharePath\)/);
   assert.doesNotMatch(compactShareUi, /New link/);
   assert.doesNotMatch(compactShareUi, /Active · Exp|Expired \{expiryLabel\}/);
   assert.doesNotMatch(compactShareUi, /data-trailer-share-view|data-trailer-share-popover|formatCompactShareExpiry/);
