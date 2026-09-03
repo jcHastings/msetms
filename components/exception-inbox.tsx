@@ -1,61 +1,12 @@
 import Link from "next/link";
-import { exceptionAction } from "@/lib/dispatcher-actions";
 import {
   EXCEPTION_KINDS,
-  attentionLabel,
   groupInboxExceptions,
   labelForExceptionKind,
   type ExceptionInbox,
-  type ExceptionSeverity,
-  type InboxException,
 } from "@/lib/exceptions";
-import { exceptionStateFor } from "@/lib/desk";
-
-const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
-  CRITICAL: "bg-rose-100 text-rose-900",
-  HIGH: "bg-orange-100 text-orange-900",
-  MEDIUM: "bg-amber-100 text-amber-950",
-  LOW: "bg-slate-100 text-slate-700",
-};
-
-function IssueLine({ item }: { item: InboxException }) {
-  const state = exceptionStateFor(item);
-  return (
-    <li className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0" data-attention-issue={item.kind}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_CLASS[item.severity]}`}
-        >
-          {attentionLabel(item)}
-        </span>
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {labelForExceptionKind(item.kind)}
-        </span>
-        {state?.status === "ack" ? (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-700">Ack</span>
-        ) : null}
-        {item.demo ? (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">demo</span>
-        ) : null}
-      </div>
-      <div className="mt-1 text-sm text-slate-700">{item.title}</div>
-      <div className="mt-0.5 text-xs text-slate-600">{item.detail}</div>
-      <form action={exceptionAction} className="mt-2 flex flex-wrap items-center gap-2">
-        <input type="hidden" name="exception_key" value={item.id} />
-        <input name="reason" placeholder="Note" className="w-40 rounded-lg border border-slate-300 px-2 py-1 text-xs" />
-        <button className="btn btn-ghost text-xs" name="status" value="ack" type="submit">
-          Ack
-        </button>
-        <button className="btn btn-ghost text-xs" name="status" value="snoozed" type="submit">
-          Snooze 4h
-        </button>
-        <button className="btn btn-ghost text-xs" name="status" value="resolved" type="submit">
-          Resolve
-        </button>
-      </form>
-    </li>
-  );
-}
+import { ExceptionIssueLine } from "@/components/exception-issue-line";
+import { WorkbenchLoadCard } from "@/components/workbench-load-card";
 
 export function ExceptionInboxCard({
   inbox,
@@ -78,51 +29,72 @@ export function ExceptionInboxCard({
       ? `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine`
       : `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine · ${inbox.attentionCount} need attention`;
 
+  const filters = (
+    <div className="flex flex-wrap items-end gap-2">
+      {workbench ? (
+        <Link href="/board" className="btn btn-secondary" data-workbench-board="">
+          All trucks
+        </Link>
+      ) : null}
+      <form className="flex flex-wrap items-end gap-2" method="get" action={workbench ? "/" : "/desk"}>
+        <div className="field">
+          <label htmlFor="inbox-kind">Type</label>
+          <select id="inbox-kind" name="kind" defaultValue={kind ?? ""}>
+            <option value="">All types</option>
+            {EXCEPTION_KINDS.map((item) => (
+              <option key={item} value={item}>
+                {labelForExceptionKind(item)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="inbox-q">Find</label>
+          <input id="inbox-q" name="q" defaultValue={q ?? ""} placeholder="Load, customer, lane" />
+        </div>
+        <button className="btn btn-secondary" type="submit">
+          Filter
+        </button>
+      </form>
+    </div>
+  );
+
+  if (workbench) {
+    return (
+      <section data-attention-inbox="" data-workbench="">
+        <header className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Workbench</p>
+            <h2 className="text-sm font-semibold text-slate-900">{summary}</h2>
+          </div>
+          {filters}
+        </header>
+        {groups.length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-sm text-slate-500">
+            All loads are in tolerance.
+          </p>
+        ) : (
+          <div className="grid gap-4" data-workbench-cards="">
+            {groups.map((group) => (
+              <WorkbenchLoadCard key={group.loadId} group={group} />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section
-      className="card mb-6 overflow-hidden"
-      data-attention-inbox=""
-      data-workbench={workbench ? "" : undefined}
-    >
+    <section className="card mb-6 overflow-hidden" data-attention-inbox="">
       <header className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200 px-5 py-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            {workbench ? "Workbench" : "Requires Attention"}
-          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Requires Attention</p>
           <h2 className="text-sm font-semibold text-slate-900">{summary}</h2>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-        {workbench ? (
-          <Link href="/board" className="btn btn-secondary" data-workbench-board="">
-            All trucks
-          </Link>
-        ) : null}
-        <form className="flex flex-wrap items-end gap-2" method="get" action={workbench ? "/" : "/desk"}>
-          <div className="field">
-            <label htmlFor="inbox-kind">Type</label>
-            <select id="inbox-kind" name="kind" defaultValue={kind ?? ""}>
-              <option value="">All types</option>
-              {EXCEPTION_KINDS.map((item) => (
-                <option key={item} value={item}>
-                  {labelForExceptionKind(item)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="inbox-q">Find</label>
-            <input id="inbox-q" name="q" defaultValue={q ?? ""} placeholder="Load, customer, lane" />
-          </div>
-          <button className="btn btn-secondary" type="submit">
-            Filter
-          </button>
-        </form>
-        </div>
+        {filters}
       </header>
       {groups.length === 0 ? (
-        <p className="px-5 py-8 text-sm text-slate-500">
-          {workbench ? "All loads are in tolerance." : "All quiet — nothing needs attention."}
-        </p>
+        <p className="px-5 py-8 text-sm text-slate-500">All quiet — nothing needs attention.</p>
       ) : (
         <ul>
           {groups.map((group) => (
@@ -141,16 +113,13 @@ export function ExceptionInboxCard({
                       {group.destination}
                     </div>
                   </div>
-                  <Link
-                    href={workbench ? `/loads/${group.loadId}` : `/loads/${group.loadId}`}
-                    className="text-sm font-medium text-slate-600"
-                  >
+                  <Link href={`/loads/${group.loadId}`} className="text-sm font-medium text-slate-600">
                     Open
                   </Link>
                 </div>
                 <ul className="mt-3 space-y-3">
                   {group.items.map((item) => (
-                    <IssueLine key={item.id} item={item} />
+                    <ExceptionIssueLine key={item.id} item={item} />
                   ))}
                 </ul>
               </div>
