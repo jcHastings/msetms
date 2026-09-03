@@ -45,8 +45,8 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const coords = path.length >= 2 ? path : points.filter((point) => point.kind !== "truck");
   if (coords.length === 0) {
     return (
-      <div className="flex h-56 min-h-[14rem] items-center justify-center bg-slate-100 text-sm text-slate-600 md:h-full">
-        Lane map not ready.
+      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] text-slate-500">
+        No map
       </div>
     );
   }
@@ -58,34 +58,34 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const maxLng = Math.max(...lngs);
   const dLat = Math.max(maxLat - minLat, 0.35);
   const dLng = Math.max(maxLng - minLng, 0.35);
-  const xOf = (lng: number) => ((lng - minLng) / dLng) * 80 + 10;
-  const yOf = (lat: number) => (1 - (lat - minLat) / dLat) * 70 + 12;
+  const xOf = (lng: number) => ((lng - minLng) / dLng) * 72 + 14;
+  const yOf = (lat: number) => (1 - (lat - minLat) / dLat) * 64 + 18;
   const line = coords.map((p) => `${xOf(p.lng).toFixed(1)},${yOf(p.lat).toFixed(1)}`).join(" ");
   const pickup = points.find((p) => p.kind === "pickup") ?? points[0];
   const drop = [...points].reverse().find((p) => p.kind === "delivery") ?? points[points.length - 1];
   const truck = points.find((p) => p.kind === "truck");
   const shortLabel = (point?: LoadMapPoint) => (point?.label ?? "").split(",")[0]?.trim() ?? "";
   return (
-    <div className="relative h-56 min-h-[14rem] overflow-hidden bg-[#dce6ef] md:h-full" data-workbench-lane-sketch="">
+    <div className="relative h-full w-full overflow-hidden bg-[#dce6ef]" data-workbench-lane-sketch="">
       <svg viewBox="0 0 100 100" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <rect width="100" height="100" fill="#dce6ef" />
-        {Array.from({ length: 8 }, (_, i) => (
-          <line key={`h${i}`} x1="0" y1={i * 12.5} x2="100" y2={i * 12.5} stroke="#c5d0db" strokeWidth="0.3" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <line key={`h${i}`} x1="0" y1={i * 16.6} x2="100" y2={i * 16.6} stroke="#c5d0db" strokeWidth="0.35" />
         ))}
-        {Array.from({ length: 8 }, (_, i) => (
-          <line key={`v${i}`} x1={i * 12.5} y1="0" x2={i * 12.5} y2="100" stroke="#c5d0db" strokeWidth="0.3" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <line key={`v${i}`} x1={i * 16.6} y1="0" x2={i * 16.6} y2="100" stroke="#c5d0db" strokeWidth="0.35" />
         ))}
-        <polyline points={line} fill="none" stroke="#12315c" strokeWidth="1.8" strokeLinejoin="round" />
-        {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="2.6" fill={LOAD_MAP_MARKER_COLOR.pickup} /> : null}
-        {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="2.6" fill={LOAD_MAP_MARKER_COLOR.delivery} /> : null}
-        {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="2.4" fill={LOAD_MAP_MARKER_COLOR.truck} /> : null}
+        <polyline points={line} fill="none" stroke="#12315c" strokeWidth="2.2" strokeLinejoin="round" />
+        {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.pickup} /> : null}
+        {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.delivery} /> : null}
+        {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="3" fill={LOAD_MAP_MARKER_COLOR.truck} /> : null}
         {pickup && shortLabel(pickup) ? (
-          <text x={xOf(pickup.lng)} y={yOf(pickup.lat) - 4} textAnchor="middle" fontSize="4.2" fill="#0f172a">
+          <text x={xOf(pickup.lng)} y={yOf(pickup.lat) - 5} textAnchor="middle" fontSize="7" fill="#0f172a">
             {shortLabel(pickup)}
           </text>
         ) : null}
         {drop && shortLabel(drop) ? (
-          <text x={xOf(drop.lng)} y={yOf(drop.lat) - 4} textAnchor="middle" fontSize="4.2" fill="#0f172a">
+          <text x={xOf(drop.lng)} y={yOf(drop.lat) - 5} textAnchor="middle" fontSize="7" fill="#0f172a">
             {shortLabel(drop)}
           </text>
         ) : null}
@@ -103,52 +103,53 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
 
   return (
     <article
-      className="overflow-hidden rounded-xl border-2 border-slate-300 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.08)]"
+      className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)]"
       data-workbench-card=""
       data-attention-load={group.loadNumber}
     >
-      <div className="grid md:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
-        <div className="border-b border-slate-200 md:border-b-0 md:border-r">
+      <div className="flex items-start gap-2.5 px-3 pt-3">
+        <div
+          className="h-20 w-20 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
+          data-workbench-map-thumb=""
+        >
           {apiKey ? (
             <LoadMapCanvas
               apiKey={apiKey}
               points={points}
               path={path}
-              className="h-56 w-full min-h-[14rem] bg-slate-100 md:h-full"
+              className="h-full w-full bg-slate-100"
               missingKeyMessage="Map is off."
-              emptyMessage="Lane map not ready."
+              emptyMessage="No map"
             />
           ) : (
             <WorkbenchLaneSketch points={points} path={path} />
           )}
         </div>
-        <div className="px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <Link href={`/loads/${group.loadId}`} className="font-mono text-base font-semibold tracking-tight hover:underline">
-                {group.loadNumber}
-              </Link>
-              <div className="mt-0.5 text-sm text-slate-700">{group.customerName}</div>
-              <div className="mt-0.5 text-xs text-slate-500">
-                {group.origin}
-                <span className="mx-1 text-slate-400">—</span>
-                {group.destination}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2" data-workbench-fast-actions="">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <Link href={`/loads/${group.loadId}`} className="font-mono text-sm font-semibold tracking-tight hover:underline">
+              {group.loadNumber}
+            </Link>
+            <div className="flex shrink-0 items-center gap-1.5" data-workbench-fast-actions="">
               <LoadCardFastActions loadId={group.loadId} loadNumber={group.loadNumber} stops={stops} />
-              <Link href={`/loads/${group.loadId}`} className="text-sm font-medium text-slate-600">
+              <Link href={`/loads/${group.loadId}`} className="text-xs font-medium text-slate-600">
                 Open
               </Link>
             </div>
           </div>
-          <ul className="mt-3 space-y-3">
-            {group.items.map((item) => (
-              <ExceptionIssueLine key={item.id} item={item} />
-            ))}
-          </ul>
+          <div className="mt-0.5 truncate text-xs text-slate-700">{group.customerName}</div>
+          <div className="mt-0.5 truncate text-[11px] text-slate-500">
+            {group.origin}
+            <span className="mx-1 text-slate-400">—</span>
+            {group.destination}
+          </div>
         </div>
       </div>
+      <ul className="mt-2 space-y-2 border-t border-slate-100 px-3 pb-2.5 pt-2">
+        {group.items.map((item) => (
+          <ExceptionIssueLine key={item.id} item={item} compact />
+        ))}
+      </ul>
     </article>
   );
 }

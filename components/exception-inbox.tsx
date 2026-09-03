@@ -74,7 +74,10 @@ export function ExceptionInboxCard({
             All loads are in tolerance.
           </p>
         ) : (
-          <div className="grid gap-6" data-workbench-cards="">
+          <div
+            className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+            data-workbench-cards=""
+          >
             {groups.map((group) => (
               <WorkbenchLoadCard key={group.loadId} group={group} />
             ))}
