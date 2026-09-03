@@ -28,13 +28,31 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const pickup = points.find((p) => p.kind === "pickup") ?? points[0];
   const drop = [...points].reverse().find((p) => p.kind === "delivery") ?? points[points.length - 1];
   const truck = points.find((p) => p.kind === "truck");
+  const shortLabel = (point?: LoadMapPoint) => (point?.label ?? "").split(",")[0]?.trim() ?? "";
   return (
-    <div className="relative h-56 min-h-[14rem] bg-[#e8eef4] md:h-full" data-workbench-lane-sketch="">
+    <div className="relative h-56 min-h-[14rem] overflow-hidden bg-[#dce6ef] md:h-full" data-workbench-lane-sketch="">
       <svg viewBox="0 0 100 100" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <polyline points={line} fill="none" stroke="#12315c" strokeWidth="1.6" strokeLinejoin="round" />
-        {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="2.4" fill="#166534" /> : null}
-        {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="2.4" fill="#be123c" /> : null}
-        {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="2.2" fill="#0b1f3a" /> : null}
+        <rect width="100" height="100" fill="#dce6ef" />
+        {Array.from({ length: 8 }, (_, i) => (
+          <line key={`h${i}`} x1="0" y1={i * 12.5} x2="100" y2={i * 12.5} stroke="#c5d0db" strokeWidth="0.3" />
+        ))}
+        {Array.from({ length: 8 }, (_, i) => (
+          <line key={`v${i}`} x1={i * 12.5} y1="0" x2={i * 12.5} y2="100" stroke="#c5d0db" strokeWidth="0.3" />
+        ))}
+        <polyline points={line} fill="none" stroke="#12315c" strokeWidth="1.8" strokeLinejoin="round" />
+        {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="2.6" fill={LOAD_MAP_MARKER_COLOR.pickup} /> : null}
+        {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="2.6" fill={LOAD_MAP_MARKER_COLOR.delivery} /> : null}
+        {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="2.4" fill={LOAD_MAP_MARKER_COLOR.truck} /> : null}
+        {pickup && shortLabel(pickup) ? (
+          <text x={xOf(pickup.lng)} y={yOf(pickup.lat) - 4} textAnchor="middle" fontSize="4.2" fill="#0f172a">
+            {shortLabel(pickup)}
+          </text>
+        ) : null}
+        {drop && shortLabel(drop) ? (
+          <text x={xOf(drop.lng)} y={yOf(drop.lat) - 4} textAnchor="middle" fontSize="4.2" fill="#0f172a">
+            {shortLabel(drop)}
+          </text>
+        ) : null}
       </svg>
     </div>
   );
