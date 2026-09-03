@@ -437,7 +437,18 @@ export function driverSheetStopRefs(
     poNumber: driverFacingStopPo({ reference: po }, load),
     confirmationNumber: driverFacingStopConfirmation({ confirmation: conf }, load),
     puNumber: driverFacingStopConfirmation({ confirmation: pu }, load),
-    quantity: String(stop?.cargo ?? "").trim() || paper.quantity,
+    quantity: (() => {
+      const raw = String(stop?.cargo ?? "").trim() || paper.quantity;
+      const puRef = driverFacingStopConfirmation({ confirmation: pu }, load);
+      if (puRef && raw.replace(/\s+/g, "").toUpperCase() === puRef.replace(/\s+/g, "").toUpperCase()) return "";
+      if (puRef) {
+        return raw
+          .replace(new RegExp(`\\b${puRef.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"), "")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+      }
+      return raw;
+    })(),
   };
 }
 
@@ -833,7 +844,8 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   }
 
   let y = Math.max(148, cardY + cardH + 8);
-  const pageLimit = 712;
+  const pageLimit = 748;
+  const pageStampY = 776;
 
   function addContentPage(): number {
     doc.addPage();
@@ -922,10 +934,30 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     y += 20;
   }
 
+  const tagCtx = {
+    orgName: model.company.company_name,
+    userName: model.headerDispatcher || model.company.dispatcher_name,
+    userEmail: model.headerEmail,
+    userPhone: model.headerPhone || model.company.dispatcher_phone,
+    loadId: model.loadNumber,
+    customerName: model.customerName,
+    customerPhone: model.customerPhone,
+  };
+  const rawTerms = expandDocumentTags(defaults.terms_text, tagCtx);
+  const printedTerms =
+    model.packet === "internal" ? driverFacingTermsText(rawTerms).trim() : rawTerms.trim();
+  if (printedTerms) {
+    doc.font("Helvetica").fontSize(8).fillColor(INK);
+    const termsH = Math.max(12, doc.heightOfString(printedTerms, { width }) + 2);
+    ensureSpace(termsH + 8);
+    doc.text(printedTerms, left, y, { width, lineBreak: true });
+    y += termsH + 4;
+  }
+
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i += 1) {
     doc.switchToPage(range.start + i);
-    stampConfirmationFooter(doc, model, defaults, left, width, i + 1, range.count);
+    stampConfirmationFooter(doc, model, defaults, tagCtx, left, width, i + 1, range.count, pageStampY);
   }
 }
 
@@ -949,29 +981,22 @@ function stampConfirmationFooter(
   doc: PDFKit.PDFDocument,
   model: ConfirmationModel,
   defaults: ReturnType<typeof getDocumentDefaults>,
+  tagCtx: {
+    orgName: string;
+    userName: string;
+    userEmail: string;
+    userPhone: string;
+    loadId: string;
+    customerName: string;
+    customerPhone: string;
+  },
   left: number,
   width: number,
   page: number,
   pageCount: number,
+  pageStampY: number,
 ): void {
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
-  const tagCtx = {
-    orgName: model.company.company_name,
-    userName: model.headerDispatcher || model.company.dispatcher_name,
-    userEmail: model.headerEmail,
-    userPhone: model.headerPhone || model.company.dispatcher_phone,
-    loadId: model.loadNumber,
-    customerName: model.customerName,
-    customerPhone: model.customerPhone,
-  };
-  const rawTerms = expandDocumentTags(defaults.terms_text, tagCtx);
-  const printedTerms =
-    model.packet === "internal" ? driverFacingTermsText(rawTerms).trim() : rawTerms.trim();
-  const isLast = page === pageCount;
-  if (isLast && printedTerms) {
-    doc.font("Helvetica").fontSize(8).fillColor(INK);
-    doc.text(printedTerms, left, 716, { width, lineBreak: true });
-  }
   const rawFooter = expandDocumentTags(defaults.footer_text, tagCtx).trim();
   const footer = model.packet === "internal" ? driverFacingTermsText(rawFooter) : rawFooter;
   doc.font("Helvetica").fontSize(8).fillColor(INK);
@@ -982,12 +1007,12 @@ function stampConfirmationFooter(
       : "",
   ].filter(Boolean);
   if (footerBits.length) {
-    doc.text(footerBits.join("  "), left, 738, { width: width - 100, lineBreak: false });
+    doc.text(footerBits.join("  "), left, pageStampY - 14, { width: width - 100, lineBreak: false });
   }
   doc.text(
     model.locale === "es" ? `Página ${page} de ${pageCount}` : `Page ${page} of ${pageCount}`,
     left,
-    752,
+    pageStampY,
     { width, align: "center", lineBreak: false },
   );
 }
@@ -1131,39 +1156,29 @@ function drawReeferBar(
   return y + height;
 }
 
-function stopGridRows(stop: ConfirmationStop): Array<[string, string]> {
-  return [
-    ["Date", stop.date],
-    ["Time", stop.time],
-    ["Quantity", stop.quantity],
-    ["Weight", stop.weight ? `${stop.weight} lbs` : ""],
-    ["Appointment", stop.appointment],
-    ["Purchase Order #", stop.poNumber],
-    ["Confirmation number", stop.confirmationNumber],
-    ...(stop.puNumber ? ([["PU #", stop.puNumber]] as Array<[string, string]>) : []),
-  ];
+function stopQuantityLabel(stop: ConfirmationStop): string {
+  const raw = stop.quantity.trim();
+  const pu = stop.puNumber.trim();
+  if (!raw) return "";
+  if (pu && raw.replace(/\s+/g, "").toUpperCase() === pu.replace(/\s+/g, "").toUpperCase()) return "";
+  if (pu) return raw.replace(new RegExp(`\\b${pu.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"), "").replace(/\s{2,}/g, " ").trim();
+  return raw;
 }
 
 function stopMetaHeight(stop: ConfirmationStop): number {
-  const rows = stopGridRows(stop);
-  const rightRows = Math.max(0, rows.length - 5);
-  const gridH = 8 + Math.max(5, rightRows) * 16;
   const leftH = stop.hours.trim() ? 94 : 72;
-  return Math.max(gridH, leftH);
+  return Math.max(64, leftH);
 }
 
 function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop, width = 540): number {
-  let height = stopMetaHeight(stop) + 8;
-  if (stop.description.trim()) {
-    doc.font("Helvetica-Bold").fontSize(11);
-    height += Math.max(14, doc.heightOfString(stop.description, { width: width - 110 })) + 2;
-  }
+  let height = stopMetaHeight(stop) + 22;
+  if (stop.description.trim()) height += 16;
   const extra = stop.extra.trim();
   if (extra) {
     doc.font("Helvetica").fontSize(10);
     height += 10 + Math.max(14, doc.heightOfString(extra, { width: width - 12 }));
   }
-  return Math.max(102, height);
+  return Math.max(96, height);
 }
 
 function drawStop(
@@ -1175,7 +1190,7 @@ function drawStop(
   height = 102,
 ): number {
   doc.rect(x, y, width, height).strokeColor(INK).lineWidth(1).stroke();
-  const leftW = 214;
+  const leftW = 250;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INK).text(stop.title, x + 6, y + 5, {
     width: leftW - 8,
     lineBreak: false,
@@ -1196,23 +1211,35 @@ function drawStop(
     doc.text(stop.hours, x + 6, y + 80, { width: leftW - 8, lineBreak: false });
   }
 
-  const gridX = x + leftW;
-  const colW = (width - leftW) / 2;
-  const rows = stopGridRows(stop);
-  rows.forEach(([label, value], index) => {
-    const col = index < 5 ? 0 : 1;
-    const row = index < 5 ? index : index - 5;
-    kv(doc, gridX + col * colW, y + 8 + row * 16, 88, colW - 6, label, value, true);
-  });
+  const rightX = x + leftW;
+  const rightW = width - leftW;
+  const half = rightW / 2;
+  kv(doc, rightX, y + 8, 72, half - 4, "Date", stop.date, true);
+  kv(doc, rightX + half, y + 8, 72, half - 4, "Time", stop.time, true);
+  kv(doc, rightX, y + 24, 72, half - 4, "Quantity", stopQuantityLabel(stop), true);
+  kv(doc, rightX + half, y + 24, 72, half - 4, "Weight", stop.weight ? `${stop.weight} lbs` : "", true);
+  kv(doc, rightX, y + 40, 88, rightW - 8, "Appointment", stop.appointment, true);
 
-  let cursor = y + stopMetaHeight(stop) + 4;
+  const refsY = y + stopMetaHeight(stop) + 2;
+  const refW = width / 3;
+  kv(doc, x + 6, refsY, 36, refW - 8, "PO#", stop.poNumber, true);
+  kv(doc, x + 6 + refW, refsY, 48, refW - 8, "Conf#", stop.confirmationNumber, true);
+  kv(doc, x + 6 + refW * 2, refsY, 36, refW - 8, "PU#", stop.puNumber, true);
+
+  let cursor = refsY + 18;
   if (stop.description.trim()) {
-    kv(doc, x + 6, cursor, 88, width - 16, "Description", stop.description, true);
-    doc.font("Helvetica-Bold").fontSize(11);
-    cursor += Math.max(14, doc.heightOfString(stop.description, { width: width - 110 })) + 2;
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text("Description:", x + 6, cursor, {
+      width: 72,
+      lineBreak: false,
+    });
+    doc.font("Helvetica-Bold").fontSize(11).text(stop.description, x + 80, cursor - 1, {
+      width: width - 88,
+      lineBreak: false,
+    });
+    cursor += 16;
   }
   if (stop.extra.trim()) {
-    cursor += 8;
+    cursor += 6;
     doc.font("Helvetica").fontSize(10).fillColor(INK);
     doc.text(stop.extra, x + 6, cursor, { width: width - 12, lineBreak: true });
   }

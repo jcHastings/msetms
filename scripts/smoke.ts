@@ -5790,7 +5790,12 @@ P: 314-459-1752
   assert.match(cbDriverText, /61713982/);
   assert.match(cbDriverText, /Consignee 2/);
   assert.match(cbDriverText, /AWG - Norfolk|Norfolk/);
+  assert.match(cbDriverText, /PU#:\s*N25504|PU #:\s*N25504/);
+  assert.doesNotMatch(cbDriverText, /Quantity:\s*N25504/);
+  assert.match(cbDriverText, /1440 cases/);
+  assert.match(cbDriverText, /Fresh Foods BERRIES/);
   assert.doesNotMatch(cbDriverText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
+  assert.doesNotMatch(cbDriverText, /Page \d+on|Page 1on|of the\s+\d+\s+POD/);
   const signedDriverPdf = await confirmationLib.renderConfirmationPdf({
     ...cbDriver,
     driverName: "Ceferino",
@@ -5824,7 +5829,11 @@ P: 314-459-1752
   assert.match(cbCustomerText, /Consignee 2/);
   assert.match(cbCustomerText, /110247187/);
   assert.match(cbCustomerText, /61713982/);
+  assert.match(cbCustomerText, /PU#:\s*N25504|PU #:\s*N25504/);
+  assert.doesNotMatch(cbCustomerText, /Quantity:\s*N25504/);
+  assert.match(cbCustomerText, /Fresh Foods BERRIES/);
   assert.doesNotMatch(cbCustomerText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
+  assert.doesNotMatch(cbCustomerText, /Page \d+on|Page 1on|of the\s+\d+\s+POD/);
   assert.match(cbDriverFlat, /MUST CHECK IN WITH ALL PU#s/);
   assert.match(cbDriverFlat, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
   assert.match(cbDriverFlat, /MUST CHECK IN[\s\S]*WITH ALL PU#s[\s\S]*SUBMIT RECEIPTS FOR REIMBURSEMENT/);
