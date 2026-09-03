@@ -1,7 +1,7 @@
 /**
- * Two-column CB Logistics 106361 page matching the live packet layout.
- * Attn sits on the same baseline as city/state so unpdf does not emit a
- * line that starts with Attn — the failure mode of the old Carrier-line regex.
+ * CB Logistics 106361 page whose unpdf extract matches office:
+ * a bare Attn: label, then a leftover person line after Carrier / Hastings /
+ * our company name. Do not glue Attn and the person onto one line.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -15,31 +15,32 @@ export async function buildCb106361Pdf(): Promise<Uint8Array> {
   const ink = rgb(0.1, 0.1, 0.12);
 
   const left = 48;
-  const right = 360;
   let y = 760;
 
-  page.drawText("CB Logistics Group", { x: left, y, size: 12, font: bold, color: ink });
-  page.drawText("LOAD NUMBER 106361", { x: right, y, size: 11, font: bold, color: ink });
-  y -= 16;
-  page.drawText("2704 Adobe Drive", { x: left, y, size: 9, font, color: ink });
-  page.drawText("9/2/2026", { x: right, y, size: 9, font, color: ink });
-  y -= 13;
-  page.drawText("Imperial, MO 63052", { x: left, y, size: 9, font, color: ink });
-  y -= 13;
-  page.drawText("MC: 1326420 P: 314-459-1752", { x: left, y, size: 9, font, color: ink });
-  y -= 28;
-  page.drawText("DISPATCH CONFIRMATION", { x: 200, y, size: 13, font: bold, color: ink });
-  y -= 24;
-
-  page.drawText("Carrier: M&S LOADS LLC", { x: left, y, size: 9, font, color: ink });
-  page.drawText("MCID: 056299", { x: right, y, size: 9, font, color: ink });
-  y -= 13;
-  page.drawText("HASTINGS, NE", { x: left, y, size: 9, font, color: ink });
-  page.drawText("Attn: JoJo Schwartz Driver: Chris", { x: right, y, size: 9, font, color: ink });
-  y -= 13;
-  page.drawText("Ph/Fax: (402) 302-0097", { x: left, y, size: 9, font, color: ink });
-  page.drawText("Trailer: MS1519  Cell: 3217709078  Truck: 42", { x: right, y, size: 9, font, color: ink });
-  y -= 22;
+  const header = [
+    "CB Logistics Group",
+    "LOAD NUMBER 106361",
+    "2704 Adobe Drive",
+    "Imperial, MO 63052 106361",
+    "MC: 1326420 P: 314-459-1752 F: 9/2/2026",
+    "Carrier:",
+    "Attn:",
+    "(402) 302-0097Ph/Fax: Truck: 42",
+    "Driver: Chris",
+    "Reference: Cell: 3217709078",
+    "Trailer: MS1519",
+    "M&S LOADS LLC",
+    "HASTINGS, NE",
+    "JoJo Schwartz",
+    "DISPATCH CONFIRMATION",
+  ];
+  for (const line of header) {
+    const size = line === "DISPATCH CONFIRMATION" ? 13 : line === "CB Logistics Group" ? 12 : 9;
+    const face = line === "DISPATCH CONFIRMATION" || line === "CB Logistics Group" ? bold : font;
+    page.drawText(line, { x: left, y, size, font: face, color: ink });
+    y -= line === "DISPATCH CONFIRMATION" ? 22 : 13;
+  }
+  y -= 8;
 
   page.drawText("Pieces: 1440   Pallets: 6   Act Wgt: 12000   Temp: 34   Flat  3,500.00", {
     x: left,

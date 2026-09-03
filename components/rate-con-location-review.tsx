@@ -9,6 +9,7 @@ import {
   customerRefFromRateCon,
   formatParsedStop,
   parsedStopHasDetails,
+  rateConApplyContactFields,
   type ParsedRateCon,
   type ParsedStop,
 } from "@/lib/rate-con-shared";
@@ -44,6 +45,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
       reefer_mode: parsed.reefer_mode,
       shipper_location_id: shipperId ? Number(shipperId) : null,
       consignee_location_id: consigneeId ? Number(consigneeId) : null,
+      ...rateConApplyContactFields(parsed),
     },
     review: (
       <RateConLocationReview

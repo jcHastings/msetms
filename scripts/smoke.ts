@@ -1225,6 +1225,12 @@ async function main() {
     fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"),
     /parsed\.contact_name\s*\|\|\s*load\.contact_name/,
   );
+  const rateConImportUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConImportUi, /rateConApplyContactFields/);
+  assert.doesNotMatch(rateConImportUi, /parsed\.contact_name\s*\|\|\s*/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /createLoadAction[\s\S]*rateConApplyContactFields/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /leftoverCarrierPersonLine/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /carrierRoleWindow/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-summary.ts"), "utf8"), /driverFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
@@ -5451,10 +5457,45 @@ P: 314-459-1752
     rateConApplyContactFields,
     isOwnPaperworkName: ownPaperworkName,
   } = await import("../lib/rate-con-shared");
-  const livePdfCandidates = [
-    "/workspace/mse1065/broker-ratecon.pdf",
-    path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.pdf"),
-  ];
+  const leftoverPersonAfterBareAttn = (text: string) => {
+    const lines = String(text ?? "").split(/\n/);
+    const attnAt = lines.findIndex((line) => /^\s*attn\s*:?\s*$/i.test(line));
+    if (attnAt < 0) return "";
+    for (const line of lines.slice(attnAt + 1, attnAt + 16)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (/^(carrier|attn|driver|cell|truck|trailer|reference|ph|fax|mcid|dispatch)\b/i.test(trimmed)) continue;
+      if (/\d{3}|llc|inc|group|loads|logistics|hastings/i.test(trimmed)) continue;
+      if (/^[A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+)+$/.test(trimmed)) return trimmed;
+    }
+    return "";
+  };
+  const officeUnpdfHeader = `LOAD NUMBERCB Logistics Group
+2704 Adobe Drive
+Imperial, MO 63052 106361
+MC: 1326420 P: 314-459-1752 F: 9/2/2026
+Carrier:
+Attn:
+(402) 302-0097Ph/Fax: Truck: 42
+Driver: Chris
+Reference: Cell: 3217709078
+Trailer: MS1519
+M&S LOADS LLC
+HASTINGS, NE
+JoJo Schwartz
+DISPATCH CONFIRMATION
+`;
+  const officeHeaderParsed = parseRateConText(officeUnpdfHeader, [], "DispatchConfirmation106361-09-02-2026-1-.pdf");
+  assert.equal(officeHeaderParsed.contact_name, "");
+  assert.equal(officeHeaderParsed.customer_name, "CB Logistics Group");
+  assert.equal(officeHeaderParsed.contact_phone, "314-459-1752");
+  assert.equal(officeHeaderParsed.load_number_hint, "106361");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(officeHeaderParsed), "106361");
+  assert.doesNotMatch(officeHeaderParsed.contact_name, /Imperial|63052|106361|JoJo|MS Test|M&S|Express/i);
+  const officeLeftover = leftoverPersonAfterBareAttn(officeUnpdfHeader);
+  assert.ok(officeLeftover, "office unpdf header must keep a leftover person after bare Attn:");
+  assert.equal(ownPaperworkName(officeLeftover, officeUnpdfHeader), true);
+  const livePdfCandidates = ["/workspace/mse1065/broker-ratecon.pdf"];
   let livePdfPath = livePdfCandidates.find((candidate) => fs.existsSync(candidate));
   if (!livePdfPath) {
     const { writeCb106361Pdf } = await import("./build-cb-106361-pdf");
@@ -5466,12 +5507,10 @@ P: 314-459-1752
   assert.match(liveExtract, /314-459-1752/);
   assert.match(liveExtract, /JoJo Schwartz/);
   assert.match(liveExtract, /Attn/i);
-  assert.equal(
-    liveExtract.split(/\n/).some((line) => /^\s*attn\b/i.test(line) && !/driver|cell|trailer|hastings/i.test(line)),
-    false,
-    "live unpdf extract must keep Attn mid-line, not a linearized Attn-only line",
-  );
-  assert.doesNotMatch(liveExtract.split(/\n/).find((line) => /attn/i.test(line)) ?? "", /^\s*attn\b/i);
+  const bareAttn = liveExtract.split(/\n/).some((line) => /^\s*attn\s*:?\s*$/i.test(line));
+  assert.equal(bareAttn, true, "live unpdf extract is a bare Attn: line, not pdftotext Attn: Name");
+  const leftoverNearAttn = leftoverPersonAfterBareAttn(liveExtract);
+  assert.ok(leftoverNearAttn, "bare Attn: must have a nearby leftover person line");
   const liveParsed = parseRateConText(liveExtract, [], path.basename(livePdfPath));
   assert.equal(liveParsed.customer_name, "CB Logistics Group");
   assert.equal(liveParsed.contact_name, "");
@@ -5483,6 +5522,7 @@ P: 314-459-1752
   assert.doesNotMatch(liveParsed.contact_name, /JoJo|Chris|Imperial|106361|M&S|Express/i);
   assert.doesNotMatch(liveParsed.contact_phone, /402-302-0097|3217709078/);
   assert.doesNotMatch(liveParsed.customer_name, /M&S|MS Express|Loads LLC/i);
+  assert.equal(ownPaperworkName(leftoverNearAttn, liveExtract), true);
   assert.equal(ownPaperworkName("JoJo Schwartz", liveExtract), true);
   assert.equal(ownPaperworkName("JoJo", liveExtract), true);
   assert.equal(ownPaperworkName("Riley Booker", liveExtract), false);
@@ -5667,6 +5707,31 @@ P: 314-459-1752
   applyCbStops(cbLoadId, cbStopForm);
   assert.equal(queries.getLoad(cbLoadId)!.contact_name, "");
   assert.equal(queries.getLoad(cbLoadId)!.contact_phone, "314-459-1752");
+  const { parseLoadInput: parseCbReapplyInput } = await import("../lib/load-input");
+  const createFromRateCon = new FormData();
+  createFromRateCon.set("customer_id", String(cbCustomerId));
+  createFromRateCon.set("origin", liveParsed.origin || "Mascoutah, IL");
+  createFromRateCon.set("destination", "Norfolk, NE");
+  createFromRateCon.set("contact_name", leftoverNearAttn || "JoJo Schwartz");
+  createFromRateCon.set("contact_phone", "314-459-1752");
+  const createDraft = parseCbReapplyInput(createFromRateCon);
+  const createMapped = rateConApplyContactFields(liveParsed, createDraft);
+  assert.equal(createMapped.contact_name, "");
+  assert.equal(createMapped.contact_phone, "314-459-1752");
+  const createdFromRateConId = queries.createLoad({
+    ...createDraft,
+    ...createMapped,
+    load_number: "MSE-1065-CREATE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(createdFromRateConId)!.contact_name, "");
+  assert.doesNotMatch(queries.getLoad(createdFromRateConId)!.contact_name, /JoJo/);
   assert.match(queries.getCustomer(cbCustomerId)?.name ?? "", /CB Logistics/i);
   assert.equal(queries.getLoad(cbLoadId)!.customer_reference, "106361");
   const blankReapplyId = queries.createLoad({
@@ -5699,7 +5764,6 @@ P: 314-459-1752
   });
   assert.equal(queries.getLoad(blankReapplyId)!.contact_name, "");
   assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "");
-  const { parseLoadInput: parseCbReapplyInput } = await import("../lib/load-input");
   const blankExisting = queries.getLoad(blankReapplyId)!;
   const reapplyForm = new FormData();
   reapplyForm.set("customer_id", String(cbCustomerId));

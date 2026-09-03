@@ -482,11 +482,17 @@ export async function createLoadAction(
     try {
       const actor = await requireLoadEditor();
       const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
+      const inboxId = String(formData.get("inbox_id") ?? "").trim();
+      if (inboxId) {
+        const { readInboxParse } = await import("./files");
+        const { rateConApplyContactFields, type ParsedRateCon } = await import("./rate-con-shared");
+        const inbox = readInboxParse<ParsedRateCon>(inboxId);
+        if (inbox) Object.assign(input, rateConApplyContactFields(inbox, input));
+      }
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       const id = createLoad(input);
       maybeAssignCreatingDispatcher(id, actor.id);
       if (input.driver_id) applyWorkflowOnDriverAssign(id);
-      const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
         const { attachInboxToLoad } = await import("./files");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");

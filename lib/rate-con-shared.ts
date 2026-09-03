@@ -549,6 +549,8 @@ function carrierRoleChunks(text: string): string[] {
   for (const row of raw.matchAll(/attn\s*:?\s*[A-Za-z][A-Za-z .'-]{1,60}/gi)) {
     chunks.push(row[0] ?? "");
   }
+  const window = carrierRoleWindow(raw);
+  if (window) chunks.push(window);
   for (const row of raw.matchAll(/ph\s*\/\s*fax\s*:?\s*[+\d().\-\s]{7,30}/gi)) {
     chunks.push(row[0] ?? "");
   }
@@ -556,6 +558,43 @@ function carrierRoleChunks(text: string): string[] {
     chunks.push(row[0] ?? "");
   }
   return chunks.filter((chunk) => chunk.trim());
+}
+
+const CARRIER_WINDOW_END_RE =
+  /^(?:load\s+information|pickups?\b|drops?\b|deliver(?:y|ies)\b|stop\s+\d|pieces\b|pallets\b|commodity\b|must pulp|special instructions)/i;
+
+/** Carrier / Attn / our city / our name — before the stop table or confirmation body. */
+function carrierRoleWindow(text: string): string {
+  const raw = String(text ?? "").replace(/\r/g, "");
+  const start = raw.search(
+    /(?:^|\n)\s*(?:carrier(?:\s+contact)?\s*:|attn\s*:|m\s*&\s*s\s+loads(?:\s+llc)?|hastings\s*,\s*ne)/i,
+  );
+  if (start < 0) return "";
+  const from = raw[start] === "\n" ? start + 1 : start;
+  const kept: string[] = [];
+  for (const line of raw.slice(from).split("\n")) {
+    const trimmed = collapse(line);
+    if (kept.length > 0 && CARRIER_WINDOW_END_RE.test(trimmed)) break;
+    if (kept.length > 0 && /^dispatch confirmation\s*$/i.test(trimmed)) break;
+    kept.push(line);
+    if (kept.length >= 20) break;
+  }
+  return kept.join("\n");
+}
+
+function leftoverCarrierPersonLine(line: string): string {
+  const text = collapse(line);
+  if (!text) return "";
+  if (
+    /^(carrier|attn|driver|cell|truck|trailer|reference|ph|fax|mcid|mc|load|pieces|pallets|dispatch|contact)\b/i.test(
+      text,
+    )
+  ) {
+    return "";
+  }
+  if (looksLikePlaceOrLoadNumber(text) || looksLikeCompanyName(text)) return "";
+  if (/m\s*&\s*s\s+loads|ms\s*express|msloads|\bhastings\b/i.test(text)) return "";
+  return looksLikePersonName(text) ? text : "";
 }
 
 function peopleInCarrierRole(text: string): string[] {
@@ -568,6 +607,10 @@ function peopleInCarrierRole(text: string): string[] {
     }
     const carrierName = chunk.match(/\bcarrier(?:\s+contact)?\s*:?\s*([^\n,/]+)/i)?.[1];
     if (carrierName) names.push(collapse(carrierName));
+    for (const line of chunk.split("\n")) {
+      const leftover = leftoverCarrierPersonLine(line);
+      if (leftover) names.push(leftover);
+    }
   }
   return names;
 }
@@ -628,7 +671,7 @@ export function parseLetterheadCustomer(text: string): string {
   const parts = head.split(/\n/).flatMap((line) => line.split(/\s{2,}/));
   for (const part of parts) {
     const cleaned = collapse(part)
-      .replace(/\bload\s*number\b.*$/i, "")
+      .replace(/load\s*number(?:\b\s*[:#-]?\s*[A-Z0-9-]*)?/i, "")
       .replace(/\bmc\s*:.*$/i, "")
       .replace(/\bp(?:hone)?\s*:.*$/i, "")
       .trim();
@@ -664,8 +707,11 @@ export function resolveRateConOrigin(origin: string, shipper: ParsedStop, text: 
 }
 
 export function parseLetterheadLoadNumber(text: string): string {
-  const match = String(text ?? "").match(/\bload\s*(?:number|#|no\.?)\s*[:#-]?\s*([A-Z0-9-]{3,20})\b/i);
-  return match?.[1]?.trim() ?? "";
+  const raw = String(text ?? "");
+  const labeled = raw.match(/\bload\s*(?:number|#|no\.?)\s*[:#-]?\s*([A-Z0-9-]{3,20})\b/i);
+  if (labeled?.[1]) return labeled[1].trim();
+  const afterZip = raw.match(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\s+(\d{4,8})\b/);
+  return afterZip?.[1]?.trim() ?? "";
 }
 
 export function pickBrokerCustomerName(text: string, candidates: string[]): string {
