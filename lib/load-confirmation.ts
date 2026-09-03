@@ -877,7 +877,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
   for (let index = 0; index < stopBoxes.length; index += 1) {
     const gap = index === 0 ? 8 : 6;
-    const boxH = stopBoxHeight(doc, stopBoxes[index]);
+    const boxH = stopBoxHeight(doc, stopBoxes[index], width);
     ensureSpace(gap + boxH);
     y = drawStop(doc, left, y + gap, width, stopBoxes[index], boxH);
   }
@@ -1131,12 +1131,39 @@ function drawReeferBar(
   return y + height;
 }
 
-function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop): number {
+function stopGridRows(stop: ConfirmationStop): Array<[string, string]> {
+  return [
+    ["Date", stop.date],
+    ["Time", stop.time],
+    ["Quantity", stop.quantity],
+    ["Weight", stop.weight ? `${stop.weight} lbs` : ""],
+    ["Appointment", stop.appointment],
+    ["Purchase Order #", stop.poNumber],
+    ["Confirmation number", stop.confirmationNumber],
+    ...(stop.puNumber ? ([["PU #", stop.puNumber]] as Array<[string, string]>) : []),
+  ];
+}
+
+function stopMetaHeight(stop: ConfirmationStop): number {
+  const rows = stopGridRows(stop);
+  const rightRows = Math.max(0, rows.length - 5);
+  const gridH = 8 + Math.max(5, rightRows) * 16;
+  const leftH = stop.hours.trim() ? 94 : 72;
+  return Math.max(gridH, leftH);
+}
+
+function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop, width = 540): number {
+  let height = stopMetaHeight(stop) + 8;
+  if (stop.description.trim()) {
+    doc.font("Helvetica-Bold").fontSize(11);
+    height += Math.max(14, doc.heightOfString(stop.description, { width: width - 110 })) + 2;
+  }
   const extra = stop.extra.trim();
-  if (!extra) return 102;
-  doc.font("Helvetica").fontSize(10);
-  const extraH = doc.heightOfString(extra, { width: 528 });
-  return 102 + Math.max(14, extraH + 4);
+  if (extra) {
+    doc.font("Helvetica").fontSize(10);
+    height += 10 + Math.max(14, doc.heightOfString(extra, { width: width - 12 }));
+  }
+  return Math.max(102, height);
 }
 
 function drawStop(
@@ -1171,25 +1198,23 @@ function drawStop(
 
   const gridX = x + leftW;
   const colW = (width - leftW) / 2;
-  const rows: Array<[string, string]> = [
-    ["Date", stop.date],
-    ["Time", stop.time],
-    ["Quantity", stop.quantity],
-    ["Weight", stop.weight ? `${stop.weight} lbs` : ""],
-    ["Appointment", stop.appointment],
-    ["Purchase Order #", stop.poNumber],
-    ["Confirmation number", stop.confirmationNumber],
-    ...(stop.puNumber ? ([["PU #", stop.puNumber]] as Array<[string, string]>) : []),
-    ["Description", stop.description],
-  ];
+  const rows = stopGridRows(stop);
   rows.forEach(([label, value], index) => {
     const col = index < 5 ? 0 : 1;
     const row = index < 5 ? index : index - 5;
     kv(doc, gridX + col * colW, y + 8 + row * 16, 88, colW - 6, label, value, true);
   });
+
+  let cursor = y + stopMetaHeight(stop) + 4;
+  if (stop.description.trim()) {
+    kv(doc, x + 6, cursor, 88, width - 16, "Description", stop.description, true);
+    doc.font("Helvetica-Bold").fontSize(11);
+    cursor += Math.max(14, doc.heightOfString(stop.description, { width: width - 110 })) + 2;
+  }
   if (stop.extra.trim()) {
+    cursor += 8;
     doc.font("Helvetica").fontSize(10).fillColor(INK);
-    doc.text(stop.extra, x + 6, y + 86, { width: width - 12, lineBreak: true });
+    doc.text(stop.extra, x + 6, cursor, { width: width - 12, lineBreak: true });
   }
   return y + height;
 }

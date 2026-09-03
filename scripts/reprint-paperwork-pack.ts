@@ -73,6 +73,23 @@ const awgKc = stop({
   extra: "AWG IS BY SET APPT. Appointment required.",
 });
 
+const awgNorfolk = stop({
+  title: "Consignee 2",
+  name: "AWG - Norfolk",
+  address: "1301 W Omaha Ave, Norfolk, NE 68701",
+  phone: "",
+  date: "09/04/26",
+  time: "9:00 PM",
+  quantity: "480 cases",
+  weight: "12000",
+  poNumber: "110247187",
+  confirmationNumber: "61713982",
+  appointment: "Yes",
+  description: "Fresh Foods BERRIES",
+  hoursLabel: "Receiving Hours",
+  extra: "AWG IS BY SET APPT. Appointment required.",
+});
+
 const baseConfirm: ConfirmationModel = {
   packet: "internal",
   style: "owner_operator",
@@ -82,12 +99,12 @@ const baseConfirm: ConfirmationModel = {
   todayDate: "09/02/26",
   carrierName: "Lumig Transports LLC",
   carrierPhone: "3217709078",
-  driverName: "",
-  driverPhone: "",
+  driverName: "Ceferino",
+  driverPhone: "3217709078",
   driverEmail: "",
   equipment: "53' Reefer",
-  truckNumber: "",
-  trailerNumber: "",
+  truckNumber: "42",
+  trailerNumber: "MS1519",
   agreedAmount: 2625,
   customerName: "",
   customerBilling: "",
@@ -104,7 +121,7 @@ const baseConfirm: ConfirmationModel = {
   loadStatus: "",
   shipper: northBay,
   consignee: awgKc,
-  stops: [northBay, awgKc],
+  stops: [northBay, awgKc, awgNorfolk],
   dispatchNotes:
     "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN WITH ALL PU#s.....HAVE DRIVERS PAY ALL GATE FEES AND LUMPER FEES AND SUBMIT RECEIPTS FOR REIMBURSEMENT. After-hours tracking 314-459-1752. Keep the air chute clear. Trailer must be clean with no exposed insulation.",
   internalLegs: "",

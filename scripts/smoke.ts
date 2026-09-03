@@ -5788,6 +5788,23 @@ P: 314-459-1752
   assert.match(cbDriverText, /110247187/);
   assert.match(cbDriverText, /61511545/);
   assert.match(cbDriverText, /61713982/);
+  assert.match(cbDriverText, /Consignee 2/);
+  assert.match(cbDriverText, /AWG - Norfolk|Norfolk/);
+  assert.doesNotMatch(cbDriverText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
+  const signedDriverPdf = await confirmationLib.renderConfirmationPdf({
+    ...cbDriver,
+    driverName: "Ceferino",
+    driverPhone: "3217709078",
+    truckNumber: "42",
+    trailerNumber: "MS1519",
+  });
+  const signedDriverText = String(
+    (await extractCbPdfText(new Uint8Array(signedDriverPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(signedDriverText, /Ceferino/);
+  assert.match(signedDriverText, /3217709078/);
+  assert.match(signedDriverText, /MS1519/);
+  assert.match(signedDriverText, /Truck #:[\s\S]{0,24}42|42[\s\S]{0,12}Trailer/);
   const cbCustomer = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "customer" });
   assert.equal(cbCustomer.stops.find((stop) => /North Bay/i.test(stop.name))?.poNumber, "");
   assert.equal(cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.poNumber, "000250476");
@@ -5804,6 +5821,10 @@ P: 314-459-1752
   assert.doesNotMatch(cbCustomerText, /PO#\s*000250476|CONF#\s*61511545/);
   assert.match(cbCustomerText, /000250476/);
   assert.match(cbCustomerText, /61511545/);
+  assert.match(cbCustomerText, /Consignee 2/);
+  assert.match(cbCustomerText, /110247187/);
+  assert.match(cbCustomerText, /61713982/);
+  assert.doesNotMatch(cbCustomerText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
   assert.match(cbDriverFlat, /MUST CHECK IN WITH ALL PU#s/);
   assert.match(cbDriverFlat, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
   assert.match(cbDriverFlat, /MUST CHECK IN[\s\S]*WITH ALL PU#s[\s\S]*SUBMIT RECEIPTS FOR REIMBURSEMENT/);
