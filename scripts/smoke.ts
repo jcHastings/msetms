@@ -395,6 +395,50 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
+  const dashHome = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(dashHome, /if \(!dispatcher\) redirect\("\/login"\)/);
+  assert.ok(
+    dashHome.indexOf('if (!dispatcher) redirect("/login")') < dashHome.indexOf("listCustomers()"),
+    "unauthenticated / must redirect before loading the customer directory",
+  );
+  const rscRouter = await import("../lib/rsc-router-state");
+  const legacyLoginTree = encodeURIComponent(
+    JSON.stringify(["", { children: ["login", { children: ["__PAGE__", {}, null, null] }, null, null] }, null, null, true]),
+  );
+  const next16LoginTree = encodeURIComponent(
+    JSON.stringify(["", { children: ["login", { children: ["__PAGE__", {}, null, null, 4096] }, null, null, 4096] }, null, null, 4112]),
+  );
+  assert.equal(rscRouter.shouldDropFlightRouterStateHeader(legacyLoginTree), true);
+  assert.equal(rscRouter.shouldDropFlightRouterStateHeader(next16LoginTree), false);
+  assert.equal(
+    rscRouter.stripInvalidFlightRouterState({ "next-router-state-tree": legacyLoginTree }),
+    true,
+  );
+  assert.equal(rscRouter.isPublicPath("/login"), true);
+  assert.equal(rscRouter.isPublicPath("/"), false);
+  const proxySrc = fs.readFileSync(path.join(process.cwd(), "proxy.ts"), "utf8");
+  assert.match(proxySrc, /DISPATCHER_SESSION_COOKIE/);
+  assert.match(proxySrc, /pathname === "\/"/);
+  assert.match(proxySrc, /\/login/);
+  const instrumentationSrc = fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8");
+  assert.match(instrumentationSrc, /stripInvalidFlightRouterState/);
+  const stripHook = await import("../scripts/strip-invalid-router-state.cjs");
+  assert.equal(stripHook.shouldDrop(legacyLoginTree), true);
+  assert.equal(stripHook.shouldDrop(next16LoginTree), false);
+  const layoutSrc = fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8");
+  assert.match(layoutSrc, /PUBLIC_PAGE_HEADER/);
+  assert.match(layoutSrc, /publicPage/);
+  const httpOrigin = process.env.TMS_HTTP_ORIGIN || "http://127.0.0.1:3000";
+  try {
+    const probe = await fetch(`${httpOrigin}/login`, { signal: AbortSignal.timeout(2000) });
+    if (probe.ok || probe.status === 307) {
+      const { runSignedOutHttpAsserts } = await import("./assert-signed-out-http");
+      await runSignedOutHttpAsserts(httpOrigin);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AssertionError") throw error;
+    /* source/unit asserts above cover the contract when no desk is listening */
+  }
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /temporary password/);
@@ -1506,6 +1550,7 @@ async function main() {
   assert.doesNotMatch(runNextSrc, /`--require \$\{preload\}`/);
   const keepAliveSrc = fs.readFileSync(path.join(process.cwd(), "scripts/next-keep-alive.cjs"), "utf8");
   assert.match(keepAliveSrc, /loadProjectEnv/);
+  assert.match(keepAliveSrc, /strip-invalid-router-state/);
   const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");
   assert.match(readme, /JC should start production with `npm start`/);
   assert.match(readme, /Do \*\*not\*\* run `next start`/);

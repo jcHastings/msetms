@@ -24,6 +24,7 @@
 
 const { loadProjectEnv } = require("./project-env.cjs");
 loadProjectEnv();
+require("./strip-invalid-router-state.cjs");
 
 function ignoreBrokenPipe(stream) {
   if (!stream || typeof stream.on !== "function") return;
