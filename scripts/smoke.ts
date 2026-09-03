@@ -7082,6 +7082,12 @@ P: 314-459-1752
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /claim number/);
   assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /MS Express load number/);
   assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /TriumphPay/i);
+  const confirmSrc = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");
+  assert.doesNotMatch(confirmSrc, /fontSize\(\s*7\b|fontSize\(\s*6\.5/);
+  assert.doesNotMatch(confirmSrc, /#4b5563|#6b7280|#6b7c90|#dbeafe|#111827/);
+  assert.match(confirmSrc, /fontSize\(18\)/);
+  assert.match(confirmSrc, /#12315c/);
+  assert.match(confirmSrc, /#000000/);
   assert.equal(getDocumentDefaults("invoice").footer_text, "");
   assert.equal(getDocumentDefaults("invoice").terms_text, "");
   assert.match(getDocumentDefaults("customer_confirmation").terms_text, /billing@msloads.com/);

@@ -783,10 +783,10 @@ function drawConfirmationLogo(
       doc.image(logo, x, y, { fit });
       return true;
     } catch {
-      // Fall through to the wordmark.
+      // Fall through to the navy wordmark when the raster file is missing or bad.
     }
   }
-  drawMsExpressWordmark(doc, x, y + 8, Math.min(18, fit[1] - 4));
+  drawMsExpressWordmark(doc, x, y + 6, Math.max(16, Math.min(22, fit[1] - 8)));
   return false;
 }
 
@@ -810,7 +810,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     ] as Array<[string, string]>
   ).filter(([label, value]) => label === "LOAD #" || Boolean(value.trim()));
 
-  drawConfirmationLogo(doc, left, 28, [110, 52]);
+  drawConfirmationLogo(doc, left, 28, [140, 64]);
 
   doc.font("Helvetica-Bold").fontSize(18).fillColor(INK);
   doc.text(title, 0, 36, { width: pageW, align: "center", lineBreak: false });
@@ -821,7 +821,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const cardH = drawContactCard(doc, cardX, cardY, cardW, contactRows);
 
   const nameWidth = Math.max(120, cardX - left - 10);
-  const nameY = 84;
+  const nameY = 96;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INK);
   doc.text(model.company.company_name || "M&S Loads", left, nameY, { width: nameWidth, lineBreak: false });
   const address = formatCompanyAddress(getCompanySettings());
@@ -884,7 +884,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   y += 10;
   ensureSpace(28);
-  doc.font("Helvetica-Bold").fontSize(9).fillColor(INK).text(confirmLabel(model, "DISPATCH NOTES", "NOTAS DE DESPACHO"), left, y, {
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text(confirmLabel(model, "DISPATCH NOTES", "NOTAS DE DESPACHO"), left, y, {
     lineBreak: false,
   });
   y += 14;
@@ -893,7 +893,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   if (model.packet === "internal" && model.internalLegs) {
     ensureSpace(36);
-    doc.font("Helvetica-Bold").fontSize(9).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
+    doc.font("Helvetica-Bold").fontSize(8).text(confirmLabel(model, "Internal legs (not billed):", "Tramos internos:"), left, y, {
       lineBreak: false,
     });
     y += 14;
@@ -911,7 +911,6 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
       lineBreak: false,
     });
     y += 18;
-    doc.font("Helvetica").fontSize(8);
     drawWriteLine(doc, left, y, 170, "Accepted By");
     drawWriteLine(doc, left + 186, y, 120, "Date");
     drawWriteLine(doc, left + 322, y, 218, "Signature");
@@ -1036,7 +1035,7 @@ function drawCustomerRate(
   const rowH = 16;
   const height = Math.max(36, 22 + lines.length * rowH + 16);
   doc.rect(x, y, width, height).strokeColor(INK).lineWidth(1).stroke();
-  doc.font("Helvetica-Bold").fontSize(9).fillColor(INK).text("RATE", x + 6, y + 6, {
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text("RATE", x + 6, y + 6, {
     lineBreak: false,
   });
   if (!lines.length) {
@@ -1224,10 +1223,10 @@ function drawWriteLine(
   label: string,
   value = "",
 ): void {
-  doc.font("Helvetica").fontSize(8).fillColor("#111827").text(`${label}:`, x, y);
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text(`${label}:`, x, y);
   const labelW = doc.widthOfString(`${label}: `);
-  doc.moveTo(x + labelW, y + 10).lineTo(x + width, y + 10).strokeColor("#111827").lineWidth(0.7).stroke();
+  doc.moveTo(x + labelW, y + 10).lineTo(x + width, y + 10).strokeColor(INK).lineWidth(1).stroke();
   if (value) {
-    doc.font("Helvetica").fontSize(8).text(value, x + labelW + 2, y - 1, { width: width - labelW - 4 });
+    doc.font("Helvetica-Bold").fontSize(11).text(value, x + labelW + 2, y - 1, { width: width - labelW - 4 });
   }
 }
