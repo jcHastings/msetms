@@ -118,7 +118,7 @@ export function LoadMapCanvas({
           center: { lat: start.lat, lng: start.lng },
           zoom: points.length + route.length === 1 ? 15 : 5,
           maxZoom: 20,
-          gestureHandling: disableDefaultUi ? "cooperative" : "greedy",
+          gestureHandling: "greedy",
           disableDefaultUI: disableDefaultUi,
           zoomControl: !disableDefaultUi,
           mapTypeControl: false,
