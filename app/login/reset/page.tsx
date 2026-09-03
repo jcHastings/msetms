@@ -1,5 +1,5 @@
-import { BrandMark } from "@/components/brand-mark";
 import { DispatcherResetForm } from "@/components/dispatcher-reset-form";
+import { LoginCanvas } from "@/components/login-canvas";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,11 +17,7 @@ export default async function ResetPasswordPage({
   const token = String((await searchParams).token ?? "").trim();
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <div className="mb-6">
-        <BrandMark size="lg" />
-        <h1 className="mt-4 text-3xl font-semibold">Set password</h1>
-      </div>
+    <LoginCanvas title="Set password">
       {token ? (
         <DispatcherResetForm token={token} />
       ) : (
@@ -32,6 +28,6 @@ export default async function ResetPasswordPage({
           </Link>
         </div>
       )}
-    </div>
+    </LoginCanvas>
   );
 }

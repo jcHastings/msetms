@@ -22,10 +22,14 @@ export const LOAD_MAP_PIN_TIP_Y = LOAD_MAP_PIN_HEIGHT;
 export const LOAD_MAP_PIN_HEAD_X = 11;
 export const LOAD_MAP_PIN_HEAD_Y = 10;
 
-/** Moving units: the whole marker is a straight arrow, anchored at the GPS point. */
-export const LOAD_MAP_ARROW_SIZE = 28;
-export const LOAD_MAP_ARROW_CX = 14;
-export const LOAD_MAP_ARROW_CY = 14;
+/** Moving units: compact Samsara dart, anchored at the GPS point. */
+export const LOAD_MAP_ARROW_SIZE = 14;
+export const LOAD_MAP_ARROW_CX = 7;
+export const LOAD_MAP_ARROW_CY = 7;
+export const LOAD_MAP_DART_PATH = "M7 1.2 L12.6 12.6 L7 10.2 L1.4 12.6 Z";
+export const LOAD_MAP_PARKED_SIZE = 10;
+export const LOAD_MAP_PARKED_CX = 5;
+export const LOAD_MAP_PARKED_CY = 5;
 
 export function loadMapIconLayout(pinShape?: "circle" | "arrow"): {
   w: number;
@@ -39,6 +43,14 @@ export function loadMapIconLayout(pinShape?: "circle" | "arrow"): {
       h: LOAD_MAP_ARROW_SIZE,
       anchorX: LOAD_MAP_ARROW_CX,
       anchorY: LOAD_MAP_ARROW_CY,
+    };
+  }
+  if (pinShape === "circle") {
+    return {
+      w: LOAD_MAP_PARKED_SIZE,
+      h: LOAD_MAP_PARKED_SIZE,
+      anchorX: LOAD_MAP_PARKED_CX,
+      anchorY: LOAD_MAP_PARKED_CY,
     };
   }
   return {
@@ -92,8 +104,10 @@ export function loadMapPinSvg(point: Pick<LoadMapPoint, "kind" | "pinColor" | "p
   if (point.pinShape === "arrow") {
     const heading = Number(point.headingDeg);
     const deg = Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : 0;
-    const arrow = "M14 2.2 L24.6 15.4 L17.6 15.4 L17.6 25.8 L10.4 25.8 L10.4 15.4 L3.4 15.4 Z";
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_ARROW_SIZE}" height="${LOAD_MAP_ARROW_SIZE}" viewBox="0 0 ${LOAD_MAP_ARROW_SIZE} ${LOAD_MAP_ARROW_SIZE}"><g transform="rotate(${deg.toFixed(0)} ${LOAD_MAP_ARROW_CX} ${LOAD_MAP_ARROW_CY})"><path d="${arrow}" fill="none" stroke="#0f172a" stroke-width="4.2" stroke-linejoin="round"/><path d="${arrow}" fill="${fill}" stroke="#ffffff" stroke-width="2.1" stroke-linejoin="round"/></g></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_ARROW_SIZE}" height="${LOAD_MAP_ARROW_SIZE}" viewBox="0 0 14 14"><g transform="rotate(${deg.toFixed(0)} ${LOAD_MAP_ARROW_CX} ${LOAD_MAP_ARROW_CY})"><path d="${LOAD_MAP_DART_PATH}" fill="${fill}" stroke="#0f172a" stroke-width="1" stroke-linejoin="miter" stroke-linecap="miter"/></g></svg>`;
+  }
+  if (point.pinShape === "circle") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PARKED_SIZE}" height="${LOAD_MAP_PARKED_SIZE}" viewBox="0 0 10 10"><circle cx="${LOAD_MAP_PARKED_CX}" cy="${LOAD_MAP_PARKED_CY}" r="4" fill="${fill}" stroke="#ffffff" stroke-width="1"/></svg>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_WIDTH}" height="${LOAD_MAP_PIN_HEIGHT}" viewBox="0 0 ${LOAD_MAP_PIN_WIDTH} ${LOAD_MAP_PIN_HEIGHT}"><path d="M11 1.4 C6.2 1.4 2.6 5.1 2.6 10 C2.6 17.4 11 30.6 11 30.6 C11 30.6 19.4 17.4 19.4 10 C19.4 5.1 15.8 1.4 11 1.4 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/><circle cx="${LOAD_MAP_PIN_HEAD_X}" cy="${LOAD_MAP_PIN_HEAD_Y}" r="3" fill="#ffffff" fill-opacity="0.35"/></svg>`;
 }

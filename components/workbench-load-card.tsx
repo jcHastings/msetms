@@ -103,7 +103,7 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
 
   return (
     <article
-      className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_1px_4px_rgba(15,23,42,0.06)]"
+      className="workbench-card"
       data-workbench-card=""
       data-attention-load={group.loadNumber}
     >

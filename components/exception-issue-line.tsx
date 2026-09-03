@@ -8,10 +8,10 @@ import {
 import { exceptionStateFor } from "@/lib/desk";
 
 const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
-  CRITICAL: "bg-rose-100 text-rose-900",
-  HIGH: "bg-orange-100 text-orange-900",
-  MEDIUM: "bg-amber-100 text-amber-950",
-  LOW: "bg-slate-100 text-slate-700",
+  CRITICAL: "status-tone-danger",
+  HIGH: "status-tone-warning",
+  MEDIUM: "status-tone-caution",
+  LOW: "status-tone-slate",
 };
 
 export function ExceptionIssueLine({ item, compact = false }: { item: InboxException; compact?: boolean }) {
@@ -23,7 +23,7 @@ export function ExceptionIssueLine({ item, compact = false }: { item: InboxExcep
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${SEVERITY_CLASS[item.severity]}`}
+          className={`status-pill ${SEVERITY_CLASS[item.severity]}`}
         >
           {attentionLabel(item)}
         </span>

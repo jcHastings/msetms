@@ -38,7 +38,7 @@ export type FleetMapPin = {
 export type FleetPinLabelOrigin = { x: number; y: number };
 
 const PIN_LABEL_CLUSTER_DECIMALS = 4;
-const PIN_LABEL_CENTER = 11;
+const PIN_LABEL_CENTER = 5;
 const PIN_LABEL_Y_SLOTS = [0, -12, 12] as const;
 
 export function clusterPinLabelSlots(

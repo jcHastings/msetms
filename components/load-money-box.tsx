@@ -22,7 +22,7 @@ export function LoadMoneyBox({ load }: { load: LoadView }) {
           </h2>
         </div>
         {load.accounting_desk === "accounting" || load.status === "accounting" ? (
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-900">
+          <span className="status-pill status-tone-success">
             Accounting
           </span>
         ) : null}

@@ -48,7 +48,7 @@ export function clusterLoadMapPoints(points: LoadMapPoint[], zoom: number): Clus
 
 export function clusterPinSvg(count: number): string {
   const label = count > 99 ? "99+" : String(count);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CLUSTER_PIN_SIZE}" height="${CLUSTER_PIN_SIZE}" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#0b1f3a" stroke="#d4a017" stroke-width="2"/><text x="14" y="18" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="700" font-family="system-ui,sans-serif">${label}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CLUSTER_PIN_SIZE}" height="${CLUSTER_PIN_SIZE}" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#07325a" stroke="#137cdd" stroke-width="2"/><text x="14" y="18" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="700" font-family="system-ui,sans-serif">${label}</text></svg>`;
 }
 
 export function clusterPinIconUrl(count: number): string {

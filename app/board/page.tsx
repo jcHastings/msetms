@@ -29,7 +29,7 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
-import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
+import { loadStatusRowClass } from "@/lib/load-status-style";
 import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
@@ -188,7 +188,7 @@ async function BoardLiveSection({
                     <td className="board-load-cell leading-tight">
                       <OverlayOpenLink
                         href={overlayHref("/board", load.id, current)}
-                        className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                        className="desk-link font-mono text-xs font-semibold hover:underline"
                         title={load.customer_name}
                       >
                         {load.load_number}
@@ -293,7 +293,7 @@ async function BoardLiveSection({
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}
-                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="btn btn-ghost">
+                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
                           Edit
                         </OverlayOpenLink>
                       </div>

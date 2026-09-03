@@ -11,22 +11,22 @@ import {
 } from "@/lib/types";
 
 const TRUCK_STYLES: Record<TruckStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  in_use: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  maintenance: "bg-amber-50 text-amber-800 ring-amber-200",
-  out_of_service: "bg-rose-50 text-rose-800 ring-rose-200",
+  available: "status-tone-success",
+  in_use: "status-tone-navy",
+  maintenance: "status-tone-warning",
+  out_of_service: "status-tone-danger",
 };
 
 const DRIVER_STYLES: Record<DriverStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  on_duty: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  off_duty: "bg-slate-100 text-slate-600 ring-slate-200",
+  available: "status-tone-success",
+  on_duty: "status-tone-navy",
+  off_duty: "status-tone-slate",
 };
 
 function Pill({ className, children }: { className: string; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${className}`}
+      className={`status-pill ring-1 ring-inset ring-black/5 ${className}`}
     >
       {children}
     </span>
@@ -38,7 +38,7 @@ export function LoadStatusBadge({ status }: { status: string }) {
 }
 
 export function CriticalTag() {
-  return <Pill className="bg-rose-600 text-white ring-rose-700">Critical</Pill>;
+  return <Pill className="status-tone-danger">Critical</Pill>;
 }
 
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {
@@ -52,13 +52,7 @@ export function DriverStatusBadge({ status }: { status: DriverStatus }) {
 export function DriverKindBadge({ type }: { type: DriverKind | string }) {
   const ownerOperator = isOwnerOperator(type);
   return (
-    <Pill
-      className={
-        ownerOperator
-          ? "bg-violet-50 text-violet-800 ring-violet-200"
-          : "bg-slate-100 text-slate-600 ring-slate-200"
-      }
-    >
+    <Pill className={ownerOperator ? "status-tone-navy" : "status-tone-slate"}>
       {labelForDriverKind(type)}
     </Pill>
   );

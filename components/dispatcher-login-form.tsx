@@ -89,19 +89,19 @@ export function DispatcherLoginForm({
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Signing in…" : "Sign in"}
           </button>
-          <button
-            className="btn btn-ghost w-full"
-            type="button"
-            data-login-name-toggle=""
-            onClick={() => setUseName((open) => !open)}
-          >
-            {useName ? "Sign in with email" : "No email on your user? Sign in with your name"}
-          </button>
-          <p className="text-center text-sm">
-            <Link href="/login/forgot" className="font-semibold underline">
+          <div className="login-links">
+            <button
+              className="login-name-toggle"
+              type="button"
+              data-login-name-toggle=""
+              onClick={() => setUseName((open) => !open)}
+            >
+              {useName ? "Sign in with email" : "No email on your user? Sign in with your name"}
+            </button>
+            <Link href="/login/forgot" className="login-forgot">
               Forgot password
             </Link>
-          </p>
+          </div>
         </>
       )}
     </form>

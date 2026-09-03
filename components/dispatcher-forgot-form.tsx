@@ -22,7 +22,7 @@ export function DispatcherForgotForm() {
         {pending ? "Sending…" : "Send reset email"}
       </button>
       <p className="text-center text-sm">
-        <Link href="/login" className="font-semibold underline">
+        <Link href="/login" className="login-forgot">
           Back to sign in
         </Link>
       </p>

@@ -135,10 +135,10 @@ async function main() {
   assert.equal(loadStatusBand("delivered"), "done");
   assert.equal(loadStatusBand("cancelled"), "done");
   assert.equal(loadStatusBand("tonu"), "done");
-  assert.match(loadStatusBadgeClass("available"), /amber/);
-  assert.doesNotMatch(loadStatusBadgeClass("assigned"), /amber/);
-  assert.match(loadStatusBadgeClass("assigned"), /sky/);
-  assert.match(loadStatusBadgeClass("delivered"), /emerald/);
+  assert.match(loadStatusBadgeClass("available"), /status-tone-slate/);
+  assert.doesNotMatch(loadStatusBadgeClass("assigned"), /status-tone-warning|amber/);
+  assert.match(loadStatusBadgeClass("assigned"), /status-tone-navy/);
+  assert.match(loadStatusBadgeClass("delivered"), /status-tone-success/);
   assert.match(loadStatusRowClass("available"), /inset_4px/);
   assert.match(loadStatusRowClass("in_transit"), /inset_4px/);
   assert.ok(LOAD_STATUSES.every((status) => loadStatusBadgeClass(status) && loadStatusRowClass(status)));
@@ -398,11 +398,14 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Forgot password/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /temporary password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8"), /BrandMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /LoginCanvas/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /email and password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G|Demo PIN|4020|4410/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/forgot/page.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/reset/page.tsx"), "utf8"), /Set password/);
@@ -438,8 +441,12 @@ async function main() {
   assert.match(cssSource, /\.load-actions/);
   assert.match(cssSource, /\.desk-sidebar/);
   assert.match(cssSource, /\.desk-nav-link-active/);
-  assert.match(cssSource, /#0b1f3a/);
-  assert.match(cssSource, /#d4a017/);
+  assert.match(cssSource, /\.login-canvas/);
+  assert.match(cssSource, /--r-xs: 2px/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /M7 1\.2 L12\.6 12\.6 L7 10\.2 L1\.4 12\.6 Z/);
+  assert.match(cssSource, /#07325a/);
+  assert.match(cssSource, /#137cdd/);
+  assert.doesNotMatch(cssSource, /#d4a017|#b8860b|#f3d27a|#f3e6b8/);
   assert.match(cssSource, /\[data-load-list-chrome\]/);
   assert.match(cssSource, /\.load-workspace \.field/);
   assert.match(cssSource, /\.load-workspace \.btn/);
@@ -11764,9 +11771,8 @@ DISPATCH CONFIRMATION
   assert.equal(liveTruckPin?.pinShape, "circle");
   assert.equal(liveTruckPin?.motion, "Parked");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#22c55e/);
-  assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /M11 1.4/);
-  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /circle cx="14" cy="14" r="9"/);
-  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /L13\.1 6\.8|M14 2\.2/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /circle cx="5" cy="5" r="4"/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /M11 1.4|L13\.1 6\.8|M14 2\.2/);
   assert.equal(loadMapPinFill({ kind: "truck", pinColor: liveTruckPin?.pinColor }), SAMSARA_TRUCK_ON_COLOR);
   const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
   assert.equal(movingTruckPin?.pinShape, "arrow");
@@ -11775,8 +11781,8 @@ DISPATCH CONFIRMATION
   assert.equal(movingTruckPin?.motion, "Moving");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /#22c55e/);
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /rotate\(85/);
-  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M14 2\.2 L24\.6 15\.4/);
-  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M11 1\.4|L13\.1 6\.8/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M7 1\.2 L12\.6 12\.6/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M11 1.4|L13\.1 6\.8|M14 2\.2|stroke-width="4\.2"/);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
