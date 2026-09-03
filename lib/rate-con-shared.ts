@@ -852,9 +852,10 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
   const merged = !usableContact(found)
     ? header
     : {
-        ...found,
         contact_name: found.contact_name || header.contact_name,
+        contact_email: found.contact_email || header.contact_email,
         contact_phone: found.contact_phone || header.contact_phone,
+        contact_ext: found.contact_ext || header.contact_ext,
       };
   return {
     ...merged,
