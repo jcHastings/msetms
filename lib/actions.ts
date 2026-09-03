@@ -19,6 +19,7 @@ import {
   createSavedReport,
   createTrailer,
   createTruck,
+  deleteCustomer,
   deleteDriver,
   deleteLocation,
   deleteSavedReport,
@@ -44,6 +45,13 @@ import {
 } from "./queries";
 import { collectAssignmentAlerts, requireAssignmentOverride } from "./compliance";
 import {
+  applyWorkflowOnDocumentAction,
+  applyWorkflowOnDriverAssign,
+  assetsForAssignment,
+  maybeAssignCreatingDispatcher,
+  requireAssignmentHardBlock,
+} from "./workflow";
+import {
   DRIVER_STATUSES,
   DRIVER_TYPES,
   TRUCK_STATUSES,
@@ -52,6 +60,7 @@ import {
   isSchedulingType,
   parseCdlEndorsements,
   parseFleetDivision,
+  isBillableStatus,
   type ActionResult,
   type DriverKind,
   type DriverStatus,
@@ -191,14 +200,9 @@ function parseDateField(value: FormDataEntryValue | null): string {
 
 function enforceAssignmentCompliance(formData: FormData, truckId: number | null, driverId: number | null, trailerId: number | null): void {
   if (!truckId && !driverId && !trailerId) return;
-  const alerts = collectAssignmentAlerts(
-    {
-      truck: truckId ? getTruck(truckId) : null,
-      driver: driverId ? getDriver(driverId) : null,
-      trailer: trailerId ? getTrailer(trailerId) : null,
-    },
-    complianceWindows(),
-  );
+  const assets = assetsForAssignment(truckId, driverId, trailerId);
+  requireAssignmentHardBlock(assets);
+  const alerts = collectAssignmentAlerts(assets, complianceWindows());
   const confirmed = String(formData.get("confirm_expired") ?? "") === "1";
   requireAssignmentOverride(alerts, confirmed);
 }
@@ -230,6 +234,8 @@ export async function createCustomerAction(
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
       credit_hold: String(formData.get("credit_hold") ?? "") === "1",
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
+      main_email: String(formData.get("main_email") ?? "").trim(),
+      billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -252,11 +258,30 @@ export async function updateCustomerAction(
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
       credit_hold: String(formData.get("credit_hold") ?? "") === "1",
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
+      main_email: String(formData.get("main_email") ?? "").trim(),
+      billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
     return { ok: true, id };
   } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteCustomerAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("customer_id"));
+    if (id == null) throw new Error("Customer not found.");
+    deleteCustomer(id);
+    refresh();
+    redirect("/customers");
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }
@@ -457,9 +482,17 @@ export async function createLoadAction(
     try {
       const actor = await requireLoadEditor();
       const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
+      const inboxId = String(formData.get("inbox_id") ?? "").trim();
+      if (inboxId) {
+        const { readInboxParse } = await import("./files");
+        const { rateConApplyContactFields } = await import("./rate-con-shared");
+        const inbox = readInboxParse<import("./rate-con-shared").ParsedRateCon>(inboxId);
+        if (inbox) Object.assign(input, rateConApplyContactFields(inbox, input));
+      }
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       const id = createLoad(input);
-      const inboxId = String(formData.get("inbox_id") ?? "").trim();
+      maybeAssignCreatingDispatcher(id, actor.id);
+      if (input.driver_id) applyWorkflowOnDriverAssign(id);
       if (inboxId) {
         const { attachInboxToLoad } = await import("./files");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
@@ -493,6 +526,7 @@ export async function updateLoadAction(
       const input = applyLoadPermissions(parseLoadInput(formData, true, existing), actor.role, existing ?? undefined);
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
+      if (input.driver_id && input.driver_id !== existing?.driver_id) applyWorkflowOnDriverAssign(id);
       if (String(formData.get("save_load_details") ?? "") === "1") {
         updateLoadDetails(id, {
           status_reason: String(formData.get("status_reason") ?? ""),
@@ -556,6 +590,7 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
         oo_percent: parseOptionalFloat(formData.get("oo_percent")),
         dispatch: String(formData.get("dispatch") ?? "") === "1",
       });
+      applyWorkflowOnDriverAssign(loadId);
       const { refreshEmptyMilesAround } = await import("./empty-miles");
       await refreshEmptyMilesAround(loadId, previousDriverId);
       refresh();
@@ -591,8 +626,7 @@ export async function disconnectQuickbooksAction(): Promise<void> {
 }
 
 export async function sendToQuickbooksFormAction(formData: FormData): Promise<void> {
-  const result = await sendToQuickbooksAction(null, formData);
-  if (!result.ok) throw new Error(result.error);
+  await sendToQuickbooksAction(null, formData);
 }
 
 export async function sendToQuickbooksAction(
@@ -606,8 +640,13 @@ export async function sendToQuickbooksAction(
     const confirmResend = String(formData.get("confirm_resend") ?? "") === "1";
     const { sendLoadToQuickbooks } = await import("./integrations/quickbooks");
     await sendLoadToQuickbooks(loadId, { confirmResend });
+    applyWorkflowOnDocumentAction(loadId, "invoice_sent");
     refresh();
-    return { ok: true, id: loadId };
+    return {
+      ok: true,
+      id: loadId,
+      message: confirmResend ? "Invoice sent again to QuickBooks." : "Invoice sent to QuickBooks.",
+    };
   } catch (error) {
     return fail(error);
   }
@@ -629,6 +668,10 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
         assertCanEditLoadRecord(existing, actor.role);
       }
       updateLoadStatus(loadId, status);
+      if (isBillableStatus(status)) {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       if (status === "cancelled") {
         redirect(safeReturnTo(formData.get("return_to"), "/board"));
@@ -831,6 +874,10 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
         mimeType: file.type,
         uploadedBy: "dispatcher",
       });
+      if (kind === "pod") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -1080,6 +1127,82 @@ export async function toggleTrailerActiveAction(
     setTrailerActive(id, String(formData.get("active") ?? "") === "1");
     refresh();
     return { ok: true, id };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createTrailerShareLinkAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("trailer_id"));
+    if (id == null) throw new Error("Trailer not found.");
+    const { createTrailerShareLink } = await import("./trailer-share");
+    const link = createTrailerShareLink(id, String(formData.get("expires_at") ?? ""));
+    refresh();
+    return { ok: true, id: link.id, message: `Customer link created. Expires ${link.expires_at}.` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createLoadShareLinkAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireLoadEditor();
+    const id = parseOptionalInt(formData.get("load_id"));
+    if (id == null) throw new Error("Load not found.");
+    const { createLoadShareLink } = await import("./load-share");
+    const link = createLoadShareLink(id, String(formData.get("expires_at") ?? ""));
+    refresh();
+    return { ok: true, id: link.id, message: `Status link created. Expires ${link.expires_at}.` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function postLoadChatAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    const body = String(formData.get("body") ?? "");
+    const role = String(formData.get("role") ?? "");
+    const { postLoadChatMessage } = await import("./load-chat");
+    if (role === "driver") {
+      const { requireDriver } = await import("./driver-session");
+      const { driverAssignedToLoad } = await import("./relay-store");
+      const driver = await requireDriver();
+      const load = getLoad(loadId);
+      if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
+        throw new Error("This load is not on your dispatch.");
+      }
+      postLoadChatMessage({
+        loadId,
+        authorRole: "driver",
+        authorId: driver.id,
+        authorName: driver.name,
+        body,
+      });
+    } else {
+      const actor = await requireLoadEditor();
+      postLoadChatMessage({
+        loadId,
+        authorRole: "dispatcher",
+        authorId: actor.id,
+        authorName: actor.name,
+        body,
+      });
+    }
+    refresh();
+    return { ok: true, id: loadId };
   } catch (error) {
     return fail(error);
   }

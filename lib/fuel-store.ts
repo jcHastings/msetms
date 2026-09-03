@@ -1,19 +1,26 @@
 import { getDb } from "./db";
 import {
   emptyPeriodTotals,
-  fuelWeekPaidStats,
+  fuelRowInWeek,
+  fuelWeekAnchorDate,
+  fuelWeekPaidStatsForWeek,
+  isCurrentFuelWeek,
   isFuelBucket,
   isMoneyCodeCategory,
+  localWeekRange,
   matchFuelDriver,
   normalizeUnit,
   parseFuelReport,
+  parseFuelWeekStart,
   startOfLocalMonth,
   startOfLocalWeek,
+  weekStartsFromFuelRows,
   type FuelCsvRowError,
   type FuelMatchLoad,
   type FuelPeriodTotals,
   type FuelRollup,
   type FuelTransactionView,
+  type FuelWeekOption,
   type FuelWeekPaidStats,
 } from "./fuel";
 import { extractNProductDriverName } from "./fuel-fleetone";
@@ -36,6 +43,8 @@ export function listFuelTransactions(filters?: {
   driverId?: number;
   truckId?: number;
   unmatchedOnly?: boolean;
+  fromIso?: string;
+  toIso?: string;
 }): FuelTransactionView[] {
   const clauses: string[] = [];
   const params: Array<string | number> = [];
@@ -49,6 +58,14 @@ export function listFuelTransactions(filters?: {
   }
   if (filters?.unmatchedOnly) {
     clauses.push("fuel_transactions.driver_id IS NULL");
+  }
+  if (filters?.fromIso) {
+    clauses.push("fuel_transactions.occurred_at >= ?");
+    params.push(filters.fromIso);
+  }
+  if (filters?.toIso) {
+    clauses.push("fuel_transactions.occurred_at < ?");
+    params.push(filters.toIso);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   return getDb()
@@ -404,13 +421,16 @@ function rollupRows(
   rows: FuelTransactionView[],
   now: Date,
   keyOf: (row: FuelTransactionView) => { id: number; name: string } | null,
+  through: Date = now,
 ): FuelRollup[] {
   const weekStart = startOfLocalWeek(now).toISOString();
   const monthStart = startOfLocalMonth(now).toISOString();
+  const endIso = new Date(through.getTime() + 1).toISOString();
   const map = new Map<number, FuelRollup>();
   for (const row of rows) {
     const key = keyOf(row);
     if (!key) continue;
+    if (row.occurred_at >= endIso) continue;
     const current = map.get(key.id) ?? toRollup(key.id, key.name);
     if (row.occurred_at >= monthStart) addToPeriod(current.month, row);
     if (row.occurred_at >= weekStart) addToPeriod(current.week, row);
@@ -439,6 +459,166 @@ export function getDriverFuelRollup(driverId: number, now = new Date()): FuelRol
   );
 }
 
-export function getFuelWeekPaidStats(now = new Date()): FuelWeekPaidStats {
-  return fuelWeekPaidStats(listFuelTransactions(), now);
+export function getFuelWeekPaidStats(weekStartYmd?: string, now = new Date()): FuelWeekPaidStats {
+  const start = parseFuelWeekStart(weekStartYmd, now);
+  const live = fuelWeekPaidStatsForWeek(listFuelTransactions(), start);
+  if (isCurrentFuelWeek(start, now)) return live;
+  const range = localWeekRange(start);
+  const weekRows = listFuelTransactions({
+    fromIso: range.start.toISOString(),
+    toIso: range.end.toISOString(),
+  });
+  if (weekRows.length > 0) return live;
+  return getFuelWeekReport(start)?.stats ?? live;
+}
+
+export type FuelWeekReport = {
+  weekStartYmd: string;
+  weekEndYmd: string;
+  stats: FuelWeekPaidStats;
+  driverRollups: FuelRollup[];
+  truckRollups: FuelRollup[];
+  txCount: number;
+  savedAt: string;
+};
+
+type FuelWeekReportRow = {
+  week_start_ymd: string;
+  week_end_ymd: string;
+  stats_json: string;
+  driver_rollups_json: string;
+  truck_rollups_json: string;
+  tx_count: number;
+  saved_at: string;
+};
+
+function parseWeekReport(row: FuelWeekReportRow): FuelWeekReport {
+  return {
+    weekStartYmd: row.week_start_ymd,
+    weekEndYmd: row.week_end_ymd,
+    stats: JSON.parse(row.stats_json) as FuelWeekPaidStats,
+    driverRollups: JSON.parse(row.driver_rollups_json) as FuelRollup[],
+    truckRollups: JSON.parse(row.truck_rollups_json) as FuelRollup[],
+    txCount: row.tx_count,
+    savedAt: row.saved_at,
+  };
+}
+
+function upsertFuelWeekReport(weekStartYmd: string, rows: FuelTransactionView[]): FuelWeekReport {
+  const range = localWeekRange(weekStartYmd);
+  const weekRows = rows.filter((row) => fuelRowInWeek(row.occurred_at, range.startYmd));
+  const through = new Date(range.end.getTime() - 1);
+  const report: FuelWeekReport = {
+    weekStartYmd: range.startYmd,
+    weekEndYmd: range.endYmd,
+    stats: fuelWeekPaidStatsForWeek(rows, range.startYmd),
+    driverRollups: rollupRows(
+      weekRows,
+      through,
+      (row) => (row.driver_id ? { id: row.driver_id, name: row.driver_name || "Driver" } : null),
+      through,
+    ),
+    truckRollups: rollupRows(
+      weekRows,
+      through,
+      (row) => (row.truck_id ? { id: row.truck_id, name: row.truck_unit || row.unit_number || "Truck" } : null),
+      through,
+    ),
+    txCount: weekRows.length,
+    savedAt: nowIso(),
+  };
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_week_reports (
+         week_start_ymd, week_end_ymd, stats_json, driver_rollups_json, truck_rollups_json, tx_count, saved_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(week_start_ymd) DO UPDATE SET
+         week_end_ymd = excluded.week_end_ymd,
+         stats_json = excluded.stats_json,
+         driver_rollups_json = excluded.driver_rollups_json,
+         truck_rollups_json = excluded.truck_rollups_json,
+         tx_count = excluded.tx_count,
+         saved_at = excluded.saved_at`,
+    )
+    .run(
+      report.weekStartYmd,
+      report.weekEndYmd,
+      JSON.stringify(report.stats),
+      JSON.stringify(report.driverRollups),
+      JSON.stringify(report.truckRollups),
+      report.txCount,
+      report.savedAt,
+    );
+  return report;
+}
+
+export function syncFuelWeekReports(now = new Date()): FuelWeekReport[] {
+  const rows = listFuelTransactions();
+  const starts = new Set(weekStartsFromFuelRows(rows));
+  const current = localWeekRange(now).startYmd;
+  starts.add(current);
+  for (const startYmd of starts) {
+    const hasRows = rows.some((row) => fuelRowInWeek(row.occurred_at, startYmd));
+    if (!hasRows && !isCurrentFuelWeek(startYmd, now)) continue;
+    upsertFuelWeekReport(startYmd, rows);
+  }
+  return listFuelWeekReports();
+}
+
+export function listFuelWeekReports(): FuelWeekReport[] {
+  return (
+    getDb()
+      .prepare("SELECT * FROM fuel_week_reports ORDER BY week_start_ymd DESC")
+      .all() as FuelWeekReportRow[]
+  ).map(parseWeekReport);
+}
+
+export function getFuelWeekReport(weekStartYmd: string): FuelWeekReport | null {
+  const row = getDb()
+    .prepare("SELECT * FROM fuel_week_reports WHERE week_start_ymd = ?")
+    .get(weekStartYmd) as FuelWeekReportRow | undefined;
+  return row ? parseWeekReport(row) : null;
+}
+
+export function listFuelWeekOptions(now = new Date()): FuelWeekOption[] {
+  const current = localWeekRange(now);
+  const seen = new Set<string>();
+  const options: FuelWeekOption[] = [];
+  const add = (startYmd: string, endYmd: string) => {
+    if (seen.has(startYmd)) return;
+    seen.add(startYmd);
+    options.push({ startYmd, endYmd, current: startYmd === current.startYmd });
+  };
+  add(current.startYmd, current.endYmd);
+  for (const report of listFuelWeekReports()) {
+    add(report.weekStartYmd, report.weekEndYmd);
+  }
+  return options;
+}
+
+export function loadFuelWeekView(weekParam?: string, now = new Date()) {
+  syncFuelWeekReports(now);
+  const weekStartYmd = parseFuelWeekStart(weekParam, now);
+  const range = localWeekRange(weekStartYmd);
+  const current = isCurrentFuelWeek(weekStartYmd, now);
+  const fromIso = range.start.toISOString();
+  const toIso = range.end.toISOString();
+  const weekRows = listFuelTransactions({ fromIso, toIso });
+  const snapshot = getFuelWeekReport(weekStartYmd);
+  const useLive = current || weekRows.length > 0;
+  const anchor = fuelWeekAnchorDate(weekStartYmd, now);
+  return {
+    weekStartYmd,
+    weekEndYmd: range.endYmd,
+    fromIso,
+    toIso,
+    current,
+    stats: useLive
+      ? fuelWeekPaidStatsForWeek(listFuelTransactions(), weekStartYmd)
+      : (snapshot?.stats ?? fuelWeekPaidStatsForWeek([], weekStartYmd)),
+    driverRollups: useLive ? listFuelRollups(anchor) : (snapshot?.driverRollups ?? []),
+    truckRollups: useLive ? listTruckFuelRollups(anchor) : (snapshot?.truckRollups ?? []),
+    weeks: listFuelWeekOptions(now),
+    mpgNow: anchor,
+  };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DriverLoadActions } from "@/components/driver-load-actions";
+import { LoadChatPanel } from "@/components/load-chat-panel";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { driverLaneEnds, driverStopWhen } from "@/lib/driver-load-display";
@@ -9,6 +10,8 @@ import { driverFacingPay } from "@/lib/settlement";
 import { getLatestReeferForLoad, getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { formatDurationMs, formatDutyStatus, getHosForDriver } from "@/lib/integrations/samsara";
 import { DriverSchedulingBlock } from "@/components/location-scheduling";
+import { driverLoadHasAssignedTrailer } from "@/lib/driver-trailer";
+import { listLoadChatMessages } from "@/lib/load-chat";
 import { getLoad, locationsForLoad } from "@/lib/queries";
 import { ensureDefaultStops } from "@/lib/stops";
 import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
@@ -80,6 +83,11 @@ export default async function DriverLoadPage({
       ) : null}
 
       <div id="confirmation" className="mt-4 flex flex-wrap gap-2">
+        {driverLoadHasAssignedTrailer(load) ? (
+          <Link className="btn btn-secondary" href={`/driver/loads/${load.id}/trailer`} data-driver-trailer-tab="">
+            Trailer
+          </Link>
+        ) : null}
         <a className="btn btn-primary" href={`/api/loads/${load.id}/confirmation?packet=internal`}>
           Download load confirmation
         </a>
@@ -181,6 +189,8 @@ export default async function DriverLoadPage({
           <p className="driver-sheet-value mt-1 whitespace-pre-wrap">{load.public_notes}</p>
         </section>
       ) : null}
+
+      <LoadChatPanel loadId={load.id} messages={listLoadChatMessages(load.id)} role="driver" />
 
       <div id="upload">
         <span id="fuel" className="sr-only">

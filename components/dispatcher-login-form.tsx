@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import Link from "next/link";
+import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
 import type { PublicDispatcher } from "@/lib/settings-shared";
 import { roleLabel } from "@/lib/settings-shared";
 import type { ActionResult } from "@/lib/types";
@@ -14,56 +16,109 @@ export function DispatcherLoginForm({
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
-  const needsTotp = Boolean(state?.ok && state.needsTotp);
+  const [useName, setUseName] = useState(false);
+  const needsEmailCode = Boolean(state?.ok && state.needsEmailCode);
+  const rememberDevice = Boolean(state && state.ok && state.rememberDevice);
   return (
-    <form action={formAction} className="card space-y-4 p-6">
-      <FormBanner result={state} hideOk={needsTotp} />
-      {needsTotp ? (
+    <form action={formAction} className="card space-y-4 p-6" data-office-login="">
+      <FormBanner result={state} hideOk={needsEmailCode} />
+      {needsEmailCode ? (
         <>
           <p className="text-sm text-slate-600">
-            {state && state.ok ? state.message : "Enter the 6-digit code from your authenticator app."}
+            {state && state.ok
+              ? state.message
+              : "Enter the sign-in code we emailed you."}
           </p>
           <div className="field">
-            <label htmlFor="totp">Authenticator code</label>
+            <label htmlFor="email_code">Sign-in code</label>
             <input
-              id="totp"
-              name="totp"
+              id="email_code"
+              name="email_code"
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
               pattern="[0-9]{6}"
+              required
             />
           </div>
-          <div className="field">
-            <label htmlFor="recovery_code">Or recovery code</label>
-            <input id="recovery_code" name="recovery_code" autoComplete="off" />
-          </div>
+          <RememberDeviceCheck defaultChecked={rememberDevice} />
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Checking…" : "Continue"}
+          </button>
+          <button
+            className="btn btn-ghost w-full"
+            type="submit"
+            name="resend"
+            value="1"
+            formNoValidate
+            disabled={pending}
+          >
+            {pending ? "Sending…" : "Resend code"}
           </button>
         </>
       ) : (
         <>
+          {useName ? (
+            <div className="field">
+              <label htmlFor="dispatcher_id">Dispatcher</label>
+              <select id="dispatcher_id" name="dispatcher_id" required defaultValue="">
+                <option value="">Select name</option>
+                {dispatchers.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name} · {roleLabel(person.role)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" name="email" type="email" required autoComplete="username" />
+            </div>
+          )}
           <div className="field">
-            <label htmlFor="dispatcher_id">Dispatcher</label>
-            <select id="dispatcher_id" name="dispatcher_id" required defaultValue="">
-              <option value="">Select name</option>
-              {dispatchers.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name} · {roleLabel(person.role)}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="password">Password</label>
+            <PasswordField
+              id="password"
+              name="password"
+              required
+              autoComplete="current-password"
+            />
           </div>
-          <div className="field">
-            <label htmlFor="pin">PIN</label>
-            <input id="pin" name="pin" inputMode="numeric" required autoComplete="off" />
-          </div>
+          <RememberDeviceCheck />
           <button className="btn btn-primary w-full" type="submit" disabled={pending}>
             {pending ? "Signing in…" : "Sign in"}
           </button>
+          <div className="login-links">
+            <button
+              className="login-name-toggle"
+              type="button"
+              data-login-name-toggle=""
+              onClick={() => setUseName((open) => !open)}
+            >
+              {useName ? "Sign in with email" : "No email on your user? Sign in with your name"}
+            </button>
+            <Link href="/login/forgot" className="login-forgot">
+              Forgot password
+            </Link>
+          </div>
         </>
       )}
     </form>
+  );
+}
+
+function RememberDeviceCheck({ defaultChecked = false }: { defaultChecked?: boolean }) {
+  return (
+    <label className="remember-device">
+      <input
+        type="checkbox"
+        name="remember_device"
+        value="1"
+        defaultChecked={defaultChecked}
+        className="remember-device-check"
+      />
+      <span>Remember this device for 30 days</span>
+    </label>
   );
 }

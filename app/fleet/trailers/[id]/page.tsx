@@ -7,8 +7,10 @@ import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { trailerFormValues, truckOption } from "@/lib/fleet-form-shared";
+import { TrailerShareLinkPanel } from "@/components/trailer-share-link";
 import { getTrailer, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
+import { latestTrailerShareLink, trailerSharePath } from "@/lib/trailer-share";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,7 @@ export default async function EditTrailerPage({
 }) {
   const trailer = getTrailer(Number.parseInt((await params).id, 10));
   if (!trailer) notFound();
+  const latestShare = latestTrailerShareLink(trailer.id);
 
   return (
     <>
@@ -37,6 +40,15 @@ export default async function EditTrailerPage({
         inspectionExpires={trailer.dot_expires}
         alerts={trailerComplianceAlerts(trailer, complianceWindows())}
       />
+      {trailer.orbcomm_asset_id.trim() ? (
+        <div className="mb-6">
+          <TrailerShareLinkPanel
+            trailerId={trailer.id}
+            sharePath={latestShare ? trailerSharePath(latestShare.token) : ""}
+            expiresAt={latestShare?.expires_at ?? ""}
+          />
+        </div>
+      ) : null}
       <TrailerForm
         trailer={trailerFormValues(trailer)}
         trucks={listTrucks().map(truckOption)}

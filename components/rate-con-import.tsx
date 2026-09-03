@@ -7,7 +7,7 @@ import { extractRateConFormData, RateConPicker } from "@/components/rate-con-pic
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, createLoadAction } from "@/lib/actions";
-import type { ParsedRateCon } from "@/lib/rate-con-shared";
+import { rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { Customer, DriverWithTruck, Location, Trailer, Truck } from "@/lib/types";
 
@@ -192,7 +192,10 @@ function RateConImportedLoad({
         locations={book.book}
         drivers={drivers}
         inboxId={inboxId}
-        defaults={book.defaults}
+        defaults={{
+          ...book.defaults,
+          ...rateConApplyContactFields(parsed),
+        }}
         {...formSettings}
         action={createLoadAction}
         submitLabel="Confirm and save load"

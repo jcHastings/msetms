@@ -8,6 +8,7 @@ import {
   type HosClock,
   type VehicleLocation,
 } from "@/lib/integrations/samsara";
+import { loadMapPinIconUrl } from "@/lib/load-map-shared";
 
 function coordsLabel(lat: number | null | undefined, lng: number | null | undefined): string {
   if (lat == null || lng == null) return "";
@@ -36,14 +37,32 @@ export function LocationBadge({
   );
 }
 
-export function TrailerLocationBadge({ location }: { location: TrailerLocation | null }) {
+export function TrailerLocationBadge({
+  location,
+  pinColor,
+}: {
+  location: TrailerLocation | null;
+  pinColor?: string;
+}) {
   if (!location) return <span className="text-xs text-slate-400">—</span>;
   const city =
     shortPlaceLabel(location.address) || coordsLabel(location.latitude, location.longitude) || "—";
   const title = [location.address, formatDateTime(location.recordedAt)].filter(Boolean).join(" · ");
   return (
-    <div className="board-place text-left text-xs leading-tight" title={title}>
-      <div className="board-place-line">{city}</div>
+    <div className="board-place board-place-with-pin text-left text-xs leading-tight" title={title} data-board-trailer-place="">
+      <img
+        className="board-place-pin"
+        data-board-place-pin=""
+        alt=""
+        width={16}
+        height={23}
+        src={loadMapPinIconUrl({ kind: "trailer", pinColor })}
+      />
+      <div className="board-place-copy">
+        <div className="board-place-line" data-board-trailer-city="">
+          {city}
+        </div>
+      </div>
     </div>
   );
 }

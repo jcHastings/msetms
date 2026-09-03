@@ -10,6 +10,7 @@ import {
   listTruckGpsReadings,
   saveLocationCoords,
 } from "./queries";
+import { applyWorkflowAfterGeofence } from "./workflow";
 
 export const GEOFENCE_MILES = 2;
 
@@ -168,6 +169,7 @@ export function applyGeofenceArrivals(
       }
     }
   }
+  if (stamped > 0) applyWorkflowAfterGeofence(loadId);
   return stamped;
 }
 

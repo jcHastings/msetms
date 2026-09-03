@@ -16,6 +16,7 @@ import {
 import { getDb } from "./db";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
+import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { driverAssignedToLoad } from "./relay-store";
 import { flatCustomerRate, importCreateRateToFinancials } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
@@ -56,7 +57,7 @@ import {
   parseFleetDivision,
   type FleetDivision,
 } from "./types";
-import { PLANNING_LOAD_STATUSES } from "./load-list-shared";
+import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
@@ -317,25 +318,35 @@ export function createCustomer(input: {
   billing_notes: string;
   credit_hold?: boolean;
   payment_terms?: string;
+  main_email?: string;
+  billing_email?: string;
   contacts: Array<{ name: string; role: string; phone: string; email: string }>;
 }): number {
   const db = getDb();
   const timestamp = now();
   const result = db
     .prepare(
-      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, main_email, billing_email, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
       input.billing_notes,
       input.credit_hold ? 1 : 0,
       input.payment_terms ?? "",
+      String(input.main_email ?? "").trim(),
+      String(input.billing_email ?? "").trim(),
       timestamp,
       timestamp,
     );
   const id = Number(result.lastInsertRowid);
   replaceContacts(id, input.contacts);
+  if (!String(input.main_email ?? "").trim()) {
+    const firstEmail = input.contacts.map((row) => row.email.trim()).find((email) => email.includes("@"));
+    if (firstEmail) {
+      db.prepare("UPDATE customers SET main_email = ? WHERE id = ? AND TRIM(main_email) = ''").run(firstEmail, id);
+    }
+  }
   return id;
 }
 
@@ -346,6 +357,8 @@ export function updateCustomer(
     billing_notes: string;
     credit_hold?: boolean;
     payment_terms?: string;
+    main_email?: string;
+    billing_email?: string;
     contacts: Array<{ name: string; role: string; phone: string; email: string }>;
   },
 ): void {
@@ -353,17 +366,47 @@ export function updateCustomer(
   if (!existing) throw new Error("Customer not found.");
   getDb()
     .prepare(
-      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, updated_at = ? WHERE id = ?",
+      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, main_email = ?, billing_email = ?, updated_at = ? WHERE id = ?",
     )
     .run(
       input.name,
       input.billing_notes,
       input.credit_hold ? 1 : 0,
       input.payment_terms ?? existing.payment_terms ?? "",
+      String(input.main_email ?? existing.main_email ?? "").trim(),
+      String(input.billing_email ?? existing.billing_email ?? "").trim(),
       now(),
       id,
     );
   replaceContacts(id, input.contacts);
+}
+
+export const CUSTOMER_HAS_LOADS_DELETE =
+  "This customer has loads. Move those loads to another customer first.";
+
+export function countLoadsForCustomer(customerId: number): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM loads WHERE customer_id = ?")
+    .get(customerId) as { count: number };
+  return Number(row.count) || 0;
+}
+
+export function loadCountsByCustomer(): Map<number, number> {
+  const rows = getDb()
+    .prepare("SELECT customer_id AS id, COUNT(*) AS count FROM loads GROUP BY customer_id")
+    .all() as Array<{ id: number; count: number }>;
+  return new Map(rows.map((row) => [row.id, Number(row.count) || 0]));
+}
+
+export function deleteCustomer(id: number): void {
+  if (!getCustomer(id)) throw new Error("Customer not found.");
+  if (countLoadsForCustomer(id) > 0) throw new Error(CUSTOMER_HAS_LOADS_DELETE);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("UPDATE load_templates SET customer_id = NULL WHERE customer_id = ?").run(id);
+    db.prepare("DELETE FROM contacts WHERE customer_id = ?").run(id);
+    db.prepare("DELETE FROM customers WHERE id = ?").run(id);
+  })();
 }
 
 function replaceContacts(
@@ -1229,6 +1272,8 @@ export type LoadFilters = {
   status?: string;
   date?: string;
   q?: string;
+  dispatcherId?: number;
+  masterOnly?: boolean;
 };
 
 export function listLoads(filters: LoadFilters = {}): LoadView[] {
@@ -1241,9 +1286,23 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   } else if (filters.status === "planning") {
     clauses.push(`loads.status IN (${PLANNING_LOAD_STATUSES.map(() => "?").join(", ")})`);
     params.push(...PLANNING_LOAD_STATUSES);
+  } else if (filters.status === "misc") {
+    clauses.push(`loads.status IN (${MISC_LOAD_STATUSES.map(() => "?").join(", ")})`);
+    params.push(...MISC_LOAD_STATUSES);
+  } else if (filters.status === "mine" || filters.status === "master") {
+    /* Tab filters use dispatcherId / masterOnly, not a load.status value. */
   } else if (filters.status !== "all") {
     clauses.push("loads.status = ?");
     params.push(filters.status);
+  }
+
+  if (filters.dispatcherId != null) {
+    clauses.push("loads.dispatcher_id = ?");
+    params.push(filters.dispatcherId);
+  }
+
+  if (filters.masterOnly) {
+    clauses.push("(loads.is_master = 1 OR loads.parent_load_id IS NOT NULL)");
   }
 
   if (filters.date) {
@@ -1526,7 +1585,7 @@ export function createLoad(input: LoadInput): number {
         input.commodity,
         input.rate,
         input.notes,
-        input.special_instructions,
+        expandTruncatedDispatchNotes(input.special_instructions),
         input.appointment_notes,
         input.reference_number,
         input.po_number,
@@ -1557,7 +1616,7 @@ export function createLoad(input: LoadInput): number {
     { field: "origin", newValue: input.origin },
     { field: "destination", newValue: input.destination },
     { field: "rate", newValue: input.rate },
-    { field: "special_instructions", newValue: input.special_instructions },
+    { field: "special_instructions", newValue: expandTruncatedDispatchNotes(input.special_instructions) },
     { field: "driver", newValue: driverName(input.driver_id) },
     { field: "truck", newValue: truckUnit(input.truck_id) },
     { field: "trailer", newValue: trailerUnit(input.trailer_id ?? null) },
@@ -1594,7 +1653,7 @@ export function updateLoad(id: number, input: LoadInput): void {
       input.commodity,
       input.rate,
       input.notes,
-      input.special_instructions,
+      expandTruncatedDispatchNotes(input.special_instructions),
       input.appointment_notes,
       input.reference_number,
       input.po_number,
@@ -1627,7 +1686,11 @@ export function updateLoad(id: number, input: LoadInput): void {
     { field: "commodity", oldValue: existing.commodity, newValue: input.commodity },
     { field: "rate", oldValue: existing.rate, newValue: input.rate },
     { field: "notes", oldValue: existing.notes, newValue: input.notes },
-    { field: "special_instructions", oldValue: existing.special_instructions, newValue: input.special_instructions },
+    {
+      field: "special_instructions",
+      oldValue: existing.special_instructions,
+      newValue: expandTruncatedDispatchNotes(input.special_instructions),
+    },
     { field: "status", oldValue: existing.status, newValue: input.status },
     { field: "driver", oldValue: driverName(existing.driver_id), newValue: driverName(input.driver_id) },
     { field: "truck", oldValue: truckUnit(existing.truck_id), newValue: truckUnit(input.truck_id) },

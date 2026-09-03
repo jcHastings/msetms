@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { LoadAuditTable } from "@/components/load-audit-table";
 import { PageHeader } from "@/components/page-header";
 import { listAuditActors, listCompanyAudit } from "@/lib/audit";
-import { canViewAudit, getPageAccess } from "@/lib/dispatcher-session";
+import { canManageUsers, canViewAudit, getPageAccess } from "@/lib/dispatcher-session";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,13 @@ export default async function AuditPage({
     <>
       <PageHeader
         title="Audit"
+        actions={
+          canManageUsers(dispatcher.role) ? (
+            <Link href="/settings/sign-in" className="btn btn-secondary">
+              Sign-in log
+            </Link>
+          ) : null
+        }
       />
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="field">

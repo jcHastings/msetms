@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
 import { parseOptionalInt } from "./format";
+import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import { authenticateDriver, updateDriverProgress } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
@@ -23,16 +24,29 @@ export async function driverLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const driverId = parseOptionalInt(formData.get("driver_id"));
   try {
-    const driverId = parseOptionalInt(formData.get("driver_id"));
     const pin = String(formData.get("pin") ?? "").trim();
     if (!driverId || !pin) throw new Error("Pick your name and enter your PIN.");
     const driver = authenticateDriver(driverId, pin);
+    await recordLoginAttemptFromRequest({
+      kind: "driver",
+      outcome: "success",
+      step: "pin",
+      userId: driver.id,
+    });
     await setDriverSession(driver.id);
     refresh();
     redirect("/driver");
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    await recordLoginAttemptFromRequest({
+      kind: "driver",
+      outcome: "failure",
+      step: "pin",
+      userId: driverId,
+      detail: publicLoginFailureDetail(error),
+    });
     return fail(error);
   }
 }
@@ -69,6 +83,8 @@ export async function driverStopCheckAction(formData: FormData): Promise<ActionR
         throw new Error("Check in first.");
       }
       stampStopTime(stopId, kind === "arrive" ? "arrived_at" : "departed_at", new Date().toISOString());
+      const { applyWorkflowAfterGeofence } = await import("./workflow");
+      applyWorkflowAfterGeofence(loadId);
       updateDriverProgress(loadId, driver.id, progressForStopEvent(kind, stop.kind));
       refresh();
       return { ok: true, id: loadId };
@@ -87,6 +103,10 @@ export async function driverProgressAction(formData: FormData): Promise<ActionRe
       if (!loadId) throw new Error("Load is missing.");
       if (!isDriverProgress(progress)) throw new Error("Pick a status.");
       updateDriverProgress(loadId, driver.id, progress);
+      if (progress === "delivered") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(loadId);
+      }
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -125,6 +145,10 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
       mimeType: file.type,
       uploadedBy: "driver",
     });
+    if (kind === "pod") {
+      const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+      await maybeAutoInvoiceLoad(loadId);
+    }
     if (kind === "fuel_receipt") {
       const { addFuelReceipt } = await import("./fuel-receipts");
       addFuelReceipt({
@@ -164,6 +188,10 @@ export async function driverClassifyAction(formData: FormData): Promise<ActionRe
         throw new Error("This load is not on your dispatch.");
       }
       updateAttachmentKind(attachmentId, kind);
+      if (kind === "pod") {
+        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        await maybeAutoInvoiceLoad(load.id);
+      }
       if (kind === "fuel_receipt") {
         const { addFuelReceipt, listFuelReceipts } = await import("./fuel-receipts");
         const already = listFuelReceipts(load.id).some((row) => row.attachment_id === attachmentId);

@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
+import { OfficeNotificationBell } from "@/components/office-notification-bell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
 import type { MikeMessage } from "@/lib/mike-shared";
 import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
@@ -15,12 +17,14 @@ export function AppShell({
   dispatcher,
   mikeConfigured = false,
   mikeMessages = [],
+  officeNotifications = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher;
   requireTwoFactor?: boolean;
   mikeConfigured?: boolean;
   mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
@@ -50,9 +54,14 @@ export function AppShell({
         >
           Menu
         </button>
-        <Link href="/" className="desk-phone-brand min-w-0">
+        <Link href="/" className="desk-phone-brand min-w-0 flex-1">
           <BrandMark variant="dark" size="sm" />
         </Link>
+        <form action={dispatcherLogoutAction}>
+          <button className="desk-phone-signout" type="submit">
+            Sign out
+          </button>
+        </form>
       </header>
       {navOpen ? (
         <button
@@ -64,7 +73,7 @@ export function AppShell({
       ) : null}
       <aside
         id="desk-sidebar"
-        className="desk-sidebar sticky top-0 flex h-screen w-60 shrink-0 flex-col overflow-x-hidden"
+        className="desk-sidebar sticky top-0 flex h-dvh max-h-dvh min-h-0 w-60 shrink-0 flex-col overflow-x-hidden"
         data-desk-chrome=""
       >
         <div className="desk-sidebar-brand shrink-0 border-b border-white/10 px-3 py-3">
@@ -74,6 +83,7 @@ export function AppShell({
         </div>
         <NavLinks role={dispatcher.role} />
         <div className="desk-sidebar-user shrink-0 border-t border-white/10 px-3 py-3 text-xs text-slate-400">
+          <OfficeNotificationBell items={officeNotifications} />
           <div className="font-medium text-slate-200" title={dispatcher.name}>
             {dispatcher.name}
           </div>
@@ -90,6 +100,15 @@ export function AppShell({
           <div data-desk-chrome="">
           <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
           </div>
+          {!dispatcher.email?.trim() ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add an email on this user. Sign-in uses your password only until then. After an email is
+              saved, the next sign-in emails a one-time code.{" "}
+              <Link href="/settings/security" className="font-semibold underline">
+                Add email
+              </Link>
+            </div>
+          ) : null}
           {children}
         </div>
       </div>

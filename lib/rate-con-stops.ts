@@ -30,9 +30,26 @@ function parsedStopFromForm(formData: FormData, prefix: "pickup" | "delivery"): 
     window_start: String(formData.get(`${prefix}_stop_window_start`) ?? "").trim(),
     window_end: String(formData.get(`${prefix}_stop_window_end`) ?? "").trim(),
     confirmation: String(formData.get(`${prefix}_stop_confirmation`) ?? "").trim(),
+    reference: String(formData.get(`${prefix}_stop_reference`) ?? "").trim(),
+    quantity: String(formData.get(`${prefix}_stop_quantity`) ?? "").trim(),
     notes: String(formData.get(`${prefix}_stop_notes`) ?? "").trim(),
   });
   return stop.name || stop.street || stop.city ? stop : null;
+}
+
+function mergeFormStop(form: ParsedStop | null, inbox?: ParsedStop | null): ParsedStop | null {
+  if (!form && !inbox) return null;
+  if (!form) return inbox ?? null;
+  if (!inbox) return form;
+  return normalizeParsedStop({
+    ...inbox,
+    ...form,
+    reference: form.reference || inbox.reference,
+    confirmation: form.confirmation || inbox.confirmation,
+    quantity: form.quantity || inbox.quantity,
+    notes: form.notes || inbox.notes,
+    schedule_type: form.schedule_type || inbox.schedule_type,
+  });
 }
 
 function extraStopsFromForm(formData: FormData): ParsedExtraStop[] {
@@ -92,8 +109,8 @@ function stopInputFromParts(
       window_start: existing?.window_start || windowStart,
       window_end: existing?.window_end || windowEnd,
       confirmation: parsed?.confirmation || existing?.confirmation || "",
-      cargo: existing?.cargo ?? "",
-      reference: parsed?.confirmation || existing?.reference || "",
+      cargo: parsed?.quantity || existing?.cargo || "",
+      reference: parsed?.reference || existing?.reference || "",
       instructions: parsed?.notes || existing?.instructions || "",
       notes: parsed?.notes || existing?.notes || "",
       arrived_at: existing?.arrived_at,
@@ -116,8 +133,8 @@ function stopInputFromParts(
     window_start: parsed.window_start || existing?.window_start || windowStart,
     window_end: parsed.window_end || existing?.window_end || windowEnd,
     confirmation: parsed.confirmation || existing?.confirmation || "",
-    cargo: existing?.cargo ?? "",
-    reference: parsed.confirmation || existing?.reference || "",
+    cargo: parsed.quantity || existing?.cargo || "",
+    reference: parsed.reference || existing?.reference || "",
     instructions: parsed.notes || existing?.instructions || "",
     notes: parsed.notes || existing?.notes || "",
     arrived_at: existing?.arrived_at,
@@ -145,8 +162,8 @@ export function applyRateConStopsToLoad(loadId: number, formData: FormData): voi
 
   const inboxId = String(formData.get("inbox_id") ?? "").trim();
   const inbox = inboxId ? readInboxParse<ParsedRateCon>(inboxId) : null;
-  const pickupParsed = parsedStopFromForm(formData, "pickup") ?? inbox?.shipper ?? null;
-  const deliveryParsed = parsedStopFromForm(formData, "delivery") ?? inbox?.consignee ?? null;
+  const pickupParsed = mergeFormStop(parsedStopFromForm(formData, "pickup"), inbox?.shipper);
+  const deliveryParsed = mergeFormStop(parsedStopFromForm(formData, "delivery"), inbox?.consignee);
   const extras = extraStopsFromForm(formData);
   const extraStops = extras.length ? extras : inbox?.extra_stops ?? [];
 

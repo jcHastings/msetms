@@ -104,7 +104,7 @@ export function DefaultedDocuments({
 
   return (
     <section className="card mb-4 overflow-hidden" id="defaulted-documents" data-defaulted-documents="">
-      <div className="section-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+      <div className="section-head flex flex-wrap items-center justify-between gap-2 px-3 py-1.5">
         <h2 className="text-sm font-semibold">Your defaulted documents</h2>
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-ghost" type="button" onClick={() => edit?.setTab("docs", "load-documents")}>
@@ -115,7 +115,7 @@ export function DefaultedDocuments({
           </button>
         </div>
       </div>
-      <div className="space-y-3 p-5">
+      <div className="space-y-2 p-3">
         <p className="text-sm text-slate-600">
           Multi-drop loads get a BOL for each delivery, a master BOL with every stop, a blind BOL (cities only —
           no street or consignee), and a BOL with signatures at each stop. Carrier and customer confirmations and

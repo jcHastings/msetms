@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { createHoverMenuCloser } from "@/lib/hover-menu";
 import { DocumentPreviewProvider } from "@/components/document-preview";
 import { closeLoadOverlay } from "@/components/page-overlay-host";
 import { LoadEditProvider } from "@/components/load-edit-context";
@@ -17,7 +18,7 @@ import {
   sendLoadWhatsAppAction,
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
-import { LoadMailMenuItems } from "@/components/load-mail-panel";
+import { EmailCustomerUpdateButton, LoadMailMenuItems } from "@/components/load-mail-panel";
 import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
@@ -25,6 +26,7 @@ import { WHATSAPP_MISSING } from "@/lib/whatsapp-shared";
 import { isFormTab, isSaveTab, loadFormTabsForRole, parseLoadTab, type LoadTab } from "@/lib/load-tabs";
 import {
   canAssignLoads,
+  canEmailInvoice,
   canLogCheckCall,
   canSendSms,
   canViewAudit,
@@ -88,6 +90,8 @@ export function LoadWorkspace({
   const [canSubmit, setCanSubmit] = useState(true);
   const [pending, setPending] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const menuCloser = useMemo(() => createHoverMenuCloser(), []);
+  useEffect(() => () => menuCloser.dispose(), [menuCloser]);
   const [smsNotice, setSmsNotice] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [smsPending, setSmsPending] = useState(false);
@@ -261,17 +265,18 @@ export function LoadWorkspace({
       value={{ tab, setTab, dirty, markDirty, clearDirty, formId, canSubmit, pending, setSubmitState }}
     >
     <DocumentPreviewProvider>
+    <div className="load-workspace">
       {header}
-      <div className="load-tabs mb-3 flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
+      <div className="load-tabs mb-2 flex flex-wrap items-center justify-between gap-1 px-2 pt-1">
         {create ? (
-          <p className="px-3 py-2 text-sm font-semibold text-slate-600">New load</p>
+          <p className="px-2 py-1 text-[12.5px] font-semibold text-slate-600">New load</p>
         ) : (
-          <nav className="flex flex-wrap gap-1" aria-label="Load tabs">
+          <nav className="flex flex-wrap gap-0.5" aria-label="Load tabs">
             {loadFormTabsForRole(role).map((item) => (
               <button
                 key={item.value}
                 type="button"
-                className={`load-tab rounded-t-md px-3 py-2 text-sm font-semibold ${
+                className={`load-tab rounded-t px-2 py-1 text-[12.5px] font-semibold ${
                   tab === item.value ? "load-tab-active" : ""
                 }`}
                 aria-current={tab === item.value ? "page" : undefined}
@@ -300,9 +305,9 @@ export function LoadWorkspace({
       </div>
 
       {loadId ? (
-      <div className="load-actions mb-4 px-4 py-3">
-        <div className="load-actions-label mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]">Load Actions</div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="load-actions mb-2 px-2 py-1.5">
+        <div className="load-actions-label mb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">Load Actions</div>
+        <div className="flex flex-wrap items-center gap-1">
         {canSendSms(role) && tab !== "docs" ? (
           <button
             type="button"
@@ -331,7 +336,26 @@ export function LoadWorkspace({
             WhatsApp load
           </button>
         ) : null}
-        <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        {canSendSms(role) && loadId ? (
+          <EmailCustomerUpdateButton
+            loadId={loadId}
+            loadNumber={loadNumber}
+            customerEmail={contactEmail}
+            onNotice={setSmsNotice}
+            appearance="action"
+          />
+        ) : null}
+        {canEmailInvoice(role) && loadId ? (
+          <button
+            type="button"
+            className="btn load-action-btn"
+            data-email-invoice-action=""
+            onClick={() => setTab("financials", "email-invoice")}
+          >
+            Email invoice
+          </button>
+        ) : null}
+        <ActionMenu label="Load Log" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           {canLogCheckCall(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "load-check-call")}>
               Log Check Call
@@ -341,13 +365,22 @@ export function LoadWorkspace({
             View Load Log
           </button>
         </ActionMenu>
-        <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Dispatch and Tracking" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button type="button" className="menu-item" onClick={() => setTab("log", "load-map")}>
             Load map
           </button>
           <button type="button" className="menu-item" onClick={() => setTab("log")}>
             Tracking and status
           </button>
+          {canSendSms(role) && loadId ? (
+            <EmailCustomerUpdateButton
+              loadId={loadId}
+              loadNumber={loadNumber}
+              customerEmail={contactEmail}
+              onNotice={setSmsNotice}
+              appearance="menu"
+            />
+          ) : null}
           {canSendSms(role) ? (
             <>
               <button
@@ -388,7 +421,7 @@ export function LoadWorkspace({
             </>
           ) : null}
         </ActionMenu>
-        <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Load Documents" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button type="button" className="menu-item" onClick={() => setTab("docs", "defaulted-documents")}>
             Your defaulted documents
           </button>
@@ -433,9 +466,29 @@ export function LoadWorkspace({
               onNotice={setSmsNotice}
             />
           ) : null}
+          {canEmailInvoice(role) && loadId ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-email-invoice-menu=""
+              onClick={() => setTab("financials", "email-invoice")}
+            >
+              Email invoice
+            </button>
+          ) : null}
         </ActionMenu>
         {canViewLoadFinancials(role) || canViewAudit(role) || canAssignLoads(role) ? (
-        <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Admin / Financials" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
+          {canEmailInvoice(role) && loadId ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-email-invoice-menu=""
+              onClick={() => setTab("financials", "email-invoice")}
+            >
+              Email invoice
+            </button>
+          ) : null}
           {canViewAudit(role) ? (
             <button type="button" className="menu-item" onClick={() => setTab("log", "accountability")}>
               View Accountability Log
@@ -466,7 +519,7 @@ export function LoadWorkspace({
           ) : null}
         </ActionMenu>
         ) : null}
-        <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+        <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
           <button
             type="button"
             className="menu-item w-full text-left"
@@ -623,6 +676,7 @@ export function LoadWorkspace({
       >
         {children}
       </div>
+    </div>
     </DocumentPreviewProvider>
     </LoadEditProvider>
   );
@@ -632,11 +686,13 @@ function ActionMenu({
   label,
   openMenu,
   setOpenMenu,
+  closer,
   children,
 }: {
   label: string;
   openMenu: string | null;
   setOpenMenu: (label: string | null) => void;
+  closer: ReturnType<typeof createHoverMenuCloser>;
   children: React.ReactNode;
 }) {
   const open = openMenu === label;
@@ -647,24 +703,34 @@ function ActionMenu({
     <div
       ref={rootRef}
       className="relative"
-      onMouseEnter={() => setOpenMenu(label)}
-      onMouseLeave={() => setOpenMenu(null)}
+      data-hover-action-menu=""
+      onMouseEnter={() => {
+        closer.cancel();
+        setOpenMenu(label);
+      }}
+      onMouseLeave={() => closer.schedule(() => setOpenMenu(null))}
     >
       <button
         type="button"
         className="btn load-action-btn"
         aria-expanded={open}
         aria-haspopup="menu"
-        onClick={() => setOpenMenu(open ? null : label)}
+        onClick={() => {
+          closer.cancel();
+          setOpenMenu(open ? null : label);
+        }}
       >
         {label}
       </button>
       {open ? (
         <div
           ref={menuRef}
-          className="absolute z-20 min-w-56 pt-1"
+          className="absolute z-20 min-w-56 pt-1 top-full left-0"
           role="menu"
+          onMouseEnter={() => closer.cancel()}
+          onMouseLeave={() => closer.schedule(() => setOpenMenu(null))}
         >
+          <div className="absolute inset-x-0 -top-2 h-2" aria-hidden data-hover-menu-bridge="" />
           <div className="load-action-menu rounded-lg py-1 shadow-lg">{children}</div>
         </div>
       ) : null}

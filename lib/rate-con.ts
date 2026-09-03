@@ -7,11 +7,16 @@ import {
   isOwnPaperworkName,
   matchCustomerName,
   parseAddressBlob,
+  parseBrokerContactFromText,
   parsedStopHasDetails,
+  parseLetterheadLoadNumber,
+  pickBrokerCustomerName,
+  resolveRateConOrigin,
   type ParsedExtraStop,
   type ParsedRateCon,
   type ParsedStop,
 } from "./rate-con-shared";
+import { enrichParsedRateConFromText, stripLegalBoilerplate } from "./rate-con-paperwork";
 import { parseReeferModeFromText, parseReeferSetpointFromText } from "./reefer-shared";
 import type { Customer } from "./types";
 
@@ -116,25 +121,27 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
   }
   const ascend = parseAscendConfirmation(text);
   const printed = parsePrintedConfirmation(text);
-  const customerName =
-    labeled(text, ["customer", "bill to", "account"]) ||
-    ascend.customer_name ||
-    printed.customer_name ||
-    "";
-  const matched = matchCustomerName(customerName, customers);
+  const customerName = pickBrokerCustomerName(text, [
+    labeled(text, ["customer", "bill to", "account"]) || "",
+    ascend.customer_name,
+    printed.customer_name,
+  ]);
+  const matched = matchCustomerName(customerName, customers, text);
 
-  const special =
+  const special = stripLegalBoilerplate(
     section(text, /special instructions?/i) ||
-    section(text, /dispatch notes/i) ||
-    ascend.special_instructions ||
-    printed.special_instructions ||
-    "";
+      section(text, /dispatch notes/i) ||
+      ascend.special_instructions ||
+      printed.special_instructions ||
+      "",
+  );
   const appointment =
     labeled(text, ["appointment"]) ||
     printed.appointment_notes ||
     linesMatching(special, /appointment|call \d+ minutes/i).join("\n");
   const pickup = parseWindow(text, "pickup");
   const delivery = parseWindow(text, "delivery");
+  const brokerContact = parseBrokerContactFromText(text);
 
   const shipper = parsedStopHasDetails(ascend.shipper)
     ? ascend.shipper
@@ -147,7 +154,8 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       ? printed.consignee
       : emptyParsedStop();
 
-  return sanitizeParsedRateCon(
+  const parsed = enrichParsedRateConFromText(
+    sanitizeParsedRateCon(
     {
       customer_name: customerName,
       customer_id: matched,
@@ -174,6 +182,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
         ascend.load_number ||
         printed.load_number ||
         labeled(text, ["ref #", "ref#", "rate con"]) ||
+        parseLetterheadLoadNumber(text) ||
         "",
       po_number:
         labeled(text, ["po #", "po#", "po number", "purchase order"]) || printed.po_number || "",
@@ -183,6 +192,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       reefer_mode: parseReeferModeFromText(text) ?? "",
       load_number_hint:
         labeled(text, ["load #", "load#", "load number"]) ||
+        parseLetterheadLoadNumber(text) ||
         ascend.load_number ||
         printed.load_number ||
         "",
@@ -192,12 +202,22 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
       extra_stops: dedupeExtraStops([...ascend.extra_stops, ...printed.extra_stops]),
       shipper_location_id: null,
       consignee_location_id: null,
+      contact_name: brokerContact.contact_name,
+      contact_email: brokerContact.contact_email,
+      contact_phone: brokerContact.contact_phone,
+      contact_ext: brokerContact.contact_ext,
       equipment: "",
       field_flags: [],
       reader: "hint",
     },
     filename,
+    ),
+    text,
   );
+  return {
+    ...parsed,
+    origin: resolveRateConOrigin(parsed.origin, parsed.shipper, text),
+  };
 }
 
 function parseAscendConfirmation(text: string): {
@@ -339,7 +359,7 @@ function parseAscendCustomer(text: string): string {
     .filter(Boolean)
     .filter((line) => !/^(information|customer information|primary contact|phone|fax|email|tel)$/i.test(line));
   for (const line of lines) {
-    if (isOwnPaperworkName(line)) continue;
+    if (isOwnPaperworkName(line, text)) continue;
     if (/^\d/.test(line)) continue;
     if (/^(or|and|the|note|not|this|responsibility)\b/i.test(line)) continue;
     if (/^[A-Za-z .'-]+,\s*[A-Z]{2}\b/.test(line)) continue;

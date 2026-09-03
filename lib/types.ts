@@ -190,6 +190,8 @@ export type Customer = {
   payment_terms: string;
   qbo_customer_id: string;
   qbo_status: string;
+  main_email: string;
+  billing_email: string;
   created_at: string;
   updated_at: string;
 };
@@ -634,7 +636,18 @@ export type DashboardStats = {
 };
 
 export type ActionResult =
-  | { ok: true; id?: number; message?: string; needsTotp?: boolean; recoveryCodes?: string[] }
+  | {
+      ok: true;
+      id?: number;
+      message?: string;
+      needsTotp?: boolean;
+      needsEmailCode?: boolean;
+      rememberDevice?: boolean;
+      maskedEmail?: string;
+      needsSmsCode?: boolean;
+      maskedPhone?: string;
+      recoveryCodes?: string[];
+    }
   | { ok: false; error: string; duplicate?: boolean; existingId?: number };
 
 export function labelForLoadStatus(status: string): string {

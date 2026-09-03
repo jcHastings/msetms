@@ -40,6 +40,7 @@ export type BolDraft = {
   declaredValue: string;
   notes: string;
   poNumber: string;
+  referenceNumber: string;
   trailerNumber: string;
   shipDate: string;
   deliveryDate: string;
@@ -80,6 +81,7 @@ export function defaultBolDraft(): BolDraft {
     declaredValue: "0.00",
     notes: "",
     poNumber: "",
+    referenceNumber: "",
     trailerNumber: "",
     shipDate: "",
     deliveryDate: "",
@@ -98,6 +100,14 @@ export function formatBolDate(iso: string): string {
 }
 
 export function bolFacingLoadNumber(load: {
+  load_number?: string | null;
+  customer_reference?: string | null;
+  reference_number?: string | null;
+}): string {
+  return String(load.load_number ?? "").trim();
+}
+
+export function bolFacingReference(load: {
   load_number?: string | null;
   customer_reference?: string | null;
   reference_number?: string | null;
@@ -152,6 +162,7 @@ export function normalizeBolDraft(value: unknown): BolDraft {
     declaredValue: String(row.declaredValue ?? "0.00").trim() || "0.00",
     notes: String(row.notes ?? "").trim(),
     poNumber: String(row.poNumber ?? "").trim(),
+    referenceNumber: String(row.referenceNumber ?? "").trim(),
     trailerNumber: String(row.trailerNumber ?? "").trim(),
     shipDate: String(row.shipDate ?? "").trim(),
     deliveryDate: String(row.deliveryDate ?? "").trim(),
@@ -220,6 +231,7 @@ export function parseBolDraftFromForm(formData: FormData | null | undefined): Bo
     declaredValue: formData.get("bol_declared_value"),
     notes: formData.get("bol_notes"),
     poNumber: formData.get("bol_po"),
+    referenceNumber: formData.get("bol_reference"),
     trailerNumber: formData.get("bol_trailer"),
     shipDate: formData.get("bol_ship_date"),
     deliveryDate: formData.get("bol_delivery_date"),
@@ -248,6 +260,7 @@ export function writeBolDraftToForm(form: FormData, draft: BolDraft): void {
   form.set("bol_declared_value", draft.declaredValue);
   form.set("bol_notes", draft.notes);
   form.set("bol_po", draft.poNumber);
+  form.set("bol_reference", draft.referenceNumber);
   form.set("bol_trailer", draft.trailerNumber);
   form.set("bol_ship_date", draft.shipDate);
   form.set("bol_delivery_date", draft.deliveryDate);

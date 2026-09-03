@@ -1,10 +1,12 @@
 import { recordLoadAudit } from "./audit";
 import { isDriverUploadKind, UNCLASSIFIED_UPLOAD_KIND } from "./driver-docs";
 import { listAttachments, updateAttachmentKind } from "./files";
+import { resolveLoadCustomerEmail } from "./load-mail";
 import { formatLoadSummary } from "./load-summary";
 import { placeholderLane } from "./load-page-shared";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeProposal, type MikeProposalKind } from "./mike-shared";
 import { createLoad, getLoad, listCustomers, listLoads, updateLoadStatus } from "./queries";
+import { decodeTieSheetDraft, saveTieSheetDraft } from "./tie-sheet";
 import { formatRelayLane } from "./relays";
 import { relayForDriver } from "./relay-store";
 import { listStops } from "./stops";
@@ -33,7 +35,7 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
     proposals.push(
       makeProposal("detention_email", "Draft detention email", body, {
         load_id: String(load.id),
-        to: load.contact_email || "",
+        to: resolveLoadCustomerEmail(load),
         subject,
         body,
       }),
@@ -65,6 +67,13 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
         status,
       }),
     );
+  }
+
+  if (/(tie.?sheet)/.test(lower)) {
+    return {
+      reply: "Upload a picture of one Tie Sheet truck. I will draft one load. Same customer and dock share a drop. Different locations each get a drop. Confirm before save.",
+      proposals: [],
+    };
   }
 
   if (/(rate.?con|start a load|new load|book this|create a load)/.test(lower)) {
@@ -124,6 +133,7 @@ export function applyMikeProposal(payload: Record<string, string>, kind: MikePro
   message: string;
   href?: string;
   mailto?: string;
+  id?: number;
 } {
   if (kind === "detention_email") {
     const to = payload.to?.trim();
@@ -183,6 +193,16 @@ export function applyMikeProposal(payload: Record<string, string>, kind: MikePro
       return { message: "Load started. Review it before dispatch.", href: `/loads/${id}` };
     }
     return { message: "Drop the rate con or load email on New load.", href: payload.href || "/loads/new" };
+  }
+  if (kind === "build_tie_sheet") {
+    const draft = decodeTieSheetDraft(payload.draft_json || "");
+    if (!draft) throw new Error("That Tie Sheet draft is gone. Upload the picture again.");
+    const saved = saveTieSheetDraft(draft, { inboxId: payload.inbox_id });
+    return {
+      message: `Load ${saved.load_number} saved from the Tie Sheet. Review it before dispatch.`,
+      href: `/loads/${saved.id}`,
+      id: saved.id,
+    };
   }
   if (kind === "flag_issue") {
     const loadId = Number(payload.load_id);

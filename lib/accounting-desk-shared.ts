@@ -12,10 +12,10 @@ export const ACCOUNTING_HUB_TABS = [
 export type AccountingHubTab = (typeof ACCOUNTING_HUB_TABS)[number]["value"];
 
 export const QBO_MAP_TABS = [
-  { value: "connection", label: "Connection" },
   { value: "items", label: "Map Pay Items" },
   { value: "customers", label: "Map Customers" },
   { value: "vendors", label: "Map Vendors" },
+  { value: "connection", label: "QuickBooks" },
 ] as const;
 
 export type QboMapTab = (typeof QBO_MAP_TABS)[number]["value"];
@@ -27,6 +27,11 @@ export function hubTabClass(active: boolean): string {
 export function parseAccountingHubTab(value: string | null | undefined): AccountingHubTab {
   const match = ACCOUNTING_HUB_TABS.find((tab) => tab.value === value);
   return match?.value ?? "invoices";
+}
+
+export function hrefForAccountingHubTab(tab: AccountingHubTab): string {
+  if (tab === "pay") return "/accounting/pay";
+  return `/accounting/invoices?tab=${tab}`;
 }
 
 export function parseQboMapTab(value: string | null | undefined): QboMapTab {

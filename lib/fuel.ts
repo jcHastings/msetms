@@ -608,6 +608,61 @@ export function startOfLocalWeek(now = new Date()): Date {
   return zonedWallToUtc(addYmdDays(ymd, -daysFromMonday), 0, 0, 0);
 }
 
+export function localWeekRange(anchor: Date | string = new Date()): {
+  start: Date;
+  end: Date;
+  startYmd: string;
+  endYmd: string;
+} {
+  const start = typeof anchor === "string" ? startOfLocalWeek(zonedWallToUtc(anchor, 12, 0, 0)) : startOfLocalWeek(anchor);
+  const startYmd = ymdInTimeZone(start, DISPLAY_TIME_ZONE);
+  const endYmd = addYmdDays(startYmd, 6);
+  return {
+    start,
+    end: zonedWallToUtc(addYmdDays(startYmd, 7), 0, 0, 0),
+    startYmd,
+    endYmd,
+  };
+}
+
+export function parseFuelWeekStart(value: string | undefined, now = new Date()): string {
+  const raw = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return localWeekRange(raw).startYmd;
+  return localWeekRange(now).startYmd;
+}
+
+export function isCurrentFuelWeek(weekStartYmd: string, now = new Date()): boolean {
+  return weekStartYmd === localWeekRange(now).startYmd;
+}
+
+export function fuelWeekAnchorDate(weekStartYmd: string, now = new Date()): Date {
+  if (isCurrentFuelWeek(weekStartYmd, now)) return now;
+  return new Date(localWeekRange(weekStartYmd).end.getTime() - 1);
+}
+
+export type FuelWeekOption = {
+  startYmd: string;
+  endYmd: string;
+  current: boolean;
+};
+
+export function fuelRowInWeek(occurredAt: string, weekStartYmd: string): boolean {
+  const at = Date.parse(occurredAt);
+  if (!Number.isFinite(at)) return false;
+  const { start, end } = localWeekRange(weekStartYmd);
+  return at >= start.getTime() && at < end.getTime();
+}
+
+export function weekStartsFromFuelRows(rows: Array<{ occurred_at: string }>): string[] {
+  const starts = new Set<string>();
+  for (const row of rows) {
+    const at = Date.parse(row.occurred_at);
+    if (!Number.isFinite(at)) continue;
+    starts.add(localWeekRange(new Date(at)).startYmd);
+  }
+  return [...starts].sort().reverse();
+}
+
 export function startOfLocalMonth(now = new Date()): Date {
   const ymd = ymdInTimeZone(now, DISPLAY_TIME_ZONE);
   return zonedWallToUtc(`${ymd.slice(0, 8)}01`, 0, 0, 0);
@@ -699,24 +754,25 @@ export function fuelWeekPaidStats(
   rows: Array<Pick<FuelTransaction, "occurred_at" | "category" | "amount" | "price_per_gallon">>,
   now = new Date(),
 ): FuelWeekPaidStats {
-  const weekStart = startOfLocalWeek(now);
-  const weekStartYmd = ymdInTimeZone(weekStart, DISPLAY_TIME_ZONE);
-  const weekEndYmd = addYmdDays(weekStartYmd, 6);
-  const weekEnd = zonedWallToUtc(addYmdDays(weekStartYmd, 7), 0, 0, 0);
-  const startMs = weekStart.getTime();
-  const endMs = weekEnd.getTime();
+  return fuelWeekPaidStatsForWeek(rows, localWeekRange(now).startYmd);
+}
+
+export function fuelWeekPaidStatsForWeek(
+  rows: Array<Pick<FuelTransaction, "occurred_at" | "category" | "amount" | "price_per_gallon">>,
+  weekStartYmd: string,
+): FuelWeekPaidStats {
+  const { startYmd, endYmd } = localWeekRange(weekStartYmd);
   const amounts: number[] = [];
   const ppgs: number[] = [];
   for (const row of rows) {
     if (!isTruckDieselCategory(row.category)) continue;
-    const at = Date.parse(row.occurred_at);
-    if (!Number.isFinite(at) || at < startMs || at >= endMs) continue;
+    if (!fuelRowInWeek(row.occurred_at, startYmd)) continue;
     if (row.amount != null && Number.isFinite(row.amount)) amounts.push(row.amount);
     if (row.price_per_gallon != null && Number.isFinite(row.price_per_gallon)) ppgs.push(row.price_per_gallon);
   }
   return {
-    weekStartYmd,
-    weekEndYmd,
+    weekStartYmd: startYmd,
+    weekEndYmd: endYmd,
     count: amounts.length,
     minAmount: amounts.length ? Math.min(...amounts) : null,
     maxAmount: amounts.length ? Math.max(...amounts) : null,
@@ -765,6 +821,10 @@ export function parseFuelWhen(dateRaw: string, timeRaw: string): Date | null {
   const meridiem = (match[7] ?? "").toLowerCase();
   if (meridiem === "pm" && hours < 12) hours += 12;
   if (meridiem === "am" && hours === 12) hours = 0;
+  if (!match[4]) {
+    const ymd = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return zonedWallToUtc(ymd, 0, 0, 0);
+  }
   const date = new Date(year, month - 1, day, hours, minutes, seconds);
   return Number.isNaN(date.getTime()) ? null : date;
 }

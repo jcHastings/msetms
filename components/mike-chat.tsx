@@ -1,8 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { askMikeAction, confirmMikeProposalAction } from "@/lib/mike-actions";
-import { MIKE_MISSING_KEY_MESSAGE, type MikeMessage, type MikeProposal } from "@/lib/mike-shared";
+import {
+  imageFileFromDataTransfer,
+  MIKE_MISSING_KEY_MESSAGE,
+  namedTieSheetImage,
+  type MikeMessage,
+  type MikeProposal,
+} from "@/lib/mike-shared";
 
 export function MikeChat({
   configured,
@@ -14,9 +20,32 @@ export function MikeChat({
   const [state, formAction, pending] = useActionState(askMikeAction, null);
   const [liveConfigured, setLiveConfigured] = useState<boolean | null>(null);
   const [confirmNotice, setConfirmNotice] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [discarded, setDiscarded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messages = state?.messages ?? initialMessages;
-  const proposals = state?.proposals ?? [];
+  const proposals = discarded ? [] : state?.proposals ?? [];
   const ready = state?.configured ?? liveConfigured ?? configured;
+
+  const receiveImage = useCallback((file: File) => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    const named = namedTieSheetImage(file);
+    const transfer = new DataTransfer();
+    transfer.items.add(named);
+    input.files = transfer.files;
+    setFileName(named.name);
+  }, []);
+
+  const takeImageFromTransfer = useCallback(
+    (data: DataTransfer | null | undefined) => {
+      const image = imageFileFromDataTransfer(data);
+      if (!image) return false;
+      receiveImage(image);
+      return true;
+    },
+    [receiveImage],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +64,19 @@ export function MikeChat({
     };
   }, []);
 
+  useEffect(() => {
+    setDiscarded(false);
+  }, [state]);
+
+  useEffect(() => {
+    const onWindowPaste = (event: ClipboardEvent) => {
+      if (!takeImageFromTransfer(event.clipboardData)) return;
+      event.preventDefault();
+    };
+    document.addEventListener("paste", onWindowPaste, true);
+    return () => document.removeEventListener("paste", onWindowPaste, true);
+  }, [takeImageFromTransfer]);
+
   return (
     <aside className="card flex h-full min-h-[24rem] w-full flex-col">
       <header className="border-b border-slate-200 px-4 py-3">
@@ -49,7 +91,8 @@ export function MikeChat({
         ) : null}
         {messages.length === 0 && ready ? (
           <p className="text-slate-500">
-            Ask who is empty, draft a detention email, or start a load from a rate-con. Confirm before anything sends.
+            Ask who is empty, draft a detention email, start a load from a rate-con, or paste or upload a Tie Sheet
+            truck picture. Confirm before anything saves.
           </p>
         ) : null}
         {messages.map((message, index) => (
@@ -70,6 +113,10 @@ export function MikeChat({
                 key={proposal.id}
                 proposal={proposal}
                 onDone={(text) => setConfirmNotice(text)}
+                onDiscard={() => {
+                  setDiscarded(true);
+                  setConfirmNotice("Draft discarded. The load was not saved.");
+                }}
               />
             ))}
           </div>
@@ -79,7 +126,20 @@ export function MikeChat({
           <p className="text-sm text-rose-700">{state.error}</p>
         ) : null}
       </div>
-      <form action={formAction} className="border-t border-slate-200 p-3">
+      <form
+        action={formAction}
+        className="border-t border-slate-200 p-3"
+        data-mike-composer=""
+        onPaste={(event) => {
+          if (takeImageFromTransfer(event.clipboardData)) event.preventDefault();
+        }}
+        onDragOver={(event) => {
+          if (imageFileFromDataTransfer(event.dataTransfer)) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          if (takeImageFromTransfer(event.dataTransfer)) event.preventDefault();
+        }}
+      >
         <label htmlFor="mike-question" className="sr-only">
           Ask Mike
         </label>
@@ -87,12 +147,25 @@ export function MikeChat({
           id="mike-question"
           name="question"
           rows={2}
-          required
-          placeholder="Draft detention on 1005921"
+          placeholder="Ask Mike, or paste a Tie Sheet picture"
           className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
+        <label className="mt-2 block text-xs font-medium text-slate-600" htmlFor="mike-tie-sheet-image">
+          Tie Sheet picture
+        </label>
+        <input
+          ref={fileInputRef}
+          id="mike-tie-sheet-image"
+          name="tie_sheet_image"
+          type="file"
+          accept="image/*"
+          data-tie-sheet-image=""
+          className="mt-1 block w-full text-xs"
+          onChange={(event) => setFileName(event.currentTarget.files?.[0]?.name ?? "")}
+        />
+        {fileName ? <p className="mt-1 truncate font-mono text-[11px] text-slate-500">{fileName}</p> : null}
         <button className="btn btn-primary mt-2 w-full" type="submit" disabled={pending}>
-          {pending ? "Asking…" : "Ask Mike"}
+          {pending ? "Working…" : fileName ? "Read picture" : "Ask Mike"}
         </button>
       </form>
     </aside>
@@ -102,14 +175,18 @@ export function MikeChat({
 function ProposalCard({
   proposal,
   onDone,
+  onDiscard,
 }: {
   proposal: MikeProposal;
   onDone: (text: string) => void;
+  onDiscard: () => void;
 }) {
   const [pending, setPending] = useState(false);
+  const isTieSheet = proposal.kind === "build_tie_sheet";
   return (
     <form
       className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+      data-tie-sheet-draft={isTieSheet ? "" : undefined}
       action={async (formData) => {
         setPending(true);
         const result = await confirmMikeProposalAction(formData);
@@ -126,6 +203,9 @@ function ProposalCard({
         if (proposal.payload.href) {
           window.location.href = proposal.payload.href;
         }
+        if (result.ok && isTieSheet && result.id) {
+          window.location.href = `/loads/${result.id}`;
+        }
       }}
     >
       <input type="hidden" name="kind" value={proposal.kind} />
@@ -134,9 +214,27 @@ function ProposalCard({
       ))}
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{proposal.title}</div>
       <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{proposal.preview}</p>
-      <button className="btn btn-primary mt-2" type="submit" disabled={pending}>
-        {pending ? "Working…" : "Confirm"}
-      </button>
+      {isTieSheet ? (
+        <p className="mt-2 text-xs text-amber-900">
+          Review the draft. Confirm saves the load. Discard does not.
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className="btn btn-primary" type="submit" disabled={pending}>
+          {pending ? "Working…" : "Confirm"}
+        </button>
+        {isTieSheet ? (
+          <button
+            className="btn btn-secondary"
+            type="button"
+            data-tie-sheet-discard=""
+            disabled={pending}
+            onClick={onDiscard}
+          >
+            Discard
+          </button>
+        ) : null}
+      </div>
     </form>
   );
 }

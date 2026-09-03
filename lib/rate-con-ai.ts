@@ -5,13 +5,20 @@ import {
   emptyParsedRateCon,
   emptyParsedStop,
   flagsFromParsedGaps,
+  isOwnPaperworkName,
   matchCustomerName,
+  mergeBrokerContact,
   normalizeParsedStop,
+  parseBrokerContactFromText,
+  parseLetterheadCustomer,
   parsedStopHasDetails,
+  pickBrokerCustomerName,
+  resolveRateConOrigin,
   type ParsedExtraStop,
   type ParsedRateCon,
   type RateConFieldFlag,
 } from "./rate-con-shared";
+import { enrichParsedRateConFromText } from "./rate-con-paperwork";
 import { isReeferMode } from "./reefer-shared";
 import { DEFAULT_LOAD_EQUIPMENT } from "./types";
 import type { Customer } from "./types";
@@ -35,7 +42,10 @@ export type RateConAiStop = {
   schedule_type?: string;
   window_start?: string;
   window_end?: string;
+  reference?: string;
+  po?: string;
   confirmation?: string;
+  quantity?: string | number;
   notes?: string;
   confidence?: string;
 };
@@ -56,6 +66,10 @@ export type RateConAiDraft = {
   appointment_notes?: string;
   stops?: RateConAiStop[];
   missing_fields?: string[];
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_ext?: string;
 };
 
 type RateConAiClient = (body: Record<string, unknown>) => Promise<string>;
@@ -76,15 +90,23 @@ export function redactRateConSecrets(text: string): string {
 const SYSTEM_PROMPT = `You read trucking rate confirmations (any broker layout) and extract a load draft for MS Express TMS.
 Return JSON only. Do not invent money or customer identity. If a field is not clearly printed, use null or "" and set confidence to low.
 Extract every pickup and delivery stop in order. Do not drop extra stops.
-Customer is the broker/bill-to (TQL, BMM Logistics, CEI Logistics, RXO, Allen Lund, etc.), not the shipper warehouse and not MS Express / M&S Loads.
+Customer is the broker/bill-to printed on this packet, not the shipper warehouse and not MS Express / M&S Loads. Never assume a broker name.
 Rate is the billed / agreed / total freight pay to the carrier — Carrier Freight Pay, Flat Rate / TOTAL, all-in. Not quantity 1, not fuel-per-mile, not a load number, not TONU/detention, not $0.00 next to a real total.
-If no freight dollar amount is printed (TQL carrier information sheet), leave rate null and confidence low. Do not invent one.
-Load number is the customer's rate-con / load # / TQL PO# / Order # (store as customer reference). Never invent an MSE trip number.
+If no freight dollar amount is printed, leave rate null and confidence low. Do not invent one.
+Load number is the customer's rate-con / load # / PO# / Order # (store as customer reference). Never invent an MSE trip number.
 Stops may be labeled Pickup At / Deliver To, PICKUPS / DROPS, PU 1 / SO 2, Shipper / Consignee. Read every one.
-schedule_type is "appointment" or "fcfs". confirmation is the stop PO / PU# / P/U number.
-PRECOOL TO 60F and similar lines are the reefer setpoint.
+schedule_type is "appointment" or "fcfs". "AWG IS BY SET APPT" / set appointment / appointment required means appointment.
+reference (also called po / PU#) is the unique purchase order or PU# for THAT stop only. Example: PU# N25504 or PO# 000250476. Never put the customer/broker load number (Load No 106361) in reference or confirmation.
+confirmation is the appointment confirmation for that stop only (CONF#). Do not copy CONF# into reference. Do not copy the PO into confirmation.
+quantity is that stop's case/piece count when printed (1440 cases / 960 cases).
+notes must include the stop Notes line AND operational Directions (food-grade, pre-cool, load locks, detention, count vs BOL). On many broker forms "Directions" are operating instructions, not turn-by-turn driving. Copy them. If a packet has real driving directions, copy those too. Do not invent Google/turn-by-turn.
+special_instructions are load-level driver operating notes (pulp/temp, check in with PU#s, pay gate/lumper and submit receipts, after-hours tracking, air chute photos, clean/dry/odor-free, no exposed insulation). Do not truncate. Do not include legal boilerplate (fines schedule, back-solicit, lawyer fees, remit address).
+PRECOOL TO 60F, Temperature 34°F, and "run 34 degrees continuous" are the reefer setpoint.
 Default equipment is 53' reefer. Reefer mode is continuous unless the document clearly says start/stop.
 Do not add liftgate or inside pickup/delivery.
+Broker/load contact is the person who booked the load: Name, email, phone, and extension from THIS document's contact-info block. Brokers label that block differently. One layout is a Name | Phone (with xEXT) | Email | Fax table; the section title may sit above or below that row. Copy only what is printed on this packet. Leave blank when missing. Never invent a name, email, domain, or phone. Never reuse a contact from another load.
+Do not use CARRIER CONTACT or the Carrier / Attn line (the trucking company named on a broker confirmation). That is the carrier, not the broker. Do not use shipper or receiver phones in stop notes. Do not use "send POD to" billing lines unless that email is the same as the contact-info email.
+Do not write this contact onto the customer card — it belongs on this load only.
 Confidence is high, medium, or low. Money and customer must be low when guessed.
 JSON shape:
 {
@@ -101,6 +123,10 @@ JSON shape:
   "reefer_mode": "continuous",
   "special_instructions": "",
   "appointment_notes": "",
+  "contact_name": "",
+  "contact_email": "",
+  "contact_phone": "",
+  "contact_ext": "",
   "stops": [
     {
       "kind": "pickup",
@@ -113,7 +139,9 @@ JSON shape:
       "schedule_type": "appointment",
       "window_start": "2026-08-21T08:00",
       "window_end": "2026-08-21T17:00",
+      "reference": "",
       "confirmation": "",
+      "quantity": "",
       "notes": "",
       "confidence": "high"
     }
@@ -138,7 +166,7 @@ export function hintForRateConPrompt(hint: ParsedRateCon): Record<string, unknow
     load_number_hint: hint.load_number_hint,
     reefer_setpoint_f: hint.reefer_setpoint_f,
     reefer_mode: hint.reefer_mode,
-    special_instructions: hint.special_instructions.slice(0, 800),
+    special_instructions: hint.special_instructions.slice(0, 4000),
     shipper: hint.shipper,
     consignee: hint.consignee,
     extra_stops: hint.extra_stops,
@@ -247,10 +275,16 @@ export function applyAiRateCon(
   hint: ParsedRateCon = emptyParsedRateCon(),
   rawText = "",
 ): ParsedRateCon {
-  const customerName = String(draft.customer_name ?? "").trim();
+  const raw = rawText || hint.raw_text;
+  const draftCustomer = String(draft.customer_name ?? "").trim();
+  const customerName = pickBrokerCustomerName(raw, [
+    isOwnPaperworkName(draftCustomer, raw) ? "" : draftCustomer,
+    hint.customer_name,
+    parseLetterheadCustomer(raw),
+  ]);
   const customerConfidence = asConfidence(draft.customer_confidence);
   const useCustomer = Boolean(customerName) && customerConfidence !== "low";
-  const customerId = useCustomer ? matchCustomerName(customerName, customers) : null;
+  const customerId = useCustomer ? matchCustomerName(customerName, customers, raw) : null;
 
   const rateConfidence = asConfidence(draft.rate_confidence);
   const rate = rateConfidence === "low" ? null : parseOptionalNumber(draft.rate);
@@ -277,7 +311,7 @@ export function applyAiRateCon(
   const parsed: ParsedRateCon = {
     customer_name: customerName,
     customer_id: customerId,
-    origin: cityStateFromStop(shipper) || hint.origin,
+    origin: resolveRateConOrigin(cityStateFromStop(shipper) || hint.origin, shipper, raw),
     destination: cityStateFromStop(consignee) || hint.destination,
     pickup_start: firstPickup?.stop.window_start || hint.pickup_start,
     pickup_end: firstPickup?.stop.window_end || firstPickup?.stop.window_start || hint.pickup_end,
@@ -300,9 +334,22 @@ export function applyAiRateCon(
     extra_stops: extraStops,
     shipper_location_id: null,
     consignee_location_id: null,
+    ...mergeBrokerContact(
+      {
+        contact_name: String(draft.contact_name ?? "").trim(),
+        contact_email: String(draft.contact_email ?? "").trim(),
+        contact_phone: String(draft.contact_phone ?? "").trim(),
+        contact_ext: String(draft.contact_ext ?? "").trim(),
+      },
+      parseBrokerContactFromText(raw),
+      raw,
+    ),
     field_flags: [],
     reader: "ai",
   };
+
+  Object.assign(parsed, enrichParsedRateConFromText(parsed, raw));
+  parsed.origin = resolveRateConOrigin(parsed.origin, parsed.shipper, raw);
 
   const flags = flagsFromParsedGaps(parsed);
   if (customerName && customerConfidence === "low") {
@@ -359,7 +406,9 @@ function stopFromAi(row: RateConAiStop): ParsedExtraStop[] {
         : "",
     window_start: normalizeWindow(row.window_start),
     window_end: normalizeWindow(row.window_end),
+    reference: row.reference ?? row.po,
     confirmation: row.confirmation,
+    quantity: row.quantity == null ? "" : String(row.quantity),
     notes: row.notes,
   });
   if (!stop.name.trim() && !stop.street.trim() && !stop.city.trim()) return [];

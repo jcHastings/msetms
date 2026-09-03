@@ -7,7 +7,9 @@ import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
 import type { TmsInvoiceModel } from "@/lib/invoice";
+import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 import { isBillableStatus, labelForUploader, type Attachment } from "@/lib/types";
+import { EmailInvoiceButton } from "@/components/email-invoice-button";
 
 export function TmsInvoicePanel({
   loadId,
@@ -15,12 +17,20 @@ export function TmsInvoicePanel({
   invoice,
   saved = false,
   invoices = [],
+  customerEmail = "",
+  lastInvoiceSent = "",
+  extras = [],
+  invoiceEmailBody = "",
 }: {
   loadId: number;
   status: string;
   invoice: TmsInvoiceModel | null;
   saved?: boolean;
   invoices?: Attachment[];
+  customerEmail?: string;
+  lastInvoiceSent?: string;
+  extras?: InvoiceMailExtraDoc[];
+  invoiceEmailBody?: string;
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -69,11 +79,40 @@ export function TmsInvoicePanel({
   }
 
   return (
-    <section className="card mb-4 overflow-hidden" data-invoice-panel="" data-load-tab="financials">
-      <div className="section-head px-5 py-3">
-        <h2 className="text-sm font-semibold">Invoice</h2>
+    <section
+      id="invoice-panel"
+      className="card mb-4 overflow-hidden"
+      data-invoice-panel=""
+      data-load-tab="financials"
+    >
+      <div className="section-head px-3 py-1.5">
+        <h2 className="text-[12.5px] font-semibold">Invoice</h2>
       </div>
-      <div className="p-5">
+      <div className="p-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <form
+          action={`/api/loads/${loadId}/invoice`}
+          method="POST"
+          target="_blank"
+          onSubmit={onSubmit}
+        >
+          <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
+            {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
+          </button>
+        </form>
+        {canInvoice ? (
+          <EmailInvoiceButton
+            loadId={loadId}
+            email={customerEmail}
+            lastSent={lastInvoiceSent}
+            extras={extras}
+            defaultBody={invoiceEmailBody}
+            anchorId="email-invoice"
+          />
+        ) : (
+          <span className="pt-1.5 text-[12.5px] text-slate-600">Email invoice after Delivered</span>
+        )}
+      </div>
       {invoice ? (
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
@@ -120,17 +159,6 @@ export function TmsInvoicePanel({
           {error}
         </p>
       ) : null}
-      <form
-        action={`/api/loads/${loadId}/invoice`}
-        method="POST"
-        target="_blank"
-        onSubmit={onSubmit}
-        className="mt-4"
-      >
-        <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
-          {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
-        </button>
-      </form>
       {invoices.length > 0 ? (
         <ul className="mt-4 divide-y divide-slate-100">
           {invoices.map((file) => (

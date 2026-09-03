@@ -15,10 +15,19 @@ import {
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
-import { getSamsaraFleet } from "./integrations/samsara";
+import { latestTrailerShareLink, trailerSharePath } from "./trailer-share";
 import {
+  driverForTruck,
+  formatSamsaraStatusHos,
+  getSamsaraFleet,
+  hosForAssignedTruck,
+  locationForTruck,
+} from "./integrations/samsara";
+import {
+  listDrivers,
   listLoads,
   listTrailers,
+  listTruckOdometerReadings,
   listTrucks,
   persistedTrailerLocation,
   persistedTruckLocation,
@@ -229,11 +238,41 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
     ? "Live Samsara GPS for active trucks."
     : "Last stored Samsara GPS for active trucks.";
 
+  const drivers = listDrivers();
+  const lastOdo = new Map<number, number>();
+  for (const reading of listTruckOdometerReadings()) {
+    lastOdo.set(reading.truck_id, reading.miles);
+  }
+  const truckStatusRows = trucks.map((truck) => {
+    const location = locationForTruck(fleet, truck.id) ?? persistedTruckLocation(truck);
+    const samsaraDriver = driverForTruck(fleet, truck.id);
+    const tmsDriver =
+      (samsaraDriver?.tmsDriverId ? drivers.find((driver) => driver.id === samsaraDriver.tmsDriverId) : null) ??
+      (truck.assigned_driver_id ? drivers.find((driver) => driver.id === truck.assigned_driver_id) : null);
+    const driverName = samsaraDriver?.samsaraDriverName || tmsDriver?.name || "";
+    const driverId = samsaraDriver?.tmsDriverId ?? tmsDriver?.id ?? null;
+    const coords =
+      location && location.latitude != null && location.longitude != null
+        ? `${location.latitude.toFixed(3)}, ${location.longitude.toFixed(3)}`
+        : "";
+    return {
+      id: `status-${truck.id}`,
+      truck: truck.unit_number,
+      href: truckHref(truck, loads),
+      location: String(location?.address ?? "").trim() || coords,
+      miles: lastOdo.get(truck.id) ?? null,
+      driver: driverName,
+      driverHref: driverId ? `/fleet/drivers/${driverId}` : "",
+      hos: formatSamsaraStatusHos(hosForAssignedTruck(fleet, truck)),
+    };
+  });
+
   return {
     title: "Samsara",
     sourceNote,
     pins,
     missing,
+    truckStatusRows,
   };
 }
 
@@ -355,9 +394,11 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
         : snapshot && "recorded_at" in snapshot && snapshot.recorded_at
           ? String(snapshot.recorded_at)
           : persistedTrailerLocation(trailer)?.recordedAt ?? "";
+    const share = latestTrailerShareLink(trailer.id);
     return {
       id: `status-${trailer.id}`,
       trailer: trailer.unit_number,
+      trailerId: trailer.id,
       href: trailerHref(trailer, loads),
       power,
       setpointF: setpointF ?? null,
@@ -365,6 +406,8 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       alarm,
       location,
       messageAt,
+      sharePath: share ? trailerSharePath(share.token) : "",
+      shareExpiresAt: share?.expires_at ?? "",
     };
   });
 

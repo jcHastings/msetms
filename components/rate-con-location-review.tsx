@@ -9,6 +9,7 @@ import {
   customerRefFromRateCon,
   formatParsedStop,
   parsedStopHasDetails,
+  rateConApplyContactFields,
   type ParsedRateCon,
   type ParsedStop,
 } from "@/lib/rate-con-shared";
@@ -44,6 +45,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
       reefer_mode: parsed.reefer_mode,
       shipper_location_id: shipperId ? Number(shipperId) : null,
       consignee_location_id: consigneeId ? Number(consigneeId) : null,
+      ...rateConApplyContactFields(parsed),
     },
     review: (
       <RateConLocationReview
@@ -134,7 +136,7 @@ function ExtraStopCard({ title, stop }: { title: string; stop: ParsedStop }) {
 function StopMeta({ stop }: { stop: ParsedStop }) {
   const schedule =
     stop.schedule_type === "fcfs" ? "FCFS" : stop.schedule_type === "appointment" ? "Appointment required" : "";
-  if (!schedule && !stop.confirmation && !stop.notes && !stop.window_start) return null;
+  if (!schedule && !stop.confirmation && !stop.reference && !stop.notes && !stop.window_start) return null;
   return (
     <ul className="mt-2 space-y-0.5 text-xs text-slate-600" data-stop-meta="">
       {schedule ? <li>Window: {schedule}</li> : null}
@@ -143,7 +145,8 @@ function StopMeta({ stop }: { stop: ParsedStop }) {
           Hours: {[stop.window_start, stop.window_end].filter(Boolean).join(" – ")}
         </li>
       ) : null}
-      {stop.confirmation ? <li>PO / confirmation: {stop.confirmation}</li> : null}
+      {stop.reference ? <li>Purchase Order #: {stop.reference}</li> : null}
+      {stop.confirmation ? <li>Confirmation number: {stop.confirmation}</li> : null}
       {stop.notes ? <li>Notes: {stop.notes}</li> : null}
     </ul>
   );

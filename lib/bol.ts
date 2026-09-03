@@ -1,15 +1,19 @@
 import PDFDocument from "./pdfkit-document";
 import { getDb } from "./db";
-import { formatLocationAddress } from "./locations";
-import { getLoad, getLocation } from "./queries";
+import { applyLocationToStop, formatLocationAddress, formatStopPartyAddress, matchLocationForStop } from "./locations";
+import { getLoad, getLocation, listLocations } from "./queries";
+import { parseStopPaperwork } from "./rate-con-paperwork";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
-import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, withOfficeAddress } from "./settings";
+import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
+import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, getDocumentDefaults, getDocumentFont, withOfficeAddress } from "./settings";
+import { listStops } from "./stops";
 import type { LoadView } from "./types";
 import {
   BOL_PAPERWORK_NAME,
   type BolDraft,
   type BolItemDraft,
   bolFacingLoadNumber,
+  bolFacingReference,
   bolItemTotals,
   defaultBolDraft,
   filledBolItems,
@@ -23,6 +27,7 @@ export type { BolDraft, BolItemDraft } from "./bol-shared";
 export {
   BOL_PAPERWORK_NAME,
   bolFacingLoadNumber,
+  bolFacingReference,
   bolItemTotals,
   filledBolItems,
   formatBolDate,
@@ -46,19 +51,96 @@ function formatItsAddress(location: { street: string; city: string; state: strin
   return [location.street.trim(), cityState, location.zip.trim()].filter(Boolean).join(", ");
 }
 
+function looksLikeCityStateName(value: string): boolean {
+  return /^[A-Za-z .'-]+,\s*[A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?$/.test(value.trim());
+}
+
+function isBolJunk(value: string): boolean {
+  const text = value.trim();
+  return !text || text.length <= 1 || /^[sSÐð•·\-_|]+$/.test(text);
+}
+
+function cleanPartyName(name: string, city = ""): string {
+  const text = name.trim();
+  if (!text) return "";
+  if (looksLikeCityStateName(text)) return "";
+  if (city && text.toLowerCase() === city.trim().toLowerCase()) return "";
+  return text;
+}
+
 function partyFromLocation(
   locationId: number | null,
   fallbackName: string,
 ): BolParty {
   const location = locationId ? getLocation(locationId) : null;
   if (!location) {
+    if (looksLikeCityStateName(fallbackName)) {
+      return { name: "", address: fallbackName, phone: "" };
+    }
     return { name: fallbackName, address: fallbackName, phone: "" };
   }
   return {
-    name: location.name,
+    name: cleanPartyName(location.name, location.city),
     address: formatItsAddress(location) || formatLocationAddress(location),
     phone: location.phone ?? "",
   };
+}
+
+function partyFromLoadEnd(load: LoadView, kind: "pickup" | "delivery"): BolParty {
+  const stops = listStops(load.id);
+  const stop =
+    kind === "pickup"
+      ? (stops.find((row) => row.kind === "pickup") ?? stops[0])
+      : ([...stops].reverse().find((row) => row.kind === "delivery") ?? stops[stops.length - 1]);
+  const fallbackId = kind === "pickup" ? load.shipper_location_id : load.consignee_location_id;
+  const fallbackLane = kind === "pickup" ? load.origin : load.destination;
+  if (!stop) return partyFromLocation(fallbackId, fallbackLane);
+  const matched = (stop.location_id ? getLocation(stop.location_id) : null) ?? matchLocationForStop(listLocations(), stop);
+  const filled = applyLocationToStop(
+    {
+      name: stop.name,
+      street: stop.street,
+      city: stop.city,
+      state: stop.state,
+      zip: stop.zip,
+      phone: stop.phone,
+      location_id: stop.location_id,
+    },
+    matched ?? { id: 0, name: "", street: "", city: "", state: "", zip: "", phone: "" },
+  );
+  const name = cleanPartyName(filled.name || matched?.name || "", filled.city || matched?.city || "");
+  const address =
+    formatStopPartyAddress(filled) ||
+    (matched ? formatItsAddress(matched) : "") ||
+    (looksLikeCityStateName(fallbackLane) ? fallbackLane : "");
+  return {
+    name,
+    address,
+    phone: (filled.phone || matched?.phone || "").trim(),
+  };
+}
+
+function bolStopPoNumbers(load: LoadView): string {
+  const seen = new Set<string>();
+  const values: string[] = [];
+  for (const stop of listStops(load.id)) {
+    const blob = [stop.reference, stop.confirmation, stop.notes, stop.instructions, stop.cargo].join("\n");
+    const paper = parseStopPaperwork(blob);
+    const poLabeled = blob.match(/\bPO\s*#\s*([A-Z0-9-]+)/i)?.[1]?.trim() ?? "";
+    const puLabeled = blob.match(/\bP\/?U\s*#\s*([A-Z0-9-]+)/i)?.[1]?.trim() ?? "";
+    let po = poLabeled || paper.reference || stop.reference.trim();
+    if (puLabeled && po === puLabeled && !poLabeled) po = "";
+    if (isBolJunk(po) || po === String(load.load_number).trim() || po === String(load.customer_reference ?? "").trim()) {
+      continue;
+    }
+    if (seen.has(po)) continue;
+    seen.add(po);
+    values.push(po);
+  }
+  if (values.length) return values.join(", ");
+  const fallback = load.po_number.trim();
+  if (isBolJunk(fallback) || fallback === load.trailer_number.trim()) return "";
+  return fallback;
 }
 
 function defaultItemFromLoad(load: LoadView): BolItemDraft {
@@ -76,8 +158,8 @@ function defaultItemFromLoad(load: LoadView): BolItemDraft {
 }
 
 export function buildBolDraftFromLoad(load: LoadView): BolDraft {
-  const shipper = partyFromLocation(load.shipper_location_id, load.origin);
-  const consignee = partyFromLocation(load.consignee_location_id, load.destination);
+  const shipper = partyFromLoadEnd(load, "pickup");
+  const consignee = partyFromLoadEnd(load, "delivery");
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f,
     temperature_f: load.temperature_f,
@@ -100,7 +182,8 @@ export function buildBolDraftFromLoad(load: LoadView): BolDraft {
     destName: consignee.name,
     destAddress: consignee.address,
     destPhone: consignee.phone,
-    poNumber: load.po_number.trim(),
+    poNumber: bolStopPoNumbers(load),
+    referenceNumber: bolFacingReference(load),
     trailerNumber: (load.trailer_unit || load.trailer_number || "").trim(),
     shipDate: formatBolDate(load.pickup_start),
     deliveryDate: formatBolDate(load.delivery_start),
@@ -158,6 +241,9 @@ export function buildBolModel(load: LoadView, draft?: BolDraft | null): BolModel
   const carrier = carrierBlock();
   return {
     ...resolved,
+    loadNumber: resolved.loadNumber.trim() || bolFacingLoadNumber(load),
+    bolNumber: resolved.bolNumber.trim() || load.load_number,
+    referenceNumber: resolved.referenceNumber.trim() || bolFacingReference(load),
     carrierName: carrier.name,
     carrierAddress: carrier.address,
     carrierPhone: carrier.phone,
@@ -228,12 +314,13 @@ const WIDTH = 556;
 
 function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel, pageCount = 1): void {
   doc.font("Helvetica-Bold").fontSize(16).fillColor(INK);
-  doc.text("Bill Of Lading", LEFT, 24, { width: WIDTH, align: "center", lineBreak: false });
+  doc.text("Bill Of Lading", LEFT, 24, { width: 310, align: "center", lineBreak: false });
   drawMsExpressLogo(doc, LEFT, 50);
 
   const meta = [
     ["Load Number", model.loadNumber],
     ["BOL Number", model.bolNumber],
+    ...(model.referenceNumber ? ([["Reference", model.referenceNumber]] as Array<[string, string]>) : []),
     ["Ship Date", model.shipDate],
     ["Delivery Date", model.deliveryDate],
     ["P.O. Number", model.poNumber],
@@ -257,6 +344,29 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel, pageCount = 1): vo
   y = drawTotalsRow(doc, LEFT, y, WIDTH, model);
   y = drawNotesAndMoney(doc, LEFT, y + 4, WIDTH, model);
   drawSignatures(doc, LEFT, y + 4, WIDTH);
+  const defaults = getDocumentDefaults("bol");
+  const font = getDocumentFont();
+  const company = getCompanySettings();
+  const tagCtx = {
+    orgName: company.company_name,
+    userName: company.dispatcher_name,
+    userEmail: company.dispatcher_email,
+    userPhone: company.dispatcher_phone,
+    loadId: model.loadNumber,
+  };
+  const terms = expandDocumentTags(defaults.terms_text, tagCtx).trim();
+  const footer = expandDocumentTags(defaults.footer_text, tagCtx).trim();
+  const copySize = Math.max(7, scaledFontSize(defaults.font_size || 8, font.scale) - 2);
+  let copyY = 700;
+  if (terms) {
+    doc.font(pdfFontName(font.family)).fontSize(copySize).fillColor(INK);
+    doc.text(terms, LEFT, copyY, { width: WIDTH, height: 22, lineBreak: true });
+    copyY += 20;
+  }
+  if (footer) {
+    doc.font(pdfFontName(font.family)).fontSize(copySize).fillColor(INK);
+    doc.text(footer, LEFT, copyY, { width: WIDTH, height: 14, lineBreak: true });
+  }
   doc.font("Helvetica").fontSize(8).fillColor(INK);
   doc.text(`Page 1 of ${pageCount}`, LEFT, 748, { width: WIDTH, align: "right", lineBreak: false });
 }
@@ -367,17 +477,22 @@ function drawPartyBox(
   doc.font("Helvetica-Bold").fontSize(9).fillColor(INK);
   doc.text(name || " ", x + 5, y + head + 5, { width: width - 10, height: 12, lineBreak: false });
   doc.font("Helvetica").fontSize(8);
-  doc.text(address || " ", x + 5, y + head + 18, { width: width - 10, height: extra ? 18 : 24, lineBreak: true });
-  const lines = [phone.trim() ? `Tel: ${phone.trim()}` : "", extra].filter(Boolean);
-  if (lines.length) {
-    doc.text(lines.join("   "), x + 5, y + height - 14, { width: width - 10, lineBreak: false });
+  doc.text(address || " ", x + 5, y + head + 18, { width: width - 10, height: extra ? 16 : 22, lineBreak: true });
+  if (phone.trim()) {
+    doc.text(`Tel: ${phone.trim()}`, x + 5, y + height - (extra ? 26 : 14), {
+      width: width - 10,
+      lineBreak: false,
+    });
+  }
+  if (extra) {
+    doc.text(extra, x + 5, y + height - 14, { width: width - 10, lineBreak: false });
   }
 }
 
 function drawPartyGrid(doc: PDFKit.PDFDocument, x: number, y: number, width: number, model: BolModel): number {
   const gap = 0;
   const col = width / 2;
-  const height = 78;
+  const height = 86;
   drawPartyBox(doc, x, y, col, height, "Shipper", model.originName, model.originAddress, model.originPhone);
   drawPartyBox(doc, x + col + gap, y, col, height, "Consignee", model.destName, model.destAddress, model.destPhone);
   drawPartyBox(

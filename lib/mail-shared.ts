@@ -2,8 +2,9 @@ export const MAIL_MISSING = "Add SMTP or SendGrid in .env";
 export const MAIL_FROM_DEFAULT = "dispatch@msloads.com";
 export const MAIL_FROM_NAME = "MS Express TMS";
 export const MAIL_NOREPLY = "noreply@msloads.com";
+export const MAIL_INVOICE_FROM = "ar@msloads.com";
 
-export const LOAD_MAIL_KINDS = ["driver_load", "customer_update"] as const;
+export const LOAD_MAIL_KINDS = ["driver_load", "customer_update", "customer_invoice"] as const;
 export type LoadMailKind = (typeof LOAD_MAIL_KINDS)[number];
 
 export type MailAttachment = {
@@ -14,6 +15,7 @@ export type MailAttachment = {
 
 export type OutgoingMail = {
   to: string;
+  from?: string;
   subject: string;
   text: string;
   replyTo?: string;
@@ -40,4 +42,8 @@ export function normalizeEmail(value: string | null | undefined): string {
 export function isUsableEmail(value: string | null | undefined): boolean {
   const email = normalizeEmail(value);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function invoiceFromAddress(): string {
+  return MAIL_INVOICE_FROM;
 }

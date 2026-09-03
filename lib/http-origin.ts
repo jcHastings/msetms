@@ -44,3 +44,31 @@ export function browserOrigin(request: Request): string {
 export function browserUrl(pathname: string, request: Request): URL {
   return new URL(pathname, browserOrigin(request));
 }
+
+function originFromHost(proto: string, rawHost: string): string {
+  const hostname = hostName(rawHost);
+  const port = hostPort(rawHost, proto === "https" ? "443" : "80");
+  const safeHost = isUnreachableListenHost(hostname) ? "localhost" : hostname;
+  const defaultPort = proto === "https" ? "443" : "80";
+  const suffix = port && port !== defaultPort ? `:${port}` : "";
+  return `${proto}://${safeHost}${suffix}`;
+}
+
+/**
+ * Origin the browser used for this request (phone, tunnel, or localhost).
+ * Falls back to localhost when there is no incoming request (scripts).
+ */
+export async function currentBrowserOrigin(): Promise<string> {
+  try {
+    const { headers } = await import("next/headers");
+    const incoming = await headers();
+    const proto = incoming.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
+    const host =
+      incoming.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+      incoming.get("host")?.split(",")[0]?.trim();
+    if (!host) return "http://localhost:3000";
+    return originFromHost(proto, host);
+  } catch {
+    return "http://localhost:3000";
+  }
+}

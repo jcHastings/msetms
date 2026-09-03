@@ -1,16 +1,30 @@
+import fs from "node:fs";
+import path from "node:path";
 import { agreedAmountForLoad, buildConfirmationForLoad, formatUsd, renderConfirmationPdf } from "./load-confirmation";
-import { formatStopWindow } from "./format";
+import { formatInvoiceMoney, formatStopWindow } from "./format";
+import { getAttachment, getAttachmentPath, guessMime, listAttachments, sanitizeName } from "./files";
 import { getLocationForLoad } from "./integrations/samsara";
 import { sendMail } from "./integrations/mail";
+import { buildTmsInvoice, createTmsInvoice } from "./invoice";
 import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
-import { isUsableEmail, MAIL_NOREPLY, normalizeEmail, type LoadMailKind, type SentMailRow } from "./mail-shared";
+import { expandDocumentTags } from "./document-tags";
+import { getInvoiceEmailBody } from "./settings";
+import {
+  invoiceFromAddress,
+  isUsableEmail,
+  MAIL_NOREPLY,
+  normalizeEmail,
+  type LoadMailKind,
+  type OutgoingMail,
+  type SentMailRow,
+} from "./mail-shared";
 import { getCustomer, getDriver, getLoad } from "./queries";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { listStops } from "./stops";
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "./stops-shared";
-import { isOwnerOperator, labelForLoadStatus, type LoadView } from "./types";
+import { isOwnerOperator, labelForAttachmentKind, labelForLoadStatus, type LoadView } from "./types";
 import {
   driverLoadGreeting,
   parseDriverMessageLocale,
@@ -31,17 +45,56 @@ export type CustomerUpdateMailDraft = {
   replyTo: string;
 };
 
+export type CustomerInvoiceMailDraft = {
+  to: string;
+  from: string;
+  subject: string;
+  text: string;
+  replyTo: string;
+};
+
+export type InvoiceMailExtraDoc = {
+  id: number;
+  name: string;
+  kind: string;
+  kindLabel: string;
+};
+
 export function resolveLoadDriverEmail(load: Pick<LoadView, "driver_id">): string {
   if (!load.driver_id) return "";
   return normalizeEmail(getDriver(load.driver_id)?.email);
 }
 
-export function resolveLoadCustomerEmail(load: Pick<LoadView, "contact_email" | "customer_id">): string {
-  const onLoad = normalizeEmail(load.contact_email);
-  if (isUsableEmail(onLoad)) return onLoad;
-  const customer = getCustomer(load.customer_id);
+export function resolveCustomerMainEmail(customerId: number): string {
+  const customer = getCustomer(customerId);
+  const main = normalizeEmail(customer?.main_email);
+  if (isUsableEmail(main)) return main;
   const fromContact = customer?.contacts.map((row) => normalizeEmail(row.email)).find((email) => isUsableEmail(email));
   return fromContact ?? "";
+}
+
+export function resolveCustomerBillingEmail(customerId: number): string {
+  const customer = getCustomer(customerId);
+  return isUsableEmail(customer?.billing_email) ? normalizeEmail(customer?.billing_email) : "";
+}
+
+export function resolveLoadPerLoadEmail(load: Pick<LoadView, "contact_email">): string {
+  const onLoad = normalizeEmail(load.contact_email);
+  return isUsableEmail(onLoad) ? onLoad : "";
+}
+
+/** Email customer update / load comms: per-load broker email, else customer main. Never billing-only. */
+export function resolveLoadCustomerEmail(load: Pick<LoadView, "contact_email" | "customer_id">): string {
+  const perLoad = resolveLoadPerLoadEmail(load);
+  if (perLoad) return perLoad;
+  return resolveCustomerMainEmail(load.customer_id);
+}
+
+/** Invoice send: billing, else main. Never the per-load broker address. */
+export function resolveInvoiceCustomerEmail(load: Pick<LoadView, "customer_id">): string {
+  const billing = resolveCustomerBillingEmail(load.customer_id);
+  if (billing) return billing;
+  return resolveCustomerMainEmail(load.customer_id);
 }
 
 export function driverMailBlockReason(load: LoadView | null): string {
@@ -350,6 +403,202 @@ export async function sendCustomerUpdateMail(
   });
   recordSentMail({ loadId, kind: "customer_update", to: draft.to, subject: draft.subject });
   return { to: draft.to, subject: draft.subject };
+}
+
+export function invoiceMailExtraDocs(loadId: number): InvoiceMailExtraDoc[] {
+  return listAttachments(loadId)
+    .filter((file) => file.kind !== "invoice")
+    .map((file) => ({
+      id: file.id,
+      name: file.original_name,
+      kind: file.kind,
+      kindLabel: labelForAttachmentKind(file.kind),
+    }));
+}
+
+function uniqueMailFilename(name: string, used: Set<string>): string {
+  const safe = sanitizeName(name);
+  const key = safe.toLowerCase();
+  if (!used.has(key)) {
+    used.add(key);
+    return safe;
+  }
+  const ext = path.extname(safe);
+  const stem = ext ? safe.slice(0, -ext.length) : safe;
+  let n = 2;
+  let next = `${stem}-${n}${ext}`;
+  while (used.has(next.toLowerCase())) {
+    n += 1;
+    next = `${stem}-${n}${ext}`;
+  }
+  used.add(next.toLowerCase());
+  return next;
+}
+
+export function mailFilesForLoadDocs(loadId: number, ids: number[]): Array<{
+  filename: string;
+  contentType: string;
+  content: Buffer;
+  label: string;
+}> {
+  const extras = invoiceMailExtraDocs(loadId);
+  const byId = new Map(extras.map((row) => [row.id, row]));
+  const used = new Set<string>();
+  return ids.map((id) => {
+    const extra = byId.get(id);
+    const file = getAttachment(id);
+    if (!extra || !file || file.load_id !== loadId || file.kind === "invoice") {
+      throw new Error("That document is not on this load.");
+    }
+    const stored = getAttachmentPath(file);
+    if (!fs.existsSync(stored)) throw new Error(`${file.original_name} is missing.`);
+    return {
+      filename: uniqueMailFilename(file.original_name, used),
+      contentType: file.mime_type || guessMime(file.original_name),
+      content: fs.readFileSync(stored),
+      label: extra.kindLabel,
+    };
+  });
+}
+
+export function composeCustomerInvoiceEmail(input: {
+  invoiceNumber: string;
+  loadNumber: string;
+  customerName?: string;
+  totalLabel?: string;
+  extraLabels?: string[];
+  body?: string;
+  officePhone?: string;
+}): CustomerInvoiceMailDraft {
+  const invoiceNumber = input.invoiceNumber.trim();
+  const loadNumber = input.loadNumber.trim();
+  const from = invoiceFromAddress();
+  const extras = (input.extraLabels ?? []).map((label) => label.trim()).filter(Boolean);
+  const subject = invoiceNumber
+    ? `Invoice ${invoiceNumber}${loadNumber ? ` — Load ${loadNumber}` : ""}`
+    : loadNumber
+      ? `Invoice — Load ${loadNumber}`
+      : "Invoice";
+  const letter = expandDocumentTags(input.body ?? "", {
+    orgName: "M & S Loads LLC",
+    customerName: input.customerName,
+    loadId: loadNumber,
+    invoiceNumber,
+    invoiceTotal: input.totalLabel,
+    userEmail: from,
+    userPhone: input.officePhone,
+  }).trim();
+  const lines = letter
+    ? [
+        letter,
+        extras.length ? `Also attached: ${extras.join(", ")}.` : "",
+        "Questions? Reply to this email.",
+        "",
+        "M & S Loads LLC · Accounts Receivable",
+      ]
+    : [
+        invoiceNumber && loadNumber
+          ? `Invoice ${invoiceNumber} for load ${loadNumber}.`
+          : invoiceNumber
+            ? `Invoice ${invoiceNumber}.`
+            : loadNumber
+              ? `Invoice for load ${loadNumber}.`
+              : "Invoice attached.",
+        input.customerName?.trim() ? `Bill to: ${input.customerName.trim()}` : "",
+        input.totalLabel?.trim() ? `Total: ${input.totalLabel.trim()}` : "",
+        "The invoice PDF is attached.",
+        extras.length ? `Also attached: ${extras.join(", ")}.` : "",
+        "Questions? Reply to this email.",
+        "",
+        "M & S Loads LLC · Accounts Receivable",
+      ];
+  return {
+    to: "",
+    from,
+    subject,
+    text: `${lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n").trim()}\n`,
+    replyTo: from,
+  };
+}
+
+async function invoicePdfForMail(load: LoadView): Promise<{
+  invoiceNumber: string;
+  filename: string;
+  buffer: Buffer;
+  total: number;
+}> {
+  const model = buildTmsInvoice(load);
+  const existing = listAttachments(load.id).find((file) => file.kind === "invoice");
+  if (existing) {
+    const stored = getAttachmentPath(existing);
+    if (fs.existsSync(stored)) {
+      return {
+        invoiceNumber: load.tms_invoice_number || model.invoiceNumber,
+        filename: existing.original_name || `${model.invoiceNumber}.pdf`,
+        buffer: fs.readFileSync(stored),
+        total: model.total,
+      };
+    }
+  }
+  const made = await createTmsInvoice(load.id);
+  return {
+    invoiceNumber: made.invoiceNumber,
+    filename: made.filename,
+    buffer: made.buffer,
+    total: model.total,
+  };
+}
+
+export function invoiceMailTo(load: LoadView, typedTo = ""): string {
+  const stored = resolveInvoiceCustomerEmail(load);
+  if (isUsableEmail(stored)) return normalizeEmail(stored);
+  return normalizeEmail(typedTo);
+}
+
+export async function sendCustomerInvoiceMail(
+  loadId: number,
+  send: typeof sendMail = sendMail,
+  options: { extraIds?: number[]; body?: string; to?: string } = {},
+): Promise<{ to: string; subject: string }> {
+  const load = getLoad(loadId);
+  if (!load) throw new Error("Load not found.");
+  const to = invoiceMailTo(load, options.to);
+  if (!isUsableEmail(to)) throw new Error("Enter an email to send this invoice.");
+  const extras = mailFilesForLoadDocs(loadId, options.extraIds ?? []);
+  const invoice = await invoicePdfForMail(load);
+  const shown = customerFacingLoadNumber(load) || load.load_number;
+  const draft = composeCustomerInvoiceEmail({
+    invoiceNumber: invoice.invoiceNumber,
+    loadNumber: shown,
+    customerName: load.customer_name,
+    totalLabel: formatInvoiceMoney(invoice.total),
+    extraLabels: extras.map((file) => file.label),
+    body: options.body ?? getInvoiceEmailBody(),
+    officePhone: getCompanyProfile().dispatcher_phone,
+  });
+  const usedNames = new Set([invoice.filename.toLowerCase()]);
+  const mail: OutgoingMail = {
+    to,
+    from: draft.from || invoiceFromAddress(),
+    subject: draft.subject,
+    text: draft.text,
+    replyTo: draft.replyTo || invoiceFromAddress(),
+    attachments: [
+      {
+        filename: invoice.filename,
+        contentType: "application/pdf",
+        content: invoice.buffer,
+      },
+      ...extras.map((file) => ({
+        filename: uniqueMailFilename(file.filename, usedNames),
+        contentType: file.contentType,
+        content: file.content,
+      })),
+    ],
+  };
+  await send(mail);
+  recordSentMail({ loadId, kind: "customer_invoice", to, subject: draft.subject });
+  return { to, subject: draft.subject };
 }
 
 export function lastLoadMail(loadId: number, kind: LoadMailKind): SentMailRow | null {

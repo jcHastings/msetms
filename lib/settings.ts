@@ -12,6 +12,7 @@ import {
   DOCUMENT_TYPES,
   PAY_METHODS,
   PERMISSION_GROUPS,
+  canDeleteDispatcherUser,
   defaultPermissionGroupForRole,
   isAdminRole,
   type ComplianceWindows,
@@ -19,7 +20,18 @@ import {
   type DocumentType,
   type DropdownKind,
 } from "./settings-shared";
+import { setDispatcherPassword } from "./dispatcher-password";
+import { dispatcherPasswordError } from "./dispatcher-password-shared";
+import {
+  BOL_TERMS,
+  CUSTOMER_CONFIRMATION_TERMS,
+  DRIVER_CONFIRMATION_TERMS,
+  shouldReplaceStoredTerms,
+} from "./document-copy";
+import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
+import { DEFAULT_INVOICE_EMAIL_BODY } from "./invoice-email-shared";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
+import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
 
 export * from "./settings-shared";
 
@@ -125,7 +137,7 @@ const SETTINGS_DEFAULTS: CompanySettings = {
   load_number_prefix: "MSE",
   load_number_next: 1001,
   show_sample_data: 1,
-  require_dispatcher_2fa: 0,
+  require_dispatcher_2fa: 1,
 };
 
 const SETTINGS_COLUMNS = [
@@ -165,6 +177,20 @@ const SETTINGS_COLUMNS = [
   "show_sample_data",
   "require_dispatcher_2fa",
 ] as const;
+
+export function getInvoiceEmailBody(): string {
+  const row = getDb()
+    .prepare("SELECT invoice_email_body FROM company_profile WHERE id = 1")
+    .get() as { invoice_email_body?: string } | undefined;
+  const text = String(row?.invoice_email_body ?? "").trim();
+  return text || DEFAULT_INVOICE_EMAIL_BODY;
+}
+
+export function updateInvoiceEmailBody(text: string): string {
+  const next = String(text ?? "").trim() || DEFAULT_INVOICE_EMAIL_BODY;
+  getDb().prepare("UPDATE company_profile SET invoice_email_body = ? WHERE id = 1").run(next);
+  return next;
+}
 
 export function getCompanySettings(): CompanySettings {
   const row = getDb()
@@ -660,8 +686,8 @@ export function clearCompanyLogo(): CompanySettings {
   return patchSettings({ logo_stored_name: "", logo_original_name: "", logo_mime_type: "" });
 }
 
-const DISPATCHER_SAFE_COLUMNS =
-  "id, name, pin, role, email, active, permission_group, totp_enrolled";
+const DISPATCHER_SAFE_COLUMNS = `id, name, role, email, phone, active, permission_group, totp_enrolled, must_change_password,
+  CASE WHEN length(trim(password_hash)) > 0 THEN 1 ELSE 0 END AS has_password`;
 
 export function listDispatcherUsers(includeInactive = true): DispatcherUser[] {
   const where = includeInactive ? "" : "WHERE active = 1";
@@ -709,34 +735,46 @@ function countAdmins(exceptId?: number): number {
 
 export function createDispatcherUser(input: {
   name: string;
-  pin: string;
+  password: string;
   role: string;
   email?: string;
+  phone?: string;
   permission_group?: string;
   active?: boolean;
 }): number {
   const name = input.name.trim();
-  const pin = input.pin.trim();
+  const password = input.password;
   if (!name) throw new Error("Name is required.");
-  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4–8 digits.");
+  const policy = dispatcherPasswordError(password);
+  if (policy) throw new Error(policy);
   const role = parseDispatcherRole(input.role);
   const group = parsePermissionGroup(input.permission_group ?? defaultPermissionGroupForRole(role));
   const result = getDb()
     .prepare(
-      `INSERT INTO dispatchers (name, pin, role, email, active, permission_group)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO dispatchers (name, pin, role, email, phone, active, permission_group, password_hash)
+       VALUES (?, '', ?, ?, ?, ?, ?, '')`,
     )
-    .run(name, pin, role, (input.email ?? "").trim(), input.active === false ? 0 : 1, group);
-  return Number(result.lastInsertRowid);
+    .run(
+      name,
+      role,
+      (input.email ?? "").trim(),
+      (input.phone ?? "").trim(),
+      input.active === false ? 0 : 1,
+      group,
+    );
+  const id = Number(result.lastInsertRowid);
+  setDispatcherPassword(id, password, { requireChange: true });
+  return id;
 }
 
 export function updateDispatcherUser(
   id: number,
   input: {
     name: string;
-    pin: string;
     role: string;
     email?: string;
+    phone?: string;
+    password?: string;
     permission_group?: string;
     active?: boolean;
   },
@@ -744,9 +782,7 @@ export function updateDispatcherUser(
   const existing = getDispatcherUser(id);
   if (!existing) throw new Error("User was not found.");
   const name = input.name.trim();
-  const pin = input.pin.trim() || existing.pin;
   if (!name) throw new Error("Name is required.");
-  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must be 4–8 digits.");
   const role = parseDispatcherRole(input.role);
   const group = parsePermissionGroup(input.permission_group ?? existing.permission_group);
   const active = input.active === false ? 0 : 1;
@@ -756,8 +792,113 @@ export function updateDispatcherUser(
   getDb()
     .prepare(
       `UPDATE dispatchers
-       SET name = ?, pin = ?, role = ?, email = ?, active = ?, permission_group = ?
+       SET name = ?, role = ?, email = ?, phone = ?, active = ?, permission_group = ?, pin = ''
        WHERE id = ?`,
     )
-    .run(name, pin, role, (input.email ?? "").trim(), active, group, id);
+    .run(name, role, (input.email ?? "").trim(), (input.phone ?? existing.phone ?? "").trim(), active, group, id);
+  const password = input.password?.trim() ?? "";
+  if (password) setDispatcherPassword(id, password, { requireChange: true });
+}
+
+export function updateOwnDispatcherContact(
+  id: number,
+  input: { email?: string; phone?: string },
+): void {
+  const existing = getDispatcherUser(id);
+  if (!existing) throw new Error("User was not found.");
+  getDb()
+    .prepare("UPDATE dispatchers SET email = ?, phone = ? WHERE id = ?")
+    .run((input.email ?? existing.email ?? "").trim(), (input.phone ?? existing.phone ?? "").trim(), id);
+}
+
+export function deleteDispatcherUser(id: number, actorId?: number | null): void {
+  const existing = getDispatcherUser(id);
+  if (!existing) throw new Error("User was not found.");
+  const allowed = canDeleteDispatcherUser({
+    targetId: id,
+    targetRole: existing.role,
+    targetActive: existing.active,
+    actorId,
+    otherActiveAdmins: countAdmins(id),
+  });
+  if (!allowed.ok) throw new Error(allowed.reason);
+  const db = getDb();
+  db.prepare("UPDATE loads SET dispatcher_id = NULL WHERE dispatcher_id = ?").run(id);
+  const rules = db.prepare("SELECT id, recipient_ids FROM alert_rules").all() as Array<{
+    id: number;
+    recipient_ids: string;
+  }>;
+  const rewrite = db.prepare("UPDATE alert_rules SET recipient_ids = ? WHERE id = ?");
+  for (const rule of rules) {
+    let ids: number[] = [];
+    try {
+      const parsed = JSON.parse(rule.recipient_ids) as unknown;
+      ids = Array.isArray(parsed) ? parsed.map(Number).filter((value) => Number.isInteger(value) && value > 0) : [];
+    } catch {
+      ids = [];
+    }
+    if (!ids.includes(id)) continue;
+    rewrite.run(JSON.stringify(ids.filter((value) => value !== id)), rule.id);
+  }
+  db.prepare("DELETE FROM dispatchers WHERE id = ?").run(id);
+}
+
+export function getDocumentFont(): { family: DocumentFontFamily; scale: number } {
+  const row = getDb()
+    .prepare("SELECT document_font_family, document_font_scale FROM company_profile WHERE id = 1")
+    .get() as { document_font_family?: string; document_font_scale?: number } | undefined;
+  const family = DOCUMENT_FONTS.some((item) => item.value === row?.document_font_family)
+    ? (row?.document_font_family as DocumentFontFamily)
+    : "helvetica";
+  const scale = Number(row?.document_font_scale) || 100;
+  return { family, scale: Math.min(160, Math.max(80, scale)) };
+}
+
+export function updateDocumentFont(input: { family: string; scale: number }): void {
+  if (!DOCUMENT_FONTS.some((item) => item.value === input.family)) {
+    throw new Error("Pick Arial, Times, or Courier.");
+  }
+  const scale = Number(input.scale);
+  if (!Number.isFinite(scale) || scale < 80 || scale > 160) {
+    throw new Error("Font scale must be between 80% and 160%.");
+  }
+  getDb()
+    .prepare("UPDATE company_profile SET document_font_family = ?, document_font_scale = ? WHERE id = 1")
+    .run(input.family, Math.round(scale));
+}
+
+export function getWorkflowSettings(): WorkflowSettings {
+  const row = getDb()
+    .prepare("SELECT workflow_json FROM company_profile WHERE id = 1")
+    .get() as { workflow_json?: string } | undefined;
+  return parseWorkflowSettings(row?.workflow_json);
+}
+
+export function updateWorkflowSettings(input: WorkflowSettings): WorkflowSettings {
+  const next = parseWorkflowSettings(JSON.stringify(input));
+  const db = getDb();
+  const written = db.prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  if (written.changes === 0) {
+    db.prepare(
+      `INSERT OR IGNORE INTO company_profile (
+        id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
+      ) VALUES (1, 'M&S Loads', 'MS Test', '', '', '')`,
+    ).run();
+    db.prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
+  }
+  return next;
+}
+
+export function seedDocumentTermsIfEmpty(): void {
+  const updates: Array<[DocumentType, string]> = [
+    ["load_confirmation", DRIVER_CONFIRMATION_TERMS],
+    ["customer_confirmation", CUSTOMER_CONFIRMATION_TERMS],
+    ["bol", BOL_TERMS],
+  ];
+  const read = getDb().prepare("SELECT terms_text FROM document_defaults WHERE doc_type = ?");
+  const write = getDb().prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ?");
+  for (const [docType, terms] of updates) {
+    const row = read.get(docType) as { terms_text?: string } | undefined;
+    if (shouldReplaceStoredTerms(docType, row?.terms_text ?? "")) write.run(terms, docType);
+  }
 }

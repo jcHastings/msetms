@@ -20,12 +20,14 @@ export function FuelMpgTable({
   selectedTruckId,
   txList,
   view,
+  week,
 }: {
   board: DriverMpgBoard;
   selectedDriverId: number | null;
   selectedTruckId: number | null;
   txList?: FuelTxListKind;
   view?: FuelPageView;
+  week?: string | null;
 }) {
   const range = `${formatMdYDisplay(board.startYmd)} – ${formatMdYDisplay(board.endYmd)}`;
   return (
@@ -37,13 +39,13 @@ export function FuelMpgTable({
         </div>
         <div className="flex gap-3 text-sm">
           <Link
-            href={fuelPageHref({ view, tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId })}
+            href={fuelPageHref({ view, tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId, week })}
             className={board.period === "week" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This week
           </Link>
           <Link
-            href={fuelPageHref({ view, tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId })}
+            href={fuelPageHref({ view, tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId, week })}
             className={board.period === "month" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This month
@@ -68,7 +70,7 @@ export function FuelMpgTable({
               {board.rows.map((row) => (
                 <tr key={row.driverId}>
                   <td>
-                    <Link href={`/fuel?driver=${row.driverId}`} className="font-semibold hover:underline">
+                    <Link href={fuelPageHref({ view, tx: txList, mpg: board.period, driverId: row.driverId, week })} className="font-semibold hover:underline">
                       {row.driverName}
                     </Link>
                   </td>

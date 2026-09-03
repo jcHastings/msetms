@@ -37,6 +37,10 @@ export type LoadFormDefaults = Partial<{
   consignee: ParsedStop;
   extra_stops: ParsedExtraStop[];
   equipment: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_ext: string;
 }>;
 
 export function LoadBasicsScreen({
@@ -70,11 +74,11 @@ export function LoadBasicsScreen({
   return (
     <section data-load-tab="basics" className={card ? "card overflow-hidden" : undefined}>
       {card ? (
-        <div className="section-head px-6 py-3">
-          <h2 className="text-sm font-semibold">Basic load information</h2>
+        <div className="section-head px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Basic load information</h2>
         </div>
       ) : null}
-      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+      <div className={card ? "grid gap-2 p-3 md:grid-cols-2" : "grid gap-2 md:grid-cols-2"}>
       <div className="field">
         <label htmlFor="load_status">Load Status</label>
         <div className="flex flex-wrap items-center gap-2">

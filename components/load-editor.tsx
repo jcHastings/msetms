@@ -5,6 +5,8 @@ import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/flee
 import { IftaPanel } from "@/components/ifta-panel";
 import { LoadExtraDetails } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
+import { LoadChatPanel } from "@/components/load-chat-panel";
+import { LoadShareLinkPanel } from "@/components/load-share-link";
 import { LoadTrackingPanel } from "@/components/load-tracking-panel";
 import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
@@ -35,6 +37,8 @@ import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { buildTmsInvoice } from "@/lib/invoice";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { listLoadChatMessages } from "@/lib/load-chat";
+import { latestLoadShareLink, loadSharePath } from "@/lib/load-share";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
@@ -44,7 +48,14 @@ import { loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
-import { resolveLoadCustomerEmail, resolveLoadDriverEmail } from "@/lib/load-mail";
+import {
+  invoiceMailExtraDocs,
+  lastLoadMail,
+  resolveInvoiceCustomerEmail,
+  resolveLoadCustomerEmail,
+  resolveLoadDriverEmail,
+} from "@/lib/load-mail";
+import { formatDateTime } from "@/lib/format";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
@@ -53,7 +64,7 @@ import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
-import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
+import { equipmentOptions, getInvoiceEmailBody, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
@@ -106,6 +117,7 @@ export async function LoadEditor({
       <LoadWorkspace
         header={
           <PageHeader
+            dense
             title={load.load_number}
             subtitle={[
               load.parent_load_id
@@ -181,6 +193,17 @@ export async function LoadEditor({
               This load is in Accounting. Ask Accounting to send it back before changing it.
             </p>
           ) : null}
+          <div className="mb-4 grid gap-3 lg:grid-cols-2">
+            <LoadShareLinkPanel
+              loadId={load.id}
+              sharePath={(() => {
+                const share = latestLoadShareLink(load.id);
+                return share ? loadSharePath(share.token) : "";
+              })()}
+              expiresAt={latestLoadShareLink(load.id)?.expires_at ?? ""}
+            />
+            <LoadChatPanel loadId={load.id} messages={listLoadChatMessages(load.id)} role="dispatcher" />
+          </div>
           <LoadForm
             customers={customers}
             trucks={trucks}
@@ -261,6 +284,13 @@ export async function LoadEditor({
                 status={load.status}
                 saved={Boolean(load.tms_invoice_number)}
                 invoices={attachments.filter((file) => file.kind === "invoice")}
+                customerEmail={resolveInvoiceCustomerEmail(load)}
+                extras={invoiceMailExtraDocs(load.id)}
+                invoiceEmailBody={getInvoiceEmailBody()}
+                lastInvoiceSent={(() => {
+                  const sent = lastLoadMail(load.id, "customer_invoice");
+                  return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
+                })()}
                 invoice={(() => {
                   try {
                     return buildTmsInvoice(load);
@@ -299,12 +329,12 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="docs">
-          <div data-load-tab="docs" className="space-y-4">
-          <div className="load-docs-actions mb-3 px-4 py-3">
-            <div className="load-actions-label mb-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
+          <div data-load-tab="docs" className="space-y-3">
+          <div className="load-docs-actions mb-2 px-2 py-1.5">
+            <div className="load-actions-label mb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
               Document actions
             </div>
-            <p className="text-sm text-slate-700">
+            <p className="text-[12.5px] text-slate-700">
               Defaulted documents stay on this load. Print / view opens the preview — it does not close the load.
             </p>
           </div>
@@ -324,10 +354,10 @@ export async function LoadEditor({
             formSettings={formSettings}
           />
           <section className="card mb-4 overflow-hidden">
-            <div className="section-head px-5 py-3">
-              <h2 className="text-sm font-semibold">Document checklist</h2>
+            <div className="section-head px-3 py-1.5">
+              <h2 className="text-[12.5px] font-semibold">Document checklist</h2>
             </div>
-            <ul className="space-y-1 p-5 text-sm">
+            <ul className="space-y-1 p-3 text-[12.5px]">
               {checklist.map((doc) => {
                 const have = attachments.some((file) => file.kind === doc.kind);
                 return (

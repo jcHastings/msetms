@@ -1,15 +1,14 @@
 import { logCheckCallFormAction } from "@/lib/dispatcher-actions";
-import { listLoadLog } from "@/lib/audit";
+import { listLoadTimeline } from "@/lib/load-timeline";
 import { formatDateTime, toInputDateTime } from "@/lib/format";
-import { labelForLoadStatus } from "@/lib/types";
 
 export function LoadLogSection({ loadId }: { loadId: number }) {
-  const rows = listLoadLog(loadId);
+  const rows = listLoadTimeline(loadId);
   return (
-    <div className="space-y-4">
-      <section id="load-check-call" className="card p-5">
-        <h2 className="text-sm font-semibold">Log check call</h2>
-        <form action={logCheckCallFormAction} className="mt-3 grid gap-3 md:grid-cols-3">
+    <div className="space-y-3">
+      <section id="load-check-call" className="card p-3">
+        <h2 className="text-[12.5px] font-semibold">Log check call</h2>
+        <form action={logCheckCallFormAction} className="mt-2 grid gap-2 md:grid-cols-3">
           <input type="hidden" name="load_id" value={loadId} />
           <div className="field">
             <label htmlFor="called_at">When</label>
@@ -30,33 +29,23 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
         </form>
       </section>
 
-      <section id="load-log" className="card overflow-hidden">
-        <header className="border-b border-slate-100 px-5 py-3">
-          <h2 className="text-sm font-semibold">Load log</h2>
+      <section id="load-log" className="card overflow-hidden" data-load-timeline="">
+        <header className="border-b border-slate-100 px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Load Timeline</h2>
         </header>
         {rows.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-slate-500">No status changes or check calls yet.</p>
+          <p className="px-3 py-3 text-[12.5px] text-slate-500">No dispatcher, status, document, or geofence events yet.</p>
         ) : (
-          <ol className="divide-y divide-slate-100">
+          <ol className="divide-y divide-slate-100" data-timeline-newest-first="">
             {rows.map((row) => (
-              <li key={row.id} className="px-5 py-3 text-sm">
+              <li key={row.id} className="px-3 py-1.5 text-[12.5px]" data-timeline-event={row.source}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-semibold capitalize">{row.action.replaceAll("_", " ")}</span>
-                  <span className="text-xs text-slate-500">
-                    {formatDateTime(row.action === "check_call" && row.old_value ? row.old_value : row.created_at)}
-                  </span>
+                  <span className="font-semibold capitalize">{row.title}</span>
+                  <span className="text-xs text-slate-500">{formatDateTime(row.at)}</span>
                 </div>
                 <div className="mt-1 text-slate-600">
                   {row.actor}
-                  {row.action === "check_call"
-                    ? ` · ${row.new_value}`
-                    : row.action === "sms"
-                      ? ` · to ${row.new_value}${row.old_value ? ` · ${row.old_value}` : ""}`
-                    : row.field === "status"
-                      ? ` · ${labelForLoadStatus(row.old_value || "")} → ${labelForLoadStatus(row.new_value || "")}`
-                      : row.new_value
-                        ? ` · ${row.new_value}`
-                        : ""}
+                  {row.detail ? ` · ${row.detail}` : ""}
                 </div>
               </li>
             ))}

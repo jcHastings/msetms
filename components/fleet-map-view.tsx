@@ -9,7 +9,13 @@ import {
   type FleetMapModel,
   type OrbcommReeferPinStatus,
 } from "@/lib/fleet-map-shared";
+import { TrailerShareLinkPanel } from "@/components/trailer-share-link";
 import { formatDateTime, shortPlaceLabel } from "@/lib/format";
+
+function formatTruckMiles(miles: number | null): string {
+  if (miles == null || Number.isNaN(miles)) return "—";
+  return miles.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
 
 const REEFER_PIN_LABEL: Record<OrbcommReeferPinStatus, string> = {
   running: "Running",
@@ -39,6 +45,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
           <LoadMapCanvas
             apiKey={apiKey}
             points={fleetMapDisplayPoints(model.pins)}
+            cluster
             className="h-[36rem] w-full bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No GPS pins."
@@ -58,7 +65,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     </li>
                   ))}
                   <li data-orbcomm-pin-shape="arrow">Arrow = moving</li>
-                  <li data-orbcomm-pin-shape="circle">Circle = stopped</li>
+                  <li data-orbcomm-pin-shape="circle">Pin = stopped</li>
                 </>
               ) : (
                 <>
@@ -158,6 +165,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                 <th>Alarm</th>
                 <th>Location</th>
                 <th>Message</th>
+                <th>Customer link</th>
               </tr>
             </thead>
             <tbody>
@@ -178,6 +186,56 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                     {shortPlaceLabel(row.location) || row.location || "—"}
                   </td>
                   <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
+                  <td className="trailer-share-compact-cell">
+                    {row.trailerId ? (
+                      <TrailerShareLinkPanel
+                        trailerId={row.trailerId}
+                        sharePath={row.sharePath}
+                        expiresAt={row.shareExpiresAt}
+                        compact
+                      />
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+      {model.truckStatusRows?.length ? (
+        <section className="card mt-4 overflow-x-auto" data-samsara-status-table="">
+          <table className="table-grid">
+            <thead>
+              <tr>
+                <th>Truck</th>
+                <th>Location</th>
+                <th>Mileage</th>
+                <th>Driver</th>
+                <th>HOS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.truckStatusRows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <Link href={row.href} className="font-semibold underline">
+                      {row.truck}
+                    </Link>
+                  </td>
+                  <td className="whitespace-nowrap text-left">
+                    {shortPlaceLabel(row.location) || row.location || "—"}
+                  </td>
+                  <td className="tabular-nums">{formatTruckMiles(row.miles)}</td>
+                  <td>
+                    {row.driverHref && row.driver ? (
+                      <Link href={row.driverHref} className="underline">
+                        {row.driver}
+                      </Link>
+                    ) : (
+                      row.driver || "—"
+                    )}
+                  </td>
+                  <td className="tabular-nums">{row.hos || "—"}</td>
                 </tr>
               ))}
             </tbody>

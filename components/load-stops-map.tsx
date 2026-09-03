@@ -10,7 +10,7 @@ export async function LoadStopsMap({ loadId }: { loadId: number }) {
   ]);
   return (
     <section className="card mb-4 overflow-hidden" data-stops-map="">
-      <header className="border-b border-slate-200 px-5 py-3">
+      <header className="border-b border-slate-200 px-3 py-1.5">
         <h2 className="text-sm font-semibold">Route</h2>
       </header>
       <LoadMapCanvas

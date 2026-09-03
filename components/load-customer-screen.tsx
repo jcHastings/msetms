@@ -36,11 +36,11 @@ export function LoadCustomerScreen({
   return (
     <section data-load-tab="customer" className={card ? "card overflow-hidden" : undefined}>
       {card ? (
-        <div className="section-head px-6 py-3">
-          <h2 className="text-sm font-semibold">Customer</h2>
+        <div className="section-head px-3 py-1.5">
+          <h2 className="text-[12.5px] font-semibold">Customer</h2>
         </div>
       ) : null}
-      <div className={card ? "grid gap-4 p-6 md:grid-cols-2" : "grid gap-4 md:grid-cols-2"}>
+      <div className={card ? "grid gap-2 p-3 md:grid-cols-2" : "grid gap-2 md:grid-cols-2"}>
       <input type="hidden" name="customer_name" value={customerId ? "" : createName} />
       <input type="hidden" id="customer_id" name="customer_id" value={customerId} required={!createName} />
       <div className="field md:col-span-2" data-customer-picker="" data-critical-save="">
@@ -124,29 +124,31 @@ export function LoadCustomerScreen({
           id="contact_name"
           name="contact_name"
           data-autosave=""
-          defaultValue={load?.contact_name ?? ""}
-          onBlur={blurPersist("contact_name", load?.contact_name ?? "")}
+          defaultValue={load?.contact_name || defaults.contact_name || ""}
+          onBlur={blurPersist("contact_name", load?.contact_name || defaults.contact_name || "")}
         />
       </div>
       <div className="field">
-        <label htmlFor="contact_email">Contact email</label>
+        <label htmlFor="contact_email">Per-load email</label>
         <input
           id="contact_email"
           name="contact_email"
           type="email"
           data-autosave=""
-          defaultValue={load?.contact_email ?? ""}
-          onBlur={blurPersist("contact_email", load?.contact_email ?? "")}
+          data-per-load-email=""
+          defaultValue={load?.contact_email || defaults.contact_email || ""}
+          onBlur={blurPersist("contact_email", load?.contact_email || defaults.contact_email || "")}
         />
       </div>
       <div className="field">
-        <label htmlFor="contact_phone">Contact phone</label>
+        <label htmlFor="contact_phone">Per-load phone</label>
         <input
           id="contact_phone"
           name="contact_phone"
           data-autosave=""
-          defaultValue={load?.contact_phone ?? ""}
-          onBlur={blurPersist("contact_phone", load?.contact_phone ?? "")}
+          data-per-load-phone=""
+          defaultValue={load?.contact_phone || defaults.contact_phone || ""}
+          onBlur={blurPersist("contact_phone", load?.contact_phone || defaults.contact_phone || "")}
         />
       </div>
       <div className="field">
@@ -155,8 +157,9 @@ export function LoadCustomerScreen({
           id="contact_ext"
           name="contact_ext"
           data-autosave=""
-          defaultValue={load?.contact_ext ?? ""}
-          onBlur={blurPersist("contact_ext", load?.contact_ext ?? "")}
+          data-per-load-ext=""
+          defaultValue={load?.contact_ext || defaults.contact_ext || ""}
+          onBlur={blurPersist("contact_ext", load?.contact_ext || defaults.contact_ext || "")}
         />
       </div>
       <div className="field md:col-span-2">

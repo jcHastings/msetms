@@ -25,6 +25,60 @@ export function fromInputDateTime(value: string): string {
 
 export const DISPLAY_TIME_ZONE = "America/New_York";
 
+function officeOffsetMs(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const num = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const asUtc = Date.UTC(num("year"), num("month") - 1, num("day"), num("hour"), num("minute"), num("second"));
+  return asUtc - instant.getTime();
+}
+
+export function officeWallToUtc(ymd: string, hours: number, minutes: number, seconds = 0): Date {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day, hours, minutes, seconds);
+  const offset1 = officeOffsetMs(new Date(utcGuess));
+  const instant = utcGuess - offset1;
+  const offset2 = officeOffsetMs(new Date(instant));
+  return new Date(utcGuess - offset2);
+}
+
+/** datetime-local value as America/New_York wall time. */
+export function fromOfficeDateTime(value: string): string {
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) throw new Error("Enter a date and time.");
+  return officeWallToUtc(
+    `${match[1]}-${match[2]}-${match[3]}`,
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] ?? 0),
+  ).toISOString();
+}
+
+export function toOfficeDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const ymd = ymdInTimeZone(date, DISPLAY_TIME_ZONE);
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = bits.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = bits.find((part) => part.type === "minute")?.value ?? "00";
+  return `${ymd}T${hour}:${minute}`;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
@@ -39,6 +93,42 @@ function dateOnlyParts(iso: string): { year: number; month: number; day: number 
 
 function formatMdYParts(year: number, month: number, day: number): string {
   return `${pad2(month)}/${pad2(day)}/${String(year).slice(-2)}`;
+}
+
+export function formatMdYFull(iso: string): string {
+  const parts = dateOnlyParts(iso);
+  if (parts) return `${pad2(parts.month)}/${pad2(parts.day)}/${parts.year}`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const month = bits.find((part) => part.type === "month")?.value ?? "01";
+  const day = bits.find((part) => part.type === "day")?.value ?? "01";
+  const year = bits.find((part) => part.type === "year")?.value ?? "0000";
+  return `${month}/${day}/${year}`;
+}
+
+export function formatAccountingDateTime(iso: string): string {
+  try {
+    const raw = String(iso ?? "").trim();
+    if (!raw) return "—";
+    if (dateOnlyParts(raw)) return formatMdYFull(raw);
+    const date = parseDisplayDate(raw);
+    if (!date) return "—";
+    const datePart = formatMdYFull(date.toISOString());
+    const timePart = date.toLocaleTimeString("en-US", {
+      timeZone: DISPLAY_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `${datePart} ${timePart}`;
+  } catch {
+    return "—";
+  }
 }
 
 export function formatMdYDisplay(iso: string): string {
@@ -75,6 +165,50 @@ export function formatDateTime(iso: string): string {
   } catch {
     return "—";
   }
+}
+
+/** Orbcomm compact cell: no path until View. Expired includes a missing/invalid expiry. */
+export function compactTrailerShareState(
+  sharePath: string,
+  expiresAt: string,
+  now = Date.now(),
+): "none" | "live" | "expired" {
+  if (!sharePath) return "none";
+  const expires = Date.parse(expiresAt);
+  if (Number.isFinite(expires) && expires > now) return "live";
+  return "expired";
+}
+
+/** Orbcomm table: `09/02 8:04p` — no year, single-letter am/pm. */
+export function formatCompactShareExpiry(iso: string): string {
+  try {
+    const raw = String(iso ?? "").trim();
+    if (!raw) return "—";
+    const date = parseDisplayDate(raw);
+    if (!date) return "—";
+    const bits = new Intl.DateTimeFormat("en-US", {
+      timeZone: DISPLAY_TIME_ZONE,
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) => bits.find((item) => item.type === type)?.value ?? "";
+    const period = (part("dayPeriod") || "AM").slice(0, 1).toLowerCase();
+    return `${part("month")}/${part("day")} ${part("hour")}:${part("minute")}${period}`;
+  } catch {
+    return "—";
+  }
+}
+
+/** Dispatch board: date on line 1, time on line 2. Do not keep them on one line. */
+export function formatBoardDateTime(iso: string): { date: string; time: string } {
+  const combined = formatDateTime(iso);
+  if (!combined || combined === "—") return { date: "—", time: "" };
+  const match = combined.match(/^(\d{1,2}\/\d{1,2}\/\d{2})(?:\s+(.+))?$/);
+  if (!match) return { date: combined, time: "" };
+  return { date: match[1], time: (match[2] ?? "").trim() };
 }
 
 function parseDisplayDate(raw: string): Date | null {

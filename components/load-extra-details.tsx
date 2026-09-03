@@ -13,7 +13,7 @@ export function LoadExtraDetails({
   claims: ClaimRow[];
 }) {
   return (
-    <section className="card mt-4 p-5">
+    <section className="card mt-2 p-3">
       <h2 className="text-sm font-semibold">Claim / OS&D</h2>
       {claims.length ? (
         <ul className="mt-2 text-sm">

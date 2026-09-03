@@ -138,14 +138,28 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
+  const qboLine = (item: { category: string; payee: string; notes: string; total: number | null }): QboInvoiceLine => ({
+    name: labelForPayCategory(item.category),
+    description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+    amount: item.total ?? 0,
+  });
   if (payItems.length) {
-    return payItems.map((item) => ({
-      name: labelForPayCategory(item.category),
-      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
-      amount: item.total ?? 0,
-    }));
+    const flats = payItems.filter((item) => item.category === "flat_rate");
+    const extras = payItems.filter((item) => item.category !== "flat_rate" && item.category !== "lumper");
+    const lines: QboInvoiceLine[] = [];
+    if (flats.length) {
+      lines.push(...flats.map(qboLine));
+    } else {
+      const rate = customerBilledRate(load);
+      if (rate != null) {
+        lines.push({ name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate });
+      }
+    }
+    lines.push(...extras.map(qboLine));
+    return lines;
   }
-  const rate = requireCustomerRate(load);
+  const rate = customerBilledRate(load);
+  if (rate == null) return [];
   const lines: QboInvoiceLine[] = [
     { name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
   ];
@@ -236,6 +250,7 @@ export async function sendLoadToQuickbooks(
     throw new Error("This load was already sent to QuickBooks. Confirm to send again.");
   }
   const preview = previewQuickbooksInvoice(load);
+  assertCustomerInvoiceReady(preview);
   const sentAt = new Date().toISOString();
 
   if (!hasQuickbooksSession()) {
@@ -302,10 +317,17 @@ export async function getQuickbooksStatus(): Promise<QboStatus> {
   }
 }
 
-function requireCustomerRate(load: LoadView): number {
-  if (load.rate == null || Number.isNaN(load.rate)) {
-    throw new Error("Set a customer rate before invoicing.");
+export const QBO_MISSING_RATE_MESSAGE =
+  "This load has no customer billed rate. Set a rate on Financials before sending to QuickBooks.";
+
+function assertCustomerInvoiceReady(preview: QboInvoicePreview): void {
+  if (!preview.lines.length || preview.amount <= 0) {
+    throw new Error(QBO_MISSING_RATE_MESSAGE);
   }
+}
+
+function customerBilledRate(load: LoadView): number | null {
+  if (load.rate == null || Number.isNaN(load.rate) || load.rate <= 0) return null;
   return load.rate;
 }
 

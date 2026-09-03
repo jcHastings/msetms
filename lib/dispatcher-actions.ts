@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
+import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import {
   fromInputDateTime,
   isAppointmentSchedule,
@@ -13,20 +14,33 @@ import {
 import { assertNyBoroughState } from "./places-shared";
 import {
   authenticateDispatcher,
+  authenticateDispatcherByEmail,
   clearDispatcherSession,
+  getDispatcher,
   getPendingTwoFactorDispatcherId,
+  isTwoFactorRequired,
+  readTrustedDeviceCookie,
   requireCapability,
   requireLoadAssigner,
   requireLoadEditor,
   setDispatcherSession,
   setPendingTwoFactor,
+  writeTrustedDeviceCookie,
 } from "./dispatcher-session";
+import { findTrustedDevice, isRememberDeviceRequested, rememberTrustedDevice } from "./dispatcher-device";
 import {
   canAccessAccounting,
+  canEmailInvoice,
   canLogCheckCall,
   canSendSms,
 } from "./settings-shared";
-import { consumeRecoveryCode, isDispatcherTotpEnrolled, verifyDispatcherTotp } from "./dispatcher-totp";
+import {
+  composeSignInCodeEmail,
+  issueEmailOtp,
+  maskEmail,
+  verifyEmailOtp,
+} from "./dispatcher-email-otp";
+import { isUsableEmail } from "./mail-shared";
 import {
   assignLoadDispatcher,
   cloneLoad,
@@ -36,6 +50,11 @@ import {
   setLoadWatched,
   updateLoadDetails,
 } from "./queries";
+import {
+  applyWorkflowAfterGeofence,
+  applyWorkflowOnDocumentAction,
+  maybeAssignCreatingDispatcher,
+} from "./workflow";
 import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
@@ -65,46 +84,95 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
 }
 
+async function sendSignInCode(
+  dispatcherId: number,
+  resend = false,
+  rememberDevice = false,
+): Promise<ActionResult> {
+  const issued = issueEmailOtp(dispatcherId, { resend });
+  const mail = composeSignInCodeEmail({ code: issued.code });
+  const { sendMail } = await import("./integrations/mail");
+  await sendMail({ to: issued.email, subject: mail.subject, text: mail.text });
+  await setPendingTwoFactor(dispatcherId);
+  return {
+    ok: true,
+    needsEmailCode: true,
+    rememberDevice,
+    maskedEmail: maskEmail(issued.email),
+    message: `We sent a sign-in code to ${maskEmail(issued.email)}.`,
+  };
+}
+
+async function finishOfficeLogin(dispatcherId: number, remember: boolean): Promise<void> {
+  if (remember) {
+    const cookie = rememberTrustedDevice(dispatcherId, await readTrustedDeviceCookie());
+    await writeTrustedDeviceCookie(cookie);
+  }
+  await setDispatcherSession(dispatcherId);
+}
+
 export async function dispatcherLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const emailCode = String(formData.get("email_code") ?? "").trim();
+  const resend = String(formData.get("resend") ?? "") === "1";
+  const remember = isRememberDeviceRequested(formData);
+  const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
   try {
-    const totp = String(formData.get("totp") ?? "").trim();
-    const recoveryCode = String(formData.get("recovery_code") ?? "").trim();
-    if (totp || recoveryCode) {
+    if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
-      if (!pendingId) throw new Error("PIN step expired. Sign in again.");
-      if (!isDispatcherTotpEnrolled(pendingId)) throw new Error("2-step is not on for this user.");
-      if (totp) {
-        if (!verifyDispatcherTotp(pendingId, totp)) {
-          throw new Error("That authenticator code is not valid.");
-        }
-      } else {
-        consumeRecoveryCode(pendingId, recoveryCode);
-      }
-      await setDispatcherSession(pendingId);
+      if (!pendingId) throw new Error("Password step expired. Sign in again.");
+      if (resend) return await sendSignInCode(pendingId, true, remember);
+      verifyEmailOtp(pendingId, emailCode);
+      await recordLoginAttemptFromRequest({
+        kind: "office",
+        outcome: "success",
+        step: "email_code",
+        userId: pendingId,
+      });
+      await finishOfficeLogin(pendingId, remember);
       refresh();
-      redirect("/");
+      redirect(getDispatcher(pendingId)?.must_change_password ? "/login/change-password" : "/");
     }
 
-    const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
-    const pin = String(formData.get("pin") ?? "").trim();
-    if (!dispatcherId || !pin) throw new Error("Pick your name and enter your PIN.");
-    const dispatcher = authenticateDispatcher(dispatcherId, pin);
-    if (isDispatcherTotpEnrolled(dispatcher.id)) {
-      await setPendingTwoFactor(dispatcher.id);
-      return {
-        ok: true,
-        needsTotp: true,
-        message: "Enter the 6-digit code from your authenticator app.",
-      };
+    const password = String(formData.get("password") ?? "");
+    const email = String(formData.get("email") ?? "").trim();
+    if (!password) throw new Error("Enter your password.");
+    const dispatcher = email
+      ? authenticateDispatcherByEmail(email, password)
+      : dispatcherId
+        ? authenticateDispatcher(dispatcherId, password)
+        : (() => {
+            throw new Error("Enter your email and password.");
+          })();
+    const afterPassword = () => {
+      return dispatcher.must_change_password ? "/login/change-password" : "/";
+    };
+    const trusted = Boolean(findTrustedDevice(await readTrustedDeviceCookie(), dispatcher.id));
+    const skipEmailCode = !isTwoFactorRequired() || !isUsableEmail(dispatcher.email) || trusted;
+    if (skipEmailCode) {
+      await recordLoginAttemptFromRequest({
+        kind: "office",
+        outcome: "success",
+        step: "password",
+        userId: dispatcher.id,
+      });
+      await finishOfficeLogin(dispatcher.id, remember || trusted);
+      refresh();
+      redirect(afterPassword());
     }
-    await setDispatcherSession(dispatcher.id);
-    refresh();
-    redirect("/");
+    return await sendSignInCode(dispatcher.id, false, remember);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    const pendingId = emailCode || resend ? await getPendingTwoFactorDispatcherId() : null;
+    await recordLoginAttemptFromRequest({
+      kind: "office",
+      outcome: "failure",
+      step: emailCode || resend ? "email_code" : "password",
+      userId: pendingId ?? dispatcherId,
+      detail: publicLoginFailureDetail(error),
+    });
     return fail(error);
   }
 }
@@ -117,10 +185,11 @@ export async function dispatcherLogoutAction(): Promise<void> {
 
 export async function cloneLoadAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
-    await requireLoadEditor();
+    const actor = await requireLoadEditor();
     const id = parseOptionalInt(formData.get("load_id"));
     if (!id) throw new Error("Load is missing.");
     const cloned = cloneLoad(id);
+    maybeAssignCreatingDispatcher(cloned, actor.id);
     writeAudit("clone", "load", cloned, `from ${id}`);
     refresh();
     redirect(`/loads/${cloned}`);
@@ -189,10 +258,11 @@ export async function saveTemplateAction(formData: FormData): Promise<void> {
 
 export async function createFromTemplateAction(formData: FormData): Promise<void> {
   await withRequestAuditActor(async () => {
-    await requireLoadEditor();
+    const actor = await requireLoadEditor();
     const id = parseOptionalInt(formData.get("template_id"));
     if (!id) throw new Error("Template is missing.");
     const loadId = createLoadFromTemplate(id);
+    maybeAssignCreatingDispatcher(loadId, actor.id);
     refresh();
     redirect(`/loads/${loadId}`);
   });
@@ -384,7 +454,10 @@ export async function updateStopAction(formData: FormData): Promise<void> {
     const stop = getDb().prepare("SELECT load_id FROM load_stops WHERE id = ?").get(id) as
       | { load_id: number }
       | undefined;
-    if (stop) await refreshLoadRouteQuiet(stop.load_id);
+    if (stop) {
+      if (input.arrived_at || input.departed_at) applyWorkflowAfterGeofence(stop.load_id);
+      await refreshLoadRouteQuiet(stop.load_id);
+    }
     refresh();
   });
 }
@@ -518,6 +591,64 @@ export async function saveManualRouteMilesAction(
   });
 }
 
+export async function flagLoadExceptionAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId || !getLoad(loadId)) throw new Error("Load is missing.");
+    const note = requiredString(formData.get("note"), "Exception note");
+    recordLoadAudit({
+      loadId,
+      action: "exception",
+      field: "note",
+      newValue: note,
+    });
+    refresh();
+  });
+}
+
+export async function setStopAppointmentAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const stopId = parseOptionalInt(formData.get("stop_id"));
+    if (!stopId) throw new Error("Stop is missing.");
+    const stop = getStop(stopId);
+    if (!stop) throw new Error("Stop not found.");
+    const whenRaw = String(formData.get("appointment_at") ?? "").trim();
+    const confirmation = String(formData.get("confirmation") ?? "").trim();
+    const scheduleType = String(formData.get("schedule_type") ?? "appointment").trim() || "appointment";
+    const when = whenRaw ? fromInputDateTime(whenRaw) : stop.window_start;
+    updateStop(stopId, {
+      kind: stop.kind,
+      name: stop.name,
+      street: stop.street,
+      city: stop.city,
+      state: stop.state,
+      zip: stop.zip,
+      phone: stop.phone,
+      window_start: when,
+      window_end: isAppointmentSchedule(scheduleType) ? "" : stop.window_end,
+      confirmation,
+      cargo: stop.cargo,
+      reference: stop.reference,
+      instructions: stop.instructions,
+      notes: stop.notes,
+      location_id: stop.location_id,
+      arrived_at: stop.arrived_at,
+      departed_at: stop.departed_at,
+      schedule_type: scheduleType,
+    });
+    recordLoadAudit({
+      loadId: stop.load_id,
+      action: "appointment",
+      field: `${stop.kind}_appointment`,
+      oldValue: stop.window_start,
+      newValue: when,
+    });
+    refresh();
+  });
+}
+
 export async function exceptionAction(formData: FormData): Promise<void> {
   await requireLoadEditor();
   const key = String(formData.get("exception_key") ?? "").trim();
@@ -634,6 +765,7 @@ export async function requestDriverDocumentsAction(formData: FormData): Promise<
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       setLoadDocsRequested(loadId, true);
+      applyWorkflowOnDocumentAction(loadId, "docs_requested");
       refresh();
       return { ok: true, id: loadId, message: "Driver will see a request for BOL/POD/photos on this load." };
     } catch (error) {
@@ -660,6 +792,7 @@ export async function requestPodAction(formData: FormData): Promise<ActionResult
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       setLoadDocsRequested(loadId, true);
+      applyWorkflowOnDocumentAction(loadId, "docs_requested");
       refresh();
       return { ok: true, id: loadId, message: "POD requested from the driver." };
     } catch (error) {
@@ -877,6 +1010,43 @@ export async function sendLoadMailAction(formData: FormData): Promise<ActionResu
           kind === "driver_load"
             ? `Load information emailed to ${sent.to}.`
             : `Tracking update emailed to ${sent.to}.`,
+      };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function sendCustomerInvoiceMailAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const load = getLoad(loadId);
+      if (!load) throw new Error("Load not found.");
+      const { sendCustomerInvoiceMail } = await import("./load-mail");
+      const { MAIL_MISSING } = await import("./mail-shared");
+      const { mailConfigured } = await import("./integrations/mail");
+      if (!mailConfigured()) throw new Error(MAIL_MISSING);
+      await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
+      const extraIds = formData
+        .getAll("extra_id")
+        .map((value) => parseOptionalInt(value))
+        .filter((id): id is number => id != null);
+      const body = formData.has("body") ? String(formData.get("body") ?? "") : undefined;
+      const to = formData.has("to") ? String(formData.get("to") ?? "") : undefined;
+      const sent = await sendCustomerInvoiceMail(loadId, undefined, { extraIds, body, to });
+      recordLoadAudit({
+        loadId,
+        action: "email",
+        field: "customer_invoice",
+        newValue: sent.to,
+      });
+      refresh();
+      return {
+        ok: true,
+        id: loadId,
+        message: `Invoice emailed to ${sent.to} from ar@msloads.com.`,
       };
     } catch (error) {
       return fail(error);

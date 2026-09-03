@@ -1036,6 +1036,15 @@ export function formatDutyStatus(value: string): string {
   }
 }
 
+export function formatSamsaraStatusHos(hos: HosClock | null | undefined): string {
+  if (!hos) return "";
+  const duty = formatDutyStatus(hos.dutyStatus);
+  const drive = formatDurationMs(hos.driveRemainingMs);
+  if (duty && duty !== "—" && drive !== "—") return `${duty} · ${drive}`;
+  if (drive !== "—") return drive;
+  return duty === "—" ? "" : duty;
+}
+
 function normalizeKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_\-#]/g, "");
 }

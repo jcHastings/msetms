@@ -1,4 +1,11 @@
 import { cookies } from "next/headers";
+import { DEVICE_COOKIE, DEVICE_TTL_MS } from "./dispatcher-device";
+import {
+  PASSWORD_NOT_RECOGNIZED,
+  PASSWORD_UNSET,
+  findActiveDispatcherByEmail,
+  verifyDispatcherPassword,
+} from "./dispatcher-password";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
 import {
   canAccessAccounting,
@@ -68,12 +75,24 @@ export function getDispatcher(id: number): Dispatcher | null {
   return user ? toPublicDispatcher(user) : null;
 }
 
-export function authenticateDispatcher(dispatcherId: number, pin: string): Dispatcher {
+export function authenticateDispatcher(dispatcherId: number, password: string): Dispatcher {
   const user = getDispatcherUser(dispatcherId);
-  if (!user || !user.active || user.pin !== pin.trim()) {
-    throw new Error("Dispatcher or PIN is not recognized.");
+  if (!user || !user.active) {
+    throw new Error(PASSWORD_NOT_RECOGNIZED);
+  }
+  if (!user.has_password) {
+    throw new Error(PASSWORD_UNSET);
+  }
+  if (!verifyDispatcherPassword(dispatcherId, password)) {
+    throw new Error(PASSWORD_NOT_RECOGNIZED);
   }
   return toPublicDispatcher(user);
+}
+
+export function authenticateDispatcherByEmail(email: string, password: string): Dispatcher {
+  const row = findActiveDispatcherByEmail(email);
+  if (!row) throw new Error(PASSWORD_NOT_RECOGNIZED);
+  return authenticateDispatcher(row.id, password);
 }
 
 const SCRIPT_ACTOR: Dispatcher = {
@@ -81,9 +100,12 @@ const SCRIPT_ACTOR: Dispatcher = {
   name: "script",
   role: "admin",
   email: "",
+  phone: "",
   active: 1,
   permission_group: "all",
   totp_enrolled: false,
+  has_password: false,
+  must_change_password: false,
 };
 
 async function sessionCookieValue(): Promise<string | undefined | "no-request"> {
@@ -165,6 +187,25 @@ export async function clearDispatcherSession(): Promise<void> {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   jar.delete(PENDING_COOKIE);
+}
+
+export async function readTrustedDeviceCookie(): Promise<string> {
+  try {
+    const jar = await cookies();
+    return jar.get(DEVICE_COOKIE)?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function writeTrustedDeviceCookie(value: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(DEVICE_COOKIE, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: DEVICE_TTL_MS / 1000,
+  });
 }
 
 export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {

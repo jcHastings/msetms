@@ -38,8 +38,8 @@ export type FleetMapPin = {
 export type FleetPinLabelOrigin = { x: number; y: number };
 
 const PIN_LABEL_CLUSTER_DECIMALS = 4;
-const PIN_LABEL_CENTER = 14;
-const PIN_LABEL_Y_SLOTS = [0, -14, 14] as const;
+const PIN_LABEL_CENTER = 5;
+const PIN_LABEL_Y_SLOTS = [0, -12, 12] as const;
 
 export function clusterPinLabelSlots(
   pins: Array<{ id: string; lat: number; lng: number; label?: string }>,
@@ -88,6 +88,7 @@ export type FleetMapMissing = {
 export type FleetStatusRow = {
   id: string;
   trailer: string;
+  trailerId: number;
   href: string;
   power: string;
   setpointF: number | null;
@@ -95,6 +96,19 @@ export type FleetStatusRow = {
   alarm: string;
   location: string;
   messageAt: string;
+  sharePath: string;
+  shareExpiresAt: string;
+};
+
+export type SamsaraStatusRow = {
+  id: string;
+  truck: string;
+  href: string;
+  location: string;
+  miles: number | null;
+  driver: string;
+  driverHref: string;
+  hos: string;
 };
 
 export type FleetMapModel = {
@@ -103,6 +117,7 @@ export type FleetMapModel = {
   pins: FleetMapPin[];
   missing: FleetMapMissing[];
   statusRows?: FleetStatusRow[];
+  truckStatusRows?: SamsaraStatusRow[];
 };
 
 export function motionFromSpeedMph(speedMph: number | null | undefined): FleetMapMotion | "" {
@@ -170,4 +185,41 @@ export function reeferPinStatusFromSnapshot(input: {
 
 export function orbcommReeferPinColor(status: OrbcommReeferPinStatus): string {
   return ORBCOMM_REEFER_PIN_COLOR[status];
+}
+
+export function orbcommMapPinStyle(input: {
+  operatingMode?: string | null;
+  powerOn?: boolean | null;
+  speedMph?: number | null;
+  headingDeg?: number | null;
+}): { pinColor: string; pinShape: FleetMapPinShape; headingDeg: number | null } {
+  return {
+    pinColor: orbcommReeferPinColor(
+      reeferPinStatusFromSnapshot({
+        operatingMode: input.operatingMode,
+        powerOn: input.powerOn,
+      }),
+    ),
+    pinShape: orbcommPinShape(input.speedMph),
+    headingDeg: input.headingDeg ?? null,
+  };
+}
+
+export function orbcommMapPinFromReading(
+  row?: {
+    operating_mode?: string | null;
+    operatingMode?: string | null;
+    powerOn?: boolean | null;
+    speed_mph?: number | null;
+    speedMph?: number | null;
+    heading_deg?: number | null;
+    headingDeg?: number | null;
+  } | null,
+): { pinColor: string; pinShape: FleetMapPinShape; headingDeg: number | null } {
+  return orbcommMapPinStyle({
+    operatingMode: row?.operatingMode ?? row?.operating_mode,
+    powerOn: row?.powerOn,
+    speedMph: row?.speedMph ?? row?.speed_mph,
+    headingDeg: row?.headingDeg ?? row?.heading_deg,
+  });
 }

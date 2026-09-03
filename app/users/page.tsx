@@ -17,13 +17,18 @@ export default async function UsersPage() {
         title="Users"
         actions={
           canManage ? (
-            <Link href="/users/new" className="btn btn-primary">
-              Add user
-            </Link>
+            <>
+              <Link href="/settings/sign-in" className="btn btn-secondary">
+                Sign-in log
+              </Link>
+              <Link href="/users/new" className="btn btn-primary">
+                Add user
+              </Link>
+            </>
           ) : null
         }
       />
-      <UsersTable users={users} canManage={canManage} />
+      <UsersTable users={users} canManage={canManage} currentUserId={dispatcher?.id ?? null} />
     </>
   );
 }

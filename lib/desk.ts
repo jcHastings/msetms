@@ -1,5 +1,10 @@
 import { getDb } from "./db";
-import { listExceptionInbox, type ExceptionInbox, type InboxException } from "./exceptions";
+import {
+  isOutOfToleranceException,
+  listExceptionInbox,
+  type ExceptionInbox,
+  type InboxException,
+} from "./exceptions";
 import { getLoad, listLoads } from "./queries";
 import type { LoadView } from "./types";
 
@@ -100,6 +105,23 @@ export function listLiveExceptionInbox(filters?: {
     ...inbox,
     items: filtered,
     attentionCount: new Set(filtered.map((item) => item.loadId)).size,
+  };
+}
+
+/** Ranked out-of-tolerance loads only. A load leaves when every flag is back in tolerance. */
+export function listWorkbenchInbox(filters?: {
+  kind?: string;
+  customer?: string;
+  q?: string;
+}): ExceptionInbox {
+  const live = listLiveExceptionInbox(filters);
+  const items = live.items.filter(isOutOfToleranceException);
+  const attentionIds = new Set(items.map((item) => item.loadId));
+  const active = listLoads({ status: "active" });
+  return {
+    items,
+    attentionCount: attentionIds.size,
+    fineCount: active.filter((load) => !attentionIds.has(load.id)).length,
   };
 }
 

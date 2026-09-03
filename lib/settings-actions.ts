@@ -10,11 +10,13 @@ import {
   confirmTotpEnrollment,
   resetDispatcherTotp,
 } from "./dispatcher-totp";
+import { createAlertRule, deleteAlertRule, markAllOfficeNotificationsRead, markOfficeNotificationRead } from "./alert-rules";
 import {
   addDropdownOption,
   clearCompanyLogo,
   createDispatcherUser,
   defaultPermissionGroupForRole,
+  deleteDispatcherUser,
   deleteDropdownOption,
   saveCompanyLogo,
   setDropdownOptionActive,
@@ -29,8 +31,19 @@ import {
   updateTaxSettings,
   updateTwoFactorPolicy,
   updateUnitSettings,
+  updateDocumentFont,
+  updateInvoiceEmailBody,
+  updateWorkflowSettings,
+  getWorkflowSettings,
   type DocumentType,
 } from "./settings";
+import {
+  minutesFromAmount,
+  type WorkflowCard,
+  type WorkflowDurationUnit,
+  type WorkflowLateKind,
+  type WorkflowLateMode,
+} from "./workflow-shared";
 import { fileToBuffer } from "./files";
 import type { ActionResult } from "./types";
 
@@ -120,6 +133,50 @@ export async function saveTaxAction(
   }
 }
 
+export async function createAlertRuleAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    const recipientIds = formData
+      .getAll("recipient_ids")
+      .map((value) => Number(value))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    createAlertRule({
+      name: requiredString(formData.get("name"), "Name of alert"),
+      triggerKey: String(formData.get("trigger_key") ?? ""),
+      recipientIds,
+      message: String(formData.get("message") ?? ""),
+    });
+    refresh();
+    return { ok: true, message: "Alert created." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteAlertRuleAction(formData: FormData): Promise<void> {
+  await requireSettingsEditor();
+  const id = parseOptionalInt(formData.get("rule_id"));
+  if (!id) throw new Error("Alert is missing.");
+  deleteAlertRule(id);
+  refresh();
+}
+
+export async function markOfficeNotificationReadAction(formData: FormData): Promise<void> {
+  const dispatcher = await requireSignedInDispatcher();
+  const id = parseOptionalInt(formData.get("notification_id"));
+  if (id) markOfficeNotificationRead(id, dispatcher.id);
+  refresh();
+}
+
+export async function markAllOfficeNotificationsReadAction(): Promise<void> {
+  const dispatcher = await requireSignedInDispatcher();
+  markAllOfficeNotificationsRead(dispatcher.id);
+  refresh();
+}
+
 export async function saveAlertsAction(
   _prev: ActionResult | null,
   formData: FormData,
@@ -191,6 +248,20 @@ export async function saveLoadManagementAction(
   }
 }
 
+export async function saveInvoiceEmailAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    updateInvoiceEmailBody(String(formData.get("invoice_email_body") ?? ""));
+    refresh();
+    return { ok: true, message: "Invoice email saved." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function saveDocumentDefaultsAction(
   _prev: ActionResult | null,
   formData: FormData,
@@ -206,6 +277,88 @@ export async function saveDocumentDefaultsAction(
     });
     refresh();
     return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveDocumentFontAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    updateDocumentFont({
+      family: String(formData.get("document_font_family") ?? "helvetica"),
+      scale: parseOptionalInt(formData.get("document_font_scale")) ?? 100,
+    });
+    refresh();
+    return { ok: true, message: "Font settings saved." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+function asDurationUnit(value: FormDataEntryValue | null, fallback: WorkflowDurationUnit): WorkflowDurationUnit {
+  return String(value ?? fallback) === "hours" ? "hours" : "minutes";
+}
+
+export async function saveWorkflowAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireSettingsEditor();
+    const card = String(formData.get("card") ?? "all") as WorkflowCard | "all";
+    const current = getWorkflowSettings();
+    const lateKind = String(formData.get("late_kind") ?? current.lateStopKind) as WorkflowLateKind;
+    const lateMode = String(formData.get("late_mode") ?? current.lateStopMode) as WorkflowLateMode;
+    const lateUnit = asDurationUnit(formData.get("late_unit"), current.lateStopUnit);
+    const noActivityUnit = asDurationUnit(formData.get("no_activity_unit"), current.noActivityUnit);
+    const next = { ...current };
+    if (card === "user_assign" || card === "all") {
+      next.autoAssignDispatcherOnCreate = String(formData.get("auto_assign_dispatcher") ?? "") === "1";
+    }
+    if (card === "blocks" || card === "all") {
+      next.blockAssignExpiredDriver = String(formData.get("block_driver") ?? "") === "1";
+      next.blockAssignExpiredTruck = String(formData.get("block_truck") ?? "") === "1";
+      next.blockAssignExpiredTrailer = String(formData.get("block_trailer") ?? "") === "1";
+    }
+    if (card === "arrive_depart" || card === "all") {
+      next.arrivePickupLoadStatus = String(formData.get("arrive_pu_load") ?? "");
+      next.arrivePickupTruckStatus = String(formData.get("arrive_pu_truck") ?? "");
+      next.departPickupLoadStatus = String(formData.get("depart_pu_load") ?? "");
+      next.departPickupTruckStatus = String(formData.get("depart_pu_truck") ?? "");
+      next.arriveDeliveryLoadStatus = String(formData.get("arrive_del_load") ?? "");
+      next.arriveDeliveryTruckStatus = String(formData.get("arrive_del_truck") ?? "");
+    }
+    if (card === "driver_assign" || card === "all") {
+      next.driverAssignLoadStatus = String(formData.get("driver_assign_load") ?? "");
+      next.driverAssignTruckStatus = String(formData.get("driver_assign_truck") ?? "");
+    }
+    if (card === "late" || card === "all") {
+      next.lateStopKind = lateKind === "pickup" || lateKind === "delivery" ? lateKind : "either";
+      next.lateStopMode = lateMode === "same_day" ? "same_day" : "specified";
+      next.lateStopUnit = lateUnit;
+      next.lateStopMinutes = minutesFromAmount(parseOptionalInt(formData.get("late_minutes")) ?? 60, lateUnit);
+      next.lateStopLoadStatus = String(formData.get("late_load") ?? "");
+      next.lateStopOnlyStatuses = formData.getAll("late_only").map(String);
+    }
+    if (card === "documents" || card === "all") {
+      next.invoiceSentLoadStatus = String(formData.get("invoice_sent_load") ?? "");
+      next.invoiceSentTruckStatus = String(formData.get("invoice_sent_truck") ?? "");
+      next.docsRequestedLoadStatus = String(formData.get("docs_requested_load") ?? "");
+      next.docsRequestedTruckStatus = String(formData.get("docs_requested_truck") ?? "");
+    }
+    if (card === "no_activity" || card === "all") {
+      next.noActivityUnit = noActivityUnit;
+      next.noActivityMinutes = minutesFromAmount(parseOptionalInt(formData.get("no_activity_minutes")) ?? 0, noActivityUnit);
+      next.noActivityLoadStatus = String(formData.get("no_activity_load") ?? "");
+      next.noActivityOnlyStatuses = formData.getAll("no_activity_only").map(String);
+    }
+    updateWorkflowSettings(next);
+    refresh();
+    return { ok: true, message: "Workflow saved." };
   } catch (error) {
     return fail(error);
   }
@@ -280,9 +433,10 @@ export async function createDispatcherUserAction(
     const role = String(formData.get("role") ?? "dispatcher");
     const id = createDispatcherUser({
       name: requiredString(formData.get("name"), "Name"),
-      pin: requiredString(formData.get("pin"), "PIN"),
+      password: requiredString(formData.get("password"), "Password"),
       role,
       email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
       permission_group:
         String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
@@ -367,7 +521,7 @@ export async function resetDispatcherTotpAction(
     if (!id) throw new Error("User is missing.");
     resetDispatcherTotp(id, admin.name);
     refresh();
-    return { ok: true, message: "2-step was reset. They can sign in with PIN until they enroll again." };
+    return { ok: true, message: "2-step was reset. They sign in with their password and email code." };
   } catch (error) {
     return fail(error);
   }
@@ -383,9 +537,10 @@ export async function updateDispatcherUserAction(
     const role = String(formData.get("role") ?? "dispatcher");
     updateDispatcherUser(id, {
       name: requiredString(formData.get("name"), "Name"),
-      pin: String(formData.get("pin") ?? ""),
+      password: String(formData.get("password") ?? ""),
       role,
       email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
       permission_group:
         String(formData.get("permission_group") ?? "").trim() || defaultPermissionGroupForRole(role),
       active: String(formData.get("active") ?? "") === "1",
@@ -393,6 +548,23 @@ export async function updateDispatcherUserAction(
     refresh();
     return { ok: true, id };
   } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteDispatcherUserAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const admin = await requireUserAdmin();
+    const id = parseOptionalInt(formData.get("user_id"));
+    if (!id) throw new Error("User is missing.");
+    deleteDispatcherUser(id, admin.id);
+    refresh();
+    redirect("/users");
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
   }
 }

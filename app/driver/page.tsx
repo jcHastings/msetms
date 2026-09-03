@@ -10,6 +10,7 @@ import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { DriverDestinations } from "@/components/driver-destinations";
 import { pickDriverDestinationLoad } from "@/lib/driver-destinations-shared";
+import { driverLoadHasAssignedTrailer } from "@/lib/driver-trailer";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
 import { isActiveLoadStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
@@ -52,21 +53,21 @@ export default async function DriverHomePage() {
       {(() => {
         const current = pickDriverDestinationLoad(active, delivered);
         const loadHref = current ? `/driver/loads/${current.id}` : "";
-        return (
-          <DriverDestinations
-            items={[
-              { href: "#active", label: "Dispatch" },
-              { href: "#active", label: "Active" },
-              { href: "#delivered", label: "Delivered" },
-              { href: current ? `${loadHref}#upload` : "#active", label: "Upload", disabled: !current },
-              {
-                href: current ? `/api/loads/${current.id}/confirmation?packet=internal` : "#active",
-                label: "Confirmation",
-                disabled: !current,
-              },
-            ]}
-          />
-        );
+        const items = [
+          { href: "#active", label: "Dispatch" },
+          { href: "#active", label: "Active" },
+          { href: "#delivered", label: "Delivered" },
+          { href: current ? `${loadHref}#upload` : "#active", label: "Upload", disabled: !current },
+          {
+            href: current ? `/api/loads/${current.id}/confirmation?packet=internal` : "#active",
+            label: "Confirmation",
+            disabled: !current,
+          },
+        ];
+        if (current && driverLoadHasAssignedTrailer(current)) {
+          items.push({ href: `${loadHref}/trailer`, label: "Trailer" });
+        }
+        return <DriverDestinations items={items} />;
       })()}
 
       <section id="active" className="mt-4">

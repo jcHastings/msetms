@@ -29,8 +29,13 @@ export const SETTINGS_SECTIONS = [
       },
       {
         href: "/settings/alerts",
-        label: "Alerts",
-        hint: "30/60 day compliance windows",
+        label: "Automated Alerting",
+        hint: "Rules on driver and unit expiry dates",
+      },
+      {
+        href: "/settings/workflow",
+        label: "Automated Workflow",
+        hint: "If-this-then-that: assign blocks, arrive/depart, late stops",
       },
       {
         href: "/settings/routing",
@@ -50,7 +55,12 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/documents",
         label: "Document defaults",
-        hint: "Header, footer, terms, and font size",
+        hint: "Driver confirmation, invoice, customer confirmation, BOL",
+      },
+      {
+        href: "/settings/invoice-email",
+        label: "Invoice email",
+        hint: "Body sent with customer invoices",
       },
     ],
   },
@@ -75,7 +85,12 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/security",
         label: "2-step verification",
-        hint: "Authenticator app for dispatcher login",
+        hint: "Email sign-in code after password, when the user has an email",
+      },
+      {
+        href: "/settings/sign-in",
+        label: "Sign-in log",
+        hint: "Successful and failed sign-ins, with time and IP",
       },
     ],
   },
@@ -164,12 +179,14 @@ export const PAY_METHODS = [
 export type DispatcherUser = {
   id: number;
   name: string;
-  pin: string;
   role: string;
   email: string;
+  phone: string;
   active: number;
   permission_group: string;
   totp_enrolled: number;
+  has_password: number;
+  must_change_password: number;
 };
 
 export type PublicDispatcher = {
@@ -177,15 +194,27 @@ export type PublicDispatcher = {
   name: string;
   role: string;
   email: string;
+  phone: string;
   active: number;
   permission_group: string;
   totp_enrolled: boolean;
+  has_password: boolean;
+  must_change_password: boolean;
 };
 
 export function toPublicDispatcher(
   user: Pick<
     DispatcherUser,
-    "id" | "name" | "role" | "email" | "active" | "permission_group" | "totp_enrolled"
+    | "id"
+    | "name"
+    | "role"
+    | "email"
+    | "phone"
+    | "active"
+    | "permission_group"
+    | "totp_enrolled"
+    | "has_password"
+    | "must_change_password"
   >,
 ): PublicDispatcher {
   return {
@@ -193,9 +222,12 @@ export function toPublicDispatcher(
     name: user.name,
     role: user.role,
     email: user.email,
+    phone: user.phone ?? "",
     active: user.active,
     permission_group: user.permission_group,
     totp_enrolled: Boolean(user.totp_enrolled),
+    has_password: Boolean(user.has_password),
+    must_change_password: Boolean(user.must_change_password),
   };
 }
 
@@ -260,6 +292,22 @@ export function canEditSettings(role: string): boolean {
 
 export function canManageUsers(role: string): boolean {
   return isAdminRole(role);
+}
+
+export function canDeleteDispatcherUser(input: {
+  targetId: number;
+  targetRole: string;
+  targetActive: boolean | number;
+  actorId?: number | null;
+  otherActiveAdmins: number;
+}): { ok: true } | { ok: false; reason: string } {
+  if (input.actorId != null && input.actorId === input.targetId) {
+    return { ok: false, reason: "You cannot delete your own login." };
+  }
+  if (input.targetActive && isAdminRole(input.targetRole) && input.otherActiveAdmins < 1) {
+    return { ok: false, reason: "Keep at least one active Administrator." };
+  }
+  return { ok: true };
 }
 
 export function canAccessAccounting(role: string): boolean {
@@ -331,18 +379,23 @@ export function canSendSms(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+export function canEmailInvoice(role: string): boolean {
+  return canEditLoads(role);
+}
+
 export function canLogCheckCall(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
 export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/driver/login") return true;
-  if (href === "/" || href === "/board" || href === "/search") return true;
+  if (href === "/" || href === "/board" || href === "/desk" || href === "/search" || href === "/control") return true;
   if (href === "/loads/new" || href === "/loads/templates" || href === "/loads/import-sheet") {
     return canEditLoads(role);
   }
   if (href === "/locations") return canEditLocations(role) || accessRole(role) === "read_only";
   if (href === "/audit") return canViewAudit(role);
+  if (href === "/settings/sign-in") return canManageUsers(role);
   if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href === "/safety") {
     return canEditFleet(role);
   }

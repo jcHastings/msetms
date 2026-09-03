@@ -110,7 +110,7 @@ export function LoadForm({
   return (
     <form
       id={formId}
-      className={workspace ? "space-y-6" : "card space-y-6 p-6"}
+      className={workspace ? "space-y-3" : "card space-y-4 p-4"}
       onSubmit={(event) => {
         event.preventDefault();
         startTransition(() => {
@@ -171,7 +171,7 @@ export function LoadForm({
       </div>
       {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}
       {resolvedScreen === "all" && !includeLane && !load ? (
-        <section className={card ? "card p-6" : undefined}>
+        <section className={card ? "card p-3" : undefined}>
           <div className="field">
             <label htmlFor="special_instructions">Routing notes</label>
             <textarea
@@ -209,6 +209,8 @@ function RateConStopFields({ prefix, stop }: { prefix: "pickup" | "delivery"; st
       <input type="hidden" name={`${prefix}_stop_window_start`} value={stop.window_start} />
       <input type="hidden" name={`${prefix}_stop_window_end`} value={stop.window_end} />
       <input type="hidden" name={`${prefix}_stop_confirmation`} value={stop.confirmation} />
+      <input type="hidden" name={`${prefix}_stop_reference`} value={stop.reference} />
+      <input type="hidden" name={`${prefix}_stop_quantity`} value={stop.quantity} />
       <input type="hidden" name={`${prefix}_stop_notes`} value={stop.notes} />
     </>
   );

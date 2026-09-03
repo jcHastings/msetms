@@ -5,6 +5,7 @@ import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
 import { CustomerRateField, OwnerOperatorPayFields } from "@/components/load-rate-fields";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { formatMoney } from "@/lib/format";
+import { officeSharePercentForOoLoad } from "@/lib/settlement";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
 import { isOwnerOperator, type Load } from "@/lib/types";
@@ -47,21 +48,34 @@ export function LoadPayItems({
   const ooAmount = ownerOperator && !hasFlatExpense ? (load.oo_pay ?? 0) : 0;
   const expenseTotal = Math.round((sumItems(expenses) + ooAmount) * 100) / 100;
   const profit = Math.round((incomeTotal - expenseTotal) * 100) / 100;
+  const officePercent = officeSharePercentForOoLoad({
+    ownerOperator,
+    ooPercent: ooPercent ?? load.oo_percent,
+    ooPay: load.oo_pay,
+    billedRate: Number.isFinite(rateAmount) ? rateAmount : load.rate,
+  });
   const ooNames = ownerOperators.filter(Boolean);
   return (
-    <section data-load-tab="financials" className="space-y-6">
-      <div className="grid gap-3 md:grid-cols-3" data-financials-totals="">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Total income</div>
-          <div className="mt-1 text-lg font-semibold text-emerald-950">{formatMoney(incomeTotal)}</div>
+    <section data-load-tab="financials" className="space-y-3">
+      <div className="grid gap-2 md:grid-cols-3" data-financials-totals="">
+        <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Total income</div>
+          <div className="mt-0.5 text-sm font-semibold text-emerald-950">{formatMoney(incomeTotal)}</div>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Total expenses</div>
-          <div className="mt-1 text-lg font-semibold text-amber-950">{formatMoney(expenseTotal)}</div>
+        <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">Total expenses</div>
+          <div className="mt-0.5 text-sm font-semibold text-amber-950">{formatMoney(expenseTotal)}</div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">{formatMoney(profit)}</div>
+        <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Gross profit</div>
+          <div className="mt-0.5 flex items-baseline gap-2 text-sm font-semibold text-slate-900">
+            <span>{formatMoney(profit)}</span>
+            {officePercent != null ? (
+              <span className="text-slate-700" data-oo-office-percent="">
+                {officePercent}%
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
       <PayItemGroup
@@ -172,7 +186,7 @@ function PayItemGroup({
   const tone = side === "income" ? "finance-income" : "finance-expense";
   return (
     <section className={`card overflow-hidden ${tone}`}>
-      <div className="finance-head flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+      <div className="finance-head flex flex-wrap items-center justify-between gap-2 px-3 py-1.5">
         <h2 className="text-sm font-semibold">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           {actions}

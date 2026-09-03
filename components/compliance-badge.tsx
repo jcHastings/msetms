@@ -5,9 +5,7 @@ export function ComplianceBadge({ alerts }: { alerts: ComplianceAlert[] }) {
   const expired = alerts.some((alert) => alert.severity === "expired");
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-        expired ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-900"
-      }`}
+      className={`status-pill ${expired ? "status-tone-danger" : "status-tone-warning"}`}
     >
       {expired ? "Expired" : "Expiring"}
     </span>

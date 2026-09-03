@@ -1,5 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  BOL_TERMS,
+  CUSTOMER_CONFIRMATION_TERMS,
+  DRIVER_CONFIRMATION_TERMS,
+  shouldReplaceStoredTerms,
+} from "./document-copy";
+import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database } from "./sqlite";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
@@ -52,6 +59,7 @@ export function getDb(): Database {
   backfillDemoAccounting(db);
   backfillSampleLoads(db);
   backfillLoadNumbering(db);
+  backfillCustomerMainEmail(db);
 
   connection = db;
   connectedPath = dbPath;
@@ -373,6 +381,9 @@ export function migrate(db: Database): void {
   ensureColumn(db, "customers", "payment_terms", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "customers", "qbo_customer_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "customers", "qbo_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "main_email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "billing_email", "TEXT NOT NULL DEFAULT ''");
+  backfillCustomerMainEmail(db);
   ensureColumn(db, "trucks", "vin", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "plate_state", "TEXT NOT NULL DEFAULT ''");
@@ -620,6 +631,29 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
+    CREATE TABLE IF NOT EXISTS fuel_week_reports (
+      week_start_ymd TEXT PRIMARY KEY,
+      week_end_ymd TEXT NOT NULL,
+      stats_json TEXT NOT NULL,
+      driver_rollups_json TEXT NOT NULL DEFAULT '[]',
+      truck_rollups_json TEXT NOT NULL DEFAULT '[]',
+      tx_count INTEGER NOT NULL DEFAULT 0,
+      saved_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS login_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      step TEXT NOT NULL,
+      user_id INTEGER,
+      user_name TEXT NOT NULL DEFAULT '',
+      ip_address TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_audit_created ON login_audit(created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_login_audit_user ON login_audit(user_name, created_at DESC);
   `);
 
   for (const [column, definition] of [
@@ -651,8 +685,14 @@ export function migrate(db: Database): void {
     ["load_number_prefix", "TEXT NOT NULL DEFAULT 'MSE'"],
     ["load_number_next", "INTEGER NOT NULL DEFAULT 1001"],
     ["show_sample_data", "INTEGER NOT NULL DEFAULT 1"],
-    ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 0"],
+    ["require_dispatcher_2fa", "INTEGER NOT NULL DEFAULT 1"],
+    ["email_otp_shipped", "INTEGER NOT NULL DEFAULT 0"],
+    ["password_change_gate_shipped", "INTEGER NOT NULL DEFAULT 0"],
     ["alert_gps_quiet_hours", "REAL NOT NULL DEFAULT 2"],
+    ["document_font_family", "TEXT NOT NULL DEFAULT 'helvetica'"],
+    ["document_font_scale", "INTEGER NOT NULL DEFAULT 100"],
+    ["workflow_json", "TEXT NOT NULL DEFAULT ''"],
+    ["invoice_email_body", "TEXT NOT NULL DEFAULT ''"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
@@ -682,6 +722,77 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_totp_recovery_dispatcher
       ON dispatcher_totp_recovery_codes(dispatcher_id, used_at);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatcher_email_otp (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_otp_dispatcher
+      ON dispatcher_email_otp(dispatcher_id, used_at);
+    CREATE TABLE IF NOT EXISTS dispatcher_trusted_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_trusted_devices_dispatcher
+      ON dispatcher_trusted_devices(dispatcher_id, expires_at);
+  `);
+  ensureColumn(db, "dispatchers", "password_hash", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "phone", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "dispatchers", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "company_profile", "password_change_gate_shipped", "INTEGER NOT NULL DEFAULT 0");
+  const changeGate = db.prepare("SELECT password_change_gate_shipped AS shipped FROM company_profile WHERE id = 1").get() as
+    | { shipped?: number }
+    | undefined;
+  if (!Number(changeGate?.shipped)) {
+    db.prepare(
+      "UPDATE dispatchers SET must_change_password = 1 WHERE length(trim(password_hash)) > 0",
+    ).run();
+    db.prepare("UPDATE company_profile SET password_change_gate_shipped = 1 WHERE id = 1").run();
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatcher_password_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_history_dispatcher
+      ON dispatcher_password_history(dispatcher_id);
+    CREATE TABLE IF NOT EXISTS dispatcher_password_reset (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_reset_token
+      ON dispatcher_password_reset(token_hash, used_at);
+    CREATE TABLE IF NOT EXISTS dispatcher_password_sms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_sms_dispatcher
+      ON dispatcher_password_sms(dispatcher_id, used_at);
+  `);
+  const otpShip = db.prepare("SELECT email_otp_shipped AS shipped FROM company_profile WHERE id = 1").get() as
+    | { shipped?: number }
+    | undefined;
+  if (!Number(otpShip?.shipped)) {
+    db.prepare("UPDATE company_profile SET require_dispatcher_2fa = 1, email_otp_shipped = 1 WHERE id = 1").run();
+  }
   ensureColumn(db, "loads", "is_sample", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "route_miles", "REAL");
   ensureColumn(db, "locations", "call_before", "INTEGER NOT NULL DEFAULT 0");
@@ -721,6 +832,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "tms_invoice_at", "TEXT NOT NULL DEFAULT ''");
   db.prepare("UPDATE dispatchers SET name = 'MS Test' WHERE name = 'Ana G' AND pin = '4020'").run();
   db.prepare("UPDATE company_profile SET dispatcher_name = 'MS Test' WHERE id = 1 AND dispatcher_name = 'Ana G'").run();
+  db.prepare("UPDATE dispatchers SET pin = '' WHERE pin != ''").run();
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
@@ -794,11 +906,87 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_sent_mail_load ON sent_mail(load_id, kind, id);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alert_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      trigger_key TEXT NOT NULL,
+      recipient_ids TEXT NOT NULL DEFAULT '[]',
+      message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS alert_rule_fires (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_id INTEGER NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+      subject_key TEXT NOT NULL,
+      expires_on TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(rule_id, subject_key, expires_on)
+    );
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+      rule_id INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      href TEXT NOT NULL DEFAULT '',
+      read_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_notifications_user
+      ON user_notifications(dispatcher_id, id);
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trailer_share_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      trailer_id INTEGER NOT NULL REFERENCES trailers(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      snapshot_latitude REAL,
+      snapshot_longitude REAL,
+      snapshot_address TEXT NOT NULL DEFAULT '',
+      snapshot_temperature_f REAL,
+      snapshot_setpoint_f REAL,
+      snapshot_recorded_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trailer_share_token ON trailer_share_links(token);
+    CREATE INDEX IF NOT EXISTS idx_trailer_share_trailer ON trailer_share_links(trailer_id, id DESC);
+  `);
+  ensureColumn(db, "trailer_share_links", "snapshot_latitude", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_longitude", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_address", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "trailer_share_links", "snapshot_temperature_f", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_setpoint_f", "REAL");
+  ensureColumn(db, "trailer_share_links", "snapshot_recorded_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_share_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_load_share_token ON load_share_links(token);
+    CREATE INDEX IF NOT EXISTS idx_load_share_load ON load_share_links(load_id, id DESC);
+    CREATE TABLE IF NOT EXISTS load_chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      author_role TEXT NOT NULL,
+      author_id INTEGER NOT NULL,
+      author_name TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_chat_load ON load_chat_messages(load_id, id);
+  `);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
   backfillDropdownLists(db);
   backfillDocumentDefaults(db);
+  backfillTruncatedDispatchNotes(db);
   backfillLoadNumbering(db);
   backfillSampleLoads(db);
 }
@@ -806,28 +994,24 @@ export function migrate(db: Database): void {
 function backfillDispatchers(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM dispatchers").get() as { count: number }).count;
   if (count > 0) return;
-  db.prepare("INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)").run(
-    "MS Test",
-    "4020",
-    "manager",
-    "ana@msloads.com",
-    "all",
-  );
+  db.prepare(
+    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group, password_hash, phone) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+  ).run("MS Test", "", "manager", "ana@msloads.com", "all", "", "");
 }
 
 function backfillSettingsUsers(db: Database): void {
-  const extras: Array<[string, string, string, string, string]> = [
-    ["Jordan Lee", "4410", "dispatcher", "jordan@msloads.com", "dispatch"],
-    ["Casey Ortiz", "6600", "accounting", "casey@msloads.com", "billing"],
-    ["Riley Parks", "5500", "read_only", "riley@msloads.com", "dispatch"],
+  const extras: Array<[string, string, string, string]> = [
+    ["Jordan Lee", "dispatcher", "jordan@msloads.com", "dispatch"],
+    ["Casey Ortiz", "accounting", "casey@msloads.com", "billing"],
+    ["Riley Parks", "read_only", "riley@msloads.com", "dispatch"],
   ];
   const find = db.prepare("SELECT id FROM dispatchers WHERE name = ?");
   const insert = db.prepare(
-    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group) VALUES (?, ?, ?, ?, 1, ?)",
+    "INSERT INTO dispatchers (name, pin, role, email, active, permission_group, password_hash, phone) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
   );
-  for (const [name, pin, role, email, group] of extras) {
+  for (const [name, role, email, group] of extras) {
     if (find.get(name)) continue;
-    insert.run(name, pin, role, email, group);
+    insert.run(name, "", role, email, group, "", "");
   }
 }
 
@@ -947,10 +1131,38 @@ function backfillDocumentDefaults(db: Database): void {
          OR lower(terms_text) LIKE '%thank you for hauling with us%'
          OR lower(terms_text) LIKE '%carrier is responsible for cargo%'
          OR lower(terms_text) LIKE '%report exceptions at pickup%'
+         OR lower(terms_text) LIKE '%customer portal%'
        THEN ''
        ELSE terms_text
      END`,
   ).run();
+  const fill = db.prepare("UPDATE document_defaults SET terms_text = ? WHERE doc_type = ?");
+  const current = db.prepare("SELECT terms_text FROM document_defaults WHERE doc_type = ?");
+  for (const [docType, terms] of [
+    ["load_confirmation", DRIVER_CONFIRMATION_TERMS],
+    ["customer_confirmation", CUSTOMER_CONFIRMATION_TERMS],
+    ["bol", BOL_TERMS],
+  ] as const) {
+    const row = current.get(docType) as { terms_text?: string } | undefined;
+    if (shouldReplaceStoredTerms(docType, row?.terms_text ?? "")) fill.run(terms, docType);
+  }
+}
+
+function backfillTruncatedDispatchNotes(db: Database): void {
+  const rows = db
+    .prepare(
+      `SELECT id, special_instructions FROM loads
+       WHERE special_instructions LIKE '%MUST PULP PRODUCT%'
+         AND special_instructions LIKE '%MUST CHECK IN%'
+         AND special_instructions NOT LIKE '%WITH ALL PU#s%'`,
+    )
+    .all() as Array<{ id: number; special_instructions: string }>;
+  if (!rows.length) return;
+  const write = db.prepare("UPDATE loads SET special_instructions = ? WHERE id = ?");
+  for (const row of rows) {
+    const next = expandTruncatedDispatchNotes(row.special_instructions);
+    if (next !== row.special_instructions) write.run(next, row.id);
+  }
 }
 
 function backfillDemoAccounting(db: Database): void {
@@ -1111,4 +1323,20 @@ function ensureColumn(
   if (!columns.some((item) => item.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+}
+
+function backfillCustomerMainEmail(db: Database): void {
+  db.exec(`
+    UPDATE customers
+    SET main_email = COALESCE((
+      SELECT TRIM(contacts.email)
+      FROM contacts
+      WHERE contacts.customer_id = customers.id
+        AND TRIM(contacts.email) != ''
+        AND TRIM(contacts.email) LIKE '%@%.%'
+      ORDER BY contacts.id
+      LIMIT 1
+    ), '')
+    WHERE TRIM(main_email) = ''
+  `);
 }

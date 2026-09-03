@@ -1,16 +1,23 @@
 import Link from "next/link";
+import { CustomersTable } from "@/components/customers-table";
 import { PageHeader } from "@/components/page-header";
-import { getCustomer, listCustomers } from "@/lib/queries";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { getCustomer, listCustomers, loadCountsByCustomer } from "@/lib/queries";
+import { canEditLoads } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
 
-export default function CustomersPage() {
+export default async function CustomersPage() {
+  const dispatcher = await getSignedInDispatcher();
+  const canManage = canEditLoads(dispatcher?.role ?? "");
+  const loadCounts = loadCountsByCustomer();
   const customers = listCustomers().map((customer) => {
     const detail = getCustomer(customer.id);
     return {
       ...customer,
       contactCount: detail?.contacts.length ?? 0,
       primary: detail?.contacts[0] ?? null,
+      loadCount: loadCounts.get(customer.id) ?? 0,
     };
   });
 
@@ -19,57 +26,14 @@ export default function CustomersPage() {
       <PageHeader
         title="Customers"
         actions={
-          <Link href="/customers/new" className="btn btn-primary">
-            New customer
-          </Link>
+          canManage ? (
+            <Link href="/customers/new" className="btn btn-primary">
+              New customer
+            </Link>
+          ) : null
         }
       />
-      <div className="card overflow-hidden">
-        <table className="table-grid">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Primary contact</th>
-              <th>Billing notes</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {customers.map((customer) => (
-              <tr key={customer.id}>
-                <td>
-                  <div className="font-semibold">{customer.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {customer.contactCount} contact{customer.contactCount === 1 ? "" : "s"}
-                    {customer.payment_terms ? ` · ${customer.payment_terms}` : ""}
-                    {customer.credit_hold ? " · credit hold" : ""}
-                  </div>
-                </td>
-                <td>
-                  {customer.primary ? (
-                    <>
-                      <div>{customer.primary.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {customer.primary.phone || customer.primary.email || customer.primary.role}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </td>
-                <td className="max-w-md text-slate-600">
-                  {customer.billing_notes || <span className="text-slate-400">—</span>}
-                </td>
-                <td className="text-right">
-                  <Link href={`/customers/${customer.id}`} className="btn btn-ghost">
-                    Edit
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <CustomersTable customers={customers} canManage={canManage} />
     </>
   );
 }

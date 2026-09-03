@@ -17,7 +17,7 @@ export function LoadLaneFields({
   const shipperId = String(load?.shipper_location_id ?? defaults.shipper_location_id ?? "");
   const consigneeId = String(load?.consignee_location_id ?? defaults.consignee_location_id ?? "");
   return (
-    <section data-load-tab="lane" className="card grid gap-4 p-6 md:grid-cols-2">
+    <section data-load-tab="lane" className="card grid gap-2 p-3 md:grid-cols-2">
       <h2 className="md:col-span-2 text-sm font-semibold">Pickup and delivery windows</h2>
       <input type="hidden" name="origin" value={origin} />
       <input type="hidden" name="destination" value={destination} />

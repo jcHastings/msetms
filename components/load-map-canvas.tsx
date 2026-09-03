@@ -2,22 +2,38 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  LOAD_MAP_PIN_SIZE,
+  CLUSTER_PIN_SIZE,
+  clusterLoadMapPoints,
+  clusterPinIconUrl,
+  shouldClusterMapPoints,
+} from "@/lib/map-cluster";
+import {
+  defaultLoadMapLabelOrigin,
+  loadMapIconLayout,
   loadMapPinIconUrl,
   type LoadMapPathPoint,
   type LoadMapPoint,
 } from "@/lib/load-map-shared";
 
+type GoogleMap = {
+  fitBounds: (bounds: { extend: (latLng: { lat: number; lng: number }) => void }) => void;
+  getZoom?: () => number;
+  setZoom?: (zoom: number) => void;
+  setCenter?: (latLng: { lat: number; lng: number }) => void;
+  addListener?: (event: string, handler: () => void) => void;
+};
+
+type GoogleMarker = {
+  addListener: (event: string, handler: () => void) => void;
+  setMap: (map: GoogleMap | null) => void;
+};
+
 type GoogleMaps = {
-  Map: new (el: HTMLElement, opts: Record<string, unknown>) => {
-    fitBounds: (bounds: { extend: (latLng: { lat: number; lng: number }) => void }) => void;
-  };
-  Marker: new (opts: Record<string, unknown>) => {
-    addListener: (event: string, handler: () => void) => void;
-  };
+  Map: new (el: HTMLElement, opts: Record<string, unknown>) => GoogleMap;
+  Marker: new (opts: Record<string, unknown>) => GoogleMarker;
   Point: new (x: number, y: number) => unknown;
   Size: new (width: number, height: number) => unknown;
-  Polyline: new (opts: Record<string, unknown>) => unknown;
+  Polyline: new (opts: Record<string, unknown>) => { setMap: (map: GoogleMap | null) => void };
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
 };
 
@@ -28,7 +44,7 @@ declare global {
   }
 }
 
-const PIN_ANCHOR = LOAD_MAP_PIN_SIZE / 2;
+const CLUSTER_ANCHOR = CLUSTER_PIN_SIZE / 2;
 
 function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
   if (window.google?.maps) return Promise.resolve(window.google.maps);
@@ -64,6 +80,8 @@ export function LoadMapCanvas({
   className,
   missingKeyMessage,
   emptyMessage,
+  cluster,
+  onSelect,
 }: {
   apiKey: string;
   points: LoadMapPoint[];
@@ -71,11 +89,14 @@ export function LoadMapCanvas({
   className?: string;
   missingKeyMessage?: string;
   emptyMessage?: string;
+  cluster?: boolean;
+  onSelect?: (point: LoadMapPoint) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const route = path ?? [];
   const hasMap = points.length > 0 || route.length > 0;
   const [failed, setFailed] = useState(false);
+  const clusterPins = shouldClusterMapPoints(points.length, cluster);
 
   useEffect(() => {
     const el = host.current;
@@ -85,13 +106,18 @@ export function LoadMapCanvas({
     window.gm_authFailure = () => {
       if (!cancelled) setFailed(true);
     };
+    const markers: GoogleMarker[] = [];
+    let line: { setMap: (map: GoogleMap | null) => void } | null = null;
     void loadMapsScript(apiKey)
       .then((maps) => {
         if (cancelled || !host.current) return;
         const start = points[0] ?? route[0];
         const map = new maps.Map(host.current, {
           center: { lat: start.lat, lng: start.lng },
-          zoom: points.length + route.length === 1 ? 8 : 5,
+          zoom: points.length + route.length === 1 ? 15 : 5,
+          maxZoom: 20,
+          gestureHandling: "greedy",
+          zoomControl: true,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
@@ -102,7 +128,7 @@ export function LoadMapCanvas({
         });
         const bounds = new maps.LatLngBounds();
         if (route.length >= 2) {
-          new maps.Polyline({
+          line = new maps.Polyline({
             map,
             path: route,
             strokeColor: "#0b1f3a",
@@ -111,39 +137,78 @@ export function LoadMapCanvas({
           });
           for (const point of route) bounds.extend(point);
         }
-        for (const point of points) {
-          const position = { lat: point.lat, lng: point.lng };
-          const marker = new maps.Marker({
-            map,
-            position,
-            title: [point.label, point.detail].filter(Boolean).join(" — "),
-            label: point.markerText
-              ? {
-                  text: point.markerText,
-                  color: "#0f172a",
-                  fontSize: "11px",
-                  fontWeight: "700",
-                  className: point.labelClassName,
-                }
-              : undefined,
-            icon: {
-              url: loadMapPinIconUrl(point),
-              size: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-              scaledSize: new maps.Size(LOAD_MAP_PIN_SIZE, LOAD_MAP_PIN_SIZE),
-              anchor: new maps.Point(PIN_ANCHOR, PIN_ANCHOR),
-              labelOrigin: point.labelOrigin
-                ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
-                : new maps.Point(PIN_ANCHOR, -2),
-            },
-          });
-          if (point.href) {
-            const href = point.href;
-            marker.addListener("click", () => {
-              window.location.assign(href);
-            });
-          }
-          bounds.extend(position);
+
+        function clearMarkers() {
+          for (const marker of markers) marker.setMap(null);
+          markers.length = 0;
         }
+
+        function drawPins() {
+          clearMarkers();
+          const zoom = map.getZoom?.() ?? 5;
+          const items = clusterPins ? clusterLoadMapPoints(points, zoom) : points.map((point) => ({ type: "point" as const, point }));
+          for (const item of items) {
+            if (item.type === "cluster") {
+              const position = { lat: item.lat, lng: item.lng };
+              const marker = new maps.Marker({
+                map,
+                position,
+                title: `${item.count} pins`,
+                icon: {
+                  url: clusterPinIconUrl(item.count),
+                  size: new maps.Size(CLUSTER_PIN_SIZE, CLUSTER_PIN_SIZE),
+                  scaledSize: new maps.Size(CLUSTER_PIN_SIZE, CLUSTER_PIN_SIZE),
+                  anchor: new maps.Point(CLUSTER_ANCHOR, CLUSTER_ANCHOR),
+                },
+              });
+              marker.addListener("click", () => {
+                map.setZoom?.((map.getZoom?.() ?? zoom) + 2);
+                map.setCenter?.(position);
+              });
+              markers.push(marker);
+              bounds.extend(position);
+              continue;
+            }
+            const point = item.point;
+            const position = { lat: point.lat, lng: point.lng };
+            const layout = loadMapIconLayout(point.pinShape);
+            const marker = new maps.Marker({
+              map,
+              position,
+              title: [point.label, point.detail].filter(Boolean).join(" — "),
+              label: point.markerText
+                ? {
+                    text: point.markerText,
+                    color: "#0f172a",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    className: point.labelClassName,
+                  }
+                : undefined,
+              icon: {
+                url: loadMapPinIconUrl(point),
+                size: new maps.Size(layout.w, layout.h),
+                scaledSize: new maps.Size(layout.w, layout.h),
+                anchor: new maps.Point(layout.anchorX, layout.anchorY),
+                labelOrigin: point.labelOrigin
+                  ? new maps.Point(point.labelOrigin.x, point.labelOrigin.y)
+                  : new maps.Point(defaultLoadMapLabelOrigin().x, defaultLoadMapLabelOrigin().y),
+              },
+            });
+            marker.addListener("click", () => {
+              if (onSelect) {
+                onSelect(point);
+                return;
+              }
+              if (point.href) window.location.assign(point.href);
+            });
+            markers.push(marker);
+            bounds.extend(position);
+          }
+        }
+
+        drawPins();
+        map.addListener?.("zoom_changed", drawPins);
         if (points.length + route.length > 1) map.fitBounds(bounds);
       })
       .catch(() => {
@@ -152,8 +217,10 @@ export function LoadMapCanvas({
     return () => {
       cancelled = true;
       window.gm_authFailure = previousAuth;
+      for (const marker of markers) marker.setMap(null);
+      line?.setMap(null);
     };
-  }, [apiKey, hasMap, points, route]);
+  }, [apiKey, hasMap, points, route, clusterPins, onSelect]);
 
   if (!apiKey || failed) {
     return (
@@ -170,5 +237,5 @@ export function LoadMapCanvas({
     );
   }
 
-  return <div ref={host} className={className ?? "h-80 w-full rounded-lg bg-slate-100"} data-load-map="" />;
+  return <div ref={host} className={className ?? "h-80 w-full rounded-lg bg-slate-100"} data-load-map="" data-map-cluster={clusterPins ? "" : undefined} />;
 }

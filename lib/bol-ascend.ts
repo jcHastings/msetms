@@ -2,6 +2,7 @@ import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { formatDateTime, formatMdYDisplay, formatWeight } from "./format";
 import { paperworkCompanyName } from "./invoice";
+import { resolveLoadCustomerPhoneLine } from "./load-contact";
 import { getCustomer, getLoad, getLocation } from "./queries";
 import { formatReeferSetpoint, resolveReeferSpec } from "./reefer-shared";
 import { companyLogoPath, getCompanySettings, HASTINGS_OFFICE, withOfficeAddress } from "./settings";
@@ -124,7 +125,7 @@ function syntheticStop(
     id: null,
     sequence,
     kind,
-    name: label,
+    name: "",
     street: "",
     city: parsed.city,
     state: parsed.state,
@@ -156,7 +157,9 @@ function stopFromLocation(
     id: null,
     sequence,
     kind,
-    name: location.name || fallbackName,
+    name: /^[A-Za-z .'-]+,\s*[A-Z]{2}$/.test((location.name || fallbackName).trim())
+      ? ""
+      : location.name || fallbackName,
     street: location.street.trim(),
     city: location.city.trim(),
     state: location.state.trim(),
@@ -206,7 +209,6 @@ function loadReferences(load: LoadView): string {
 
 function customerBlock(load: LoadView): { name: string; address: string; phone: string } {
   const customer = getCustomer(load.customer_id);
-  const contact = customer?.contacts[0];
   const notes = String(customer?.billing_notes ?? "").trim();
   const billing =
     notes && !/created from a rate confirmation/i.test(notes) && !/^net\s*\d+\s*\.?$/i.test(notes)
@@ -215,7 +217,7 @@ function customerBlock(load: LoadView): { name: string; address: string; phone: 
   return {
     name: load.customer_name.trim(),
     address: billing,
-    phone: (load.contact_phone || contact?.phone || "").trim(),
+    phone: resolveLoadCustomerPhoneLine(load),
   };
 }
 
@@ -261,8 +263,8 @@ export function buildAscendBolModel(
     companyName: office.name,
     companyAddress: office.address,
     companyPhone: office.phone,
-    thirdPartyName: office.name,
-    thirdPartyAddress: office.address,
+    thirdPartyName: customer.name,
+    thirdPartyAddress: customer.address,
     freightCharges: variant === "third_party" ? "3rd Party" : "Prepaid",
     stops: variant === "third_party" ? [shipFrom, shipTo].filter((stop): stop is AscendBolStop => Boolean(stop)) : stops,
     shipFrom,

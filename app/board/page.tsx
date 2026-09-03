@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
+import { LoadCardFastActions } from "@/components/load-card-fast-actions";
+import { listStopAppointmentTargets } from "@/lib/stops";
 import { BoardFilterProvider, BoardFilterRow } from "@/components/board-filter";
 import { BoardToolbar } from "@/components/board-toolbar";
 import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
@@ -8,7 +10,8 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
+import { orbcommMapPinFromReading } from "@/lib/fleet-map-shared";
 import {
   getDemoReeferForLoad,
   getReeferSnapshots,
@@ -26,12 +29,13 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
-import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
+import { loadStatusRowClass } from "@/lib/load-status-style";
 import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
-import { loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
+import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -48,8 +52,11 @@ export default async function BoardPage({
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
   const current = { status, date };
+  const dispatcher = await getSignedInDispatcher();
   const loads = sortMasterFamilies(
-    listLoads({ status, date }).filter((load) => loadShowsOnDispatchBoard(load.status)),
+    listLoads(listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher?.id })).filter(
+      (load) => status === "accounting" || loadShowsOnDispatchBoard(load.status),
+    ),
   );
   const assignableTrucks = listAssignableTrucks();
   const assignableTrailers = listAssignableTrailers();
@@ -83,6 +90,18 @@ export default async function BoardPage({
       ) : null}
     </BoardFilterProvider>
     </PageOverlayHost>
+  );
+}
+
+function BoardWhenCell({ start, end }: { start: string; end: string }) {
+  const { date, time } = formatBoardDateTime(start);
+  return (
+    <td className="board-when-cell" title={`to ${formatDateTime(end)}`}>
+      <div className="board-when">
+        <div className="board-when-date">{date}</div>
+        {time ? <div className="board-when-time">{time}</div> : null}
+      </div>
+    </td>
   );
 }
 
@@ -127,21 +146,21 @@ async function BoardLiveSection({
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="board-scroll">
             <table className="table-grid table-grid-board" data-dispatch-board="">
               <thead>
                 <tr>
                   <th className="board-load-cell">Load</th>
-                  <th>Status</th>
-                  <th>Pickup</th>
-                  <th>Delivery</th>
+                  <th className="board-status-cell">Status</th>
+                  <th className="board-when-cell">Pickup</th>
+                  <th className="board-when-cell">Delivery</th>
                   <th className="board-unit-cell">Unit</th>
                   <th className="board-place-cell">Tractor</th>
-                  <th className="board-place-cell">Trailer</th>
-                  <th>HOS</th>
-                  <th>Reefer</th>
-                  <th>Rate</th>
-                  <th>Move</th>
+                  <th className="board-place-cell board-trailer-cell">Trailer</th>
+                  <th className="board-hos-cell">HOS</th>
+                  <th className="board-reefer-cell">Reefer</th>
+                  <th className="board-rate-cell">Rate</th>
+                  <th className="board-move-cell">Move</th>
                   <th className="board-edit-head"></th>
                 </tr>
               </thead>
@@ -169,7 +188,7 @@ async function BoardLiveSection({
                     <td className="board-load-cell leading-tight">
                       <OverlayOpenLink
                         href={overlayHref("/board", load.id, current)}
-                        className={`font-mono text-xs font-semibold hover:underline ${loadStatusTextClass(load.status)}`}
+                        className="desk-link font-mono text-xs font-semibold hover:underline"
                         title={load.customer_name}
                       >
                         {load.load_number}
@@ -181,24 +200,16 @@ async function BoardLiveSection({
                       ) : loads.some((row) => row.parent_load_id === load.id) ? (
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Master</div>
                       ) : null}
-                      <div
-                        className="truncate whitespace-nowrap text-xs"
-                        title={`${load.origin} → ${load.destination}`}
-                      >
-                        {load.origin}
-                        <span className="mx-1 text-slate-400">→</span>
-                        {load.destination}
+                      <div className="board-lane" title={`${load.origin} → ${load.destination}`}>
+                        <div className="board-lane-line">{load.origin}</div>
+                        <div className="board-lane-line text-slate-500">→ {load.destination}</div>
                       </div>
                     </td>
-                    <td>
+                    <td className="board-status-cell">
                       <LoadStatusBadge status={load.status} />
                     </td>
-                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.pickup_end)}`}>
-                      {formatDateTime(load.pickup_start)}
-                    </td>
-                    <td className="whitespace-nowrap text-xs" title={`to ${formatDateTime(load.delivery_end)}`}>
-                      {formatDateTime(load.delivery_start)}
-                    </td>
+                    <BoardWhenCell start={load.pickup_start} end={load.pickup_end} />
+                    <BoardWhenCell start={load.delivery_start} end={load.delivery_end} />
                     <td
                       className="board-unit-cell leading-tight text-xs"
                       title={[
@@ -230,7 +241,7 @@ async function BoardLiveSection({
                     >
                       <LocationBadge location={tractorLocation} empty="—" />
                     </td>
-                    <td className="board-place-cell">
+                    <td className="board-place-cell board-trailer-cell">
                       <TrailerLocationBadge
                         location={
                           reefers.readings
@@ -238,19 +249,25 @@ async function BoardLiveSection({
                             .map(snapshotToTrailerLocation)
                             .find(Boolean) ?? null
                         }
+                        pinColor={orbcommMapPinFromReading(
+                          reefers.readings.find((item) => item.loadId === load.id),
+                        ).pinColor}
                       />
                     </td>
-                    <td title={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}>
+                    <td
+                      className="board-hos-cell"
+                      title={samsaraHosEmptyState({ assigned: Boolean(load.driver_id), hos: driverHos })}
+                    >
                       <HosBadge hos={driverHos} empty="—" />
                     </td>
-                    <td>
+                    <td className="board-reefer-cell">
                       <ReeferBadge
                         setpoint={load.reefer_setpoint_f}
                         reading={reeferByLoad.get(load.id) ?? null}
                       />
                     </td>
-                    <td className="whitespace-nowrap">{formatMoney(load.rate)}</td>
-                    <td>
+                    <td className="board-rate-cell whitespace-nowrap">{formatMoney(load.rate)}</td>
+                    <td className="board-move-cell">
                       <LoadStatusSelect
                         loadId={load.id}
                         status={load.status}
@@ -258,7 +275,12 @@ async function BoardLiveSection({
                       />
                     </td>
                     <td className="board-edit-cell whitespace-nowrap">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" data-load-card-actions="">
+                        <LoadCardFastActions
+                          loadId={load.id}
+                          loadNumber={load.load_number}
+                          stops={listStopAppointmentTargets(load.id)}
+                        />
                         {!isClosedStatus(load.status) ? (
                           <AssignDialog
                             loadId={load.id}
@@ -271,7 +293,7 @@ async function BoardLiveSection({
                             label={load.driver_id ? "Change unit" : "Assign"}
                           />
                         ) : null}
-                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="btn btn-ghost">
+                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
                           Edit
                         </OverlayOpenLink>
                       </div>

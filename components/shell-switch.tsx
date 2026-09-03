@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import type { MikeMessage } from "@/lib/mike-shared";
 import type { PublicDispatcher } from "@/lib/settings-shared";
 
@@ -12,41 +13,48 @@ export function ShellSwitch({
   requireTwoFactor = false,
   mikeConfigured = false,
   mikeMessages = [],
+  officeNotifications = [],
 }: {
   children: React.ReactNode;
   dispatcher: PublicDispatcher | null;
   requireTwoFactor?: boolean;
   mikeConfigured?: boolean;
   mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const publicPath = pathname.startsWith("/driver") || pathname === "/login";
-  const mustEnroll = Boolean(requireTwoFactor && dispatcher && !dispatcher.totp_enrolled);
-  const onSecurity = pathname === "/settings/security";
+  const publicPath =
+    pathname.startsWith("/driver") ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/t/") ||
+    pathname.startsWith("/l/");
+  const changePath = pathname === "/login/change-password";
 
   useEffect(() => {
     if (!publicPath && !dispatcher) {
       router.replace("/login");
-    } else if (mustEnroll && !onSecurity && !publicPath) {
-      router.replace("/settings/security");
     }
-  }, [publicPath, dispatcher, router, mustEnroll, onSecurity]);
+    if (dispatcher?.must_change_password && !changePath && !pathname.startsWith("/driver")) {
+      router.replace("/login/change-password");
+    }
+  }, [publicPath, changePath, dispatcher, pathname, router]);
 
   if (publicPath) {
     return <>{children}</>;
+  }
+  if (dispatcher?.must_change_password) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Redirecting to set your password…
+      </div>
+    );
   }
   if (!dispatcher) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
         Redirecting to dispatcher login…
-      </div>
-    );
-  }
-  if (mustEnroll && !onSecurity) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
-        Redirecting to 2-step setup…
       </div>
     );
   }
@@ -56,6 +64,7 @@ export function ShellSwitch({
       requireTwoFactor={requireTwoFactor}
       mikeConfigured={mikeConfigured}
       mikeMessages={mikeMessages}
+      officeNotifications={officeNotifications}
     >
       {children}
     </AppShell>

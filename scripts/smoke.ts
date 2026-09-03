@@ -18,12 +18,18 @@ async function main() {
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
   assert.match(navSource, /label: "Search"/);
+  assert.match(navSource, /label: "Workbench"/);
+  assert.match(navSource, /href: "\/desk"/);
+  assert.doesNotMatch(navSource, /label: "Dashboard"/);
+  assert.match(navSource, /href: "\/control"/);
+  assert.match(navSource, /Control Center/);
   assert.match(navSource, /title: "Accounting"/);
   assert.match(navSource, /href: "\/accounting"/);
-  assert.match(navSource, /label: "Invoices"/);
-  assert.match(navSource, /label: "Bills"/);
+  assert.match(navSource, /AR\/AP Report/);
+  assert.match(navSource, /Invoices\/Bills/);
   assert.doesNotMatch(navSource, /Invoices \(AR\)|Bills \(AP\)/);
-  assert.match(navSource, /Driver pay/);
+  assert.match(navSource, /Driver Pay Mgt/);
+  assert.match(navSource, /href: "\/accounting\/pay"/);
   assert.match(navSource, /Commissions/);
   assert.match(navSource, /QuickBooks/);
   assert.match(navSource, /href: "\/compliance"/);
@@ -34,6 +40,83 @@ async function main() {
   assert.match(navSource, /href: "\/loads\/templates"/);
   assert.match(navSource, /href: "\/settings"/);
   assert.match(navSource, /href: "\/users"/);
+  assert.match(navSource, /href: "\/claims"/);
+  assert.doesNotMatch(navSource, /href: "\/reports", label: "Claims"|href: "\/claims".*\/reports/);
+  assert.match(navSource, /data-nav-href=\{item\.href\}/);
+  assert.match(navSource, /isDeskNavActive/);
+  assert.match(navSource, /prefetch=\{item\.href === "\/claims"/);
+  const { isDeskNavActive } = await import("../lib/desk-nav-shared");
+  assert.equal(isDeskNavActive("/claims", "/claims"), true);
+  assert.equal(isDeskNavActive("/claims", "/reports"), false);
+  assert.equal(isDeskNavActive("/reports", "/reports"), true);
+  assert.equal(isDeskNavActive("/reports", "/reports/manage"), false);
+  assert.equal(isDeskNavActive("/reports", "/reports/statistics"), false);
+  assert.equal(isDeskNavActive("/reports/manage", "/reports/manage"), true);
+  assert.equal(isDeskNavActive("/reports/statistics", "/reports/statistics"), true);
+  assert.equal(isDeskNavActive("/accounting/pay", "/accounting/pay"), true);
+  assert.equal(isDeskNavActive("/accounting", "/accounting/pay"), false);
+  const { DESK_NAV_ACCORDION, deskNavSectionForPath, nextDeskNavOpenSection } = await import("../lib/desk-nav-shared");
+  assert.equal(DESK_NAV_ACCORDION, "single");
+  let accordionOpen: string | null = null;
+  for (const parent of ["Dispatch", "Fleet", "Customers", "Accounting", "Reports", "Settings"] as const) {
+    accordionOpen = nextDeskNavOpenSection(accordionOpen, parent);
+    assert.equal(accordionOpen, parent, "only the last clicked parent stays open");
+  }
+  accordionOpen = nextDeskNavOpenSection(accordionOpen, "Settings");
+  assert.equal(accordionOpen, null, "clicking the open parent collapses all");
+  assert.equal(
+    deskNavSectionForPath("/accounting/pay", [
+      { title: "Fleet", items: [{ href: "/fleet" }] },
+      { title: "Accounting", items: [{ href: "/accounting/pay" }] },
+    ]),
+    "Accounting",
+  );
+  assert.equal(nextDeskNavOpenSection(null, "Accounting"), "Accounting");
+  assert.equal(nextDeskNavOpenSection("Accounting", "Fleet"), "Fleet");
+  assert.equal(nextDeskNavOpenSection("Accounting", "Accounting"), null);
+  assert.equal(
+    deskNavSectionForPath("/reports/manage", [
+      { title: "Fleet", items: [{ href: "/fleet" }] },
+      { title: "Reports", items: [{ href: "/reports" }, { href: "/reports/manage" }] },
+    ]),
+    "Reports",
+  );
+  assert.match(navSource, /nextDeskNavOpenSection/);
+  assert.match(navSource, /DESK_NAV_ACCORDION/);
+  assert.match(navSource, /aria-expanded/);
+  assert.doesNotMatch(navSource, /Set<string>|openSections/);
+  assert.match(navSource, /kind: "link"/);
+  assert.match(navSource, /title: "Reports"/);
+  assert.match(navSource, /title: "Settings"/);
+  const reportsNavBlock = navSource.slice(navSource.indexOf('title: "Reports"'), navSource.indexOf('title: "Settings"'));
+  assert.doesNotMatch(reportsNavBlock, /href: "\/users"/);
+  assert.doesNotMatch(reportsNavBlock, /href: "\/settings"/);
+  const settingsNavBlock = navSource.slice(navSource.indexOf('title: "Settings"'));
+  assert.match(settingsNavBlock, /href: "\/settings"/);
+  assert.match(settingsNavBlock, /href: "\/users"/);
+  assert.match(settingsNavBlock, /href: "\/settings\/sign-in"/);
+  assert.match(settingsNavBlock, /Sign-in log/);
+  assert.equal(
+    deskNavSectionForPath("/users", [
+      { title: "Reports", items: [{ href: "/reports" }, { href: "/claims" }] },
+      { title: "Settings", items: [{ href: "/settings" }, { href: "/users" }] },
+    ]),
+    "Settings",
+  );
+  assert.equal(
+    deskNavSectionForPath("/settings/company", [
+      { title: "Reports", items: [{ href: "/reports" }] },
+      { title: "Settings", items: [{ href: "/settings" }, { href: "/users" }] },
+    ]),
+    "Settings",
+  );
+  assert.match(navSource, /\{open \?/);
+  assert.doesNotMatch(navSource, /LTL Orders|Find New Shippers|EDI \/ Tenders|AscendAI Load/);
+  const claimsPage = fs.readFileSync(path.join(process.cwd(), "app/claims/page.tsx"), "utf8");
+  assert.match(claimsPage, /data-claims-desk/);
+  assert.match(claimsPage, /Claims \/ OS&D/);
+  assert.doesNotMatch(claimsPage, /redirect\(/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/claims/layout.tsx"), "utf8"), /canWriteDesk/);
   assert.match(navSource, /label: "Users"/);
   assert.match(navSource, /href: "\/audit"/);
   assert.match(navSource, /label: "Audit"/);
@@ -52,19 +135,42 @@ async function main() {
   assert.equal(loadStatusBand("delivered"), "done");
   assert.equal(loadStatusBand("cancelled"), "done");
   assert.equal(loadStatusBand("tonu"), "done");
-  assert.match(loadStatusBadgeClass("available"), /amber/);
-  assert.doesNotMatch(loadStatusBadgeClass("assigned"), /amber/);
-  assert.match(loadStatusBadgeClass("assigned"), /sky/);
-  assert.match(loadStatusBadgeClass("delivered"), /slate/);
-  assert.match(loadStatusRowClass("available"), /inset_4px/);
-  assert.match(loadStatusRowClass("in_transit"), /inset_4px/);
+  assert.match(loadStatusBadgeClass("available"), /status-tone-slate/);
+  assert.doesNotMatch(loadStatusBadgeClass("assigned"), /status-tone-warning|amber/);
+  assert.match(loadStatusBadgeClass("assigned"), /status-tone-navy/);
+  assert.match(loadStatusBadgeClass("delivered"), /status-tone-success/);
+  assert.match(loadStatusRowClass("available"), /inset_3px/);
+  assert.match(loadStatusRowClass("in_transit"), /inset_3px/);
   assert.ok(LOAD_STATUSES.every((status) => loadStatusBadgeClass(status) && loadStatusRowClass(status)));
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
-  const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
-  const { loadMatchesListQuery, parseLoadListTab } = await import("../lib/load-list-shared");
+  const dashUiStatus = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
+  const {
+    loadMatchesListQuery,
+    parseLoadListTab,
+    filtersForLoadListTab,
+    listFiltersForBoardStatus,
+    LOAD_LIST_TABS,
+  } = await import("../lib/load-list-shared");
   assert.equal(parseLoadListTab(""), "active");
   assert.equal(parseLoadListTab("planning"), "planning");
+  assert.equal(parseLoadListTab("accounting"), "accounting");
+  assert.equal(parseLoadListTab("misc"), "misc");
+  assert.equal(parseLoadListTab("mine"), "mine");
+  assert.equal(parseLoadListTab("master"), "master");
+  assert.equal(parseLoadListTab("all"), "all");
+  assert.deepEqual(
+    LOAD_LIST_TABS.map((tab) => tab.value),
+    ["active", "planning", "accounting", "misc", "all", "mine", "master"],
+  );
+  assert.equal(filtersForLoadListTab("mine", { dispatcherId: 7 }).dispatcherId, 7);
+  assert.equal(filtersForLoadListTab("mine", {}).dispatcherId, -1);
+  assert.equal(filtersForLoadListTab("master").masterOnly, true);
+  assert.equal(filtersForLoadListTab("accounting").status, "accounting");
+  assert.equal(listFiltersForBoardStatus("in_transit").status, "in_transit");
+  assert.equal(listFiltersForBoardStatus("available").status, "available");
+  assert.equal(listFiltersForBoardStatus("planning").status, "planning");
+  assert.equal(listFiltersForBoardStatus("").status, "active");
   assert.equal(
     loadMatchesListQuery(
       {
@@ -86,7 +192,12 @@ async function main() {
     false,
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
-  assert.match(boardUi, /listLoads\(\{ status, date \}\)/);
+  assert.match(boardUi, /listLoads\(listFiltersForBoardStatus/);
+  assert.match(boardUi, /getSignedInDispatcher/);
+  assert.match(boardUi, /BoardWhenCell/);
+  assert.match(boardUi, /formatBoardDateTime/);
+  assert.match(boardUi, /board-when-cell/);
+  assert.match(boardUi, /status === "accounting" \|\| loadShowsOnDispatchBoard/);
   assert.match(boardUi, /loadShowsOnDispatchBoard/);
   assert.match(boardUi, /data-dispatch-board/);
   assert.match(boardUi, /table-grid-board/);
@@ -98,6 +209,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /board-edit-cell/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /max-w-\[8\.5rem\]/);
+  const trailerBadge = fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8");
+  assert.match(trailerBadge, /board-place-with-pin/);
+  assert.match(trailerBadge, /data-board-trailer-city/);
+  assert.match(trailerBadge, /loadMapPinIconUrl/);
+  assert.match(boardUi, /board-trailer-cell/);
   assert.match(boardUi, />Tractor</);
   assert.match(boardUi, />Trailer</);
   assert.match(boardUi, />HOS</);
@@ -111,25 +227,49 @@ async function main() {
   const boardToolbar = fs.readFileSync(path.join(process.cwd(), "components/board-toolbar.tsx"), "utf8");
   assert.match(boardToolbar, /Search loads on this tab/);
   assert.match(boardToolbar, /LOAD_LIST_TABS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8"), /Planning/);
+  assert.match(boardToolbar, /load-list-tabs/);
+  assert.match(boardToolbar, /Load Manager tabs/);
+  assert.doesNotMatch(boardToolbar, /AscendLTL|Externally Posted|AscendAI|Post Loads/);
+  const loadListShared = fs.readFileSync(path.join(process.cwd(), "lib/load-list-shared.ts"), "utf8");
+  assert.match(loadListShared, /Planning Loads/);
+  assert.match(loadListShared, /Ready for Accounting Loads/);
+  assert.match(loadListShared, /Misc\. Loads/);
+  assert.match(loadListShared, /My Loads/);
+  assert.match(loadListShared, /Master Loads/);
+  assert.doesNotMatch(loadListShared, /AscendLTL|Externally Posted|Post Loads/);
   assert.match(boardUi, /loadStatusRowClass\(load\.status\)/);
   assert.match(dashUiStatus, /loadStatusRowClass\(load\.status\)/);
   const tabSource = fs.readFileSync(path.join(process.cwd(), "lib/load-tabs.ts"), "utf8");
   assert.match(tabSource, /basics/);
   assert.match(tabSource, /financials/);
-  const { parseLoadTab, confirmationPacketForTab } = await import("../lib/load-tabs");
+  const { parseLoadTab, confirmationPacketForTab, confirmationDownloadLabel } = await import("../lib/load-tabs");
   assert.equal(parseLoadTab("history"), "log");
+  assert.equal(parseLoadTab("timeline"), "log");
   assert.equal(parseLoadTab("documents"), "docs");
   assert.equal(parseLoadTab("carrier"), "assets");
   assert.equal(parseLoadTab("tracking"), "assets");
   assert.equal(parseLoadTab(""), "basics");
   assert.equal(confirmationPacketForTab("customer"), "customer");
-  assert.equal(confirmationPacketForTab("financials"), "customer");
+  assert.equal(confirmationPacketForTab("financials"), "internal");
   assert.equal(confirmationPacketForTab("assets"), "internal");
-  assert.equal(confirmationPacketForTab("basics"), "customer");
+  assert.equal(confirmationPacketForTab("basics"), "internal");
+  assert.equal(confirmationPacketForTab("stops"), "internal");
+  assert.equal(confirmationPacketForTab("log"), "internal");
+  assert.equal(confirmationPacketForTab("docs"), "internal");
+  assert.equal(
+    confirmationDownloadLabel("MSE-1067", "internal"),
+    "Download MSE-1067 driver confirmation",
+  );
+  assert.equal(
+    confirmationDownloadLabel("MSE-1067", "customer"),
+    "Download MSE-1067 customer confirmation",
+  );
+  assert.doesNotMatch(confirmationDownloadLabel("MSE-1067", "internal"), /106361|broker/);
   const confirmationLinkSource = fs.readFileSync(path.join(process.cwd(), "components/load-confirmation-link.tsx"), "utf8");
   assert.match(confirmationLinkSource, /confirmationPacketForTab/);
+  assert.match(confirmationLinkSource, /confirmationDownloadLabel/);
   assert.match(confirmationLinkSource, /data-confirmation-packet/);
+  assert.doesNotMatch(confirmationLinkSource, /customer_reference/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-workspace.tsx"), "utf8"), /header/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /header=\{/);
   const loadPage = fs.readFileSync(path.join(process.cwd(), "app/loads/[id]/page.tsx"), "utf8");
@@ -156,9 +296,14 @@ async function main() {
   assert.match(qboAccountingPage, /Map Pay Items/);
   assert.match(qboAccountingPage, /Map Customers/);
   assert.match(qboAccountingPage, /Map Vendors/);
+  assert.match(qboAccountingPage, /QuickBooks Online Connection Enabled/);
+  assert.match(qboAccountingPage, /Disconnect From QuickBooks/);
+  assert.match(qboAccountingPage, /QuickBooks Desktop/);
   assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /acct-hub-tabs/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-acct/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /color: #ffffff !important/);
   const invoicesHub = fs.readFileSync(path.join(process.cwd(), "app/accounting/invoices/page.tsx"), "utf8");
   assert.match(invoicesHub, /AccountingHub/);
@@ -166,7 +311,20 @@ async function main() {
   assert.match(attachmentRoute, /regenerateMissingAttachment/);
   assert.match(attachmentRoute, /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/regenerate-attachment.ts"), "utf8"), /buildTmsInvoice/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /export async function GET/);
+  const invoiceExportRoute = fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8");
+  assert.match(invoiceExportRoute, /export async function GET/);
+  assert.match(invoiceExportRoute, /export async function POST/);
+  assert.doesNotMatch(invoiceExportRoute, /serveGeneratedInvoice/);
+  const invoiceExportGet = invoiceExportRoute.slice(
+    invoiceExportRoute.indexOf("export async function GET"),
+    invoiceExportRoute.indexOf("export async function POST"),
+  );
+  const invoiceExportPost = invoiceExportRoute.slice(invoiceExportRoute.indexOf("export async function POST"));
+  assert.match(invoiceExportGet, /listAttachments/);
+  assert.match(invoiceExportGet, /kind === "invoice"/);
+  assert.match(invoiceExportGet, /Create or Rebuild invoice first/);
+  assert.doesNotMatch(invoiceExportGet, /createTmsInvoice/);
+  assert.match(invoiceExportPost, /createTmsInvoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/confirmation/route.ts"), "utf8"), /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fleet-docs/[id]/route.ts"), "utf8"), /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /\/api\/loads\/\$\{loadId\}\/invoice/);
@@ -203,10 +361,33 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /2-step verification/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Set up 2-step/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /Require 2-step for all dispatchers/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Authenticator code/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /email_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign-in code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Resend code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="password"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="email"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign in with email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /No email on your user\? Sign in with your name/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /PasswordField/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /remember_device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Remember this device for 30 days/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /recovery_code|Authenticator code|name="pin"|Demo PIN/);
+  const passwordField = fs.readFileSync(path.join(process.cwd(), "components/password-field.tsx"), "utf8");
+  assert.match(passwordField, /Show password/);
+  assert.match(passwordField, /Hide password/);
+  assert.match(passwordField, /visible \? "Hide password" : "Show password"/);
+  assert.match(passwordField, /type=\{visible \? "text" : "password"\}/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password|remember_device|Remember this device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-reset-form.tsx"), "utf8"), /PasswordField/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /PasswordField/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /remember-device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.field \.password-field input/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle \{[\s\S]*min-height: 2\.75rem/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname.startsWith\("\/login\/"\)/);
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
-  assert.doesNotMatch(driverLoginPage, /totp|authenticator/i);
+  assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
   assert.match(driverLoginPage, /listDriversForLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
@@ -217,10 +398,19 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo-on-dark.png")), true, "transparent on-dark logo");
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /BrandMark/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MS Test/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo-on-dark\.png/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8"), /BrandMark/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /LoginCanvas/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /email and password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /Ana G|Demo PIN|4020|4410/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/forgot/page.tsx"), "utf8"), /Forgot password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/reset/page.tsx"), "utf8"), /Set password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8"), /companyLogoPath/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /MSE Transport/);
@@ -235,6 +425,9 @@ async function main() {
   assert.match(workspaceSource, /closeLoadOverlay/);
   assert.match(workspaceSource, /event\.key !== "Escape"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /LoadOverlayFrame/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /LoadOverlayPortal/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-portal.tsx"), "utf8"), /createPortal/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-portal.tsx"), "utf8"), /document\.body/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-frame.tsx"), "utf8"), /ms-open-load/);
   assert.match(workspaceSource, /Load Actions/);
   assert.match(workspaceSource, /load-tabs/);
@@ -243,15 +436,22 @@ async function main() {
   assert.match(workspaceSource, /load-action-btn/);
   assert.match(workspaceSource, /load-action-menu/);
   assert.match(workspaceSource, /load-tab-back/);
+  assert.match(workspaceSource, /load-workspace/);
   const cssSource = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(cssSource, /\.load-tabs/);
   assert.match(cssSource, /\.load-tab-active/);
   assert.match(cssSource, /\.load-actions/);
   assert.match(cssSource, /\.desk-sidebar/);
   assert.match(cssSource, /\.desk-nav-link-active/);
-  assert.match(cssSource, /#0b1f3a/);
-  assert.match(cssSource, /#d4a017/);
+  assert.match(cssSource, /\.login-canvas/);
+  assert.match(cssSource, /--r-xs: 2px/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /M7 1\.2 L12\.6 12\.6 L7 10\.2 L1\.4 12\.6 Z/);
+  assert.match(cssSource, /#07325a/);
+  assert.match(cssSource, /#137cdd/);
+  assert.doesNotMatch(cssSource, /#d4a017|#b8860b|#f3d27a|#f3e6b8/);
   assert.match(cssSource, /\[data-load-list-chrome\]/);
+  assert.match(cssSource, /\.load-workspace \.field/);
+  assert.match(cssSource, /\.load-workspace \.btn/);
   assert.match(cssSource, /\.stop-row-pickup/);
   assert.match(cssSource, /\.stop-chip-delivery/);
   assert.match(cssSource, /\.finance-income/);
@@ -271,6 +471,11 @@ async function main() {
   assert.match(shellSource, /desk-sidebar-user/);
   assert.match(shellSource, /desk-phone-bar/);
   assert.match(shellSource, /desk-phone-menu/);
+  assert.match(shellSource, /desk-phone-signout/);
+  assert.match(shellSource, /dispatcherLogoutAction/);
+  assert.match(shellSource, /h-dvh/);
+  assert.match(cssSource, /desk-phone-signout/);
+  assert.match(cssSource, /max-height: 100dvh/);
   assert.match(cssSource, /min-width: 15rem/);
   assert.match(cssSource, /@media \(max-width: 47\.99rem\)/);
   assert.match(cssSource, /desk-phone-bar/);
@@ -289,6 +494,39 @@ async function main() {
   assert.match(workspaceSource, /Admin \/ Financials/);
   assert.match(workspaceSource, /pt-1/);
   assert.doesNotMatch(workspaceSource, /load-action-menu absolute z-20 mt-1/);
+  assert.match(workspaceSource, /createHoverMenuCloser/);
+  assert.match(workspaceSource, /data-hover-action-menu/);
+  assert.match(workspaceSource, /data-hover-menu-bridge/);
+  const hoverMenu = fs.readFileSync(path.join(process.cwd(), "lib/hover-menu.ts"), "utf8");
+  assert.match(hoverMenu, /HOVER_MENU_CLOSE_DELAY_MS/);
+  assert.match(hoverMenu, /createHoverMenuCloser/);
+  const { createHoverMenuCloser, HOVER_MENU_CLOSE_DELAY_MS } = await import("../lib/hover-menu");
+  assert.ok(HOVER_MENU_CLOSE_DELAY_MS >= 150, "hover menus must survive the button-to-menu gap");
+  {
+    const closer = createHoverMenuCloser(30);
+    let closed = false;
+    closer.schedule(() => {
+      closed = true;
+    });
+    assert.equal(closed, false, "mouseleave must not close the menu immediately");
+    closer.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(closed, false, "re-entering the menu cancels the close");
+    closer.schedule(() => {
+      closed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(closed, true, "menu closes after the hover delay");
+    closer.dispose();
+  }
+  const fastActionsUi = fs.readFileSync(path.join(process.cwd(), "components/load-card-fast-actions.tsx"), "utf8");
+  assert.match(fastActionsUi, /Exception/);
+  assert.match(fastActionsUi, /Set appointment/);
+  assert.match(fastActionsUi, /Post update/);
+  assert.match(fastActionsUi, /HoverActionMenu/);
+  assert.match(boardUi, /LoadCardFastActions/);
+  assert.match(boardUi, /AssignDialog/);
+  assert.match(boardUi, />\s*Edit\s*</);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);
@@ -338,13 +576,19 @@ async function main() {
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
   assert.match(workspaceSource, /Request Detention email/);
+  assert.match(workspaceSource, /Email invoice/);
+  assert.match(workspaceSource, /data-email-invoice-action/);
+  assert.match(workspaceSource, /setTab\("financials", "email-invoice"\)/);
   assert.match(workspaceSource, /LoadMailMenuItems/);
+  assert.match(workspaceSource, /EmailCustomerUpdateButton/);
   assert.doesNotMatch(workspaceSource, /SendToAccountingControls/);
   assert.match(workspaceSource, /Spanish/);
   assert.match(workspaceSource, /driver-locale|driverLocale/);
   const mailPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-mail-panel.tsx"), "utf8");
   assert.match(mailPanelSource, /data-load-mail/);
   assert.match(mailPanelSource, /Email customer update/);
+  assert.match(mailPanelSource, /EmailCustomerUpdateButton/);
+  assert.match(mailPanelSource, /data-email-customer-update/);
   assert.match(mailPanelSource, /Send load information/);
   assert.doesNotMatch(workspaceSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);
   assert.doesNotMatch(mailPanelSource, /SMTP_HOST|SENDGRID_API_KEY|SMTP_PASS/);
@@ -577,6 +821,30 @@ async function main() {
   assert.match(paySource, /Other payee/);
   assert.match(paySource, /Total income/);
   assert.match(paySource, /Gross profit/);
+  assert.match(paySource, /officeSharePercent/);
+  assert.match(paySource, /data-oo-office-percent/);
+  const { officeSharePercent, officeSharePercentForOoLoad, impliedOwnerOperatorPercent: impliedOoPercentFromPay } =
+    await import("../lib/settlement");
+  assert.equal(officeSharePercent(85), 15);
+  assert.equal(officeSharePercent(75), 25);
+  assert.equal(officeSharePercent(null), null);
+  const mse1059Income = 5869;
+  const mse1059Expenses = 4989;
+  const mse1059Profit = mse1059Income - mse1059Expenses;
+  assert.equal(mse1059Profit, 880);
+  assert.equal(officeSharePercentForOoLoad({ ownerOperator: true, ooPercent: 85 }), 15);
+  assert.equal(
+    officeSharePercentForOoLoad({
+      ownerOperator: true,
+      ooPercent: null,
+      ooPay: mse1059Expenses,
+      billedRate: mse1059Income,
+    }),
+    15,
+  );
+  assert.equal(impliedOoPercentFromPay(mse1059Expenses, mse1059Income), 85);
+  assert.equal(officeSharePercentForOoLoad({ ownerOperator: false, ooPercent: 85 }), null);
+  assert.match(paySource, /officeSharePercentForOoLoad/);
   assert.doesNotMatch(paySource, /ViewInvoiceButton/);
   assert.doesNotMatch(paySource, /View Customer Confirmation/);
   assert.doesNotMatch(paySource, /View Carrier Confirmation/);
@@ -722,7 +990,9 @@ async function main() {
   assert.match(mapCanvasSource, /markerText/);
   assert.match(mapCanvasSource, /labelOrigin/);
   assert.match(mapCanvasSource, /point\.labelOrigin/);
-  assert.match(mapCanvasSource, /new maps\.Point\(PIN_ANCHOR, -2\)/);
+  assert.match(mapCanvasSource, /loadMapIconLayout|LOAD_MAP_PIN_TIP_X|LOAD_MAP_PIN_TIP_Y/);
+  assert.match(mapCanvasSource, /gestureHandling: "greedy"/);
+  assert.match(mapCanvasSource, /defaultLoadMapLabelOrigin/);
   assert.match(mapCanvasSource, /loadMapPinIconUrl/);
   assert.doesNotMatch(mapCanvasSource, /SymbolPath|FORWARD_CLOSED_ARROW/);
   assert.match(mapCanvasSource, /featureType: "poi"/);
@@ -783,22 +1053,138 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Picks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/loads/templates/page.tsx"), "utf8"), /Book from template/);
   const payPageSource = fs.readFileSync(path.join(process.cwd(), "app/accounting/pay/page.tsx"), "utf8");
-  assert.match(payPageSource, /tab=pay/);
+  assert.match(payPageSource, /AccountingHub/);
+  assert.match(payPageSource, /tab="pay"/);
+  assert.doesNotMatch(payPageSource, /redirect\(/);
   const hubSource = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
   assert.match(hubSource, /hubTabClass/);
-  assert.match(hubSource, /\/api\/loads\/\$\{row\.id\}\/invoice/);
+  assert.match(hubSource, /acct-hub-tabs/);
+  assert.match(hubSource, /InvoicesAcctTable/);
+  assert.match(hubSource, /acct-page/);
+  assert.match(hubSource, /hrefForAccountingHubTab/);
+  assert.match(hubSource, /action="\/accounting\/pay"/);
+  assert.doesNotMatch(hubSource, /Export bill to QBO/);
   assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
   assert.match(hubSource, /Close period/);
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /overflow-x-auto/);
   assert.match(hubSource, /min-w-max/);
   assert.match(hubSource, /sticky right-0/);
-  assert.match(hubSource, /title="Send back to Load Management"/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8"), /Driver Pay Mgmt/);
+  const invoicesTableUi = fs.readFileSync(path.join(process.cwd(), "components/invoices-acct-table.tsx"), "utf8");
+  assert.match(invoicesTableUi, /\/api\/loads\/\$\{row\.id\}\/invoice/);
+  assert.match(invoicesTableUi, /title="Send back to Load Management"/);
+  assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
+  assert.match(invoicesTableUi, /QboInvoiceSendButton/);
+  assert.match(invoicesTableUi, /EmailInvoiceButton/);
+  assert.match(invoicesTableUi, /variant="link"/);
+  assert.doesNotMatch(invoicesTableUi, /Email History/);
+  assert.doesNotMatch(invoicesTableUi, /mailto:/);
+  assert.match(invoicesTableUi, /acct-expand-grid/);
+  const emailInvoiceUi = fs.readFileSync(path.join(process.cwd(), "components/email-invoice-button.tsx"), "utf8");
+  assert.match(emailInvoiceUi, /Email invoice/);
+  assert.match(emailInvoiceUi, /anchorId/);
+  assert.match(emailInvoiceUi, /id=\{anchorId\}/);
+  assert.match(emailInvoiceUi, /ar@msloads\.com/);
+  assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceMailTo/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /resolveInvoiceCustomerEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /Enter an email to send this invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Main email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/customer-form.tsx"), "utf8"), /Billing email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /Per-load email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /Per-load phone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-per-load-phone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-customer-screen.tsx"), "utf8"), /data-per-load-ext/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-contact.ts"), "utf8"), /resolveLoadCustomerPhone/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8"), /resolveCustomerMainPhone/);
+  for (const file of [
+    "lib/rate-con-shared.ts",
+    "lib/rate-con-ai.ts",
+    "lib/rate-con.ts",
+    "lib/load-mail.ts",
+    "lib/load-contact.ts",
+    "components/load-customer-screen.tsx",
+    "components/customer-form.tsx",
+    "components/rate-con-apply.tsx",
+  ]) {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.doesNotMatch(source, /Gerard Borne|Caitlyn Will|GBorne@|CWill@/i, `${file} must not hardcode example contacts`);
+    assert.doesNotMatch(source, /800-580-3101|36765942|36817888/, `${file} must not hardcode example phones or PO#s`);
+    assert.doesNotMatch(source, /@tql\.com/i, `${file} must not assume a broker domain`);
+  }
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"), /SMTP_FROM\s*=\s*["']ar@/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("to"\)/);
+  assert.match(emailInvoiceUi, /extra_id/);
+  assert.match(emailInvoiceUi, /name="body"/);
+  assert.match(emailInvoiceUi, /Email body/);
+  assert.match(emailInvoiceUi, /Send to/);
+  assert.match(emailInvoiceUi, /data-email-invoice-to-input/);
+  assert.match(emailInvoiceUi, /Enter an email to send this invoice/);
+  assert.doesNotMatch(emailInvoiceUi, /This load has no customer email/);
+  assert.match(emailInvoiceUi, /Attach load documents/);
+  assert.match(emailInvoiceUi, /Attach all/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/invoice-email/page.tsx"), "utf8"), /invoice_email_body/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8"), /\/settings\/invoice-email/);
+  const deskShared = fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8");
+  assert.match(deskShared, /Driver Pay Mgmt/);
+  assert.match(deskShared, /hrefForAccountingHubTab/);
+  const { hrefForAccountingHubTab } = await import("../lib/accounting-desk-shared");
+  assert.equal(hrefForAccountingHubTab("pay"), "/accounting/pay");
+  assert.equal(hrefForAccountingHubTab("invoices"), "/accounting/invoices?tab=invoices");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/accounting/pay/export/route.ts"), "utf8"), /driver-pay\.xlsx/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Recent events/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8"), /Save check call/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8"), /GPS quiet window/);
+  const documentsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/documents/page.tsx"), "utf8");
+  assert.match(documentsPage, /SETTINGS_DOCUMENT_EDITORS/);
+  assert.match(documentsPage, /Font for generated documents/);
+  assert.match(documentsPage, /DocumentFontForm/);
+  assert.match(documentsPage, /DocumentTagHints/);
+  assert.doesNotMatch(documentsPage, /Skip LTL|3rd-party BOL|company-truck paperwork|Only an Administrator can change these defaults/);
+  assert.doesNotMatch(documentsPage, /Powered by Ascend|Legal Center/i);
+  const documentCopy = fs.readFileSync(path.join(process.cwd(), "lib/document-copy.ts"), "utf8");
+  assert.match(documentCopy, /Driver confirmation/);
+  assert.match(documentCopy, /Customer confirmation/);
+  assert.match(documentCopy, /Bill of Lading/);
+  assert.doesNotMatch(
+    documentCopy.slice(documentCopy.indexOf("SETTINGS_DOCUMENT_EDITORS")),
+    /TriumphPay|3rd-party BOL|LTL quote|No owner-operator|No driver greeting/,
+  );
+  const printedTerms = await import("../lib/document-copy");
+  assert.doesNotMatch(printedTerms.DRIVER_CONFIRMATION_TERMS, /TriumphPay/);
+  assert.doesNotMatch(printedTerms.CUSTOMER_CONFIRMATION_TERMS, /TriumphPay/);
+  assert.doesNotMatch(printedTerms.BOL_TERMS, /TriumphPay/);
+  const workflowPage = fs.readFileSync(path.join(process.cwd(), "app/settings/workflow/page.tsx"), "utf8");
+  assert.match(workflowPage, /Automated Workflow/);
+  assert.match(workflowPage, /Heads up/);
+  assert.match(workflowPage, /WorkflowEngine/);
+  const workflowUi = fs.readFileSync(path.join(process.cwd(), "components/workflow-engine.tsx"), "utf8");
+  assert.match(workflowUi, /Prevent a driver, truck, or trailer/);
+  assert.match(workflowUi, /arrive and depart/);
+  assert.match(workflowUi, /Late Pickups or Deliveries/);
+  assert.match(workflowUi, /Save assignment block rules/);
+  assert.match(workflowUi, /Save late stop rules/);
+  assert.match(workflowUi, /auto_assign_dispatcher/);
+  assert.doesNotMatch(workflowUi, /Setup Packet Sent To Carrier|MyCarrierPortal|Incoming EDI 214/i);
+  assert.doesNotMatch(workflowPage, /Setup Packet Sent To Carrier|MyCarrierPortal/i);
+  const alertsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/alerts/page.tsx"), "utf8");
+  assert.match(alertsPage, /GPS quiet window/);
+  assert.match(alertsPage, /Automated Alerting/);
+  const alertsUi = fs.readFileSync(path.join(process.cwd(), "components/alert-rules-panel.tsx"), "utf8");
+  assert.match(alertsUi, /\+ Add Alert/);
+  assert.match(alertsUi, /Create New Alert/);
+  assert.match(alertsUi, /Add a rule to get started/);
+  assert.match(alertsUi, /Alert On/);
+  assert.match(alertsUi, /Alert People/);
+  assert.doesNotMatch(alertsUi, /hazmat|TWIC|Convoy|Incoming 810|tender/i);
+  const alertCatalog = fs.readFileSync(path.join(process.cwd(), "lib/alert-rules-shared.ts"), "utf8");
+  assert.match(alertCatalog, /driver_license/);
+  assert.match(alertCatalog, /driver_insurance/);
+  assert.match(alertCatalog, /driver_medical/);
+  assert.match(alertCatalog, /driver_drug_test/);
+  assert.match(alertCatalog, /truck_registration/);
+  assert.match(alertCatalog, /truck_dot/);
+  assert.match(alertCatalog, /trailer_registration/);
+  assert.match(alertCatalog, /trailer_dot/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "components/location-form.tsx"), "utf8"),
     /liftgate|inside pickup/i,
@@ -828,6 +1214,9 @@ async function main() {
   assert.match(overlayHost, /ms-go/);
   assert.match(overlayHost, /\/accounting/);
   assert.match(overlayHost, /data-overlay-close/);
+  assert.match(overlayHost, /load-overlay-frame/);
+  assert.match(overlayHost, /LoadOverlayPortal/);
+  assert.doesNotMatch(overlayHost, /min-h-\[80vh\]/);
   assert.match(overlayHost, /closeLoadOverlay\(returnTo\)/);
   assert.match(overlayHost, /\/loads\/\$\{frameId\}/);
   assert.match(overlayHost, /path.startsWith\("\/api\/"\)/);
@@ -840,6 +1229,17 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8"), /defaultMaxListeners/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /customerRefFromRateCon/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /rateConApplyContactFields/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"),
+    /parsed\.contact_name\s*\|\|\s*load\.contact_name/,
+  );
+  const rateConCreateUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConCreateUi, /rateConApplyContactFields/);
+  assert.doesNotMatch(rateConCreateUi, /parsed\.contact_name\s*\|\|\s*/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /createLoadAction[\s\S]*rateConApplyContactFields/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /leftoverCarrierPersonLine/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /carrierRoleWindow/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-summary.ts"), "utf8"), /driverFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
@@ -891,9 +1291,27 @@ async function main() {
   assert.match(financialsTab, /loadIsOnAccountingDesk/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/quickbooks-invoice-panel.tsx"), "utf8"), /data-qbo-invoice/);
   const invoicesHubUi = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(invoicesHubUi, /InvoicesAcctTable/);
   assert.match(invoicesHubUi, /Send to QuickBooks/);
   assert.match(invoicesHubUi, /Record demo invoice/);
+  assert.match(invoicesHubUi, /qboInvoiceExportStatus/);
   assert.doesNotMatch(invoicesHubUi, /Export to QBO|Resend QBO/);
+  assert.doesNotMatch(invoicesHubUi, /sendToQuickbooksFormAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/arap-report.tsx"), "utf8"), /Accounts Receivable/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/arap-report.tsx"), "utf8"), /0-29 Days Past Due/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/page.tsx"), "utf8"), /ArapReport/);
+  const qboSendButtonUi = fs.readFileSync(path.join(process.cwd(), "components/qbo-invoice-send-button.tsx"), "utf8");
+  assert.match(qboSendButtonUi, /data-qbo-send-notice/);
+  assert.match(qboSendButtonUi, /confirm_resend/);
+  assert.match(qboSendButtonUi, /Invoice sent again to QuickBooks/);
+  const qboActionsSrc = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
+  const qboFormSrc = qboActionsSrc.slice(
+    qboActionsSrc.indexOf("export async function sendToQuickbooksFormAction"),
+    qboActionsSrc.indexOf("export async function sendToQuickbooksAction"),
+  );
+  assert.match(qboFormSrc, /await sendToQuickbooksAction/);
+  assert.doesNotMatch(qboFormSrc, /throw new Error/);
+  assert.match(qboActionsSrc, /Invoice sent again to QuickBooks/);
   assert.doesNotMatch(docsPage, /LoadWatchRow|CustomerSnapshot/);
   assert.match(docsPage, /when=\{\["basics", "customer", "assets"\]\}/);
   assert.match(docsPage, /when="assets"/);
@@ -1167,6 +1585,7 @@ async function main() {
   assert.match(envExample, /SMTP_FROM=dispatch@msloads.com/);
   assert.match(envExample, /SMTP_USER=dispatch@msloads.com/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_FROM_DEFAULT = "dispatch@msloads.com"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_INVOICE_FROM = "ar@msloads.com"/);
   assert.match(envExample, /SENDGRID_API_KEY=/);
   for (const file of [
     "app/fleet/layout.tsx",
@@ -1178,6 +1597,7 @@ async function main() {
     "app/fleet/drivers/[id]/page.tsx",
     "app/fleet/samsara/page.tsx",
     "app/fleet/orbcomm/page.tsx",
+    "app/t/[token]/page.tsx",
     "app/locations/new/page.tsx",
     "app/customers/new/page.tsx",
   ]) {
@@ -1281,8 +1701,18 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /\/fleet\/hos\/clocks/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /staticAssignedDriver|mapHosCurrentVehicleDrivers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /LocationBadge/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /On the road/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /LocationBadge/);
+  const deskPage = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
+  assert.match(deskPage, /On the road/);
+  assert.match(deskPage, /LocationBadge/);
+  assert.match(deskPage, /ExceptionInboxCard/);
+  assert.doesNotMatch(deskPage, /variant="workbench"/);
+  assert.doesNotMatch(deskPage, /data-workbench-cards/);
+  const workbenchHome = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  assert.match(workbenchHome, /listWorkbenchInbox/);
+  assert.match(workbenchHome, /Workbench/);
+  assert.match(workbenchHome, /variant="workbench"/);
+  assert.doesNotMatch(workbenchHome, /On the road/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /redirect\("\/"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /samsaraGpsEmptyState/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /samsaraGpsEmptyState/);
   const matchFn =
@@ -1401,6 +1831,94 @@ async function main() {
   assert.match(orbcommAuth, /setpointTemp/);
   assert.match(orbcommAuth, /Authorization: token/);
   assert.doesNotMatch(orbcommAuth, /Bearer \$\{token\}/);
+  const trailerShareUi = fs.readFileSync(path.join(process.cwd(), "components/trailer-share-link.tsx"), "utf8");
+  assert.match(trailerShareUi, /Create customer link/);
+  assert.match(trailerShareUi, /Copy link/);
+  assert.match(trailerShareUi, /datetime-local/);
+  assert.match(trailerShareUi, /name="expires_at"/);
+  assert.match(trailerShareUi, /data-trailer-share-expires-input/);
+  assert.doesNotMatch(trailerShareUi, /sendMail|mailto:|Email customer/);
+  assert.doesNotMatch(trailerShareUi, /You send this link|Pins start when you create it/);
+  assert.match(trailerShareUi, /if \(compact\)/);
+  const compactShareStart = trailerShareUi.indexOf("if (compact)");
+  const compactShareReturn = trailerShareUi.indexOf("return (", compactShareStart);
+  const deskShareReturn = trailerShareUi.indexOf("return (", compactShareReturn + 1);
+  const compactShareUi = trailerShareUi.slice(compactShareStart, deskShareReturn);
+  assert.match(compactShareUi, /trailer-share-compact-row/);
+  assert.match(compactShareUi, /Create link/);
+  assert.match(compactShareUi, /linkState === "expired" \? "New link" : linkState === "live" \? "New" : "Create link"/);
+  assert.match(compactShareUi, /"Copied" : "Copy"/);
+  assert.match(compactShareUi, /formatCompactShareExpiry/);
+  assert.match(compactShareUi, /compactTrailerShareState/);
+  assert.match(compactShareUi, /Active · Exp/);
+  assert.match(compactShareUi, /Expired \{expiryLabel\}/);
+  assert.match(compactShareUi, /data-trailer-share-view/);
+  assert.match(compactShareUi, /data-trailer-share-popover/);
+  assert.match(compactShareUi, /absoluteShareUrl\(sharePath\)/);
+  assert.doesNotMatch(compactShareUi, /title=\{sharePath\}/);
+  assert.doesNotMatch(compactShareUi, /trailer-share-compact-path|text-overflow/);
+  assert.doesNotMatch(compactShareUi, /space-y-2|break-all|Expires \{formatDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-row,\s*\.trailer-share-compact-form \{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*6px;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-chip-live \{[\s\S]*background:\s*#e8eef6;[\s\S]*color:\s*#07325a;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-chip-expired \{[\s\S]*var\(--warning\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-chip \{[\s\S]*border-radius:\s*var\(--r-xs\);/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /trailer-share-compact-path \{[\s\S]*text-overflow:\s*ellipsis;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\[data-orbcomm-status-table\] td \{[\s\S]*vertical-align:\s*middle;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /trailer-share-compact-cell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /This link has expired/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-expired/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /Trailer location is no longer available/);
+  const trailerSharePage = fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8");
+  assert.match(trailerSharePage, /data-trailer-share-temp/);
+  assert.match(trailerSharePage, /data-trailer-share-location/);
+  assert.match(trailerSharePage, /LoadMapCanvas/);
+  assert.doesNotMatch(trailerSharePage, /data-trailer-share-pins|<ol |Setpoint|Last update/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/[id]/page.tsx"), "utf8"), /TrailerShareLinkPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /lastKnownOrbcommSnapshot/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /snapshot_latitude/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/l\/"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /data-load-share-timeline/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /data-load-share-expired/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /sendMail|mailto:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/t/[token]/page.tsx"), "utf8"), /data-trailer-share-live/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /samsaraTruckPinStyle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/control-center.ts"), "utf8"), /orbcommMapPinFromReading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/control-center.ts"), "utf8"), /samsaraTruckPinStyle/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-share.ts"), "utf8"), /trailerPinColor/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/l/[token]/page.tsx"), "utf8"), /pinColor: view.trailerPinColor/);
+  for (const file of [
+    "app/t/[token]/page.tsx",
+    "app/l/[token]/page.tsx",
+    "app/driver/loads/[id]/trailer/page.tsx",
+    "components/fleet-map-view.tsx",
+    "components/control-center-view.tsx",
+    "components/load-tracking-panel.tsx",
+    "components/load-stops-map.tsx",
+  ]) {
+    assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /LoadMapCanvas/, `${file} must use the shared teardrop pin map`);
+  }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /clusterLoadMapPoints/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /data-control-filter-strip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /Orders/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /Resources/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-chat-panel.tsx"), "utf8"), /data-load-chat/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /data-load-share-create/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-share-link.tsx"), "utf8"), /sendMail|mailto:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/auto-invoice.ts"), "utf8"), /maybeAutoInvoiceLoad/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/auto-invoice.ts"), "utf8"), /resolveInvoiceCustomerEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /data-load-overlay/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /loadStatusBadgeClass/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /driverLoadHasAssignedTrailer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8"), /LoadChatPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-share.ts"), "utf8"), /invoice_sent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "SHIPPED.md"), "utf8"), /Approved spec \(2026-09-02\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "scripts/start-standalone.mjs"), "utf8"), /copyStandaloneWebAssets/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /driverFormValues/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fleet-form-shared.ts"), "utf8"), /\bpin\b/);
@@ -1415,7 +1933,73 @@ async function main() {
   for (const file of ["components/mike-chat.tsx", "components/mike-launcher.tsx", "components/app-shell.tsx"]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places)["']/, `${file} must stay client-safe`);
+    assert.doesNotMatch(source, /tie-sheet-fixtures/, `${file} must not import test fixtures`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/tie-sheet["']/, `${file} must not import server tie-sheet`);
   }
+  const mikeChatUi = fs.readFileSync(path.join(process.cwd(), "components/mike-chat.tsx"), "utf8");
+  assert.match(mikeChatUi, /data-tie-sheet-image/);
+  assert.match(mikeChatUi, /accept="image\/\*"/);
+  assert.match(mikeChatUi, /data-tie-sheet-discard/);
+  assert.match(mikeChatUi, /build_tie_sheet/);
+  assert.match(mikeChatUi, /Confirm saves the load\. Discard does not/);
+  assert.match(mikeChatUi, /imageFileFromDataTransfer/);
+  assert.match(mikeChatUi, /addEventListener\("paste"/);
+  assert.match(mikeChatUi, /data-mike-composer/);
+  assert.doesNotMatch(mikeChatUi, /paste the truck|markdown paste|From Tie Sheet/);
+  assert.doesNotMatch(mikeChatUi, /Grok Bot|Google Sheet|file watcher|shared folder/);
+  const { imageFileFromDataTransfer, namedTieSheetImage } = await import("../lib/mike-shared");
+  const phoneSnap = new File([Uint8Array.from([1, 2, 3, 4])], "IMG_2041.PNG", { type: "image/png" });
+  assert.equal(imageFileFromDataTransfer({ files: [phoneSnap], items: [] })?.name, "IMG_2041.PNG");
+  assert.equal(
+    imageFileFromDataTransfer({
+      files: [],
+      items: [{ kind: "file", type: "image/jpeg", getAsFile: () => phoneSnap }],
+    })?.name,
+    "IMG_2041.PNG",
+  );
+  assert.equal(
+    imageFileFromDataTransfer({
+      files: [],
+      items: [{ kind: "string", type: "text/plain", getAsFile: () => null }],
+    }),
+    null,
+  );
+  const clipboardBlob = new File([Uint8Array.from([9, 8, 7])], "", { type: "image/png" });
+  assert.equal(namedTieSheetImage(clipboardBlob).name, "tie-sheet.png");
+  assert.equal(namedTieSheetImage(clipboardBlob).type, "image/png");
+  const newLoadNoTieSheetPaste = fs.readFileSync(path.join(process.cwd(), "app/loads/new/page.tsx"), "utf8");
+  assert.doesNotMatch(newLoadNoTieSheetPaste, /From Tie Sheet|tie.sheet paste|paste a Tie Sheet/);
+  const tieSheetAiSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8");
+  assert.match(tieSheetAiSrc, /MIKE_OPENAI_MODEL/);
+  assert.match(tieSheetAiSrc, /redactTieSheetSecrets/);
+  assert.doesNotMatch(tieSheetAiSrc, /console\.log/);
+  assert.doesNotMatch(tieSheetAiSrc, /Grok Bot|googleusercontent|spreadsheets/);
+  const tieSheetSharedSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-shared.ts"), "utf8");
+  assert.match(tieSheetSharedSrc, /Nebraska Cold Storage Inc/);
+  assert.match(tieSheetSharedSrc, /M&S Loads/);
+  assert.match(tieSheetSharedSrc, /groupTieSheetOrdersByDock/);
+  assert.match(tieSheetSharedSrc, /tieSheetSameDockFamily/);
+  assert.match(tieSheetSharedSrc, /Never group by city alone/);
+  assert.match(tieSheetSharedSrc, /western-kosher-heartland/);
+  assert.match(tieSheetSharedSrc, /fillAmbiguousTieSheetFields/);
+  const fixtureSrc = fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-fixtures.ts"), "utf8");
+  assert.match(fixtureSrc, /THREE drops/);
+  assert.match(fixtureSrc, /not a happy-path same-drop/);
+  assert.match(fixtureSrc, /0824-10E Bozzutos/);
+  assert.match(fixtureSrc, /Ignore unnumbered 0831- PFG/);
+  assert.doesNotMatch(fixtureSrc, /googleusercontent|Drive auto-pull|Grok Bot/);
+  assert.match(tieSheetAiSrc, /do not group by city/);
+  assert.match(tieSheetAiSrc, /Heartland Kosher and Western Kosher/);
+  assert.match(fixtureSrc, /tie-sheet-0824-14M\.png/);
+  assert.match(fixtureSrc, /green load-ID cell/);
+  assert.match(fixtureSrc, /often no header/);
+  assert.match(fixtureSrc, /no TOTAL line/);
+  assert.match(tieSheetAiSrc, /often NO header row/);
+  assert.match(tieSheetAiSrc, /green load-ID cell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet-ai.ts"), "utf8"), /Order# \/ Control#/);
+  assert.doesNotMatch(tieSheetSharedSrc, /Liftgate|Inside Pickup|Inside Delivery/);
+  assert.doesNotMatch(tieSheetSharedSrc, /one drop per truck/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/tie-sheet.ts"), "utf8"), /console\.log/);
   const mikeSrc = fs.readFileSync(path.join(process.cwd(), "lib/mike.ts"), "utf8");
   assert.match(mikeSrc, /Never invent GPS|hasPosition/);
   assert.match(mikeSrc, /emptyDrivers/);
@@ -1721,10 +2305,60 @@ async function main() {
   assert.equal(reeferOnly[0]?.items.length, 1);
   assert.equal(reeferOnly[0]?.items[0]?.kind, "reefer");
   const inboxUi = fs.readFileSync(path.join(process.cwd(), "components/exception-inbox.tsx"), "utf8");
+  const workbenchCardUi = fs.readFileSync(path.join(process.cwd(), "components/workbench-load-card.tsx"), "utf8");
+  const issueLineUi = fs.readFileSync(path.join(process.cwd(), "components/exception-issue-line.tsx"), "utf8");
   assert.match(inboxUi, /groupInboxExceptions/);
   assert.match(inboxUi, /data-attention-load/);
-  assert.match(inboxUi, /data-attention-issue/);
+  assert.match(inboxUi, /variant === "workbench"/);
+  assert.match(inboxUi, /WorkbenchLoadCard/);
+  assert.match(inboxUi, /data-workbench-cards/);
+  assert.match(inboxUi, /items-stretch/);
+  assert.match(inboxUi, /md:grid-cols-2/);
+  assert.match(inboxUi, /xl:grid-cols-3/);
+  assert.doesNotMatch(inboxUi, /items-start gap-3 md:grid-cols-2/);
+  assert.doesNotMatch(inboxUi, /grid gap-6/);
   assert.doesNotMatch(inboxUi, /inbox\.items\.map\(\(item\)/);
+  assert.match(issueLineUi, /data-attention-issue/);
+  assert.match(issueLineUi, /Snooze 4h/);
+  assert.match(issueLineUi, /if \(compact\)/);
+  const compactStart = issueLineUi.indexOf("if (compact)");
+  const compactReturn = issueLineUi.indexOf("return (", compactStart);
+  const deskReturn = issueLineUi.indexOf("return (", compactReturn + 1);
+  assert.doesNotMatch(issueLineUi.slice(compactStart, deskReturn), /Snooze 4h|exceptionAction/);
+  assert.match(workbenchCardUi, /LoadMapCanvas/);
+  assert.match(workbenchCardUi, /buildStopsMapModel/);
+  assert.match(workbenchCardUi, /data-workbench-card/);
+  assert.match(workbenchCardUi, /data-workbench-map-thumb/);
+  assert.match(workbenchCardUi, /workbench-card-issues/);
+  assert.match(workbenchCardUi, /No open issues/);
+  assert.match(workbenchCardUi, /h-20 w-20/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /min-height: 11\.5rem/);
+  assert.match(workbenchCardUi, /mapsBrowserKey/);
+  assert.match(workbenchCardUi, /data-workbench-lane-sketch/);
+  assert.match(workbenchCardUi, /LoadCardFastActions/);
+  assert.doesNotMatch(workbenchCardUi, /exceptionAction|Snooze 4h/);
+  assert.match(workbenchCardUi, /listStopAppointmentTargets/);
+  assert.match(workbenchCardUi, /findCityCenter/);
+  assert.match(workbenchCardUi, /compact/);
+  assert.doesNotMatch(workbenchCardUi, /h-56/);
+  assert.doesNotMatch(workbenchCardUi, /min-h-\[14rem\]/);
+  assert.doesNotMatch(workbenchCardUi, /md:grid-cols-\[minmax/);
+  assert.doesNotMatch(workbenchCardUi, /maps\.google\.com\/maps\?/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.googleapis\.com\/maps\/api\/js/);
+  const { isOutOfToleranceException } = await import("../lib/exceptions");
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "MEDIUM" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "HIGH" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "late", severity: "CRITICAL" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "detention", severity: "HIGH" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "reefer", severity: "MEDIUM" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "missing_contact", severity: "CRITICAL" }), true);
+  assert.equal(isOutOfToleranceException({ kind: "unassigned", severity: "MEDIUM" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "missing_pod", severity: "HIGH" }), false);
+  assert.equal(isOutOfToleranceException({ kind: "compliance", severity: "HIGH" }), false);
+  const workbenchUi = fs.readFileSync(path.join(process.cwd(), "components/load-log-section.tsx"), "utf8");
+  assert.match(workbenchUi, /listLoadTimeline/);
+  assert.match(workbenchUi, /Load Timeline/);
+  assert.match(workbenchUi, /data-timeline-newest-first/);
 
   const customerId = queries.createCustomer({
     name: "Smoke Test Shipper",
@@ -1825,6 +2459,104 @@ async function main() {
   assert.ok(created);
   assert.equal(created.status, "available");
   assert.match(created.load_number, /^MSE-\d+$/);
+
+  const { listLoadTimeline } = await import("../lib/load-timeline");
+  const { runWithAuditActor, recordLoadAudit } = await import("../lib/audit");
+  const { listWorkbenchInbox, setExceptionState } = await import("../lib/desk");
+  const stopsMod = await import("../lib/stops");
+  assert.deepEqual(listLoadTimeline(-1), [], "timeline must not invent events that are not in the system");
+  assert.equal(
+    listLoadTimeline(loadId).some((row) => row.source === "samsara" || row.source === "orbcomm"),
+    false,
+    "create audit is real; Samsara/Orbcomm stay off until arrive/depart or a material reefer event",
+  );
+  const arriveAt = new Date(Date.now() - 90 * 60 * 1000).toISOString();
+  const departAt = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const pingAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const missAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const statusAt = new Date().toISOString();
+  stopsMod.ensureDefaultStops(loadId);
+  const pickupStop = getDb()
+    .prepare("SELECT id FROM load_stops WHERE load_id = ? AND kind = 'pickup' ORDER BY id LIMIT 1")
+    .get(loadId) as { id: number } | undefined;
+  if (pickupStop) {
+    getDb()
+      .prepare("UPDATE load_stops SET arrived_at = ?, departed_at = ? WHERE id = ?")
+      .run(arriveAt, departAt, pickupStop.id);
+  }
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (?, NULL, '', 34, 34.2, 0, '', 'orbcomm', ?)`,
+    )
+    .run(loadId, pingAt);
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (?, NULL, '', 34, 48.6, 0, 'HIGH TEMP', 'orbcomm', ?)`,
+    )
+    .run(loadId, missAt);
+  runWithAuditActor({ name: "Pat Desk", kind: "dispatcher" }, () => {
+    recordLoadAudit({
+      loadId,
+      action: "status",
+      field: "status",
+      oldValue: "available",
+      newValue: "assigned",
+    });
+  });
+  const timeline = listLoadTimeline(loadId);
+  assert.ok(timeline.length >= 3, "timeline shows real arrive/depart, reefer miss, and dispatcher action");
+  const times = timeline.map((row) => new Date(row.at).getTime());
+  for (let index = 1; index < times.length; index += 1) {
+    assert.ok(times[index] <= times[index - 1], "timeline is newest first");
+  }
+  assert.ok(timeline.some((row) => row.source === "samsara" && /Arrived/.test(row.title)));
+  assert.ok(timeline.some((row) => row.source === "samsara" && /Departed/.test(row.title)));
+  assert.ok(timeline.some((row) => row.source === "orbcomm" && /HIGH TEMP/.test(row.detail)));
+  assert.ok(timeline.some((row) => row.source === "dispatcher" && row.actor === "Pat Desk"));
+  assert.equal(
+    timeline.some((row) => row.at === pingAt && row.source === "orbcomm"),
+    false,
+    "Orbcomm pings that are in tolerance stay off the timeline",
+  );
+  getDb().prepare("DELETE FROM reefer_readings WHERE load_id = ?").run(loadId);
+  if (pickupStop) {
+    getDb().prepare("UPDATE load_stops SET arrived_at = '', departed_at = '' WHERE id = ?").run(pickupStop.id);
+  }
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("Pat Broker", "", loadId);
+  const namedNoPhone = listWorkbenchInbox().items.filter((item) => item.loadId === loadId);
+  assert.ok(
+    namedNoPhone.some((item) => item.kind === "missing_contact"),
+    "blank rate-con phone is out of tolerance",
+  );
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("", "314-555-0100", loadId);
+  const phoneNoName = (await import("../lib/exceptions"))
+    .listExceptionInbox()
+    .items.filter((item) => item.loadId === loadId && item.kind === "missing_contact");
+  assert.equal(phoneNoName.length, 0, "blank name with a phone is in tolerance");
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("Pat Broker", "", loadId);
+  const beforeResolve = listWorkbenchInbox().items.filter((item) => item.loadId === loadId);
+  assert.ok(beforeResolve.length >= 1, "workbench lists the out-of-tolerance load");
+  for (const item of beforeResolve) {
+    setExceptionState(item.id, "resolved", "back in tolerance");
+  }
+  assert.equal(
+    listWorkbenchInbox().items.some((item) => item.loadId === loadId),
+    false,
+    "a load leaves the workbench when it is back in tolerance",
+  );
+  getDb()
+    .prepare("UPDATE loads SET contact_name = ?, contact_phone = ? WHERE id = ?")
+    .run("", "", loadId);
 
   const jamesId = queries.createDriver({
     name: "James Whitaker Smoke",
@@ -2089,6 +2821,13 @@ async function main() {
   assert.ok(planningIds.length >= 1);
   assert.ok([...planningStatuses].every((status) => status === "available" || status === "hold"));
   assert.equal(planningIds.includes(cancelBoardId), false);
+  const miscLoads = queries.listLoads({ status: "misc" });
+  assert.ok(miscLoads.some((load) => load.id === cancelBoardId));
+  assert.ok(miscLoads.every((load) => load.status === "cancelled" || load.status === "completed"));
+  const masterOnlyLoads = queries.listLoads({ status: "all", masterOnly: true });
+  assert.ok(masterOnlyLoads.every((load) => load.is_master || load.parent_load_id));
+  const mineNone = queries.listLoads({ status: "all", dispatcherId: -1 });
+  assert.equal(mineNone.length, 0);
   const sampleRefLoad = queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1042");
   assert.ok(sampleRefLoad);
   assert.ok(
@@ -2924,6 +3663,47 @@ async function main() {
   assert.match(customerDraft.text, /Do not reply/);
   assert.match(customerDraft.text, /not monitored/);
   assert.doesNotMatch(customerDraft.text, /\$|settlement|relay|oo pay/i);
+  const invoiceDraft = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    customerName: "Kayco",
+    totalLabel: "$2,200.00",
+  });
+  assert.equal(invoiceDraft.from, "ar@msloads.com");
+  assert.equal(invoiceDraft.replyTo, "ar@msloads.com");
+  assert.match(invoiceDraft.subject, /INV-12345/);
+  assert.match(invoiceDraft.subject, /12345/);
+  assert.match(invoiceDraft.text, /Invoice INV-12345 for load 12345/);
+  assert.match(invoiceDraft.text, /Bill to: Kayco/);
+  assert.match(invoiceDraft.text, /\$2,200\.00/);
+  assert.match(invoiceDraft.text, /The invoice PDF is attached/);
+  assert.match(invoiceDraft.text, /Reply to this email/);
+  assert.match(invoiceDraft.text, /Accounts Receivable/);
+  assert.doesNotMatch(invoiceDraft.text, /Do not reply|not monitored/);
+  assert.doesNotMatch(invoiceDraft.replyTo, /noreply@|dispatch@/);
+  const invoiceDraftWithDocs = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    extraLabels: ["BOL", "Lumper"],
+  });
+  assert.match(invoiceDraftWithDocs.text, /Also attached: BOL, Lumper/);
+  assert.doesNotMatch(invoiceDraft.text, /Also attached/);
+  const { DEFAULT_INVOICE_EMAIL_BODY } = await import("../lib/invoice-email-shared");
+  const invoiceLetter = loadMail.composeCustomerInvoiceEmail({
+    invoiceNumber: "INV-12345",
+    loadNumber: "12345",
+    customerName: "Kayco",
+    totalLabel: "$2,200.00",
+    extraLabels: ["BOL"],
+    body: DEFAULT_INVOICE_EMAIL_BODY,
+  });
+  assert.match(invoiceLetter.text, /Dear Kayco/);
+  assert.match(invoiceLetter.text, /INV-12345/);
+  assert.match(invoiceLetter.text, /load 12345/);
+  assert.match(invoiceLetter.text, /\$2,200\.00/);
+  assert.match(invoiceLetter.text, /Thank you for your business/);
+  assert.match(invoiceLetter.text, /Also attached: BOL/);
+  assert.doesNotMatch(invoiceLetter.text, /Do not reply|not monitored/);
   assert.equal(
     loadMail.customerFacingLoadNumber({
       load_number: "MSE-1055",
@@ -3108,6 +3888,23 @@ async function main() {
   assert.doesNotMatch(sendgridBody, /info@msloads\.com/);
   assert.match(sendgridBody, /"reply_to":\{"email":"noreply@msloads.com"\}/);
   assert.doesNotMatch(sendgridBody, /ana@/);
+  let invoiceSendgridBody = "";
+  await mailer.sendMail(
+    {
+      to: "ap.mail@customer.example",
+      from: "ar@msloads.com",
+      subject: "Invoice INV-12345",
+      text: "Invoice attached.",
+      replyTo: "ar@msloads.com",
+    },
+    (async (_url, init) => {
+      invoiceSendgridBody = String(init && typeof init === "object" && "body" in init ? init.body : "");
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+  );
+  assert.match(invoiceSendgridBody, /"email":"ar@msloads.com"/);
+  assert.match(invoiceSendgridBody, /"reply_to":\{"email":"ar@msloads.com"\}/);
+  assert.doesNotMatch(invoiceSendgridBody, /dispatch@msloads\.com|noreply@msloads\.com/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
     assert.equal(input.to, "ap.mail@customer.example");
     assert.equal(input.replyTo, "noreply@msloads.com");
@@ -3131,6 +3928,160 @@ async function main() {
     assert.doesNotMatch(input.text, /\$|settlement|relay|oo pay/i);
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
+  queries.updateLoadStatus(mailLoadId, "delivered");
+  let invoiceMailTo = "";
+  let invoiceMailFrom = "";
+  let invoiceMailReplyTo = "";
+  let invoiceMailHasPdf = false;
+  await loadMail.sendCustomerInvoiceMail(mailLoadId, async (input) => {
+    invoiceMailTo = input.to;
+    invoiceMailFrom = input.from ?? "";
+    invoiceMailReplyTo = input.replyTo ?? "";
+    invoiceMailHasPdf = Boolean(input.attachments?.some((file) => file.contentType === "application/pdf"));
+    assert.match(input.subject, /Invoice/);
+    assert.match(input.text, /Thank you for your business|The invoice PDF is attached/);
+    assert.doesNotMatch(input.text, /Do not reply|not monitored/);
+  });
+  assert.equal(invoiceMailTo, "pat@example.com");
+  assert.equal(invoiceMailFrom, "ar@msloads.com");
+  assert.equal(invoiceMailReplyTo, "ar@msloads.com");
+  assert.equal(invoiceMailHasPdf, true);
+  assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "pat@example.com");
+  const lumperReceipt = addAttachment({
+    loadId: mailLoadId,
+    kind: "lumper",
+    originalName: "lumper-receipt.pdf",
+    buffer: Buffer.from("%PDF-1.4 lumper"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const bolScan = addAttachment({
+    loadId: mailLoadId,
+    kind: "bol",
+    originalName: "bol.pdf",
+    buffer: Buffer.from("%PDF-1.4 bol"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const extraDocs = loadMail.invoiceMailExtraDocs(mailLoadId);
+  assert.ok(extraDocs.some((file) => file.id === lumperReceipt.id && file.kindLabel === "Lumper"));
+  assert.ok(extraDocs.some((file) => file.id === bolScan.id && file.kindLabel === "BOL"));
+  assert.equal(extraDocs.some((file) => file.kind === "invoice"), false);
+  assert.throws(() => loadMail.mailFilesForLoadDocs(mailLoadId, [999999]), /not on this load/);
+  await loadMail.sendCustomerInvoiceMail(
+    mailLoadId,
+    async (input) => {
+      assert.equal(input.attachments?.length, 3);
+      assert.ok(input.attachments?.some((file) => file.filename === "lumper-receipt.pdf"));
+      assert.ok(input.attachments?.some((file) => file.filename === "bol.pdf"));
+      assert.match(input.text, /Also attached: Lumper, BOL/);
+    },
+    { extraIds: [lumperReceipt.id, bolScan.id] },
+  );
+  const noInvoiceMail = new FormData();
+  noInvoiceMail.set("load_id", String(noEmailLoadId));
+  const { sendCustomerInvoiceMailAction } = await import("../lib/dispatcher-actions");
+  const noInvoiceMailResult = await sendCustomerInvoiceMailAction(noInvoiceMail);
+  assert.equal(noInvoiceMailResult.ok, false);
+  if (!noInvoiceMailResult.ok) assert.match(noInvoiceMailResult.error, /Enter an email to send this invoice/);
+  assert.doesNotMatch(noInvoiceMailResult.ok ? "" : noInvoiceMailResult.error, /no customer email/);
+  queries.updateLoadStatus(noEmailLoadId, "delivered");
+  let typedInvoiceTo = "";
+  await loadMail.sendCustomerInvoiceMail(
+    noEmailLoadId,
+    async (input) => {
+      typedInvoiceTo = input.to;
+    },
+    { to: "typed.invoice@example.com" },
+  );
+  assert.equal(typedInvoiceTo, "typed.invoice@example.com");
+  assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(noEmailLoadId)!), "");
+  await loadMail.sendCustomerInvoiceMail(
+    mailLoadId,
+    async (input) => {
+      assert.equal(input.to, "pat@example.com");
+    },
+    { to: "ignore-override@example.com" },
+  );
+  const slotCustomerId = queries.createCustomer({
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "info@slots.example",
+    billing_email: "billing@slots.example",
+    contacts: [{ name: "Desk", role: "Office", phone: "555-0100", email: "info@slots.example" }],
+  });
+  const slotLoadId = queries.createLoad({
+    customer_id: slotCustomerId,
+    origin: "Omaha, NE",
+    destination: "Dallas, TX",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET contact_email = ? WHERE id = ?").run("ana@slots.example", slotLoadId);
+  const slotLoad = queries.getLoad(slotLoadId)!;
+  assert.equal(loadMail.resolveLoadCustomerEmail(slotLoad), "ana@slots.example");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotLoad), "billing@slots.example");
+  assert.equal(loadMail.invoiceMailTo(slotLoad, "typed@slots.example"), "billing@slots.example");
+  assert.notEqual(loadMail.resolveInvoiceCustomerEmail(slotLoad), "ana@slots.example");
+  const loadContact = await import("../lib/load-contact");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "2210", slotLoadId);
+  const slotPhoneLoad = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadPerLoadPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadPerLoadExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotPhoneLoad), "800-555-0142");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotPhoneLoad), "2210");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotPhoneLoad), "800-555-0142 x2210");
+  assert.equal(loadContact.resolveCustomerMainPhone(slotCustomerId), "555-0100");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(slotPhoneLoad), "billing@slots.example");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "", slotLoadId);
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(queries.getLoad(slotLoadId)!), "800-555-0142");
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("", "9999", slotLoadId);
+  const slotFallback = queries.getLoad(slotLoadId)!;
+  assert.equal(loadContact.resolveLoadCustomerPhone(slotFallback), "555-0100");
+  assert.equal(loadContact.resolveLoadCustomerExt(slotFallback), "");
+  assert.equal(loadContact.resolveLoadCustomerPhoneLine(slotFallback), "555-0100");
+  assert.equal(queries.getCustomer(slotCustomerId)?.contacts[0]?.phone, "555-0100");
+  queries.updateCustomer(slotCustomerId, {
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "info@slots.example",
+    billing_email: "",
+    contacts: [{ name: "Desk", role: "Office", phone: "555-0100", email: "info@slots.example" }],
+  });
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(queries.getLoad(slotLoadId)!), "info@slots.example");
+  queries.updateCustomer(slotCustomerId, {
+    name: "Three Slot Shipper",
+    billing_notes: "",
+    main_email: "",
+    billing_email: "",
+    contacts: [],
+  });
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(queries.getLoad(slotLoadId)!), "");
+  assert.equal(loadMail.invoiceMailTo(queries.getLoad(slotLoadId)!, "typed@slots.example"), "typed@slots.example");
+  assert.equal(loadMail.resolveLoadCustomerEmail(queries.getLoad(slotLoadId)!), "ana@slots.example");
+  assert.equal(queries.getCustomer(slotCustomerId)?.main_email, "");
+  assert.equal(queries.getCustomer(slotCustomerId)?.billing_email, "");
   const {
     replaceStops: replaceDropStops,
     setStopDelivered,
@@ -3949,6 +4900,10 @@ Continuous reefer. Two load locks.
     "reefer_setpoint_f": 28,
     "reefer_mode": "continuous",
     "special_instructions": "Call the yard before arrival.",
+    "contact_name": "Alex Broker",
+    "contact_email": "alex.broker@example.com",
+    "contact_phone": "402-555-0199",
+    "contact_ext": "2210",
     "stops": [
       {
         "kind": "pickup",
@@ -3996,6 +4951,13 @@ Continuous reefer. Two load locks.
   assert.equal(brokerParsed.reader, "ai");
   assert.equal(brokerParsed.customer_name, "Allen Lund Company");
   assert.equal(brokerParsed.customer_id, allenId);
+  assert.equal(brokerParsed.contact_email, "alex.broker@example.com");
+  assert.equal(brokerParsed.contact_name, "Alex Broker");
+  assert.equal(brokerParsed.contact_phone, "402-555-0199");
+  assert.equal(brokerParsed.contact_ext, "2210");
+  assert.equal(queries.getCustomer(allenId)?.main_email, "");
+  assert.equal(queries.getCustomer(allenId)?.billing_email, "");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
   assert.equal(brokerParsed.rate, 4250);
   assert.equal(brokerParsed.weight, 38400);
   assert.match(brokerParsed.commodity, /Fresh beef/i);
@@ -4014,6 +4976,158 @@ Continuous reefer. Two load locks.
   assert.equal(brokerParsed.extra_stops[0]?.kind, "delivery");
   assert.match(brokerParsed.extra_stops[0]?.stop.name ?? "", /Kayco/i);
   assert.equal(brokerParsed.field_flags.some((flag) => flag.key === "rate" && flag.status === "low"), false);
+
+  const { parseBrokerContactFromText } = await import("../lib/rate-con-shared");
+  const tqlContactText = `
+CARRIER CONTACT
+MS Express
+jc 402-555-0100
+TQL CONTACT INFO
+Name Phone Email Fax
+Riley Booker 800-555-3101 x47010 riley.booker@broker.example 5135554273
+PICKUP
+Indel (915) 590-5914
+send POD to billing.pod@broker.example
+`;
+  const tqlContact = parseBrokerContactFromText(tqlContactText);
+  assert.equal(tqlContact.contact_email, "riley.booker@broker.example");
+  assert.match(tqlContact.contact_name, /Riley Booker/);
+  assert.equal(tqlContact.contact_phone, "800-555-3101");
+  assert.equal(tqlContact.contact_ext, "47010");
+  assert.doesNotMatch(tqlContact.contact_email, /billing\.pod|jc@|indel/i);
+  const aboveTitleSheet = fs.readFileSync(
+    path.join(process.cwd(), "scripts/fixtures/contact-table-above-title.txt"),
+    "utf8",
+  );
+  const aboveTitleContact = parseBrokerContactFromText(aboveTitleSheet);
+  assert.equal(aboveTitleContact.contact_name, "Morgan Hale");
+  assert.equal(aboveTitleContact.contact_email, "morgan.hale@broker.example");
+  assert.equal(aboveTitleContact.contact_phone, "312-555-0144");
+  assert.equal(aboveTitleContact.contact_ext, "8821");
+  assert.doesNotMatch(aboveTitleContact.contact_email, /leftover\.pod|jc@|tql/i);
+  assert.doesNotMatch(`${aboveTitleContact.contact_phone} ${aboveTitleContact.contact_ext}`, /60666|7177828|915|580-3101/);
+  const sheetCustomerId = queries.createCustomer({
+    name: "Sheet Customer",
+    billing_notes: "",
+    main_email: "desk@shipper.example",
+    billing_email: "ap@shipper.example",
+    contacts: [{ name: "Desk", role: "Office", phone: "402-555-0100", email: "desk@shipper.example" }],
+  });
+  const sheetLoadId = queries.createLoad({
+    customer_id: sheetCustomerId,
+    origin: "Chicago, IL",
+    destination: "Lenexa, KS",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 2699,
+    commodity: "Epoxy",
+    rate: null,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 0,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    contact_name: aboveTitleContact.contact_name,
+    contact_email: aboveTitleContact.contact_email,
+    contact_phone: aboveTitleContact.contact_phone,
+    contact_ext: aboveTitleContact.contact_ext,
+  });
+  const sheetLoad = queries.getLoad(sheetLoadId)!;
+  assert.equal(sheetLoad.contact_name, "Morgan Hale");
+  assert.equal(sheetLoad.contact_email, "morgan.hale@broker.example");
+  assert.equal(sheetLoad.contact_phone, "312-555-0144");
+  assert.equal(sheetLoad.contact_ext, "8821");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.main_email, "desk@shipper.example");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.billing_email, "ap@shipper.example");
+  assert.equal(queries.getCustomer(sheetCustomerId)?.contacts[0]?.phone, "402-555-0100");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(sheetLoad), "ap@shipper.example");
+  assert.equal(loadMail.resolveLoadCustomerEmail(sheetLoad), "morgan.hale@broker.example");
+  assert.equal(loadContact.resolveLoadCustomerPhone(sheetLoad), "312-555-0144");
+  assert.equal(loadContact.resolveCustomerMainPhone(sheetCustomerId), "402-555-0100");
+  const noContactBlock = parseBrokerContactFromText(`
+LOAD INFORMATION
+Pickup Chicago IL
+Phone: (915) 590-5914
+send POD to leftover@broker.example
+`);
+  assert.equal(noContactBlock.contact_name, "");
+  assert.equal(noContactBlock.contact_email, "");
+  assert.equal(noContactBlock.contact_phone, "");
+  assert.equal(noContactBlock.contact_ext, "");
+  const tqlHint = parseRateConText(tqlContactText);
+  assert.equal(tqlHint.contact_email, "riley.booker@broker.example");
+  assert.equal(tqlHint.contact_ext, "47010");
+  const fromTextOnly = applyAiRateCon(
+    { customer_name: "Allen Lund Company", customer_confidence: "high", stops: [] },
+    queries.listCustomers(),
+    emptyParsedRateCon(),
+    tqlContactText,
+  );
+  assert.equal(fromTextOnly.contact_email, "riley.booker@broker.example");
+  assert.equal(fromTextOnly.contact_phone, "800-555-3101");
+  assert.equal(fromTextOnly.contact_ext, "47010");
+  assert.equal(queries.getCustomer(allenId)?.main_email, "");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
+  const phoneOnlyContact = parseBrokerContactFromText(`
+BROKER CONTACT
+Name: Dana Desk
+Phone: 402-555-0188
+Email: dana.desk@broker.example
+`);
+  assert.equal(phoneOnlyContact.contact_phone, "402-555-0188");
+  assert.equal(phoneOnlyContact.contact_ext, "");
+  assert.equal(phoneOnlyContact.contact_email, "dana.desk@broker.example");
+  const noPhoneContact = parseBrokerContactFromText(`
+BROKER CONTACT
+Name: No Phone
+Email: nophone@broker.example
+`);
+  assert.equal(noPhoneContact.contact_phone, "");
+  assert.equal(noPhoneContact.contact_ext, "");
+  assert.equal(noPhoneContact.contact_email, "nophone@broker.example");
+  const appliedPhoneLoadId = queries.createLoad({
+    customer_id: allenId,
+    origin: "Hastings, NE",
+    destination: "Bronx, NY",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 38400,
+    commodity: "Fresh beef trimmings",
+    rate: 4250,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 28,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    contact_name: brokerParsed.contact_name,
+    contact_email: brokerParsed.contact_email,
+    contact_phone: brokerParsed.contact_phone,
+    contact_ext: brokerParsed.contact_ext,
+  });
+  const appliedPhoneLoad = queries.getLoad(appliedPhoneLoadId)!;
+  assert.equal(appliedPhoneLoad.contact_phone, "402-555-0199");
+  assert.equal(appliedPhoneLoad.contact_ext, "2210");
+  assert.equal(appliedPhoneLoad.contact_email, "alex.broker@example.com");
+  assert.equal(queries.getCustomer(allenId)?.contacts.length, 0);
+  assert.equal(queries.getCustomer(allenId)?.contacts[0]?.phone, undefined);
+  const { resolveLoadCustomerPhoneLine, resolveCustomerMainPhone } = await import("../lib/load-contact");
+  assert.equal(resolveLoadCustomerPhoneLine(appliedPhoneLoad), "402-555-0199 x2210");
+  assert.equal(resolveCustomerMainPhone(allenId), "");
+  assert.equal(loadMail.resolveInvoiceCustomerEmail(appliedPhoneLoad), "");
 
   const lowMoney = applyAiRateCon(
     {
@@ -4262,6 +5376,19 @@ Continuous reefer. Two load locks.
       assert.equal(aiDraft.shipper.schedule_type, "fcfs");
       assert.equal(aiDraft.consignee.schedule_type, "fcfs");
       assert.equal(aiDraft.consignee.city, "Midland");
+      const tqlHintContact = parseRateConText(text, [], fixture.file);
+      assert.equal(tqlHintContact.contact_name, "Caitlyn Will");
+      assert.equal(tqlHintContact.contact_email, "CWill@TQL.com");
+      assert.equal(tqlHintContact.contact_phone, "800-580-3101");
+      assert.equal(tqlHintContact.contact_ext, "43088");
+      assert.doesNotMatch(tqlHintContact.contact_phone, /915|590-5914/);
+      assert.doesNotMatch(tqlHintContact.contact_name, /Pike|Express|jc/i);
+      assert.equal(aiDraft.contact_name, "Caitlyn Will");
+      assert.equal(aiDraft.contact_email, "CWill@TQL.com");
+      assert.equal(aiDraft.contact_phone, "800-580-3101");
+      assert.equal(aiDraft.contact_ext, "43088");
+      assert.equal(queries.getCustomer(customerId)?.contacts.length, 0);
+      assert.equal(loadMail.resolveInvoiceCustomerEmail({ contact_email: aiDraft.contact_email, customer_id: customerId }), "");
     }
     if (fixture.file.startsWith("bmm")) {
       assert.equal(aiDraft.rate, 2000);
@@ -4298,6 +5425,667 @@ Continuous reefer. Two load locks.
     const loadsAfterTql = queries.listLoads().length;
     assert.equal(queries.listLoads().length, loadsAfterTql, "reading TQL must not save a load");
   }
+
+  const cbText = fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.txt"), "utf8");
+  const { parseStopPaperwork } = await import("../lib/rate-con-paperwork");
+  const shipperPaper = parseStopPaperwork("PU# N25504 (1440 CASES)");
+  assert.equal(shipperPaper.reference, "N25504");
+  assert.equal(shipperPaper.confirmation, "");
+  assert.equal(shipperPaper.quantity, "1440 cases");
+  const kcPaper = parseStopPaperwork("CONF# 61511545 PO# 000250476 ( 960 CASES)");
+  assert.equal(kcPaper.reference, "000250476");
+  assert.equal(kcPaper.confirmation, "61511545");
+  assert.equal(kcPaper.quantity, "960 cases");
+  const norfolkPaper = parseStopPaperwork("CONF#61713982 PO# 110247187 (480 CASES)");
+  assert.equal(norfolkPaper.reference, "110247187");
+  assert.equal(norfolkPaper.confirmation, "61713982");
+  const cbHint = parseRateConText(cbText, [], "cb-logistics-106361.txt");
+  assert.equal(cbHint.customer_name, "CB Logistics Group");
+  assert.equal(cbHint.contact_name, "");
+  assert.equal(cbHint.contact_phone, "314-459-1752");
+  assert.match(cbHint.origin, /Mascoutah/i);
+  assert.doesNotMatch(cbHint.origin, /Imperial/i);
+  assert.equal(cbHint.load_number_hint, "106361");
+  assert.doesNotMatch(cbHint.contact_name, /Imperial|63052|106361|JoJo|MS Test|M&S|Express/i);
+  assert.doesNotMatch(cbHint.contact_phone, /402-302-0097|3217709078/);
+  const liveCarrierSheet = `
+CB Logistics Group
+2704 Adobe Drive
+Imperial, MO
+P: 314-459-1752
+DISPATCH CONFIRMATION
+Load Number 106361
+Carrier: M&S LOADS LLC / HASTINGS, NE / Ph (402) 302-0097 / Attn JoJo Schwartz
+CONTACT INFO
+Name Phone Email Fax
+JoJo Schwartz 402-302-0097 jojo@msloads.com
+`;
+  const { parseBrokerContactFromText: parseCbBrokerContact } = await import("../lib/rate-con-shared");
+  const cbBrokerContact = parseCbBrokerContact(liveCarrierSheet);
+  assert.equal(cbBrokerContact.contact_name, "");
+  assert.equal(cbBrokerContact.contact_phone, "314-459-1752");
+  assert.doesNotMatch(cbBrokerContact.contact_name, /Imperial|63052|106361|JoJo|MS Test/i);
+  assert.doesNotMatch(cbBrokerContact.contact_phone, /402-302-0097/);
+  assert.doesNotMatch(cbBrokerContact.contact_email, /jojo@msloads|msloads/i);
+  const twoColumnCarrierSheet = `
+CB Logistics Group M&S LOADS LLC
+2704 Adobe Drive HASTINGS, NE
+Imperial, MO Ph (402) 302-0097
+P: 314-459-1752 Attn JoJo Schwartz
+DISPATCH CONFIRMATION
+Load Number 106361
+`;
+  const twoColumnContact = parseCbBrokerContact(twoColumnCarrierSheet);
+  assert.equal(twoColumnContact.contact_name, "");
+  assert.equal(twoColumnContact.contact_phone, "314-459-1752");
+  assert.doesNotMatch(twoColumnContact.contact_name, /JoJo|MS Test|M&S|Express|Imperial|106361/i);
+  assert.doesNotMatch(twoColumnContact.contact_phone, /402-302-0097/);
+  assert.ok(twoColumnContact.contact_phone, "broker phone must not be blank");
+  const titledHeaderSheet = `
+RATE CONFIRMATION
+CB Logistics Group
+2704 Adobe Drive
+Imperial, MO
+P: 314-459-1752
+F: 314-555-0199
+CARRIER
+M&S LOADS LLC
+HASTINGS, NE
+Ph (402) 302-0097
+Fax (402) 302-0098
+Attn: JoJo Schwartz
+`;
+  const titledHeaderContact = parseCbBrokerContact(titledHeaderSheet);
+  assert.equal(titledHeaderContact.contact_name, "");
+  assert.equal(titledHeaderContact.contact_phone, "314-459-1752");
+  assert.doesNotMatch(titledHeaderContact.contact_name, /JoJo|RATE CONFIRMATION|MS Test|Imperial|106361/i);
+  assert.doesNotMatch(titledHeaderContact.contact_phone, /402-302-0097|314-555-0199/);
+  assert.ok(titledHeaderContact.contact_phone);
+  const { brokerContactPersonName } = await import("../lib/rate-con-shared");
+  assert.equal(brokerContactPersonName("Imperial, MO 63052 106361"), "");
+  assert.equal(brokerContactPersonName("2704 Adobe Drive"), "");
+  assert.equal(brokerContactPersonName("CB Logistics Group"), "");
+  assert.equal(brokerContactPersonName("106361"), "");
+  assert.equal(brokerContactPersonName("Riley Booker"), "Riley Booker");
+  assert.equal(brokerContactPersonName("Ph"), "");
+  const gluedHeaderName = parseCbBrokerContact(`
+Imperial, MO 63052 106361
+P: 314-459-1752
+`);
+  assert.equal(gluedHeaderName.contact_name, "");
+  assert.equal(gluedHeaderName.contact_phone, "314-459-1752");
+  const { extractDocumentText: extractCbLiveText } = await import("../lib/rate-con");
+  const {
+    mergeBrokerContact,
+    rateConApplyContactFields,
+    isOwnPaperworkName: ownPaperworkName,
+  } = await import("../lib/rate-con-shared");
+  const leftoverPersonAfterBareAttn = (text: string) => {
+    const lines = String(text ?? "").split(/\n/);
+    const attnAt = lines.findIndex((line) => /^\s*attn\s*:?\s*$/i.test(line));
+    if (attnAt < 0) return "";
+    for (const line of lines.slice(attnAt + 1, attnAt + 16)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (/^(carrier|attn|driver|cell|truck|trailer|reference|ph|fax|mcid|dispatch)\b/i.test(trimmed)) continue;
+      if (/\d{3}|llc|inc|group|loads|logistics|hastings/i.test(trimmed)) continue;
+      if (/^[A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+)+$/.test(trimmed)) return trimmed;
+    }
+    return "";
+  };
+  const officeUnpdfHeader = `LOAD NUMBERCB Logistics Group
+2704 Adobe Drive
+Imperial, MO 63052 106361
+MC: 1326420 P: 314-459-1752 F: 9/2/2026
+Carrier:
+Attn:
+(402) 302-0097Ph/Fax: Truck: 42
+Driver: Chris
+Reference: Cell: 3217709078
+Trailer: MS1519
+M&S LOADS LLC
+HASTINGS, NE
+JoJo Schwartz
+DISPATCH CONFIRMATION
+`;
+  const officeHeaderParsed = parseRateConText(officeUnpdfHeader, [], "DispatchConfirmation106361-09-02-2026-1-.pdf");
+  assert.equal(officeHeaderParsed.contact_name, "");
+  assert.equal(officeHeaderParsed.customer_name, "CB Logistics Group");
+  assert.equal(officeHeaderParsed.contact_phone, "314-459-1752");
+  assert.equal(officeHeaderParsed.load_number_hint, "106361");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(officeHeaderParsed), "106361");
+  assert.doesNotMatch(officeHeaderParsed.contact_name, /Imperial|63052|106361|JoJo|MS Test|M&S|Express/i);
+  const officeLeftover = leftoverPersonAfterBareAttn(officeUnpdfHeader);
+  assert.ok(officeLeftover, "office unpdf header must keep a leftover person after bare Attn:");
+  assert.equal(ownPaperworkName(officeLeftover, officeUnpdfHeader), true);
+  const livePdfCandidates = ["/workspace/mse1065/broker-ratecon.pdf"];
+  let livePdfPath = livePdfCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!livePdfPath) {
+    const { writeCb106361Pdf } = await import("./build-cb-106361-pdf");
+    livePdfPath = await writeCb106361Pdf();
+  }
+  const livePdfBytes = fs.readFileSync(livePdfPath);
+  const liveExtract = await extractCbLiveText(livePdfBytes, "application/pdf", path.basename(livePdfPath));
+  assert.match(liveExtract, /CB Logistics Group/i);
+  assert.match(liveExtract, /314-459-1752/);
+  assert.match(liveExtract, /JoJo Schwartz/);
+  assert.match(liveExtract, /Attn/i);
+  const bareAttn = liveExtract.split(/\n/).some((line) => /^\s*attn\s*:?\s*$/i.test(line));
+  assert.equal(bareAttn, true, "live unpdf extract is a bare Attn: line, not pdftotext Attn: Name");
+  const leftoverNearAttn = leftoverPersonAfterBareAttn(liveExtract);
+  assert.ok(leftoverNearAttn, "bare Attn: must have a nearby leftover person line");
+  const liveParsed = parseRateConText(liveExtract, [], path.basename(livePdfPath));
+  assert.equal(liveParsed.customer_name, "CB Logistics Group");
+  assert.equal(liveParsed.contact_name, "");
+  assert.equal(liveParsed.contact_phone, "314-459-1752");
+  assert.equal(liveParsed.load_number_hint, "106361");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(liveParsed), "106361");
+  assert.match(liveParsed.origin, /Mascoutah/i);
+  assert.doesNotMatch(liveParsed.origin, /Imperial/i);
+  assert.doesNotMatch(liveParsed.contact_name, /JoJo|Chris|Imperial|106361|M&S|Express/i);
+  assert.doesNotMatch(liveParsed.contact_phone, /402-302-0097|3217709078/);
+  assert.doesNotMatch(liveParsed.customer_name, /M&S|MS Express|Loads LLC/i);
+  assert.equal(ownPaperworkName(leftoverNearAttn, liveExtract), true);
+  assert.equal(ownPaperworkName("JoJo Schwartz", liveExtract), true);
+  assert.equal(ownPaperworkName("JoJo", liveExtract), true);
+  assert.equal(ownPaperworkName("Riley Booker", liveExtract), false);
+  const mixedKeepPhone = applyAiRateCon(
+    parseRateConAiJson(`{
+      "customer_name": "CB Logistics Group",
+      "contact_name": "JoJo Schwartz",
+      "contact_phone": "314-459-1752",
+      "load_number": "106361",
+      "stops": [
+        {
+          "kind": "pickup",
+          "name": "North Bay Produce - Mascoutah",
+          "city": "Mascoutah",
+          "state": "IL"
+        }
+      ]
+    }`),
+    [],
+    liveParsed,
+    liveExtract,
+  );
+  assert.equal(mixedKeepPhone.contact_name, "");
+  assert.equal(mixedKeepPhone.contact_phone, "314-459-1752");
+  assert.equal(mixedKeepPhone.customer_name, "CB Logistics Group");
+  assert.match(mixedKeepPhone.origin, /Mascoutah/i);
+  const mashedAttn = mergeBrokerContact(
+    { contact_name: "JoJo Schwartz", contact_phone: "314-459-1752" },
+    parseCbBrokerContact(liveExtract),
+    liveExtract,
+  );
+  assert.equal(mashedAttn.contact_name, "");
+  assert.equal(mashedAttn.contact_phone, "314-459-1752");
+  const overwriteJoJo = rateConApplyContactFields(liveParsed, {
+    contact_name: "JoJo Schwartz",
+    contact_phone: "402-302-0097",
+  });
+  assert.equal(overwriteJoJo.contact_name, "");
+  assert.equal(overwriteJoJo.contact_phone, "314-459-1752");
+  assert.match(cbHint.shipper.name, /North Bay/i);
+  assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
+  assert.equal(cbHint.shipper.reference, "N25504");
+  assert.equal(cbHint.shipper.confirmation, "");
+  assert.match(cbHint.shipper.notes, /FOOD GRADE TRAILER REQUIRED/i);
+  assert.match(cbHint.shipper.notes, /DETENTION IS NOT PAID HERE/i);
+  assert.match(cbHint.shipper.notes, /\$100 fine/i);
+  assert.match(cbHint.shipper.notes, /PU# N25504 \(1440 CASES\)/);
+  assert.equal(cbHint.consignee.reference, "000250476");
+  assert.equal(cbHint.consignee.confirmation, "61511545");
+  assert.match(cbHint.consignee.notes, /AWG IS BY SET APPT/);
+  assert.match(cbHint.consignee.notes, /CONF# 61511545 PO# 000250476/);
+  assert.equal(cbHint.consignee.schedule_type, "appointment");
+  const cbNorfolk = cbHint.extra_stops.find((item) => /Norfolk/i.test(item.stop.city) || /Norfolk/i.test(item.stop.name));
+  assert.ok(cbNorfolk, "third stop Norfolk must persist");
+  assert.equal(cbNorfolk?.stop.reference, "110247187");
+  assert.equal(cbNorfolk?.stop.confirmation, "61713982");
+  assert.match(cbHint.special_instructions, /MUST PULP PRODUCT-TAKE TEMP WHEN LOADING/);
+  assert.match(cbHint.special_instructions, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbHint.special_instructions, /GATE FEES AND LUMPER FEES AND SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbHint.special_instructions, /after-hours tracking/);
+  assert.match(cbHint.special_instructions, /air chute/);
+  assert.match(cbHint.special_instructions, /exposed insulation/);
+  assert.doesNotMatch(cbHint.special_instructions, /BACK SOLICIT|REMIT TO|ATTORNEY FEES|FINES SCHEDULE/i);
+  assert.equal(cbHint.reefer_setpoint_f, 34);
+  assert.equal(cbHint.reefer_mode, "continuous");
+  const mixedAi = applyAiRateCon(
+    parseRateConAiJson(`{
+      "customer_name": "CB Logistics Group",
+      "customer_confidence": "high",
+      "rate": 2625,
+      "rate_confidence": "high",
+      "commodity": "Fresh Foods BERRIES",
+      "weight": 12000,
+      "load_number": "106361",
+      "equipment": "reefer",
+      "reefer_mode": "continuous",
+      "contact_name": "JoJo Schwartz",
+      "contact_phone": "402-302-0097",
+      "special_instructions": "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN",
+      "stops": [
+        {
+          "kind": "pickup",
+          "name": "North Bay Produce - Mascoutah",
+          "street": "8835 Richard Brauer Road",
+          "city": "Mascoutah",
+          "state": "IL",
+          "zip": "62258",
+          "schedule_type": "appointment",
+          "confirmation": "",
+          "notes": ""
+        },
+        {
+          "kind": "delivery",
+          "name": "AWG - Kansas City",
+          "street": "4701 Speaker Road",
+          "city": "Kansas City",
+          "state": "KS",
+          "zip": "66106",
+          "confirmation": "61511545",
+          "notes": "AWG IS BY SET APPT DRIVER TO VERIFY COUNTS RECEIVED, AWG DOES NOT PAY DETENTION, CALL IF BEING DETAINED."
+        },
+        {
+          "kind": "delivery",
+          "name": "AWG - Norfolk",
+          "street": "1301 W Omaha Ave",
+          "city": "Norfolk",
+          "state": "NE",
+          "zip": "68701",
+          "confirmation": "61713982",
+          "notes": "AWG IS BY SET APPT DRIVER TO VERIFY COUNTS RECEIVED, AWG DOES NOT PAY DETENTION, CALL IF BEING DETAINED."
+        }
+      ]
+    }`),
+    queries.listCustomers(),
+    cbHint,
+    cbText,
+  );
+  assert.equal(mixedAi.shipper.reference, "N25504");
+  assert.equal(mixedAi.consignee.reference, "000250476");
+  assert.equal(mixedAi.consignee.confirmation, "61511545");
+  assert.notEqual(mixedAi.consignee.reference, mixedAi.consignee.confirmation);
+  assert.match(mixedAi.special_instructions, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(mixedAi.special_instructions, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.equal(mixedAi.contact_name, "");
+  assert.equal(mixedAi.contact_phone, "314-459-1752");
+  assert.doesNotMatch(mixedAi.contact_name, /JoJo|MS Test|Imperial|106361/i);
+  assert.doesNotMatch(mixedAi.contact_phone, /402-302-0097/);
+  const cbCustomerId =
+    queries.listCustomers().find((row) => /CB Logistics/i.test(row.name))?.id ??
+    queries.createCustomer({ name: "CB Logistics Group", billing_notes: "", contacts: [] });
+  const cbLoadId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-SMOKE",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: mixedAi.special_instructions,
+    appointment_notes: "",
+    contact_name: mixedAi.contact_name,
+    contact_phone: mixedAi.contact_phone,
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: mixedAi.reefer_setpoint_f,
+    reefer_mode: mixedAi.reefer_mode,
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  const cbStopForm = new FormData();
+  cbStopForm.set("pickup_stop_name", mixedAi.shipper.name);
+  cbStopForm.set("pickup_stop_street", mixedAi.shipper.street);
+  cbStopForm.set("pickup_stop_city", mixedAi.shipper.city);
+  cbStopForm.set("pickup_stop_state", mixedAi.shipper.state);
+  cbStopForm.set("pickup_stop_zip", mixedAi.shipper.zip);
+  cbStopForm.set("pickup_stop_schedule_type", mixedAi.shipper.schedule_type);
+  cbStopForm.set("pickup_stop_confirmation", mixedAi.shipper.confirmation);
+  cbStopForm.set("pickup_stop_reference", mixedAi.shipper.reference);
+  cbStopForm.set("pickup_stop_quantity", mixedAi.shipper.quantity);
+  cbStopForm.set("pickup_stop_notes", mixedAi.shipper.notes);
+  cbStopForm.set("delivery_stop_name", mixedAi.consignee.name);
+  cbStopForm.set("delivery_stop_street", mixedAi.consignee.street);
+  cbStopForm.set("delivery_stop_city", mixedAi.consignee.city);
+  cbStopForm.set("delivery_stop_state", mixedAi.consignee.state);
+  cbStopForm.set("delivery_stop_zip", mixedAi.consignee.zip);
+  cbStopForm.set("delivery_stop_schedule_type", mixedAi.consignee.schedule_type);
+  cbStopForm.set("delivery_stop_confirmation", mixedAi.consignee.confirmation);
+  cbStopForm.set("delivery_stop_reference", mixedAi.consignee.reference);
+  cbStopForm.set("delivery_stop_quantity", mixedAi.consignee.quantity);
+  cbStopForm.set("delivery_stop_notes", mixedAi.consignee.notes);
+  cbStopForm.set("extra_stops_json", JSON.stringify(mixedAi.extra_stops));
+  const { applyRateConStopsToLoad: applyCbStops } = await import("../lib/rate-con-stops");
+  applyCbStops(cbLoadId, cbStopForm);
+  assert.equal(queries.getLoad(cbLoadId)!.contact_name, "");
+  assert.equal(queries.getLoad(cbLoadId)!.contact_phone, "314-459-1752");
+  const { parseLoadInput: parseCbReapplyInput } = await import("../lib/load-input");
+  const createFromRateCon = new FormData();
+  createFromRateCon.set("customer_id", String(cbCustomerId));
+  createFromRateCon.set("origin", liveParsed.origin || "Mascoutah, IL");
+  createFromRateCon.set("destination", "Norfolk, NE");
+  createFromRateCon.set("contact_name", leftoverNearAttn || "JoJo Schwartz");
+  createFromRateCon.set("contact_phone", "314-459-1752");
+  const createDraft = parseCbReapplyInput(createFromRateCon);
+  const createMapped = rateConApplyContactFields(liveParsed, createDraft);
+  assert.equal(createMapped.contact_name, "");
+  assert.equal(createMapped.contact_phone, "314-459-1752");
+  const createdFromRateConId = queries.createLoad({
+    ...createDraft,
+    ...createMapped,
+    load_number: "MSE-1065-CREATE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(createdFromRateConId)!.contact_name, "");
+  assert.doesNotMatch(queries.getLoad(createdFromRateConId)!.contact_name, /JoJo/);
+  assert.match(queries.getCustomer(cbCustomerId)?.name ?? "", /CB Logistics/i);
+  assert.equal(queries.getLoad(cbLoadId)!.customer_reference, "106361");
+  const blankReapplyId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-REAPPLY",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN",
+    appointment_notes: "",
+    contact_name: "",
+    contact_phone: "",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_name, "");
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "");
+  const blankExisting = queries.getLoad(blankReapplyId)!;
+  const reapplyForm = new FormData();
+  reapplyForm.set("customer_id", String(cbCustomerId));
+  reapplyForm.set("origin", blankExisting.origin);
+  reapplyForm.set("destination", blankExisting.destination);
+  reapplyForm.set("contact_name", cbHint.contact_name);
+  reapplyForm.set("contact_phone", cbHint.contact_phone);
+  queries.updateLoad(blankReapplyId, parseCbReapplyInput(reapplyForm, true, blankExisting));
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_name, "");
+  assert.equal(queries.getLoad(blankReapplyId)!.contact_phone, "314-459-1752");
+  assert.equal(queries.getLoad(blankReapplyId)!.customer_reference, "106361");
+  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_name, /Imperial|63052|106361|JoJo|MS Test/i);
+  assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_phone, /402-302-0097/);
+  const storedJoJoId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-JOJO",
+    origin: "Imperial, MO",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    contact_name: "JoJo Schwartz",
+    contact_phone: "402-302-0097",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_name, "JoJo Schwartz");
+  const storedJoJo = queries.getLoad(storedJoJoId)!;
+  const jojoForm = new FormData();
+  jojoForm.set("customer_id", String(cbCustomerId));
+  jojoForm.set("origin", liveParsed.origin || storedJoJo.origin);
+  jojoForm.set("destination", storedJoJo.destination);
+  const appliedContact = rateConApplyContactFields(liveParsed, storedJoJo);
+  jojoForm.set("contact_name", appliedContact.contact_name);
+  jojoForm.set("contact_phone", appliedContact.contact_phone);
+  queries.updateLoad(storedJoJoId, parseCbReapplyInput(jojoForm, true, storedJoJo));
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_name, "");
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_phone, "314-459-1752");
+  assert.doesNotMatch(queries.getLoad(storedJoJoId)!.contact_name, /JoJo/);
+  assert.doesNotMatch(queries.getLoad(storedJoJoId)!.contact_phone, /402-302-0097/);
+  const confirmationLib = await import("../lib/load-confirmation");
+  const cbDriver = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "internal" });
+  assert.equal(cbDriver.loadNumber, "MSE-1065-SMOKE");
+  assert.equal(cbDriver.customerReference, "");
+  assert.equal(cbDriver.reeferSetpoint, "34°F");
+  assert.match(cbDriver.reeferMode, /Continuous/i);
+  const cbShipper = cbDriver.stops.find((stop) => /North Bay/i.test(stop.name));
+  const cbKc = cbDriver.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`));
+  const cbNf = cbDriver.stops.find((stop) => /Norfolk/i.test(`${stop.name} ${stop.address}`));
+  assert.equal(cbShipper?.poNumber, "");
+  assert.equal(cbShipper?.puNumber, "N25504");
+  assert.equal(cbShipper?.confirmationNumber, "");
+  assert.match(cbShipper?.quantity ?? "", /1440/);
+  assert.match(cbShipper?.extra ?? "", /FOOD GRADE TRAILER REQUIRED/i);
+  assert.match(cbShipper?.extra ?? "", /LOAD LOCKS ARE REQUIRED/i);
+  assert.equal(cbKc?.poNumber, "000250476");
+  assert.equal(cbKc?.confirmationNumber, "61511545");
+  assert.match(cbKc?.quantity ?? "", /960/);
+  assert.equal(cbKc?.appointment, "Yes");
+  assert.match(cbKc?.extra ?? "", /AWG IS BY SET APPT/);
+  assert.equal(cbNf?.poNumber, "110247187");
+  assert.equal(cbNf?.confirmationNumber, "61713982");
+  assert.match(cbNf?.quantity ?? "", /480/);
+  assert.equal(cbNf?.appointment, "Yes");
+  assert.match(cbDriver.dispatchNotes, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbDriver.dispatchNotes, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriver.dispatchNotes, /air chute/);
+  assert.doesNotMatch(cbDriver.dispatchNotes, /106361/);
+  const { extractText: extractCbPdfText } = await import("unpdf");
+  const cbDriverText = String(
+    (await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(cbDriver)), { mergePages: true }))
+      .text ?? "",
+  );
+  const cbDriverFlat = cbDriverText.replace(/\s+/g, " ");
+  assert.match(cbDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(cbDriverText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(cbDriverText, /at_pickup/);
+  assert.doesNotMatch(cbDriverText, /MS Test/);
+  assert.doesNotMatch(cbDriverText, /ana@msloads\.com/);
+  assert.doesNotMatch(cbDriverText, /Purchase Order #: s\b|Purchase Order #:\s*s\s/);
+  assert.match(cbDriverText, /N25504/);
+  assert.match(cbDriverText, /000250476/);
+  assert.match(cbDriverText, /110247187/);
+  assert.match(cbDriverText, /61511545/);
+  assert.match(cbDriverText, /61713982/);
+  assert.match(cbDriverText, /Consignee 2/);
+  assert.match(cbDriverText, /AWG - Norfolk|Norfolk/);
+  assert.match(cbDriverText, /PU#:\s*N25504|PU #:\s*N25504/);
+  assert.doesNotMatch(cbDriverText, /Quantity:\s*N25504/);
+  assert.match(cbDriverText, /1440 cases/);
+  assert.match(cbDriverText, /Fresh Foods BERRIES/);
+  assert.doesNotMatch(cbDriverText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
+  assert.doesNotMatch(cbDriverText, /Page \d+on|Page 1on|of the\s+\d+\s+POD/);
+  const signedDriverPdf = await confirmationLib.renderConfirmationPdf({
+    ...cbDriver,
+    driverName: "Ceferino",
+    driverPhone: "3217709078",
+    truckNumber: "42",
+    trailerNumber: "MS1519",
+  });
+  const signedDriverText = String(
+    (await extractCbPdfText(new Uint8Array(signedDriverPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(signedDriverText, /Ceferino/);
+  assert.match(signedDriverText, /3217709078/);
+  assert.match(signedDriverText, /MS1519/);
+  assert.match(signedDriverText, /Truck #:[\s\S]{0,24}42|42[\s\S]{0,12}Trailer/);
+  const cbCustomer = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "customer" });
+  assert.equal(cbCustomer.stops.find((stop) => /North Bay/i.test(stop.name))?.poNumber, "");
+  assert.equal(cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.poNumber, "000250476");
+  assert.equal(
+    cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.confirmationNumber,
+    "61511545",
+  );
+  const cbCustomerText = String(
+    (await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(cbCustomer)), { mergePages: true }))
+      .text ?? "",
+  );
+  assert.match(cbCustomerText, /Customer Confirmation/);
+  assert.doesNotMatch(cbCustomerText, /Truck #|Trailer #|Load Status|at_pickup/);
+  assert.doesNotMatch(cbCustomerText, /PO#\s*000250476|CONF#\s*61511545/);
+  assert.match(cbCustomerText, /000250476/);
+  assert.match(cbCustomerText, /61511545/);
+  assert.match(cbCustomerText, /Consignee 2/);
+  assert.match(cbCustomerText, /110247187/);
+  assert.match(cbCustomerText, /61713982/);
+  assert.match(cbCustomerText, /PU#:\s*N25504|PU #:\s*N25504/);
+  assert.doesNotMatch(cbCustomerText, /Quantity:\s*N25504/);
+  assert.match(cbCustomerText, /Fresh Foods BERRIES/);
+  assert.doesNotMatch(cbCustomerText.replace(/\s+/g, ""), /BERRIESFOODGRADE/);
+  assert.doesNotMatch(cbCustomerText, /Page \d+on|Page 1on|of the\s+\d+\s+POD/);
+  assert.match(cbDriverFlat, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(cbDriverFlat, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriverFlat, /MUST CHECK IN[\s\S]*WITH ALL PU#s[\s\S]*SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.match(cbDriverText, /34\s*°\s*F/);
+  assert.doesNotMatch(cbDriverText, /106361/);
+  assert.doesNotMatch(cbDriverText, /billing@msloads\.com/);
+  assert.doesNotMatch(cbDriverText, /Email invoices, the rate confirmation/);
+  assert.doesNotMatch(cbDriverText, /turn left|google maps|head north on/i);
+  const { expandTruncatedDispatchNotes: expandPulpNotes } = await import("../lib/rate-con-paperwork");
+  const liveTruncatedPulp = "MUST PULP PRODUCT-TAKE TEMP WHEN LOADING!!!!....MUST CHECK IN";
+  assert.match(expandPulpNotes(liveTruncatedPulp), /WITH ALL PU#s/);
+  assert.match(expandPulpNotes(liveTruncatedPulp), /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.doesNotMatch(expandPulpNotes(liveTruncatedPulp).trim(), /MUST CHECK IN$/);
+  const {
+    CUSTOMER_CONFIRMATION_TERMS: customerTermsCopy,
+    DRIVER_CONFIRMATION_TERMS: driverTermsCopy,
+    driverFacingTermsText,
+    shouldReplaceStoredTerms,
+  } = await import("../lib/document-copy");
+  assert.doesNotMatch(driverFacingTermsText(customerTermsCopy), /billing@msloads\.com/);
+  assert.match(driverFacingTermsText(customerTermsCopy), /Temperature-controlled loads run Continuous/);
+  assert.match(driverFacingTermsText(customerTermsCopy), /claim number/);
+  assert.equal(shouldReplaceStoredTerms("load_confirmation", customerTermsCopy), true);
+  const truncatedPersistId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-TRUNC",
+    origin: "Mascoutah, IL",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: liveTruncatedPulp,
+    appointment_notes: "",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.match(queries.getLoad(truncatedPersistId)!.special_instructions, /WITH ALL PU#s/);
+  assert.match(queries.getLoad(truncatedPersistId)!.special_instructions, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  const { getDb: getSmokeDb } = await import("../lib/db");
+  getSmokeDb()
+    .prepare("UPDATE loads SET special_instructions = ? WHERE id = ?")
+    .run(liveTruncatedPulp, truncatedPersistId);
+  const liveReprint = confirmationLib.buildConfirmationForLoad(truncatedPersistId, { packet: "internal" });
+  assert.match(liveReprint.dispatchNotes, /WITH ALL PU#s/);
+  assert.match(liveReprint.dispatchNotes, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  const liveReprintText = String(
+    (
+      await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(liveReprint)), {
+        mergePages: true,
+      })
+    ).text ?? "",
+  ).replace(/\s+/g, " ");
+  assert.match(liveReprintText, /MUST CHECK IN WITH ALL PU#s/);
+  assert.match(liveReprintText, /SUBMIT RECEIPTS FOR REIMBURSEMENT/);
+  assert.doesNotMatch(liveReprintText, /billing@msloads\.com/);
+  const liveCustomerText = String(
+    (
+      await extractCbPdfText(
+        new Uint8Array(
+          await confirmationLib.renderConfirmationPdf(
+            confirmationLib.buildConfirmationForLoad(truncatedPersistId, { packet: "customer" }),
+          ),
+        ),
+        { mergePages: true },
+      )
+    ).text ?? "",
+  );
+  assert.match(liveCustomerText, /billing@msloads\.com/);
+  const settingsForTerms = await import("../lib/settings");
+  const priorDriverDefaults = settingsForTerms.getDocumentDefaults("load_confirmation");
+  settingsForTerms.updateDocumentDefaults({
+    ...priorDriverDefaults,
+    terms_text: customerTermsCopy,
+    footer_text: "Questions? Call dispatch.",
+  });
+  try {
+    const pollutedDriverText = String(
+      (
+        await extractCbPdfText(new Uint8Array(await confirmationLib.renderConfirmationPdf(liveReprint)), {
+          mergePages: true,
+        })
+      ).text ?? "",
+    );
+    assert.doesNotMatch(pollutedDriverText, /billing@msloads\.com/);
+    assert.doesNotMatch(pollutedDriverText, /Email invoices, the rate confirmation/);
+    assert.match(pollutedDriverText, /Questions\? Call dispatch/);
+    assert.match(pollutedDriverText, /Continuous/);
+    assert.match(pollutedDriverText, /claim number/);
+  } finally {
+    settingsForTerms.updateDocumentDefaults({
+      ...priorDriverDefaults,
+      terms_text: driverTermsCopy,
+      footer_text: priorDriverDefaults.footer_text,
+    });
+  }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /reference \(also called po/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"),
+    /confirmation is the stop PO/,
+  );
 
   const sampleAscendPdf = path.join(process.cwd(), "public", "samples", "sample-ascend-rate-con.pdf");
   if (fs.existsSync(sampleAscendPdf)) {
@@ -4528,6 +6316,429 @@ Continuous reefer. Two load locks.
   assert.ok(trailerLocation, "demo ORBCOMM snapshot should include trailer location");
   assert.equal(trailerLocation.source, "demo");
   assert.ok(trailerLocation.latitude != null && trailerLocation.longitude != null);
+
+  const trailerShare = await import("../lib/trailer-share");
+  const { fromOfficeDateTime, toOfficeDateTime } = await import("../lib/format");
+  const shareLater = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const shareExpiresInput = toOfficeDateTime(shareLater.toISOString());
+  assert.match(shareExpiresInput, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  assert.ok(Math.abs(Date.parse(fromOfficeDateTime(shareExpiresInput)) - shareLater.getTime()) < 60_000);
+  const orbcommShareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-1",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-1",
+  });
+  assert.throws(() => trailerShare.createTrailerShareLink(orbcommShareTrailerId, ""), /date and time/);
+  assert.throws(
+    () => trailerShare.createTrailerShareLink(orbcommShareTrailerId, toOfficeDateTime(new Date(Date.now() - 60 * 60 * 1000).toISOString())),
+    /future/,
+  );
+  const noOrbcommShareId = queries.createTrailer({ unit_number: "TR-SHARE-DRY", type: "dry_van" });
+  assert.throws(() => trailerShare.createTrailerShareLink(noOrbcommShareId, shareExpiresInput), /Orbcomm/);
+  const emptyShareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-EMPTY",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-empty",
+  });
+  const emptyShare = trailerShare.createTrailerShareLink(
+    emptyShareTrailerId,
+    shareExpiresInput,
+    new Date("2026-08-20T16:00:00.000Z"),
+  );
+  const emptyShareView = trailerShare.trailerShareView(emptyShare.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(emptyShareView.found, true);
+  assert.equal(emptyShareView.expired, false);
+  assert.equal(emptyShareView.temperatureF, null);
+  assert.equal(emptyShareView.address, "");
+  assert.equal(emptyShareView.points.length, 0);
+  const gpsOnlyShareTrailerId = queries.createTrailer({
+    unit_number: "TR-SHARE-GPS",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-share-gps",
+  });
+  queries.saveTrailerGps(gpsOnlyShareTrailerId, {
+    latitude: 41.2,
+    longitude: -73.8,
+    address: "GPS only last known",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  const gpsOnlyShare = trailerShare.createTrailerShareLink(
+    gpsOnlyShareTrailerId,
+    shareExpiresInput,
+    new Date("2026-08-20T16:00:00.000Z"),
+  );
+  assert.equal(gpsOnlyShare.snapshot_latitude, 41.2);
+  assert.equal(gpsOnlyShare.snapshot_address, "GPS only last known");
+  assert.equal(gpsOnlyShare.snapshot_temperature_f, null);
+  const gpsOnlyView = trailerShare.trailerShareView(gpsOnlyShare.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(gpsOnlyView.temperatureF, null);
+  assert.equal(gpsOnlyView.address, "GPS only last known");
+  assert.equal(gpsOnlyView.points.length, 1);
+  assert.equal(gpsOnlyView.points[0]?.lat, 41.2);
+  assert.equal(gpsOnlyView.points[0]?.pinColor, "#64748b");
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-SHARE-1",
+    setpoint_f: 34,
+    temperature_f: 10,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.7,
+    longitude: -74,
+    address: "Before create",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T15:00:00.000Z",
+  });
+  const shareCreatedAt = new Date("2026-08-20T16:00:00.000Z");
+  const firstShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
+  const secondShare = trailerShare.createTrailerShareLink(orbcommShareTrailerId, shareExpiresInput, shareCreatedAt);
+  assert.notEqual(firstShare.token, secondShare.token);
+  assert.ok(firstShare.token.length >= 24);
+  assert.notEqual(firstShare.token, String(orbcommShareTrailerId));
+  assert.equal(trailerShare.getTrailerShareLink("1"), null);
+  assert.equal(trailerShare.getTrailerShareLink("abc"), null);
+  assert.equal(firstShare.created_at, shareCreatedAt.toISOString());
+  assert.equal(firstShare.snapshot_temperature_f, 10);
+  assert.equal(firstShare.snapshot_address, "Before create");
+  assert.equal(firstShare.snapshot_latitude, 40.7);
+  const justMintedView = trailerShare.trailerShareView(firstShare.token, shareCreatedAt);
+  assert.equal(justMintedView.expired, false);
+  assert.equal(justMintedView.temperatureF, 10);
+  assert.equal(justMintedView.address, "Before create");
+  assert.equal(justMintedView.points.length, 1);
+  assert.equal(justMintedView.points[0]?.lat, 40.7);
+  assert.equal(justMintedView.points[0]?.pinColor, "#16a34a");
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "orbcomm-tr-share-1",
+    setpoint_f: 34,
+    temperature_f: 36,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 40.8,
+    longitude: -74.1,
+    address: "After create",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T16:05:00.000Z",
+  });
+  const shareNow = new Date("2026-08-20T16:10:00.000Z");
+  const shareReadings = trailerShare.listTrailerShareReadings(
+    { unit_number: "TR-SHARE-1", orbcomm_asset_id: "orbcomm-tr-share-1" },
+    firstShare.created_at,
+    shareNow,
+  );
+  assert.equal(shareReadings.length, 1);
+  assert.equal(shareReadings[0]?.temperature_f, 36);
+  assert.equal(shareReadings.some((row) => row.address === "Before create"), false);
+  const liveShareView = trailerShare.trailerShareView(firstShare.token, shareNow);
+  assert.equal(liveShareView.found, true);
+  assert.equal(liveShareView.expired, false);
+  assert.equal(liveShareView.temperatureF, 36);
+  assert.equal(liveShareView.address, "After create");
+  assert.equal(liveShareView.points.length, 2);
+  assert.equal(liveShareView.points[0]?.lat, 40.7);
+  assert.equal(liveShareView.points[1]?.lat, 40.8);
+  assert.equal(liveShareView.points[1]?.kind, "trailer");
+  assert.equal(liveShareView.points[1]?.pinColor, "#16a34a");
+  assert.equal(trailerShare.trailerShareIsExpired(firstShare, new Date(firstShare.expires_at)), true);
+  const expiredShareView = trailerShare.trailerShareView(firstShare.token, new Date(firstShare.expires_at));
+  assert.equal(expiredShareView.found, true);
+  assert.equal(expiredShareView.expired, true);
+  assert.equal(expiredShareView.temperatureF, null);
+  assert.equal(expiredShareView.address, "");
+  assert.equal(expiredShareView.points.length, 0);
+  assert.doesNotMatch(
+    JSON.stringify({
+      temperatureF: expiredShareView.temperatureF,
+      address: expiredShareView.address,
+      recordedAt: expiredShareView.recordedAt,
+      points: expiredShareView.points,
+    }),
+    /After create|40\.8|36/,
+  );
+
+  const { clusterLoadMapPoints } = await import("../lib/map-cluster");
+  const clusteredPins = clusterLoadMapPoints(
+    [
+      { id: "a", kind: "trailer", label: "A", lat: 40.7, lng: -74 },
+      { id: "b", kind: "trailer", label: "B", lat: 40.7004, lng: -74.0004 },
+      { id: "c", kind: "truck", label: "C", lat: 41.5, lng: -75 },
+    ],
+    5,
+  );
+  assert.equal(clusteredPins.some((item) => item.type === "cluster" && item.count === 2), true);
+  assert.equal(clusterLoadMapPoints(
+    [
+      { id: "a", kind: "trailer", label: "A", lat: 40.7, lng: -74 },
+      { id: "b", kind: "trailer", label: "B", lat: 40.7004, lng: -74.0004 },
+    ],
+    14,
+  ).every((item) => item.type === "point"), true);
+
+  const loadShare = await import("../lib/load-share");
+  const chat = await import("../lib/load-chat");
+  const autoInvoice = await import("../lib/auto-invoice");
+  const controlCenter = await import("../lib/control-center");
+  const controlShared = await import("../lib/control-center-shared");
+  const shareLoadCustomerId = queries.createCustomer({
+    name: "Share Timeline Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0199", email: "share.ap@customer.example" }],
+  });
+  const shareLoadId = queries.createLoad({
+    customer_id: shareLoadCustomerId,
+    origin: "Omaha, NE",
+    destination: "Dallas, TX",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 2200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-SHARE",
+    po_number: "PO-SHARE",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const bookedOnly = loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!);
+  assert.deepEqual(bookedOnly.map((step) => step.key), ["booked"]);
+  queries.updateLoadStatus(shareLoadId, "picked_up");
+  assert.deepEqual(loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key), ["booked", "pickup"]);
+  queries.updateLoadStatus(shareLoadId, "in_transit");
+  assert.deepEqual(
+    loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key),
+    ["booked", "pickup", "in_transit"],
+  );
+  queries.updateLoadStatus(shareLoadId, "delivered");
+  assert.deepEqual(
+    loadShare.loadShareMilestones(queries.getLoad(shareLoadId)!).map((step) => step.key),
+    ["booked", "pickup", "in_transit", "delivered"],
+  );
+  const loadShareExpires = toOfficeDateTime(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
+  const loadLink = loadShare.createLoadShareLink(shareLoadId, loadShareExpires, new Date("2026-08-20T16:00:00.000Z"));
+  const liveLoadView = loadShare.loadShareView(loadLink.token, new Date("2026-08-20T16:01:00.000Z"));
+  assert.equal(liveLoadView.found, true);
+  assert.equal(liveLoadView.expired, false);
+  assert.equal(liveLoadView.milestones.some((step) => step.key === "delivered"), true);
+  assert.equal(loadShare.loadShareView(loadLink.token, new Date(loadLink.expires_at)).expired, true);
+  assert.equal(loadShare.loadShareView(loadLink.token, new Date(loadLink.expires_at)).milestones.length, 0);
+  chat.postLoadChatMessage({
+    loadId: shareLoadId,
+    authorRole: "dispatcher",
+    authorId: 1,
+    authorName: "Dispatch",
+    body: "Call when empty",
+    now: new Date("2026-08-20T16:02:00.000Z"),
+  });
+  chat.postLoadChatMessage({
+    loadId: shareLoadId,
+    authorRole: "driver",
+    authorId: 2,
+    authorName: "Driver",
+    body: "Rolling",
+    now: new Date("2026-08-20T16:03:00.000Z"),
+  });
+  const chatRows = chat.listLoadChatMessages(shareLoadId);
+  assert.equal(chatRows.length, 2);
+  assert.equal(chatRows[0]?.body, "Call when empty");
+  assert.equal(chatRows[1]?.author_role, "driver");
+
+  addAttachment({
+    loadId: shareLoadId,
+    kind: "pod",
+    originalName: "pod-share.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  let autoInvoiceTo = "";
+  const autoFirst = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async (input) => {
+    autoInvoiceTo = input.to;
+  });
+  assert.equal(autoFirst.created, true);
+  assert.equal(autoFirst.sent, true);
+  assert.equal(autoInvoiceTo, "share.ap@customer.example");
+  const autoSecond = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async () => {
+    throw new Error("should not send twice");
+  });
+  assert.equal(autoSecond.sent, false);
+  assert.equal(autoSecond.skipped, "already_sent");
+
+  const noEmailInvoiceCustomer = queries.createCustomer({
+    name: "No Email Invoice Co",
+    billing_notes: "",
+    contacts: [],
+  });
+  const noEmailInvoiceLoad = queries.createLoad({
+    customer_id: noEmailInvoiceCustomer,
+    origin: "Lincoln, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 38000,
+    commodity: "Pork",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  addAttachment({
+    loadId: noEmailInvoiceLoad,
+    kind: "pod",
+    originalName: "pod-no-email.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const noEmailAuto = await autoInvoice.maybeAutoInvoiceLoad(noEmailInvoiceLoad, async () => {
+    throw new Error("do not invent an email");
+  });
+  assert.equal(noEmailAuto.created, true);
+  assert.equal(noEmailAuto.sent, false);
+  assert.equal(noEmailAuto.skipped, "no_email");
+  const invoiceInbox = (await import("../lib/exceptions")).listExceptionInbox(new Date("2026-08-21T12:00:00.000Z"));
+  assert.ok(invoiceInbox.items.some((item) => item.loadId === noEmailInvoiceLoad && item.kind === "invoice_send"));
+  const billingVsBrokerCustomer = queries.createCustomer({
+    name: "Billing Vs Broker Co",
+    billing_notes: "",
+    main_email: "desk@shipper.example",
+    billing_email: "ap@shipper.example",
+    contacts: [],
+  });
+  const billingVsBrokerLoad = queries.createLoad({
+    customer_id: billingVsBrokerCustomer,
+    origin: "Lincoln, NE",
+    destination: "Kansas City, MO",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 38000,
+    commodity: "Pork",
+    rate: 1750,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+    contact_email: "broker@packet.example",
+  });
+  addAttachment({
+    loadId: billingVsBrokerLoad,
+    kind: "pod",
+    originalName: "pod-billing.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  let billingAutoTo = "";
+  const billingAuto = await autoInvoice.maybeAutoInvoiceLoad(billingVsBrokerLoad, async (input) => {
+    billingAutoTo = input.to;
+  });
+  assert.equal(billingAuto.created, true);
+  assert.equal(billingAuto.sent, true);
+  assert.equal(billingAutoTo, "ap@shipper.example");
+  assert.notEqual(billingAutoTo, "broker@packet.example");
+
+  const controlOrderId = queries.createLoad({
+    customer_id: shareLoadCustomerId,
+    origin: "Omaha, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-08-22T12:00:00.000Z",
+    pickup_end: "2026-08-22T16:00:00.000Z",
+    delivery_start: "2026-08-23T12:00:00.000Z",
+    delivery_end: "2026-08-23T20:00:00.000Z",
+    weight: 36000,
+    commodity: "Beef",
+    rate: 1900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  const idleShareTrailer = queries.createTrailer({
+    unit_number: "TR-CTRL-IDLE",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-tr-ctrl-idle",
+  });
+  queries.saveTrailerGps(idleShareTrailer, {
+    latitude: 41.25,
+    longitude: -96.0,
+    address: "Lincoln, NE",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-CTRL-IDLE",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Running",
+    latitude: 41.25,
+    longitude: -96.0,
+    address: "Lincoln, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:00:00.000Z",
+  });
+  const center = await controlCenter.buildControlCenter();
+  assert.ok(center.orders.some((item) => item.refId === controlOrderId && item.origin.includes("Omaha")));
+  assert.ok(center.resources.some((item) => item.refId === idleShareTrailer && item.status === "idle"));
+  const idleControl = center.resources.find((item) => item.refId === idleShareTrailer);
+  assert.equal(idleControl?.pinColor, "#16a34a");
+  assert.equal(controlShared.controlCenterPoints([idleControl!])[0]?.pinColor, "#16a34a");
+  const neOnly = controlShared.filterControlCenterItems(center.resources, {
+    state: "NE",
+    equipment: "reefer",
+    status: "idle",
+  });
+  assert.ok(neOnly.some((item) => item.refId === idleShareTrailer));
+  assert.equal(
+    controlShared.filterControlCenterItems(center.resources, { state: "TX", equipment: "", status: "" }).some(
+      (item) => item.refId === idleShareTrailer,
+    ),
+    false,
+  );
 
   const mappedGps = samsara.mapVehicleLocations({
     vehicles: [
@@ -4825,6 +7036,175 @@ Continuous reefer. Two load locks.
   assert.match(deniseLicense.message, /driver license/);
   assert.throws(() => requireAssignmentOverride(tyrellAlerts, false), /Expired documents/);
   requireAssignmentOverride(tyrellAlerts, true);
+  const workflow = await import("../lib/workflow");
+  const { DEFAULT_WORKFLOW_SETTINGS } = await import("../lib/workflow-shared");
+  assert.throws(
+    () =>
+      workflow.requireAssignmentHardBlock(
+        { driver: tyrell },
+        { ...DEFAULT_WORKFLOW_SETTINGS, blockAssignExpiredDriver: true },
+      ),
+    /Cannot assign/,
+  );
+  workflow.requireAssignmentHardBlock({ driver: tyrell }, DEFAULT_WORKFLOW_SETTINGS);
+  const settingsStore = await import("../lib/settings");
+  const previousWorkflow = settingsStore.getWorkflowSettings();
+  const { addStop } = await import("../lib/stops");
+  const workflowLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Chicago, IL",
+    pickup_start: "2026-08-20T08:00:00.000Z",
+    pickup_end: "2026-08-20T12:00:00.000Z",
+    delivery_start: "2026-08-21T08:00:00.000Z",
+    delivery_end: "2026-08-21T16:00:00.000Z",
+    weight: 40000,
+    commodity: "Workflow fire",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+  });
+  addStop(workflowLoadId, {
+    kind: "pickup",
+    name: "Shipper",
+    city: "Hastings",
+    state: "NE",
+    window_start: "2026-08-20T08:00:00.000Z",
+    window_end: "2026-08-20T12:00:00.000Z",
+  });
+  addStop(workflowLoadId, {
+    kind: "delivery",
+    name: "Receiver",
+    city: "Chicago",
+    state: "IL",
+    window_start: "2026-08-21T08:00:00.000Z",
+    window_end: "2026-08-21T16:00:00.000Z",
+  });
+  const workflowStops = (await import("../lib/stops")).listStops(workflowLoadId);
+  const workflowPickup = workflowStops.find((stop) => stop.kind === "pickup");
+  const workflowDelivery = workflowStops.find((stop) => stop.kind === "delivery");
+  assert.ok(workflowPickup && workflowDelivery);
+  stampStopTime(workflowPickup.id, "arrived_at", "2026-08-20T09:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "at_pickup");
+  stampStopTime(workflowPickup.id, "departed_at", "2026-08-20T11:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "in_transit");
+  stampStopTime(workflowDelivery.id, "arrived_at", "2026-08-21T10:00:00.000Z");
+  workflow.applyWorkflowAfterGeofence(workflowLoadId);
+  assert.equal(queries.getLoad(workflowLoadId)?.status, "at_delivery");
+  settingsStore.updateWorkflowSettings({
+    ...previousWorkflow,
+    driverAssignLoadStatus: "assigned",
+    driverAssignTruckStatus: "dispatched",
+  });
+  const driverAssignLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: "2026-08-22T08:00:00.000Z",
+    pickup_end: "2026-08-22T12:00:00.000Z",
+    delivery_start: "2026-08-22T14:00:00.000Z",
+    delivery_end: "2026-08-22T18:00:00.000Z",
+    weight: 10000,
+    commodity: "Driver assign fire",
+    rate: 400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  workflow.applyWorkflowOnDriverAssign(driverAssignLoadId);
+  const afterDriverAssign = queries.getLoad(driverAssignLoadId);
+  assert.equal(afterDriverAssign?.status, "assigned");
+  assert.equal(afterDriverAssign?.truck_status, "dispatched");
+  const lateLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "York, NE",
+    destination: "Grand Island, NE",
+    pickup_start: "2026-08-20T08:00:00.000Z",
+    pickup_end: "2026-08-20T10:00:00.000Z",
+    delivery_start: "2026-08-21T08:00:00.000Z",
+    delivery_end: "2026-08-21T12:00:00.000Z",
+    weight: 8000,
+    commodity: "Late fire",
+    rate: 300,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "loading",
+    truck_id: null,
+    driver_id: null,
+  });
+  addStop(lateLoadId, {
+    kind: "pickup",
+    name: "Late shipper",
+    city: "York",
+    state: "NE",
+    window_start: "2026-08-20T08:00:00.000Z",
+    window_end: "2026-08-20T10:00:00.000Z",
+  });
+  settingsStore.updateWorkflowSettings({
+    ...previousWorkflow,
+    lateStopKind: "pickup",
+    lateStopMode: "specified",
+    lateStopMinutes: 30,
+    lateStopUnit: "minutes",
+    lateStopLoadStatus: "hold",
+    lateStopOnlyStatuses: ["loading"],
+  });
+  assert.equal(settingsStore.getWorkflowSettings().lateStopLoadStatus, "hold");
+  const lateChanged = workflow.applyLateStopWorkflow(new Date("2026-08-20T12:00:00.000Z"));
+  assert.ok(lateChanged >= 1);
+  assert.equal(queries.getLoad(lateLoadId)?.status, "hold");
+  const deskUser = settingsStore.listDispatcherUsers(false)[0];
+  assert.ok(deskUser);
+  settingsStore.updateWorkflowSettings({ ...previousWorkflow, autoAssignDispatcherOnCreate: true });
+  const autoDispatchId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Kearney, NE",
+    destination: "North Platte, NE",
+    pickup_start: "2026-08-23T08:00:00.000Z",
+    pickup_end: "2026-08-23T12:00:00.000Z",
+    delivery_start: "2026-08-23T14:00:00.000Z",
+    delivery_end: "2026-08-23T18:00:00.000Z",
+    weight: 5000,
+    commodity: "Auto dispatcher",
+    rate: 250,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  workflow.maybeAssignCreatingDispatcher(autoDispatchId, deskUser.id);
+  assert.equal(queries.getLoad(autoDispatchId)?.dispatcher_id, deskUser.id);
+  settingsStore.updateWorkflowSettings(previousWorkflow);
+  const { expandDocumentTags } = await import("../lib/document-tags");
+  assert.equal(expandDocumentTags("Load [load_id] for [customer_name]", { loadId: "MSE-1", customerName: "Acme" }), "Load MSE-1 for Acme");
   const upcoming = queries.listUpcomingCompliance();
   assert.ok(upcoming.length >= 3, "seed should surface expiring/expired documents");
   const truck210 = queries.listTrucks().find((truck) => truck.unit_number === "210");
@@ -4866,9 +7246,21 @@ Continuous reefer. Two load locks.
   assert.equal(header.company_name, "M&S Loads");
   const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo } = await import("../lib/settings");
   assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
-  assert.equal(getDocumentDefaults("load_confirmation").terms_text, "");
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /Continuous/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /Two load locks are required/);
+  assert.match(getDocumentDefaults("load_confirmation").terms_text, /claim number/);
+  assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /MS Express load number/);
+  assert.doesNotMatch(getDocumentDefaults("load_confirmation").terms_text, /TriumphPay/i);
+  const confirmSrc = fs.readFileSync(path.join(process.cwd(), "lib/load-confirmation.ts"), "utf8");
+  assert.doesNotMatch(confirmSrc, /fontSize\(\s*7\b|fontSize\(\s*6\.5/);
+  assert.doesNotMatch(confirmSrc, /#4b5563|#6b7280|#6b7c90|#dbeafe|#111827/);
+  assert.match(confirmSrc, /fontSize\(18\)/);
+  assert.match(confirmSrc, /#12315c/);
+  assert.match(confirmSrc, /#000000/);
   assert.equal(getDocumentDefaults("invoice").footer_text, "");
   assert.equal(getDocumentDefaults("invoice").terms_text, "");
+  assert.match(getDocumentDefaults("customer_confirmation").terms_text, /billing@msloads.com/);
+  assert.match(getDocumentDefaults("bol").terms_text, /Seal numbers/);
   assert.equal(hasCustomCompanyLogo(), false);
   assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
   assert.equal(companyLogoPath(), defaultCompanyLogoPath());
@@ -4897,8 +7289,12 @@ Continuous reefer. Two load locks.
   assert.equal(coleDriver.customerRate, null);
   const coleDriverPdf = await confirmation.renderConfirmationPdf(coleDriver);
   const coleDriverText = String((await extractText(new Uint8Array(coleDriverPdf), { mergePages: true })).text ?? "");
-  assert.match(coleDriverText, /Rate & Load Confirmation/);
+  assert.match(coleDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(coleDriverText, /Rate & Load Confirmation/);
   assert.doesNotMatch(coleDriverText, /Customer Confirmation/);
+  assert.doesNotMatch(coleDriverText, /at_pickup/);
+  assert.doesNotMatch(coleDriverText, /MS Test/);
+  assert.doesNotMatch(coleDriverText, /ana@msloads\.com/);
   assert.doesNotMatch(coleDriverText, /Thank you for hauling with us/);
   assert.doesNotMatch(coleDriverText, /Carrier is responsible for cargo/);
   assert.doesNotMatch(coleDriverText, /Report exceptions at pickup/);
@@ -4929,7 +7325,16 @@ Continuous reefer. Two load locks.
   const deniseDriverText = String(
     (await extractText(new Uint8Array(deniseDriverPdf), { mergePages: true })).text ?? "",
   );
-  assert.match(deniseDriverText, /Load Confirmation/);
+  assert.match(deniseDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /Rate & Load Confirmation/);
+  assert.doesNotMatch(deniseDriverText, /^Load Confirmation$/m);
+  assert.match(deniseDriverText, /Continuous/);
+  assert.match(deniseDriverText, /load locks/i);
+  assert.match(deniseDriverText, /claim number/);
+  assert.doesNotMatch(deniseDriverText, /TriumphPay/i);
+  assert.doesNotMatch(deniseDriverText, /billing@msloads\.com/);
+  assert.doesNotMatch(deniseDriverText, /Email invoices, the rate confirmation/);
+  assert.match(deniseText, /billing@msloads.com/);
   assert.doesNotMatch(deniseDriverText, /Customer Confirmation/);
   assert.doesNotMatch(deniseDriverText, /Thank you for hauling with us/);
   assert.doesNotMatch(deniseDriverText, /Carrier is responsible for cargo/);
@@ -4937,7 +7342,8 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(deniseDriverText, /Customer Rate|^Rate$/m);
   assert.doesNotMatch(deniseDriverText, /3,100/);
   assert.doesNotMatch(deniseDriverText, /RC-1045/, "customer / rate-con load # must not appear on the driver sheet");
-  assert.match(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
+  assert.doesNotMatch(deniseText.replaceAll(/\s+/g, ""), /ana@msloads\.com/);
+  assert.doesNotMatch(deniseText, /Truck #|Trailer #|Load Status|at_pickup/);
   assert.match(deniseText, /Mon–Fri 06:00–12:00|Mon-Fri 06:00–12:00|Mon–Fri 06:00-12:00/);
   assert.match(deniseText, /Daily 14:00–22:00|Daily 14:00-22:00/);
   assert.match(deniseText, /REEFER/);
@@ -5234,10 +7640,11 @@ Continuous reefer. Two load locks.
   assert.equal((await PDFDocument.load(bolBuf)).getPageCount(), 1, "BOL must be one page");
   const bolText = String((await extractText(new Uint8Array(bolBuf), { mergePages: true })).text ?? "");
   assert.match(bolText, /Bill Of Lading/);
+  assert.match(bolText, /Smoke BOL terms stay on the form/);
+  assert.match(bolText, /Smoke BOL footer/);
   assert.doesNotMatch(bolText, /Bill Of LadingLoad Number/);
   assert.doesNotMatch(bolText, /Smoke Bill of Lading/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/bol.ts"), "utf8"), /text\("Bill Of Lading", LEFT, 24/);
-  assert.doesNotMatch(bolText, /Smoke BOL footer|Smoke BOL terms/);
   assert.match(bolText, /# of pieces|of pieces/);
   assert.match(bolText, /Description of the goods/);
   assert.match(bolText, /Weight in LBS/);
@@ -5250,6 +7657,7 @@ Continuous reefer. Two load locks.
   assert.match(bolText, /Declared Value/);
   assert.match(bolText, /Number Of Pieces Received/);
   assert.match(bolText, /Page 1 of 1/);
+  assert.match(bolText, /MSE-1045/);
   const { listDefaultedDocuments, generateDefaultedDocument } = await import("../lib/load-documents");
   const defaulted = listDefaultedDocuments(deniseLoad.id);
   assert.ok(defaulted.some((row) => row.key === "bol" && row.status === "ready"));
@@ -5670,6 +8078,7 @@ Continuous reefer. Two load locks.
     driver_id: null,
     contact_name: "Jordan Buyer",
     contact_phone: "816-555-0199",
+    contact_ext: "4401",
     contact_email: "jordan@westside-smoke.example",
     customer_reference: "WSF-1006153",
   });
@@ -5730,7 +8139,8 @@ Continuous reefer. Two load locks.
   assert.match(billedPacket.customerBilling, /4400 Packer Ave/);
   assert.match(billedPacket.customerBilling, /Kansas City, MO 64120/);
   assert.equal(billedPacket.customerContact, "Jordan Buyer");
-  assert.equal(billedPacket.customerPhone, "816-555-0199");
+  assert.equal(billedPacket.customerPhone, "816-555-0199 x4401");
+  assert.equal(queries.getCustomer(billedCustomerId)?.contacts[0]?.phone, "816-555-0101");
   assert.equal(billedPacket.customerEmail, "jordan@westside-smoke.example");
   assert.equal(billedPacket.customerReference, "WSF-1006153");
   assert.equal(billedPacket.customerRate, 2150);
@@ -5769,8 +8179,8 @@ Continuous reefer. Two load locks.
     (await extractText(new Uint8Array(await confirmation.renderConfirmationPdf(billedDriver)), { mergePages: true }))
       .text ?? "",
   );
-  assert.match(billedDriverText, /Load Confirmation/);
-  assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|Westside Foods Billing Co|WSF-1006153/);
+  assert.match(billedDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|WSF-1006153/);
   const driverPoLoadId = queries.createLoad({
     customer_id: billedCustomerId,
     load_number: "1006150",
@@ -8185,6 +10595,11 @@ Continuous reefer. Two load locks.
   assert.match(fuelMatchUi, /data-fuel-match-queue/);
   assert.match(fuelMatchUi, /Receipt match/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-reports/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Saved weeks/);
+  assert.match(fuelPage, /loadFuelWeekView/);
+  assert.match(fuelPage, /week\?:/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Highest paid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Average paid/);
@@ -8237,6 +10652,7 @@ Continuous reefer. Two load locks.
     matchFuelDriver,
     classifyFuelCategory,
     fuelWeekPaidStats,
+    fuelWeekPaidStatsForWeek,
     isTruckDieselCategory,
     fuelTxListKind,
     parseEfsFuelText,
@@ -8246,8 +10662,11 @@ Continuous reefer. Two load locks.
     parseFuelCsv,
     parseFuelReport,
     parseFuelWhen,
+    parseFuelWeekStart,
     renderFuelExportCsv,
     renderFuelTemplate,
+    localWeekRange,
+    startOfLocalMonth,
     startOfLocalWeek,
     FUEL_CSV_HEADERS,
     FUEL_BUCKETS,
@@ -8289,6 +10708,52 @@ Continuous reefer. Two load locks.
   assert.equal(weekPaid.minPpg, 3);
   assert.equal(weekPaid.maxPpg, 3.5);
   assert.equal(weekPaid.avgPpg, 3.25);
+  assert.equal(parseFuelWeekStart("2026-08-20", wedNy), "2026-08-17");
+  assert.equal(parseFuelWeekStart(undefined, wedNy), "2026-08-24");
+  assert.equal(parseFuelWeekStart("nope", wedNy), "2026-08-24");
+  const priorWeekPaid = fuelWeekPaidStatsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100, price_per_gallon: 3 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50, price_per_gallon: 2 },
+    ],
+    "2026-08-17",
+  );
+  assert.equal(priorWeekPaid.count, 1);
+  assert.equal(priorWeekPaid.minAmount, 50);
+  assert.equal(priorWeekPaid.weekStartYmd, "2026-08-17");
+  assert.equal(priorWeekPaid.weekEndYmd, "2026-08-23");
+  const { fuelPageHref } = await import("../components/fuel-transaction-lists");
+  assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
+  assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
+  fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
+      "07/02/2026,10:00,Denise Ortega,112,Diesel,11,3.00,33.00,WEEK-SAVE-1",
+    ].join("\n"),
+    "saved-week.csv",
+  );
+  const savedWeekStart = localWeekRange("2026-07-02").startYmd;
+  assert.equal(savedWeekStart, "2026-06-29");
+  const savedWeekRows = fuelStore.listFuelTransactions({
+    fromIso: localWeekRange(savedWeekStart).start.toISOString(),
+    toIso: localWeekRange(savedWeekStart).end.toISOString(),
+  });
+  assert.ok(savedWeekRows.some((row) => row.source_file === "saved-week.csv"));
+  const syncedWeeks = fuelStore.syncFuelWeekReports(wedNy);
+  const savedWeek = syncedWeeks.find((row) => row.weekStartYmd === savedWeekStart);
+  assert.ok(savedWeek);
+  assert.equal(savedWeek.weekEndYmd, "2026-07-05");
+  assert.ok(savedWeek.txCount >= 1);
+  assert.equal(savedWeek.stats.minAmount, 33);
+  const savedWeekTx = fuelStore.listFuelTransactions().find((row) => row.source_file === "saved-week.csv");
+  assert.ok(savedWeekTx);
+  fuelStore.deleteFuelTransaction(savedWeekTx.id);
+  fuelStore.syncFuelWeekReports(wedNy);
+  const keptWeek = fuelStore.getFuelWeekReport(savedWeekStart);
+  assert.ok(keptWeek);
+  assert.equal(keptWeek.txCount, savedWeek.txCount);
+  assert.equal(keptWeek.stats.minAmount, 33);
+  assert.equal(fuelStore.getFuelWeekPaidStats(savedWeekStart, wedNy).minAmount, 33);
   assert.equal(isTruckDieselCategory("truck_diesel"), true);
   assert.equal(isTruckDieselCategory("Truck diesel"), true);
   assert.equal(isTruckDieselCategory("reefer_diesel"), false);
@@ -8300,15 +10765,16 @@ Continuous reefer. Two load locks.
   assert.equal(fuelTxListKind("cash advance"), "money_code");
   assert.equal(fuelTxListKind("def"), "def");
   assert.equal(fuelTxListKind("DATE DB CATEGORY"), null);
-  const fuelWhen = new Date();
+  const fuelWhen = new Date(Date.now() - 2 * 60 * 60 * 1000);
   const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
   const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
+  const fuelHour = String(fuelWhen.getHours()).padStart(2, "0");
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
-    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
-    `${fuelDate},00:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
-    `${fuelDate},00:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
-    `${fuelDate},00:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},${fuelHour}:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
@@ -8526,25 +10992,40 @@ Continuous reefer. Two load locks.
     ["truck_diesel", "reefer_diesel", "def", "scale"],
   );
 
+  const efsNow = new Date();
+  const [efsYear, efsMonth, efsDay] = ymdInTimeZone(efsNow, DISPLAY_TIME_ZONE).split("-").map(Number);
+  const efsStamp = `${String(efsMonth).padStart(2, "0")}/${String(efsDay).padStart(2, "0")}/${String(efsYear).slice(-2)}`;
+  const efsReportDate = `${String(efsMonth).padStart(2, "0")}/${String(efsDay).padStart(2, "0")}/${efsYear}`;
   const efsReport = [
     "/Dm201902",
     "M&S LOADS",
     "CUSTOMER 3770001903818",
     "TRANSACTION ACTIVITY REPORT",
-    "REPORT DATE 08/21/2026",
+    `REPORT DATE ${efsReportDate}`,
     "",
     "NName: HOWELL, CHRISTOPHER",
-    "08/21/26 556712341111 DIESEL ULTRA LOW SULFUR DIESEL 32 32 900111 1011 MEMPHIS TN LOVES 102.340 3.459 8.20 353.90 0.00 1.00 355.10",
-    "08/21/26 556712341111 REEFER REEFER ULTRA LOW SULFUR 32 32 900112 1011 MEMPHIS TN LOVES 20.000 3.459 1.50 69.18 0.00 0.00 69.18",
-    "08/21/26 556712341111 DEF DIESEL EXHAUST FLUID 32 32 900113 1011 MEMPHIS TN LOVES 5.000 4.199 0.40 21.00 0.00 0.00 21.00",
+    `${efsStamp} 556712341111 DIESEL ULTRA LOW SULFUR DIESEL 32 32 900111 1011 MEMPHIS TN LOVES 102.340 3.459 8.20 353.90 0.00 1.00 355.10`,
+    `${efsStamp} 556712341111 REEFER REEFER ULTRA LOW SULFUR 32 32 900112 1011 MEMPHIS TN LOVES 20.000 3.459 1.50 69.18 0.00 0.00 69.18`,
+    `${efsStamp} 556712341111 DEF DIESEL EXHAUST FLUID 32 32 900113 1011 MEMPHIS TN LOVES 5.000 4.199 0.40 21.00 0.00 0.00 21.00`,
     "",
     "NName: ELLER, STEVE",
-    "08/21/26 556712342222 SCALE CAT SCALES 26 26 900221 2022 JACKSON MS CAT SCALE 1.000 0.000 0.00 18.50 0.00 0.00 18.50",
+    `${efsStamp} 556712342222 SCALE CAT SCALES 26 26 900221 2022 JACKSON MS CAT SCALE 1.000 0.000 0.00 18.50 0.00 0.00 18.50`,
     "",
     "NName: WHALEY, KELVIN",
-    "08/21/26 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45",
+    `${efsStamp} 556712343333 DIESEL ULTRA LOW SULFUR DIESEL 28 28 900331 3033 NASHVILLE TN PILOT 88.100 3.399 6.10 299.45 0.00 0.00 299.45`,
   ].join("\n");
   const efsParsed = parseEfsFuelText(efsReport);
+  const efsWhen = parseFuelWhen(efsStamp, "");
+  assert.ok(efsWhen);
+  assert.equal(
+    ymdInTimeZone(efsWhen, DISPLAY_TIME_ZONE),
+    `${efsYear}-${String(efsMonth).padStart(2, "0")}-${String(efsDay).padStart(2, "0")}`,
+  );
+  assert.ok(efsWhen.getTime() <= Date.now(), "date-only EFS stamp must not be in the future");
+  assert.ok(
+    efsWhen.getTime() >= startOfLocalMonth(efsNow).getTime(),
+    "date-only EFS stamp must stay in the current office month",
+  );
   assert.equal(looksLikeEfsReport(efsReport), true);
   const { looksLikeFleetOneReport } = await import("../lib/fuel-fleetone");
   assert.equal(looksLikeFleetOneReport(efsReport), false, "EFS nname / report id must stay on the EFS path");
@@ -9004,6 +11485,18 @@ Continuous reefer. Two load locks.
   const accountingPay = await import("../lib/accounting");
   const driverPayRows = accountingPay.listDriverPay();
   assert.ok(Array.isArray(driverPayRows));
+  const aging = await import("../lib/accounting-aging");
+  assert.equal(aging.paymentTermsDays("Net 30"), 30);
+  assert.equal(aging.paymentTermsDays("30 days"), 30);
+  assert.equal(aging.paymentTermsDays(""), 30);
+  assert.equal(aging.agingAmounts(100, 0).current, 100);
+  assert.equal(aging.agingAmounts(100, 12).aging0to29, 100);
+  assert.equal(aging.agingAmounts(100, 40).aging30, 100);
+  assert.equal(aging.qboInvoiceExportStatus({ qbo_invoice_id: "", qbo_sent_at: "" }).invoiceLine, "Unsent");
+  assert.match(
+    aging.qboInvoiceExportStatus({ qbo_invoice_id: "1", qbo_sent_at: "2026-08-30T13:24:00.000Z", paid: false }).invoiceLine,
+    /Invoice Exported/,
+  );
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
   const mapLib = await import("../lib/load-map");
@@ -9114,6 +11607,76 @@ Continuous reefer. Two load locks.
   assert.ok(truckPin);
   assert.equal(truckPin?.lat, 41.25);
   assert.equal(truckPin?.lng, -95.93);
+  const { ORBCOMM_REEFER_PIN_COLOR: loadMapReeferColor, SAMSARA_TRUCK_OFF_COLOR: loadMapTruckOff, SAMSARA_TRUCK_ON_COLOR: loadMapTruckOn } =
+    await import("../lib/fleet-map-shared");
+  assert.equal(truckPin?.pinColor, loadMapTruckOff);
+  queries.saveTruckGps(mapTruckId, {
+    latitude: 41.25,
+    longitude: -95.93,
+    address: "Omaha, NE",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+    speedMph: 0,
+    engineOn: true,
+  });
+  const truckOnPin = (await mapLib.buildLoadMapPoints(mapLoadId)).find((point) => point.kind === "truck");
+  assert.equal(truckOnPin?.pinColor, loadMapTruckOn);
+  const mapTrailerId = queries.createTrailer({
+    unit_number: "MAP-TR-PIN",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-map-tr-pin",
+  });
+  queries.saveTrailerGps(mapTrailerId, {
+    latitude: 40.81,
+    longitude: -96.7,
+    address: "Lincoln, NE",
+    recordedAt: "2026-08-20T14:30:00.000Z",
+    source: "orbcomm",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "MAP-TR-PIN",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Shutdown",
+    latitude: 40.81,
+    longitude: -96.7,
+    address: "Lincoln, NE",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:30:00.000Z",
+  });
+  const mapTrailerLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    trailer_id: mapTrailerId,
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const loadTrailerPin = (await mapLib.buildLoadMapPoints(mapTrailerLoadId)).find((point) => point.kind === "trailer");
+  assert.equal(loadTrailerPin?.lat, 40.81);
+  assert.equal(loadTrailerPin?.pinColor, loadMapReeferColor.shutdown);
+  assert.equal(loadTrailerPin?.pinColor, "#dc2626");
 
   const previousOrbcommUser = process.env.ORBCOMM_USERNAME;
   const previousOrbcommPass = process.env.ORBCOMM_PASSWORD;
@@ -9140,6 +11703,11 @@ Continuous reefer. Two load locks.
     speedMph: 0,
     headingDeg: 10,
     engineOn: true,
+  });
+  queries.saveTruckOdometer(fleetMapTruckId, {
+    miles: 188432,
+    recordedAt: "2026-08-31T12:00:00.000Z",
+    source: "samsara",
   });
   const fleetMapMoveId = queries.createTruck({
     unit_number: "FM-SAM-GO",
@@ -9242,6 +11810,8 @@ Continuous reefer. Two load locks.
   assert.equal(liveTruckPin?.pinShape, "circle");
   assert.equal(liveTruckPin?.motion, "Parked");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /#22c55e/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /circle cx="5" cy="5" r="4"/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: liveTruckPin?.pinColor, pinShape: "circle" }), /M11 1.4|L13\.1 6\.8|M14 2\.2/);
   assert.equal(loadMapPinFill({ kind: "truck", pinColor: liveTruckPin?.pinColor }), SAMSARA_TRUCK_ON_COLOR);
   const movingTruckPin = samsaraFleetMap.pins.find((pin) => pin.label === "FM-SAM-GO");
   assert.equal(movingTruckPin?.pinShape, "arrow");
@@ -9250,12 +11820,21 @@ Continuous reefer. Two load locks.
   assert.equal(movingTruckPin?.motion, "Moving");
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /#22c55e/);
   assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /rotate\(85/);
+  assert.match(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M7 1\.2 L12\.6 12\.6/);
+  assert.doesNotMatch(loadMapPinSvg({ kind: "truck", pinColor: movingTruckPin?.pinColor, pinShape: "arrow", headingDeg: 85 }), /M11 1.4|L13\.1 6\.8|M14 2\.2|stroke-width="4\.2"/);
   assert.equal(
     samsaraFleetMap.pins.some((pin) => pin.label === "FM-OLD"),
     false,
     "deactivated trucks stay off the live Samsara map",
   );
   assert.ok(samsaraFleetMap.missing.some((item) => item.label === "FM-EMPTY" && item.id === fleetMapEmptyId));
+  const samsaraStatus = samsaraFleetMap.truckStatusRows?.find((row) => row.truck === "FM-SAM-1");
+  assert.ok(samsaraStatus, "Samsara page lists every active truck under the map");
+  assert.match(samsaraStatus.location, /Omaha/);
+  assert.equal(samsaraStatus.miles, 188432);
+  assert.equal(samsaraStatus.driver, "");
+  assert.ok(samsaraFleetMap.truckStatusRows?.some((row) => row.truck === "FM-EMPTY" && !row.location && row.miles == null));
+  assert.equal(samsaraFleetMap.truckStatusRows?.some((row) => row.truck === "FM-OLD"), false);
   queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId);
   const assignedSamsaraMap = await fleetMap.buildSamsaraFleetMap();
   assert.equal(
@@ -9558,9 +12137,27 @@ Continuous reefer. Two load locks.
   assert.equal(session.listDispatchers().some((row) => row.name === "Ana G"), false);
   assert.equal(msTest.totp_enrolled, false);
   assert.equal("pin" in msTest, false);
+  assert.equal("password_hash" in msTest, false);
   assert.equal("totp_secret" in msTest, false);
-  assert.equal(session.authenticateDispatcher(msTest.id, "4020").role, "manager");
-  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"));
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /Administrator|Forgot password|not recognized/);
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "0000"), /Administrator|Forgot password|not recognized/);
+  settingsMod.updateDispatcherUser(msTest.id, {
+    name: msTest.name,
+    role: msTest.role,
+    email: msTest.email,
+    phone: "4025550100",
+    password: "Office1$ab",
+  });
+  assert.equal(session.authenticateDispatcher(msTest.id, "Office1$ab").role, "manager");
+  settingsMod.updateDispatcherUser(msTest.id, {
+    name: msTest.name,
+    role: msTest.role,
+    email: "office.login@msloads.com",
+    phone: "4025550100",
+  });
+  assert.equal(session.authenticateDispatcherByEmail("office.login@msloads.com", "Office1$ab").id, msTest.id);
+  assert.throws(() => session.authenticateDispatcherByEmail("nobody@msloads.com", "Office1$ab"), /not recognized/);
+  assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
   assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
   assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
 
@@ -9576,6 +12173,8 @@ Continuous reefer. Two load locks.
   assert.equal(sentBooks.accounting_desk, "accounting");
   assert.equal(queries.listLoads({ status: "active" }).some((load) => load.id === deliveredForBooks.id), false);
   assert.equal(queries.listLoads().some((load) => load.id === deliveredForBooks.id), false);
+  assert.equal(queries.listLoads({ status: "accounting" }).some((load) => load.id === sentBooks.id), true);
+  assert.equal(queries.listLoads({ status: "misc" }).some((load) => load.id === sentBooks.id), false);
   const { isActiveLoadStatus } = await import("../lib/types");
   const { loadShowsOnDispatchBoard } = await import("../lib/load-list-shared");
   assert.equal(isActiveLoadStatus(sentBooks.status), false);
@@ -9803,6 +12402,56 @@ Continuous reefer. Two load locks.
     const demoResent = await qbo.sendLoadToQuickbooks(loadId, { confirmResend: true });
     assert.notEqual(demoResent.invoiceId, demoSent.invoiceId);
 
+    const unbilledZeroId = queries.createLoad({
+      customer_id: customerId,
+      origin: "Hastings, NE",
+      destination: "Bronx, NY",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 40000,
+      commodity: "Unbilled zero",
+      rate: 0,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "accounting",
+      truck_id: null,
+      driver_id: null,
+    });
+    const unbilledZero = queries.getLoad(unbilledZeroId);
+    assert.ok(unbilledZero);
+    const zeroPreview = qbo.previewQuickbooksInvoice(unbilledZero);
+    assert.equal(zeroPreview.amount, 0);
+    assert.equal(zeroPreview.lines.length, 0);
+    await assert.rejects(() => qbo.sendLoadToQuickbooks(unbilledZeroId), /no customer billed rate/i);
+    const { sendToQuickbooksAction, sendToQuickbooksFormAction } = await import("../lib/actions");
+    const zeroForm = new FormData();
+    zeroForm.set("load_id", String(unbilledZeroId));
+    const zeroResult = await sendToQuickbooksAction(null, zeroForm);
+    assert.equal(zeroResult.ok, false);
+    assert.match(zeroResult.error, /no customer billed rate/i);
+    await sendToQuickbooksFormAction(zeroForm);
+    assert.ok(!queries.getLoad(unbilledZeroId)?.qbo_invoice_id);
+
+    const coleForm = new FormData();
+    coleForm.set("load_id", String(coleLoad.id));
+    const coleSend = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleSend.ok, true);
+    assert.match(String(coleSend.message), /Invoice sent to QuickBooks/);
+    const coleAgainSilent = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleAgainSilent.ok, false);
+    assert.match(coleAgainSilent.error, /already sent|send again/i);
+    coleForm.set("confirm_resend", "1");
+    const coleAgain = await sendToQuickbooksAction(null, coleForm);
+    assert.equal(coleAgain.ok, true);
+    assert.match(String(coleAgain.message), /sent again/i);
+
     const qboStatus = await qbo.getQuickbooksStatus();
     assert.equal(qboStatus.configured, false);
     assert.equal(qboStatus.status, "Demo");
@@ -9878,10 +12527,32 @@ Continuous reefer. Two load locks.
 
   const settings = await import("../lib/settings");
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Company Settings"));
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/alerts" && item.label === "Automated Alerting"),
+    ),
+  );
+  assert.equal(
+    settings.SETTINGS_SECTIONS.some((section) => /Business Center|Pro Plan|Find New Shippers/i.test(section.title)),
+    false,
+  );
   assert.ok(settings.SETTINGS_SECTIONS.some((section) => section.title === "Users"));
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/users")),
   );
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) => section.items.some((item) => item.href === "/settings/sign-in")),
+  );
+  assert.ok(
+    settings.SETTINGS_SECTIONS.some((section) =>
+      section.items.some((item) => item.href === "/settings/invoice-email" && item.label === "Invoice email"),
+    ),
+  );
+  assert.match(settings.getInvoiceEmailBody(), /Dear \[customer_name\]/);
+  settings.updateInvoiceEmailBody("Hello [customer_name].");
+  assert.equal(settings.getInvoiceEmailBody(), "Hello [customer_name].");
+  settings.updateInvoiceEmailBody("");
+  assert.match(settings.getInvoiceEmailBody(), /Dear \[customer_name\]/);
   assert.equal(settings.roleLabel("admin"), "Administrator");
   assert.equal(settings.roleLabel("manager"), "Administrator");
   assert.equal(settings.roleLabel("dispatcher"), "Standard");
@@ -9894,6 +12565,10 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canAssignLoads("dispatcher"), true);
   assert.equal(settings.canAssignLoads("accounting"), false);
   assert.equal(settings.canEditLoads("accounting"), true);
+  assert.equal(settings.canEmailInvoice("accounting"), true);
+  assert.equal(settings.canEmailInvoice("dispatcher"), true);
+  assert.equal(settings.canEmailInvoice("admin"), true);
+  assert.equal(settings.canEmailInvoice("read_only"), false);
   assert.equal(settings.canEditSettings("dispatcher"), false);
   assert.equal(settings.canEditSettings("accounting"), false);
   assert.equal(settings.canEditSettings("manager"), true);
@@ -9911,6 +12586,9 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canSeeNavHref("dispatcher", "/accounting"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/settings"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/users"), false);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/settings/sign-in"), false);
+  assert.equal(settings.canSeeNavHref("accounting", "/settings/sign-in"), false);
+  assert.equal(settings.canSeeNavHref("manager", "/settings/sign-in"), true);
   assert.equal(settings.canSeeNavHref("dispatcher", "/audit"), false);
   assert.equal(settings.canSeeNavHref("accounting", "/accounting"), true);
   assert.equal(settings.canSeeNavHref("accounting", "/settings"), false);
@@ -9925,18 +12603,108 @@ Continuous reefer. Two load locks.
   assert.equal(settings.canSeeNavHref("manager", "/reports/manage"), true);
   assert.equal(settings.canSeeNavHref("manager", "/reports/statistics"), true);
   assert.equal(settings.canSeeNavHref("dispatcher", "/reports/statistics"), false);
+  assert.equal(settings.canSeeNavHref("manager", "/claims"), true);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/claims"), true);
   assert.equal(session.roleLabel("manager"), "Administrator");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/sign-in/page.tsx"), "utf8"), /data-sign-in-log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/sign-in/page.tsx"), "utf8"), /Sign-in log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/sign-in-audit-table.tsx"), "utf8"), /data-sign-in-outcome/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /recordLoginAttemptFromRequest/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /recordLoginAttemptFromRequest/);
   const usersPage = fs.readFileSync(path.join(process.cwd(), "app/users/page.tsx"), "utf8");
   assert.match(usersPage, /Add user/);
+  assert.match(usersPage, /Sign-in log/);
   assert.match(usersPage, /listDispatcherUsers/);
+  assert.match(usersPage, /currentUserId/);
+  const usersTable = fs.readFileSync(path.join(process.cwd(), "components/users-table.tsx"), "utf8");
+  assert.match(usersTable, /"Edit"/);
+  assert.match(usersTable, /DeleteUserForm/);
+  assert.match(usersTable, /data-users-list/);
+  assert.doesNotMatch(usersTable, /overflow-hidden/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/delete-user-form.tsx"), "utf8"), /deleteDispatcherUserAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/users/[id]/page.tsx"), "utf8"), /Delete user/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-actions.ts"), "utf8"), /deleteDispatcherUserAction/);
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 1,
+      targetRole: "admin",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 2,
+    }).ok,
+    false,
+  );
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 2,
+      targetRole: "admin",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 0,
+    }).ok,
+    false,
+  );
+  assert.equal(
+    settings.canDeleteDispatcherUser({
+      targetId: 3,
+      targetRole: "dispatcher",
+      targetActive: true,
+      actorId: 1,
+      otherActiveAdmins: 2,
+    }).ok,
+    true,
+  );
+  const removableUserId = settings.createDispatcherUser({
+    name: "Temp Desk User",
+    password: "Temp1$ab",
+    role: "dispatcher",
+    email: "temp-desk@msloads.com",
+  });
+  settings.deleteDispatcherUser(removableUserId);
+  assert.equal(settings.getDispatcherUser(removableUserId), null);
+  const selfId = settings.createDispatcherUser({
+    name: "Self Desk User",
+    password: "Self1$ab",
+    role: "dispatcher",
+    email: "self-desk@msloads.com",
+  });
+  assert.throws(() => settings.deleteDispatcherUser(selfId, selfId), /your own login/);
+  settings.deleteDispatcherUser(selfId);
+  const customersPage = fs.readFileSync(path.join(process.cwd(), "app/customers/page.tsx"), "utf8");
+  assert.match(customersPage, /New customer/);
+  assert.match(customersPage, /CustomersTable/);
+  const customersTable = fs.readFileSync(path.join(process.cwd(), "components/customers-table.tsx"), "utf8");
+  assert.match(customersTable, /"Edit"/);
+  assert.match(customersTable, /DeleteCustomerForm/);
+  assert.match(customersTable, /data-customers-list/);
+  assert.doesNotMatch(customersTable, /overflow-hidden/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/delete-customer-form.tsx"), "utf8"), /deleteCustomerAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/customers/[id]/page.tsx"), "utf8"), /Delete customer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /deleteCustomerAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /CUSTOMER_HAS_LOADS_DELETE/);
+  const tempCustomerId = queries.createCustomer({
+    name: "Temp Customer Delete Me",
+    billing_notes: "",
+    contacts: [{ name: "Pat", role: "", phone: "", email: "" }],
+  });
+  queries.deleteCustomer(tempCustomerId);
+  assert.equal(queries.getCustomer(tempCustomerId), null);
+  const customerWithLoads = queries.listCustomers().find((row) => queries.countLoadsForCustomer(row.id) > 0);
+  assert.ok(customerWithLoads);
+  assert.throws(() => queries.deleteCustomer(customerWithLoads.id), /has loads/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/users/page.tsx"), "utf8"), /redirect\("\/users"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8"), /SettingsAdminGate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/settings-admin-gate.tsx"), "utf8"), /Only an Administrator can change Settings/);
   const userForm = fs.readFileSync(path.join(process.cwd(), "components/dispatcher-user-form.tsx"), "utf8");
-  assert.doesNotMatch(userForm, /user\?\.pin/);
+  assert.doesNotMatch(userForm, /user\?\.pin|name="pin"/);
+  assert.match(userForm, /name="password"/);
+  assert.match(userForm, /PasswordField/);
+  assert.match(userForm, /name="phone"/);
   assert.match(userForm, /defaultValue=""/);
   assert.match(userForm, /leave blank to keep/);
+  assert.match(userForm, /temporary password/);
   assert.match(userForm, /2-step verification/);
+  assert.match(userForm, /Add an email on this user/);
   assert.ok(
     settings.SETTINGS_SECTIONS.some((section) =>
       section.items.some((item) => item.href === "/settings/quickbooks"),
@@ -9971,12 +12739,35 @@ Continuous reefer. Two load locks.
   settings.updateTaxSettings({ tax_enabled: true, tax_kind: "gst", tax_rate: 5 });
   assert.equal(settings.taxOnAmount(200).tax, 10);
   settings.updateAlertSettings({
-    alert_driver_days: 14,
+    alert_driver_days: 30,
     alert_registration_days: 45,
     alert_dot_days: 21,
     alert_emails_enabled: true,
   });
-  assert.equal(settings.getCompanySettings().alert_driver_days, 14);
+  assert.equal(settings.getCompanySettings().alert_driver_days, 30);
+  const alertRules = await import("../lib/alert-rules");
+  assert.equal(alertRules.alertCatalogHasNoBrokerageTriggers(), true);
+  const officeUsers = settings.listDispatcherUsers(false);
+  assert.ok(officeUsers.length >= 1);
+  const createdRule = alertRules.createAlertRule({
+    name: "License watch",
+    triggerKey: "driver_license",
+    recipientIds: [officeUsers[0].id],
+    message: "Call safety.",
+  });
+  assert.equal(createdRule.name, "License watch");
+  assert.ok(alertRules.listAlertRules().some((rule) => rule.id === createdRule.id));
+  assert.ok(
+    alertRules.alertRuleListRows().some((row) => row.watching === "Driver license" && row.name === "License watch"),
+  );
+  const fired = alertRules.syncAlertNotifications();
+  assert.ok(fired.created >= 1, "expired or due license should notify the selected office user");
+  const notices = alertRules.listOfficeNotifications(officeUsers[0].id);
+  assert.ok(notices.some((item) => item.title === "License watch" && /license/i.test(item.body)));
+  assert.throws(
+    () => alertRules.createAlertRule({ name: "EDI watch", triggerKey: "incoming_810", recipientIds: [officeUsers[0].id] }),
+    /trucking alert trigger/,
+  );
   settings.updateRoutingNotes("Call 30 minutes out.");
   settings.updatePaySettings({
     default_oo_percent: 80,
@@ -10017,7 +12808,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.isKnownLoadStatus("waiting_paper"), true);
   const userId = settings.createDispatcherUser({
     name: "Smoke Desk",
-    pin: "7777",
+    password: "Desk1$ab",
     role: "dispatcher",
     email: "smoke@msloads.com",
     permission_group: "billing",
@@ -10025,7 +12816,7 @@ Continuous reefer. Two load locks.
   assert.equal(settings.getDispatcherUser(userId)?.permission_group, "billing");
   const booksId = settings.createDispatcherUser({
     name: "Smoke Books",
-    pin: "8888",
+    password: "Books1$ab",
     role: "accounting",
     email: "books@msloads.com",
   });
@@ -10039,11 +12830,224 @@ Continuous reefer. Two load locks.
   assert.ok(casey);
   assert.equal(casey.role, "accounting");
   assert.equal(session.roleLabel(casey.role), "Accounting");
-  assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 0);
-  assert.equal(settings.isDispatcherTwoFactorRequired(), false);
+  assert.equal(settings.getCompanySettings().require_dispatcher_2fa, 1);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), true);
   settings.updateTwoFactorPolicy(true);
   assert.equal(settings.isDispatcherTwoFactorRequired(), true);
   settings.updateTwoFactorPolicy(false);
+  assert.equal(settings.isDispatcherTwoFactorRequired(), false);
+  const emailOtp = await import("../lib/dispatcher-email-otp");
+  assert.equal(emailOtp.maskEmail("ana@msloads.com"), "a••@msloads.com");
+  const signInMail = emailOtp.composeSignInCodeEmail({ code: "482193", officePhone: "402-302-0097" });
+  assert.match(signInMail.subject, /MS Express TMS sign-in code/);
+  assert.match(signInMail.text, /482193/);
+  assert.match(signInMail.text, /Do not reply/);
+  assert.match(signInMail.text, /not monitored/);
+  assert.match(signInMail.text, /402-302-0097/);
+  assert.doesNotMatch(signInMail.text, /Twilio|SendGrid|SMTP_/);
+  const otpUserId = settings.createDispatcherUser({
+    name: "Email Code Desk",
+    password: "Otp1$abc",
+    role: "dispatcher",
+    email: "otp-desk@msloads.com",
+  });
+  const issued = emailOtp.issueEmailOtp(otpUserId);
+  assert.match(issued.code, /^\d{6}$/);
+  assert.equal(issued.email, "otp-desk@msloads.com");
+  assert.throws(() => emailOtp.issueEmailOtp(otpUserId, { resend: true }), /Wait before/);
+  emailOtp.verifyEmailOtp(otpUserId, issued.code);
+  assert.throws(() => emailOtp.verifyEmailOtp(otpUserId, issued.code), /expired|not valid/);
+  const noMailId = settings.createDispatcherUser({
+    name: "No Email Desk",
+    password: "None1$ab",
+    role: "dispatcher",
+    email: "",
+  });
+  assert.throws(() => emailOtp.issueEmailOtp(noMailId), /Add an email on this user/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /needsEmailCode/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /sendMail/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /console\.log/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-email-otp.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/security/page.tsx"), "utf8"), /one-time code/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /mustEnroll|2-step setup/);
+  const passwordRules = await import("../lib/dispatcher-password-shared");
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1$ab"), true);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("office1$ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("OFFICE1$AB"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office$ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Office1-ab"), false);
+  assert.equal(passwordRules.isQualifyingDispatcherPassword("Short1$"), false);
+  const passwords = await import("../lib/dispatcher-password");
+  assert.equal(passwords.maskPhone("402-555-0199"), "•••-•••-0199");
+  assert.match(passwords.composePasswordChangeSms({ code: "123456", officePhone: "402-302-0097" }), /123456/);
+  assert.doesNotMatch(passwords.composePasswordChangeSms({ code: "123456" }), /TWILIO_|Auth Token/);
+  const resetMail = passwords.composePasswordResetEmail({
+    resetUrl: "https://desk.example/login/reset?token=abc",
+    officePhone: "402-302-0097",
+  });
+  assert.match(resetMail.subject, /Reset your MS Express TMS password/);
+  assert.match(resetMail.text, /desk\.example\/login\/reset/);
+  assert.match(resetMail.text, /Do not reply/);
+  assert.match(resetMail.text, /not monitored/);
+  assert.doesNotMatch(resetMail.text, /TWILIO_|SMTP_|SendGrid/);
+  const historyUserId = settings.createDispatcherUser({
+    name: "Password History Desk",
+    password: "First1$ab",
+    role: "dispatcher",
+    email: "history-desk@msloads.com",
+    phone: "4025550199",
+  });
+  assert.throws(
+    () => settings.updateDispatcherUser(historyUserId, {
+      name: "Password History Desk",
+      role: "dispatcher",
+      email: "history-desk@msloads.com",
+      phone: "4025550199",
+      password: "First1$ab",
+    }),
+    /used before/,
+  );
+  settings.updateDispatcherUser(historyUserId, {
+    name: "Password History Desk",
+    role: "dispatcher",
+    email: "history-desk@msloads.com",
+    phone: "4025550199",
+    password: "Second2$ab",
+  });
+  assert.equal(session.authenticateDispatcher(historyUserId, "Second2$ab").id, historyUserId);
+  assert.throws(
+    () => settings.updateDispatcherUser(historyUserId, {
+      name: "Password History Desk",
+      role: "dispatcher",
+      email: "history-desk@msloads.com",
+      phone: "4025550199",
+      password: "First1$ab",
+    }),
+    /used before/,
+  );
+  const resetToken = passwords.createPasswordResetToken(historyUserId);
+  passwords.resetPasswordWithToken(resetToken, "Third3$ab");
+  assert.equal(session.authenticateDispatcher(historyUserId, "Third3$ab").id, historyUserId);
+  assert.throws(() => passwords.resetPasswordWithToken(resetToken, "Fourth4$ab"), /not valid|expired/);
+  assert.throws(() => passwords.issuePasswordSmsOtp(noMailId), /phone number/);
+  const smsIssued = passwords.issuePasswordSmsOtp(historyUserId);
+  assert.match(smsIssued.code, /^\d{6}$/);
+  assert.equal(smsIssued.phone, "4025550199");
+  assert.throws(() => passwords.issuePasswordSmsOtp(historyUserId, { resend: true }), /Wait before/);
+  passwords.verifyPasswordSmsOtp(historyUserId, smsIssued.code);
+  assert.throws(() => passwords.verifyPasswordSmsOtp(historyUserId, smsIssued.code), /expired|not valid/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /sendMail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /sendTwilioSms/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /currentBrowserOrigin/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password.ts"), "utf8"), /console\.log/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-password-actions.ts"), "utf8"), /console\.log/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /sms_code/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /No phone is on this user/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("password"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /authenticateDispatcherByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("email"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /login\/change-password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /EMAIL_OTP_NO_EMAIL/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("pin"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/change-password/page.tsx"), "utf8"), /Set your password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-forgot-form.tsx"), "utf8"), /temporary password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /must_change_password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /Add an email on this user/);
+  assert.equal(settings.getDispatcherUser(noMailId)?.must_change_password, 1);
+  assert.equal(session.authenticateDispatcher(noMailId, "None1$ab").id, noMailId);
+  assert.equal(session.authenticateDispatcher(noMailId, "None1$ab").must_change_password, true);
+  passwords.setDispatcherPassword(noMailId, "None2$cd");
+  assert.equal(settings.getDispatcherUser(noMailId)?.must_change_password, 0);
+  assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").id, noMailId);
+  assert.equal(session.authenticateDispatcher(noMailId, "None2$cd").must_change_password, false);
+  const pinDriver = queries.listDrivers().find((driver) => driver.pin);
+  assert.ok(pinDriver, "driver PIN login stays on the driver record");
+  const loginAudit = await import("../lib/login-audit");
+  const failedLogin = loginAudit.recordLoginAttempt({
+    kind: "office",
+    outcome: "failure",
+    step: "password",
+    userId: noMailId,
+    ipAddress: "203.0.113.44",
+    detail: "password=Office1$ab",
+  });
+  assert.equal(failedLogin.user_name, "No Email Desk");
+  assert.equal(failedLogin.ip_address, "203.0.113.44");
+  assert.equal(failedLogin.detail, "[redacted]");
+  assert.doesNotMatch(failedLogin.detail, /Office1\$ab/);
+  const signedIn = loginAudit.recordLoginAttempt({
+    kind: "office",
+    outcome: "success",
+    step: "password",
+    userId: noMailId,
+    ipAddress: "198.51.100.10",
+  });
+  assert.equal(signedIn.outcome, "success");
+  const driverFail = loginAudit.recordLoginAttempt({
+    kind: "driver",
+    outcome: "failure",
+    step: "pin",
+    userId: pinDriver.id,
+    ipAddress: "192.0.2.8",
+    detail: "Driver or PIN is not recognized.",
+  });
+  assert.equal(driverFail.kind, "driver");
+  assert.match(driverFail.detail, /not recognized/);
+  const listed = loginAudit.listLoginAudit({ user: "No Email Desk", outcome: "failure" });
+  assert.ok(listed.some((row) => row.ip_address === "203.0.113.44" && row.outcome === "failure"));
+  const byIp = loginAudit.listLoginAudit({ outcome: "success" }).find((row) => row.ip_address === "198.51.100.10");
+  assert.ok(byIp);
+  const { dispatcherLoginAction } = await import("../lib/dispatcher-actions");
+  const badLogin = new FormData();
+  badLogin.set("dispatcher_id", String(noMailId));
+  badLogin.set("password", "Wrong1$zz");
+  const badResult = await dispatcherLoginAction(null, badLogin);
+  assert.equal(badResult.ok, false);
+  const devices = await import("../lib/dispatcher-device");
+  assert.equal(devices.DEVICE_TTL_MS, 30 * 24 * 60 * 60 * 1000);
+  assert.equal(devices.DEVICE_COOKIE, "tms_device");
+  const rememberOn = new FormData();
+  rememberOn.set("remember_device", "1");
+  assert.equal(devices.isRememberDeviceRequested(rememberOn), true);
+  assert.equal(devices.isRememberDeviceRequested(new FormData()), false);
+  const issuedDevice = devices.createTrustedDevice(noMailId);
+  assert.match(issuedDevice.cookie, new RegExp(`^${noMailId}\\.[0-9a-f]{64}$`));
+  assert.ok(devices.findTrustedDevice(issuedDevice.cookie, noMailId));
+  assert.equal(devices.findTrustedDevice(issuedDevice.cookie, noMailId + 999), null);
+  assert.equal(devices.findTrustedDevice(`${noMailId}.deadbeef`, noMailId), null);
+  assert.equal(devices.countTrustedDevices(noMailId), 1);
+  const storedDevice = getDb()
+    .prepare("SELECT token_hash FROM dispatcher_trusted_devices WHERE dispatcher_id = ?")
+    .get(noMailId) as { token_hash: string };
+  assert.equal(storedDevice.token_hash.length, 64);
+  assert.notEqual(storedDevice.token_hash, issuedDevice.cookie.split(".")[1]);
+  assert.equal(storedDevice.token_hash, devices.hashDeviceToken(issuedDevice.cookie.split(".")[1] ?? ""));
+  getDb()
+    .prepare("UPDATE dispatcher_trusted_devices SET expires_at = ? WHERE dispatcher_id = ?")
+    .run("2000-01-01T00:00:00.000Z", noMailId);
+  assert.equal(devices.findTrustedDevice(issuedDevice.cookie, noMailId), null);
+  const liveDevice = devices.createTrustedDevice(noMailId);
+  assert.ok(devices.findTrustedDevice(liveDevice.cookie, noMailId));
+  passwords.setDispatcherPassword(noMailId, "None3$ef");
+  assert.equal(devices.countTrustedDevices(noMailId), 0);
+  assert.equal(devices.findTrustedDevice(liveDevice.cookie, noMailId), null);
+  assert.equal(session.authenticateDispatcher(noMailId, "None3$ef").id, noMailId);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /remember_device|isRememberDeviceRequested/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /findTrustedDevice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /dispatcher_trusted_devices/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-device.ts"), "utf8"), /console\.log/);
+  assert.ok(
+    loginAudit.listLoginAudit({ user: "No Email Desk", outcome: "failure" }).some((row) => row.step === "password"),
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/audit/page.tsx"), "utf8"), /settings\/sign-in/);
+  settings.updateOwnDispatcherContact(noMailId, { email: "none2@msloads.com", phone: "" });
+  assert.equal(settings.getDispatcherUser(noMailId)?.email, "none2@msloads.com");
+  const afterEmail = emailOtp.issueEmailOtp(noMailId);
+  emailOtp.verifyEmailOtp(noMailId, afterEmail.code);
+  assert.equal(queries.authenticateDriver(pinDriver.id, pinDriver.pin).id, pinDriver.id);
+  assert.throws(() => queries.authenticateDriver(pinDriver.id, "0000"));
+  settings.updateTwoFactorPolicy(true);
   const totp = await import("../lib/totp");
   const dispatcherTotp = await import("../lib/dispatcher-totp");
   const generatedSecret = totp.generateTotpSecret();
@@ -10390,7 +13394,7 @@ Continuous reefer. Two load locks.
   assert.match(assignUi, /name="truck_id"[\s\S]*?\{item\.unit_number\}[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /name="truck_id"[\s\S]*?item\.type[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /dry van/i);
-  const dashUi = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const dashUi = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
   assert.match(dashUi, /Unit \{truck\.unit_number\}/);
   assert.doesNotMatch(dashUi, /labelForTruckType/);
 
@@ -10603,13 +13607,15 @@ Continuous reefer. Two load locks.
   assert.equal(worstSafetyRank(["due_soon", "hos_violation", "expired"]), "expired");
   const tyrellSafety = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(tyrellSafety);
+  const safetyNow = new Date();
+  safetyNow.setDate(safetyNow.getDate() + 15);
   const safetyBoard = buildSafetyBoard({
     drivers: queries.listDrivers(),
     windowDays: 30,
     insurance: { provider: "Great West", policy: "POL-100", expires: "2026-07-01" },
     tokenSet: false,
     hos: [],
-    now: new Date("2026-08-24T12:00:00"),
+    now: safetyNow,
   });
   assert.ok(safetyBoard.rows.some((row) => row.subject === "Denise Ortega"));
   assert.ok(safetyBoard.rows.some((row) => row.subject === "Cole Brennan" && row.driverType === "owner_operator"));
@@ -10671,15 +13677,85 @@ Continuous reefer. Two load locks.
   assert.equal(invoiceLines[0]?.amount, 1500);
   assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
   assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
+  const freightPlusDetentionId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Kansas City, MO",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 5869,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  payItemsMod.addPayItem(freightPlusDetentionId, {
+    side: "income",
+    bill_to: "customer",
+    payee: "Customer",
+    category: "detention",
+    rate: 100,
+    qty: 1,
+    total: 100,
+    notes: "",
+  });
+  const freightPlusDetentionLoad = queries.getLoad(freightPlusDetentionId)!;
+  assert.equal(freightPlusDetentionLoad.rate, 5869);
+  const freightPlusDetentionLines = tmsCustomerInvoiceLines(freightPlusDetentionLoad);
+  assert.deepEqual(
+    freightPlusDetentionLines.map((line) => [line.name, line.amount]),
+    [
+      ["Flat Rate", 5869],
+      ["Detention", 100],
+    ],
+  );
+  const freightPlusDetentionModel = buildTmsInvoice(freightPlusDetentionLoad);
+  assert.equal(freightPlusDetentionModel.total, 5969);
+  const freightPlusDetentionPdf = await renderTmsInvoicePdf(freightPlusDetentionModel);
+  const { extractText: extractInvoiceText } = await import("unpdf");
+  const freightPlusDetentionText = String(
+    (await extractInvoiceText(new Uint8Array(freightPlusDetentionPdf), { mergePages: true })).text ?? "",
+  );
+  assert.match(freightPlusDetentionText, /Flat Rate/);
+  assert.match(freightPlusDetentionText, /5,869/);
+  assert.match(freightPlusDetentionText, /Detention/);
+  assert.match(freightPlusDetentionText, /100/);
+  assert.match(freightPlusDetentionText, /5,969/);
+  const freightPlusDetentionQbo = (await import("../lib/integrations/quickbooks")).buildInvoiceLines(
+    freightPlusDetentionLoad,
+  );
+  assert.deepEqual(
+    freightPlusDetentionQbo.map((line) => [line.name, line.amount]),
+    [
+      ["Line Haul", 5869],
+      ["Detention", 100],
+    ],
+  );
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
+  assert.equal(tmsInvoiceModel.companyEmail, "ar@msloads.com");
   assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");
   assert.match(tmsInvoiceModel.companyLegalName, /LLC/);
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
   assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
   assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
-  assert.equal(tmsInvoiceModel.customerStreet, settings.getCompanySettings().street);
-  assert.match(tmsInvoiceModel.customerCityStateZip, /NE/);
-  assert.match(tmsInvoiceModel.customerPhone, /402-302-0097/);
+  assert.doesNotMatch(tmsInvoiceModel.customerStreet, /600 E 39th|100 Fleet Way/);
+  assert.doesNotMatch(tmsInvoiceModel.customerCityStateZip, /Hastings/);
+  assert.doesNotMatch(tmsInvoiceModel.customerPhone, /402-302-0097/);
+  getDb()
+    .prepare("UPDATE loads SET contact_phone = ?, contact_ext = ? WHERE id = ?")
+    .run("800-555-0142", "2210", invoiceLoadId);
+  const invoiceIgnoresBrokerPhone = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
+  assert.doesNotMatch(invoiceIgnoresBrokerPhone.customerPhone, /800-555-0142/);
   assert.match(tmsInvoiceModel.companyAddress, /100 Fleet Way|600 E 39th/);
   assert.equal(settings.withOfficeAddress({ street: "", city: "", state: "", zip: "" }).street, "600 E 39th St");
   assert.equal(settings.withOfficeAddress({ street: "100 Fleet Way", city: "Omaha", state: "NE", zip: "68102" }).street, "100 Fleet Way");
@@ -10726,6 +13802,7 @@ Continuous reefer. Two load locks.
   assert.ok(recoveredConfirm);
   assert.equal(recoveredConfirm.buffer.subarray(0, 4).toString(), "%PDF");
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
+  assert.match(invoicePdfText, /ar@msloads\.com/);
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
   assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
@@ -10809,7 +13886,8 @@ Continuous reefer. Two load locks.
   const onePageText = await extractDocumentText(onePageInvoice, "application/pdf", "INV-1005921-one.pdf");
   assert.match(onePageText, /Page 1 of 1/);
   assert.match(onePageText, /Load #/);
-  assert.match(onePageText, /MS Test \(M&S Loads LLC\)/);
+  assert.doesNotMatch(onePageText, /MS Test \(M&S Loads LLC\)/);
+  assert.doesNotMatch(onePageText, /MS Test/);
   const freightPdf = await renderTmsInvoicePdf({
     ...tmsInvoiceModel,
     invoiceNumber: "INV-1005921",
@@ -10893,6 +13971,10 @@ Continuous reefer. Two load locks.
   assert.ok(invoiceFiles.some((file) => file.id === made.attachmentId && file.original_name === "INV-1005911.pdf"));
   const invoicePanel = fs.readFileSync(path.join(process.cwd(), "components/tms-invoice-panel.tsx"), "utf8");
   assert.match(invoicePanel, /Create invoice/);
+  assert.match(invoicePanel, /EmailInvoiceButton/);
+  assert.match(invoicePanel, /id="invoice-panel"/);
+  assert.match(invoicePanel, /anchorId="email-invoice"/);
+  assert.match(invoicePanel, /Email invoice after Delivered/);
   assert.match(invoicePanel, /companyLegalName/);
   assert.match(invoicePanel, /\/api\/loads\/\$\{loadId\}\/invoice/);
   assert.match(invoicePanel, /method="POST"/);
@@ -10903,9 +13985,23 @@ Continuous reefer. Two load locks.
   assert.match(invoicePanel, /\/api\/attachments\/\$\{attachmentId\}\?download=1/);
   assert.match(invoicePanel, /setTab\("financials"\)/);
   assert.doesNotMatch(invoicePanel, /saved on Load Documents|go to the Load Documents/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /pdfResponseHeaders/);
+  const invoiceRouteSource = fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8");
+  assert.match(invoiceRouteSource, /pdfResponseHeaders/);
+  assert.match(invoiceRouteSource, /X-Attachment-Id/);
+  assert.match(invoiceRouteSource, /export async function GET/);
+  assert.match(invoiceRouteSource, /export async function POST/);
+  assert.doesNotMatch(invoiceRouteSource, /serveGeneratedInvoice/);
+  const invoiceGetSource = invoiceRouteSource.slice(
+    invoiceRouteSource.indexOf("export async function GET"),
+    invoiceRouteSource.indexOf("export async function POST"),
+  );
+  const invoicePostSource = invoiceRouteSource.slice(invoiceRouteSource.indexOf("export async function POST"));
+  assert.match(invoiceGetSource, /listAttachments/);
+  assert.match(invoiceGetSource, /kind === "invoice"/);
+  assert.match(invoiceGetSource, /Create or Rebuild invoice first/);
+  assert.doesNotMatch(invoiceGetSource, /createTmsInvoice/);
+  assert.match(invoicePostSource, /createTmsInvoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Disposition.*attachment/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /X-Attachment-Id/);
   const openPdf = fs.readFileSync(path.join(process.cwd(), "lib/open-generated-pdf.ts"), "utf8");
   assert.match(openPdf, /createObjectURL/);
   assert.match(openPdf, /openPdfInNewTab/);
@@ -11614,6 +14710,23 @@ Continuous reefer. Two load locks.
     }).headingDeg,
     85,
   );
+  assert.equal(
+    samsara.formatSamsaraStatusHos({
+      driverId: 1,
+      loadId: null,
+      samsaraDriverId: "d1",
+      driverName: "Test",
+      dutyStatus: "driving",
+      driveRemainingMs: 6.2 * 3600000,
+      shiftRemainingMs: null,
+      cycleRemainingMs: null,
+      timeUntilBreakMs: null,
+      recordedAt: "2026-08-31T12:00:00.000Z",
+      source: "samsara",
+    }),
+    "Driving · 6h 12m",
+  );
+  assert.equal(samsara.formatSamsaraStatusHos(null), "");
   const odometerMiles = samsara.extractSamsaraOdometerMiles({
     obdOdometerMeters: { time: "2026-08-26T12:00:00.000Z", value: 160934.4 },
   }).miles;
@@ -11621,9 +14734,19 @@ Continuous reefer. Two load locks.
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
 
-  const { formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
+  const { compactTrailerShareState, formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
   assert.match(formatDateTime("2026-08-25T16:30:00-04:00"), /08\/25\/26/);
+  assert.equal(formatCompactShareExpiry("2026-09-02T20:04:00-04:00"), "09/02 8:04p");
+  assert.equal(compactTrailerShareState("", ""), "none");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-04T17:22:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "live");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-02T20:04:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "expired");
+  assert.equal(compactTrailerShareState("/t/abc", "2026-09-03T12:00:00-04:00", Date.parse("2026-09-03T12:00:00-04:00")), "expired");
+  const boardWhen = formatBoardDateTime("2026-08-28T08:00:00-04:00");
+  assert.equal(boardWhen.date, "08/28/26");
+  assert.match(boardWhen.time, /8:00\s*AM/);
+  assert.doesNotMatch(boardWhen.date, /AM|PM/);
+  assert.equal(formatBoardDateTime("2026-08-28").time, "");
   assert.equal(
     formatStopWindow("2026-08-25T11:57:00.000Z", "2026-08-25T11:58:00.000Z", "appointment"),
     formatDateTime("2026-08-25T11:57:00.000Z"),
@@ -11695,6 +14818,8 @@ Continuous reefer. Two load locks.
   assert.match(driverHome, /Dispatch/);
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /Confirmation/);
+  assert.match(driverHome, /label: "Trailer"/);
+  assert.match(driverHome, /driverLoadHasAssignedTrailer/);
   assert.doesNotMatch(driverHome, /label: "Fuel"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
@@ -11712,6 +14837,99 @@ Continuous reefer. Two load locks.
     33,
   );
   assert.equal(pickDriverDestinationLoad([], []), null);
+  const { driverLoadHasAssignedTrailer, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
+  assert.equal(driverLoadHasAssignedTrailer({ trailer_id: null }), false);
+  assert.equal(driverLoadHasAssignedTrailer({ trailer_id: 9 }), true);
+  const driverPinTrailerId = queries.createTrailer({
+    unit_number: "TR-DRV-PIN",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-drv-pin",
+  });
+  queries.saveTrailerGps(driverPinTrailerId, {
+    latitude: 41.11,
+    longitude: -96.22,
+    address: "Driver trailer pin",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  orbcomm.insertReeferReading({
+    load_id: null,
+    truck_id: null,
+    trailer_id: "TR-DRV-PIN",
+    setpoint_f: 34,
+    temperature_f: 34,
+    return_air_f: null,
+    supply_air_f: null,
+    door_open: 0,
+    alarm: "",
+    operating_mode: "Off",
+    latitude: 41.11,
+    longitude: -96.22,
+    address: "Driver trailer pin",
+    source: "orbcomm",
+    recorded_at: "2026-08-20T14:00:00.000Z",
+  });
+  const driverPinCustomerId = queries.createCustomer({
+    name: "Driver Trailer Pin Co",
+    billing_notes: "",
+    contacts: [],
+  });
+  const driverPinLoadId = queries.createLoad({
+    customer_id: driverPinCustomerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    trailer_id: driverPinTrailerId,
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const driverPinView = await driverAssignedTrailerMap(queries.getLoad(driverPinLoadId)!);
+  assert.equal(driverPinView.trailerNumber, "TR-DRV-PIN");
+  assert.equal(driverPinView.point?.lat, 41.11);
+  assert.equal(driverPinView.point?.lng, -96.22);
+  assert.equal(driverPinView.point?.pinColor, "#eab308");
+  const emptyTrailerLoadId = queries.createLoad({
+    customer_id: driverPinCustomerId,
+    origin: "Omaha, NE",
+    destination: "Lincoln, NE",
+    pickup_start: "2026-08-20T12:00:00.000Z",
+    pickup_end: "2026-08-20T16:00:00.000Z",
+    delivery_start: "2026-08-21T12:00:00.000Z",
+    delivery_end: "2026-08-21T20:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1500,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const emptyTrailerView = await driverAssignedTrailerMap(queries.getLoad(emptyTrailerLoadId)!);
+  assert.equal(emptyTrailerView.point, null);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /data-driver-trailer-map/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /cluster=\{false\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /LOAD_MAP_PIN_TIP_Y/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /r="9"/);
   const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
   assert.match(driverLoadPage, /driverFacingPay/);
   assert.doesNotMatch(driverLoadPage, /formatMoney\(load\.rate\)/);
@@ -11720,6 +14938,7 @@ Continuous reefer. Two load locks.
   assert.doesNotMatch(driverLoadPage, /DriverFuelReceipt|DriverCameraPdf/);
   assert.match(driverLoadPage, /DriverLoadActions/);
   assert.match(driverLoadPage, /id="bol"/);
+  assert.match(driverLoadPage, /data-driver-trailer-tab/);
   assert.match(driverLoadPage, /packet=internal/);
   assert.match(driverLoadPage, /isCustomerRateDocument/);
   assert.match(
@@ -12360,7 +15579,11 @@ Continuous reefer. Two load locks.
   assert.equal(shortPlaceLabel("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
   assert.equal(shortPlaceLabel("Dakota City, NE"), "Dakota City, NE");
   assert.equal(shortPlaceLabel("Holcomb, KS"), "Holcomb, KS");
+  assert.equal(shortPlaceLabel("South Sioux City, NE"), "South Sioux City, NE");
+  assert.equal(shortPlaceLabel("Hays, KS"), "Hays, KS");
   assert.doesNotMatch(shortPlaceLabel("Holcomb, KS"), /LCOMB/);
+  assert.doesNotMatch(shortPlaceLabel("South Sioux City, NE"), /UTH SIOUX/);
+  assert.doesNotMatch(shortPlaceLabel("Hays, KS"), /^YS,/);
   assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
   const boardCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   const placeBlock = boardCss.match(/\.board-place\s*\{[^}]+\}/)?.[0] ?? "";
@@ -12377,6 +15600,34 @@ Continuous reefer. Two load locks.
   assert.match(boardPage, /board-place-cell/);
   assert.match(boardPage, /board-unit-cell/);
   assert.match(boardPage, /board-load-cell/);
+  assert.match(boardPage, /board-when-cell/);
+  assert.match(boardPage, /board-when-date/);
+  assert.match(boardPage, /board-when-time/);
+  assert.match(boardPage, /board-lane-line/);
+  assert.match(boardPage, /board-scroll/);
+  assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
+  assert.match(boardCss, /board-when-cell/);
+  assert.match(boardCss, /board-scroll/);
+  assert.match(boardCss, /min-width:\s*103rem/);
+  assert.match(boardCss, /board-place-with-pin/);
+  assert.match(boardCss, /board-trailer-cell/);
+  const trailerCell = boardCss.match(/td\.board-trailer-cell[\s\S]*?\}/)?.[0] ?? "";
+  assert.match(trailerCell, /overflow:\s*visible/);
+  const pinStack = boardCss.match(/\.board-place-with-pin\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(pinStack, /flex-direction:\s*column/);
+  assert.match(pinStack, /overflow:\s*visible/);
+  assert.doesNotMatch(pinStack, /position:\s*absolute/);
+  const pinOnCity = boardCss.match(/\.board-place-with-pin \.board-place-line\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(pinOnCity, /white-space:\s*normal/);
+  assert.match(pinOnCity, /overflow:\s*visible/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /circle cx="14" cy="14" r="9"/);
+  assert.doesNotMatch(boardCss.match(/\.board-when-date[\s\S]*?\}/)?.[0] ?? "", /direction:\s*rtl/);
+  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*z-index:\s*80/);
+  assert.match(boardCss, /\.load-overlay-backdrop[\s\S]*100dvh/);
+  assert.match(boardCss, /\.load-overlay-panel[\s\S]*height:\s*100%/);
+  assert.doesNotMatch(boardCss, /\.load-overlay-panel,\s*\n\.pay-item-dialog/);
+  assert.doesNotMatch(boardCss, /load-overlay-panel[\s\S]{0,80}min\(1100px/);
+  assert.match(boardCss, /acct-expand-grid/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-badges.tsx"), "utf8"), /board-place-line/);
   const { criteriaFromSearchParams } = await import("../lib/search");
   assert.equal(criteriaFromSearchParams({ q: "MSE-1055" }).q, "MSE-1055");
@@ -12444,7 +15695,7 @@ Continuous reefer. Two load locks.
   assert.ok(!searchGrid.flat().includes("Not In Results"));
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /Download spreadsheet/);
 
-  const dashToday = fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
+  const dashToday = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
   assert.match(dashToday, /loadTouchesToday/);
   assert.doesNotMatch(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
@@ -12677,6 +15928,13 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Truck</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Mileage</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Driver</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />HOS</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /truckStatusRows/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /formatSamsaraStatusHos/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
@@ -12685,7 +15943,7 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-reefer-pin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Arrow = moving/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Circle = stopped/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Pin = stopped/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin-legend/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="on"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-pin="moving"/);
@@ -13609,7 +16867,7 @@ Continuous reefer. Two load locks.
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Loaded miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /refreshAction\(form\)/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /data-email-ingest/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /data-email-ingest/);
   assert.match(workspaceSource, /WhatsApp load/);
   assert.match(workspaceSource, /Send WhatsApp/);
   assert.match(workspaceSource, /whatsappConfigured/);
@@ -13652,9 +16910,436 @@ Continuous reefer. Two load locks.
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "late", severity: "HIGH" }]), true);
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "reefer", severity: "CRITICAL" }]), true);
 
-  const { proposeMikeWork } = await import("../lib/mike-work");
+  const { proposeMikeWork, applyMikeProposal } = await import("../lib/mike-work");
   const detentionWork = proposeMikeWork(`Draft detention email for ${created.load_number}`);
   assert.ok(detentionWork.proposals.some((item) => item.kind === "detention_email"));
+
+  const {
+    TIE_SHEET_FIXTURES,
+    TIE_SHEET_FIXTURE_0824_14M,
+    TIE_SHEET_FIXTURE_0824_19E,
+    TIE_SHEET_FIXTURE_0824_5W,
+    TIE_SHEET_FIXTURE_0824_9E,
+    TIE_SHEET_FIXTURE_0824_4W,
+    TIE_SHEET_FIXTURE_0824_10E,
+    TIE_SHEET_0824_4W_DROPS,
+    TIE_SHEET_PICTURE_FILES,
+    knownTieSheetExtract,
+    readTieSheetPictureFixture,
+  } = await import("../lib/tie-sheet-fixtures");
+  const {
+    draftFromTieSheetExtract,
+    encodeTieSheetDraft,
+    fillAmbiguousTieSheetFields,
+    groupTieSheetOrdersByDock,
+    parseTieSheetText,
+    tieSheetDraftPreview,
+    tieSheetSameDockFamily,
+    TIE_SHEET_CUSTOMER,
+    TIE_SHEET_MISSING_KEY_MESSAGE,
+    TIE_SHEET_SHIPPER_NAME,
+  } = await import("../lib/tie-sheet-shared");
+  const { saveTieSheetDraft } = await import("../lib/tie-sheet");
+  const { askMike } = await import("../lib/mike");
+  const { setTieSheetAiTestClient } = await import("../lib/tie-sheet-ai");
+  const ignoredParks = parseTieSheetText(`0824-14M
+74774 | 89676G | MBL | Hammond, IN | 8/28 | 8/31 | 18,851 | Mixed | | 7:00 AM
+XK + TOTAL | | | | | | 36,533 |
+
+Customer Pickup
+99999 | 000 | Stay at plant | Hastings, NE | 8/28 | 8/28 | 1 | 1 | | 
+
+********
+parked for next week
+0831-1E | 1 | Future | Chicago, IL | 8/31 | 9/2 | 100 | 1 | |
+`);
+  assert.equal(ignoredParks.load_id, "0824-14M");
+  assert.equal(ignoredParks.orders.length, 1);
+  assert.equal(ignoredParks.orders[0]?.control, "74774");
+  assert.equal(ignoredParks.orders.some((order) => order.control === "99999" || order.control === "0831-1E"), false);
+
+  const ignoredUnnumberedPfg = parseTieSheetText(`0831-
+74910 | 3698429 | PFG | Springfield, MA | 9/4 | 9/7 | 37,714 | 575 | |
+`);
+  assert.equal(ignoredUnnumberedPfg.load_id, "");
+  assert.equal(ignoredUnnumberedPfg.orders.length, 0, "unnumbered 0831- PFG is not a truck");
+  const truckThenUnnumberedPfg = parseTieSheetText(`0824-9E
+74789 | 128494 | Bertolino | Peabody, MA | 8/28 | 8/31 | 37,152 | 630 | | 8am appt 8/31
+
+0831-
+74910 | 3698429 | PFG | Springfield, MA | 9/4 | 9/7 | 37,714 | 575 | |
+`);
+  assert.equal(truckThenUnnumberedPfg.load_id, "0824-9E");
+  assert.deepEqual(truckThenUnnumberedPfg.orders.map((order) => order.control), ["74789"]);
+
+  const extra10E = parseTieSheetText(TIE_SHEET_FIXTURE_0824_10E);
+  assert.equal(extra10E.load_id, "0824-10E");
+  const extra10EDraft = draftFromTieSheetExtract(extra10E);
+  assert.equal(extra10EDraft.drops.length, 1, "0824-10E is an optional clean single");
+  assert.match(extra10EDraft.drop.name, /Bozzutos/i);
+  assert.equal(extra10EDraft.drop.city, "North Haven");
+  assert.equal(extra10EDraft.drop.state, "CT");
+  assert.deepEqual(extra10EDraft.drop.order_numbers, ["74371"]);
+  assert.deepEqual(extra10EDraft.drop.po_numbers, ["3205355"]);
+  assert.equal(extra10EDraft.weight, 46987);
+  assert.equal(extra10EDraft.case_count, 635);
+  assert.equal(extra10EDraft.drop.schedule_type, "appointment");
+  assert.ok(!TIE_SHEET_FIXTURES.some((row) => row.id === "0824-10E"), "10E is not a picture-upload fixture");
+  assert.ok(!TIE_SHEET_PICTURE_FILES.some((row) => row.id === "0824-10E"));
+  assert.ok(!TIE_SHEET_FIXTURES.some((row) => row.id === "0824-4W"), "4W is mixed, not a happy-path same-drop");
+  assert.ok(!TIE_SHEET_PICTURE_FILES.some((row) => row.id === "0824-4W"));
+
+  const pastedTieSheet = proposeMikeWork(TIE_SHEET_FIXTURE_0824_14M);
+  assert.equal(
+    pastedTieSheet.proposals.some((item) => item.kind === "build_tie_sheet"),
+    false,
+    "fixture text is not a dispatcher paste path",
+  );
+  const tieSheetAsk = proposeMikeWork("Build a load from this tie sheet");
+  assert.match(tieSheetAsk.reply, /picture/i);
+  assert.equal(tieSheetAsk.proposals.length, 0);
+
+  const expectedTrucks = [
+    {
+      text: TIE_SHEET_FIXTURE_0824_14M,
+      id: "0824-14M",
+      receiver: /MBL/i,
+      city: "Hammond",
+      state: "IN",
+      orders: ["74774", "74775", "74929"],
+      pos: ["89676G", "89784", "Kosher 89786"],
+      weight: 36533,
+      qty: 251,
+      schedule: "appointment",
+    },
+    {
+      text: TIE_SHEET_FIXTURE_0824_19E,
+      id: "0824-19E",
+      receiver: /Westside Nonkosher/i,
+      city: "Bronx",
+      state: "NY",
+      orders: ["74480", "74795"],
+      pos: ["288167", "289281"],
+      weight: 19620,
+      qty: 322,
+      schedule: "fcfs",
+    },
+    {
+      text: TIE_SHEET_FIXTURE_0824_5W,
+      id: "0824-5W",
+      receiver: /Zant/i,
+      city: "Los Angeles",
+      state: "CA",
+      orders: ["74792", "74794"],
+      pos: ["468110", "468111"],
+      weight: 41084,
+      qty: 657,
+      schedule: "appointment",
+    },
+    {
+      text: TIE_SHEET_FIXTURE_0824_9E,
+      id: "0824-9E",
+      receiver: /Bertolino/i,
+      city: "Peabody",
+      state: "MA",
+      orders: ["74789"],
+      pos: ["128494"],
+      weight: 37152,
+      qty: 630,
+      schedule: "appointment",
+    },
+  ];
+  assert.equal(TIE_SHEET_FIXTURES.length, 4);
+  const loadsBeforeTieSheet = queries.listLoads({ status: "all" }).length;
+  for (const truck of expectedTrucks) {
+    const extract = parseTieSheetText(truck.text);
+    assert.equal(extract.load_id, truck.id);
+    const draft = draftFromTieSheetExtract(extract);
+    assert.equal(draft.customer_name, TIE_SHEET_CUSTOMER);
+    assert.equal(draft.pickup.name, TIE_SHEET_SHIPPER_NAME);
+    assert.equal(draft.pickup.city, "Hastings");
+    assert.equal(draft.pickup.state, "NE");
+    assert.equal(draft.pickup.schedule_type, "appointment");
+    assert.equal(draft.pickup.call_before, true);
+    assert.equal(draft.drops.length, 1, `${truck.id} is same-receiver so one drop`);
+    assert.match(draft.drop.name, truck.receiver);
+    assert.equal(draft.drop.city, truck.city);
+    assert.equal(draft.drop.state, truck.state);
+    assert.deepEqual(draft.drop.order_numbers, truck.orders);
+    assert.deepEqual(draft.drop.po_numbers, truck.pos);
+    assert.equal(draft.weight, truck.weight);
+    assert.equal(draft.case_count, truck.qty);
+    assert.equal(draft.drop.schedule_type, truck.schedule);
+    assert.equal(draft.equipment, "reefer_53");
+    assert.equal(draft.reefer_mode, "continuous");
+    assert.match(draft.notes, new RegExp(truck.id));
+    assert.match(draft.pickup_start, /2026-08-2[89]/);
+    assert.match(draft.delivery_start, /2026-08-31/);
+    for (const order of truck.orders) assert.match(draft.drop.notes, new RegExp(order));
+    for (const po of truck.pos) assert.match(draft.drop.notes, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+    const saved = saveTieSheetDraft(draft);
+    const load = queries.getLoad(saved.id);
+    assert.ok(load);
+    assert.match(load.load_number, /^MSE-\d+$/);
+    assert.doesNotMatch(load.load_number, /0824-/);
+    assert.equal(load.customer_name, TIE_SHEET_CUSTOMER);
+    assert.equal(load.rate, null);
+    assert.equal(load.weight, truck.weight);
+    assert.equal(load.case_count, truck.qty);
+    assert.equal(load.equipment, "reefer_53");
+    assert.equal(load.reefer_mode, "continuous");
+    assert.match(load.notes, new RegExp(truck.id));
+    const stops = (await import("../lib/stops")).listStops(saved.id);
+    assert.equal(stops.length, 2, `${truck.id} same-receiver truck is one pickup and one drop`);
+    assert.equal(stops.filter((stop) => stop.kind === "delivery").length, 1);
+    const pickupStop = stops.find((stop) => stop.kind === "pickup");
+    const dropStop = stops.find((stop) => stop.kind === "delivery");
+    assert.ok(pickupStop && dropStop);
+    assert.match(pickupStop.name, /Nebraska Cold Storage/i);
+    assert.equal(pickupStop.city, "Hastings");
+    assert.equal(pickupStop.state, "NE");
+    assert.equal(pickupStop.schedule_type, "appointment");
+    assert.match(dropStop.name, truck.receiver);
+    assert.equal(dropStop.city, truck.city);
+    assert.equal(dropStop.state, truck.state);
+    assert.equal(dropStop.schedule_type, truck.schedule);
+    for (const order of truck.orders) assert.match(`${dropStop.confirmation} ${dropStop.notes}`, new RegExp(order));
+    for (const po of truck.pos) {
+      assert.match(`${dropStop.reference} ${dropStop.notes} ${load.po_number}`, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    const shipperLoc = pickupStop.location_id ? queries.getLocation(pickupStop.location_id) : null;
+    assert.ok(shipperLoc);
+    assert.equal(shipperLoc.scheduling_type, "appointment");
+    assert.equal(shipperLoc.call_before, 1);
+    assert.doesNotMatch(JSON.stringify(shipperLoc), /liftgate|inside/i);
+  }
+  assert.equal(queries.listLoads({ status: "all" }).length, loadsBeforeTieSheet + 4);
+
+  const mixedExtract = parseTieSheetText(TIE_SHEET_FIXTURE_0824_4W);
+  assert.equal(mixedExtract.load_id, "0824-4W");
+  assert.equal(mixedExtract.orders.length, 7, "sheet has 7 order rows; that is not 7 drops");
+  assert.equal(tieSheetSameDockFamily("Heartland Kosher - Western Kosher"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Heartland Kosher"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Western Kosher - Deli Crossdock"), "western-kosher-heartland");
+  assert.equal(tieSheetSameDockFamily("Zant"), "");
+  assert.equal(tieSheetSameDockFamily("Rolling Ranch"), "");
+  const heartlandOnly = groupTieSheetOrdersByDock([
+    { ...mixedExtract.orders[1], deliver_to: "Heartland Kosher" },
+    mixedExtract.orders[2],
+    mixedExtract.orders[6],
+  ]);
+  assert.equal(heartlandOnly.length, 2, "Heartland still shares the Western Kosher dock; Zant does not");
+  assert.deepEqual(heartlandOnly[0]?.map((order) => order.control), ["74846", "7599"]);
+  assert.deepEqual(heartlandOnly[1]?.map((order) => order.control), ["74793"]);
+  const mixedDraft = draftFromTieSheetExtract(mixedExtract);
+  assert.equal(mixedDraft.customer_name, TIE_SHEET_CUSTOMER);
+  assert.equal(mixedDraft.pickup.name, TIE_SHEET_SHIPPER_NAME);
+  assert.notEqual(mixedDraft.drops.length, 7, "0824-4W is not one drop per order");
+  assert.notEqual(mixedDraft.drops.length, 2, "0824-4W is not one drop per city");
+  assert.equal(mixedDraft.drops.length, 3, "0824-4W is one load with three customer/dock drops");
+  assert.equal(TIE_SHEET_0824_4W_DROPS.length, 3);
+  const mixedTieSheetPreview = tieSheetDraftPreview(mixedDraft);
+  assert.match(mixedTieSheetPreview, /3 drops/);
+  for (const [index, expected] of TIE_SHEET_0824_4W_DROPS.entries()) {
+    const drop = mixedDraft.drops[index];
+    assert.ok(drop, `0824-4W drop ${index + 1} ${expected.label}`);
+    if (index === 0) assert.match(drop.name, /Rolling Ranch/i);
+    if (index === 1) assert.match(drop.name, /Heartland|Western Kosher/i);
+    if (index === 2) assert.match(drop.name, /Zant/i);
+    assert.equal(drop.city, expected.city);
+    assert.equal(drop.state, expected.state);
+    assert.deepEqual(drop.order_numbers, [...expected.orders]);
+    for (const order of expected.orders) {
+      assert.match(`${drop.confirmation} ${drop.notes}`, new RegExp(order));
+      assert.match(mixedTieSheetPreview, new RegExp(order));
+    }
+    for (const po of expected.pos) {
+      assert.ok(drop.po_numbers.includes(po), `${expected.label} must keep PO ${po} on that drop`);
+      assert.match(`${drop.reference} ${drop.notes}`, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(mixedTieSheetPreview, new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+  }
+  assert.equal(mixedDraft.drops.filter((drop) => drop.city === "Los Angeles").length, 2, "LA city alone is not one drop");
+  assert.equal(mixedDraft.weight, 39629);
+  const mixedBefore = queries.listLoads({ status: "all" }).length;
+  const mixedSaved = saveTieSheetDraft(mixedDraft);
+  const mixedLoad = queries.getLoad(mixedSaved.id);
+  assert.ok(mixedLoad);
+  assert.match(mixedLoad.load_number, /^MSE-\d+$/);
+  assert.equal(mixedLoad.customer_name, TIE_SHEET_CUSTOMER);
+  assert.equal(mixedLoad.weight, 39629);
+  const mixedStops = (await import("../lib/stops")).listStops(mixedSaved.id);
+  assert.equal(mixedStops.filter((stop) => stop.kind === "pickup").length, 1);
+  assert.equal(mixedStops.filter((stop) => stop.kind === "delivery").length, 3);
+  assert.match(mixedStops.find((stop) => stop.kind === "pickup")?.name ?? "", /Nebraska Cold Storage/i);
+  const mixedDrops = mixedStops.filter((stop) => stop.kind === "delivery");
+  assert.notEqual(mixedDrops.length, 7);
+  assert.notEqual(mixedDrops.length, 2);
+  assert.equal(mixedDrops.length, 3);
+  for (const [index, expected] of TIE_SHEET_0824_4W_DROPS.entries()) {
+    const drop = mixedDrops[index];
+    assert.equal(drop?.city, expected.city);
+    assert.equal(drop?.state, expected.state);
+    for (const order of expected.orders) {
+      assert.match(`${drop?.confirmation} ${drop?.notes}`, new RegExp(order));
+    }
+    for (const po of expected.pos) {
+      assert.match(
+        `${drop?.reference} ${drop?.notes} ${mixedLoad.po_number}`,
+        new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+  }
+  assert.match(mixedDrops[0]?.name ?? "", /Rolling Ranch/i);
+  assert.match(mixedDrops[1]?.name ?? "", /Heartland|Western Kosher/i);
+  assert.match(mixedDrops[2]?.name ?? "", /Zant/i);
+  assert.equal(queries.listLoads({ status: "all" }).length, mixedBefore + 1, "mixed truck is still one load");
+
+  const discardedCount = queries.listLoads({ status: "all" }).length;
+  const discardDraft = draftFromTieSheetExtract(parseTieSheetText(TIE_SHEET_FIXTURE_0824_14M));
+  assert.ok(discardDraft.drop.order_numbers.length);
+  assert.equal(queries.listLoads({ status: "all" }).length, discardedCount, "mapping a draft must not save");
+
+  const confirmDraft = draftFromTieSheetExtract(parseTieSheetText(TIE_SHEET_FIXTURE_0824_9E));
+  const confirmResult = applyMikeProposal({ draft_json: encodeTieSheetDraft(confirmDraft) }, "build_tie_sheet");
+  assert.match(confirmResult.message, /MSE-/);
+  assert.ok(confirmResult.id);
+  const confirmed = queries.getLoad(confirmResult.id);
+  assert.ok(confirmed);
+  assert.equal(confirmed.customer_name, TIE_SHEET_CUSTOMER);
+  const confirmedStops = (await import("../lib/stops")).listStops(confirmResult.id);
+  assert.equal(confirmedStops.filter((stop) => stop.kind === "delivery").length, 1);
+  assert.match(confirmedStops.find((stop) => stop.kind === "delivery")?.reference ?? "", /128494/);
+
+  const tinyPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  setTieSheetAiTestClient(null);
+  const missingKey = await askMike("", [], { mimeType: "image/png", buffer: tinyPng, filename: "truck.png" });
+  assert.match(missingKey.reply, /not connected|Tie Sheet reader/i);
+  assert.doesNotMatch(missingKey.reply, /OPENAI_API_KEY|sk-/);
+  assert.equal(missingKey.proposals.length, 0);
+  assert.match(TIE_SHEET_MISSING_KEY_MESSAGE, /not connected/);
+  assert.doesNotMatch(TIE_SHEET_MISSING_KEY_MESSAGE, /\.env|OPENAI_API_KEY|sk-/);
+
+  const thin14M = parseTieSheetText(TIE_SHEET_FIXTURE_0824_14M);
+  const ambiguous14M = fillAmbiguousTieSheetFields(
+    { load_id: "0824-14M", orders: [{ ...thin14M.orders[0], po: "", city: "", weight: null, qty: null, qty_label: "", appts: "" }], total_weight: null, total_qty: null },
+    thin14M,
+  );
+  assert.equal(ambiguous14M.orders[0]?.po, "89676G");
+  assert.equal(ambiguous14M.orders[0]?.city, "Hammond");
+  assert.equal(ambiguous14M.total_weight, 36533);
+  assert.equal(ambiguous14M.orders.length, 3, "known snapshot supplies the other two orders when the crop is thin");
+
+  assert.equal(TIE_SHEET_PICTURE_FILES.length, 4);
+  const liveCrops = TIE_SHEET_PICTURE_FILES.map((row) => ({ id: row.id, picture: readTieSheetPictureFixture(row.id) }));
+  const livePresent = liveCrops.filter((row) => row.picture);
+  if (livePresent.length) {
+    assert.equal(livePresent.length, 4, "all four live 8.24.26 crops must be present together");
+    for (const row of liveCrops) {
+      assert.ok(row.picture && row.picture.buffer.length > 5000, `${row.id} live crop is a real photo`);
+      assert.equal(row.picture?.buffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    }
+  }
+  const pictureTrucks = [
+    { id: "0824-14M", receiver: /MBL/, city: "Hammond", orders: ["74774", "74775", "74929"], pos: ["89676G", "89784", "Kosher 89786"] },
+    { id: "0824-19E", receiver: /Westside Nonkosher/, city: "Bronx", orders: ["74480", "74795"], pos: ["288167", "289281"] },
+    { id: "0824-5W", receiver: /Zant/, city: "Los Angeles", orders: ["74792", "74794"], pos: ["468110", "468111"] },
+    { id: "0824-9E", receiver: /Bertolino/, city: "Peabody", orders: ["74789"], pos: ["128494"] },
+  ];
+  for (const truck of pictureTrucks) {
+    const known = knownTieSheetExtract(truck.id);
+    assert.ok(known);
+    setTieSheetAiTestClient(async () =>
+      JSON.stringify({
+        load_id: truck.id,
+        orders: known.orders.map((order) => ({ control: order.control })),
+      }),
+    );
+    const picture = readTieSheetPictureFixture(truck.id) ?? {
+      buffer: tinyPng,
+      filename: `tie-sheet-${truck.id}.png`,
+      mimeType: "image/png",
+    };
+    const loadsBeforePicture = queries.listLoads({ status: "all" }).length;
+    const pictureRead = await askMike("", [], {
+      mimeType: picture.mimeType,
+      buffer: picture.buffer,
+      filename: picture.filename,
+    });
+    setTieSheetAiTestClient(null);
+    assert.equal(pictureRead.proposals.length, 1, `${truck.id} picture drafts one load`);
+    assert.equal(pictureRead.proposals[0]?.kind, "build_tie_sheet");
+    assert.match(pictureRead.proposals[0]?.preview ?? "", /M&S Loads/);
+    assert.match(pictureRead.proposals[0]?.preview ?? "", /Nebraska Cold Storage/);
+    assert.match(pictureRead.proposals[0]?.preview ?? "", truck.receiver);
+    for (const order of truck.orders) assert.match(pictureRead.proposals[0]?.preview ?? "", new RegExp(order));
+    assert.equal(queries.listLoads({ status: "all" }).length, loadsBeforePicture, `${truck.id} vision must not save until confirm`);
+    const pictureConfirm = applyMikeProposal(pictureRead.proposals[0]?.payload ?? {}, "build_tie_sheet");
+    assert.ok(pictureConfirm.id);
+    const pictureLoad = queries.getLoad(pictureConfirm.id);
+    assert.equal(pictureLoad?.customer_name, TIE_SHEET_CUSTOMER);
+    const pictureStops = (await import("../lib/stops")).listStops(pictureConfirm.id!);
+    assert.equal(pictureStops.filter((stop) => stop.kind === "pickup").length, 1);
+    assert.equal(pictureStops.filter((stop) => stop.kind === "delivery").length, 1, `${truck.id} is one drop`);
+    const pictureDrop = pictureStops.find((stop) => stop.kind === "delivery");
+    assert.equal(pictureDrop?.city, truck.city);
+    if (truck.id === "0824-19E") {
+      assert.equal(pictureDrop?.state, "NY");
+      assert.equal(pictureDrop?.schedule_type, "fcfs");
+    }
+    for (const order of truck.orders) assert.match(`${pictureDrop?.confirmation} ${pictureDrop?.notes}`, new RegExp(order));
+    for (const po of truck.pos) {
+      assert.match(
+        `${pictureDrop?.reference} ${pictureDrop?.notes} ${pictureLoad?.po_number}`,
+        new RegExp(po.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+  }
+
+  const known4W = knownTieSheetExtract("0824-4W");
+  assert.ok(known4W);
+  setTieSheetAiTestClient(async () =>
+    JSON.stringify({
+      load_id: "0824-4W",
+      orders: known4W.orders.map((order) => ({ control: order.control })),
+    }),
+  );
+  const mixedPicture = readTieSheetPictureFixture("0824-4W") ?? {
+    buffer: tinyPng,
+    filename: "tie-sheet-0824-4W.png",
+    mimeType: "image/png",
+  };
+  const mixedPictureBefore = queries.listLoads({ status: "all" }).length;
+  const mixedPictureRead = await askMike("", [], {
+    mimeType: mixedPicture.mimeType,
+    buffer: mixedPicture.buffer,
+    filename: mixedPicture.filename,
+  });
+  setTieSheetAiTestClient(null);
+  assert.equal(mixedPictureRead.proposals.length, 1, "0824-4W picture drafts one load");
+  assert.equal(mixedPictureRead.proposals[0]?.kind, "build_tie_sheet");
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /3 drop/);
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /Rolling Ranch/);
+  assert.match(mixedPictureRead.proposals[0]?.preview ?? "", /Zant/);
+  for (const expected of TIE_SHEET_0824_4W_DROPS) {
+    for (const order of expected.orders) {
+      assert.match(mixedPictureRead.proposals[0]?.preview ?? "", new RegExp(order));
+    }
+  }
+  assert.equal(queries.listLoads({ status: "all" }).length, mixedPictureBefore, "0824-4W vision must not save until confirm");
+  const mixedPictureConfirm = applyMikeProposal(mixedPictureRead.proposals[0]?.payload ?? {}, "build_tie_sheet");
+  assert.ok(mixedPictureConfirm.id);
+  const mixedPictureStops = (await import("../lib/stops")).listStops(mixedPictureConfirm.id!);
+  assert.equal(mixedPictureStops.filter((stop) => stop.kind === "pickup").length, 1);
+  assert.equal(
+    mixedPictureStops.filter((stop) => stop.kind === "delivery").length,
+    3,
+    "0824-4W picture is three drops, not seven orders or two cities",
+  );
 
   const whatsappEnvKeys = [
     "TWILIO_ACCOUNT_SID",

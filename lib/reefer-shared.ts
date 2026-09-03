@@ -31,6 +31,10 @@ export function parseReeferSetpointFromText(text: string): number | null {
     /(?:reefer\s*)?(?:setpoint|set point|temp(?:erature)?|maintain|run(?:ning)? at)\s*[:#]?\s*(-?\d+(?:\.\d+)?)\s*°?\s*F\b/i,
   );
   if (labeled) return Number.parseFloat(labeled[1]);
+  const spoken = text.match(
+    /(?:pre[-\s]*cool(?:ed)?|temperature|temp|setpoint|run(?:ning)?(?:\s+at)?)\s*(?:to|at|:)?\s*(-?\d+(?:\.\d+)?)\s*(?:°\s*F|degrees(?:\s*F)?|\bF\b)/i,
+  );
+  if (spoken) return Number.parseFloat(spoken[1]);
   const set = text.match(/\breefer\s+set\s+(-?\d+(?:\.\d+)?)\s*°?\s*F\b/i);
   if (set) return Number.parseFloat(set[1]);
   const bare = text.match(/(-?\d+(?:\.\d+)?)\s*°\s*F\b/);
