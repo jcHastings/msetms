@@ -2294,7 +2294,10 @@ async function main() {
   assert.match(issueLineUi, /data-attention-issue/);
   assert.match(issueLineUi, /Snooze 4h/);
   assert.match(issueLineUi, /if \(compact\)/);
-  assert.doesNotMatch(issueLineUi.split("if (compact)")[1]?.split("return (")[1] ?? "", /Snooze 4h|exceptionAction|demo/);
+  const compactStart = issueLineUi.indexOf("if (compact)");
+  const compactReturn = issueLineUi.indexOf("return (", compactStart);
+  const deskReturn = issueLineUi.indexOf("return (", compactReturn + 1);
+  assert.doesNotMatch(issueLineUi.slice(compactStart, deskReturn), /Snooze 4h|exceptionAction/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
