@@ -139,8 +139,8 @@ async function main() {
   assert.doesNotMatch(loadStatusBadgeClass("assigned"), /status-tone-warning|amber/);
   assert.match(loadStatusBadgeClass("assigned"), /status-tone-navy/);
   assert.match(loadStatusBadgeClass("delivered"), /status-tone-success/);
-  assert.match(loadStatusRowClass("available"), /inset_4px/);
-  assert.match(loadStatusRowClass("in_transit"), /inset_4px/);
+  assert.match(loadStatusRowClass("available"), /inset_3px/);
+  assert.match(loadStatusRowClass("in_transit"), /inset_3px/);
   assert.ok(LOAD_STATUSES.every((status) => loadStatusBadgeClass(status) && loadStatusRowClass(status)));
   assert.equal(LOAD_STATUSES.includes("tonu" as (typeof LOAD_STATUSES)[number]), false);
   const boardUi = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
