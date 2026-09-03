@@ -485,8 +485,8 @@ export async function createLoadAction(
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
         const { readInboxParse } = await import("./files");
-        const { rateConApplyContactFields, type ParsedRateCon } = await import("./rate-con-shared");
-        const inbox = readInboxParse<ParsedRateCon>(inboxId);
+        const { rateConApplyContactFields } = await import("./rate-con-shared");
+        const inbox = readInboxParse<import("./rate-con-shared").ParsedRateCon>(inboxId);
         if (inbox) Object.assign(input, rateConApplyContactFields(inbox, input));
       }
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
