@@ -81,6 +81,7 @@ export function LoadMapCanvas({
   missingKeyMessage,
   emptyMessage,
   cluster,
+  disableDefaultUi = false,
   onSelect,
 }: {
   apiKey: string;
@@ -90,6 +91,7 @@ export function LoadMapCanvas({
   missingKeyMessage?: string;
   emptyMessage?: string;
   cluster?: boolean;
+  disableDefaultUi?: boolean;
   onSelect?: (point: LoadMapPoint) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -117,10 +119,12 @@ export function LoadMapCanvas({
           zoom: points.length + route.length === 1 ? 15 : 5,
           maxZoom: 20,
           gestureHandling: "greedy",
-          zoomControl: true,
+          disableDefaultUI: disableDefaultUi,
+          zoomControl: !disableDefaultUi,
           mapTypeControl: false,
           streetViewControl: false,
-          fullscreenControl: true,
+          fullscreenControl: !disableDefaultUi,
+          cameraControl: !disableDefaultUi,
           styles: [
             { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
             { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -220,7 +224,7 @@ export function LoadMapCanvas({
       for (const marker of markers) marker.setMap(null);
       line?.setMap(null);
     };
-  }, [apiKey, hasMap, points, route, clusterPins, onSelect]);
+  }, [apiKey, hasMap, points, route, clusterPins, disableDefaultUi, onSelect]);
 
   if (!apiKey || failed) {
     return (
