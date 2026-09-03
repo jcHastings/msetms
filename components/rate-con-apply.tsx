@@ -7,7 +7,7 @@ import { extractRateConFormData, RateConPicker } from "@/components/rate-con-pic
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
-import { customerRefFromRateCon, type ParsedRateCon } from "@/lib/rate-con-shared";
+import { customerRefFromRateCon, rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
@@ -197,10 +197,7 @@ function RateConAppliedLoad({
           reefer_setpoint_f: parsed.reefer_setpoint_f ?? load.reefer_setpoint_f,
           shipper_location_id: book.defaults.shipper_location_id ?? load.shipper_location_id,
           consignee_location_id: book.defaults.consignee_location_id ?? load.consignee_location_id,
-          contact_name: parsed.contact_name || load.contact_name,
-          contact_email: parsed.contact_email || load.contact_email,
-          contact_phone: parsed.contact_phone || load.contact_phone,
-          contact_ext: parsed.contact_ext || load.contact_ext,
+          ...rateConApplyContactFields(parsed, load),
         }}
         inboxId={inboxId}
         defaults={book.defaults}

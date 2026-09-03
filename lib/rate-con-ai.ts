@@ -5,11 +5,15 @@ import {
   emptyParsedRateCon,
   emptyParsedStop,
   flagsFromParsedGaps,
+  isOwnPaperworkName,
   matchCustomerName,
   mergeBrokerContact,
   normalizeParsedStop,
   parseBrokerContactFromText,
+  parseLetterheadCustomer,
   parsedStopHasDetails,
+  pickBrokerCustomerName,
+  resolveRateConOrigin,
   type ParsedExtraStop,
   type ParsedRateCon,
   type RateConFieldFlag,
@@ -271,10 +275,16 @@ export function applyAiRateCon(
   hint: ParsedRateCon = emptyParsedRateCon(),
   rawText = "",
 ): ParsedRateCon {
-  const customerName = String(draft.customer_name ?? "").trim();
+  const raw = rawText || hint.raw_text;
+  const draftCustomer = String(draft.customer_name ?? "").trim();
+  const customerName = pickBrokerCustomerName(raw, [
+    isOwnPaperworkName(draftCustomer, raw) ? "" : draftCustomer,
+    hint.customer_name,
+    parseLetterheadCustomer(raw),
+  ]);
   const customerConfidence = asConfidence(draft.customer_confidence);
   const useCustomer = Boolean(customerName) && customerConfidence !== "low";
-  const customerId = useCustomer ? matchCustomerName(customerName, customers) : null;
+  const customerId = useCustomer ? matchCustomerName(customerName, customers, raw) : null;
 
   const rateConfidence = asConfidence(draft.rate_confidence);
   const rate = rateConfidence === "low" ? null : parseOptionalNumber(draft.rate);
@@ -301,7 +311,7 @@ export function applyAiRateCon(
   const parsed: ParsedRateCon = {
     customer_name: customerName,
     customer_id: customerId,
-    origin: cityStateFromStop(shipper) || hint.origin,
+    origin: resolveRateConOrigin(cityStateFromStop(shipper) || hint.origin, shipper, raw),
     destination: cityStateFromStop(consignee) || hint.destination,
     pickup_start: firstPickup?.stop.window_start || hint.pickup_start,
     pickup_end: firstPickup?.stop.window_end || firstPickup?.stop.window_start || hint.pickup_end,
@@ -331,14 +341,15 @@ export function applyAiRateCon(
         contact_phone: String(draft.contact_phone ?? "").trim(),
         contact_ext: String(draft.contact_ext ?? "").trim(),
       },
-      parseBrokerContactFromText(rawText || hint.raw_text),
-      rawText || hint.raw_text,
+      parseBrokerContactFromText(raw),
+      raw,
     ),
     field_flags: [],
     reader: "ai",
   };
 
-  Object.assign(parsed, enrichParsedRateConFromText(parsed, rawText || hint.raw_text));
+  Object.assign(parsed, enrichParsedRateConFromText(parsed, raw));
+  parsed.origin = resolveRateConOrigin(parsed.origin, parsed.shipper, raw);
 
   const flags = flagsFromParsedGaps(parsed);
   if (customerName && customerConfidence === "low") {

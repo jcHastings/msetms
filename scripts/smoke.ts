@@ -1170,6 +1170,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8"), /defaultMaxListeners/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-shared.ts"), "utf8"), /customerRefFromRateCon/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /customer_reference/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"), /rateConApplyContactFields/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/rate-con-apply.tsx"), "utf8"),
+    /parsed\.contact_name\s*\|\|\s*load\.contact_name/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-summary.ts"), "utf8"), /driverFacingLoadNumber/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /customerMailStops/);
@@ -5185,8 +5190,12 @@ Email: nophone@broker.example
   assert.equal(norfolkPaper.reference, "110247187");
   assert.equal(norfolkPaper.confirmation, "61713982");
   const cbHint = parseRateConText(cbText, [], "cb-logistics-106361.txt");
+  assert.equal(cbHint.customer_name, "CB Logistics Group");
   assert.equal(cbHint.contact_name, "");
   assert.equal(cbHint.contact_phone, "314-459-1752");
+  assert.match(cbHint.origin, /Mascoutah/i);
+  assert.doesNotMatch(cbHint.origin, /Imperial/i);
+  assert.equal(cbHint.load_number_hint, "106361");
   assert.doesNotMatch(cbHint.contact_name, /Imperial|63052|106361|JoJo|MS Test|M&S|Express/i);
   assert.doesNotMatch(cbHint.contact_phone, /402-302-0097|3217709078/);
   const liveCarrierSheet = `
@@ -5255,6 +5264,83 @@ P: 314-459-1752
 `);
   assert.equal(gluedHeaderName.contact_name, "");
   assert.equal(gluedHeaderName.contact_phone, "314-459-1752");
+  const { extractDocumentText: extractCbLiveText } = await import("../lib/rate-con");
+  const {
+    mergeBrokerContact,
+    rateConApplyContactFields,
+    isOwnPaperworkName: ownPaperworkName,
+  } = await import("../lib/rate-con-shared");
+  const livePdfCandidates = [
+    "/workspace/mse1065/broker-ratecon.pdf",
+    path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.pdf"),
+  ];
+  let livePdfPath = livePdfCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!livePdfPath) {
+    const { writeCb106361Pdf } = await import("./build-cb-106361-pdf");
+    livePdfPath = await writeCb106361Pdf();
+  }
+  const livePdfBytes = fs.readFileSync(livePdfPath);
+  const liveExtract = await extractCbLiveText(livePdfBytes, "application/pdf", path.basename(livePdfPath));
+  assert.match(liveExtract, /CB Logistics Group/i);
+  assert.match(liveExtract, /314-459-1752/);
+  assert.match(liveExtract, /JoJo Schwartz/);
+  assert.match(liveExtract, /Attn/i);
+  assert.equal(
+    liveExtract.split(/\n/).some((line) => /^\s*attn\b/i.test(line) && !/driver|cell|trailer|hastings/i.test(line)),
+    false,
+    "live unpdf extract must keep Attn mid-line, not a linearized Attn-only line",
+  );
+  assert.doesNotMatch(liveExtract.split(/\n/).find((line) => /attn/i.test(line)) ?? "", /^\s*attn\b/i);
+  const liveParsed = parseRateConText(liveExtract, [], path.basename(livePdfPath));
+  assert.equal(liveParsed.customer_name, "CB Logistics Group");
+  assert.equal(liveParsed.contact_name, "");
+  assert.equal(liveParsed.contact_phone, "314-459-1752");
+  assert.equal(liveParsed.load_number_hint, "106361");
+  assert.equal((await import("../lib/rate-con-shared")).customerRefFromRateCon(liveParsed), "106361");
+  assert.match(liveParsed.origin, /Mascoutah/i);
+  assert.doesNotMatch(liveParsed.origin, /Imperial/i);
+  assert.doesNotMatch(liveParsed.contact_name, /JoJo|Chris|Imperial|106361|M&S|Express/i);
+  assert.doesNotMatch(liveParsed.contact_phone, /402-302-0097|3217709078/);
+  assert.doesNotMatch(liveParsed.customer_name, /M&S|MS Express|Loads LLC/i);
+  assert.equal(ownPaperworkName("JoJo Schwartz", liveExtract), true);
+  assert.equal(ownPaperworkName("JoJo", liveExtract), true);
+  assert.equal(ownPaperworkName("Riley Booker", liveExtract), false);
+  const mixedKeepPhone = applyAiRateCon(
+    parseRateConAiJson(`{
+      "customer_name": "CB Logistics Group",
+      "contact_name": "JoJo Schwartz",
+      "contact_phone": "314-459-1752",
+      "load_number": "106361",
+      "stops": [
+        {
+          "kind": "pickup",
+          "name": "North Bay Produce - Mascoutah",
+          "city": "Mascoutah",
+          "state": "IL"
+        }
+      ]
+    }`),
+    [],
+    liveParsed,
+    liveExtract,
+  );
+  assert.equal(mixedKeepPhone.contact_name, "");
+  assert.equal(mixedKeepPhone.contact_phone, "314-459-1752");
+  assert.equal(mixedKeepPhone.customer_name, "CB Logistics Group");
+  assert.match(mixedKeepPhone.origin, /Mascoutah/i);
+  const mashedAttn = mergeBrokerContact(
+    { contact_name: "JoJo Schwartz", contact_phone: "314-459-1752" },
+    parseCbBrokerContact(liveExtract),
+    liveExtract,
+  );
+  assert.equal(mashedAttn.contact_name, "");
+  assert.equal(mashedAttn.contact_phone, "314-459-1752");
+  const overwriteJoJo = rateConApplyContactFields(liveParsed, {
+    contact_name: "JoJo Schwartz",
+    contact_phone: "402-302-0097",
+  });
+  assert.equal(overwriteJoJo.contact_name, "");
+  assert.equal(overwriteJoJo.contact_phone, "314-459-1752");
   assert.match(cbHint.shipper.name, /North Bay/i);
   assert.match(cbHint.shipper.street, /8835 Richard Brauer/i);
   assert.equal(cbHint.shipper.reference, "N25504");
@@ -5446,6 +5532,48 @@ P: 314-459-1752
   assert.equal(queries.getLoad(blankReapplyId)!.customer_reference, "106361");
   assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_name, /Imperial|63052|106361|JoJo|MS Test/i);
   assert.doesNotMatch(queries.getLoad(blankReapplyId)!.contact_phone, /402-302-0097/);
+  const storedJoJoId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1065-JOJO",
+    origin: "Imperial, MO",
+    destination: "Norfolk, NE",
+    pickup_start: "2026-09-02T14:00",
+    pickup_end: "2026-09-02T14:00",
+    delivery_start: "2026-09-04T21:00",
+    delivery_end: "2026-09-04T21:00",
+    weight: 12000,
+    commodity: "Fresh Foods BERRIES",
+    rate: 2625,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    contact_name: "JoJo Schwartz",
+    contact_phone: "402-302-0097",
+    reference_number: "106361",
+    po_number: "",
+    customer_reference: "106361",
+    reefer_setpoint_f: 34,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1519",
+    status: "at_pickup",
+    truck_id: null,
+    driver_id: null,
+  });
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_name, "JoJo Schwartz");
+  const storedJoJo = queries.getLoad(storedJoJoId)!;
+  const jojoForm = new FormData();
+  jojoForm.set("customer_id", String(cbCustomerId));
+  jojoForm.set("origin", liveParsed.origin || storedJoJo.origin);
+  jojoForm.set("destination", storedJoJo.destination);
+  const appliedContact = rateConApplyContactFields(liveParsed, storedJoJo);
+  jojoForm.set("contact_name", appliedContact.contact_name);
+  jojoForm.set("contact_phone", appliedContact.contact_phone);
+  queries.updateLoad(storedJoJoId, parseCbReapplyInput(jojoForm, true, storedJoJo));
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_name, "");
+  assert.equal(queries.getLoad(storedJoJoId)!.contact_phone, "314-459-1752");
+  assert.doesNotMatch(queries.getLoad(storedJoJoId)!.contact_name, /JoJo/);
+  assert.doesNotMatch(queries.getLoad(storedJoJoId)!.contact_phone, /402-302-0097/);
   const confirmationLib = await import("../lib/load-confirmation");
   const cbDriver = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "internal" });
   assert.equal(cbDriver.loadNumber, "MSE-1065-SMOKE");

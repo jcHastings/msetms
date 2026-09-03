@@ -163,8 +163,22 @@ export function parsedStopHasDetails(stop: ParsedStop | null | undefined): stop 
   return Boolean(stop.name.trim() || stop.street.trim());
 }
 
-export function isOwnPaperworkName(name: string): boolean {
-  return /m\s*&\s*s\s+loads|ms\s*express|msloads/i.test(name);
+export function isOwnPaperworkName(name: string, sourceText = ""): boolean {
+  const text = String(name ?? "");
+  if (/m\s*&\s*s\s+loads|ms\s*express|msloads/i.test(text)) return true;
+  const key = collapse(text).toLowerCase();
+  if (!key || key.length < 3) return false;
+  for (const person of peopleInCarrierRole(sourceText)) {
+    const personKey = collapse(person).toLowerCase();
+    if (!personKey) continue;
+    if (personKey === key || personKey.includes(key) || key.includes(personKey)) return true;
+    const personFirst = personKey.split(/\s+/)[0] ?? "";
+    const keyFirst = key.split(/\s+/)[0] ?? "";
+    if (personFirst && keyFirst && personFirst === keyFirst && (personKey.includes(" ") || key.includes(" "))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function normalizePartyName(name: string): string {
@@ -177,10 +191,10 @@ export function normalizePartyName(name: string): string {
     .trim();
 }
 
-export function matchCustomerName(name: string, customers: Customer[]): number | null {
+export function matchCustomerName(name: string, customers: Customer[], sourceText = ""): number | null {
   if (!name) return null;
   const needle = normalizePartyName(name);
-  if (!needle || isOwnPaperworkName(name)) return null;
+  if (!needle || isOwnPaperworkName(name, sourceText)) return null;
   const exact = customers.find((customer) => normalizePartyName(customer.name) === needle);
   if (exact) return exact.id;
   const partial = customers.find((customer) => {
@@ -483,10 +497,8 @@ const CONTACT_HEADER_RE =
 const CONTACT_TABLE_RE = /(?:^|\n)\s*Name\s+Phone\s+Email(?:\s+Fax)?\s*\n([^\n]+)/i;
 const NEXT_SECTION_RE =
   /\n(?:CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO)\b/i;
-const CARRIER_LINE_RE = /(?:^|\n)\s*(?:carrier(?:\s+contact)?\s*:?|attn\b)[^\n]*/gi;
-const CARRIER_STOP_RE =
-  /\n(?:[^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)|CARRIER CONTACT|LOAD INFORMATION|PICKUPS?|DROPS?|DELIVER(?:Y|IES)|BILLING REQUIREMENTS|NOTE TO|STOP\s+\d|DRIVER\b)\b/i;
-const HEADER_CUT_RE = /\n\s*(?:carrier\b|stop\s+\d|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
+const HEADER_ROLE_CUT_RE =
+  /\b(?:carrier\s*:|stop\s+\d|pieces\b|pallets\b|pickups?\b|drops?\b|deliver(?:y|ies)\b)/i;
 const NAME_STOPWORDS =
   /^(name|phone|email|fax|contact|dispatcher|driver|carrier|office|tel|mobile|info|ph|ext)$/i;
 
@@ -512,11 +524,171 @@ function looksLikeCompanyName(value: string): boolean {
   );
 }
 
-/** Contact name is a person only — never city/state/zip, street, load #, or a company line. */
-export function brokerContactPersonName(value: string): string {
+function cutAttnPerson(value: string): string {
+  return collapse(value).replace(
+    /\b(?:driver|cell|truck|trailer|mcid|ph|fax|reference|mcid|load|pieces|pallets)\b.*$/i,
+    "",
+  );
+}
+
+/** Carrier / Attn / Ph/Fax / Dispatch-to-carrier — not letterhead, not the stop table. */
+function carrierRoleChunks(text: string): string[] {
+  const raw = String(text ?? "");
+  const chunks: string[] = [];
+  for (const row of raw.matchAll(/\bcarrier(?:\s+contact)?\s*:[\s\S]{0,500}/gi)) {
+    const block = row[0] ?? "";
+    const cut = block.search(/\b(?:stop\s+\d|pickups?\b|pieces\b|pallets\b|must pulp|commodity\b)/i);
+    chunks.push(cut >= 0 ? block.slice(0, cut) : block);
+  }
+  for (const row of raw.matchAll(/(?:^|\n)\s*carrier\s+contact\b[\s\S]{0,400}/gi)) {
+    const block = row[0] ?? "";
+    const cut = block.search(
+      /\n(?:[^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)|LOAD INFORMATION|PICKUPS?|DROPS?)/i,
+    );
+    chunks.push(cut >= 0 ? block.slice(0, cut) : block);
+  }
+  for (const row of raw.matchAll(/attn\s*:?\s*[A-Za-z][A-Za-z .'-]{1,60}/gi)) {
+    chunks.push(row[0] ?? "");
+  }
+  for (const row of raw.matchAll(/ph\s*\/\s*fax\s*:?\s*[+\d().\-\s]{7,30}/gi)) {
+    chunks.push(row[0] ?? "");
+  }
+  for (const row of raw.matchAll(/\bph\s*[:()][+\d().\-\s]{10,30}/gi)) {
+    chunks.push(row[0] ?? "");
+  }
+  return chunks.filter((chunk) => chunk.trim());
+}
+
+function peopleInCarrierRole(text: string): string[] {
+  const names: string[] = [];
+  if (!text) return names;
+  for (const chunk of carrierRoleChunks(text)) {
+    for (const row of chunk.matchAll(/\battn\s*:?\s*([A-Za-z][A-Za-z .'-]{1,60})/gi)) {
+      const name = cutAttnPerson(row[1] ?? "");
+      if (name && looksLikePersonName(name)) names.push(name);
+    }
+    const carrierName = chunk.match(/\bcarrier(?:\s+contact)?\s*:?\s*([^\n,/]+)/i)?.[1];
+    if (carrierName) names.push(collapse(carrierName));
+  }
+  return names;
+}
+
+function phonesInChunks(chunks: string[]): string[] {
+  const phones: string[] = [];
+  for (const chunk of chunks) {
+    for (const phone of chunk.matchAll(new RegExp(PHONE_ONLY_RE.source, "g"))) {
+      const digits = digitsPhone(phone[1] ?? "");
+      if (digits.length >= 10) phones.push(digits);
+    }
+  }
+  return phones;
+}
+
+function driverRolePhones(text: string): string[] {
+  const phones: string[] = [];
+  for (const row of String(text ?? "").matchAll(/\bcell\s*:?\s*([+\d().\-\s]{7,})/gi)) {
+    const digits = digitsPhone(row[1] ?? "");
+    if (digits.length >= 10) phones.push(digits);
+  }
+  return phones;
+}
+
+function stripCarrierAndDriverRoles(text: string): string {
+  return String(text ?? "")
+    .replace(
+      /\bcarrier(?:\s+contact)?\s*:[\s\S]{0,240}?(?=\b(?:driver\s*:|cell\s*:|stop\s+\d|pieces\b|dispatch confirmation|rate confirmation|$))/gi,
+      " ",
+    )
+    .replace(/(?:^|\n)\s*carrier\s+contact\b[\s\S]{0,240}?(?=\n[^\n]*(?:CONTACT INFO|BROKER CONTACT|DISPATCH CONTACT|BOOKING CONTACT)|$)/gi, "\n")
+    .replace(/\battn\s*:?\s*[A-Za-z][A-Za-z .'-]{1,60}/gi, " ")
+    .replace(/\bph\s*\/\s*fax\s*:?\s*[+\d().\-\s]{7,}/gi, " ")
+    .replace(/\b(?:ph|fax)\s*[:|]\s*[+\d().\-\s]{7,}/gi, " ")
+    .replace(/\bdriver\s*:?\s*[A-Za-z][A-Za-z .'-]{0,40}/gi, " ")
+    .replace(/\bcell\s*:?\s*[+\d().\-\s]{7,}/gi, " ")
+    .replace(/\b(?:truck|trailer|mcid)\s*:?\s*\S+/gi, " ")
+    .replace(/m\s*&\s*s\s+loads(?:\s+llc)?/gi, " ")
+    .replace(/ms\s*express(?:\s+tms)?/gi, " ")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+function letterheadRegion(text: string): string {
+  const raw = String(text ?? "").replace(/\r/g, "");
+  const cut = raw.search(HEADER_ROLE_CUT_RE);
+  const head = (cut >= 0 ? raw.slice(0, cut) : raw.slice(0, 900))
+    .replace(/^\s*(?:dispatch confirmation|rate confirmation)\s*/i, "")
+    .trim();
+  return stripCarrierAndDriverRoles(head).trim();
+}
+
+/** Broker letterhead company. Never the carrier / our name. */
+export function parseLetterheadCustomer(text: string): string {
+  const head = letterheadRegion(text);
+  const parts = head.split(/\n/).flatMap((line) => line.split(/\s{2,}/));
+  for (const part of parts) {
+    const cleaned = collapse(part)
+      .replace(/\bload\s*number\b.*$/i, "")
+      .replace(/\bmc\s*:.*$/i, "")
+      .replace(/\bp(?:hone)?\s*:.*$/i, "")
+      .trim();
+    if (!cleaned || cleaned.length < 4 || cleaned.length > 80) continue;
+    if (isOwnPaperworkName(cleaned, text) || looksLikePlaceOrLoadNumber(cleaned)) continue;
+    if (looksLikeCompanyName(cleaned)) return cleaned;
+    if (looksLikePersonName(cleaned)) continue;
+  }
+  return "";
+}
+
+export function letterheadOfficeCityState(text: string): string {
+  const match = letterheadRegion(text).match(/\b([A-Z][A-Za-z.'-]+),\s*([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\b/);
+  return match ? `${match[1]}, ${match[2]}` : "";
+}
+
+/** Pickup city. Never the broker office printed in the letterhead. */
+export function resolveRateConOrigin(origin: string, shipper: ParsedStop, text: string): string {
+  const fromShipper = cityStateFromStop(shipper);
+  const office = letterheadOfficeCityState(text);
+  const current = collapse(origin);
+  if (office && current) {
+    const officeCity = office.split(",")[0]?.trim().toLowerCase() ?? "";
+    if (officeCity && current.toLowerCase().includes(officeCity)) return fromShipper;
+  }
+  return current || fromShipper;
+}
+
+export function parseLetterheadLoadNumber(text: string): string {
+  const match = String(text ?? "").match(/\bload\s*(?:number|#|no\.?)\s*[:#-]?\s*([A-Z0-9-]{3,20})\b/i);
+  return match?.[1]?.trim() ?? "";
+}
+
+export function pickBrokerCustomerName(text: string, candidates: string[]): string {
+  for (const name of candidates) {
+    const cleaned = collapse(name);
+    if (!cleaned) continue;
+    if (isOwnPaperworkName(cleaned, text) || looksLikePlaceOrLoadNumber(cleaned)) continue;
+    if (looksLikeCompanyName(cleaned) || !looksLikePersonName(cleaned)) return cleaned;
+  }
+  return parseLetterheadCustomer(text);
+}
+
+export function parseLetterheadPhone(text: string): string {
+  const head = letterheadRegion(text)
+    .replace(/ph\s*\/\s*fax[\s\S]{0,40}/gi, " ")
+    .replace(/\bfax\s*[:|]\s*[+\d().\-\s]{7,}/gi, " ");
+  const labeled =
+    head.match(/(?:^|[\s|,(])P(?:hone)?\s*[:|]\s*([+\d().\-\s]{10,})/i) ??
+    head.match(/\btel(?:ephone)?\s*[:|]\s*([+\d().\-\s]{10,})/i) ??
+    head.match(/\boffice\s*[:|]\s*([+\d().\-\s]{10,})/i);
+  const digits = digitsPhone(labeled?.[1] ?? "");
+  return digits.length === 10 ? formatTenDigitPhone(digits) : "";
+}
+
+/** Contact name is a broker dispatcher person only. */
+export function brokerContactPersonName(value: string, sourceText = ""): string {
   const text = collapse(value);
   if (!text) return "";
-  if (looksLikePlaceOrLoadNumber(text) || looksLikeCompanyName(text) || isOwnPaperworkName(text)) return "";
+  if (looksLikePlaceOrLoadNumber(text) || looksLikeCompanyName(text) || isOwnPaperworkName(text, sourceText)) {
+    return "";
+  }
   return looksLikePersonName(text) ? text : "";
 }
 
@@ -535,16 +707,18 @@ function usableContact(contact: ParsedBrokerContact): boolean {
   return Boolean(contact.contact_email || contact.contact_phone);
 }
 
-function parseContactFields(block: string): ParsedBrokerContact {
-  const skipBilling = String(block ?? "")
-    .replace(/send\s+pod[\s\S]{0,120}/gi, " ")
-    .replace(/billing instructions?[\s\S]{0,120}/gi, " ");
+function parseContactFields(block: string, sourceText = ""): ParsedBrokerContact {
+  const skipBilling = stripCarrierAndDriverRoles(
+    String(block ?? "")
+      .replace(/send\s+pod[\s\S]{0,120}/gi, " ")
+      .replace(/billing instructions?[\s\S]{0,120}/gi, " "),
+  );
   if (!skipBilling.trim()) return emptyBrokerContact();
   const email = skipBilling.match(BROKER_EMAIL_RE)?.[0]?.trim() ?? "";
   const withExt = skipBilling.match(PHONE_EXT_RE);
   const phoneRaw =
     withExt?.[1] ??
-    skipBilling.match(/(?:phone|tel|office|(?:^|\n)\s*p)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
+    skipBilling.match(/(?:phone|tel|office|(?:^|[\s|,(])p)\s*[:|]\s*([+\d().\-\s]{10,})/i)?.[1] ??
     skipBilling.match(PHONE_ONLY_RE)?.[1] ??
     "";
   const ext = (withExt?.[2] ?? (phoneRaw ? skipBilling.match(STANDALONE_EXT_RE)?.[1] : "") ?? "").trim();
@@ -559,7 +733,7 @@ function parseContactFields(block: string): ParsedBrokerContact {
           .match(/([A-Z][a-z'.-]+(?:\s+[A-Z][a-z'.-]+)?)\s*$/)?.[1] ?? ""
       : "";
   const named = labeledName || beforePhone;
-  const contact_name = brokerContactPersonName(named);
+  const contact_name = brokerContactPersonName(named, sourceText || block);
   const formatted = phoneDigits.length === 10 ? formatTenDigitPhone(phoneDigits) : collapse(phoneRaw);
   const contact_phone = formatted && /\d{7,}/.test(formatted.replace(/\D/g, "")) ? formatted : "";
   return {
@@ -587,83 +761,79 @@ function contactBlocksFromHeaders(text: string): string[] {
   return blocks;
 }
 
-function carrierChunks(text: string): string[] {
-  const chunks: string[] = [];
-  for (const row of String(text ?? "").matchAll(CARRIER_LINE_RE)) {
-    const start = row.index ?? 0;
-    const after = text.slice(start + row[0].length);
-    const cut = after.search(CARRIER_STOP_RE);
-    chunks.push(row[0] + (cut >= 0 ? after.slice(0, cut) : after.slice(0, 240)));
-  }
-  return chunks;
-}
-
 function carrierSideIdentity(text: string): { names: string[]; phones: string[] } {
-  const names: string[] = [];
-  const phones: string[] = [];
-  for (const block of carrierChunks(text)) {
-    for (const phone of block.matchAll(new RegExp(PHONE_ONLY_RE.source, "g"))) {
-      const digits = digitsPhone(phone[1] ?? "");
-      if (digits.length >= 10) phones.push(digits);
-    }
-    const attn = block.match(/attn\s*:?\s*([A-Za-z][A-Za-z .'-]{1,60})/i)?.[1];
-    if (attn) names.push(collapse(attn).toLowerCase());
-    const carrierName = block.match(/carrier(?:\s+contact)?\s*:?\s*([^\n,/]+)/i)?.[1];
-    if (carrierName) names.push(collapse(carrierName).toLowerCase());
-  }
+  const names = peopleInCarrierRole(text).map((name) => name.toLowerCase());
+  const phones = [...phonesInChunks(carrierRoleChunks(text)), ...driverRolePhones(text)];
   return { names, phones };
 }
 
+export function isCarrierSideName(name: string, raw: string): boolean {
+  const key = collapse(name);
+  if (!key) return false;
+  if (isOwnPaperworkName(key, raw)) return true;
+  const nameKey = key.toLowerCase();
+  return carrierSideIdentity(raw).names.some((item) => item.includes(nameKey) || nameKey.includes(item));
+}
+
+export function isCarrierSidePhone(phone: string, raw: string): boolean {
+  const digits = digitsPhone(phone);
+  if (digits.length < 10) return false;
+  const letterhead = digitsPhone(parseLetterheadPhone(raw));
+  if (letterhead && letterhead === digits) return false;
+  return carrierSideIdentity(raw).phones.includes(digits);
+}
+
 export function isCarrierSideContact(contact: ParsedBrokerContact, raw: string): boolean {
-  const name = collapse(contact.contact_name);
   const email = collapse(contact.contact_email);
-  if (isOwnPaperworkName(name) || isOwnPaperworkName(email)) return true;
-  const side = carrierSideIdentity(raw);
-  const nameKey = name.toLowerCase();
-  if (nameKey && side.names.some((item) => item.includes(nameKey) || nameKey.includes(item))) return true;
-  const phone = digitsPhone(contact.contact_phone);
-  return Boolean(phone.length >= 10 && side.phones.includes(phone));
+  if (isCarrierSideName(contact.contact_name, raw) || isOwnPaperworkName(email, raw)) return true;
+  return isCarrierSidePhone(contact.contact_phone, raw);
 }
 
+/** Drop carrier-side name/phone only. Keep a letterhead phone when the name is us. */
 export function rejectCarrierSideContact(contact: ParsedBrokerContact, raw: string): ParsedBrokerContact {
-  return isCarrierSideContact(contact, raw) ? emptyBrokerContact() : contact;
-}
-
-function stripOwnCarrierTokens(text: string): string {
-  let out = String(text ?? "");
-  for (const chunk of carrierChunks(out)) {
-    out = out.replace(chunk, "\n");
-  }
-  return out
-    .replace(/m\s*&\s*s\s+loads(?:\s+llc)?/gi, " ")
-    .replace(/ms\s*express(?:\s+tms)?/gi, " ")
-    .replace(/attn\s*:?\s*[A-Za-z][A-Za-z .'-]{1,40}/gi, " ")
-    .replace(/[ \t]{2,}/g, " ");
+  const letterheadPhone = parseLetterheadPhone(raw);
+  const name = isCarrierSideName(contact.contact_name, raw)
+    ? ""
+    : brokerContactPersonName(contact.contact_name, raw);
+  const email = isOwnPaperworkName(contact.contact_email, raw) ? "" : contact.contact_email;
+  const phone = isCarrierSidePhone(contact.contact_phone, raw)
+    ? letterheadPhone
+    : contact.contact_phone || letterheadPhone;
+  return {
+    contact_name: name,
+    contact_email: email,
+    contact_phone: phone,
+    contact_ext: phone && phone === contact.contact_phone ? contact.contact_ext : "",
+  };
 }
 
 function parseHeaderBrokerContact(text: string): ParsedBrokerContact {
-  const cut = text.search(HEADER_CUT_RE);
-  const rawHead = (cut >= 0 ? text.slice(0, cut) : text.slice(0, 800)).trim();
-  const head = stripOwnCarrierTokens(rawHead).trim();
-  if (!head) return emptyBrokerContact();
-  const fields = parseContactFields(head);
+  const head = letterheadRegion(text);
+  if (!head) {
+    return {
+      ...emptyBrokerContact(),
+      contact_phone: parseLetterheadPhone(text),
+    };
+  }
+  const fields = parseContactFields(head, text);
   return {
-    contact_name: brokerContactPersonName(fields.contact_name),
+    contact_name: brokerContactPersonName(fields.contact_name, text),
     contact_email: fields.contact_email,
-    contact_phone: fields.contact_phone,
+    contact_phone: fields.contact_phone || parseLetterheadPhone(text),
     contact_ext: fields.contact_ext,
   };
 }
 
-/** Copy name/email/phone/ext from the packet in front of you. Do not assume a broker. */
+/** Copy name/email/phone/ext from the broker role on the packet. Never Carrier/Attn/driver. */
 export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
   const text = String(raw ?? "").replace(/\r/g, "");
   if (!text.trim()) return emptyBrokerContact();
-  const tableRow = text.match(CONTACT_TABLE_RE)?.[1] ?? "";
-  let found = rejectCarrierSideContact(parseContactFields(tableRow), text);
+  const cleaned = stripCarrierAndDriverRoles(text);
+  const tableRow = cleaned.match(CONTACT_TABLE_RE)?.[1] ?? "";
+  let found = rejectCarrierSideContact(parseContactFields(tableRow, text), text);
   if (!usableContact(found)) {
-    for (const block of contactBlocksFromHeaders(text)) {
-      const parsed = rejectCarrierSideContact(parseContactFields(block), text);
+    for (const block of contactBlocksFromHeaders(cleaned)) {
+      const parsed = rejectCarrierSideContact(parseContactFields(block, text), text);
       if (usableContact(parsed)) {
         found = parsed;
         break;
@@ -676,10 +846,12 @@ export function parseBrokerContactFromText(raw: string): ParsedBrokerContact {
     : {
         ...found,
         contact_name: found.contact_name || header.contact_name,
+        contact_phone: found.contact_phone || header.contact_phone,
       };
   return {
     ...merged,
-    contact_name: brokerContactPersonName(merged.contact_name),
+    contact_name: brokerContactPersonName(merged.contact_name, text),
+    contact_phone: merged.contact_phone || parseLetterheadPhone(text),
   };
 }
 
@@ -697,10 +869,24 @@ export function mergeBrokerContact(
     },
     raw,
   );
+  const right = rejectCarrierSideContact(fallback, raw);
   return {
-    contact_name: brokerContactPersonName(left.contact_name || fallback.contact_name),
-    contact_email: left.contact_email || fallback.contact_email,
-    contact_phone: left.contact_phone || fallback.contact_phone,
-    contact_ext: left.contact_ext || fallback.contact_ext,
+    contact_name: brokerContactPersonName(left.contact_name || right.contact_name, raw),
+    contact_email: left.contact_email || right.contact_email,
+    contact_phone: left.contact_phone || right.contact_phone || parseLetterheadPhone(raw),
+    contact_ext: left.contact_ext || right.contact_ext,
+  };
+}
+
+/** Re-apply writes a blank parsed name over a stored Carrier Attn name. */
+export function rateConApplyContactFields(
+  parsed: ParsedBrokerContact,
+  existing: Partial<ParsedBrokerContact> = {},
+): ParsedBrokerContact {
+  return {
+    contact_name: parsed.contact_name,
+    contact_email: parsed.contact_email,
+    contact_phone: parsed.contact_phone || existing.contact_phone || "",
+    contact_ext: parsed.contact_phone ? parsed.contact_ext : existing.contact_ext || "",
   };
 }
