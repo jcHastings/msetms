@@ -167,7 +167,7 @@ export function formatDateTime(iso: string): string {
   }
 }
 
-/** Orbcomm compact cell: no path until View. Expired includes a missing/invalid expiry. */
+/** Orbcomm compact cell: live vs empty. Expired (missing/invalid/past expiry) displays like no share. */
 export function compactTrailerShareState(
   sharePath: string,
   expiresAt: string,
