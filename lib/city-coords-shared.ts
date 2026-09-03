@@ -65,6 +65,10 @@ export const US_CITY_CENTERS: CityCenter[] = [
   { label: "Dodge City, KS", city: "Dodge City", state: "KS", lat: 37.7528, lng: -100.0171, aliases: ["dodge city"] },
   { label: "Holcomb, KS", city: "Holcomb", state: "KS", lat: 37.9861, lng: -100.9957, aliases: ["holcomb"] },
   { label: "Hastings, NE", city: "Hastings", state: "NE", lat: 40.5861, lng: -98.3884, aliases: ["hastings"] },
+  { label: "Detroit, MI", city: "Detroit", state: "MI", lat: 42.3314, lng: -83.0458, aliases: ["detroit"] },
+  { label: "Cincinnati, OH", city: "Cincinnati", state: "OH", lat: 39.1031, lng: -84.512, aliases: ["cincinnati"] },
+  { label: "Louisville, KY", city: "Louisville", state: "KY", lat: 38.2527, lng: -85.7585, aliases: ["louisville"] },
+  { label: "Columbus, OH", city: "Columbus", state: "OH", lat: 39.9612, lng: -82.9988, aliases: ["columbus"] },
 ];
 
 const STATE_NAME_TO_ABBR: Record<string, string> = {

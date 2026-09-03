@@ -2280,6 +2280,9 @@ async function main() {
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /mapsBrowserKey/);
   assert.match(workbenchCardUi, /data-workbench-lane-sketch/);
+  assert.match(workbenchCardUi, /LoadCardFastActions/);
+  assert.match(workbenchCardUi, /listStopAppointmentTargets/);
+  assert.match(workbenchCardUi, /findCityCenter/);
   assert.doesNotMatch(workbenchCardUi, /maps\.google\.com\/maps\?/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.googleapis\.com\/maps\/api\/js/);
   const { isOutOfToleranceException } = await import("../lib/exceptions");
