@@ -615,7 +615,7 @@ function letterheadRegion(text: string): string {
   const roleCut = raw.search(HEADER_ROLE_CUT_RE);
   let head = roleCut >= 0 ? raw.slice(0, roleCut) : raw.slice(0, 900);
   const bodyCut = head.search(
-    /\b(?:stops?\s*\/\s*actions|special instructions|commodity\b|weight\b|equipment\b|origin\s*:|destination\s*:|pickup\b|delivery\b)/i,
+    /\b(?:stops?\s*\/\s*actions|special instructions|commodity\b|weight\b|equipment\b|origin\s*:|destination\s*:|pickup\b|delivery\b|customer\s*:|bill\s*to\s*:)/i,
   );
   if (bodyCut >= 0) head = head.slice(0, bodyCut);
   head = head.replace(/^\s*(?:dispatch confirmation|rate confirmation|load confirmation)\s*/i, "").trim();
