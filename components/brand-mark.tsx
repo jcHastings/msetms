@@ -13,7 +13,11 @@ export function BrandMark({
   return (
     <div className={`brand-mark flex flex-col items-start gap-2 ${variant === "dark" ? "brand-mark-on-dark" : ""}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/api/company/logo" alt="MS Express" className={`${height} w-auto`} />
+      <img
+        src={variant === "dark" ? "/ms-express-logo-on-dark.png" : "/api/company/logo"}
+        alt="MS Express"
+        className={`${height} w-auto`}
+      />
       <div className={nameClass}>MS Express TMS</div>
     </div>
   );

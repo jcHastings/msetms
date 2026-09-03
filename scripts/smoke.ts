@@ -398,9 +398,11 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
+  assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo-on-dark.png")), true, "transparent on-dark logo");
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo-on-dark\.png/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /LoginCanvas/);

@@ -887,7 +887,7 @@ button {
   margin: 0 0 0.15rem;
   padding: 0.15rem 0 0.2rem;
   background: rgba(15, 23, 42, 0.35);
-  border-radius: 0.35rem;
+  border-radius: var(--r-sm);
 }
 
 .desk-nav-chevron {
@@ -897,6 +897,7 @@ button {
 
 .desk-nav-link {
   color: #d5deea;
+  border-radius: var(--r-xs);
 }
 
 .desk-nav-link:hover {
@@ -2081,7 +2082,7 @@ html:has([data-load-embed]) body {
 }
 
 .brand-mark-on-dark img {
-  filter: invert(1) hue-rotate(180deg) brightness(1.35) contrast(1.05);
+  background: transparent;
 }
 
 .workbench-card {
