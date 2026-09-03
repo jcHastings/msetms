@@ -5,7 +5,6 @@ import { tmsCustomerInvoiceLines } from "./invoice";
 import { computeOwnerOperatorPay } from "./settlement";
 import {
   applyLocationToStop,
-  formatSchedulingSummary,
   formatStopPartyAddress,
   isPlaceholderStopName,
   matchLocationForStop,
@@ -165,37 +164,46 @@ export function stripPaperworkPrefix(value: string): string {
     .trim();
 }
 
+function stripPaperworkLabelsFromNotes(text: string): string {
+  return String(text ?? "")
+    .replace(/\bP\/?U\s*#\s*[A-Z0-9-]+/gi, "")
+    .replace(/\bPO\s*#\s*[A-Z0-9-]+/gi, "")
+    .replace(/\bCONF(?:IRMATION)?\s*#\s*[A-Z0-9-]+/gi, "")
+    .replace(/\(\s*\d{2,5}\s*cases?\s*\)/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function collapseRepeatedPhrases(text: string): string {
   const parts = String(text ?? "")
     .replace(/\r\n/g, "\n")
-    .split(/\n+|(?<=[.!?])\s+/)
-    .map((part) => part.trim())
+    .split(/\n+/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  const seen = new Set<string>();
   const kept: string[] = [];
   for (const part of parts) {
-    const key = part.replace(/\s+/g, " ").toLowerCase();
-    if (seen.has(key)) continue;
-    if ([...seen].some((prior) => prior.includes(key) || (key.includes(prior) && prior.length > 24))) {
+    const key = part.toLowerCase();
+    if (kept.some((prior) => prior.toLowerCase() === key)) continue;
+    if (parts.some((other) => other !== part && other.toLowerCase().startsWith(key) && other.length > part.length + 8)) {
       continue;
     }
-    seen.add(key);
     kept.push(part);
   }
-  return kept.join(" ").replace(/[ \t]{2,}/g, " ").trim();
+  return kept.join("\n").trim();
 }
 
 function stripNotesAlreadyPrinted(extra: string, already: string): string {
   const printed = collapseRepeatedPhrases(already).replace(/\s+/g, " ").toLowerCase();
   if (!printed) return collapseRepeatedPhrases(extra);
   const kept: string[] = [];
-  for (const part of collapseRepeatedPhrases(extra).split(/(?<=[.!?])\s+|\n+/)) {
+  for (const part of collapseRepeatedPhrases(extra).split(/\n+/)) {
     const phrase = part.trim();
     if (!phrase) continue;
     if (printed.includes(phrase.replace(/\s+/g, " ").toLowerCase())) continue;
     kept.push(phrase);
   }
-  return kept.join(" ").trim();
+  return kept.join("\n").trim();
 }
 
 export function equipmentLabel(load: LoadView): string {
@@ -493,7 +501,7 @@ function confirmationStopFromParty(
     poNumber: refs.poNumber,
     confirmationNumber: refs.confirmationNumber,
     puNumber: refs.puNumber,
-    extra: collapseRepeatedPhrases(party.extra),
+    extra: collapseRepeatedPhrases(stripPaperworkLabelsFromNotes(party.extra)),
     hoursLabel: isPickup ? "Shipping Hours" : "Receiving Hours",
     hours: party.hours,
     appointment: stopAppointmentLabel(stop, party.appointment, party.extra, load.appointment_notes),
@@ -511,13 +519,6 @@ export function buildConfirmationModel(
   const pickup = stops.find((stop) => stop.kind === "pickup") ?? stops[0];
   const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery") ?? stops[stops.length - 1];
   const firstDelivery = stops.find((stop) => stop.kind === "delivery") ?? lastDelivery;
-  const shipperParty = confirmationParty(pickup, load.shipper_location_id, load.origin, load.customer_name);
-  const lastDeliveryParty = confirmationParty(
-    lastDelivery,
-    load.consignee_location_id,
-    load.destination,
-    load.customer_name,
-  );
   const listedStops = stops.length
     ? stops.map((stop) => {
         const isFirstPickup = Boolean(pickup && stop.id === pickup.id);
@@ -564,8 +565,6 @@ export function buildConfirmationModel(
     load.public_notes,
     expandTruncatedDispatchNotes(load.special_instructions),
     load.appointment_notes,
-    shipperParty.location ? `Pickup: ${formatSchedulingSummary(shipperParty.location)}` : "",
-    lastDeliveryParty.location ? `Delivery: ${formatSchedulingSummary(lastDeliveryParty.location)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -816,7 +815,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   doc.font("Helvetica-Bold").fontSize(18).fillColor(INK);
   doc.text(title, 0, 36, { width: pageW, align: "center", lineBreak: false });
 
-  const cardW = 220;
+  const cardW = 258;
   const cardX = left + width - cardW;
   const cardY = 58;
   const cardH = drawContactCard(doc, cardX, cardY, cardW, contactRows);
@@ -833,8 +832,8 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     });
   }
 
-  let y = Math.max(160, cardY + cardH + 12);
-  const pageLimit = 628;
+  let y = Math.max(148, cardY + cardH + 8);
+  const pageLimit = 712;
 
   function addContentPage(): number {
     doc.addPage();
@@ -850,9 +849,9 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   if (model.packet === "customer") {
     y = drawCustomerBlock(doc, left, y, width, model);
-    y = drawCustomerRate(doc, left, y + 8, width, model);
+    y = drawCustomerRate(doc, left, y + 6, width, model);
     if (model.equipment.trim()) {
-      y = drawPartyRow(doc, left, y + 8, width, [["Equipment", model.equipment]]);
+      y = drawPartyRow(doc, left, y + 6, width, [["Equipment", model.equipment]]);
     }
   } else if (model.style === "owner_operator") {
     y = drawPartyRow(doc, left, y, width, [
@@ -872,12 +871,12 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   }
 
   if (model.reeferSetpoint || model.reeferMode) {
-    y = drawReeferBar(doc, left, y + 8, width, model.reeferSetpoint, model.reeferMode);
+    y = drawReeferBar(doc, left, y + 6, width, model.reeferSetpoint, model.reeferMode);
   }
 
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
   for (let index = 0; index < stopBoxes.length; index += 1) {
-    const gap = index === 0 ? 10 : 8;
+    const gap = index === 0 ? 8 : 6;
     const boxH = stopBoxHeight(doc, stopBoxes[index]);
     ensureSpace(gap + boxH);
     y = drawStop(doc, left, y + gap, width, stopBoxes[index], boxH);
@@ -923,8 +922,6 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     drawWriteLine(doc, left + 428, y, 112, "Trailer #", model.trailerNumber);
     y += 20;
   }
-
-  if (y > pageLimit) addContentPage();
 
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i += 1) {
@@ -974,7 +971,7 @@ function stampConfirmationFooter(
   const isLast = page === pageCount;
   if (isLast && printedTerms) {
     doc.font("Helvetica").fontSize(8).fillColor(INK);
-    doc.text(printedTerms, left, 636, { width, lineBreak: true });
+    doc.text(printedTerms, left, 716, { width, lineBreak: true });
   }
   const rawFooter = expandDocumentTags(defaults.footer_text, tagCtx).trim();
   const footer = model.packet === "internal" ? driverFacingTermsText(rawFooter) : rawFooter;
@@ -1072,18 +1069,22 @@ function drawContactCard(
   width: number,
   rows: Array<[string, string]>,
 ): number {
-  const rowH = 16;
-  const height = rows.length * rowH + 8;
+  const valueW = width - 88;
+  const heights = rows.map(([label, value]) => {
+    const loadRow = /load\s*#|carga\s*#/i.test(label);
+    doc.font("Helvetica-Bold").fontSize(loadRow ? 14 : 11);
+    return Math.max(16, Math.ceil(doc.heightOfString(value || " ", { width: valueW })) + 2);
+  });
+  const height = heights.reduce((sum, h) => sum + h, 0) + 8;
   doc.rect(x, y, width, height).strokeColor(INK).lineWidth(1).stroke();
+  let rowY = y + 4;
   rows.forEach(([label, value], index) => {
     const loadRow = /load\s*#|carga\s*#/i.test(label);
     doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
-    doc.text(`${label}:`, x + 6, y + 5 + index * rowH, { width: 72, lineBreak: false });
+    doc.text(`${label}:`, x + 6, rowY, { width: 72, lineBreak: false });
     doc.font("Helvetica-Bold").fontSize(loadRow ? 14 : 11).fillColor(INK);
-    doc.text(value || " ", x + 80, y + (loadRow ? 3 : 4) + index * rowH, {
-      width: width - 88,
-      lineBreak: false,
-    });
+    doc.text(value || " ", x + 80, rowY, { width: valueW });
+    rowY += heights[index];
   });
   return height;
 }
@@ -1133,10 +1134,10 @@ function drawReeferBar(
 
 function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop): number {
   const extra = stop.extra.trim();
-  if (!extra) return 118;
+  if (!extra) return 102;
   doc.font("Helvetica").fontSize(10);
   const extraH = doc.heightOfString(extra, { width: 528 });
-  return 118 + Math.max(16, extraH + 6);
+  return 102 + Math.max(14, extraH + 4);
 }
 
 function drawStop(
@@ -1145,18 +1146,28 @@ function drawStop(
   y: number,
   width: number,
   stop: ConfirmationStop,
-  height = 118,
+  height = 102,
 ): number {
   doc.rect(x, y, width, height).strokeColor(INK).lineWidth(1).stroke();
   const leftW = 214;
-  doc.font("Helvetica-Bold").fontSize(12).fillColor(INK).text(`${stop.title}  ${stop.name || ""}`.trim(), x + 6, y + 6, {
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(INK).text(stop.title, x + 6, y + 5, {
+    width: leftW - 8,
+    lineBreak: false,
+  });
+  doc.font("Helvetica-Bold").fontSize(12).text(stop.name || " ", x + 6, y + 19, {
     width: leftW - 8,
     lineBreak: false,
   });
   doc.font("Helvetica-Bold").fontSize(11);
-  doc.text(stop.address || " ", x + 6, y + 24, { width: leftW - 8, lineBreak: true });
+  doc.text(stop.address || " ", x + 6, y + 34, { width: leftW - 8, lineBreak: true });
   if (stop.phone) {
-    doc.font("Helvetica-Bold").fontSize(11).text(stop.phone, x + 6, y + 62, { width: leftW - 8, lineBreak: false });
+    doc.font("Helvetica-Bold").fontSize(11).text(stop.phone, x + 6, y + 58, { width: leftW - 8, lineBreak: false });
+  }
+  if (stop.hours.trim()) {
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
+    doc.text(`${stop.hoursLabel}:`, x + 6, y + 70, { width: leftW - 8, lineBreak: false });
+    doc.font("Helvetica-Bold").fontSize(11);
+    doc.text(stop.hours, x + 6, y + 80, { width: leftW - 8, lineBreak: false });
   }
 
   const gridX = x + leftW;
@@ -1170,7 +1181,6 @@ function drawStop(
     ["Purchase Order #", stop.poNumber],
     ["Confirmation number", stop.confirmationNumber],
     ...(stop.puNumber ? ([["PU #", stop.puNumber]] as Array<[string, string]>) : []),
-    [stop.hoursLabel, stop.hours],
     ["Description", stop.description],
   ];
   rows.forEach(([label, value], index) => {
@@ -1180,7 +1190,7 @@ function drawStop(
   });
   if (stop.extra.trim()) {
     doc.font("Helvetica").fontSize(10).fillColor(INK);
-    doc.text(stop.extra, x + 6, y + 100, { width: width - 12, lineBreak: true });
+    doc.text(stop.extra, x + 6, y + 86, { width: width - 12, lineBreak: true });
   }
   return y + height;
 }

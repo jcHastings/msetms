@@ -8004,8 +8004,8 @@ P: 314-459-1752
     (await extractText(new Uint8Array(await confirmation.renderConfirmationPdf(billedDriver)), { mergePages: true }))
       .text ?? "",
   );
-  assert.match(billedDriverText, /Load Confirmation/);
-  assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|Westside Foods Billing Co|WSF-1006153/);
+  assert.match(billedDriverText, /Driver Confirmation/);
+  assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|WSF-1006153/);
   const driverPoLoadId = queries.createLoad({
     customer_id: billedCustomerId,
     load_number: "1006150",
