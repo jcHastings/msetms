@@ -307,7 +307,20 @@ async function main() {
   assert.match(attachmentRoute, /regenerateMissingAttachment/);
   assert.match(attachmentRoute, /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/regenerate-attachment.ts"), "utf8"), /buildTmsInvoice/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8"), /export async function GET/);
+  const invoiceExportRoute = fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8");
+  assert.match(invoiceExportRoute, /export async function GET/);
+  assert.match(invoiceExportRoute, /export async function POST/);
+  assert.doesNotMatch(invoiceExportRoute, /serveGeneratedInvoice/);
+  const invoiceExportGet = invoiceExportRoute.slice(
+    invoiceExportRoute.indexOf("export async function GET"),
+    invoiceExportRoute.indexOf("export async function POST"),
+  );
+  const invoiceExportPost = invoiceExportRoute.slice(invoiceExportRoute.indexOf("export async function POST"));
+  assert.match(invoiceExportGet, /listAttachments/);
+  assert.match(invoiceExportGet, /kind === "invoice"/);
+  assert.match(invoiceExportGet, /Create or Rebuild invoice first/);
+  assert.doesNotMatch(invoiceExportGet, /createTmsInvoice/);
+  assert.match(invoiceExportPost, /createTmsInvoice/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/confirmation/route.ts"), "utf8"), /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fleet-docs/[id]/route.ts"), "utf8"), /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/view-invoice-button.tsx"), "utf8"), /\/api\/loads\/\$\{loadId\}\/invoice/);
