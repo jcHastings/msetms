@@ -393,7 +393,7 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
 
   y = drawSectionBand(doc, left, y, width, "Customer Information");
   y = drawCustomerBlock(doc, model, left, width, y);
-  y += 28;
+  y += 22;
 
   ensureSpace(72);
   y = drawSectionBand(doc, left, y, width, "Pay Items");
@@ -408,7 +408,7 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   ]);
   y = drawLetterTable(doc, left, y, width, payHeaders, payWidths, payRows, {
     pageBottom,
-    minRowH: 26,
+    minRowH: 30,
     onPage: addContentPage,
     getY: () => y,
     setY: (next) => {
@@ -416,7 +416,7 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     },
   });
   y = drawPayTotal(doc, left, width, y, payWidths, formatInvoiceMoney(model.total, currency));
-  y += 28;
+  y += 22;
 
   const stops = invoiceStopsInPrintOrder(model.stops);
   if (stops.length) {
@@ -438,9 +438,9 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     const bandH = 28;
     const neededMin = bandH + stopHeaderH + stops.length * stopMinH;
     let stopRowH = stopMinH;
-    if (y + neededMin <= pageBottom) {
-      const leftover = pageBottom - (y + neededMin);
-      stopRowH = Math.min(76, stopMinH + leftover / Math.max(1, stops.length));
+    if (y + neededMin + 8 <= pageBottom) {
+      const leftover = pageBottom - (y + neededMin) - 8;
+      stopRowH = Math.min(110, stopMinH + leftover / Math.max(1, stops.length));
     }
     ensureSpace(bandH + stopHeaderH + stopMinH);
     y = drawSectionBand(doc, left, y, width, "Pickup / Delivery");
@@ -450,7 +450,7 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
       y,
       width,
       ["#", "Pickup / Delivery", "Date/Time", "Location", "Contact"],
-      [28, 88, 108, 196, 104],
+      [26, 82, 126, 190, 100],
       stopRows,
       {
         pageBottom,
@@ -647,19 +647,20 @@ function drawCustomerBlock(
     `Phone: ${model.customerContactPhone?.trim() || ""}`,
     "Fax:",
   ];
-  const lineH = 14;
-  const blockH = Math.max(64, Math.max(billLines.length, contactLines.length) * lineH);
-  const blockTop = y;
+  const lineH = 15;
+  const innerH = Math.max(72, Math.max(billLines.length, contactLines.length) * lineH + 16);
+  doc.rect(x, y, width, innerH).strokeColor(INVOICE_INK).lineWidth(0.8).stroke();
+  const blockTop = y + 10;
   billLines.forEach((line, index) => {
     doc.font(index === 0 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(INVOICE_INK);
-    doc.text(line, x, blockTop + index * lineH, { width: 280 });
+    doc.text(line, x + 10, blockTop + index * lineH, { width: 280 });
   });
   contactLines.forEach((line, index) => {
-    doc.font("Helvetica").fontSize(10).fillColor(INVOICE_INK).text(line, x + width - 220, blockTop + index * lineH, {
+    doc.font("Helvetica").fontSize(10).fillColor(INVOICE_INK).text(line, x + width - 230, blockTop + index * lineH, {
       width: 220,
     });
   });
-  return blockTop + blockH;
+  return y + innerH;
 }
 
 function drawPayTotal(
@@ -768,7 +769,7 @@ function drawLetterTable(
   const drawRow = (row: string[]) => {
     doc.font("Helvetica").fontSize(9);
     const heights = row.map((cell, index) => doc.heightOfString(cell || " ", { width: widths[index] - 10 }));
-    const rowH = Math.max(minRowH, ...heights) + 12;
+    const rowH = Math.max(minRowH, Math.max(...heights) + 14);
     if (y + rowH > options.pageBottom) {
       doc.strokeColor("#c5c9d1").lineWidth(0.5).rect(x, segmentTop, width, Math.max(headerH, y - segmentTop)).stroke();
       options.onPage();
@@ -776,11 +777,14 @@ function drawLetterTable(
       y = drawHeader(y);
       segmentTop = y - headerH;
     }
+    if (rowH >= 48) {
+      doc.rect(x, y, width, rowH).fill("#f7f8fa");
+    }
     let cx = x + 6;
     row.forEach((cell, index) => {
       const numeric = /^(qty|quantity|rate|amount)$/i.test(headers[index] ?? "");
       doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK);
-      doc.text(cell || "", cx, y + 8, {
+      doc.text(cell || "", cx, y + 10, {
         width: widths[index] - 10,
         align: numeric ? "right" : "left",
       });

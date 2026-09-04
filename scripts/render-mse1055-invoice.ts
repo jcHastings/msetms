@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getDb } from "../lib/db";
 import { renderTmsInvoicePdf, type TmsInvoiceModel } from "../lib/invoice";
 
 const model: TmsInvoiceModel = {
@@ -60,6 +61,7 @@ const model: TmsInvoiceModel = {
 };
 
 async function main(): Promise<void> {
+  getDb();
   const pdf = await renderTmsInvoicePdf(model);
   const outDir = process.env.PAPERWORK_ARTIFACT_DIR || "/opt/cursor/artifacts";
   fs.mkdirSync(outDir, { recursive: true });
