@@ -5949,7 +5949,7 @@ DISPATCH CONFIRMATION
   assert.match(signedDriverText, /Ceferino/);
   assert.match(signedDriverText, /3217709078/);
   assert.match(signedDriverText, /MS1519/);
-  assert.match(signedDriverText, /Truck #:[\s\S]{0,24}42|42[\s\S]{0,12}Trailer/);
+  assert.match(signedDriverText, /TRUCK #\s*42|Truck #:\s*42|42\s*TRAILER/i);
   const cbCustomer = confirmationLib.buildConfirmationForLoad(cbLoadId, { packet: "customer" });
   assert.equal(cbCustomer.stops.find((stop) => /North Bay/i.test(stop.name))?.poNumber, "");
   assert.equal(cbCustomer.stops.find((stop) => /Kansas City/i.test(`${stop.name} ${stop.address}`))?.poNumber, "000250476");
