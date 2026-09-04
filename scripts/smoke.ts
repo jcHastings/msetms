@@ -5996,6 +5996,128 @@ DISPATCH CONFIRMATION
   assert.match(driverFacingTermsText(customerTermsCopy), /Temperature-controlled loads run Continuous/);
   assert.match(driverFacingTermsText(customerTermsCopy), /claim number/);
   assert.equal(shouldReplaceStoredTerms("load_confirmation", customerTermsCopy), true);
+  const mse1055Lecture =
+    ": To ensure prompt payment please EMAIL your invoice, rate confirmation and proof of delivery to billing@msloads.com Equipment: Reefer, 53'. Continuous reefer. Two load locks. Seal required. Billing: billing@msloads.com";
+  const mse1055DriverNotes = driverFacingTermsText(mse1055Lecture);
+  assert.doesNotMatch(mse1055DriverNotes, /billing@msloads\.com/i);
+  assert.doesNotMatch(mse1055DriverNotes, /EMAIL your invoice/i);
+  assert.doesNotMatch(mse1055DriverNotes, /prompt payment/i);
+  assert.match(mse1055DriverNotes, /Equipment:\s*Reefer/);
+  assert.match(mse1055DriverNotes, /Two load locks/);
+  assert.match(mse1055DriverNotes, /Seal required/);
+  const { replaceStops: replaceMse1055Stops } = await import("../lib/stops");
+  const mse1055ShipperLoc = queries.createLocation({
+    name: "Nebraska Cold Storage Inc Sheet",
+    street: "600 E 39th St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    phone: "(402) 461-4442",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "Mon–Fri 07:00–15:00",
+    scheduling_notes: "",
+  });
+  const mse1055ConsigneeLoc = queries.createLocation({
+    name: "ESSENTIA PROTEIN SOLUTIONS Sheet",
+    street: "2043 Juniper Ave",
+    city: "Harlan",
+    state: "IA",
+    zip: "51537",
+    phone: "",
+    notes: "",
+    role: "consignee",
+    scheduling_type: "fcfs",
+    hours: "Mon–Fri 08:00–17:00",
+    scheduling_notes: "FCFS",
+  });
+  const mse1055SheetId = queries.createLoad({
+    customer_id: cbCustomerId,
+    load_number: "MSE-1055-SHEET",
+    origin: "Hastings, NE",
+    destination: "Harlan, IA",
+    pickup_start: "2026-08-27T08:00",
+    pickup_end: "2026-08-27T08:00",
+    delivery_start: "2026-08-28T08:00",
+    delivery_end: "2026-08-28T17:00",
+    weight: 41500,
+    commodity: "FRESH BEEF",
+    rate: 2200,
+    notes: "",
+    special_instructions: mse1055Lecture,
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    customer_reference: "",
+    reefer_setpoint_f: 26,
+    reefer_mode: "continuous",
+    equipment: "reefer_53",
+    trailer_number: "MS1523",
+    status: "dispatched",
+    truck_id: null,
+    driver_id: null,
+    shipper_location_id: mse1055ShipperLoc,
+    consignee_location_id: mse1055ConsigneeLoc,
+  });
+  replaceMse1055Stops(mse1055SheetId, [
+    {
+      kind: "pickup",
+      name: "Nebraska Cold Storage Inc Sheet",
+      street: "600 E 39th St",
+      city: "Hastings",
+      state: "NE",
+      zip: "68901",
+      phone: "(402) 461-4442",
+      window_start: "2026-08-27T08:00",
+      window_end: "2026-08-27T08:00",
+      schedule_type: "appointment",
+      location_id: mse1055ShipperLoc,
+    },
+    {
+      kind: "delivery",
+      name: "ESSENTIA PROTEIN SOLUTIONS Sheet",
+      street: "2043 Juniper Ave",
+      city: "Harlan",
+      state: "IA",
+      zip: "51537",
+      window_start: "2026-08-28T08:00",
+      window_end: "2026-08-28T17:00",
+      schedule_type: "fcfs",
+      location_id: mse1055ConsigneeLoc,
+    },
+  ]);
+  const mse1055Driver = confirmationLib.buildConfirmationForLoad(mse1055SheetId, { packet: "internal" });
+  assert.doesNotMatch(mse1055Driver.dispatchNotes, /billing@msloads\.com/i);
+  assert.doesNotMatch(mse1055Driver.dispatchNotes, /EMAIL your invoice/i);
+  assert.match(mse1055Driver.dispatchNotes, /Equipment:\s*Reefer|Continuous reefer|load locks/i);
+  assert.match(mse1055Driver.consignee.time, /8:00\s*AM/);
+  assert.match(mse1055Driver.consignee.time, /5:00\s*PM/);
+  assert.equal(mse1055Driver.consignee.weight, "41500");
+  const mse1055DriverPdf = await confirmationLib.renderConfirmationPdf(mse1055Driver);
+  const mse1055DriverText = String(
+    (await extractCbPdfText(new Uint8Array(mse1055DriverPdf), { mergePages: true })).text ?? "",
+  );
+  assert.doesNotMatch(mse1055DriverText, /billing@msloads\.com/i);
+  assert.doesNotMatch(mse1055DriverText, /EMAIL your invoice/i);
+  assert.doesNotMatch(mse1055DriverText, /prompt payment/i);
+  assert.match(mse1055DriverText, /8:00\s*AM/);
+  assert.match(mse1055DriverText, /5:00\s*PM/);
+  assert.match(mse1055DriverText, /41500\s*lbs/);
+  assert.match(mse1055DriverText, /FRESH BEEF/);
+  const mse1055CustomerText = String(
+    (
+      await extractCbPdfText(
+        new Uint8Array(
+          await confirmationLib.renderConfirmationPdf(
+            confirmationLib.buildConfirmationForLoad(mse1055SheetId, { packet: "customer" }),
+          ),
+        ),
+        { mergePages: true },
+      )
+    ).text ?? "",
+  );
+  assert.match(mse1055CustomerText, /billing@msloads\.com/i);
   const truncatedPersistId = queries.createLoad({
     customer_id: cbCustomerId,
     load_number: "MSE-1065-TRUNC",
