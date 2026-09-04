@@ -9,7 +9,7 @@ import { buildTmsInvoice, createTmsInvoice } from "./invoice";
 import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
-import { expandDocumentTags } from "./document-tags";
+import { fillInvoiceEmailBody } from "./invoice-email-shared";
 import { getInvoiceEmailBody } from "./settings";
 import {
   invoiceFromAddress,
@@ -479,7 +479,7 @@ export function composeCustomerInvoiceEmail(input: {
     : loadNumber
       ? `Invoice — Load ${loadNumber}`
       : "Invoice";
-  const letter = expandDocumentTags(input.body ?? "", {
+  const letter = fillInvoiceEmailBody(input.body ?? "", {
     orgName: "M & S Loads LLC",
     customerName: input.customerName,
     loadId: loadNumber,
@@ -547,6 +547,30 @@ async function invoicePdfForMail(load: LoadView): Promise<{
     buffer: made.buffer,
     total: model.total,
   };
+}
+
+export function invoiceEmailBodyForLoad(
+  load: LoadView,
+  invoice?: { invoiceNumber?: string; total?: number } | null,
+): string {
+  const shown = customerFacingLoadNumber(load) || load.load_number;
+  let invoiceNumber = (load.tms_invoice_number || invoice?.invoiceNumber || "").trim();
+  let totalLabel = invoice != null && Number.isFinite(invoice.total) ? formatInvoiceMoney(invoice.total) : "";
+  if (!invoiceNumber || !totalLabel) {
+    try {
+      const model = buildTmsInvoice(load);
+      invoiceNumber = invoiceNumber || model.invoiceNumber;
+      totalLabel = totalLabel || formatInvoiceMoney(model.total);
+    } catch {
+      // Leave missing invoice fields blank — never show [brackets].
+    }
+  }
+  return fillInvoiceEmailBody(getInvoiceEmailBody(), {
+    customerName: load.customer_name,
+    loadId: shown,
+    invoiceNumber,
+    invoiceTotal: totalLabel,
+  });
 }
 
 export function invoiceMailTo(load: LoadView, typedTo = ""): string {

@@ -49,6 +49,7 @@ import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from 
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
 import {
+  invoiceEmailBodyForLoad,
   invoiceMailExtraDocs,
   lastLoadMail,
   resolveInvoiceCustomerEmail,
@@ -64,7 +65,7 @@ import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
-import { equipmentOptions, getInvoiceEmailBody, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
+import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
 import { ensureDefaultStops } from "@/lib/stops";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
@@ -111,6 +112,13 @@ export async function LoadEditor({
   const family = listMasterFamily(load.id);
   const masterRow = family.find((row) => !row.parent_load_id) ?? family[0];
   const childRows = family.filter((row) => row.parent_load_id);
+  const invoice = (() => {
+    try {
+      return buildTmsInvoice(load);
+    } catch {
+      return null;
+    }
+  })();
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
@@ -286,18 +294,12 @@ export async function LoadEditor({
                 invoices={attachments.filter((file) => file.kind === "invoice")}
                 customerEmail={resolveInvoiceCustomerEmail(load)}
                 extras={invoiceMailExtraDocs(load.id)}
-                invoiceEmailBody={getInvoiceEmailBody()}
+                invoiceEmailBody={invoiceEmailBodyForLoad(load, invoice)}
                 lastInvoiceSent={(() => {
                   const sent = lastLoadMail(load.id, "customer_invoice");
                   return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
                 })()}
-                invoice={(() => {
-                  try {
-                    return buildTmsInvoice(load);
-                  } catch {
-                    return null;
-                  }
-                })()}
+                invoice={invoice}
               />
               <LoadPayItems
                 load={load}

@@ -33,12 +33,12 @@ import {
 import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
-import { invoiceMailExtraDocs, resolveInvoiceCustomerEmail } from "@/lib/load-mail";
+import { invoiceEmailBodyForLoad, invoiceMailExtraDocs, resolveInvoiceCustomerEmail } from "@/lib/load-mail";
 import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCustomer } from "@/lib/queries";
-import { getCompanySettings, getInvoiceEmailBody, taxOnAmount } from "@/lib/settings";
+import { getCompanySettings, taxOnAmount } from "@/lib/settings";
 import { listStops } from "@/lib/stops";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForLoadStatus, type LoadView } from "@/lib/types";
@@ -224,7 +224,7 @@ function toInvoiceAcctRow(
       return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
     })(),
     extras: invoiceMailExtraDocs(row.id),
-    invoiceEmailBody: getInvoiceEmailBody(),
+    invoiceEmailBody: invoiceEmailBodyForLoad(row),
     pick: stopLabel(pick, row.origin),
     drop: stopLabel(drop, row.destination),
     paperwork: [
