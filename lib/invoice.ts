@@ -8,7 +8,7 @@ import { customerInvoicePayItems } from "./pay-items";
 import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
-import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults, getDocumentFont } from "./settings";
+import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults, getDocumentFont, HASTINGS_OFFICE } from "./settings";
 import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
@@ -305,8 +305,8 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     customerPhone: customer.phone,
     customerContact: customer.contact,
     customerContactPhone: customer.contactPhone,
-    terms: customer.terms,
-    dueDate: dueDateFromTerms(customer.terms, date),
+    terms: customer.terms || "Net 30",
+    dueDate: dueDateFromTerms(customer.terms || "Net 30", date),
     dispatcherName: "",
     companyDocket: "",
     stops: invoiceStops(load),
@@ -371,15 +371,15 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     doc.on("end", () => resolve(Buffer.concat(chunks)));
   });
 
-  const left = 48;
-  const width = 516;
-  const ink = "#111111";
-  const pageBottom = 720;
-  let y = 48;
+  const left = 44;
+  const width = 524;
+  const ink = INVOICE_INK;
+  const pageBottom = 732;
+  let y = 36;
 
   function addContentPage() {
     doc.addPage();
-    y = 48;
+    y = 36;
     y = drawContinuationHeader(doc, model, left, width, y);
   }
 
@@ -388,119 +388,61 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
     addContentPage();
   }
 
-  const logo = companyLogoPath();
-  let companyY = y;
-  if (logo) {
-    try {
-      doc.image(logo, left, y, { fit: [132, 46] });
-      companyY = y + 52;
-    } catch {
-      companyY = y;
-    }
-  }
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(ink).text(model.companyLegalName, left, companyY, {
-    width: 250,
-  });
-  companyY += 16;
-  for (const line of addressLines(
-    settings.street,
-    cityStateZipLine(settings.city, settings.state, settings.zip),
-  )) {
-    doc.font("Helvetica").fontSize(9).fillColor(ink).text(line, left, companyY, { width: 250 });
-    companyY += 12;
-  }
-  if (model.companyDocket?.trim()) {
-    doc.font("Helvetica").fontSize(9).text(model.companyDocket.trim(), left, companyY, { width: 250 });
-    companyY += 12;
-  }
-  if (model.companyPhone) {
-    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, left, companyY, { width: 250 });
-    companyY += 12;
-  }
-  if (model.companyEmail) {
-    doc.font("Helvetica").fontSize(9).text(model.companyEmail, left, companyY, { width: 250 });
-    companyY += 12;
-  }
-
-  doc.font("Helvetica-Bold").fontSize(22).fillColor(ink);
-  doc.text("INVOICE", left, y, { width, align: "right" });
-  const meta = [
-    ["Invoice #", model.invoiceNumber],
-    ["Date", model.date],
-    ["Terms", model.terms ?? ""],
-    ["Due Date", model.dueDate ?? ""],
-    ["Weight", model.weight],
-    ["Distance", model.miles ? `${model.miles} miles` : ""],
-  ].filter(([, value]) => value);
-  let metaY = y + 30;
-  for (const [label, value] of meta) {
-    doc.font("Helvetica-Bold").fontSize(9).text(`${label}:`, left + 300, metaY, { width: 80, lineBreak: false });
-    doc.font("Helvetica").text(value, left + 380, metaY, { width: 136, lineBreak: false });
-    metaY += 14;
-  }
-  y = Math.max(companyY, metaY) + 22;
+  y = drawInvoiceHeader(doc, model, settings, left, width, y);
+  y += 22;
 
   y = drawSectionBand(doc, left, y, width, "Customer Information");
-  const billLines = [
-    model.customerName,
-    ...addressLines(model.customerStreet, model.customerCityStateZip),
-    model.customerPhone,
-  ].filter((line) => line.trim());
-  const contactLines = [
-    model.customerContact ? `Primary Contact: ${model.customerContact}` : "",
-    model.customerContactPhone ? `Phone: ${model.customerContactPhone}` : "",
-  ].filter(Boolean);
-  const blockH = Math.max(billLines.length, contactLines.length) * 13;
-  ensureSpace(blockH + 8);
-  const blockTop = y;
-  billLines.forEach((line, index) => {
-    doc.font(index === 0 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(ink);
-    doc.text(line, left, blockTop + index * 13, { width: 280 });
-  });
-  contactLines.forEach((line, index) => {
-    doc.font("Helvetica").fontSize(9).fillColor(ink).text(line, left + 300, blockTop + index * 13, { width: 216 });
-  });
-  y = blockTop + blockH + 20;
+  y = drawCustomerBlock(doc, model, left, width, y);
+  y += 22;
 
-  const showNotes = model.lines.some((line) => line.description.trim());
-  ensureSpace(56);
+  ensureSpace(72);
   y = drawSectionBand(doc, left, y, width, "Pay Items");
-  const payHeaders = showNotes
-    ? ["Description", "Notes", "Quantity", "Rate", "Amount"]
-    : ["Description", "Quantity", "Rate", "Amount"];
-  const payWidths = showNotes ? [140, 140, 70, 80, 86] : [220, 90, 100, 106];
-  const payRows = model.lines.map((line) =>
-    showNotes
-      ? [
-          line.name,
-          line.description,
-          line.qty != null ? String(line.qty) : "",
-          formatInvoiceMoney(line.rate, currency),
-          formatInvoiceMoney(line.amount, currency),
-        ]
-      : [
-          line.name,
-          line.qty != null ? String(line.qty) : "",
-          formatInvoiceMoney(line.rate, currency),
-          formatInvoiceMoney(line.amount, currency),
-        ],
-  );
-  const totalRow = showNotes
-    ? ["Total", "", "", "", formatInvoiceMoney(model.total, currency)]
-    : ["Total", "", "", formatInvoiceMoney(model.total, currency)];
+  const payHeaders = ["Description", "Notes", "Qty", "Rate", "Amount"];
+  const payWidths = [148, 148, 52, 86, 90];
+  const payRows = model.lines.map((line) => [
+    line.name,
+    line.description,
+    line.qty != null ? String(line.qty) : "",
+    formatInvoiceMoney(line.rate, currency),
+    formatInvoiceMoney(line.amount, currency),
+  ]);
   y = drawLetterTable(doc, left, y, width, payHeaders, payWidths, payRows, {
-    totalRow,
     pageBottom,
+    minRowH: 30,
     onPage: addContentPage,
     getY: () => y,
     setY: (next) => {
       y = next;
     },
   });
+  y = drawPayTotal(doc, left, width, y, payWidths, formatInvoiceMoney(model.total, currency));
   y += 22;
 
-  if (model.stops.length) {
-    ensureSpace(56);
+  const stops = invoiceStopsInPrintOrder(model.stops);
+  if (stops.length) {
+    const stopRows = stops.map((stop) => [
+      String(stop.sequence),
+      stop.kind,
+      stop.window,
+      [
+        stopLocationBlock(stop),
+        stop.reference ? `References: ${stop.reference}` : "",
+        stop.cargo ? `Cargo: ${stop.cargo}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      stop.phone,
+    ]);
+    const stopHeaderH = 22;
+    const stopMinH = 48;
+    const bandH = 28;
+    const neededMin = bandH + stopHeaderH + stops.length * stopMinH;
+    let stopRowH = stopMinH;
+    if (y + neededMin + 8 <= pageBottom) {
+      const leftover = pageBottom - (y + neededMin) - 8;
+      stopRowH = Math.min(110, stopMinH + leftover / Math.max(1, stops.length));
+    }
+    ensureSpace(bandH + stopHeaderH + stopMinH);
     y = drawSectionBand(doc, left, y, width, "Pickup / Delivery");
     y = drawLetterTable(
       doc,
@@ -508,18 +450,11 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
       y,
       width,
       ["#", "Pickup / Delivery", "Date/Time", "Location", "Contact"],
-      [22, 78, 108, 200, 108],
-      model.stops.map((stop) => [
-        String(stop.sequence),
-        stop.kind,
-        stop.window,
-        [stopLocationBlock(stop), stop.reference ? `References: ${stop.reference}` : "", stop.cargo ? `Cargo: ${stop.cargo}` : ""]
-          .filter(Boolean)
-          .join("\n"),
-        stop.phone,
-      ]),
+      [26, 82, 126, 190, 100],
+      stopRows,
       {
         pageBottom,
+        minRowH: stopRowH,
         onPage: addContentPage,
         getY: () => y,
         setY: (next) => {
@@ -570,6 +505,118 @@ export async function renderTmsInvoicePdf(model: TmsInvoiceModel): Promise<Buffe
   return done;
 }
 
+const INVOICE_NAVY = "#12315c";
+const INVOICE_INK = "#111111";
+
+function invoiceTerms(model: TmsInvoiceModel): string {
+  return (model.terms ?? "").trim() || "Net 30";
+}
+
+function invoiceDueDate(model: TmsInvoiceModel): string {
+  return (model.dueDate ?? "").trim() || dueDateFromTerms(invoiceTerms(model), model.date);
+}
+
+function invoiceDistance(miles: string): string {
+  const trimmed = miles.trim();
+  if (!trimmed) return "";
+  return /mile/i.test(trimmed) ? trimmed : `${trimmed} miles`;
+}
+
+function invoiceStopsInPrintOrder(stops: TmsInvoiceStop[]): TmsInvoiceStop[] {
+  const pickups = stops.filter((stop) => stop.kind !== "Delivery");
+  const deliveries = stops.filter((stop) => stop.kind === "Delivery");
+  if (!pickups.length || !deliveries.length) return stops;
+  const alreadyOrdered = stops.findIndex((stop) => stop.kind === "Delivery") > stops.findIndex((stop) => stop.kind !== "Delivery");
+  return alreadyOrdered ? stops : [...pickups, ...deliveries];
+}
+
+function drawMsExpressWordmark(doc: PDFKit.PDFDocument, x: number, y: number, size: number): void {
+  doc.font("Helvetica-Bold").fontSize(size).fillColor(INVOICE_NAVY).text("MS EXPRESS", x, y, { lineBreak: false });
+}
+
+function drawInvoiceLogo(doc: PDFKit.PDFDocument, x: number, y: number, fit: [number, number]): number {
+  const logo = companyLogoPath();
+  if (logo) {
+    try {
+      doc.image(logo, x, y, { fit });
+      return fit[1];
+    } catch {
+      // Raster missing — navy wordmark keeps the MS Express mark.
+    }
+  }
+  drawMsExpressWordmark(doc, x, y + 8, Math.max(16, Math.min(22, fit[1] - 10)));
+  return 28;
+}
+
+function drawInvoiceHeader(
+  doc: PDFKit.PDFDocument,
+  model: TmsInvoiceModel,
+  settings: ReturnType<typeof getCompanySettings>,
+  x: number,
+  width: number,
+  y: number,
+): number {
+  const logoH = drawInvoiceLogo(doc, x, y, [176, 62]);
+  let companyY = y + logoH + 8;
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK).text(model.companyLegalName, x, companyY, {
+    width: 250,
+  });
+  companyY += 16;
+  for (const line of addressLines(
+    settings.street,
+    cityStateZipLine(settings.city, settings.state, settings.zip),
+  )) {
+    doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK).text(line, x, companyY, { width: 250 });
+    companyY += 13;
+  }
+  if (model.companyDocket?.trim()) {
+    doc.font("Helvetica").fontSize(9).text(model.companyDocket.trim(), x, companyY, { width: 250 });
+    companyY += 13;
+  }
+  if (model.companyPhone) {
+    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, x, companyY, { width: 250 });
+    companyY += 13;
+  }
+  if (model.companyEmail) {
+    doc.font("Helvetica").fontSize(9).text(model.companyEmail, x, companyY, { width: 250 });
+    companyY += 13;
+  }
+
+  const cardW = 228;
+  const cardX = x + width - cardW;
+  doc.font("Helvetica-Bold").fontSize(23).fillColor(INVOICE_INK);
+  doc.text("INVOICE", x, y, { width, align: "right" });
+  const meta = [
+    ["Invoice #", model.invoiceNumber],
+    ["Date", model.date],
+    ["Terms", invoiceTerms(model)],
+    ["Due Date", invoiceDueDate(model)],
+    ["Weight", model.weight],
+    ["Distance", invoiceDistance(model.miles)],
+  ];
+  const rowH = 15;
+  const cardY = y + 30;
+  const cardH = 12 + meta.length * rowH;
+  doc.rect(cardX, cardY, cardW, cardH).strokeColor(INVOICE_INK).lineWidth(1).stroke();
+  let metaY = cardY + 7;
+  for (const [label, value] of meta) {
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(INVOICE_INK).text(`${label}:`, cardX + 10, metaY, {
+      width: 78,
+      lineBreak: false,
+    });
+    doc.font("Helvetica").fontSize(9).text(value, cardX + 90, metaY, { width: 128, lineBreak: false });
+    metaY += rowH;
+  }
+  const bottom = Math.max(companyY, cardY + cardH) + 14;
+  doc
+    .moveTo(x, bottom)
+    .lineTo(x + width, bottom)
+    .strokeColor(INVOICE_NAVY)
+    .lineWidth(1.4)
+    .stroke();
+  return bottom + 8;
+}
+
 function drawSectionBand(
   doc: PDFKit.PDFDocument,
   x: number,
@@ -577,10 +624,62 @@ function drawSectionBand(
   width: number,
   title: string,
 ): number {
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111111").text(title, x, y);
-  y += 14;
-  doc.moveTo(x, y).lineTo(x + width, y).strokeColor("#111111").lineWidth(0.8).stroke();
-  return y + 10;
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(INVOICE_INK).text(title, x, y);
+  y += 15;
+  doc.moveTo(x, y).lineTo(x + width, y).strokeColor(INVOICE_NAVY).lineWidth(1.25).stroke();
+  return y + 12;
+}
+
+function drawCustomerBlock(
+  doc: PDFKit.PDFDocument,
+  model: TmsInvoiceModel,
+  x: number,
+  width: number,
+  y: number,
+): number {
+  const billLines = [
+    model.customerName,
+    ...addressLines(model.customerStreet, model.customerCityStateZip),
+    model.customerPhone,
+  ].filter((line) => line.trim());
+  const contactLines = [
+    `Primary Contact: ${model.customerContact?.trim() || ""}`,
+    `Phone: ${model.customerContactPhone?.trim() || ""}`,
+    "Fax:",
+  ];
+  const lineH = 15;
+  const innerH = Math.max(72, Math.max(billLines.length, contactLines.length) * lineH + 16);
+  doc.rect(x, y, width, innerH).strokeColor(INVOICE_INK).lineWidth(0.8).stroke();
+  const blockTop = y + 10;
+  billLines.forEach((line, index) => {
+    doc.font(index === 0 ? "Helvetica-Bold" : "Helvetica").fontSize(10).fillColor(INVOICE_INK);
+    doc.text(line, x + 10, blockTop + index * lineH, { width: 280 });
+  });
+  contactLines.forEach((line, index) => {
+    doc.font("Helvetica").fontSize(10).fillColor(INVOICE_INK).text(line, x + width - 230, blockTop + index * lineH, {
+      width: 220,
+    });
+  });
+  return y + innerH;
+}
+
+function drawPayTotal(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  width: number,
+  y: number,
+  widths: number[],
+  amount: string,
+): number {
+  y += 8;
+  doc.moveTo(x, y).lineTo(x + width, y).strokeColor(INVOICE_INK).lineWidth(0.8).stroke();
+  y += 10;
+  const amountW = widths[widths.length - 1] ?? 90;
+  const amountX = x + width - amountW;
+  doc.font("Helvetica-Bold").fontSize(14).fillColor(INVOICE_INK);
+  doc.text("Total", amountX - 88, y, { width: 80, align: "right", lineBreak: false });
+  doc.text(amount, amountX, y, { width: amountW, align: "right", lineBreak: false });
+  return y + 20;
 }
 
 function drawContinuationHeader(
@@ -590,21 +689,12 @@ function drawContinuationHeader(
   width: number,
   y: number,
 ): number {
-  const logo = companyLogoPath();
-  if (logo) {
-    try {
-      doc.image(logo, x, y, { fit: [64, 26] });
-    } catch {
-      doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c").text("MS EXPRESS", x, y + 6);
-    }
-  } else {
-    doc.font("Helvetica-Bold").fontSize(11).fillColor("#12315c").text("MS EXPRESS", x, y + 6);
-  }
-  doc.font("Helvetica-Bold").fontSize(12).fillColor("#111111");
-  doc.text("INVOICE", x + 72, y + 6, { width: 200, lineBreak: false });
-  doc.text(`Load #${model.loadNumber}`, x, y + 6, { width, align: "right", lineBreak: false });
-  doc.moveTo(x, y + 32).lineTo(x + width, y + 32).strokeColor("#111111").lineWidth(1).stroke();
-  return y + 42;
+  drawInvoiceLogo(doc, x, y, [72, 28]);
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK);
+  doc.text("INVOICE", x + 84, y + 8, { width: 200, lineBreak: false });
+  doc.text(`Load #${model.loadNumber}`, x, y + 8, { width, align: "right", lineBreak: false });
+  doc.moveTo(x, y + 36).lineTo(x + width, y + 36).strokeColor(INVOICE_NAVY).lineWidth(1.1).stroke();
+  return y + 46;
 }
 
 function drawPinnedFooter(
@@ -617,17 +707,23 @@ function drawPinnedFooter(
 ): void {
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const top = 748;
-  doc.moveTo(x, top).lineTo(x + width, top).strokeColor("#111111").lineWidth(1).stroke();
-  doc.moveTo(x + 172, top).lineTo(x + 172, top + 28).stroke();
-  doc.font("Helvetica").fontSize(8).fillColor("#111111");
-  doc.text(`Page ${page} of ${pageCount}`, x + 8, top + 10, {
-    width: 156,
+  doc.moveTo(x, top).lineTo(x + width, top).strokeColor(INVOICE_INK).lineWidth(0.7).stroke();
+  const remit = `Remit to ${model.companyLegalName} / ${HASTINGS_OFFICE.city}`;
+  doc.font("Helvetica").fontSize(8).fillColor(INVOICE_INK);
+  doc.text(`Page ${page} of ${pageCount}`, x, top + 10, {
+    width: 150,
     lineBreak: false,
     height: 12,
   });
-  doc.text(`Load #${model.loadNumber}`, x + 180, top + 10, {
-    width: 156,
+  doc.text(`Load #${model.loadNumber}`, x + 150, top + 10, {
+    width: 224,
     align: "center",
+    lineBreak: false,
+    height: 12,
+  });
+  doc.text(remit, x + 374, top + 10, {
+    width: 150,
+    align: "right",
     lineBreak: false,
     height: 12,
   });
@@ -642,65 +738,69 @@ function drawLetterTable(
   widths: number[],
   rows: string[][],
   options: {
-    totalRow?: string[];
     pageBottom: number;
+    minRowH?: number;
     onPage: () => void;
     getY: () => number;
     setY: (next: number) => void;
   },
 ): number {
-  const headerH = 18;
+  const headerH = 22;
+  const minRowH = options.minRowH ?? 26;
   const drawHeader = (at: number) => {
-    doc.rect(x, at, width, headerH).fill("#e5e7eb");
-    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111111");
-    let cx = x + 4;
+    doc.rect(x, at, width, headerH).fill(INVOICE_NAVY);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
+    let cx = x + 6;
     headers.forEach((header, index) => {
-      doc.text(header, cx, at + 5, { width: widths[index] - 8, lineBreak: false });
+      const numeric = /^(qty|quantity|rate|amount)$/i.test(headers[index] ?? "");
+      doc.text(header, cx, at + 7, { width: widths[index] - 10, lineBreak: false, align: numeric ? "right" : "left" });
       cx += widths[index];
     });
     return at + headerH;
   };
 
-  if (y + headerH + 22 > options.pageBottom) {
+  if (y + headerH + minRowH > options.pageBottom) {
     options.onPage();
     y = options.getY();
   }
   y = drawHeader(y);
   let segmentTop = y - headerH;
 
-  const drawRow = (row: string[], rowIndex: number, bold = false) => {
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8);
-    const heights = row.map((cell, index) => doc.heightOfString(cell || " ", { width: widths[index] - 8 }));
-    const rowH = Math.max(18, ...heights) + 8;
+  const drawRow = (row: string[]) => {
+    doc.font("Helvetica").fontSize(9);
+    const heights = row.map((cell, index) => doc.heightOfString(cell || " ", { width: widths[index] - 10 }));
+    const rowH = Math.max(minRowH, Math.max(...heights) + 14);
     if (y + rowH > options.pageBottom) {
-      doc.strokeColor("#d1d5db").lineWidth(0.5).rect(x, segmentTop, width, Math.max(headerH, y - segmentTop)).stroke();
+      doc.strokeColor("#c5c9d1").lineWidth(0.5).rect(x, segmentTop, width, Math.max(headerH, y - segmentTop)).stroke();
       options.onPage();
       y = options.getY();
       y = drawHeader(y);
       segmentTop = y - headerH;
     }
-    if (!bold && rowIndex % 2 === 1) {
-      doc.rect(x, y, width, rowH).fill("#f9fafb");
+    if (rowH >= 48) {
+      doc.rect(x, y, width, rowH).fill("#f7f8fa");
     }
-    let cx = x + 4;
+    let cx = x + 6;
     row.forEach((cell, index) => {
-      const numeric = /^(quantity|rate|amount)$/i.test(headers[index] ?? "");
-      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 9 : 8).fillColor("#111111");
-      doc.text(cell || "", cx, y + 5, {
-        width: widths[index] - 8,
+      const numeric = /^(qty|quantity|rate|amount)$/i.test(headers[index] ?? "");
+      doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK);
+      doc.text(cell || "", cx, y + 10, {
+        width: widths[index] - 10,
         align: numeric ? "right" : "left",
       });
       cx += widths[index];
     });
     y += rowH;
+    doc
+      .moveTo(x, y)
+      .lineTo(x + width, y)
+      .strokeColor("#d8dce3")
+      .lineWidth(0.4)
+      .stroke();
   };
 
-  rows.forEach((row, rowIndex) => drawRow(row, rowIndex));
-  if (options.totalRow) {
-    doc.moveTo(x, y).lineTo(x + width, y).strokeColor("#111111").lineWidth(0.6).stroke();
-    drawRow(options.totalRow, rows.length, true);
-  }
-  doc.strokeColor("#d1d5db").lineWidth(0.5).rect(x, segmentTop, width, Math.max(headerH, y - segmentTop)).stroke();
+  rows.forEach((row) => drawRow(row));
+  doc.strokeColor("#c5c9d1").lineWidth(0.5).rect(x, segmentTop, width, Math.max(headerH, y - segmentTop)).stroke();
   options.setY(y);
   return y;
 }
