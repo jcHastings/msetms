@@ -10,6 +10,7 @@ import { formatStopPartyAddress } from "./locations";
 import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
 import { fillInvoiceEmailBody } from "./invoice-email-shared";
+import { isInvoiceMailCustomerDoc } from "./load-documents-shared";
 import { getInvoiceEmailBody } from "./settings";
 import {
   invoiceFromAddress,
@@ -407,7 +408,7 @@ export async function sendCustomerUpdateMail(
 
 export function invoiceMailExtraDocs(loadId: number): InvoiceMailExtraDoc[] {
   return listAttachments(loadId)
-    .filter((file) => file.kind !== "invoice")
+    .filter((file) => isInvoiceMailCustomerDoc(file))
     .map((file) => ({
       id: file.id,
       name: file.original_name,
@@ -447,8 +448,11 @@ export function mailFilesForLoadDocs(loadId: number, ids: number[]): Array<{
   return ids.map((id) => {
     const extra = byId.get(id);
     const file = getAttachment(id);
-    if (!extra || !file || file.load_id !== loadId || file.kind === "invoice") {
+    if (!file || file.load_id !== loadId) {
       throw new Error("That document is not on this load.");
+    }
+    if (file.kind === "invoice" || !extra || !isInvoiceMailCustomerDoc(file)) {
+      throw new Error("That document cannot be attached to an invoice email.");
     }
     const stored = getAttachmentPath(file);
     if (!fs.existsSync(stored)) throw new Error(`${file.original_name} is missing.`);
