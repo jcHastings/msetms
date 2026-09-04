@@ -13939,17 +13939,23 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(invoicePdfText, /Thank you for hauling with us/);
   assert.doesNotMatch(invoicePdfText, /Carrier is responsible for cargo/);
   assert.doesNotMatch(invoicePdfText, /Report exceptions at pickup/);
-  assert.doesNotMatch(invoicePdfText, /Notes/);
+  assert.match(invoicePdfText, /Notes/);
   assert.doesNotMatch(invoicePdfText, /Stops \/ Actions/);
   assert.match(invoicePdfText, /Pickup \/ Delivery/);
   assert.match(invoicePdfText, /Pay Items/);
   assert.match(invoicePdfText, /Page 1 of /);
   assert.match(invoicePdfText, /Load #/);
+  assert.match(invoicePdfText, /Primary Contact:/);
+  assert.match(invoicePdfText, /Fax:/);
+  assert.match(invoicePdfText, /Net 30/);
+  assert.match(invoicePdfText, /Remit to M&S Loads LLC/);
+  assert.match(invoicePdfText, /Qty/);
   assert.doesNotMatch(invoicePdfText, /Subtotal/);
-  assert.doesNotMatch(invoicePdfText, /AscendTMS|Powered by|Nanuet|228 East Route/);
+  assert.doesNotMatch(invoicePdfText, /AscendTMS|Powered by|Nanuet|228 East Route|Esti Katz|MC970613/);
   assert.match(invoicePdfText, /100 Fleet Way|600 E 39th/);
   const invoiceLibSource = fs.readFileSync(path.join(process.cwd(), "lib/invoice.ts"), "utf8");
-  assert.match(invoiceLibSource, /showNotes/);
+  assert.match(invoiceLibSource, /Notes/);
+  assert.match(invoiceLibSource, /#12315c/);
   assert.doesNotMatch(invoiceLibSource, /Linehaul is the customer rate|Payment due per customer terms/);
   const invoiceDefaults = settings.getDocumentDefaults("invoice");
   assert.equal(invoiceDefaults.footer_text, "");
@@ -13963,7 +13969,7 @@ DISPATCH CONFIRMATION
   assert.match(invoiceLibSource, /Pickup \/ Delivery/);
   assert.doesNotMatch(invoiceLibSource, /Stops \/ Actions/);
   assert.match(invoiceLibSource, /Date\/Time/);
-  assert.match(invoiceLibSource, /Quantity/);
+  assert.match(invoiceLibSource, /Qty/);
   assert.match(invoiceLibSource, /paperworkCompanyName/);
   assert.match(invoiceLibSource, /bufferPages/);
   assert.match(invoiceLibSource, /drawPinnedFooter/);
@@ -14016,8 +14022,87 @@ DISPATCH CONFIRMATION
   const onePageText = await extractDocumentText(onePageInvoice, "application/pdf", "INV-1005921-one.pdf");
   assert.match(onePageText, /Page 1 of 1/);
   assert.match(onePageText, /Load #/);
+  assert.match(onePageText, /Primary Contact:/);
+  assert.match(onePageText, /Fax:/);
+  assert.match(onePageText, /Notes/);
+  assert.match(onePageText, /Qty/);
+  assert.match(onePageText, /Remit to M&S Loads LLC \/ Hastings/);
   assert.doesNotMatch(onePageText, /MS Test \(M&S Loads LLC\)/);
   assert.doesNotMatch(onePageText, /MS Test/);
+  const mse1055Invoice = await renderTmsInvoicePdf({
+    ...tmsInvoiceModel,
+    invoiceNumber: "INV-MSE-1055",
+    loadNumber: "MSE-1055",
+    date: "08/28/26",
+    customerName: "M & S Loads LLC.",
+    customerStreet: "",
+    customerCityStateZip: "",
+    customerPhone: "",
+    customerContact: "JC",
+    customerContactPhone: "",
+    terms: "Net 30",
+    dueDate: "09/27/26",
+    companyLegalName: "M&S Loads LLC",
+    companyPhone: "402-302-0097",
+    companyEmail: "ar@msloads.com",
+    weight: "41,500 lb",
+    miles: "209.1",
+    dispatcherName: "MS Test",
+    companyDocket: "",
+    lines: [{ name: "Flat Rate", description: "", amount: 1400, qty: 1, rate: 1400 }],
+    total: 1400,
+    publicNotes: "",
+    stops: [
+      {
+        sequence: 1,
+        kind: "Pickup",
+        window: "08/27/26 8:00 AM",
+        name: "Nebraska Cold Storage Inc",
+        street: "600 E 39th St",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        phone: "402-461-4442",
+        reference: "",
+        cargo: "",
+      },
+      {
+        sequence: 2,
+        kind: "Delivery",
+        window: "08/28/26 8:00 AM – 5:00 PM",
+        name: "ESSENTIA PROTEIN SOLUTIONS",
+        street: "1347 Highway 44",
+        city: "Harlan",
+        state: "IA",
+        zip: "51537",
+        phone: "",
+        reference: "",
+        cargo: "",
+      },
+    ],
+  });
+  assert.equal((await PDFDocument.load(mse1055Invoice)).getPageCount(), 1, "MSE-1055 invoice stays on one letter page");
+  const mse1055InvoiceText = await extractDocumentText(mse1055Invoice, "application/pdf", "INV-MSE-1055.pdf");
+  assert.match(mse1055InvoiceText, /INV-MSE-1055/);
+  assert.match(mse1055InvoiceText, /M&S Loads LLC/);
+  assert.match(mse1055InvoiceText, /600 E 39th/);
+  assert.match(mse1055InvoiceText, /402-302-0097/);
+  assert.match(mse1055InvoiceText, /ar@msloads\.com/);
+  assert.match(mse1055InvoiceText, /Primary Contact:\s*JC/);
+  assert.match(mse1055InvoiceText, /Fax:/);
+  assert.match(mse1055InvoiceText, /Net 30/);
+  assert.match(mse1055InvoiceText, /09\/27\/26/);
+  assert.match(mse1055InvoiceText, /41,500 lb/);
+  assert.match(mse1055InvoiceText, /209\.1 miles/);
+  assert.match(mse1055InvoiceText, /Flat Rate/);
+  assert.match(mse1055InvoiceText, /1,400/);
+  assert.match(mse1055InvoiceText, /Nebraska Cold Storage Inc/);
+  assert.match(mse1055InvoiceText, /ESSENTIA PROTEIN SOLUTIONS/);
+  assert.match(mse1055InvoiceText, /1347 Highway 44/);
+  assert.match(mse1055InvoiceText, /Load #MSE-1055/);
+  assert.match(mse1055InvoiceText, /Remit to M&S Loads LLC \/ Hastings/);
+  assert.doesNotMatch(mse1055InvoiceText, /MS Test/);
+  assert.doesNotMatch(mse1055InvoiceText, /AscendTMS|Powered by|Nanuet|228 East Route|Esti Katz|MC970613/);
   const freightPdf = await renderTmsInvoicePdf({
     ...tmsInvoiceModel,
     invoiceNumber: "INV-1005921",
@@ -14090,7 +14175,7 @@ DISPATCH CONFIRMATION
   assert.match(freightText, /References: 2405556-Moshe/);
   assert.doesNotMatch(freightText, /Subtotal/);
   assert.doesNotMatch(freightText, /Stops \/ Actions/);
-  assert.doesNotMatch(freightText, /Notes/);
+  assert.match(freightText, /Notes/);
   assert.doesNotMatch(freightText, /Linehaul is the customer rate/);
   assert.doesNotMatch(freightText, /AscendTMS|Powered by|Nanuet|228 East Route/);
   assert.equal(tmsInvoiceModel.lines[0]?.name, "Flat Rate");
