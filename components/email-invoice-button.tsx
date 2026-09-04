@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { sendCustomerInvoiceMailAction } from "@/lib/dispatcher-actions";
+import { isInvoiceMailCustomerDoc } from "@/lib/load-documents-shared";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
 export function EmailInvoiceButton({
@@ -30,6 +31,7 @@ export function EmailInvoiceButton({
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const storedTo = email.trim();
+  const attachable = extras.filter((file) => isInvoiceMailCustomerDoc({ kind: file.kind, original_name: file.name }));
 
   function start() {
     setBody(defaultBody);
@@ -122,7 +124,7 @@ export function EmailInvoiceButton({
               onChange={(event) => setBody(event.target.value)}
             />
           </div>
-          {extras.length > 0 ? (
+          {attachable.length > 0 ? (
             <>
               <div className="font-medium text-slate-800">Attach load documents</div>
               <p className="text-xs text-slate-500">Invoice PDF is always attached.</p>
@@ -131,7 +133,7 @@ export function EmailInvoiceButton({
                   className="acct-link"
                   type="button"
                   disabled={pending}
-                  onClick={() => setSelected(extras.map((file) => file.id))}
+                  onClick={() => setSelected(attachable.map((file) => file.id))}
                 >
                   Attach all
                 </button>
@@ -140,7 +142,7 @@ export function EmailInvoiceButton({
                 </button>
               </div>
               <ul className="max-h-48 space-y-1 overflow-auto">
-                {extras.map((file) => (
+                {attachable.map((file) => (
                   <li key={file.id}>
                     <label className="flex items-start gap-2">
                       <input

@@ -1123,6 +1123,8 @@ async function main() {
   assert.doesNotMatch(emailInvoiceUi, /This load has no customer email/);
   assert.match(emailInvoiceUi, /Attach load documents/);
   assert.match(emailInvoiceUi, /Attach all/);
+  assert.match(emailInvoiceUi, /isInvoiceMailCustomerDoc/);
+  assert.match(emailInvoiceUi, /attachable\.map/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/invoice-email-shared.ts"), "utf8"), /fillInvoiceEmailBody/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceEmailBodyForLoad/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /invoiceEmailBodyForLoad\(load, invoice\)/);
@@ -2145,6 +2147,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /bol_third_party/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /BOL-master/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /isCustomerRateDocument/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /isInvoiceMailCustomerDoc/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents-shared.ts"), "utf8"), /invoiceMailDocumentRole/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /isInvoiceMailCustomerDoc/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /generateDefaultedDocument/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-documents.ts"), "utf8"), /buildAscendBolModel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/bol-ascend.ts"), "utf8"), /BILL OF LADING/);
@@ -4043,11 +4048,55 @@ async function main() {
     mimeType: "application/pdf",
     uploadedBy: "dispatcher",
   });
+  const driverPacket = addAttachment({
+    loadId: mailLoadId,
+    kind: "other",
+    originalName: `${mailLoad.load_number}-driver-packet.pdf`,
+    buffer: Buffer.from("%PDF-1.4 driver packet"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const carrierConf = addAttachment({
+    loadId: mailLoadId,
+    kind: "other",
+    originalName: `${mailLoad.load_number}-carrier-confirmation.pdf`,
+    buffer: Buffer.from("%PDF-1.4 carrier confirmation"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const driverNamedConf = addAttachment({
+    loadId: mailLoadId,
+    kind: "other",
+    originalName: "Driver confirmation.pdf",
+    buffer: Buffer.from("%PDF-1.4 driver confirmation"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const customerConf = addAttachment({
+    loadId: mailLoadId,
+    kind: "other",
+    originalName: `${mailLoad.load_number}-customer-confirmation.pdf`,
+    buffer: Buffer.from("%PDF-1.4 customer confirmation"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
   const extraDocs = loadMail.invoiceMailExtraDocs(mailLoadId);
   assert.ok(extraDocs.some((file) => file.id === lumperReceipt.id && file.kindLabel === "Lumper"));
   assert.ok(extraDocs.some((file) => file.id === bolScan.id && file.kindLabel === "BOL"));
+  assert.ok(extraDocs.some((file) => file.id === customerConf.id && file.name === `${mailLoad.load_number}-customer-confirmation.pdf`));
   assert.equal(extraDocs.some((file) => file.kind === "invoice"), false);
+  assert.equal(extraDocs.some((file) => file.id === driverPacket.id), false);
+  assert.equal(extraDocs.some((file) => file.id === carrierConf.id), false);
+  assert.equal(extraDocs.some((file) => file.id === driverNamedConf.id), false);
+  assert.equal(
+    extraDocs.some((file) => /driver|carrier/i.test(`${file.kindLabel} ${file.name}`)),
+    false,
+  );
   assert.throws(() => loadMail.mailFilesForLoadDocs(mailLoadId, [999999]), /not on this load/);
+  assert.throws(
+    () => loadMail.mailFilesForLoadDocs(mailLoadId, [driverPacket.id]),
+    /cannot be attached to an invoice email/,
+  );
   await loadMail.sendCustomerInvoiceMail(
     mailLoadId,
     async (input) => {
@@ -15244,7 +15293,8 @@ DISPATCH CONFIRMATION
     fs.readFileSync(path.join(process.cwd(), "app/api/attachments/[id]/route.ts"), "utf8"),
     /driver && isCustomerRateDocument/,
   );
-  const { isCustomerRateDocument } = await import("../lib/load-documents-shared");
+  const { isCustomerRateDocument, invoiceMailDocumentRole, isInvoiceMailCustomerDoc } =
+    await import("../lib/load-documents-shared");
   assert.equal(isCustomerRateDocument({ kind: "rate_con", original_name: "rate.pdf" }), true);
   assert.equal(isCustomerRateDocument({ kind: "invoice", original_name: "inv.pdf" }), true);
   assert.equal(
@@ -15256,6 +15306,29 @@ DISPATCH CONFIRMATION
     isCustomerRateDocument({ kind: "other", original_name: "MSE-1051-carrier-confirmation.pdf" }),
     false,
   );
+  assert.equal(
+    invoiceMailDocumentRole({ kind: "other", original_name: "MSE-1063-driver-packet.pdf" }),
+    "driver_facing",
+  );
+  assert.equal(
+    invoiceMailDocumentRole({ kind: "other", original_name: "Driver confirmation.pdf" }),
+    "driver_facing",
+  );
+  assert.equal(
+    invoiceMailDocumentRole({ kind: "other", original_name: "MSE-1063-carrier-confirmation.pdf" }),
+    "driver_facing",
+  );
+  assert.equal(
+    invoiceMailDocumentRole({ kind: "other", original_name: "MSE-1063-customer-confirmation.pdf" }),
+    "customer_confirmation",
+  );
+  assert.equal(invoiceMailDocumentRole({ kind: "bol", original_name: "bol.pdf" }), "customer_supporting");
+  assert.equal(invoiceMailDocumentRole({ kind: "invoice", original_name: "INV-1.pdf" }), "invoice");
+  assert.equal(invoiceMailDocumentRole({ kind: "fuel_receipt", original_name: "fuel.pdf" }), "driver_facing");
+  assert.equal(isInvoiceMailCustomerDoc({ kind: "other", original_name: "MSE-1063-driver-packet.pdf" }), false);
+  assert.equal(isInvoiceMailCustomerDoc({ kind: "other", original_name: "MSE-1063-customer-confirmation.pdf" }), true);
+  assert.equal(isInvoiceMailCustomerDoc({ kind: "bol", original_name: "customer-bol.pdf" }), true);
+  assert.equal(isInvoiceMailCustomerDoc({ kind: "invoice", original_name: "INV-1.pdf" }), false);
   assert.match(driverLoadPage, /driver-sheet-value/);
   assert.match(driverLoadPage, /driverStopWhen/);
   assert.doesNotMatch(driverLoadPage, /text-white\}>\{value\}/);

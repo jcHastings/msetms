@@ -72,6 +72,98 @@ export function isCustomerRateDocument(file: { kind: string; original_name?: str
   return name.includes("customer-confirmation") || name.includes("customer_confirmation");
 }
 
+/** How the TMS classifies a stored load file for invoice-send attach. */
+export type InvoiceMailDocRole =
+  | "invoice"
+  | "customer_confirmation"
+  | "customer_supporting"
+  | "driver_facing"
+  | "excluded";
+
+const INVOICE_MAIL_CUSTOMER_KINDS = new Set([
+  "bol",
+  "pod",
+  "lumper",
+  "scale_ticket",
+  "temp_log",
+  "photo_trailer",
+  "photo_product",
+  "photo_seals",
+  "claim",
+  "rate_con",
+]);
+
+const INVOICE_MAIL_DRIVER_KINDS = new Set(["carrier_invoice", "ifta", "fuel_receipt"]);
+
+const DRIVER_FACING_DEFAULTED = new Set<DefaultedDocKey>([
+  "carrier_confirmation",
+  "carrier_confirmation_blind",
+]);
+
+const CUSTOMER_SUPPORTING_DEFAULTED = new Set<DefaultedDocKey>([
+  "bol",
+  "bol_signatures",
+  "bol_blind",
+  "bol_third_party",
+]);
+
+/** Map a stored filename onto the defaulted-document role the TMS uses. */
+export function defaultedDocKeyFromFilename(name: string): DefaultedDocKey | null {
+  const lower = String(name ?? "").toLowerCase();
+  if (lower.includes("carrier-confirmation-blind") || lower.includes("carrier_confirmation_blind")) {
+    return "carrier_confirmation_blind";
+  }
+  if (lower.includes("carrier-confirmation") || lower.includes("carrier_confirmation")) {
+    return "carrier_confirmation";
+  }
+  if (lower.includes("customer-confirmation") || lower.includes("customer_confirmation")) {
+    return "customer_confirmation";
+  }
+  if (lower.includes("draft-invoice") || lower.includes("draft_invoice")) return "draft_invoice";
+  if (/-bol-signatures/i.test(lower)) return "bol_signatures";
+  if (/-bol-blind/i.test(lower)) return "bol_blind";
+  if (/-bol-3rd/i.test(lower)) return "bol_third_party";
+  if (/-bol-master/i.test(lower)) return "bol";
+  return null;
+}
+
+function isCustomerConfirmationName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes("customer-confirmation") || lower.includes("customer_confirmation");
+}
+
+/** Secondary safety net — driver/carrier/load-confirmation names that slip past kind. */
+export function isDriverFacingFilename(name: string): boolean {
+  const lower = String(name ?? "").toLowerCase();
+  if (!lower || isCustomerConfirmationName(lower)) return false;
+  return (
+    /driver[-_\s]?packet|driver[-_\s]?confirmation/.test(lower) ||
+    /driver[-_\s]?(rate[-_\s]?con|ratecon)/.test(lower) ||
+    /internal[-_\s]?(packet|confirmation)/.test(lower) ||
+    /carrier[-_\s]?confirmation/.test(lower) ||
+    /rate\s*&\s*load/.test(lower) ||
+    /load[-_\s]?confirmation/.test(lower)
+  );
+}
+
+export function invoiceMailDocumentRole(file: { kind: string; original_name?: string }): InvoiceMailDocRole {
+  const name = String(file.original_name ?? "");
+  const key = defaultedDocKeyFromFilename(name);
+  if (file.kind === "invoice" || key === "draft_invoice") return "invoice";
+  if (key === "customer_confirmation") return "customer_confirmation";
+  if (key && DRIVER_FACING_DEFAULTED.has(key)) return "driver_facing";
+  if (key && CUSTOMER_SUPPORTING_DEFAULTED.has(key)) return "customer_supporting";
+  if (INVOICE_MAIL_DRIVER_KINDS.has(file.kind) || isDriverFacingFilename(name)) return "driver_facing";
+  if (INVOICE_MAIL_CUSTOMER_KINDS.has(file.kind)) return "customer_supporting";
+  return "excluded";
+}
+
+/** Optional invoice-email attach list: customer-facing roles only. Invoice PDF is attached separately. */
+export function isInvoiceMailCustomerDoc(file: { kind: string; original_name?: string }): boolean {
+  const role = invoiceMailDocumentRole(file);
+  return role === "customer_confirmation" || role === "customer_supporting";
+}
+
 export function attachmentIdFromHref(href: string): number | null {
   const match = href.match(/\/api\/attachments\/(\d+)/);
   if (!match) return null;
