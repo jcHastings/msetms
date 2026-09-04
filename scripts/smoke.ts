@@ -4072,7 +4072,7 @@ async function main() {
     mimeType: "application/pdf",
     uploadedBy: "dispatcher",
   });
-  const customerConf = addAttachment({
+  const invoiceMailCustomerConf = addAttachment({
     loadId: mailLoadId,
     kind: "other",
     originalName: `${mailLoad.load_number}-customer-confirmation.pdf`,
@@ -4083,7 +4083,7 @@ async function main() {
   const extraDocs = loadMail.invoiceMailExtraDocs(mailLoadId);
   assert.ok(extraDocs.some((file) => file.id === lumperReceipt.id && file.kindLabel === "Lumper"));
   assert.ok(extraDocs.some((file) => file.id === bolScan.id && file.kindLabel === "BOL"));
-  assert.ok(extraDocs.some((file) => file.id === customerConf.id && file.name === `${mailLoad.load_number}-customer-confirmation.pdf`));
+  assert.ok(extraDocs.some((file) => file.id === invoiceMailCustomerConf.id && file.name === `${mailLoad.load_number}-customer-confirmation.pdf`));
   assert.equal(extraDocs.some((file) => file.kind === "invoice"), false);
   assert.equal(extraDocs.some((file) => file.id === driverPacket.id), false);
   assert.equal(extraDocs.some((file) => file.id === carrierConf.id), false);
