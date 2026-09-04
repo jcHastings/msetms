@@ -579,11 +579,12 @@ export function buildConfirmationModel(
   ]
     .filter(Boolean)
     .join("\n");
-  const dispatchNotes = collapseRepeatedPhrases(
+  const joinedNotes = collapseRepeatedPhrases(
     packet === "internal"
       ? stripCustomerLoadNumber(expandTruncatedDispatchNotes(joinUniqueNotes(notes)), load)
       : joinUniqueNotes(notes),
   );
+  const dispatchNotes = packet === "internal" ? driverFacingTermsText(joinedNotes) : joinedNotes;
   const trailer = load.trailer_id ? getTrailer(load.trailer_id) : null;
   const reefer = resolveReeferSpec({
     reefer_setpoint_f: load.reefer_setpoint_f ?? trailer?.reefer_setpoint_f ?? null,
@@ -888,7 +889,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
 
   const stopBoxes = model.stops.length ? model.stops : [model.shipper, model.consignee];
   for (let index = 0; index < stopBoxes.length; index += 1) {
-    const gap = index === 0 ? 8 : 6;
+    const gap = STOP_BOX_GAP;
     const boxH = stopBoxHeight(doc, stopBoxes[index], width);
     ensureSpace(gap + boxH);
     y = drawStop(doc, left, y + gap, width, stopBoxes[index], boxH);
@@ -1165,20 +1166,71 @@ function stopQuantityLabel(stop: ConfirmationStop): string {
   return raw;
 }
 
-function stopMetaHeight(stop: ConfirmationStop): number {
-  const leftH = stop.hours.trim() ? 94 : 72;
-  return Math.max(64, leftH);
+/** Added air between Date/Time, Quantity/Weight, Appointment, PO/Conf/PU, Description. */
+const STOP_ROW_GAP = 6;
+const STOP_FIELD_H = 16;
+/** 8–10pt between Shipper and Consignee boxes. */
+const STOP_BOX_GAP = 10;
+const STOP_BOX_PAD = 8;
+const STOP_MIN_HEIGHT = 132;
+const STOP_LEFT_W = 250;
+const STOP_LABEL_W = 72;
+
+function timeNeedsOwnRow(doc: PDFKit.PDFDocument, time: string, halfValueWidth: number): boolean {
+  const text = time.trim();
+  if (!text) return false;
+  if (/[\n\r]/.test(text)) return true;
+  // FCFS windows like "8:00 AM – 5:00 PM" never share a column stack with Weight.
+  if (/[–—]|\bAM\s*-\s*\d|\bPM\s*-\s*\d/i.test(text)) return true;
+  doc.font("Helvetica-Bold").fontSize(11);
+  return doc.widthOfString(text) > halfValueWidth;
+}
+
+function planStopBox(doc: PDFKit.PDFDocument, stop: ConfirmationStop, width: number) {
+  const leftW = STOP_LEFT_W;
+  const rightW = width - leftW;
+  const half = rightW / 2;
+  const halfValueW = Math.max(36, half - 4 - STOP_LABEL_W);
+  const timeOwn = timeNeedsOwnRow(doc, stop.time, halfValueW);
+  const timeValueW = Math.max(36, (timeOwn ? rightW - 8 : half - 4) - STOP_LABEL_W);
+
+  doc.font("Helvetica-Bold").fontSize(12);
+  let leftH = STOP_BOX_PAD + 16 + 16;
+  doc.font("Helvetica-Bold").fontSize(11);
+  leftH += Math.max(13, Math.ceil(doc.heightOfString(stop.address || " ", { width: leftW - 8 }))) + 4;
+  if (stop.phone.trim()) leftH += 15;
+  if (stop.hours.trim()) leftH += 27;
+
+  doc.font("Helvetica-Bold").fontSize(11);
+  const timeH = timeOwn
+    ? Math.max(STOP_FIELD_H, Math.ceil(doc.heightOfString(stop.time || " ", { width: timeValueW })) + 2)
+    : STOP_FIELD_H;
+  let rightH = STOP_BOX_PAD + 2;
+  rightH += STOP_FIELD_H + STOP_ROW_GAP;
+  if (timeOwn) rightH += timeH + STOP_ROW_GAP;
+  rightH += STOP_FIELD_H + STOP_ROW_GAP;
+  rightH += STOP_FIELD_H + STOP_ROW_GAP;
+
+  let body = Math.max(leftH, rightH) + 4;
+  body += STOP_FIELD_H + STOP_ROW_GAP;
+  if (stop.description.trim()) body += 16;
+  if (stop.extra.trim()) {
+    doc.font("Helvetica").fontSize(10);
+    body += 6 + Math.max(14, Math.ceil(doc.heightOfString(stop.extra, { width: width - 12 })));
+  }
+  body += STOP_BOX_PAD;
+  return {
+    height: Math.max(STOP_MIN_HEIGHT, body),
+    timeOwn,
+    timeH,
+    leftW,
+    rightW,
+    half,
+  };
 }
 
 function stopBoxHeight(doc: PDFKit.PDFDocument, stop: ConfirmationStop, width = 540): number {
-  let height = stopMetaHeight(stop) + 22;
-  if (stop.description.trim()) height += 16;
-  const extra = stop.extra.trim();
-  if (extra) {
-    doc.font("Helvetica").fontSize(10);
-    height += 10 + Math.max(14, doc.heightOfString(extra, { width: width - 12 }));
-  }
-  return Math.max(96, height);
+  return planStopBox(doc, stop, width).height;
 }
 
 function drawStop(
@@ -1187,46 +1239,66 @@ function drawStop(
   y: number,
   width: number,
   stop: ConfirmationStop,
-  height = 102,
+  height = 132,
 ): number {
-  doc.rect(x, y, width, height).strokeColor(INK).lineWidth(1).stroke();
-  const leftW = 250;
-  doc.font("Helvetica-Bold").fontSize(12).fillColor(INK).text(stop.title, x + 6, y + 5, {
+  const plan = planStopBox(doc, stop, width);
+  const boxH = Math.max(height, plan.height);
+  doc.rect(x, y, width, boxH).strokeColor(INK).lineWidth(1).stroke();
+  const leftW = plan.leftW;
+  const rightW = plan.rightW;
+  const half = plan.half;
+  const rightX = x + leftW;
+
+  let leftY = y + STOP_BOX_PAD;
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(INK).text(stop.title, x + 6, leftY, {
     width: leftW - 8,
     lineBreak: false,
   });
-  doc.font("Helvetica-Bold").fontSize(12).text(stop.name || " ", x + 6, y + 19, {
+  leftY += 16;
+  doc.font("Helvetica-Bold").fontSize(12).text(stop.name || " ", x + 6, leftY, {
     width: leftW - 8,
     lineBreak: false,
   });
+  leftY += 16;
   doc.font("Helvetica-Bold").fontSize(11);
-  doc.text(stop.address || " ", x + 6, y + 34, { width: leftW - 8, lineBreak: true });
-  if (stop.phone) {
-    doc.font("Helvetica-Bold").fontSize(11).text(stop.phone, x + 6, y + 58, { width: leftW - 8, lineBreak: false });
+  const addressH = Math.max(13, Math.ceil(doc.heightOfString(stop.address || " ", { width: leftW - 8 })));
+  doc.text(stop.address || " ", x + 6, leftY, { width: leftW - 8, lineBreak: true });
+  leftY += addressH + 4;
+  if (stop.phone.trim()) {
+    doc.font("Helvetica-Bold").fontSize(11).text(stop.phone, x + 6, leftY, { width: leftW - 8, lineBreak: false });
+    leftY += 15;
   }
   if (stop.hours.trim()) {
     doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
-    doc.text(`${stop.hoursLabel}:`, x + 6, y + 70, { width: leftW - 8, lineBreak: false });
+    doc.text(`${stop.hoursLabel}:`, x + 6, leftY, { width: leftW - 8, lineBreak: false });
+    leftY += 12;
     doc.font("Helvetica-Bold").fontSize(11);
-    doc.text(stop.hours, x + 6, y + 80, { width: leftW - 8, lineBreak: false });
+    doc.text(stop.hours, x + 6, leftY, { width: leftW - 8, lineBreak: false });
+    leftY += 15;
   }
 
-  const rightX = x + leftW;
-  const rightW = width - leftW;
-  const half = rightW / 2;
-  kv(doc, rightX, y + 8, 72, half - 4, "Date", stop.date, true);
-  kv(doc, rightX + half, y + 8, 72, half - 4, "Time", stop.time, true);
-  kv(doc, rightX, y + 26, 72, half - 4, "Quantity", stopQuantityLabel(stop), true);
-  kv(doc, rightX + half, y + 26, 72, half - 4, "Weight", stop.weight ? `${stop.weight} lbs` : "", true);
-  kv(doc, rightX, y + 56, 88, rightW - 8, "Appointment", stop.appointment, true);
+  let rightY = y + STOP_BOX_PAD + 2;
+  kv(doc, rightX, rightY, STOP_LABEL_W, half - 4, "Date", stop.date, true);
+  if (!plan.timeOwn) {
+    kv(doc, rightX + half, rightY, STOP_LABEL_W, half - 4, "Time", stop.time, true);
+  }
+  rightY += STOP_FIELD_H + STOP_ROW_GAP;
+  if (plan.timeOwn) {
+    kvWrapped(doc, rightX, rightY, STOP_LABEL_W, rightW - 8, "Time", stop.time, plan.timeH);
+    rightY += plan.timeH + STOP_ROW_GAP;
+  }
+  kv(doc, rightX, rightY, STOP_LABEL_W, half - 4, "Quantity", stopQuantityLabel(stop), true);
+  kv(doc, rightX + half, rightY, STOP_LABEL_W, half - 4, "Weight", stop.weight ? `${stop.weight} lbs` : "", true);
+  rightY += STOP_FIELD_H + STOP_ROW_GAP;
+  kv(doc, rightX, rightY, 88, rightW - 8, "Appointment", stop.appointment, true);
+  rightY += STOP_FIELD_H + STOP_ROW_GAP;
 
-  const refsY = y + stopMetaHeight(stop) + 2;
+  let cursor = Math.max(leftY, rightY) + 4;
   const refW = width / 3;
-  kv(doc, x + 6, refsY, 36, refW - 8, "PO#", stop.poNumber, true);
-  kv(doc, x + 6 + refW, refsY, 48, refW - 8, "Conf#", stop.confirmationNumber, true);
-  kv(doc, x + 6 + refW * 2, refsY, 36, refW - 8, "PU#", stop.puNumber, true);
-
-  let cursor = refsY + 18;
+  kv(doc, x + 6, cursor, 36, refW - 8, "PO#", stop.poNumber, true);
+  kv(doc, x + 6 + refW, cursor, 48, refW - 8, "Conf#", stop.confirmationNumber, true);
+  kv(doc, x + 6 + refW * 2, cursor, 36, refW - 8, "PU#", stop.puNumber, true);
+  cursor += STOP_FIELD_H + STOP_ROW_GAP;
   if (stop.description.trim()) {
     doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text("Description:", x + 6, cursor, {
       width: 72,
@@ -1243,7 +1315,29 @@ function drawStop(
     doc.font("Helvetica").fontSize(10).fillColor(INK);
     doc.text(stop.extra, x + 6, cursor, { width: width - 12, lineBreak: true });
   }
-  return y + height;
+  return y + boxH;
+}
+
+function kvWrapped(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  labelW: number,
+  width: number,
+  label: string,
+  value: string,
+  height: number,
+): void {
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text(`${label}:`, x, y, {
+    width: labelW,
+    lineBreak: false,
+  });
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(INK);
+  doc.text(value || " ", x + labelW, y - 1, {
+    width: Math.max(36, width - labelW),
+    height: Math.max(14, height + 2),
+    lineBreak: true,
+  });
 }
 
 function kv(

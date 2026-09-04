@@ -25,15 +25,26 @@ export const BOL_TERMS =
 export const DRIVER_CONFIRMATION_TERMS_STUB =
   "Temperature-controlled loads run Continuous. Use two load locks. Check the setpoint with the shipper before you leave. Record every seal number on the BOL. Paperwork is required for every PO. Shortages or damages need a claim number before leaving the receiver. Notify dispatch one hour before detention starts. Receiving load texts is consent to SMS from dispatch.";
 
-/** Billing email lines belong on the customer/invoice sheet, not the driver packet. */
+/**
+ * Billing lecture belongs on the customer/invoice sheet, never the driver packet.
+ * Do not treat the period in billing@msloads.com as a sentence boundary.
+ */
 export function driverFacingTermsText(terms: string): string {
   return String(terms ?? "")
-    .replace(/Email invoices,[^.]*\./gi, "")
-    .replace(/Include the load number in the subject line\.?/gi, "")
-    .replace(/[^.]*billing@msloads\.com[^.]*\.?/gi, "")
-    .replace(/This sheet uses the MS Express load number[^.]*\./gi, "")
+    .replace(/to\s+ensure\s+prompt\s+payment[,:\s]*/gi, " ")
+    .replace(
+      /(?:please\s+)?e-?mail\s+(?:your\s+)?invoice(?:s)?(?:\s*,\s*(?:the\s+)?rate confirmation)?(?:\s*,?\s*(?:and|&)\s*(?:proof of delivery|p\.?o\.?d\.?))?(?:\s+to\s+)?billing@msloads\.com\.?/gi,
+      " ",
+    )
+    .replace(/\bbilling:\s*billing@msloads\.com/gi, " ")
+    .replace(/(?:include|with)\s+the\s+load\s+number\s+in\s+the\s+subject\s+line\.?/gi, " ")
+    .replace(/This sheet uses the MS Express load number[^\n]*?\./gi, " ")
+    .replace(/billing@msloads\.com/gi, " ")
+    .replace(/(?:please\s+)?e-?mail\s+(?:your\s+)?invoice(?:s)?(?:\s*,\s*(?:the\s+)?rate confirmation)?(?:\s*,?\s*(?:and|&)\s*(?:proof of delivery|p\.?o\.?d\.?))?(?:\s+to\s*)?\.?/gi, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s+\./g, ".")
+    .replace(/^[:\s,;]+/g, "")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
