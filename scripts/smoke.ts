@@ -1123,6 +1123,18 @@ async function main() {
   assert.doesNotMatch(emailInvoiceUi, /This load has no customer email/);
   assert.match(emailInvoiceUi, /Attach load documents/);
   assert.match(emailInvoiceUi, /Attach all/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/invoice-email-shared.ts"), "utf8"), /fillInvoiceEmailBody/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceEmailBodyForLoad/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /invoiceEmailBodyForLoad\(load, invoice\)/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"),
+    /invoiceEmailBody=\{getInvoiceEmailBody\(\)\}/,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8"), /invoiceEmailBodyForLoad\(row\)/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8"),
+    /invoiceEmailBody: getInvoiceEmailBody\(\)/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/invoice-email/page.tsx"), "utf8"), /invoice_email_body/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8"), /\/settings\/invoice-email/);
   const deskShared = fs.readFileSync(path.join(process.cwd(), "lib/accounting-desk-shared.ts"), "utf8");
@@ -3688,7 +3700,7 @@ async function main() {
   });
   assert.match(invoiceDraftWithDocs.text, /Also attached: BOL, Lumper/);
   assert.doesNotMatch(invoiceDraft.text, /Also attached/);
-  const { DEFAULT_INVOICE_EMAIL_BODY } = await import("../lib/invoice-email-shared");
+  const { DEFAULT_INVOICE_EMAIL_BODY, fillInvoiceEmailBody } = await import("../lib/invoice-email-shared");
   const invoiceLetter = loadMail.composeCustomerInvoiceEmail({
     invoiceNumber: "INV-12345",
     loadNumber: "12345",
@@ -3704,6 +3716,32 @@ async function main() {
   assert.match(invoiceLetter.text, /Thank you for your business/);
   assert.match(invoiceLetter.text, /Also attached: BOL/);
   assert.doesNotMatch(invoiceLetter.text, /Do not reply|not monitored/);
+  const filledDialogBody = fillInvoiceEmailBody(DEFAULT_INVOICE_EMAIL_BODY, {
+    customerName: "M&S Loads",
+    invoiceNumber: "INV-1006153",
+    loadId: "1006153",
+    invoiceTotal: "$2,150.00",
+  });
+  assert.equal(
+    filledDialogBody,
+    [
+      "Dear M&S Loads,",
+      "",
+      "Attached is your invoice INV-1006153 for load 1006153. Total: $2,150.00.",
+      "",
+      "Thank you for your business.",
+    ].join("\n"),
+  );
+  assert.doesNotMatch(filledDialogBody, /\[[^\]]+\]/);
+  const blankDialogBody = fillInvoiceEmailBody(DEFAULT_INVOICE_EMAIL_BODY, {
+    customerName: "",
+    invoiceNumber: "",
+    loadId: "",
+    invoiceTotal: "",
+  });
+  assert.doesNotMatch(blankDialogBody, /\[[^\]]+\]/);
+  assert.match(blankDialogBody, /Dear ,/);
+  assert.doesNotMatch(blankDialogBody, /contact_name|\[customer_name\]/);
   assert.equal(
     loadMail.customerFacingLoadNumber({
       load_number: "MSE-1055",
@@ -3722,6 +3760,48 @@ async function main() {
     }),
     "",
   );
+  const invoiceBodyCustomerId = queries.createCustomer({
+    name: "M&S Loads",
+    billing_notes: "",
+    contacts: [{ name: "Not The Company", role: "AP", phone: "555-0199", email: "ap@msloads.example" }],
+  });
+  const invoiceBodyLoadId = queries.createLoad({
+    customer_id: invoiceBodyCustomerId,
+    load_number: "MSE-1055-BODY",
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 2150,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    customer_reference: "1006153",
+    contact_name: "Not The Company",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  queries.markTmsInvoice(invoiceBodyLoadId, "INV-1006153", new Date().toISOString());
+  const invoiceBodyLoad = queries.getLoad(invoiceBodyLoadId);
+  assert.ok(invoiceBodyLoad);
+  assert.equal(invoiceBodyLoad.contact_name, "Not The Company");
+  const dialogBody = loadMail.invoiceEmailBodyForLoad(invoiceBodyLoad);
+  assert.match(dialogBody, /Dear M&S Loads,/);
+  assert.doesNotMatch(dialogBody, /Not The Company|contact_name/);
+  assert.match(dialogBody, /invoice INV-1006153/);
+  assert.match(dialogBody, /load 1006153/);
+  assert.doesNotMatch(dialogBody, /MSE-1055-BODY/);
+  assert.match(dialogBody, /\$2,150\.00/);
+  assert.doesNotMatch(dialogBody, /\[[^\]]+\]/);
   const customerByRef = loadMail.composeCustomerUpdateEmail({
     loadNumber: "45090",
     customerRef: "45090",
