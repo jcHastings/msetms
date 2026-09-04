@@ -15319,6 +15319,11 @@ DISPATCH CONFIRMATION
     "driver_facing",
   );
   assert.equal(
+    invoiceMailDocumentRole({ kind: "other", original_name: "1006153-carrier-confirmation.pdf" }),
+    "driver_facing",
+  );
+  assert.equal(isInvoiceMailCustomerDoc({ kind: "other", original_name: "1006153-carrier-confirmation.pdf" }), false);
+  assert.equal(
     invoiceMailDocumentRole({ kind: "other", original_name: "MSE-1063-customer-confirmation.pdf" }),
     "customer_confirmation",
   );
