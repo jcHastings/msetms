@@ -7434,7 +7434,10 @@ DISPATCH CONFIRMATION
   assert.equal(deniseConfirm.loadNumber, deniseLoad.load_number);
   const denisePdf = await confirmation.renderConfirmationPdf(deniseConfirm);
   assert.equal(denisePdf.subarray(0, 4).toString(), "%PDF");
-  assert.equal((await PDFDocument.load(denisePdf)).getPageCount(), 1, "company confirmation must be one page");
+  assert.ok(
+    (await PDFDocument.load(denisePdf)).getPageCount() <= 2,
+    "company confirmation may use a second page instead of cramming stop boxes",
+  );
   const deniseText = String((await extractText(new Uint8Array(denisePdf), { mergePages: true })).text ?? "");
   assert.match(deniseText, /Customer Confirmation/);
   assert.doesNotMatch(deniseText, /Rate & Load Confirmation/);
