@@ -8282,7 +8282,10 @@ DISPATCH CONFIRMATION
   assert.match(billedPacket.shipper.address, /600 E 39th/);
   assert.match(billedPacket.consignee.address, /12 Test Dock Rd/);
   const billedPdf = await confirmation.renderConfirmationPdf(billedPacket);
-  assert.equal((await PDFDocument.load(billedPdf)).getPageCount(), 1, "customer confirmation must be one page");
+  assert.ok(
+    (await PDFDocument.load(billedPdf)).getPageCount() <= 2,
+    "customer confirmation may use a second page instead of cramming stop boxes",
+  );
   const billedText = String((await extractText(new Uint8Array(billedPdf), { mergePages: true })).text ?? "");
   assert.match(billedText, /Customer Confirmation/);
   assert.match(billedText, /Westside Foods Billing Co/);
