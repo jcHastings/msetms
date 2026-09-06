@@ -16310,7 +16310,12 @@ DISPATCH CONFIRMATION
     .map((file) => fs.readFileSync(path.join(process.cwd(), "components", file), "utf8"))
     .join("\n");
   const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
-  const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
+  const pageSubtitles =
+    [...pageCopy.matchAll(/<PageHeader\b[\s\S]*?>/g)]
+      .map((match) => match[0])
+      .join("\n")
+      .match(/subtitle=\{?`?["'][^"'`]+["'`]/g)
+      ?.join("\n") ?? "";
   assert.equal(pageSubtitles, "", "app pages must not print helper PageHeader subtitles");
   assert.doesNotMatch(componentCopy, /subtitle="[^"]+"/);
   assert.match(
