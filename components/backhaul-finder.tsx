@@ -37,6 +37,7 @@ function LoadRow({ row }: { row: BackhaulLoadRow }) {
       </td>
       <td>{row.customer}</td>
       <td>{row.pickup}</td>
+      <td>{row.delivery}</td>
       <td className="backhaul-num backhaul-nearest">{row.miles} mi</td>
     </>
   );
@@ -50,7 +51,12 @@ function LoadCard({ row }: { row: BackhaulLoadRow }) {
       </Link>
       <div className="backhaul-card-customer">{row.customer}</div>
       <div className="backhaul-lane">
-        <span>{row.pickup}</span>
+        <span>
+          <span className="backhaul-stop-kind">Pickup</span> {row.pickup}
+        </span>
+        <span>
+          <span className="backhaul-stop-kind">Delivery</span> {row.delivery}
+        </span>
       </div>
       <div className="backhaul-card-meta">
         <span className="backhaul-nearest">{row.miles} mi</span>
@@ -110,6 +116,7 @@ function FinderBody({
               <th>Load</th>
               <th>Customer</th>
               <th>Pickup</th>
+              <th>Delivery</th>
               <th className="backhaul-num">Mi</th>
             </tr>
           </thead>

@@ -76,6 +76,10 @@ export const US_CITY_CENTERS: CityCenter[] = [
   { label: "Newark, NJ", city: "Newark", state: "NJ", lat: 40.7357, lng: -74.1724, aliases: ["newark"] },
   { label: "Edison, NJ", city: "Edison", state: "NJ", lat: 40.5187, lng: -74.4121, aliases: ["edison"] },
   { label: "Philadelphia, PA", city: "Philadelphia", state: "PA", lat: 39.9526, lng: -75.1652, aliases: ["philadelphia", "philly"] },
+  { label: "Buffalo, NY", city: "Buffalo", state: "NY", lat: 42.8864, lng: -78.8784, aliases: ["buffalo"] },
+  { label: "Maspeth, NY", city: "Maspeth", state: "NY", lat: 40.7234, lng: -73.9124, aliases: ["maspeth"] },
+  { label: "Yonkers, NY", city: "Yonkers", state: "NY", lat: 40.9312, lng: -73.8988, aliases: ["yonkers"] },
+  { label: "Brooklyn Park, MN", city: "Brooklyn Park", state: "MN", lat: 45.0941, lng: -93.3563, aliases: ["brooklyn park"] },
 ];
 
 const STATE_NAME_TO_ABBR: Record<string, string> = {
@@ -131,6 +135,8 @@ const STATE_NAME_TO_ABBR: Record<string, string> = {
   wyoming: "wy",
 };
 
+const STATE_ABBRS = new Set<string>([...Object.values(STATE_NAME_TO_ABBR), "dc"]);
+
 export function normalizeCityKey(value: string): string {
   let text = value
     .toLowerCase()
@@ -142,6 +148,32 @@ export function normalizeCityKey(value: string): string {
     text = text.replace(new RegExp(`\\b${name}\\b`, "g"), abbr);
   }
   return text.replace(/\s+/g, " ").trim();
+}
+
+function cityTokensWithoutState(key: string): string {
+  return key
+    .split(" ")
+    .filter((token) => token && !STATE_ABBRS.has(token))
+    .join(" ");
+}
+
+function stateTokenFromKey(key: string): string {
+  return key.split(" ").find((token) => STATE_ABBRS.has(token)) ?? "";
+}
+
+/** Same city (and state when both sides have one). Never "Brooklyn Park" → "Brooklyn". */
+export function cityKeysEquivalent(asked: string, candidate: string): boolean {
+  const a = normalizeCityKey(asked);
+  const c = normalizeCityKey(candidate);
+  if (!a || !c) return false;
+  if (a === c) return true;
+  const aCity = cityTokensWithoutState(a);
+  const cCity = cityTokensWithoutState(c);
+  if (!aCity || !cCity || aCity !== cCity) return false;
+  const aState = stateTokenFromKey(a);
+  const cState = stateTokenFromKey(c);
+  if (aState && cState && aState !== cState) return false;
+  return true;
 }
 
 export function isClosestCityQuestion(question: string): boolean {
@@ -190,7 +222,7 @@ export function findExactCityCenter(
   if (saved && saved.lat != null && saved.lng != null) {
     return { label: `${saved.city} ${saved.state}`.trim(), lat: saved.lat, lng: saved.lng };
   }
-  return findCityCenter([city, state].filter(Boolean).join(", "), locations);
+  return null;
 }
 
 export function findCityCenter(
@@ -201,16 +233,16 @@ export function findCityCenter(
   if (!key) return null;
 
   const known = US_CITY_CENTERS.find((city) => {
-    const names = [city.label, city.city, `${city.city} ${city.state}`, ...city.aliases].map(normalizeCityKey);
-    return names.some((name) => name && (key === name || key.includes(name) || name.includes(key)));
+    const names = [city.label, city.city, `${city.city} ${city.state}`, ...city.aliases];
+    return names.some((name) => cityKeysEquivalent(key, name));
   });
   if (known) return { label: known.label, lat: known.lat, lng: known.lng };
 
   const saved = locations.find((location) => {
     if (location.lat == null || location.lng == null) return false;
-    const city = normalizeCityKey(`${location.city} ${location.state}`);
-    const name = normalizeCityKey(location.name);
-    return (city && (key === city || key.includes(city) || city.includes(key))) || (name && key.includes(name));
+    const city = `${location.city} ${location.state}`.trim();
+    const name = location.name;
+    return cityKeysEquivalent(key, city) || cityKeysEquivalent(key, name);
   });
   if (saved && saved.lat != null && saved.lng != null) {
     return { label: `${saved.name}, ${saved.city} ${saved.state}`.trim(), lat: saved.lat, lng: saved.lng };

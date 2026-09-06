@@ -472,6 +472,8 @@ async function main() {
   assert.match(backhaulUi, /Try again/);
   assert.match(backhaulUi, /data-backhaul-card/);
   assert.match(backhaulUi, /Pickup/);
+  assert.match(backhaulUi, /Delivery/);
+  assert.match(backhaulUi, /row\.delivery/);
   assert.match(backhaulUi, /BACKHAUL_RULE/);
   assert.doesNotMatch(backhaulUi, /PU \/ Del/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /sheetOnPhone/);
@@ -2499,16 +2501,23 @@ async function main() {
   assert.match(compactUi, /data-attention-reason/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /exception-reason \{[\s\S]*-webkit-line-clamp: 2;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: visible;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
-  assert.match(workbenchCardUi, /data-workbench-map-thumb/);
+  assert.match(workbenchCardUi, /data-workbench-map-pane/);
   assert.match(workbenchCardUi, /workbench-card-issues/);
   assert.match(workbenchCardUi, /No open issues/);
-  assert.match(workbenchCardUi, /h-20 w-20/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /min-height: 11\.5rem/);
+  assert.match(workbenchCardUi, /disableDefaultUi/);
+  assert.doesNotMatch(workbenchCardUi, /data-workbench-map-thumb/);
+  assert.doesNotMatch(workbenchCardUi, /h-20 w-20/);
+  assert.doesNotMatch(workbenchCardUi, /workbench-map-thumb/);
+  const workbenchCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+  assert.match(workbenchCss, /min-height: 14\.5rem/);
+  assert.match(workbenchCss, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(workbenchCss, /\.workbench-map-pane/);
+  assert.doesNotMatch(workbenchCss, /\.workbench-map-thumb/);
   assert.match(workbenchCardUi, /mapsBrowserKey/);
   assert.match(workbenchCardUi, /data-workbench-lane-sketch/);
   assert.match(workbenchCardUi, /LoadCardFastActions/);
@@ -2520,7 +2529,12 @@ async function main() {
   assert.doesNotMatch(workbenchCardUi, /min-h-\[14rem\]/);
   assert.doesNotMatch(workbenchCardUi, /md:grid-cols-\[minmax/);
   assert.doesNotMatch(workbenchCardUi, /maps\.google\.com\/maps\?/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /maps\.googleapis\.com\/maps\/api\/js/);
+  const mapCanvasUi = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
+  assert.match(mapCanvasUi, /maps\.googleapis\.com\/maps\/api\/js/);
+  assert.match(mapCanvasUi, /disableDefaultUi/);
+  assert.match(mapCanvasUi, /disableDefaultUI: disableDefaultUi/);
+  assert.match(mapCanvasUi, /zoomControl: !disableDefaultUi/);
+  assert.match(mapCanvasUi, /fullscreenControl: !disableDefaultUi/);
   const { isOutOfToleranceException } = await import("../lib/exceptions");
   assert.equal(isOutOfToleranceException({ kind: "late", severity: "MEDIUM" }), false);
   assert.equal(isOutOfToleranceException({ kind: "late", severity: "HIGH" }), true);
@@ -18024,6 +18038,25 @@ parked for next week
   const bronx = findCityCenter("Bronx, NY")!;
   const newark = findCityCenter("Newark, NJ")!;
   const chicago = findCityCenter("Chicago, IL")!;
+  const exactBuffalo = findExactCityCenter("Buffalo", "NY");
+  const exactBrooklynPark = findExactCityCenter("Brooklyn Park", "MN");
+  const exactMaspeth = findExactCityCenter("Maspeth", "NY");
+  const fuzzyBrooklynPark = findCityCenter("Brooklyn Park, MN");
+  assert.ok(exactBuffalo, "Buffalo must resolve to Buffalo, not a NYC borough");
+  assert.ok(exactBrooklynPark, "Brooklyn Park MN must resolve to Minnesota");
+  assert.ok(exactMaspeth, "Maspeth NY must resolve as its own city");
+  assert.match(exactBuffalo!.label, /Buffalo/i);
+  assert.match(exactBrooklynPark!.label, /Brooklyn Park/i);
+  assert.doesNotMatch(exactBrooklynPark!.label, /Brooklyn, NY/);
+  assert.ok(fuzzyBrooklynPark);
+  assert.match(fuzzyBrooklynPark!.label, /Brooklyn Park/i);
+  assert.doesNotMatch(fuzzyBrooklynPark!.label, /Brooklyn, NY/);
+  const buffaloMi = haversineMiles(bronx.lat, bronx.lng, exactBuffalo!.lat, exactBuffalo!.lng);
+  const brooklynParkMi = haversineMiles(bronx.lat, bronx.lng, exactBrooklynPark!.lat, exactBrooklynPark!.lng);
+  const maspethMi = haversineMiles(bronx.lat, bronx.lng, exactMaspeth!.lat, exactMaspeth!.lng);
+  assert.ok(buffaloMi > 150, `Buffalo is hundreds of miles from the Bronx, got ${buffaloMi}`);
+  assert.ok(brooklynParkMi > 150, `Brooklyn Park MN cannot be ≤150 mi from the Bronx, got ${brooklynParkMi}`);
+  assert.ok(maspethMi <= 150, `Maspeth NY is a real nearby pickup, got ${maspethMi}`);
   const newarkMi = haversineMiles(bronx.lat, bronx.lng, newark.lat, newark.lng);
   const chicagoMi = haversineMiles(bronx.lat, bronx.lng, chicago.lat, chicago.lng);
   assert.ok(backhaulShared.isWithinBackhaulRadius(newarkMi), "Newark is inside 150 mi of the Bronx");
@@ -18033,6 +18066,9 @@ parked for next week
   const westsideId = queries.findOrCreateCustomer("Westside Foods");
   const expressId = queries.findOrCreateCustomer("24/7 Express");
   const farCustomerId = queries.findOrCreateCustomer("Prairie Grain Cooperative");
+  const gampacId = queries.findOrCreateCustomer("Gampac Logistics");
+  const campAgudahId = queries.findOrCreateCustomer("Camp Agudah midwest");
+  const easeId = queries.findOrCreateCustomer("Ease Logistics Services, LLC");
   function backhaulLaneLoad(input: {
     load_number: string;
     customer_id: number;
@@ -18152,9 +18188,46 @@ parked for next week
     pickup_start: "2026-04-01T12:00:00.000Z",
     delivery_start: "2026-04-02T12:00:00.000Z",
   });
+  const buffaloPickupId = backhaulLaneLoad({
+    load_number: "1006089",
+    customer_id: gampacId,
+    origin: "Buffalo, NY",
+    destination: "Chicago, IL",
+    pickup_start: "2026-07-30T12:00:00.000Z",
+    delivery_start: "2026-07-31T12:00:00.000Z",
+  });
+  const maspethPickupId = backhaulLaneLoad({
+    load_number: "1005968",
+    customer_id: campAgudahId,
+    origin: "Maspeth, NY",
+    destination: "Boston, MA",
+    pickup_start: "2026-06-16T12:00:00.000Z",
+    delivery_start: "2026-06-17T12:00:00.000Z",
+  });
+  const brooklynParkPickupId = backhaulLaneLoad({
+    load_number: "1006077",
+    customer_id: easeId,
+    origin: "Brooklyn Park, MN",
+    destination: "Dallas, TX",
+    pickup_start: "2026-07-27T12:00:00.000Z",
+    delivery_start: "2026-07-28T12:00:00.000Z",
+  });
   assert.equal(backhaulShared.isBlankPlacePart("TBD"), true);
   assert.equal(backhaulShared.isBlankPlacePart("Bronx"), false);
-  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId, deliveryOnlyNearId, cancelledId, missingId]) {
+  for (const id of [
+    sourceId,
+    nearId,
+    midId,
+    closestId,
+    houseNearId,
+    farId,
+    deliveryOnlyNearId,
+    cancelledId,
+    missingId,
+    buffaloPickupId,
+    maspethPickupId,
+    brooklynParkPickupId,
+  ]) {
     stopsMod.ensureDefaultStops(id);
   }
   const found = await backhaul.findBackhaulForLoad(sourceId);
@@ -18174,6 +18247,18 @@ parked for next week
     foundNumbers.includes("MSE-BH55"),
     false,
     "candidate whose delivery is near the center but pickup is far must be excluded",
+  );
+  assert.equal(foundNumbers.includes("1006089"), false, "Buffalo pickup is hundreds of miles from Bronx delivery");
+  assert.equal(foundNumbers.includes("1006077"), false, "Brooklyn Park MN pickup cannot be ≤150 mi from Bronx");
+  assert.ok(foundNumbers.includes("1005968"), "Maspeth NY pickup is a real nearby backhaul");
+  const jcMaspeth = found.loads.find((row) => row.loadNumber === "1005968");
+  assert.ok(jcMaspeth);
+  assert.match(jcMaspeth.pickup, /Maspeth/i);
+  assert.match(jcMaspeth.delivery, /Boston/i);
+  assert.ok(jcMaspeth.miles <= 150, `Maspeth miles must be Bronx DEL→PU, got ${jcMaspeth.miles}`);
+  assert.ok(
+    found.loads.every((row) => Boolean(row.pickup?.trim()) && Boolean(row.delivery?.trim())),
+    "every backhaul row must show pickup city AND delivery city",
   );
   assert.equal(typeof found.total, "number");
   assert.ok(found.total >= found.loads.length);

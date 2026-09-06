@@ -107,25 +107,23 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
       data-workbench-card=""
       data-attention-load={group.loadNumber}
     >
-      <div className="workbench-card-header flex items-start gap-2.5 px-3 pt-3">
-        <div
-          className="workbench-map-thumb h-20 w-20 shrink-0 overflow-hidden"
-          data-workbench-map-thumb=""
-        >
-          {apiKey ? (
-            <LoadMapCanvas
-              apiKey={apiKey}
-              points={points}
-              path={path}
-              className="h-full w-full overflow-hidden bg-slate-100"
-              missingKeyMessage="Map is off."
-              emptyMessage="No map"
-            />
-          ) : (
-            <WorkbenchLaneSketch points={points} path={path} />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
+      <div className="workbench-map-pane" data-workbench-map-pane="">
+        {apiKey ? (
+          <LoadMapCanvas
+            apiKey={apiKey}
+            points={points}
+            path={path}
+            disableDefaultUi
+            className="h-full w-full overflow-hidden bg-slate-100"
+            missingKeyMessage="Map is off."
+            emptyMessage="No map"
+          />
+        ) : (
+          <WorkbenchLaneSketch points={points} path={path} />
+        )}
+      </div>
+      <div className="workbench-card-content">
+        <div className="workbench-card-header px-3 pt-3">
           <div className="flex items-start justify-between gap-2">
             <Link
               href={`/loads/${group.loadId}`}
@@ -147,14 +145,14 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             {group.destination}
           </div>
         </div>
+        <ul className="workbench-card-issues mt-2 space-y-1.5 border-t border-slate-100 px-3 pb-2.5 pt-2">
+          {group.items.length === 0 ? (
+            <li className="text-xs text-slate-500">No open issues</li>
+          ) : (
+            group.items.map((item) => <ExceptionIssueLine key={item.id} item={item} compact />)
+          )}
+        </ul>
       </div>
-      <ul className="workbench-card-issues mt-2 space-y-1.5 border-t border-slate-100 px-3 pb-2.5 pt-2">
-        {group.items.length === 0 ? (
-          <li className="text-xs text-slate-500">No open issues</li>
-        ) : (
-          group.items.map((item) => <ExceptionIssueLine key={item.id} item={item} compact />)
-        )}
-      </ul>
     </article>
   );
 }
