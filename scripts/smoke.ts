@@ -471,11 +471,19 @@ async function main() {
   assert.match(backhaulUi, /Open load/);
   assert.match(backhaulUi, /Try again/);
   assert.match(backhaulUi, /data-backhaul-card/);
-  assert.match(backhaulUi, /Pickup/);
-  assert.match(backhaulUi, /Delivery/);
+  assert.match(backhaulUi, /<th>Pickup<\/th>/);
+  assert.match(backhaulUi, /<th>Delivery<\/th>/);
+  assert.match(backhaulUi, /<th>Date<\/th>/);
+  assert.match(backhaulUi, /row\.pickup/);
   assert.match(backhaulUi, /row\.delivery/);
+  assert.match(backhaulUi, /row\.date/);
+  assert.match(backhaulUi, /PU \{row\.pickup\}/);
+  assert.match(backhaulUi, /DEL \{row\.delivery\}/);
+  assert.match(backhaulUi, /data-backhaul-pu/);
+  assert.match(backhaulUi, /data-backhaul-del/);
   assert.match(backhaulUi, /BACKHAUL_RULE/);
   assert.doesNotMatch(backhaulUi, /PU \/ Del/);
+  assert.doesNotMatch(backhaulUi, /backhaul-stop-kind/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /sheetOnPhone/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /action-phone-sheet/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/backhaul/route.ts"), "utf8"), /findBackhaulForLoad/);
@@ -18257,9 +18265,12 @@ parked for next week
   assert.match(jcMaspeth.delivery, /Boston/i);
   assert.ok(jcMaspeth.miles <= 150, `Maspeth miles must be Bronx DEL→PU, got ${jcMaspeth.miles}`);
   assert.ok(
-    found.loads.every((row) => Boolean(row.pickup?.trim()) && Boolean(row.delivery?.trim())),
-    "every backhaul row must show pickup city AND delivery city",
+    found.loads.every(
+      (row) => Boolean(row.pickup?.trim()) && Boolean(row.delivery?.trim()) && Boolean(row.date?.trim()),
+    ),
+    "every backhaul row must show pickup city, delivery city, and date",
   );
+  assert.match(jcMaspeth.date, /\d{2}\/\d{2}\/\d{2}/);
   assert.equal(typeof found.total, "number");
   assert.ok(found.total >= found.loads.length);
   const bh72 = found.loads.find((row) => row.loadNumber === "MSE-BH72");
