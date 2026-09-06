@@ -2530,17 +2530,6 @@ html:has([data-load-embed]) body {
   overflow: visible;
 }
 
-.btn.load-action-find {
-  padding: 0.35rem 0.55rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.btn.load-action-find:hover {
-  color: var(--link);
-}
-
 .backhaul-backdrop {
   position: fixed;
   inset: 0;
@@ -2593,9 +2582,6 @@ html:has([data-load-embed]) body {
 }
 
 .backhaul-source {
-  display: inline-block;
-  margin-top: 0.2rem;
-  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -2635,6 +2621,15 @@ html:has([data-load-embed]) body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.backhaul-rule {
+  margin: 0 0 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .backhaul-table {

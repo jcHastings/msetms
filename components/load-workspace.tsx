@@ -19,7 +19,6 @@ import {
   watchLoadAction,
 } from "@/lib/dispatcher-actions";
 import { BackhaulFinderHost } from "@/components/backhaul-finder";
-import { HoverActionMenu } from "@/components/hover-action-menu";
 import { EmailCustomerUpdateButton, LoadMailMenuItems } from "@/components/load-mail-panel";
 import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
@@ -523,16 +522,14 @@ export function LoadWorkspace({
         ) : null}
         <BackhaulFinderHost loadId={loadId}>
           {(openFinder) => (
-            <HoverActionMenu label="Find" triggerClassName="btn btn-ghost load-action-find">
-              <button
-                type="button"
-                className="menu-item w-full text-left"
-                data-backhaul-finder-action=""
-                onClick={openFinder}
-              >
-                Backhaul Finder
-              </button>
-            </HoverActionMenu>
+            <button
+              type="button"
+              className="btn load-action-btn"
+              data-backhaul-finder-action=""
+              onClick={openFinder}
+            >
+              Backhaul Finder
+            </button>
           )}
         </BackhaulFinderHost>
         <ActionMenu label="Copy / Cancel / Archive" openMenu={openMenu} setOpenMenu={setOpenMenu} closer={menuCloser}>
