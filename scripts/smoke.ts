@@ -1050,7 +1050,7 @@ async function main() {
   assert.match(mapCanvasSource, /labelOrigin/);
   assert.match(mapCanvasSource, /point\.labelOrigin/);
   assert.match(mapCanvasSource, /loadMapIconLayout|LOAD_MAP_PIN_TIP_X|LOAD_MAP_PIN_TIP_Y/);
-  assert.match(mapCanvasSource, /gestureHandling: "greedy"/);
+  assert.match(mapCanvasSource, /gestureHandling: disableDefaultUi \? "cooperative" : "greedy"/);
   assert.match(mapCanvasSource, /defaultLoadMapLabelOrigin/);
   assert.match(mapCanvasSource, /loadMapPinIconUrl/);
   assert.doesNotMatch(mapCanvasSource, /SymbolPath|FORWARD_CLOSED_ARROW/);
