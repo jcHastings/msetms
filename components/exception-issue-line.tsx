@@ -1,6 +1,8 @@
 import { exceptionAction } from "@/lib/dispatcher-actions";
 import {
   attentionLabel,
+  exceptionReasonText,
+  exceptionReasonTooltip,
   labelForExceptionKind,
   type ExceptionSeverity,
   type InboxException,
@@ -17,11 +19,21 @@ const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
 export function ExceptionIssueLine({ item, compact = false }: { item: InboxException; compact?: boolean }) {
   const state = exceptionStateFor(item);
   if (compact) {
+    const reason = exceptionReasonText(item);
+    const tooltip = exceptionReasonTooltip(item);
     return (
-      <li className="min-w-0" data-attention-issue={item.kind}>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className={`status-pill shrink-0 ${SEVERITY_CLASS[item.severity]}`}>{attentionLabel(item)}</span>
-          <span className="truncate text-xs font-medium text-slate-800">{item.title}</span>
+      <li className="min-w-0" data-attention-issue={item.kind} title={tooltip}>
+        <div className="flex min-w-0 flex-wrap items-start gap-1.5">
+          <span className={`status-pill shrink-0 ${SEVERITY_CLASS[item.severity]}`} title={tooltip}>
+            {attentionLabel(item)}
+          </span>
+          <span
+            className="min-w-0 flex-1 whitespace-normal break-words text-xs font-medium text-slate-800"
+            data-attention-reason=""
+            title={tooltip}
+          >
+            {reason}
+          </span>
         </div>
       </li>
     );

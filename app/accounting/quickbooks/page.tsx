@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { QBO_MAP_TABS, hubTabClass, parseQboMapTab } from "@/lib/accounting-desk-shared";
-import { listQboItemMaps, listQboVendorMaps } from "@/lib/accounting-desk";
 import { disconnectQuickbooksAction } from "@/lib/actions";
 import {
   saveQboCustomerMapFormAction,
@@ -9,44 +8,71 @@ import {
   saveQboVendorMapFormAction,
 } from "@/lib/dispatcher-actions";
 import { canConnectQuickbooks, getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { getQuickbooksStatus, listQboCustomers, listQboItems, listQboVendors } from "@/lib/integrations/quickbooks";
 import { PAY_ITEM_CATEGORIES } from "@/lib/load-page-shared";
-import { listCustomers, listCustomersNeedingQbo, listDrivers } from "@/lib/queries";
-import { listBills } from "@/lib/accounting";
-import { isOwnerOperator } from "@/lib/types";
+import { loadQuickbooksDesk } from "@/lib/quickbooks-desk";
 
 export const dynamic = "force-dynamic";
+
+function QboSoftFail({ message }: { message: string }) {
+  return (
+    <section className="card space-y-3 p-5" data-qbo-soft-fail="">
+      <h1 className="text-sm font-semibold">QuickBooks</h1>
+      <p className="text-sm text-slate-600">
+        QuickBooks could not finish loading. Connection settings were not changed.
+      </p>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">{message}</p>
+      <Link href="/settings/quickbooks" className="btn btn-secondary">
+        Settings → QuickBooks
+      </Link>
+    </section>
+  );
+}
 
 export default async function QuickbooksAccountingPage({
   searchParams,
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  try {
+    return await renderQuickbooksAccountingPage(searchParams);
+  } catch (error) {
+    return (
+      <QboSoftFail
+        message={error instanceof Error && error.message.trim() ? error.message : "QuickBooks is unavailable."}
+      />
+    );
+  }
+}
+
+async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: string }>) {
   const params = await searchParams;
   const tab = parseQboMapTab(params.tab);
   const dispatcher = await getSignedInDispatcher();
   const canConnect = dispatcher ? canConnectQuickbooks(dispatcher.role) : false;
-  const qbo = await getQuickbooksStatus();
-  const qboCustomers = await listQboCustomers();
-  const qboItems = await listQboItems();
-  const qboVendors = await listQboVendors();
-  const customers = listCustomers();
-  const needsCustomer = listCustomersNeedingQbo();
-  const itemMaps = listQboItemMaps();
-  const vendorMaps = listQboVendorMaps();
-  const vendorNames = [
-    ...listDrivers()
-      .filter((driver) => isOwnerOperator(driver.driver_type))
-      .map((driver) => driver.name),
-    ...listBills().map((bill) => bill.vendor),
-  ].filter((name, index, all) => name.trim() && all.indexOf(name) === index);
+  const {
+    qbo,
+    qboCustomers,
+    qboItems,
+    qboVendors,
+    customers,
+    needsCustomer,
+    itemMaps,
+    vendorMaps,
+    vendorNames,
+    error,
+  } = await loadQuickbooksDesk(tab);
 
   return (
-    <>
+    <div data-qbo-accounting="">
       <PageHeader dense title="Accounting Management" />
       <p className="mb-3 text-[12.5px] text-slate-600">
         Perform accounting related tasks on loads that have been Sent to Accounting.
       </p>
+      {error ? (
+        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-qbo-soft-fail="">
+          {error}
+        </p>
+      ) : null}
       <nav className="acct-hub-tabs">
         {QBO_MAP_TABS.map((item) => (
           <Link
@@ -282,6 +308,6 @@ export default async function QuickbooksAccountingPage({
           </table>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }

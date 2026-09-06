@@ -44,7 +44,7 @@ import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
-import { loadNeedsCriticalTag } from "@/lib/exceptions";
+import { loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
@@ -143,7 +143,9 @@ export async function LoadEditor({
               <div className="flex items-center gap-3">
                 <CopyTripNumber value={load.load_number} />
                 <LoadStatusBadge status={load.status} />
-                {loadNeedsCriticalTag(load.id) ? <CriticalTag /> : null}
+                {loadNeedsCriticalTag(load.id) ? (
+                  <CriticalTag reason={loadCriticalReasons(load.id).join(" · ")} />
+                ) : null}
                 <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
                 {load.qbo_invoice_number || load.qbo_invoice_id ? (
                   <span className="text-sm text-slate-600">

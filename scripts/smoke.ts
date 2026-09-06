@@ -44,8 +44,11 @@ async function main() {
   assert.doesNotMatch(navSource, /href: "\/reports", label: "Claims"|href: "\/claims".*\/reports/);
   assert.match(navSource, /data-nav-href=\{item\.href\}/);
   assert.match(navSource, /isDeskNavActive/);
-  assert.match(navSource, /prefetch=\{item\.href === "\/claims"/);
-  const { isDeskNavActive } = await import("../lib/desk-nav-shared");
+  assert.match(navSource, /shouldPrefetchDeskNav/);
+  const { isDeskNavActive, shouldPrefetchDeskNav } = await import("../lib/desk-nav-shared");
+  assert.equal(shouldPrefetchDeskNav("/claims"), false);
+  assert.equal(shouldPrefetchDeskNav("/accounting/quickbooks"), false);
+  assert.equal(shouldPrefetchDeskNav("/accounting/commissions"), true);
   assert.equal(isDeskNavActive("/claims", "/claims"), true);
   assert.equal(isDeskNavActive("/claims", "/reports"), false);
   assert.equal(isDeskNavActive("/reports", "/reports"), true);
@@ -300,7 +303,19 @@ async function main() {
   assert.match(qboAccountingPage, /Disconnect From QuickBooks/);
   assert.match(qboAccountingPage, /QuickBooks Desktop/);
   assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
+  assert.match(qboAccountingPage, /loadQuickbooksDesk/);
+  assert.match(qboAccountingPage, /data-qbo-accounting/);
+  assert.match(qboAccountingPage, /data-qbo-soft-fail/);
+  assert.match(qboAccountingPage, /QboSoftFail/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/error.tsx"), "utf8"), /data-qbo-error/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/loading.tsx"), "utf8"), /data-qbo-loading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/quickbooks-desk.ts"), "utf8"), /Never throws/);
+  const qboDesk = await import("../lib/quickbooks-desk");
+  const qboDeskPage = await qboDesk.loadQuickbooksDesk("connection");
+  assert.equal(qboDeskPage.tab, "connection");
+  assert.ok(qboDeskPage.qbo);
+  assert.equal(qboDeskPage.error, "");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /acct-hub-tabs/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-acct/);
@@ -1939,7 +1954,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/new/page.tsx"), "utf8"), /driverOption/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /truckFormValues/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /MikeLauncher/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), />\s*Mike\s*</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), />\s*Ask Mike\s*</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /Dispatcher assistant/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-chat.tsx"), "utf8"), /Ask Mike/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /force-dynamic/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /MikeLauncher|mikeConfigured/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /MikeChat/);
@@ -2341,7 +2358,15 @@ async function main() {
   const compactStart = issueLineUi.indexOf("if (compact)");
   const compactReturn = issueLineUi.indexOf("return (", compactStart);
   const deskReturn = issueLineUi.indexOf("return (", compactReturn + 1);
-  assert.doesNotMatch(issueLineUi.slice(compactStart, deskReturn), /Snooze 4h|exceptionAction/);
+  const compactUi = issueLineUi.slice(compactStart, deskReturn);
+  assert.doesNotMatch(compactUi, /Snooze 4h|exceptionAction/);
+  assert.doesNotMatch(compactUi, /truncate/);
+  assert.match(compactUi, /exceptionReasonText/);
+  assert.match(compactUi, /exceptionReasonTooltip/);
+  assert.match(compactUi, /whitespace-normal break-words/);
+  assert.match(compactUi, /data-attention-reason/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: visible;/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
@@ -16340,12 +16365,17 @@ DISPATCH CONFIRMATION
   assert.match(orbcommAuth, /persistLiveReeferReadings/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Official IFTA|<code>\.env|GOOGLE_MAPS_API_KEY/);
 
-  const { attentionLabel } = await import("../lib/exceptions");
+  const { attentionLabel, exceptionReasonText, exceptionReasonTooltip } = await import("../lib/exceptions");
   assert.equal(attentionLabel({ kind: "late", severity: "HIGH", title: "Late to pickup" }), "Running late");
   assert.equal(attentionLabel({ kind: "reefer", severity: "CRITICAL", title: "Temperature discrepancy" }), "Critical");
   assert.equal(attentionLabel({ kind: "unassigned", severity: "LOW", title: "Unassigned" }), "Caution");
   assert.equal(attentionLabel({ kind: "missing_pod", severity: "HIGH", title: "Missing POD" }), "Important");
   assert.equal(attentionLabel({ kind: "detention", severity: "HIGH", title: "Detention — Dock" }), "Detention");
+  assert.equal(exceptionReasonText({ title: "Missing rate-con phone" }), "Missing rate-con phone");
+  assert.equal(
+    exceptionReasonTooltip({ title: "Late to pickup", detail: "Pickup window ended" }),
+    "Late to pickup — Pickup window ended",
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"),
@@ -17261,6 +17291,8 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /WhatsApp/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /TWILIO_|OPENAI_API_KEY|WHATSAPP_ACCESS_TOKEN/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /CriticalTag/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /loadCriticalReasons/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /Critical · \$\{text\}/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="active"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="delivered"/);
@@ -17278,10 +17310,17 @@ DISPATCH CONFIRMATION
     /Hastings/,
   );
 
-  const { loadNeedsCriticalTag } = await import("../lib/exceptions");
+  const { loadCriticalReasons, loadNeedsCriticalTag } = await import("../lib/exceptions");
   assert.equal(loadNeedsCriticalTag(999999, [{ loadId: 1, kind: "late", severity: "HIGH" }]), false);
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "late", severity: "HIGH" }]), true);
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "reefer", severity: "CRITICAL" }]), true);
+  assert.deepEqual(
+    loadCriticalReasons(1, [
+      { loadId: 1, kind: "missing_contact", severity: "CRITICAL", title: "Missing rate-con phone" },
+      { loadId: 1, kind: "late", severity: "HIGH", title: "Late to pickup" },
+    ]),
+    ["Missing rate-con phone", "Late to pickup"],
+  );
 
   const { proposeMikeWork, applyMikeProposal } = await import("../lib/mike-work");
   const detentionWork = proposeMikeWork(`Draft detention email for ${created.load_number}`);

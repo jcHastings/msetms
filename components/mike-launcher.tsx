@@ -22,8 +22,10 @@ export function MikeLauncher({
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={open}
+          aria-label="Ask Mike, dispatcher assistant"
+          title="Dispatcher assistant — ask about loads, trucks, and drafts"
         >
-          Mike
+          Ask Mike
         </button>
       </div>
       {open ? (
@@ -31,12 +33,12 @@ export function MikeLauncher({
           <button
             type="button"
             className="absolute inset-0 cursor-default"
-            aria-label="Close Mike"
+            aria-label="Close dispatcher assistant"
             onClick={() => setOpen(false)}
           />
           <div
             role="dialog"
-            aria-label="Mike"
+            aria-label="Dispatcher assistant"
             className="relative flex h-full w-full max-w-md flex-col bg-background shadow-2xl"
           >
             <div className="flex justify-end px-4 pt-3">
