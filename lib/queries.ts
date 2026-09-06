@@ -304,6 +304,92 @@ export function listCustomers(): Customer[] {
   return getDb().prepare("SELECT * FROM customers ORDER BY name COLLATE NOCASE").all() as Customer[];
 }
 
+export const CUSTOMERS_PAGE_SIZE = 25;
+
+export type CustomerDirectoryRow = Customer & {
+  contactCount: number;
+  primary: Contact | null;
+  loadCount: number;
+};
+
+export type CustomerDirectoryPage = {
+  customers: CustomerDirectoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+};
+
+function customerSearchNeedle(q: string): string {
+  return q.replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function searchCustomersDirectory(
+  input: { q?: string; page?: number; pageSize?: number } = {},
+): CustomerDirectoryPage {
+  const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize ?? CUSTOMERS_PAGE_SIZE)));
+  const needle = customerSearchNeedle(String(input.q ?? ""));
+  const db = getDb();
+  const filterSql = needle
+    ? `WHERE (
+        customers.name LIKE ?
+        OR IFNULL(customers.payment_terms, '') LIKE ?
+        OR IFNULL(customers.main_email, '') LIKE ?
+        OR IFNULL(customers.billing_email, '') LIKE ?
+        OR IFNULL(customers.billing_notes, '') LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM contacts
+          WHERE contacts.customer_id = customers.id
+            AND (
+              contacts.name LIKE ?
+              OR IFNULL(contacts.phone, '') LIKE ?
+              OR IFNULL(contacts.email, '') LIKE ?
+            )
+        )
+      )`
+    : "";
+  const filterParams = needle ? Array<string>(8).fill(`%${needle}%`) : [];
+  const total =
+    Number(
+      (db.prepare(`SELECT COUNT(*) AS count FROM customers ${filterSql}`).get(...filterParams) as { count: number })
+        .count,
+    ) || 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const requested = Math.floor(Number(input.page));
+  const page = Math.min(pageCount, Math.max(1, Number.isFinite(requested) && requested > 0 ? requested : 1));
+  const customers = db
+    .prepare(`SELECT * FROM customers ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
+    .all(...filterParams, pageSize, (page - 1) * pageSize) as Customer[];
+  const ids = customers.map((customer) => customer.id);
+  const contactsByCustomer = new Map<number, Contact[]>();
+  if (ids.length) {
+    const contacts = db
+      .prepare(`SELECT * FROM contacts WHERE customer_id IN (${ids.map(() => "?").join(", ")}) ORDER BY id`)
+      .all(...ids) as Contact[];
+    for (const contact of contacts) {
+      const list = contactsByCustomer.get(contact.customer_id) ?? [];
+      list.push(contact);
+      contactsByCustomer.set(contact.customer_id, list);
+    }
+  }
+  const loadCounts = loadCountsByCustomer();
+  return {
+    customers: customers.map((customer) => {
+      const contacts = contactsByCustomer.get(customer.id) ?? [];
+      return {
+        ...customer,
+        contactCount: contacts.length,
+        primary: contacts[0] ?? null,
+        loadCount: loadCounts.get(customer.id) ?? 0,
+      };
+    }),
+    total,
+    page,
+    pageSize,
+    pageCount,
+  };
+}
+
 export function getCustomer(id: number): CustomerWithContacts | null {
   const customer = getDb().prepare("SELECT * FROM customers WHERE id = ?").get(id) as Customer | undefined;
   if (!customer) return null;

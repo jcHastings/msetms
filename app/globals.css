@@ -537,30 +537,30 @@ button {
 
 .table-grid.table-grid-board {
   table-layout: fixed;
-  width: 103rem;
-  min-width: 103rem;
-  max-width: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .table-grid-board th {
-  padding: 0.3rem 0.5rem;
+  padding: 0.3rem 0.4rem;
 }
 
 .table-grid-board td {
-  padding: 0.28rem 0.5rem;
+  padding: 0.28rem 0.4rem;
   vertical-align: top;
   font-size: 0.8rem;
   line-height: 1.2;
   overflow: hidden;
 }
 
-/* Explicit widths so the board scrolls instead of stacking text on the next column.
-   Pickup/Delivery keep date then time on two lines. Do not RTL-ellipsis cities. */
+/* Desktop: pack labeled columns into the desk pane so H-scroll is not required.
+   Load + Status stay sticky on the left; Actions stay sticky on the right. */
 .table-grid-board .board-load-cell {
   position: sticky;
   left: 0;
   z-index: 3;
-  width: 13rem;
+  width: 10.5rem;
   background: #fff;
   box-shadow: 1px 0 0 var(--border);
 }
@@ -571,11 +571,21 @@ button {
 }
 
 .table-grid-board .board-status-cell {
-  width: 7.25rem;
+  position: sticky;
+  left: 10.5rem;
+  z-index: 3;
+  width: 6.25rem;
+  background: #fff;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.table-grid-board thead .board-status-cell {
+  z-index: 5;
+  background: #f8fafc;
 }
 
 .table-grid-board .board-when-cell {
-  width: 5.75rem;
+  width: 4.75rem;
 }
 
 .board-when-date,
@@ -595,43 +605,33 @@ button {
 }
 
 .table-grid-board .board-unit-cell {
-  width: 8.75rem;
+  width: 7.25rem;
 }
 
 .table-grid-board .board-place-cell {
-  width: 10.5rem;
+  width: 8.25rem;
 }
 
 .table-grid-board td.board-trailer-cell,
 .table-grid-board th.board-trailer-cell {
-  width: 13rem;
+  width: 9.5rem;
   overflow: visible;
 }
 
 .table-grid-board .board-hos-cell {
-  width: 5rem;
+  width: 4rem;
 }
 
 .table-grid-board .board-reefer-cell {
-  width: 5.5rem;
+  width: 4.5rem;
 }
 
 .table-grid-board .board-rate-cell {
-  position: sticky;
-  right: 20.5rem;
-  z-index: 3;
-  width: 5.25rem;
-  background: #fff;
-  box-shadow: -1px 0 0 var(--border);
-}
-
-.table-grid-board thead .board-rate-cell {
-  z-index: 5;
-  background: #f8fafc;
+  width: 4.5rem;
 }
 
 .board-status-select {
-  min-width: 9rem;
+  min-width: 0;
   width: 100%;
 }
 
@@ -639,8 +639,8 @@ button {
   position: sticky;
   right: 0;
   z-index: 3;
-  width: 20.5rem;
-  min-width: 20.5rem;
+  width: 16.5rem;
+  min-width: 16.5rem;
   padding: 0;
   background: #fff;
   box-shadow: -1px 0 0 var(--border);
@@ -654,7 +654,7 @@ button {
 
 .board-end-stack {
   display: grid;
-  grid-template-columns: 9.5rem 11rem;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
   align-items: start;
   min-width: 0;
 }
@@ -690,6 +690,16 @@ button {
 
 /* Narrow: never sticky-overlay Actions on MOVE. Stack status full-width above Actions. */
 @media (max-width: 79.99rem) {
+  .table-grid.table-grid-board {
+    width: 68rem;
+    min-width: 68rem;
+    max-width: none;
+  }
+
+  .table-grid-board .board-status-cell {
+    left: 8.75rem;
+  }
+
   .table-grid-board .board-rate-cell,
   .table-grid-board thead .board-rate-cell {
     position: static;
@@ -785,6 +795,7 @@ button {
 
 .table-grid tbody tr:hover td.board-end-cell,
 .table-grid tbody tr:hover td.board-load-cell,
+.table-grid tbody tr:hover td.board-status-cell,
 .table-grid tbody tr:hover td.board-rate-cell {
   background: var(--row-hover);
 }
@@ -1118,6 +1129,10 @@ button {
 
   .table-grid-board .board-load-cell {
     width: 8.75rem;
+  }
+
+  .table-grid-board .board-status-cell {
+    left: 8.75rem;
   }
 
   .table-grid-board .board-end-cell,

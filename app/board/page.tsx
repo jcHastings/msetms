@@ -146,7 +146,7 @@ async function BoardLiveSection({
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
-          <div className="board-scroll">
+          <div className="board-scroll" data-board-packed="">
             <table className="table-grid table-grid-board table-zones" data-dispatch-board="" data-table-zones="board">
               <thead>
                 <tr>

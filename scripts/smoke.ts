@@ -13140,10 +13140,46 @@ DISPATCH CONFIRMATION
   const customersPage = fs.readFileSync(path.join(process.cwd(), "app/customers/page.tsx"), "utf8");
   assert.match(customersPage, /New customer/);
   assert.match(customersPage, /CustomersTable/);
+  assert.match(customersPage, /searchCustomersDirectory/);
+  assert.match(customersPage, /searchParams/);
+  assert.doesNotMatch(customersPage, /listCustomers\(\)/);
+  assert.doesNotMatch(customersPage, /getCustomer\(/);
   const customersTable = fs.readFileSync(path.join(process.cwd(), "components/customers-table.tsx"), "utf8");
   assert.match(customersTable, /CustomerRowActions/);
   assert.match(customersTable, /data-customers-list/);
+  assert.match(customersTable, /data-customers-search/);
+  assert.match(customersTable, /data-customers-pagination/);
+  assert.match(customersTable, /data-customers-mounted/);
   assert.doesNotMatch(customersTable, /overflow-hidden/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /CUSTOMERS_PAGE_SIZE = 25/);
+  const directoryPage = queries.searchCustomersDirectory({ q: "", page: 1, pageSize: 10 });
+  assert.ok(directoryPage.customers.length <= 10);
+  assert.ok(directoryPage.total >= directoryPage.customers.length);
+  assert.equal(directoryPage.page, 1);
+  assert.equal(directoryPage.pageSize, 10);
+  const uniqueDirectoryName = `Zzz Directory Filter ${Date.now()}`;
+  const directoryCustomerId = queries.createCustomer({
+    name: uniqueDirectoryName,
+    billing_notes: "Net 45 directory",
+    payment_terms: "Net 45",
+    contacts: [{ name: "Pat Directory", role: "", phone: "402-555-0199", email: "pat.directory@example.com" }],
+  });
+  const filteredDirectory = queries.searchCustomersDirectory({ q: uniqueDirectoryName, page: 1, pageSize: 25 });
+  assert.equal(filteredDirectory.total, 1);
+  assert.equal(filteredDirectory.customers.length, 1);
+  assert.equal(filteredDirectory.customers[0].id, directoryCustomerId);
+  assert.equal(filteredDirectory.customers[0].contactCount, 1);
+  assert.equal(filteredDirectory.customers[0].primary?.phone, "402-555-0199");
+  const phoneDirectory = queries.searchCustomersDirectory({ q: "402-555-0199", page: 1, pageSize: 25 });
+  assert.ok(phoneDirectory.customers.some((row) => row.id === directoryCustomerId));
+  const manyDirectory = queries.searchCustomersDirectory({ q: "", page: 1, pageSize: 5 });
+  const nextDirectory = queries.searchCustomersDirectory({ q: "", page: 2, pageSize: 5 });
+  assert.ok(manyDirectory.total > 5);
+  assert.equal(manyDirectory.customers.length, 5);
+  assert.ok(nextDirectory.customers.length <= 5);
+  const firstPageIds = new Set(manyDirectory.customers.map((row) => row.id));
+  assert.ok(nextDirectory.customers.every((row) => !firstPageIds.has(row.id)));
+  queries.deleteCustomer(directoryCustomerId);
   const customerRowActions = fs.readFileSync(path.join(process.cwd(), "components/customer-row-actions.tsx"), "utf8");
   assert.match(customerRowActions, /"Edit"/);
   assert.match(customerRowActions, /DeleteCustomerForm/);
@@ -16204,10 +16240,16 @@ DISPATCH CONFIRMATION
   assert.match(boardPage, /board-when-time/);
   assert.match(boardPage, /board-lane-line/);
   assert.match(boardPage, /board-scroll/);
+  assert.match(boardPage, /data-board-packed/);
   assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
   assert.match(boardCss, /board-when-cell/);
   assert.match(boardCss, /board-scroll/);
-  assert.match(boardCss, /min-width:\s*103rem/);
+  assert.match(boardCss, /\.table-grid\.table-grid-board\s*\{[^}]*width:\s*100%/);
+  assert.match(boardCss, /\.table-grid\.table-grid-board\s*\{[^}]*min-width:\s*0/);
+  assert.doesNotMatch(boardCss, /min-width:\s*103rem/);
+  assert.doesNotMatch(boardCss, /width:\s*103rem/);
+  assert.match(boardCss, /left:\s*10\.5rem/);
+  assert.match(boardCss, /@media \(max-width: 79\.99rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   assert.match(boardCss, /board-place-with-pin/);
   assert.match(boardCss, /board-trailer-cell/);
   const trailerCell = boardCss.match(/td\.board-trailer-cell[\s\S]*?\}/)?.[0] ?? "";
