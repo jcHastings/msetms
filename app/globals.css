@@ -1945,10 +1945,12 @@ html:has([data-load-embed]) body {
 
 .orbcomm-status-scroll,
 [data-orbcomm-status-scroll] {
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: visible;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
 }
 
 [data-orbcomm-status-table] .table-grid {
