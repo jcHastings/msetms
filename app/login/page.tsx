@@ -1,7 +1,7 @@
 import { DispatcherLoginForm } from "@/components/dispatcher-login-form";
 import { LoginCanvas } from "@/components/login-canvas";
 import { dispatcherLoginAction } from "@/lib/dispatcher-actions";
-import { getSignedInDispatcher, listDispatchers } from "@/lib/dispatcher-session";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function DispatcherLoginPage() {
 
   return (
     <LoginCanvas title="Dispatcher desk" subtitle="Sign in with email and password.">
-      <DispatcherLoginForm dispatchers={listDispatchers()} action={dispatcherLoginAction} />
+      <DispatcherLoginForm action={dispatcherLoginAction} />
     </LoginCanvas>
   );
 }

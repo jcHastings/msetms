@@ -4,6 +4,7 @@ import {
   PASSWORD_NOT_RECOGNIZED,
   PASSWORD_UNSET,
   findActiveDispatcherByEmail,
+  findActiveDispatcherByName,
   verifyDispatcherPassword,
 } from "./dispatcher-password";
 import { getDispatcherUser, isDispatcherTwoFactorRequired, listDispatcherUsers } from "./settings";
@@ -91,6 +92,12 @@ export function authenticateDispatcher(dispatcherId: number, password: string): 
 
 export function authenticateDispatcherByEmail(email: string, password: string): Dispatcher {
   const row = findActiveDispatcherByEmail(email);
+  if (!row) throw new Error(PASSWORD_NOT_RECOGNIZED);
+  return authenticateDispatcher(row.id, password);
+}
+
+export function authenticateDispatcherByName(name: string, password: string): Dispatcher {
+  const row = findActiveDispatcherByName(name);
   if (!row) throw new Error(PASSWORD_NOT_RECOGNIZED);
   return authenticateDispatcher(row.id, password);
 }

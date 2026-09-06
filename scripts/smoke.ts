@@ -383,8 +383,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Resend code/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="password"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="email"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /name="dispatcher_name"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Sign in with email/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /No email on your user\? Sign in with your name/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"),
+    /dispatchers|PublicDispatcher|totp_enrolled|has_password|permission_group/,
+  );
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /listDispatchers|dispatchers=/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /Forgot password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-login-form.tsx"), "utf8"), /remember_device/);
@@ -1321,6 +1327,22 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/overlay-open-link.tsx"), "utf8"), /createPortal/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay.tsx"), "utf8"), /Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"), /compress:\s*false/);
+  const nextConfigSource = fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8");
+  assert.match(nextConfigSource, /poweredByHeader:\s*false/);
+  assert.match(nextConfigSource, /Content-Security-Policy/);
+  assert.match(nextConfigSource, /X-Frame-Options/);
+  assert.match(nextConfigSource, /X-Content-Type-Options/);
+  assert.match(nextConfigSource, /Referrer-Policy/);
+  assert.match(nextConfigSource, /Permissions-Policy/);
+  assert.match(nextConfigSource, /Strict-Transport-Security/);
+  assert.match(nextConfigSource, /frame-ancestors 'none'/);
+  const robotsTxt = fs.readFileSync(path.join(process.cwd(), "app/robots.txt"), "utf8");
+  assert.match(robotsTxt, /User-agent:\s*\*/);
+  assert.match(robotsTxt, /Disallow:\s*\//);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "app/not-found.tsx"), "utf8"),
+    /local TMS database/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /Content-Encoding.*identity/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/pdf-response.ts"), "utf8"), /no-transform/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "instrumentation.ts"), "utf8"), /defaultMaxListeners/);
@@ -12598,6 +12620,9 @@ DISPATCH CONFIRMATION
     phone: "4025550100",
   });
   assert.equal(session.authenticateDispatcherByEmail("office.login@msloads.com", "Office1$ab").id, msTest.id);
+  assert.equal(session.authenticateDispatcherByName("MS Test", "Office1$ab").id, msTest.id);
+  assert.equal(session.authenticateDispatcherByName("ms test", "Office1$ab").id, msTest.id);
+  assert.throws(() => session.authenticateDispatcherByName("Nobody", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcherByEmail("nobody@msloads.com", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
   assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
@@ -13393,7 +13418,9 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /No phone is on this user/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("password"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /authenticateDispatcherByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /authenticateDispatcherByName/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("email"\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("dispatcher_name"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /login\/change-password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /EMAIL_OTP_NO_EMAIL/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/dispatcher-actions.ts"), "utf8"), /formData\.get\("pin"\)/);
@@ -13451,6 +13478,11 @@ DISPATCH CONFIRMATION
   badLogin.set("password", "Wrong1$zz");
   const badResult = await dispatcherLoginAction(null, badLogin);
   assert.equal(badResult.ok, false);
+  const badNameLogin = new FormData();
+  badNameLogin.set("dispatcher_name", "No Email Desk");
+  badNameLogin.set("password", "Wrong1$zz");
+  const badNameResult = await dispatcherLoginAction(null, badNameLogin);
+  assert.equal(badNameResult.ok, false);
   const devices = await import("../lib/dispatcher-device");
   assert.equal(devices.DEVICE_TTL_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(devices.DEVICE_COOKIE, "tms_device");
