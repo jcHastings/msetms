@@ -1103,6 +1103,7 @@ async function main() {
   const fleetMapView = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
   assert.doesNotMatch(fleetMapView, /from ["']@\/lib\/(db|env|settings|places)["']/);
   assert.match(fleetMapView, /fleetMapDisplayPoints/);
+  assert.match(fleetMapView, /cluster=\{false\}/);
   assert.match(fleetMapView, /Map is off/);
   assert.doesNotMatch(fleetMapView, /GOOGLE_MAPS_API_KEY|<code>\.env/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/samsara/page.tsx"), "utf8"), /buildSamsaraFleetMap/);
@@ -6877,7 +6878,9 @@ DISPATCH CONFIRMATION
     /After create|40\.8|36/,
   );
 
-  const { clusterLoadMapPoints } = await import("../lib/map-cluster");
+  const { clusterLoadMapPoints, shouldClusterMapPoints } = await import("../lib/map-cluster");
+  assert.equal(shouldClusterMapPoints(40, false), false, "Samsara/Orbcomm fleet maps keep every unit pin");
+  assert.equal(shouldClusterMapPoints(40, true), true);
   const clusteredPins = clusterLoadMapPoints(
     [
       { id: "a", kind: "trailer", label: "A", lat: 40.7, lng: -74 },
