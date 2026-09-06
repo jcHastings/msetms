@@ -2687,6 +2687,7 @@ html:has([data-load-embed]) body {
     width: 100%;
     max-width: none;
     height: 100dvh;
+    border-radius: 12px 12px 0 0;
     box-shadow: 0 -8px 28px rgba(7, 50, 90, 0.18);
   }
 }

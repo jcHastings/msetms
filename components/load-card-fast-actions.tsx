@@ -46,6 +46,14 @@ export function LoadCardFastActions({
       <BackhaulFinderHost loadId={loadId}>
         {(openFinder) => (
           <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost">
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-backhaul-finder-action=""
+              onClick={openFinder}
+            >
+              Backhaul Finder
+            </button>
             <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("exception")}>
               Exception
             </button>
@@ -54,14 +62,6 @@ export function LoadCardFastActions({
             </button>
             <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("update")}>
               Post update
-            </button>
-            <button
-              type="button"
-              className="menu-item w-full text-left"
-              data-backhaul-finder-action=""
-              onClick={openFinder}
-            >
-              Backhaul Finder
             </button>
           </HoverActionMenu>
         )}
