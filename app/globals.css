@@ -1025,11 +1025,11 @@ button {
     overflow-x: auto;
   }
 
-  .password-field {
+  .password-field:not(:is(.login-canvas *)) {
     grid-template-columns: 1fr;
   }
 
-  .password-field-toggle {
+  .password-field-toggle:not(:is(.login-canvas *)) {
     width: 100%;
     min-height: 2.75rem;
   }
@@ -2593,13 +2593,17 @@ html:has([data-load-embed]) body {
 
 .login-canvas .password-field input {
   width: 100%;
-  padding-right: 4.75rem;
+  padding-right: 7.5rem;
 }
 
 .login-canvas .password-field-toggle {
   position: absolute;
   top: 50%;
   right: 0.45rem;
+  left: auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
   transform: translateY(-50%);
   border: 0;
   background: transparent;
