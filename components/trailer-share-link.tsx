@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTrailerShareLinkAction } from "@/lib/actions";
 import { FormBanner } from "@/components/form-banner";
-import { compactTrailerShareState, formatDateTime } from "@/lib/format";
+import { compactTrailerShareState, formatDateTime, toOfficeDateTime } from "@/lib/format";
 import type { ActionResult } from "@/lib/types";
 
 function absoluteShareUrl(sharePath: string): string {
@@ -47,31 +47,30 @@ export function TrailerShareLinkPanel({
   }
 
   if (compact) {
-    const linkState = compactTrailerShareState(sharePath, expiresAt);
-    const isLive = linkState === "live";
+    const isLive = compactTrailerShareState(sharePath, expiresAt) === "live";
+    const defaultExpiry = toOfficeDateTime(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
     return (
-      <div className="trailer-share-compact" data-trailer-share="" data-trailer-share-state={isLive ? "live" : "none"}>
+      <div
+        className="trailer-share-compact"
+        data-trailer-share=""
+        data-trailer-share-copy-only=""
+        data-trailer-share-state={isLive ? "live" : "none"}
+      >
         <FormBanner result={state} hideOk />
         <div className="trailer-share-compact-row">
-          <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">
-            <input type="hidden" name="trailer_id" value={trailerId} />
-            <input
-              id={`trailer-share-expires-${trailerId}`}
-              name="expires_at"
-              type="datetime-local"
-              required
-              aria-label="Expires"
-              data-trailer-share-expires-input=""
-            />
-            <button className="btn btn-primary" type="submit" disabled={pending} data-trailer-share-create="">
-              {pending ? "Creating…" : "Create link"}
-            </button>
-          </form>
           {isLive ? (
             <button className="btn btn-secondary" type="button" data-trailer-share-copy="" onClick={() => void copy()}>
               {copied ? "Copied" : "Copy link"}
             </button>
-          ) : null}
+          ) : (
+            <form action={formAction} className="trailer-share-compact-form" data-trailer-share-form="">
+              <input type="hidden" name="trailer_id" value={trailerId} />
+              <input type="hidden" name="expires_at" value={defaultExpiry} data-trailer-share-expires-input="" />
+              <button className="btn btn-primary" type="submit" disabled={pending} data-trailer-share-create="">
+                {pending ? "Creating…" : "Create link"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );

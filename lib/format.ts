@@ -167,7 +167,7 @@ export function formatDateTime(iso: string): string {
   }
 }
 
-/** Orbcomm compact cell: no path until View. Expired includes a missing/invalid expiry. */
+/** Copy-only compact cell: live → Copy link. Expired or missing → Create link. No chips. */
 export function compactTrailerShareState(
   sharePath: string,
   expiresAt: string,

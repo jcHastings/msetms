@@ -1897,12 +1897,15 @@ async function main() {
   assert.match(compactShareUi, /btn btn-primary/);
   assert.match(compactShareUi, /"Copied" : "Copy link"/);
   assert.match(compactShareUi, /compactTrailerShareState/);
-  assert.match(compactShareUi, /linkState === "live"/);
+  assert.match(compactShareUi, /=== "live"/);
+  assert.match(compactShareUi, /data-trailer-share-copy-only/);
   assert.match(compactShareUi, /data-trailer-share-state=\{isLive \? "live" : "none"\}/);
   assert.match(trailerShareUi, /return `\$\{window\.location\.origin\}\$\{sharePath\}`/);
   assert.match(trailerShareUi, /absoluteShareUrl\(sharePath\)/);
   assert.doesNotMatch(compactShareUi, /New link/);
-  assert.doesNotMatch(compactShareUi, /Active · Exp|Expired \{expiryLabel\}/);
+  assert.doesNotMatch(compactShareUi, /datetime-local/);
+  assert.doesNotMatch(compactShareUi, /Active · Exp|Expired \{expiryLabel\}|Expired /);
+  assert.doesNotMatch(compactShareUi, /trailer-share-compact-chip|chip-expired|chip-live/);
   assert.doesNotMatch(compactShareUi, /data-trailer-share-view|data-trailer-share-popover|formatCompactShareExpiry/);
   assert.doesNotMatch(compactShareUi, /title=\{sharePath\}/);
   assert.doesNotMatch(compactShareUi, /trailer-share-compact-path|text-overflow/);
@@ -1911,6 +1914,7 @@ async function main() {
   assert.match(compactShareCss, /trailer-share-compact-row,\s*\.trailer-share-compact-form \{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*6px;/);
   assert.match(compactShareCss, /trailer-share-compact \.btn \{[\s\S]*border-radius:\s*var\(--r-xs\);/);
   assert.doesNotMatch(compactShareCss, /trailer-share-compact-chip|trailer-share-compact-view|trailer-share-compact-popover/);
+  // Pack Copy-only: expired/none = Create link; live = Copy link. No orange chips.
   assert.doesNotMatch(compactShareCss, /trailer-share-compact-path \{[\s\S]*text-overflow:\s*ellipsis;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\[data-orbcomm-status-table\] td \{[\s\S]*vertical-align:\s*middle;/);
   const fleetMapUi = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
