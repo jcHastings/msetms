@@ -27,6 +27,7 @@ export function AppShell({
   officeNotifications?: OfficeNotification[];
 }) {
   const pathname = usePathname();
+  const orbcommPage = pathname === "/fleet/orbcomm" || pathname.startsWith("/fleet/orbcomm/");
   const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
@@ -42,8 +43,28 @@ export function AppShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    if (orbcommPage) {
+      root.setAttribute("data-orbcomm-page", "");
+      body.setAttribute("data-orbcomm-page", "");
+    } else {
+      root.removeAttribute("data-orbcomm-page");
+      body.removeAttribute("data-orbcomm-page");
+    }
+    return () => {
+      root.removeAttribute("data-orbcomm-page");
+      body.removeAttribute("data-orbcomm-page");
+    };
+  }, [orbcommPage]);
+
   return (
-    <div className="desk-shell flex min-h-screen bg-background" data-nav-open={navOpen ? "true" : "false"}>
+    <div
+      className="desk-shell flex min-h-screen bg-background"
+      data-nav-open={navOpen ? "true" : "false"}
+      data-orbcomm-page={orbcommPage ? "" : undefined}
+    >
       <header className="desk-phone-bar" data-desk-phone-bar="">
         <button
           type="button"

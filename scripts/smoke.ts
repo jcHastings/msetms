@@ -1948,19 +1948,25 @@ async function main() {
   assert.doesNotMatch(compactShareCss, /trailer-share-compact-path \{[\s\S]*text-overflow:\s*ellipsis;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\[data-orbcomm-status-table\] td \{[\s\S]*vertical-align:\s*middle;/);
   const fleetMapUi = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
+  const orbcommPanelUi = fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8");
+  const appShellUi = fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8");
   const orbcommCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-  assert.match(fleetMapUi, /trailer-share-compact-cell/);
-  // Phone hard acceptance: stacked cards, not another overflow-x / H-scroll "fix".
-  // Live tip febd537 still left-clipped LOCATION (HASTINGS→STINGS) after scroll.
-  assert.match(fleetMapUi, /data-orbcomm-status-scroll/);
-  assert.match(fleetMapUi, /data-orbcomm-status-cards/);
-  assert.match(fleetMapUi, /data-orbcomm-status-card/);
-  assert.match(fleetMapUi, /data-orbcomm-phone-cards/);
-  assert.match(fleetMapUi, /data-orbcomm-location/);
-  assert.match(fleetMapUi, /data-orbcomm-temp/);
-  assert.match(fleetMapUi, /statusPlace\(row\.location\)/);
-  const orbcommCardMarkup = fleetMapUi.match(/data-orbcomm-status-card=""[\s\S]*?<\/li>/)?.[0] ?? "";
+  assert.match(fleetMapUi, /OrbcommStatusPanel/);
+  assert.match(orbcommPanelUi, /trailer-share-compact-cell/);
+  // Phone hard acceptance: cards only (table unmounted). Not another :has + overflow-x:visible patch.
+  // Live febd537 CSS was served (MD5 10DC4E7D) and still left-clipped LOCATION.
+  assert.match(orbcommPanelUi, /data-orbcomm-status-scroll/);
+  assert.match(orbcommPanelUi, /data-orbcomm-status-cards/);
+  assert.match(orbcommPanelUi, /data-orbcomm-status-card/);
+  assert.match(orbcommPanelUi, /data-orbcomm-phone-cards/);
+  assert.match(orbcommPanelUi, /data-orbcomm-location/);
+  assert.match(orbcommPanelUi, /data-orbcomm-temp/);
+  assert.match(orbcommPanelUi, /statusPlace\(row\.location\)/);
+  assert.match(orbcommPanelUi, /useState\(true\)/);
+  assert.match(orbcommPanelUi, /max-width: 47\.99rem/);
+  const orbcommCardMarkup = orbcommPanelUi.match(/data-orbcomm-status-card=""[\s\S]*?<\/li>/)?.[0] ?? "";
   assert.match(orbcommCardMarkup, /data-orbcomm-location/);
+  assert.doesNotMatch(orbcommCardMarkup, /orbcomm-location-cell|orbcomm-temp-cell/);
   assert.ok(
     orbcommCardMarkup.indexOf("data-orbcomm-location") < orbcommCardMarkup.indexOf("data-orbcomm-temp"),
     "phone card must show LOCATION before TEMP",
@@ -1972,17 +1978,17 @@ async function main() {
   assert.match(orbcommCss, /td\[data-orbcomm-temp\] \{[\s\S]*min-width:\s*5\.5rem;/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-location\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-temp\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
-  const deskMainOrbcommRules = orbcommCss.match(/\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]+\}/g) ?? [];
-  assert.ok(deskMainOrbcommRules.length >= 1, "Orbcomm desk-main :has rule must exist");
-  for (const rule of deskMainOrbcommRules) {
-    assert.doesNotMatch(rule, /overflow-x:\s*hidden/, "desk-main must not clip Orbcomm");
-  }
-  assert.match(orbcommCss, /\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]*overflow-x:\s*visible/);
-  assert.match(orbcommCss, /html:has\(\[data-orbcomm-status-table\]\)/);
-  assert.doesNotMatch(
-    orbcommCss,
-    /\.desk-main:has\(\[data-orbcomm-status-table\]\)\s*\{[^}]*overflow-x:\s*hidden/,
-  );
+  assert.doesNotMatch(orbcommCss, /html:has\(\[data-orbcomm-status-table\]\)/);
+  assert.doesNotMatch(orbcommCss, /\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]*overflow-x:\s*visible/);
+  assert.match(appShellUi, /data-orbcomm-page/);
+  assert.match(appShellUi, /\/fleet\/orbcomm/);
+  const orbcommPageOverflow =
+    orbcommCss.match(
+      /html\[data-orbcomm-page\],[\s\S]*?\.desk-shell\[data-orbcomm-page\] \.desk-main-inner \{[\s\S]*?\n  \}/,
+    )?.[0] ?? "";
+  assert.match(orbcommPageOverflow, /overflow-x:\s*clip/);
+  assert.doesNotMatch(orbcommPageOverflow, /:has\(/);
+  assert.doesNotMatch(orbcommPageOverflow, /overflow-x:\s*visible/);
   const orbcommScrollRule =
     orbcommCss.match(
       /\.orbcomm-status-scroll,\s*\[data-orbcomm-status-scroll\]\s*\{[\s\S]*?\n\}/,
@@ -1996,14 +2002,13 @@ async function main() {
   assert.doesNotMatch(orbcommScrollRule, /margin-(left|inline-start):\s*-/);
   const phoneCardLocationRule =
     orbcommCss.match(
-      /\[data-orbcomm-status-card\] \[data-orbcomm-location\] \{[\s\S]*?\n  \}/,
+      /\.orbcomm-status-card-location,[\s\S]*?\[data-orbcomm-status-card\] \[data-orbcomm-location\] \{[\s\S]*?\n\}/,
     )?.[0] ?? "";
   assert.match(phoneCardLocationRule, /white-space:\s*normal/);
   assert.match(phoneCardLocationRule, /overflow:\s*visible/);
   assert.match(phoneCardLocationRule, /overflow-wrap:\s*break-word/);
   assert.doesNotMatch(phoneCardLocationRule, /white-space:\s*nowrap|overflow:\s*hidden|direction:\s*rtl|position:\s*sticky|text-align:\s*center/);
   assert.match(orbcommCss, /\[data-orbcomm-phone-cards\] \.orbcomm-status-scroll[\s\S]*display:\s*none/);
-  assert.match(orbcommCss, /@media \(max-width:\s*47\.99rem\) \{[\s\S]*\[data-orbcomm-status-cards\]/);
   assert.match(orbcommCss, /board-end-stack/);
   assert.match(orbcommCss, /max-width:\s*79\.99rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
@@ -2016,7 +2021,7 @@ async function main() {
   assert.match(trailerSharePage, /LoadMapCanvas/);
   assert.doesNotMatch(trailerSharePage, /data-trailer-share-pins|<ol |Setpoint|Last update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/[id]/page.tsx"), "utf8"), /TrailerShareLinkPanel/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), /Customer link/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /lastKnownOrbcommSnapshot/);
@@ -16459,7 +16464,8 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /OrbcommStatusPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), /data-orbcomm-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Truck</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Mileage</);
@@ -16468,7 +16474,7 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /truckStatusRows/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /formatSamsaraStatusHos/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), />Message</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-live-note/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);

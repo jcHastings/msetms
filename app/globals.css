@@ -1126,20 +1126,21 @@ button {
     min-width: 10.5rem;
   }
 
-  /* Phone Orbcomm uses stacked cards (see .orbcomm-status-cards). Keep
-     ancestors from becoming a second clip if the desktop table is shown. */
-  html:has([data-orbcomm-status-table]),
-  html:has([data-orbcomm-status-table]) body,
-  .desk-shell:has([data-orbcomm-status-table]),
-  .desk-main:has([data-orbcomm-status-table]),
-  .desk-main:has([data-orbcomm-status-table]) .desk-main-inner,
-  [data-orbcomm-status-table] {
-    overflow-x: visible;
+  /* Orbcomm phone: kill the competing overflow-x:auto scrollports without
+     :has. Live WebKit still left-clipped when :has → visible lost to
+     html/body/desk-main { overflow-x: auto }. Pathname attr is set on
+     html/body/desk-shell from AppShell. Cards never need H-scroll. */
+  html[data-orbcomm-page],
+  html[data-orbcomm-page] body,
+  .desk-shell[data-orbcomm-page],
+  .desk-shell[data-orbcomm-page] .desk-main,
+  .desk-shell[data-orbcomm-page] .desk-main-inner {
+    overflow-x: clip;
     max-width: 100%;
     min-width: 0;
   }
 
-  .desk-main:has([data-orbcomm-status-table]) .desk-main-inner {
+  .desk-shell[data-orbcomm-page] .desk-main-inner {
     margin-inline: 0;
   }
 
@@ -2014,134 +2015,124 @@ html:has([data-load-embed]) body {
   text-overflow: clip;
 }
 
-.orbcomm-status-cards {
-  display: none;
+.orbcomm-status-cards,
+[data-orbcomm-status-cards] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.7rem 0.75rem 0.85rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.orbcomm-status-card,
+[data-orbcomm-status-card] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.7rem 0.8rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: visible;
+}
+
+.orbcomm-status-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.orbcomm-status-card-alarm,
+[data-orbcomm-alarm] {
+  color: #be123c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: normal;
+}
+
+.orbcomm-status-card-location,
+[data-orbcomm-status-card] [data-orbcomm-location] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  text-overflow: clip;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.orbcomm-status-card-temp,
+[data-orbcomm-status-card] [data-orbcomm-temp] {
+  min-width: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.orbcomm-status-card-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.35rem 0.75rem;
+  margin: 0.15rem 0 0;
+  min-width: 0;
+}
+
+.orbcomm-status-card-meta > div {
+  min-width: 0;
+}
+
+.orbcomm-status-card-meta dt {
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.orbcomm-status-card-meta dd {
+  margin: 0.05rem 0 0;
+  font-size: 0.85rem;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+[data-orbcomm-status-card] .trailer-share-compact-cell {
+  margin-top: 0.25rem;
+  white-space: normal;
 }
 
 @media (max-width: 47.99rem) {
-  [data-orbcomm-phone-cards] .orbcomm-status-cards,
-  [data-orbcomm-status-cards] {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    list-style: none;
-    margin: 0;
-    padding: 0.7rem 0.75rem 0.85rem;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
   [data-orbcomm-phone-cards] .orbcomm-status-scroll,
   [data-orbcomm-phone-cards] [data-orbcomm-status-scroll] {
     display: none;
-    overflow: hidden;
-    width: 0;
-    height: 0;
-    padding: 0;
-    margin: 0;
-    border: 0;
-  }
-
-  .orbcomm-status-card,
-  [data-orbcomm-status-card] {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.35rem;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0.7rem 0.8rem 0.75rem;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    overflow: visible;
-  }
-
-  .orbcomm-status-card-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  .orbcomm-status-card-alarm,
-  [data-orbcomm-alarm] {
-    color: #be123c;
-    font-size: 0.75rem;
-    font-weight: 700;
-    white-space: normal;
-  }
-
-  [data-orbcomm-status-card] .orbcomm-location-cell,
-  [data-orbcomm-status-card] [data-orbcomm-location] {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    font-size: 1.05rem;
-    font-weight: 700;
-    line-height: 1.25;
-    letter-spacing: 0.01em;
-    text-align: left;
-    text-transform: none;
-    white-space: normal;
-    overflow: visible;
-    overflow-wrap: break-word;
-    word-break: normal;
-    hyphens: none;
-    text-overflow: clip;
-    direction: ltr;
-    unicode-bidi: isolate;
-  }
-
-  [data-orbcomm-status-card] .orbcomm-temp-cell,
-  [data-orbcomm-status-card] [data-orbcomm-temp] {
-    min-width: 0;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    font-weight: 650;
-  }
-
-  .orbcomm-status-card-meta {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 0.35rem 0.75rem;
-    margin: 0.15rem 0 0;
-    min-width: 0;
-  }
-
-  .orbcomm-status-card-meta > div {
-    min-width: 0;
-  }
-
-  .orbcomm-status-card-meta dt {
-    margin: 0;
-    font-size: 0.62rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  .orbcomm-status-card-meta dd {
-    margin: 0.05rem 0 0;
-    font-size: 0.85rem;
-    overflow-wrap: break-word;
-    white-space: normal;
-  }
-
-  [data-orbcomm-status-card] .trailer-share-compact-cell {
-    margin-top: 0.25rem;
-    white-space: normal;
   }
 }
 
