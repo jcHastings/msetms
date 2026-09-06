@@ -293,14 +293,44 @@ export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | 
   return "Caution";
 }
 
+export function exceptionReasonText(item: Pick<InboxException, "title">): string {
+  return item.title.trim();
+}
+
+export function exceptionReasonTooltip(item: Pick<InboxException, "title" | "detail">): string {
+  const title = item.title.trim();
+  const detail = item.detail.trim();
+  if (!detail || detail === title) return title;
+  return `${title} — ${detail}`;
+}
+
+function isCriticalTagItem(item: Pick<InboxException, "kind" | "severity">): boolean {
+  return item.severity === "CRITICAL" || item.kind === "late";
+}
+
 export function loadNeedsCriticalTag(
   loadId: number,
   items?: Array<Pick<InboxException, "loadId" | "kind" | "severity">>,
 ): boolean {
   const rows = items ?? listExceptionInbox().items;
-  return rows.some(
-    (item) => item.loadId === loadId && (item.severity === "CRITICAL" || item.kind === "late"),
-  );
+  return rows.some((item) => item.loadId === loadId && isCriticalTagItem(item));
+}
+
+export function loadCriticalReasons(
+  loadId: number,
+  items?: Array<Pick<InboxException, "loadId" | "kind" | "severity" | "title">>,
+): string[] {
+  const rows = items ?? listExceptionInbox().items;
+  const seen = new Set<string>();
+  const reasons: string[] = [];
+  for (const item of rows) {
+    if (item.loadId !== loadId || !isCriticalTagItem(item)) continue;
+    const reason = item.title.trim();
+    if (!reason || seen.has(reason)) continue;
+    seen.add(reason);
+    reasons.push(reason);
+  }
+  return reasons;
 }
 
 function lateExceptions(load: LoadView, now: Date): InboxException[] {

@@ -44,8 +44,11 @@ async function main() {
   assert.doesNotMatch(navSource, /href: "\/reports", label: "Claims"|href: "\/claims".*\/reports/);
   assert.match(navSource, /data-nav-href=\{item\.href\}/);
   assert.match(navSource, /isDeskNavActive/);
-  assert.match(navSource, /prefetch=\{item\.href === "\/claims"/);
-  const { isDeskNavActive } = await import("../lib/desk-nav-shared");
+  assert.match(navSource, /shouldPrefetchDeskNav/);
+  const { isDeskNavActive, shouldPrefetchDeskNav } = await import("../lib/desk-nav-shared");
+  assert.equal(shouldPrefetchDeskNav("/claims"), false);
+  assert.equal(shouldPrefetchDeskNav("/accounting/quickbooks"), false);
+  assert.equal(shouldPrefetchDeskNav("/accounting/commissions"), true);
   assert.equal(isDeskNavActive("/claims", "/claims"), true);
   assert.equal(isDeskNavActive("/claims", "/reports"), false);
   assert.equal(isDeskNavActive("/reports", "/reports"), true);
@@ -300,7 +303,19 @@ async function main() {
   assert.match(qboAccountingPage, /Disconnect From QuickBooks/);
   assert.match(qboAccountingPage, /QuickBooks Desktop/);
   assert.match(qboAccountingPage, /hubTabClass|hub-tab-active/);
+  assert.match(qboAccountingPage, /loadQuickbooksDesk/);
+  assert.match(qboAccountingPage, /data-qbo-accounting/);
+  assert.match(qboAccountingPage, /data-qbo-soft-fail/);
+  assert.match(qboAccountingPage, /QboSoftFail/);
   assert.doesNotMatch(qboAccountingPage, /Ready to invoice|Already sent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/error.tsx"), "utf8"), /data-qbo-error/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/loading.tsx"), "utf8"), /data-qbo-loading/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/quickbooks-desk.ts"), "utf8"), /Never throws/);
+  const qboDesk = await import("../lib/quickbooks-desk");
+  const qboDeskPage = await qboDesk.loadQuickbooksDesk("connection");
+  assert.equal(qboDeskPage.tab, "connection");
+  assert.ok(qboDeskPage.qbo);
+  assert.equal(qboDeskPage.error, "");
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /a\.hub-tab-active/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /acct-hub-tabs/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /table-grid-acct/);
@@ -1065,23 +1080,38 @@ async function main() {
   assert.match(hubSource, /action="\/accounting\/pay"/);
   assert.doesNotMatch(hubSource, /Export bill to QBO/);
   assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
-  assert.match(hubSource, /Close period/);
+  assert.match(hubSource, /ClosePayPeriodButton/);
   assert.match(hubSource, /Download Excel/);
+  assert.match(hubSource, /No driver pay in this period/);
+  assert.match(hubSource, /Approve load pay items/);
   assert.match(hubSource, /overflow-x-auto/);
   assert.match(hubSource, /min-w-max/);
   assert.match(hubSource, /sticky right-0/);
   const invoicesTableUi = fs.readFileSync(path.join(process.cwd(), "components/invoices-acct-table.tsx"), "utf8");
+  const invoiceActionsUi = fs.readFileSync(path.join(process.cwd(), "components/invoice-row-actions.tsx"), "utf8");
   assert.match(invoicesTableUi, /\/api\/loads\/\$\{row\.id\}\/invoice/);
-  assert.match(invoicesTableUi, /title="Send back to Load Management"/);
+  assert.match(invoicesTableUi, /data-table-zones="invoices"/);
+  assert.match(invoicesTableUi, /InvoiceCollapsedActions/);
+  assert.match(invoicesTableUi, /InvoiceSendPostGroup/);
   assert.match(invoicesTableUi, /Invoice Exported|Unsent/);
-  assert.match(invoicesTableUi, /QboInvoiceSendButton/);
-  assert.match(invoicesTableUi, /EmailInvoiceButton/);
-  assert.match(invoicesTableUi, /variant="link"/);
+  assert.match(invoicesTableUi, /data-invoice-preview/);
   assert.doesNotMatch(invoicesTableUi, /Email History/);
   assert.doesNotMatch(invoicesTableUi, /mailto:/);
+  assert.doesNotMatch(invoicesTableUi, /EmailInvoiceButton/);
   assert.match(invoicesTableUi, /acct-expand-grid/);
+  assert.match(invoiceActionsUi, /titleAttr="Send back to Load Management"/);
+  assert.match(invoiceActionsUi, /QboInvoiceSendButton/);
+  assert.match(invoiceActionsUi, /EmailInvoiceButton/);
+  assert.match(invoiceActionsUi, /variant="link"/);
+  assert.match(invoiceActionsUi, /data-invoice-send-post/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/close-pay-period-button.tsx"), "utf8"), /Close period…/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/close-pay-period-button.tsx"), "utf8"), /ConfirmDialog/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/close-pay-period-button.tsx"), "utf8"), /window\.confirm/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/delete-customer-form.tsx"), "utf8"), /window\.confirm/);
   const emailInvoiceUi = fs.readFileSync(path.join(process.cwd(), "components/email-invoice-button.tsx"), "utf8");
   assert.match(emailInvoiceUi, /Email invoice/);
+  assert.match(emailInvoiceUi, /ConfirmDialog/);
+  assert.doesNotMatch(emailInvoiceUi, /window\.confirm/);
   assert.match(emailInvoiceUi, /anchorId/);
   assert.match(emailInvoiceUi, /id=\{anchorId\}/);
   assert.match(emailInvoiceUi, /ar@msloads\.com/);
@@ -1316,6 +1346,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/accounting/page.tsx"), "utf8"), /ArapReport/);
   const qboSendButtonUi = fs.readFileSync(path.join(process.cwd(), "components/qbo-invoice-send-button.tsx"), "utf8");
   assert.match(qboSendButtonUi, /data-qbo-send-notice/);
+  assert.match(qboSendButtonUi, /ConfirmDialog/);
+  assert.doesNotMatch(qboSendButtonUi, /window\.confirm/);
   assert.match(qboSendButtonUi, /confirm_resend/);
   assert.match(qboSendButtonUi, /Invoice sent again to QuickBooks/);
   const qboActionsSrc = fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8");
@@ -1940,6 +1972,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /truckFormValues/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8"), /MikeLauncher/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), />\s*Mike\s*</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /Ask Mike — dispatcher assistant/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /btn-secondary/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /width="16"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /btn-primary/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/mike-chat.tsx"), "utf8"), /Ask Mike/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /force-dynamic/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /MikeLauncher|mikeConfigured/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /MikeChat/);
@@ -2341,7 +2378,18 @@ async function main() {
   const compactStart = issueLineUi.indexOf("if (compact)");
   const compactReturn = issueLineUi.indexOf("return (", compactStart);
   const deskReturn = issueLineUi.indexOf("return (", compactReturn + 1);
-  assert.doesNotMatch(issueLineUi.slice(compactStart, deskReturn), /Snooze 4h|exceptionAction/);
+  const compactUi = issueLineUi.slice(compactStart, deskReturn);
+  assert.doesNotMatch(compactUi, /Snooze 4h|exceptionAction/);
+  assert.doesNotMatch(compactUi, /truncate/);
+  assert.match(compactUi, /exceptionReasonText/);
+  assert.match(compactUi, /exceptionReasonTooltip/);
+  assert.match(compactUi, /exception-badge-stack/);
+  assert.match(compactUi, /exception-reason/);
+  assert.match(compactUi, /data-attention-reason/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /exception-reason \{[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: visible;/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
@@ -12933,11 +12981,16 @@ DISPATCH CONFIRMATION
   assert.match(customersPage, /New customer/);
   assert.match(customersPage, /CustomersTable/);
   const customersTable = fs.readFileSync(path.join(process.cwd(), "components/customers-table.tsx"), "utf8");
-  assert.match(customersTable, /"Edit"/);
-  assert.match(customersTable, /DeleteCustomerForm/);
+  assert.match(customersTable, /CustomerRowActions/);
   assert.match(customersTable, /data-customers-list/);
   assert.doesNotMatch(customersTable, /overflow-hidden/);
+  const customerRowActions = fs.readFileSync(path.join(process.cwd(), "components/customer-row-actions.tsx"), "utf8");
+  assert.match(customerRowActions, /"Edit"/);
+  assert.match(customerRowActions, /DeleteCustomerForm/);
+  assert.match(customerRowActions, /RowOverflowMenu/);
+  assert.match(customerRowActions, /Delete…/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/delete-customer-form.tsx"), "utf8"), /deleteCustomerAction/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/delete-customer-form.tsx"), "utf8"), /ConfirmDialog/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/customers/[id]/page.tsx"), "utf8"), /Delete customer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /deleteCustomerAction/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /CUSTOMER_HAS_LOADS_DELETE/);
@@ -16285,7 +16338,12 @@ DISPATCH CONFIRMATION
     .map((file) => fs.readFileSync(path.join(process.cwd(), "components", file), "utf8"))
     .join("\n");
   const settingsHints = fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8");
-  const pageSubtitles = pageCopy.match(/subtitle=\{?`?["'][^"'`]+["'`]/g)?.join("\n") ?? "";
+  const pageSubtitles =
+    [...pageCopy.matchAll(/<PageHeader\b[\s\S]*?>/g)]
+      .map((match) => match[0])
+      .join("\n")
+      .match(/subtitle=\{?`?["'][^"'`]+["'`]/g)
+      ?.join("\n") ?? "";
   assert.equal(pageSubtitles, "", "app pages must not print helper PageHeader subtitles");
   assert.doesNotMatch(componentCopy, /subtitle="[^"]+"/);
   assert.match(
@@ -16340,12 +16398,17 @@ DISPATCH CONFIRMATION
   assert.match(orbcommAuth, /persistLiveReeferReadings/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Official IFTA|<code>\.env|GOOGLE_MAPS_API_KEY/);
 
-  const { attentionLabel } = await import("../lib/exceptions");
+  const { attentionLabel, exceptionReasonText, exceptionReasonTooltip } = await import("../lib/exceptions");
   assert.equal(attentionLabel({ kind: "late", severity: "HIGH", title: "Late to pickup" }), "Running late");
   assert.equal(attentionLabel({ kind: "reefer", severity: "CRITICAL", title: "Temperature discrepancy" }), "Critical");
   assert.equal(attentionLabel({ kind: "unassigned", severity: "LOW", title: "Unassigned" }), "Caution");
   assert.equal(attentionLabel({ kind: "missing_pod", severity: "HIGH", title: "Missing POD" }), "Important");
   assert.equal(attentionLabel({ kind: "detention", severity: "HIGH", title: "Detention — Dock" }), "Detention");
+  assert.equal(exceptionReasonText({ title: "Missing rate-con phone" }), "Missing rate-con phone");
+  assert.equal(
+    exceptionReasonTooltip({ title: "Late to pickup", detail: "Pickup window ended" }),
+    "Late to pickup — Pickup window ended",
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"), /"detention"/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/exceptions.ts"), "utf8"),
@@ -17238,6 +17301,19 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Truck mileage/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /Loaded miles/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /iftaStateLabel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/ifta/page.tsx"), "utf8"), /data-table-zones="ifta"/);
+  const { iftaStateLabel } = await import("../lib/us-state-lookup");
+  assert.equal(iftaStateLabel("AL", "AL"), "Alabama");
+  assert.equal(iftaStateLabel("IA", "IA Iowa"), "Iowa");
+  assert.equal(iftaStateLabel("IA", "Iowa"), "Iowa");
+  assert.equal(iftaStateLabel("TX", ""), "Texas");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /data-table-zones="board"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.table-zones \{/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /box-shadow: 1px 0 0 var\(--border\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/arap-report.tsx"), "utf8"), /data-table-zones="arap"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/statistics/page.tsx"), "utf8"), /data-table-zones="stats"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/confirm-dialog.tsx"), "utf8"), /data-confirm-dialog/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /Empty miles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-routing-guide.tsx"), "utf8"), /refreshAction\(form\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /data-email-ingest/);
@@ -17261,6 +17337,9 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /WhatsApp/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /TWILIO_|OPENAI_API_KEY|WHATSAPP_ACCESS_TOKEN/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /CriticalTag/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /loadCriticalReasons/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /data-critical-reason/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="active"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="delivered"/);
@@ -17278,10 +17357,17 @@ DISPATCH CONFIRMATION
     /Hastings/,
   );
 
-  const { loadNeedsCriticalTag } = await import("../lib/exceptions");
+  const { loadCriticalReasons, loadNeedsCriticalTag } = await import("../lib/exceptions");
   assert.equal(loadNeedsCriticalTag(999999, [{ loadId: 1, kind: "late", severity: "HIGH" }]), false);
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "late", severity: "HIGH" }]), true);
   assert.equal(loadNeedsCriticalTag(1, [{ loadId: 1, kind: "reefer", severity: "CRITICAL" }]), true);
+  assert.deepEqual(
+    loadCriticalReasons(1, [
+      { loadId: 1, kind: "missing_contact", severity: "CRITICAL", title: "Missing rate-con phone" },
+      { loadId: 1, kind: "late", severity: "HIGH", title: "Late to pickup" },
+    ]),
+    ["Missing rate-con phone", "Late to pickup"],
+  );
 
   const { proposeMikeWork, applyMikeProposal } = await import("../lib/mike-work");
   const detentionWork = proposeMikeWork(`Draft detention email for ${created.load_number}`);

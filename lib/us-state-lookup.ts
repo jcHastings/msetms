@@ -207,3 +207,18 @@ export function usStateForPoint(lat: number, lng: number): { code: string; name:
 export function usStateName(code: string): string {
   return US_STATE_BOXES.find((box) => box.code === code.toUpperCase())?.name ?? code.toUpperCase();
 }
+
+/** One clean IFTA jurisdiction label — never `AL AL` or `IA Iowa`. */
+export function iftaStateLabel(state: string, name?: string | null): string {
+  const code = String(state ?? "").trim().toUpperCase();
+  const raw = String(name ?? "").trim();
+  const looked = code ? usStateName(code) : "";
+  if (!raw || raw.toUpperCase() === code) {
+    return looked || code;
+  }
+  const stripped = code ? raw.replace(new RegExp(`^${code}\\s+`, "i"), "").trim() : raw;
+  if (!stripped || stripped.toUpperCase() === code) {
+    return looked || code;
+  }
+  return stripped;
+}

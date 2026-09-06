@@ -8,7 +8,6 @@ import {
 } from "@/lib/accounting-desk-shared";
 import {
   archiveAccountingLoadFormAction,
-  closeDriverPayPeriodAction,
   createBillAction,
   payAllOpenBillsFormAction,
   payBillAction,
@@ -16,6 +15,7 @@ import {
   sendBillToQuickbooksFormAction,
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
+import { ClosePayPeriodButton } from "@/components/close-pay-period-button";
 import { InvoicesAcctTable, type InvoiceAcctRow } from "@/components/invoices-acct-table";
 import {
   addDaysIso,
@@ -547,16 +547,18 @@ function PayTab({ from, to, driver }: { from: string; to: string; driver: string
         <a className="btn btn-secondary" href={exportHref}>
           Download Excel
         </a>
-        <form action={closeDriverPayPeriodAction}>
-          <input type="hidden" name="from" value={from} />
-          <input type="hidden" name="to" value={to} />
-          <button className="btn btn-primary" type="submit">
-            Close period
-          </button>
-        </form>
+        <ClosePayPeriodButton from={from} to={to} />
       </div>
       {groups.length === 0 ? (
-        <div className="card p-6 text-sm text-slate-600">No Accounting driver pay in this period.</div>
+        <div className="pay-empty-state" data-driver-pay-empty="">
+          <p className="font-semibold text-slate-800">No driver pay in this period</p>
+          <p className="mt-1 text-sm text-slate-600">
+            Approve load pay items on the invoice queue, then apply this period.
+          </p>
+          <Link href={hrefForAccountingHubTab("approve")} className="acct-link mt-2 inline-block">
+            Approve load pay items
+          </Link>
+        </div>
       ) : (
         <div className="space-y-4">
           {groups.map((group) => (

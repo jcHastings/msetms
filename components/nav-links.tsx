@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { DESK_NAV_ACCORDION, deskNavSectionForPath, isDeskNavActive, nextDeskNavOpenSection } from "@/lib/desk-nav-shared";
+import {
+  DESK_NAV_ACCORDION,
+  deskNavSectionForPath,
+  isDeskNavActive,
+  nextDeskNavOpenSection,
+  shouldPrefetchDeskNav,
+} from "@/lib/desk-nav-shared";
 import { canSeeNavHref } from "@/lib/settings-shared";
 
 type NavItem = { href: string; label: string; short: string; icon: string };
@@ -96,7 +102,7 @@ function NavItemLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       title={item.label}
       data-nav-href={item.href}
-      prefetch={item.href === "/claims" ? false : undefined}
+      prefetch={shouldPrefetchDeskNav(item.href) ? undefined : false}
       className={`desk-nav-link flex items-center gap-2 whitespace-nowrap px-2 py-1.5 ${
         active ? "desk-nav-link-active" : ""
       }`}

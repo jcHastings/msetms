@@ -23,11 +23,17 @@ const DRIVER_STYLES: Record<DriverStatus, string> = {
   off_duty: "status-tone-slate",
 };
 
-function Pill({ className, children }: { className: string; children: React.ReactNode }) {
+function Pill({
+  className,
+  children,
+  title,
+}: {
+  className: string;
+  children: React.ReactNode;
+  title?: string;
+}) {
   return (
-    <span
-      className={`status-pill ring-1 ring-inset ring-black/5 ${className}`}
-    >
+    <span className={`status-pill ring-1 ring-inset ring-black/5 ${className}`} title={title}>
       {children}
     </span>
   );
@@ -37,8 +43,18 @@ export function LoadStatusBadge({ status }: { status: string }) {
   return <Pill className={loadStatusBadgeClass(status)}>{labelForLoadStatus(status)}</Pill>;
 }
 
-export function CriticalTag() {
-  return <Pill className="status-tone-danger">Critical</Pill>;
+export function CriticalTag({ reason }: { reason?: string }) {
+  const text = reason?.trim() ?? "";
+  return (
+    <span className="exception-badge-stack" title={text || "Critical"}>
+      <Pill className="status-tone-danger shrink-0">Critical</Pill>
+      {text ? (
+        <span className="exception-reason" data-critical-reason="">
+          {text}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {
