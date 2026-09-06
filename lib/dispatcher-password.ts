@@ -103,6 +103,18 @@ export function findActiveDispatcherByEmail(email: string): AuthRow | null {
   );
 }
 
+export function findActiveDispatcherByName(name: string): AuthRow | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const rows = getDb()
+    .prepare(
+      `SELECT id, active, password_hash, email, phone FROM dispatchers
+       WHERE active = 1 AND name = ? COLLATE NOCASE`,
+    )
+    .all(trimmed) as AuthRow[];
+  return rows.length === 1 ? rows[0] : null;
+}
+
 export function dispatcherHasPassword(id: number): boolean {
   const row = getDispatcherAuth(id);
   return Boolean(row?.password_hash);

@@ -15,6 +15,7 @@ import { assertNyBoroughState } from "./places-shared";
 import {
   authenticateDispatcher,
   authenticateDispatcherByEmail,
+  authenticateDispatcherByName,
   clearDispatcherSession,
   getDispatcher,
   getPendingTwoFactorDispatcherId,
@@ -138,14 +139,17 @@ export async function dispatcherLoginAction(
 
     const password = String(formData.get("password") ?? "");
     const email = String(formData.get("email") ?? "").trim();
+    const dispatcherName = String(formData.get("dispatcher_name") ?? "").trim();
     if (!password) throw new Error("Enter your password.");
     const dispatcher = email
       ? authenticateDispatcherByEmail(email, password)
-      : dispatcherId
-        ? authenticateDispatcher(dispatcherId, password)
-        : (() => {
-            throw new Error("Enter your email and password.");
-          })();
+      : dispatcherName
+        ? authenticateDispatcherByName(dispatcherName, password)
+        : dispatcherId
+          ? authenticateDispatcher(dispatcherId, password)
+          : (() => {
+              throw new Error("Enter your email and password.");
+            })();
     const afterPassword = () => {
       return dispatcher.must_change_password ? "/login/change-password" : "/";
     };

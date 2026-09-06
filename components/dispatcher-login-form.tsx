@@ -4,15 +4,11 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { PasswordField } from "@/components/password-field";
-import type { PublicDispatcher } from "@/lib/settings-shared";
-import { roleLabel } from "@/lib/settings-shared";
 import type { ActionResult } from "@/lib/types";
 
 export function DispatcherLoginForm({
-  dispatchers,
   action,
 }: {
-  dispatchers: PublicDispatcher[];
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
@@ -60,15 +56,14 @@ export function DispatcherLoginForm({
         <>
           {useName ? (
             <div className="field">
-              <label htmlFor="dispatcher_id">Dispatcher</label>
-              <select id="dispatcher_id" name="dispatcher_id" required defaultValue="">
-                <option value="">Select name</option>
-                {dispatchers.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.name} · {roleLabel(person.role)}
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="dispatcher_name">Name</label>
+              <input
+                id="dispatcher_name"
+                name="dispatcher_name"
+                type="text"
+                required
+                autoComplete="username"
+              />
             </div>
           ) : (
             <div className="field">
