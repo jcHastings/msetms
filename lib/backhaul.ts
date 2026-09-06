@@ -1,4 +1,4 @@
-import { findExactCityCenter } from "./city-coords-shared";
+import { findExactCityCenter, normalizeCityKey } from "./city-coords-shared";
 import { formatDate } from "./format";
 import { geocodeAddress } from "./places";
 import { getLoad, listLoads, listLocations } from "./queries";
@@ -78,17 +78,37 @@ function placeFromStopOrLane(
   };
 }
 
+function locationPlaceAgrees(
+  location: Pick<Location, "city" | "state">,
+  place: { city: string; state: string },
+): boolean {
+  const locCity = normalizeCityKey(location.city);
+  const locState = normalizeCityKey(location.state);
+  const placeCity = normalizeCityKey(place.city);
+  const placeState = normalizeCityKey(place.state);
+  if (placeCity && locCity && locCity !== placeCity) return false;
+  if (placeState && locState && locState !== placeState) return false;
+  if (placeCity && !locCity) return false;
+  return true;
+}
+
 function coordsFromKnown(
   place: { city: string; state: string; locationId: number | null },
   locations: Location[],
 ): { lat: number; lng: number } | null {
+  // City-table / exact city+state first. Never use a linked warehouse in another
+  // city (Buffalo stop → Bronx dock coords) and never substring-match Brooklyn Park → Brooklyn.
+  const known = findExactCityCenter(place.city, place.state, locationCoords(locations));
+  if (known) return { lat: known.lat, lng: known.lng };
   const linked = place.locationId ? locations.find((location) => location.id === place.locationId) : null;
-  if (linked?.latitude != null && linked.longitude != null) {
+  if (
+    linked?.latitude != null &&
+    linked.longitude != null &&
+    locationPlaceAgrees(linked, place)
+  ) {
     return { lat: linked.latitude, lng: linked.longitude };
   }
-  const known = findExactCityCenter(place.city, place.state, locationCoords(locations));
-  if (!known) return null;
-  return { lat: known.lat, lng: known.lng };
+  return null;
 }
 
 async function resolvePlace(
