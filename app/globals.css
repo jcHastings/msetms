@@ -1126,9 +1126,22 @@ button {
     min-width: 10.5rem;
   }
 
-  /* Orbcomm: page must not be a competing clip/scrollport. Table container scrolls. */
-  .desk-main:has([data-orbcomm-status-table]) {
-    overflow-x: hidden;
+  /* Orbcomm ~390: ancestors must not clip or H-scroll. PR44 set
+     overflow-x:hidden here; that clip ate LOCATION/TEMP leading chars
+     while .orbcomm-status-scroll was supposed to be the only scrollport. */
+  html:has([data-orbcomm-status-table]),
+  html:has([data-orbcomm-status-table]) body,
+  .desk-shell:has([data-orbcomm-status-table]),
+  .desk-main:has([data-orbcomm-status-table]),
+  .desk-main:has([data-orbcomm-status-table]) .desk-main-inner,
+  [data-orbcomm-status-table] {
+    overflow-x: visible;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .desk-main:has([data-orbcomm-status-table]) .desk-main-inner {
+    margin-inline: 0;
   }
 
   .load-overlay-backdrop,
@@ -1935,22 +1948,32 @@ html:has([data-load-embed]) body {
   vertical-align: middle;
 }
 
-/* Mobile smoke: Orbcomm LOCATION/TEMP left-edge clip is overflow+crushed
-   columns, not missing letters. Keep the table container as the only
-   horizontal scrollport. Do not sticky or overflow:hidden the cells. */
+/* Mobile smoke: Orbcomm LOCATION/TEMP left-edge clip is a competing
+   ancestor clip (desk-main overflow-x:hidden), not missing letters.
+   Only .orbcomm-status-scroll may clip or H-scroll. */
 [data-orbcomm-status-table] {
   overflow: visible;
   max-width: 100%;
+  min-width: 0;
 }
 
 .orbcomm-status-scroll,
 [data-orbcomm-status-scroll] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: scroll;
   overflow-y: visible;
-  max-width: 100%;
+  overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 transparent;
+  padding-inline: max(0.75rem, env(safe-area-inset-left, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px));
+  scroll-padding-inline: max(0.75rem, env(safe-area-inset-left, 0px))
+    max(0.75rem, env(safe-area-inset-right, 0px));
 }
 
 [data-orbcomm-status-table] .table-grid {

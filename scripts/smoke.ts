@@ -526,6 +526,7 @@ async function main() {
   assert.doesNotMatch(cssSource, /html,\s*body\s*\{[^}]*overflow-x:\s*hidden/);
   assert.doesNotMatch(shellSource, /w-\[4\.75rem\]/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /width: "device-width"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /viewportFit: "cover"/);
   assert.doesNotMatch(shellSource, /Set up 2-step/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/mike-launcher.tsx"), "utf8"), /fixed right-6 bottom-6/);
   assert.match(navSource, /whitespace-nowrap/);
@@ -1960,6 +1961,30 @@ async function main() {
   assert.match(orbcommCss, /td\[data-orbcomm-temp\] \{[\s\S]*min-width:\s*5\.5rem;/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-location\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-temp\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
+  // Live 390px regression: desk-main overflow-x:hidden competed with the table
+  // scrollport and ate HASTINGS→STINGS / TEMP fragments. Ancestors stay visible.
+  const deskMainOrbcommRules = orbcommCss.match(/\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]+\}/g) ?? [];
+  assert.ok(deskMainOrbcommRules.length >= 1, "Orbcomm desk-main :has rule must exist");
+  for (const rule of deskMainOrbcommRules) {
+    assert.doesNotMatch(rule, /overflow-x:\s*hidden/, "desk-main must not clip Orbcomm");
+  }
+  assert.match(orbcommCss, /\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]*overflow-x:\s*visible/);
+  assert.match(orbcommCss, /html:has\(\[data-orbcomm-status-table\]\)/);
+  assert.doesNotMatch(
+    orbcommCss,
+    /\.desk-main:has\(\[data-orbcomm-status-table\]\)\s*\{[^}]*overflow-x:\s*hidden/,
+  );
+  const orbcommScrollRule =
+    orbcommCss.match(
+      /\.orbcomm-status-scroll,\s*\[data-orbcomm-status-scroll\]\s*\{[\s\S]*?\n\}/,
+    )?.[0] ?? "";
+  assert.match(orbcommScrollRule, /overflow-x:\s*scroll/);
+  assert.match(orbcommScrollRule, /padding-inline:/);
+  assert.match(orbcommScrollRule, /safe-area-inset-left/);
+  assert.match(orbcommScrollRule, /min-width:\s*0/);
+  assert.match(orbcommScrollRule, /width:\s*100%/);
+  assert.doesNotMatch(orbcommScrollRule, /overflow-x:\s*hidden/);
+  assert.doesNotMatch(orbcommScrollRule, /margin-(left|inline-start):\s*-/);
   assert.match(orbcommCss, /board-end-stack/);
   assert.match(orbcommCss, /max-width:\s*79\.99rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
