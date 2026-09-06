@@ -4,11 +4,21 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDismissable } from "@/components/use-dismissable";
-import { BACKHAUL_RADIUS_MI, type BackhaulResponse } from "@/lib/backhaul-shared";
+import {
+  BACKHAUL_EMPTY_TITLE,
+  BACKHAUL_MISSING_TITLE,
+  BACKHAUL_RADIUS_MI,
+  BACKHAUL_SEARCH_FAILED,
+  BACKHAUL_SEARCHING,
+  backhaulEmptyDetail,
+  type BackhaulLoadRow,
+  type BackhaulResponse,
+} from "@/lib/backhaul-shared";
 
 function FinderSkeleton() {
   return (
     <div className="backhaul-skeleton" data-backhaul-skeleton="">
+      <p className="backhaul-searching">{BACKHAUL_SEARCHING}</p>
       {Array.from({ length: 4 }, (_, index) => (
         <div key={index} className="backhaul-skeleton-row" />
       ))}
@@ -16,32 +26,96 @@ function FinderSkeleton() {
   );
 }
 
-function FinderBody({ data }: { data: BackhaulResponse }) {
+function LoadRow({ row }: { row: BackhaulLoadRow }) {
+  return (
+    <>
+      <td>
+        <Link href={`/loads/${row.id}`} className="desk-link font-mono">
+          {row.loadNumber}
+        </Link>
+      </td>
+      <td>{row.customer}</td>
+      <td>
+        <div className="backhaul-lane">
+          <span>{row.pickup}</span>
+          <span className="backhaul-muted">{row.delivery}</span>
+        </div>
+      </td>
+      <td className="backhaul-num backhaul-nearest">{row.miles} mi</td>
+      <td>{row.date}</td>
+    </>
+  );
+}
+
+function LoadCard({ row }: { row: BackhaulLoadRow }) {
+  return (
+    <article className="backhaul-card" data-backhaul-card="">
+      <Link href={`/loads/${row.id}`} className="desk-link font-mono">
+        {row.loadNumber}
+      </Link>
+      <div className="backhaul-card-customer">{row.customer}</div>
+      <div className="backhaul-lane">
+        <span>{row.pickup}</span>
+        <span className="backhaul-muted">{row.delivery}</span>
+      </div>
+      <div className="backhaul-card-meta">
+        <span className="backhaul-nearest">{row.miles} mi</span>
+        <span>{row.date}</span>
+      </div>
+    </article>
+  );
+}
+
+function FinderBody({
+  data,
+  loadId,
+  onRetry,
+}: {
+  data: BackhaulResponse;
+  loadId: number;
+  onRetry: () => void;
+}) {
   if (!data.ok) {
+    const title = data.reason === "missing_delivery" ? BACKHAUL_MISSING_TITLE : BACKHAUL_SEARCH_FAILED;
     return (
-      <p className="backhaul-empty" data-backhaul-state={data.reason}>
-        {data.error}
-      </p>
+      <div className="backhaul-empty" data-backhaul-state={data.reason}>
+        <p className="backhaul-empty-title">{title}</p>
+        {data.detail ? <p className="backhaul-empty-detail">{data.detail}</p> : null}
+        {data.reason === "missing_delivery" ? (
+          <Link href={`/loads/${loadId}`} className="btn btn-secondary mt-3">
+            Open load
+          </Link>
+        ) : (
+          <button type="button" className="btn btn-secondary mt-3" onClick={onRetry}>
+            Try again
+          </button>
+        )}
+      </div>
     );
   }
   if (data.loads.length === 0) {
     return (
-      <p className="backhaul-empty" data-backhaul-state="empty">
-        No loads within {data.radiusMi} mi of {data.center.label}.
-      </p>
+      <div className="backhaul-empty" data-backhaul-state="empty">
+        <p className="backhaul-empty-title">{BACKHAUL_EMPTY_TITLE}</p>
+        <p className="backhaul-empty-detail">{backhaulEmptyDetail(data.center.label)}</p>
+      </div>
     );
   }
   return (
     <>
       <section className="backhaul-section" data-backhaul-loads="">
         <h3 className="backhaul-section-title">Loads near delivery</h3>
-        <table className="backhaul-table">
+        {data.total > data.loads.length ? (
+          <p className="backhaul-cap">
+            Showing {data.loads.length} of {data.total}
+          </p>
+        ) : null}
+        <table className="backhaul-table backhaul-table-desktop">
           <thead>
             <tr>
-              <th>Load#</th>
+              <th>Load</th>
               <th>Customer</th>
-              <th>Pickup</th>
-              <th>Delivery</th>
+              <th>PU / Del</th>
               <th className="backhaul-num">Mi</th>
               <th>Date</th>
             </tr>
@@ -49,20 +123,16 @@ function FinderBody({ data }: { data: BackhaulResponse }) {
           <tbody>
             {data.loads.map((row) => (
               <tr key={row.id}>
-                <td>
-                  <Link href={`/loads/${row.id}`} className="desk-link font-mono">
-                    {row.loadNumber}
-                  </Link>
-                </td>
-                <td>{row.customer}</td>
-                <td>{row.pickup}</td>
-                <td className="backhaul-muted">{row.delivery}</td>
-                <td className="backhaul-num">{row.miles}</td>
-                <td>{row.date}</td>
+                <LoadRow row={row} />
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="backhaul-cards">
+          {data.loads.map((row) => (
+            <LoadCard key={row.id} row={row} />
+          ))}
+        </div>
       </section>
       <section className="backhaul-section" data-backhaul-customers="">
         <h3 className="backhaul-section-title">Customers in radius</h3>
@@ -104,6 +174,7 @@ export function BackhaulFinderPanel({
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<BackhaulResponse | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   useDismissable(open, onClose, panelRef);
   useEffect(() => setMounted(true), []);
 
@@ -122,7 +193,7 @@ export function BackhaulFinderPanel({
           setData({
             ok: false,
             reason: "error",
-            error: "Backhaul Finder could not search right now.",
+            error: BACKHAUL_SEARCH_FAILED,
           });
         }
       })
@@ -132,7 +203,7 @@ export function BackhaulFinderPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, loadId]);
+  }, [open, loadId, retryTick]);
 
   if (!mounted || !open) return null;
 
@@ -151,6 +222,7 @@ export function BackhaulFinderPanel({
         aria-modal="true"
         aria-labelledby="backhaul-finder-title"
       >
+        <div className="backhaul-grab" aria-hidden="true" />
         <header className="backhaul-header">
           <div className="min-w-0">
             <h2 id="backhaul-finder-title" className="backhaul-title">
@@ -168,7 +240,11 @@ export function BackhaulFinderPanel({
           </button>
         </header>
         <div className="backhaul-body">
-          {loading || !data ? <FinderSkeleton /> : <FinderBody data={data} />}
+          {loading || !data ? (
+            <FinderSkeleton />
+          ) : (
+            <FinderBody data={data} loadId={loadId} onRetry={() => setRetryTick((tick) => tick + 1)} />
+          )}
         </div>
         <p className="backhaul-footnote">M&S Loads house accounts excluded. Radius fixed at {BACKHAUL_RADIUS_MI} mi.</p>
       </div>

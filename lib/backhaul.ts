@@ -6,7 +6,9 @@ import { listStops } from "./stops";
 import type { LoadStop } from "./stops-shared";
 import type { Location, LoadView } from "./types";
 import {
+  BACKHAUL_MISSING_TITLE,
   BACKHAUL_RADIUS_MI,
+  BACKHAUL_SEARCH_FAILED,
   capBackhaulLoads,
   formatCityState,
   isHouseCustomerName,
@@ -151,7 +153,8 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     return {
       ok: false,
       reason: "missing_delivery",
-      error: "This load has no delivery city. Add a delivery stop to search for backhaul.",
+      error: BACKHAUL_MISSING_TITLE,
+      detail: "Set a delivery city and state on this load, then search again.",
       source: { id: source.id, loadNumber: source.load_number },
     };
   }
@@ -161,7 +164,8 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     return {
       ok: false,
       reason: "geocode_failed",
-      error: `Could not place ${deliveryPlace.label || "the delivery city"} on the map. Check the city and state.`,
+      error: BACKHAUL_SEARCH_FAILED,
+      detail: `Could not place ${deliveryPlace.label || "the delivery city"} on the map.`,
       source: { id: source.id, loadNumber: source.load_number },
     };
   }
@@ -169,6 +173,7 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
   const candidates: BackhaulLoadRow[] = [];
   for (const load of listLoads({ status: "all" })) {
     if (load.id === source.id) continue;
+    if (load.status === "cancelled") continue;
     if (isHouseCustomerName(load.customer_name)) continue;
     const stops = listStops(load.id);
     const pickupStop = firstPickupStop(stops);
@@ -194,7 +199,8 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     );
   }
 
-  const loads = capBackhaulLoads(sortBackhaulLoads(candidates));
+  const sorted = sortBackhaulLoads(candidates);
+  const loads = capBackhaulLoads(sorted);
   return {
     ok: true,
     center: {
@@ -207,7 +213,8 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     radiusMi: BACKHAUL_RADIUS_MI,
     source: { id: source.id, loadNumber: source.load_number },
     loads,
-    customers: rollupBackhaulCustomers(loads),
+    customers: rollupBackhaulCustomers(sorted),
+    total: sorted.length,
   };
 }
 

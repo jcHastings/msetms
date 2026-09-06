@@ -2,6 +2,15 @@ import { haversineMiles } from "./city-coords-shared";
 
 export const BACKHAUL_RADIUS_MI = 150;
 export const BACKHAUL_LOAD_CAP = 50;
+export const BACKHAUL_EMPTY_TITLE = "No loads within 150 mi";
+export const BACKHAUL_MISSING_TITLE = "Need a delivery location";
+export const BACKHAUL_SEARCH_FAILED = "Couldn't search";
+export const BACKHAUL_SEARCHING = "Searching within 150 mi…";
+
+export function backhaulEmptyDetail(deliveryLabel: string): string {
+  const place = deliveryLabel.trim() || "delivery";
+  return `No past pickups or deliveries near ${place} (excluding M&S Loads).`;
+}
 
 export type BackhaulPlace = {
   city: string;
@@ -46,12 +55,14 @@ export type BackhaulResult = {
   source: { id: number; loadNumber: string };
   loads: BackhaulLoadRow[];
   customers: BackhaulCustomerRow[];
+  total: number;
 };
 
 export type BackhaulFailure = {
   ok: false;
   reason: "not_found" | "missing_delivery" | "geocode_failed" | "unauthorized" | "error";
   error: string;
+  detail?: string;
   source?: { id: number; loadNumber: string };
 };
 

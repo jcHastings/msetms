@@ -2539,12 +2539,20 @@ html:has([data-load-embed]) body {
   color: var(--text);
 }
 
+.backhaul-grab {
+  display: none;
+}
+
 .backhaul-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 1rem 1.1rem 0.85rem;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -2637,6 +2645,24 @@ html:has([data-load-embed]) body {
   white-space: nowrap;
 }
 
+.backhaul-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  line-height: 1.25;
+}
+
+.backhaul-cards {
+  display: none;
+}
+
+.backhaul-cap,
+.backhaul-searching {
+  margin: 0 0 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .backhaul-nearest {
   font-weight: 700;
 }
@@ -2645,6 +2671,17 @@ html:has([data-load-embed]) body {
   margin: 1.25rem 0;
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.backhaul-empty-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.backhaul-empty-detail {
+  margin: 0.35rem 0 0;
 }
 
 .backhaul-footnote {
@@ -2689,5 +2726,61 @@ html:has([data-load-embed]) body {
     height: 100dvh;
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -8px 28px rgba(7, 50, 90, 0.18);
+  }
+
+  .backhaul-grab {
+    display: block;
+    width: 2.5rem;
+    height: 0.28rem;
+    margin: 0.45rem auto 0;
+    border-radius: 999px;
+    background: #c5d0dc;
+  }
+
+  .backhaul-table-desktop {
+    display: none;
+  }
+
+  .backhaul-cards {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .backhaul-card {
+    padding: 0.55rem 0;
+    border-top: 1px solid #eef1f4;
+  }
+
+  .backhaul-card-customer {
+    margin-top: 0.15rem;
+    font-size: 0.8125rem;
+  }
+
+  .backhaul-card-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .action-phone-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 85;
+    padding: 0.35rem 0.75rem 1rem;
+    background: var(--surface);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 28px rgba(7, 50, 90, 0.18);
+  }
+
+  .action-phone-grab {
+    width: 2.5rem;
+    height: 0.28rem;
+    margin: 0.4rem auto 0.55rem;
+    border-radius: 999px;
+    background: #c5d0dc;
   }
 }

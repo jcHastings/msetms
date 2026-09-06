@@ -45,7 +45,7 @@ export function LoadCardFastActions({
     <>
       <BackhaulFinderHost loadId={loadId}>
         {(openFinder) => (
-          <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost">
+          <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost" sheetOnPhone>
             <button
               type="button"
               className="menu-item w-full text-left"
