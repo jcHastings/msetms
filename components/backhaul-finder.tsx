@@ -8,6 +8,7 @@ import {
   BACKHAUL_EMPTY_TITLE,
   BACKHAUL_MISSING_TITLE,
   BACKHAUL_RADIUS_MI,
+  BACKHAUL_RULE,
   BACKHAUL_SEARCH_FAILED,
   BACKHAUL_SEARCHING,
   backhaulEmptyDetail,
@@ -35,14 +36,8 @@ function LoadRow({ row }: { row: BackhaulLoadRow }) {
         </Link>
       </td>
       <td>{row.customer}</td>
-      <td>
-        <div className="backhaul-lane">
-          <span>{row.pickup}</span>
-          <span className="backhaul-muted">{row.delivery}</span>
-        </div>
-      </td>
+      <td>{row.pickup}</td>
       <td className="backhaul-num backhaul-nearest">{row.miles} mi</td>
-      <td>{row.date}</td>
     </>
   );
 }
@@ -56,11 +51,9 @@ function LoadCard({ row }: { row: BackhaulLoadRow }) {
       <div className="backhaul-card-customer">{row.customer}</div>
       <div className="backhaul-lane">
         <span>{row.pickup}</span>
-        <span className="backhaul-muted">{row.delivery}</span>
       </div>
       <div className="backhaul-card-meta">
         <span className="backhaul-nearest">{row.miles} mi</span>
-        <span>{row.date}</span>
       </div>
     </article>
   );
@@ -97,6 +90,7 @@ function FinderBody({
     return (
       <div className="backhaul-empty" data-backhaul-state="empty">
         <p className="backhaul-empty-title">{BACKHAUL_EMPTY_TITLE}</p>
+        <p className="backhaul-empty-detail">{BACKHAUL_RULE}</p>
         <p className="backhaul-empty-detail">{backhaulEmptyDetail(data.center.label)}</p>
       </div>
     );
@@ -104,7 +98,7 @@ function FinderBody({
   return (
     <>
       <section className="backhaul-section" data-backhaul-loads="">
-        <h3 className="backhaul-section-title">Loads near delivery</h3>
+        <p className="backhaul-rule">{BACKHAUL_RULE}</p>
         {data.total > data.loads.length ? (
           <p className="backhaul-cap">
             Showing {data.loads.length} of {data.total}
@@ -115,9 +109,8 @@ function FinderBody({
             <tr>
               <th>Load</th>
               <th>Customer</th>
-              <th>PU / Del</th>
+              <th>Pickup</th>
               <th className="backhaul-num">Mi</th>
-              <th>Date</th>
             </tr>
           </thead>
           <tbody>
@@ -208,10 +201,8 @@ export function BackhaulFinderPanel({
   if (!mounted || !open) return null;
 
   const sourceNumber = data && "source" in data && data.source ? data.source.loadNumber : "";
-  const subtitle =
-    data && data.ok
-      ? `${data.radiusMi} mi from ${data.center.label}`
-      : `${BACKHAUL_RADIUS_MI} mi from delivery`;
+  const placeLabel = data && data.ok ? data.center.label : "delivery";
+  const radiusMi = data && data.ok ? data.radiusMi : BACKHAUL_RADIUS_MI;
 
   return createPortal(
     <div className="backhaul-backdrop" data-backhaul-finder="" role="presentation">
@@ -228,12 +219,17 @@ export function BackhaulFinderPanel({
             <h2 id="backhaul-finder-title" className="backhaul-title">
               Backhaul Finder
             </h2>
-            <p className="backhaul-sub">{subtitle}</p>
-            {sourceNumber ? (
-              <Link href={`/loads/${loadId}`} className="desk-link backhaul-source font-mono">
-                {sourceNumber}
-              </Link>
-            ) : null}
+            <p className="backhaul-sub">
+              {radiusMi} mi from {placeLabel}
+              {sourceNumber ? (
+                <>
+                  {" · "}
+                  <Link href={`/loads/${loadId}`} className="desk-link backhaul-source font-mono">
+                    {sourceNumber}
+                  </Link>
+                </>
+              ) : null}
+            </p>
           </div>
           <button type="button" className="backhaul-close" aria-label="Close" onClick={onClose}>
             ×

@@ -7,9 +7,11 @@ export const BACKHAUL_MISSING_TITLE = "Need a delivery location";
 export const BACKHAUL_SEARCH_FAILED = "Couldn't search";
 export const BACKHAUL_SEARCHING = "Searching within 150 mi…";
 
+export const BACKHAUL_RULE = "Loads whose pickup is within 150 mi of this delivery.";
+
 export function backhaulEmptyDetail(deliveryLabel: string): string {
   const place = deliveryLabel.trim() || "delivery";
-  return `No past pickups or deliveries near ${place} (excluding M&S Loads).`;
+  return `No past pickups near ${place} (excluding M&S Loads).`;
 }
 
 export type BackhaulPlace = {
@@ -109,18 +111,13 @@ export function formatCityState(city: string, state: string): string {
   return place || st;
 }
 
-/** Miles to the nearer of a load's PU / DEL. Null when neither point is usable. */
-export function nearerMiles(
+/** Miles from the source delivery center to the candidate pickup only. */
+export function pickupMiles(
   center: { lat: number; lng: number },
   pickup: { lat: number; lng: number } | null,
-  delivery: { lat: number; lng: number } | null,
 ): number | null {
-  const pu = pickup ? haversineMiles(center.lat, center.lng, pickup.lat, pickup.lng) : null;
-  const del = delivery ? haversineMiles(center.lat, center.lng, delivery.lat, delivery.lng) : null;
-  if (pu == null && del == null) return null;
-  if (pu == null) return del;
-  if (del == null) return pu;
-  return Math.min(pu, del);
+  if (!pickup) return null;
+  return haversineMiles(center.lat, center.lng, pickup.lat, pickup.lng);
 }
 
 export function isWithinBackhaulRadius(miles: number | null, radiusMi = BACKHAUL_RADIUS_MI): boolean {
