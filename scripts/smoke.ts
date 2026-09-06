@@ -18044,7 +18044,6 @@ parked for next week
   assert.equal(found.radiusMi, 150);
   assert.match(found.center.label, /Bronx/i);
   const foundNumbers = found.loads.map((row) => row.loadNumber);
-  const fixtureRows = found.loads.filter((row) => row.loadNumber.startsWith("MSE-BH"));
   assert.ok(foundNumbers.includes("MSE-BH41"));
   assert.ok(foundNumbers.includes("MSE-BH98"));
   assert.ok(foundNumbers.includes("MSE-BH72"));
