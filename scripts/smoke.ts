@@ -18075,7 +18075,9 @@ parked for next week
     pickup_start: "2026-04-01T12:00:00.000Z",
     delivery_start: "2026-04-02T12:00:00.000Z",
   });
-  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId, cancelledId]) {
+  assert.equal(backhaulShared.isBlankPlacePart("TBD"), true);
+  assert.equal(backhaulShared.isBlankPlacePart("Bronx"), false);
+  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId, cancelledId, missingId]) {
     stopsMod.ensureDefaultStops(id);
   }
   const found = await backhaul.findBackhaulForLoad(sourceId);

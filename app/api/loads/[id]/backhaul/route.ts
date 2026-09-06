@@ -1,4 +1,5 @@
 import { findBackhaulForLoad } from "@/lib/backhaul";
+import { BACKHAUL_SEARCH_FAILED } from "@/lib/backhaul-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return Response.json(result, { status });
   } catch {
     return Response.json(
-      { ok: false, reason: "error", error: "Backhaul Finder could not search right now." },
+      { ok: false, reason: "error", error: BACKHAUL_SEARCH_FAILED },
       { status: 500 },
     );
   }

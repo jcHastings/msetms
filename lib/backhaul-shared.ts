@@ -86,9 +86,15 @@ export function isHouseCustomerName(name: string): boolean {
   return key.startsWith("msloads") || key.startsWith("mandsloads") || key.startsWith("mnsloads");
 }
 
+/** Empty or placeholder city/state (TBD) is not a searchable place. */
+export function isBlankPlacePart(value: string): boolean {
+  const trimmed = String(value ?? "").trim();
+  return !trimmed || /^tbd$/i.test(trimmed);
+}
+
 export function splitCityState(value: string): { city: string; state: string } {
   const trimmed = String(value ?? "").trim();
-  if (!trimmed || /^tbd$/i.test(trimmed)) return { city: "", state: "" };
+  if (isBlankPlacePart(trimmed)) return { city: "", state: "" };
   const match = trimmed.match(/^(.+),\s*([A-Za-z]{2})$/);
   if (match) return { city: match[1].trim(), state: match[2].toUpperCase() };
   const named = trimmed.match(/^(.+),\s*([A-Za-z][A-Za-z\s]+)$/);

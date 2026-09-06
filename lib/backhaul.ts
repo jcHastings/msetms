@@ -11,6 +11,7 @@ import {
   BACKHAUL_SEARCH_FAILED,
   capBackhaulLoads,
   formatCityState,
+  isBlankPlacePart,
   isHouseCustomerName,
   isWithinBackhaulRadius,
   nearerMiles,
@@ -58,8 +59,8 @@ function placeFromStopOrLane(
   stop: LoadStop | null,
   lane: string,
 ): { city: string; state: string; label: string; locationId: number | null } {
-  const city = stop?.city.trim() ?? "";
-  const state = stop?.state.trim() ?? "";
+  const city = isBlankPlacePart(stop?.city ?? "") ? "" : (stop?.city.trim() ?? "");
+  const state = isBlankPlacePart(stop?.state ?? "") ? "" : (stop?.state.trim() ?? "");
   if (city || state) {
     return {
       city,
