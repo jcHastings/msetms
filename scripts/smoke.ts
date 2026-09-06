@@ -18051,10 +18051,21 @@ parked for next week
   assert.equal(foundNumbers.includes("MSE-BH63"), false, "source load must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH00"), false, "M&S Loads house account must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH20"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
-  assert.equal(fixtureRows[0]?.loadNumber, "MSE-BH72", "nearest fixture miles sort first");
+  const bh72 = found.loads.find((row) => row.loadNumber === "MSE-BH72");
+  const bh41 = found.loads.find((row) => row.loadNumber === "MSE-BH41");
+  const bh98 = found.loads.find((row) => row.loadNumber === "MSE-BH98");
+  assert.ok(bh72 && bh41 && bh98);
+  assert.equal(bh72.miles, 0, "Bronx pickup is 0 mi from the Bronx delivery center");
+  assert.ok(bh41.miles <= 15, "Newark is inside 15 mi of the Bronx");
+  assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "Edison/Philly is farther but inside 150 mi");
   assert.ok(
-    found.loads.every((row, index, rows) => index === 0 || rows[index - 1].miles <= row.miles),
-    "loads sort by miles ascending",
+    found.loads.every((row, index, rows) => {
+      if (index === 0) return true;
+      const prev = rows[index - 1];
+      if (prev.miles !== row.miles) return prev.miles < row.miles;
+      return prev.dateSort >= row.dateSort;
+    }),
+    "loads sort by miles ascending then date descending",
   );
   assert.equal(
     found.customers.some((row) => /M&S|MS Loads|MNS/i.test(row.name)),
