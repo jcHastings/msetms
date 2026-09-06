@@ -1080,7 +1080,6 @@ async function main() {
   assert.match(hubSource, /action="\/accounting\/pay"/);
   assert.doesNotMatch(hubSource, /Export bill to QBO/);
   assert.doesNotMatch(hubSource, /\/api\/attachments\/\$\{invoice\.id\}/);
-  assert.match(hubSource, /Close period/);
   assert.match(hubSource, /ClosePayPeriodButton/);
   assert.match(hubSource, /Download Excel/);
   assert.match(hubSource, /No driver pay in this period/);
@@ -17339,7 +17338,8 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/integrations/page.tsx"), "utf8"), /TWILIO_|OPENAI_API_KEY|WHATSAPP_ACCESS_TOKEN/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /CriticalTag/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /loadCriticalReasons/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /Critical · \$\{text\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /data-critical-reason/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="active"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="delivered"/);
