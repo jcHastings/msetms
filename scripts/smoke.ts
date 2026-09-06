@@ -17922,7 +17922,7 @@ parked for next week
 
   const backhaulShared = await import("../lib/backhaul-shared");
   const backhaul = await import("../lib/backhaul");
-  const { findCityCenter, haversineMiles } = await import("../lib/city-coords-shared");
+  const { haversineMiles } = await import("../lib/city-coords-shared");
   assert.equal(backhaulShared.isHouseCustomerName("M&S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads LLC"), true);
