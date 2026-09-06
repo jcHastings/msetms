@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DeleteCustomerForm } from "@/components/delete-customer-form";
+import { CustomerRowActions } from "@/components/customer-row-actions";
 import { CUSTOMER_HAS_LOADS_DELETE } from "@/lib/queries";
 import type { Contact, Customer } from "@/lib/types";
 
@@ -60,19 +60,13 @@ export function CustomersTable({
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/customers/${customer.id}`} className="btn btn-secondary">
-                    {canManage ? "Edit" : "View"}
-                  </Link>
-                  {canManage ? (
-                    <DeleteCustomerForm
-                      customerId={customer.id}
-                      customerName={customer.name}
-                      disabled={hasLoads}
-                      disabledReason={hasLoads ? CUSTOMER_HAS_LOADS_DELETE : undefined}
-                    />
-                  ) : null}
-                </div>
+                <CustomerRowActions
+                  customerId={customer.id}
+                  customerName={customer.name}
+                  canManage={canManage}
+                  hasLoads={hasLoads}
+                  disabledReason={hasLoads ? CUSTOMER_HAS_LOADS_DELETE : undefined}
+                />
               </li>
             );
           })}

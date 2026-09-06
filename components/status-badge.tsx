@@ -46,9 +46,14 @@ export function LoadStatusBadge({ status }: { status: string }) {
 export function CriticalTag({ reason }: { reason?: string }) {
   const text = reason?.trim() ?? "";
   return (
-    <Pill className="status-tone-danger max-w-full whitespace-normal break-words" title={text || "Critical"}>
-      {text ? `Critical · ${text}` : "Critical"}
-    </Pill>
+    <span className="exception-badge-stack" title={text || "Critical"}>
+      <Pill className="status-tone-danger shrink-0">Critical</Pill>
+      {text ? (
+        <span className="exception-reason" data-critical-reason="">
+          {text}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

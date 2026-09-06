@@ -1,9 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
 import type { ArApReportRow } from "@/lib/accounting-aging";
+
+const RIGHT_KEYS = ["total", "paid", "current", "aging0to29", "aging30"] as const;
+const COL_WIDTH_REM: Record<string, number> = {
+  name: 14,
+  total: 6.4,
+  paid: 6.2,
+  current: 6.2,
+  aging0to29: 7.2,
+  aging30: 5.8,
+};
 
 const AR_COLUMNS = [
   { key: "name", label: "Name" },
@@ -135,6 +145,31 @@ export function ArapReport({ arRows, apRows }: { arRows: ArApReportRow[]; apRows
   );
 }
 
+function zoneClass(key: ColumnKey, hideSelect: boolean): string {
+  if (key === "name") return hideSelect ? "zone-left" : "zone-left zone-left-arap-name";
+  if ((RIGHT_KEYS as readonly string[]).includes(key)) return "zone-right";
+  return "";
+}
+
+function zoneStyle(key: ColumnKey, visible: { key: ColumnKey }[]): CSSProperties | undefined {
+  if (key === "name") {
+    return { width: `${COL_WIDTH_REM.name}rem`, minWidth: `${COL_WIDTH_REM.name}rem` };
+  }
+  const rights = visible.filter((col) => (RIGHT_KEYS as readonly string[]).includes(col.key));
+  const idx = rights.findIndex((col) => col.key === key);
+  if (idx < 0) return undefined;
+  const offset = rights.slice(idx + 1).reduce((sum, col) => sum + (COL_WIDTH_REM[col.key] ?? 6), 0);
+  const width = COL_WIDTH_REM[key] ?? 6;
+  return { right: `${offset}rem`, width: `${width}rem`, minWidth: `${width}rem` };
+}
+
+function agingTone(key: ColumnKey): string {
+  if (key === "current") return "acct-aging-current";
+  if (key === "aging0to29") return "acct-aging-29";
+  if (key === "aging30") return "acct-aging-30";
+  return "";
+}
+
 function AgingTable({
   rows,
   columns,
@@ -153,26 +188,19 @@ function AgingTable({
   const visible = AR_COLUMNS.filter((col) => columns.includes(col.key));
   return (
     <div className="card overflow-x-auto">
-      <table className="table-grid table-grid-acct min-w-max">
+      <table className="table-grid table-grid-acct table-zones min-w-max" data-table-zones="arap">
         <thead>
           <tr>
             {hideSelect ? null : (
-              <th>
+              <th className="zone-left zone-left-0" style={{ width: "2.4rem", minWidth: "2.4rem" }}>
                 <input type="checkbox" aria-label="Select all" onChange={onToggleAll} />
               </th>
             )}
             {visible.map((col) => (
               <th
                 key={col.key}
-                className={
-                  col.key === "current"
-                    ? "acct-aging-current"
-                    : col.key === "aging0to29"
-                      ? "acct-aging-29"
-                      : col.key === "aging30"
-                        ? "acct-aging-30"
-                        : undefined
-                }
+                className={[zoneClass(col.key, hideSelect), agingTone(col.key)].filter(Boolean).join(" ") || undefined}
+                style={zoneStyle(col.key, visible)}
               >
                 {col.label}
               </th>
@@ -190,7 +218,7 @@ function AgingTable({
             rows.map((row) => (
               <tr key={`${row.kind}-${row.id}`}>
                 {hideSelect ? null : (
-                  <td>
+                  <td className="zone-left zone-left-0" style={{ width: "2.4rem", minWidth: "2.4rem" }}>
                     <input
                       type="checkbox"
                       checked={selected.includes(row.id)}
@@ -202,17 +230,16 @@ function AgingTable({
                 {visible.map((col) => (
                   <td
                     key={col.key}
-                    className={
-                      col.key === "current"
-                        ? "acct-aging-current text-right"
-                        : col.key === "aging0to29"
-                          ? "acct-aging-29 text-right"
-                          : col.key === "aging30"
-                            ? "acct-aging-30 text-right"
-                            : col.key === "total" || col.key === "paid" || col.key === "daysPastDue"
-                              ? "text-right"
-                              : undefined
-                    }
+                    className={[
+                      zoneClass(col.key, hideSelect),
+                      agingTone(col.key),
+                      col.key === "total" || col.key === "paid" || col.key === "daysPastDue" || agingTone(col.key)
+                        ? "text-right"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined}
+                    style={zoneStyle(col.key, visible)}
                   >
                     {cell(row, col.key)}
                   </td>

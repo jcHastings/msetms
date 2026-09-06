@@ -334,6 +334,181 @@ button {
   border-collapse: collapse;
 }
 
+.table-zones {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-zones .zone-left,
+.table-zones .zone-right {
+  position: sticky;
+  z-index: 3;
+  background: #fff;
+}
+
+.table-zones thead .zone-left,
+.table-zones thead .zone-right {
+  z-index: 5;
+  background: #f8fafc;
+}
+
+.table-zones .zone-left {
+  left: 0;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.table-zones .zone-left-0 {
+  left: 0;
+  box-shadow: none;
+}
+
+.table-zones .zone-left-1,
+.table-zones .zone-left-arap-name {
+  left: 2.4rem;
+  min-width: 14rem;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.table-zones .zone-left-stats-load {
+  left: 10rem;
+  min-width: 7.5rem;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.table-zones .zone-right-0 {
+  right: 0;
+  box-shadow: -1px 0 0 var(--border);
+}
+
+.table-zones .zone-right-invoice-balance {
+  right: 7.5rem;
+  min-width: 6.6rem;
+}
+
+.table-zones .zone-right-invoice-total {
+  right: 14.1rem;
+  min-width: 6.6rem;
+}
+
+.table-zones .zone-right-ifta-1 {
+  right: 6.5rem;
+  min-width: 6.5rem;
+}
+
+.table-zones .zone-right-ifta-2 {
+  right: 13rem;
+  min-width: 6.5rem;
+}
+
+.table-zones .zone-right-stats-1 {
+  right: 4.2rem;
+  min-width: 6rem;
+}
+
+.table-zones .zone-right-stats-2 {
+  right: 10.2rem;
+  min-width: 6rem;
+}
+
+.table-zones .zone-right-stats-3 {
+  right: 16.2rem;
+  min-width: 6rem;
+}
+
+.table-grid tbody tr:hover td.zone-left,
+.table-grid tbody tr:hover td.zone-right {
+  background: var(--row-hover);
+}
+
+.invoice-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.table-grid-acct td.zone-right-0,
+.table-grid-acct th.zone-right-0 {
+  min-width: 7.5rem;
+  width: 7.5rem;
+}
+
+.acct-action-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.acct-action-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1.25rem;
+  background: rgba(11, 31, 58, 0.45);
+  overflow: auto;
+}
+
+.confirm-dialog {
+  width: min(420px, 100%);
+  margin-top: 4rem;
+  padding: 1.1rem 1.15rem 1rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  box-shadow: 0 18px 50px rgba(7, 50, 90, 0.28);
+}
+
+.confirm-dialog-wide {
+  width: min(520px, 100%);
+}
+
+.pay-empty-state {
+  border: 1px dashed var(--border);
+  background: #fff;
+  padding: 1.5rem 1.25rem;
+}
+
+.exception-badge-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.exception-reason {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #1e293b;
+  line-height: 1.25;
+}
+
+.mike-sparkle-icon {
+  color: var(--accent);
+  flex: 0 0 16px;
+}
+
 .table-grid th {
   text-align: left;
   font-size: 0.68rem;
@@ -382,7 +557,17 @@ button {
 /* Explicit widths so the board scrolls instead of stacking text on the next column.
    Pickup/Delivery keep date then time on two lines. Do not RTL-ellipsis cities. */
 .table-grid-board .board-load-cell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
   width: 13rem;
+  background: #fff;
+  box-shadow: 1px 0 0 var(--border);
+}
+
+.table-grid-board thead .board-load-cell {
+  z-index: 5;
+  background: #f8fafc;
 }
 
 .table-grid-board .board-status-cell {
@@ -432,11 +617,30 @@ button {
 }
 
 .table-grid-board .board-rate-cell {
+  position: sticky;
+  right: 20.5rem;
+  z-index: 3;
   width: 5.25rem;
+  background: #fff;
+  box-shadow: -1px 0 0 var(--border);
+}
+
+.table-grid-board thead .board-rate-cell {
+  z-index: 5;
+  background: #f8fafc;
 }
 
 .table-grid-board .board-move-cell {
+  position: sticky;
+  right: 11rem;
+  z-index: 3;
   width: 9.5rem;
+  background: #fff;
+}
+
+.table-grid-board thead .board-move-cell {
+  z-index: 5;
+  background: #f8fafc;
 }
 
 .board-place {
@@ -493,11 +697,11 @@ button {
 .table-grid-board .board-edit-cell {
   position: sticky;
   right: 0;
-  z-index: 2;
+  z-index: 3;
   width: 11rem;
   min-width: 11rem;
   overflow: visible;
-  box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.18);
+  box-shadow: -1px 0 0 var(--border);
 }
 
 .table-grid-board .board-edit-head {
@@ -508,7 +712,10 @@ button {
   background: #fff;
 }
 
-.table-grid tbody tr:hover td.board-edit-cell {
+.table-grid tbody tr:hover td.board-edit-cell,
+.table-grid tbody tr:hover td.board-load-cell,
+.table-grid tbody tr:hover td.board-rate-cell,
+.table-grid tbody tr:hover td.board-move-cell {
   background: var(--row-hover);
 }
 

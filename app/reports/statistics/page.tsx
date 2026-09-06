@@ -136,16 +136,16 @@ export default async function StatisticsPage({
       </section>
 
       <section className="card overflow-x-auto rounded-t-none">
-        <table className="table-grid stats-matrix" data-stats-matrix="">
+        <table className="table-grid stats-matrix table-zones" data-stats-matrix="" data-table-zones="stats">
           <thead>
             <tr>
-              <th>{selectedName}</th>
+              <th className="zone-left">{selectedName}</th>
               {stats.months.map((key) => (
                 <th key={key} className={month === key ? "bg-amber-50" : undefined}>
                   {reportMonthLabel(key)}
                 </th>
               ))}
-              <th>Totals</th>
+              <th className="zone-right zone-right-0">Totals</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +158,7 @@ export default async function StatisticsPage({
             ) : (
               <>
                 <tr>
-                  <td className="font-semibold">Breakdown</td>
+                  <td className="zone-left font-semibold">Breakdown</td>
                   {stats.months.map((key) => (
                     <td key={key} className={month === key ? "bg-amber-50/70" : undefined}>
                       <Link href={`${queryBase}&month=${key}`} className="stats-breakdown-icon" title={`Open ${reportMonthLabel(key)} loads`}>
@@ -166,11 +166,11 @@ export default async function StatisticsPage({
                       </Link>
                     </td>
                   ))}
-                  <td>—</td>
+                  <td className="zone-right zone-right-0">—</td>
                 </tr>
                 {STATS_METRIC_ROWS.map((metric) => (
                   <tr key={metric.key}>
-                    <td className="font-semibold">
+                    <td className="zone-left font-semibold">
                       <span className="stats-swatch" style={{ background: metric.color }} />
                       {metric.label}
                     </td>
@@ -179,7 +179,7 @@ export default async function StatisticsPage({
                         {formatMetric(metric.key, stats.cells[key])}
                       </td>
                     ))}
-                    <td className="font-semibold">{formatMetric(metric.key, stats.totals)}</td>
+                    <td className="zone-right zone-right-0 font-semibold">{formatMetric(metric.key, stats.totals)}</td>
                   </tr>
                 ))}
               </>
@@ -199,19 +199,19 @@ export default async function StatisticsPage({
             </Link>
           </header>
           <div className="overflow-x-auto">
-            <table className="table-grid">
+            <table className="table-grid table-zones stats-drill" data-table-zones="stats-drill">
               <thead>
                 <tr>
-                  <th>{dimension}</th>
-                  <th>Load #</th>
+                  <th className="zone-left zone-left-0">{dimension}</th>
+                  <th className="zone-left zone-left-stats-load">Load #</th>
                   <th>Customer</th>
                   <th>Lane</th>
                   <th>Miles</th>
                   <th>Empty M</th>
-                  <th>Gross Rev.</th>
-                  <th>Fees</th>
-                  <th>Net Rev.</th>
-                  <th>%</th>
+                  <th className="zone-right zone-right-stats-3">Gross Rev.</th>
+                  <th className="zone-right zone-right-stats-2">Fees</th>
+                  <th className="zone-right zone-right-stats-1">Net Rev.</th>
+                  <th className="zone-right zone-right-0">%</th>
                 </tr>
               </thead>
               <tbody>
@@ -225,10 +225,10 @@ export default async function StatisticsPage({
                   groups.flatMap((group) => [
                     ...group.rows.map((row, index) => (
                       <tr key={`${row.loadId}-${row.entityId}-${index}`}>
-                        <td className={index === 0 ? "font-semibold" : "text-slate-400"}>
+                        <td className={`${index === 0 ? "font-semibold" : "text-slate-400"} zone-left zone-left-0`}>
                           {index === 0 ? group.entityName : ""}
                         </td>
-                        <td>
+                        <td className="zone-left zone-left-stats-load">
                           <Link href={`/loads/${row.loadId}`} className="font-mono text-navy underline">
                             {row.loadNumber}
                           </Link>
@@ -239,27 +239,31 @@ export default async function StatisticsPage({
                         </td>
                         <td>{row.miles ?? "—"}</td>
                         <td>{row.emptyMiles ?? "—"}</td>
-                        <td>{row.allocatedRevenue != null ? formatMoney(row.allocatedRevenue) : "—"}</td>
-                        <td>{row.fees != null && row.fees ? formatMoney(row.fees) : "—"}</td>
-                        <td>
+                        <td className="zone-right zone-right-stats-3">
+                          {row.allocatedRevenue != null ? formatMoney(row.allocatedRevenue) : "—"}
+                        </td>
+                        <td className="zone-right zone-right-stats-2">
+                          {row.fees != null && row.fees ? formatMoney(row.fees) : "—"}
+                        </td>
+                        <td className="zone-right zone-right-stats-1">
                           {row.allocatedRevenue != null
                             ? formatMoney(row.allocatedRevenue - (row.fees ?? 0))
                             : "—"}
                         </td>
-                        <td>{formatShare(row.share)}</td>
+                        <td className="zone-right zone-right-0">{formatShare(row.share)}</td>
                       </tr>
                     )),
                     <tr key={`${group.entityId}-${group.entityName}-total`} className="stats-total-row">
-                      <td className="font-semibold">Totals</td>
-                      <td />
+                      <td className="zone-left zone-left-0 font-semibold">Totals</td>
+                      <td className="zone-left zone-left-stats-load" />
                       <td />
                       <td />
                       <td className="font-semibold">{group.miles || "—"}</td>
                       <td className="font-semibold">{group.emptyMiles || "—"}</td>
-                      <td className="font-semibold">{formatMoney(group.gross)}</td>
-                      <td className="font-semibold">{group.fees ? formatMoney(group.fees) : "—"}</td>
-                      <td className="font-semibold">{formatMoney(group.net)}</td>
-                      <td />
+                      <td className="zone-right zone-right-stats-3 font-semibold">{formatMoney(group.gross)}</td>
+                      <td className="zone-right zone-right-stats-2 font-semibold">{group.fees ? formatMoney(group.fees) : "—"}</td>
+                      <td className="zone-right zone-right-stats-1 font-semibold">{formatMoney(group.net)}</td>
+                      <td className="zone-right zone-right-0" />
                     </tr>,
                   ])
                 )}

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { sendToQuickbooksAction } from "@/lib/actions";
 
 export function QboInvoiceSendButton({
@@ -9,15 +10,24 @@ export function QboInvoiceSendButton({
   alreadySent,
   label,
   variant = "button",
+  autoConfirm = false,
+  onFinished,
 }: {
   loadId: number;
   alreadySent: boolean;
   label: string;
   variant?: "button" | "link";
+  autoConfirm?: boolean;
+  onFinished?: () => void;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(autoConfirm);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (autoConfirm) setConfirmOpen(true);
+  }, [autoConfirm]);
 
   async function send() {
     setPending(true);
@@ -29,6 +39,7 @@ export function QboInvoiceSendButton({
     setPending(false);
     if (!result.ok) {
       setNotice({ ok: false, text: result.error });
+      onFinished?.();
       return;
     }
     setNotice({
@@ -37,19 +48,42 @@ export function QboInvoiceSendButton({
     });
     // First send flips Sent / Not sent. Send-again keeps this notice so it is not a dead click.
     if (!alreadySent) router.refresh();
+    onFinished?.();
   }
 
   return (
     <div className={variant === "link" ? "space-y-1" : "max-w-[16rem] space-y-1"}>
-      <button
-        className={variant === "link" ? "acct-link" : "btn btn-secondary"}
-        type="button"
-        data-qbo-send=""
-        disabled={pending}
-        onClick={() => void send()}
-      >
-        {pending ? "Sending…" : label}
-      </button>
+      {autoConfirm ? null : (
+        <button
+          className={variant === "link" ? "acct-link" : "btn btn-secondary"}
+          type="button"
+          data-qbo-send=""
+          disabled={pending}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {pending ? "Sending…" : label}
+        </button>
+      )}
+      <ConfirmDialog
+        open={confirmOpen}
+        title={alreadySent ? "Send again to QuickBooks?" : "Send to QuickBooks?"}
+        body={
+          alreadySent
+            ? "This invoice was already exported. Send it again?"
+            : "Export this invoice to QuickBooks?"
+        }
+        confirmLabel={alreadySent ? "Send again" : "Send to QuickBooks"}
+        tone="primary"
+        busy={pending}
+        onCancel={() => {
+          setConfirmOpen(false);
+          onFinished?.();
+        }}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          void send();
+        }}
+      />
       {notice ? (
         <p
           className={notice.ok ? "text-xs text-emerald-800" : "text-xs text-rose-700"}

@@ -23,15 +23,11 @@ export function ExceptionIssueLine({ item, compact = false }: { item: InboxExcep
     const tooltip = exceptionReasonTooltip(item);
     return (
       <li className="min-w-0" data-attention-issue={item.kind} title={tooltip}>
-        <div className="flex min-w-0 flex-wrap items-start gap-1.5">
-          <span className={`status-pill shrink-0 ${SEVERITY_CLASS[item.severity]}`} title={tooltip}>
+        <div className="exception-badge-stack">
+          <span className={`status-pill shrink-0 ${SEVERITY_CLASS[item.severity]}`}>
             {attentionLabel(item)}
           </span>
-          <span
-            className="min-w-0 flex-1 whitespace-normal break-words text-xs font-medium text-slate-800"
-            data-attention-reason=""
-            title={tooltip}
-          >
+          <span className="exception-reason" data-attention-reason="" title={tooltip}>
             {reason}
           </span>
         </div>

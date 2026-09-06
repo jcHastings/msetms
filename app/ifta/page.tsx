@@ -7,6 +7,7 @@ import {
   listIftaQuarterChoices,
   parseIftaQuarter,
 } from "@/lib/ifta-quarter";
+import { iftaStateLabel } from "@/lib/us-state-lookup";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { canSeeNavHref } from "@/lib/settings-shared";
 import { redirect } from "next/navigation";
@@ -33,7 +34,7 @@ export default async function IftaPage({
     const miles = estimate.milesByState.find((row) => row.state === state);
     return {
       state,
-      name: miles?.name ?? state,
+      name: iftaStateLabel(state, miles?.name),
       gallons: fuel?.gallons ?? 0,
       amount: fuel?.amount ?? 0,
       loaded: miles?.loaded ?? 0,
@@ -83,39 +84,38 @@ export default async function IftaPage({
         {rows.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">No imported fuel or stored route miles in this quarter.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="table-grid table-zones w-full text-sm" data-table-zones="ifta">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-2">State</th>
+                <th className="zone-left px-5 py-2">State</th>
                 <th className="px-5 py-2">Gallons</th>
                 <th className="px-5 py-2">Fuel $</th>
-                <th className="px-5 py-2">Loaded</th>
-                <th className="px-5 py-2">Empty</th>
-                <th className="px-5 py-2">Total</th>
+                <th className="zone-right zone-right-ifta-2 px-5 py-2">Loaded</th>
+                <th className="zone-right zone-right-ifta-1 px-5 py-2">Empty</th>
+                <th className="zone-right zone-right-0 px-5 py-2">Total</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.state} className="border-t border-slate-100">
-                  <td className="px-5 py-2 font-semibold">
-                    {row.state}
-                    <span className="ml-2 font-normal text-slate-500">{row.name}</span>
-                  </td>
+                  <td className="zone-left px-5 py-2 font-semibold">{row.name}</td>
                   <td className="px-5 py-2 tabular-nums">{row.gallons.toLocaleString("en-US")}</td>
                   <td className="px-5 py-2 tabular-nums">{formatMoney(row.amount)}</td>
-                  <td className="px-5 py-2 tabular-nums">
+                  <td className="zone-right zone-right-ifta-2 px-5 py-2 tabular-nums">
                     {row.loaded > 0 ? `${row.loaded.toLocaleString("en-US")} mi` : "—"}
                   </td>
-                  <td className="px-5 py-2 tabular-nums">
+                  <td className="zone-right zone-right-ifta-1 px-5 py-2 tabular-nums">
                     {row.empty > 0 ? `${row.empty.toLocaleString("en-US")} mi` : "—"}
                   </td>
-                  <td className="px-5 py-2 tabular-nums">
+                  <td className="zone-right zone-right-0 px-5 py-2 tabular-nums">
                     {row.miles > 0 ? `${row.miles.toLocaleString("en-US")} mi` : "—"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -129,26 +129,28 @@ export default async function IftaPage({
         {estimate.drivers.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">No driver miles in this quarter.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="table-grid table-zones w-full text-sm" data-table-zones="ifta-drivers">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-2">Driver</th>
+                <th className="zone-left px-5 py-2">Driver</th>
                 <th className="px-5 py-2">Loaded</th>
                 <th className="px-5 py-2">Empty</th>
-                <th className="px-5 py-2">Total</th>
+                <th className="zone-right zone-right-0 px-5 py-2">Total</th>
               </tr>
             </thead>
             <tbody>
               {estimate.drivers.map((row) => (
                 <tr key={row.id} className="border-t border-slate-100">
-                  <td className="px-5 py-2 font-semibold">{row.name}</td>
+                  <td className="zone-left px-5 py-2 font-semibold">{row.name}</td>
                   <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
                   <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
-                  <td className="px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
+                  <td className="zone-right zone-right-0 px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -159,26 +161,28 @@ export default async function IftaPage({
         {estimate.trucks.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">No truck miles in this quarter.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="table-grid table-zones w-full text-sm" data-table-zones="ifta-trucks">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-2">Truck</th>
+                <th className="zone-left px-5 py-2">Truck</th>
                 <th className="px-5 py-2">Loaded</th>
                 <th className="px-5 py-2">Empty</th>
-                <th className="px-5 py-2">Total</th>
+                <th className="zone-right zone-right-0 px-5 py-2">Total</th>
               </tr>
             </thead>
             <tbody>
               {estimate.trucks.map((row) => (
                 <tr key={row.id} className="border-t border-slate-100">
-                  <td className="px-5 py-2 font-semibold">{row.name}</td>
+                  <td className="zone-left px-5 py-2 font-semibold">{row.name}</td>
                   <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
                   <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
-                  <td className="px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
+                  <td className="zone-right zone-right-0 px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 

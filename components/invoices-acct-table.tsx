@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  markReceivablePaidAction,
-  returnLoadToOperationsFormAction,
-} from "@/lib/dispatcher-actions";
-import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
-import { EmailInvoiceButton } from "@/components/email-invoice-button";
+import { InvoiceCollapsedActions, InvoiceSendPostGroup } from "@/components/invoice-row-actions";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
 export type InvoiceAcctRow = {
@@ -41,26 +36,27 @@ export type InvoiceAcctRow = {
 export function InvoicesAcctTable({ rows }: { rows: InvoiceAcctRow[] }) {
   const [openId, setOpenId] = useState<number | null>(null);
   return (
-    <table className="table-grid table-grid-acct min-w-max">
+    <table className="table-grid table-grid-acct table-zones min-w-max" data-table-zones="invoices">
       <thead>
         <tr>
-          <th></th>
-          <th>Company Name</th>
+          <th className="zone-left zone-left-0"></th>
+          <th className="zone-left zone-left-1">Company Name</th>
           <th>Invoice #</th>
           <th>Reference #</th>
           <th>Delivery Date</th>
           <th>Sent Status</th>
           <th>Invoice Date</th>
           <th>Due Date</th>
-          <th>Invoice Total</th>
-          <th>Balance</th>
           <th>QBO Export</th>
+          <th className="zone-right zone-right-invoice-total">Invoice Total</th>
+          <th className="zone-right zone-right-invoice-balance">Balance</th>
+          <th className="zone-right zone-right-0">Actions</th>
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 ? (
           <tr>
-            <td colSpan={11} className="px-3 py-3 text-[12.5px] text-slate-500">
+            <td colSpan={12} className="px-3 py-3 text-[12.5px] text-slate-500">
               No loads in Accounting yet. Send a delivered load from Financials.
             </td>
           </tr>
@@ -94,7 +90,7 @@ function InvoiceAcctRowView({
   return (
     <>
       <tr>
-        <td>
+        <td className="zone-left zone-left-0">
           <button
             type="button"
             className="acct-link font-mono"
@@ -104,7 +100,7 @@ function InvoiceAcctRowView({
             {open ? "−" : "+"}
           </button>
         </td>
-        <td>
+        <td className="zone-left zone-left-1">
           <Link href={`/loads/${row.id}?tab=financials`} className="font-semibold underline">
             {row.customerName}
           </Link>
@@ -113,67 +109,38 @@ function InvoiceAcctRowView({
         </td>
         <td className={row.unbilled ? "text-rose-700" : undefined}>
           <div>{row.invoiceNumber}</div>
-          <EmailInvoiceButton
-            loadId={row.id}
-            email={row.email}
-            lastSent={row.lastInvoiceSent}
-            extras={row.extras}
-            defaultBody={row.invoiceEmailBody}
-            variant="link"
-          />
         </td>
         <td>{row.reference}</td>
         <td>{row.deliveryDate}</td>
         <td className={row.sentStatus === "Sent" ? "text-emerald-700" : "text-sky-800"}>{row.sentStatus}</td>
         <td>{row.invoiceDate}</td>
         <td>{row.dueDate}</td>
-        <td className="text-right">{row.totalLabel}</td>
-        <td className="text-right">{row.balanceLabel}</td>
         <td>
           <div className="qbo-export-status">
             <div className={row.alreadySent ? "qbo-export-status-sent" : "text-slate-600"}>{row.qboInvoiceLine}</div>
             {row.qboPaymentsLine ? <div className="qbo-export-status-pay">{row.qboPaymentsLine}</div> : null}
           </div>
         </td>
+        <td className="zone-right zone-right-invoice-total text-right">{row.totalLabel}</td>
+        <td className="zone-right zone-right-invoice-balance text-right">{row.balanceLabel}</td>
+        <td className="zone-right zone-right-0">
+          <InvoiceCollapsedActions row={row} />
+        </td>
       </tr>
       {open ? (
         <tr>
-          <td colSpan={11} className="!p-0">
+          <td colSpan={12} className="!p-0">
             <div className="acct-expand-panel">
               <div className="acct-expand-grid">
-                <div className="space-y-0.5">
-                  <a className="acct-link" href={`/api/loads/${row.id}/invoice`}>
-                    View Invoice as PDF
-                  </a>
-                  <div>View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}</div>
-                  <EmailInvoiceButton
-                    loadId={row.id}
-                    email={row.email}
-                    lastSent={row.lastInvoiceSent}
-                    extras={row.extras}
-                    defaultBody={row.invoiceEmailBody}
-                    variant="link"
-                  />
-                  <form action={returnLoadToOperationsFormAction}>
-                    <input type="hidden" name="load_id" value={row.id} />
-                    <button className="acct-link" type="submit" title="Send back to Load Management">
-                      Send Back to Load Management
-                    </button>
-                  </form>
-                  <QboInvoiceSendButton
-                    loadId={row.id}
-                    alreadySent={row.alreadySent}
-                    label={row.sendLabel}
-                    variant="link"
-                  />
-                  {row.paid ? null : (
-                    <form action={markReceivablePaidAction}>
-                      <input type="hidden" name="load_id" value={row.id} />
-                      <button className="acct-link" type="submit">
-                        Record payment
-                      </button>
-                    </form>
-                  )}
+                <div className="space-y-3">
+                  <div className="acct-action-group" data-invoice-preview="">
+                    <div className="acct-action-group-label">Preview</div>
+                    <a className="acct-link" href={`/api/loads/${row.id}/invoice`}>
+                      View Invoice as PDF
+                    </a>
+                    <div>View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}</div>
+                  </div>
+                  <InvoiceSendPostGroup row={row} />
                 </div>
                 <div>
                   <div>
