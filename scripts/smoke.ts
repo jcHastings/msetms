@@ -17974,7 +17974,7 @@ parked for next week
 
   const backhaulShared = await import("../lib/backhaul-shared");
   const backhaul = await import("../lib/backhaul");
-  const { haversineMiles } = await import("../lib/city-coords-shared");
+  const { findExactCityCenter, haversineMiles } = await import("../lib/city-coords-shared");
   assert.equal(backhaulShared.isHouseCustomerName("M&S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads LLC"), true);
@@ -18147,11 +18147,15 @@ parked for next week
   const bh41 = found.loads.find((row) => row.loadNumber === "MSE-BH41");
   const bh98 = found.loads.find((row) => row.loadNumber === "MSE-BH98");
   assert.ok(bh72 && bh41 && bh98);
+  const exactBronx = findExactCityCenter("Bronx", "NY")!;
+  const exactNewark = findExactCityCenter("Newark", "NJ")!;
+  const exactEdison = findExactCityCenter("Edison", "NJ")!;
+  const newarkPickupMi = Math.round(haversineMiles(exactBronx.lat, exactBronx.lng, exactNewark.lat, exactNewark.lng));
+  const edisonPickupMi = Math.round(haversineMiles(exactBronx.lat, exactBronx.lng, exactEdison.lat, exactEdison.lng));
   assert.ok(bh72.miles <= 5, "miles are Bronx delivery to Bronx pickup");
-  assert.ok(bh41.miles <= 15, "miles are Bronx delivery to Newark pickup");
-  assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "miles are Bronx delivery to Edison pickup");
-  const newarkPickupMi = Math.round(haversineMiles(bronx.lat, bronx.lng, newark.lat, newark.lng));
-  assert.equal(bh41.miles, newarkPickupMi, "shown miles must be center to candidate pickup only");
+  assert.equal(bh41.miles, newarkPickupMi, "shown miles must be Bronx delivery to Newark pickup");
+  assert.equal(bh98.miles, edisonPickupMi, "shown miles must be Bronx delivery to Edison pickup");
+  assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "Edison pickup is farther than Newark and inside 150 mi");
   assert.ok(
     found.loads.every((row, index, rows) => {
       if (index === 0) return true;
