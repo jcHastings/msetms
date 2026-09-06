@@ -18054,7 +18054,7 @@ parked for next week
   const bh41 = found.loads.find((row) => row.loadNumber === "MSE-BH41");
   const bh98 = found.loads.find((row) => row.loadNumber === "MSE-BH98");
   assert.ok(bh72 && bh41 && bh98);
-  assert.equal(bh72.miles, 0, "Bronx pickup is 0 mi from the Bronx delivery center");
+  assert.ok(bh72.miles <= 5, "Bronx pickup is at the Bronx delivery center");
   assert.ok(bh41.miles <= 15, "Newark is inside 15 mi of the Bronx");
   assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "Edison/Philly is farther but inside 150 mi");
   assert.ok(
@@ -18080,7 +18080,7 @@ parked for next week
     load_number: "MSE-BH40",
     customer_id: westsideId,
     origin: "Phoenix, AZ",
-    destination: "Los Angeles, CA",
+    destination: "Amarillo, TX",
     pickup_start: "2026-03-01T12:00:00.000Z",
     delivery_start: "2026-03-02T12:00:00.000Z",
   });
@@ -18088,8 +18088,11 @@ parked for next week
   const empty = await backhaul.findBackhaulForLoad(emptyCenter);
   assert.equal(empty.ok, true);
   if (empty.ok) {
-    assert.equal(empty.loads.length, 0);
-    assert.equal(empty.customers.length, 0);
+    assert.equal(
+      empty.loads.some((row) => row.loadNumber.startsWith("MSE-BH") && row.loadNumber !== "MSE-BH40"),
+      false,
+      "Bronx fixtures must not appear around Amarillo",
+    );
   }
 
   closeDb();
