@@ -447,6 +447,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-portal.tsx"), "utf8"), /document\.body/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-frame.tsx"), "utf8"), /ms-open-load/);
   assert.match(workspaceSource, /Load Actions/);
+  assert.match(workspaceSource, /Backhaul Finder/);
+  assert.match(workspaceSource, /label="Find"/);
+  assert.match(workspaceSource, /data-backhaul-finder-action/);
+  assert.doesNotMatch(workspaceSource, /back hole/i);
+  assert.doesNotMatch(navSource, /Backhaul Finder/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/backhaul-finder.tsx"), "utf8"), /Backhaul Finder/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/backhaul-finder.tsx"), "utf8"), /data-backhaul-finder/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/backhaul/route.ts"), "utf8"), /findBackhaulForLoad/);
   assert.match(workspaceSource, /load-tabs/);
   assert.match(workspaceSource, /load-tab-active/);
   assert.match(workspaceSource, /load-actions/);
@@ -455,6 +463,8 @@ async function main() {
   assert.match(workspaceSource, /load-tab-back/);
   assert.match(workspaceSource, /load-workspace/);
   const cssSource = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+  assert.match(cssSource, /\.backhaul-panel/);
+  assert.match(cssSource, /max-width: 390px/);
   assert.match(cssSource, /\.load-tabs/);
   assert.match(cssSource, /\.load-tab-active/);
   assert.match(cssSource, /\.load-actions/);
@@ -541,6 +551,8 @@ async function main() {
   assert.match(fastActionsUi, /Set appointment/);
   assert.match(fastActionsUi, /Post update/);
   assert.match(fastActionsUi, /HoverActionMenu/);
+  assert.match(fastActionsUi, /Backhaul Finder/);
+  assert.match(fastActionsUi, /data-backhaul-finder-action/);
   assert.match(boardUi, /LoadCardFastActions/);
   assert.match(boardUi, /AssignDialog/);
   assert.match(boardUi, />\s*Edit\s*</);
@@ -17906,6 +17918,167 @@ parked for next week
     const value = previousWhatsAppEnv[key];
     if (value == null) delete process.env[key];
     else process.env[key] = value;
+  }
+
+  const backhaulShared = await import("../lib/backhaul-shared");
+  const backhaul = await import("../lib/backhaul");
+  const { findCityCenter, haversineMiles } = await import("../lib/city-coords-shared");
+  assert.equal(backhaulShared.isHouseCustomerName("M&S Loads"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("M & S Loads"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("M & S Loads LLC"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("M and S Loads"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("MNS Loads"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("MS Loads"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("msloadsllc"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("MSLOADS"), true);
+  assert.equal(backhaulShared.isHouseCustomerName("River City Produce"), false);
+  assert.equal(backhaulShared.isHouseCustomerName("Heartland Foods Co."), false);
+  assert.ok(findCityCenter("Bronx, NY"), "Bronx must geocode from the public city table");
+  assert.ok(findCityCenter("Newark, NJ"), "Newark must geocode from the public city table");
+  const bronx = findCityCenter("Bronx, NY")!;
+  const newark = findCityCenter("Newark, NJ")!;
+  const chicago = findCityCenter("Chicago, IL")!;
+  const newarkMi = haversineMiles(bronx.lat, bronx.lng, newark.lat, newark.lng);
+  const chicagoMi = haversineMiles(bronx.lat, bronx.lng, chicago.lat, chicago.lng);
+  assert.ok(backhaulShared.isWithinBackhaulRadius(newarkMi), "Newark is inside 150 mi of the Bronx");
+  assert.equal(backhaulShared.isWithinBackhaulRadius(chicagoMi), false, "Chicago is outside 150 mi of the Bronx");
+  const houseCustomerId = queries.findOrCreateCustomer("M&S Loads");
+  const riverCustomerId = queries.findOrCreateCustomer("River City Produce");
+  const westsideId = queries.findOrCreateCustomer("Westside Foods");
+  const expressId = queries.findOrCreateCustomer("24/7 Express");
+  const farCustomerId = queries.findOrCreateCustomer("Prairie Grain Cooperative");
+  function backhaulLaneLoad(input: {
+    load_number: string;
+    customer_id: number;
+    origin: string;
+    destination: string;
+    pickup_start: string;
+    delivery_start: string;
+  }) {
+    return queries.createLoad({
+      load_number: input.load_number,
+      customer_id: input.customer_id,
+      origin: input.origin,
+      destination: input.destination,
+      pickup_start: input.pickup_start,
+      pickup_end: input.pickup_start,
+      delivery_start: input.delivery_start,
+      delivery_end: input.delivery_start,
+      weight: 40000,
+      commodity: "Produce",
+      rate: 1800,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: 36,
+      trailer_number: "",
+      status: "delivered",
+      truck_id: null,
+      driver_id: null,
+    });
+  }
+  const sourceId = backhaulLaneLoad({
+    load_number: "MSE-1063",
+    customer_id: riverCustomerId,
+    origin: "Chicago, IL",
+    destination: "Bronx, NY",
+    pickup_start: "2026-09-01T12:00:00.000Z",
+    delivery_start: "2026-09-03T12:00:00.000Z",
+  });
+  const nearId = backhaulLaneLoad({
+    load_number: "MSE-1041",
+    customer_id: riverCustomerId,
+    origin: "Newark, NJ",
+    destination: "Bronx, NY",
+    pickup_start: "2026-08-12T12:00:00.000Z",
+    delivery_start: "2026-08-12T18:00:00.000Z",
+  });
+  const midId = backhaulLaneLoad({
+    load_number: "MSE-0998",
+    customer_id: expressId,
+    origin: "Edison, NJ",
+    destination: "Philadelphia, PA",
+    pickup_start: "2026-07-02T12:00:00.000Z",
+    delivery_start: "2026-07-02T18:00:00.000Z",
+  });
+  const closestId = backhaulLaneLoad({
+    load_number: "MSE-0872",
+    customer_id: westsideId,
+    origin: "Bronx, NY",
+    destination: "Chicago, IL",
+    pickup_start: "2026-06-18T12:00:00.000Z",
+    delivery_start: "2026-06-19T12:00:00.000Z",
+  });
+  const houseNearId = backhaulLaneLoad({
+    load_number: "MSE-0100",
+    customer_id: houseCustomerId,
+    origin: "Newark, NJ",
+    destination: "Bronx, NY",
+    pickup_start: "2026-08-01T12:00:00.000Z",
+    delivery_start: "2026-08-01T18:00:00.000Z",
+  });
+  const farId = backhaulLaneLoad({
+    load_number: "MSE-0200",
+    customer_id: farCustomerId,
+    origin: "Chicago, IL",
+    destination: "Dallas, TX",
+    pickup_start: "2026-05-01T12:00:00.000Z",
+    delivery_start: "2026-05-02T12:00:00.000Z",
+  });
+  const missingId = backhaulLaneLoad({
+    load_number: "MSE-0300",
+    customer_id: westsideId,
+    origin: "Chicago, IL",
+    destination: "TBD",
+    pickup_start: "2026-04-01T12:00:00.000Z",
+    delivery_start: "2026-04-02T12:00:00.000Z",
+  });
+  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId]) {
+    stopsMod.ensureDefaultStops(id);
+  }
+  const found = await backhaul.findBackhaulForLoad(sourceId);
+  assert.equal(found.ok, true, found.ok ? "" : found.error);
+  if (!found.ok) throw new Error(found.error);
+  assert.equal(found.radiusMi, 150);
+  assert.match(found.center.label, /Bronx/i);
+  const foundNumbers = found.loads.map((row) => row.loadNumber);
+  assert.ok(foundNumbers.includes("MSE-1041"));
+  assert.ok(foundNumbers.includes("MSE-0998"));
+  assert.ok(foundNumbers.includes("MSE-0872"));
+  assert.equal(foundNumbers.includes("MSE-1063"), false, "source load must be excluded");
+  assert.equal(foundNumbers.includes("MSE-0100"), false, "M&S Loads house account must be excluded");
+  assert.equal(foundNumbers.includes("MSE-0200"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
+  assert.equal(found.loads[0]?.loadNumber, "MSE-0872", "nearest miles sort first");
+  assert.ok(
+    found.loads.every((row, index, rows) => index === 0 || rows[index - 1].miles <= row.miles),
+    "loads sort by miles ascending",
+  );
+  assert.equal(
+    found.customers.some((row) => /M&S|MS Loads|MNS/i.test(row.name)),
+    false,
+    "house accounts must not appear in the customer rollup",
+  );
+  assert.ok(found.customers.some((row) => row.name === "Westside Foods"));
+  assert.ok(found.customers[0] && found.customers[0].loads >= found.customers[found.customers.length - 1].loads);
+  const missing = await backhaul.findBackhaulForLoad(missingId);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.ok ? "" : missing.reason, "missing_delivery");
+  const emptyCenter = backhaulLaneLoad({
+    load_number: "MSE-0400",
+    customer_id: westsideId,
+    origin: "Phoenix, AZ",
+    destination: "Los Angeles, CA",
+    pickup_start: "2026-03-01T12:00:00.000Z",
+    delivery_start: "2026-03-02T12:00:00.000Z",
+  });
+  stopsMod.ensureDefaultStops(emptyCenter);
+  const empty = await backhaul.findBackhaulForLoad(emptyCenter);
+  assert.equal(empty.ok, true);
+  if (empty.ok) {
+    assert.equal(empty.loads.length, 0);
+    assert.equal(empty.customers.length, 0);
   }
 
   closeDb();

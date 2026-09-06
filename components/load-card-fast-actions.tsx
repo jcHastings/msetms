@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { BackhaulFinderHost } from "@/components/backhaul-finder";
 import { HoverActionMenu } from "@/components/hover-action-menu";
 import { useDismissable } from "@/components/use-dismissable";
 import {
@@ -42,17 +43,29 @@ export function LoadCardFastActions({
 
   return (
     <>
-      <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost">
-        <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("exception")}>
-          Exception
-        </button>
-        <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("appointment")}>
-          Set appointment
-        </button>
-        <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("update")}>
-          Post update
-        </button>
-      </HoverActionMenu>
+      <BackhaulFinderHost loadId={loadId}>
+        {(openFinder) => (
+          <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost">
+            <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("exception")}>
+              Exception
+            </button>
+            <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("appointment")}>
+              Set appointment
+            </button>
+            <button type="button" className="menu-item w-full text-left" onClick={() => setDialog("update")}>
+              Post update
+            </button>
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-backhaul-finder-action=""
+              onClick={openFinder}
+            >
+              Backhaul Finder
+            </button>
+          </HoverActionMenu>
+        )}
+      </BackhaulFinderHost>
       {mounted && dialog
         ? createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" data-fast-action-dialog={dialog}>
