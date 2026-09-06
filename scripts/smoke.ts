@@ -448,8 +448,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-overlay-frame.tsx"), "utf8"), /ms-open-load/);
   assert.match(workspaceSource, /Load Actions/);
   assert.match(workspaceSource, /Backhaul Finder/);
-  assert.match(workspaceSource, /label="Find"/);
+  assert.match(workspaceSource, /className="btn load-action-btn"/);
   assert.match(workspaceSource, /data-backhaul-finder-action/);
+  assert.doesNotMatch(workspaceSource, /label="Find"/);
+  assert.doesNotMatch(workspaceSource, /load-action-find/);
+  assert.doesNotMatch(workspaceSource, /HoverActionMenu/);
   assert.doesNotMatch(workspaceSource, /back hole/i);
   assert.doesNotMatch(navSource, /Backhaul Finder/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/backhaul-finder.tsx"), "utf8"), /Backhaul Finder/);
@@ -461,11 +464,16 @@ async function main() {
   assert.match(backhaulCopy, /Couldn't search/);
   assert.match(backhaulCopy, /Searching within 150 mi/);
   assert.match(backhaulCopy, /excluding M&S Loads/);
+  assert.match(backhaulCopy, /Loads whose pickup is within 150 mi of this delivery/);
+  assert.match(backhaulCopy, /function pickupMiles/);
+  assert.doesNotMatch(backhaulCopy, /nearerMiles|pickups or deliveries/);
   assert.match(backhaulUi, /Showing \{data\.loads\.length\} of \{data\.total\}/);
   assert.match(backhaulUi, /Open load/);
   assert.match(backhaulUi, /Try again/);
   assert.match(backhaulUi, /data-backhaul-card/);
-  assert.match(backhaulUi, /PU \/ Del/);
+  assert.match(backhaulUi, /Pickup/);
+  assert.match(backhaulUi, /BACKHAUL_RULE/);
+  assert.doesNotMatch(backhaulUi, /PU \/ Del/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /sheetOnPhone/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /action-phone-sheet/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/backhaul/route.ts"), "utf8"), /findBackhaulForLoad/);
@@ -480,6 +488,8 @@ async function main() {
   assert.match(cssSource, /\.backhaul-panel/);
   assert.match(cssSource, /\.backhaul-grab/);
   assert.match(cssSource, /\.backhaul-cards/);
+  assert.match(cssSource, /\.backhaul-rule/);
+  assert.doesNotMatch(cssSource, /load-action-find/);
   assert.match(cssSource, /max-width: 390px/);
   assert.match(cssSource, /\.load-tabs/);
   assert.match(cssSource, /\.load-tab-active/);
@@ -1948,32 +1958,47 @@ async function main() {
   assert.doesNotMatch(compactShareCss, /trailer-share-compact-path \{[\s\S]*text-overflow:\s*ellipsis;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\[data-orbcomm-status-table\] td \{[\s\S]*vertical-align:\s*middle;/);
   const fleetMapUi = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
+  const orbcommPanelUi = fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8");
+  const appShellUi = fs.readFileSync(path.join(process.cwd(), "components/app-shell.tsx"), "utf8");
   const orbcommCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-  assert.match(fleetMapUi, /trailer-share-compact-cell/);
-  // Pack C mobile smoke: Wave packs must not reintroduce Orbcomm left-edge clip
-  // (overflow:hidden / sticky / crushed 100% table eating CITY, ST and TEMP).
-  assert.match(fleetMapUi, /data-orbcomm-status-scroll/);
-  assert.match(fleetMapUi, /data-orbcomm-location/);
-  assert.match(fleetMapUi, /data-orbcomm-temp/);
+  assert.match(fleetMapUi, /OrbcommStatusPanel/);
+  assert.match(orbcommPanelUi, /trailer-share-compact-cell/);
+  // Phone hard acceptance: cards only (table unmounted). Not another :has + overflow-x:visible patch.
+  // Live febd537 CSS was served (MD5 10DC4E7D) and still left-clipped LOCATION.
+  assert.match(orbcommPanelUi, /data-orbcomm-status-scroll/);
+  assert.match(orbcommPanelUi, /data-orbcomm-status-cards/);
+  assert.match(orbcommPanelUi, /data-orbcomm-status-card/);
+  assert.match(orbcommPanelUi, /data-orbcomm-phone-cards/);
+  assert.match(orbcommPanelUi, /data-orbcomm-location/);
+  assert.match(orbcommPanelUi, /data-orbcomm-temp/);
+  assert.match(orbcommPanelUi, /statusPlace\(row\.location\)/);
+  assert.match(orbcommPanelUi, /useState\(true\)/);
+  assert.match(orbcommPanelUi, /max-width: 47\.99rem/);
+  const orbcommCardMarkup = orbcommPanelUi.match(/data-orbcomm-status-card=""[\s\S]*?<\/li>/)?.[0] ?? "";
+  assert.match(orbcommCardMarkup, /data-orbcomm-location/);
+  assert.doesNotMatch(orbcommCardMarkup, /orbcomm-location-cell|orbcomm-temp-cell/);
+  assert.ok(
+    orbcommCardMarkup.indexOf("data-orbcomm-location") < orbcommCardMarkup.indexOf("data-orbcomm-temp"),
+    "phone card must show LOCATION before TEMP",
+  );
   assert.match(orbcommCss, /orbcomm-status-scroll/);
+  assert.match(orbcommCss, /orbcomm-status-cards/);
   assert.match(orbcommCss, /\[data-orbcomm-status-table\] \.table-grid \{[\s\S]*width:\s*max-content;/);
   assert.match(orbcommCss, /td\[data-orbcomm-location\] \{[\s\S]*overflow:\s*visible;/);
   assert.match(orbcommCss, /td\[data-orbcomm-temp\] \{[\s\S]*min-width:\s*5\.5rem;/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-location\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-temp\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
-  // Live 390px regression: desk-main overflow-x:hidden competed with the table
-  // scrollport and ate HASTINGS→STINGS / TEMP fragments. Ancestors stay visible.
-  const deskMainOrbcommRules = orbcommCss.match(/\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]+\}/g) ?? [];
-  assert.ok(deskMainOrbcommRules.length >= 1, "Orbcomm desk-main :has rule must exist");
-  for (const rule of deskMainOrbcommRules) {
-    assert.doesNotMatch(rule, /overflow-x:\s*hidden/, "desk-main must not clip Orbcomm");
-  }
-  assert.match(orbcommCss, /\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]*overflow-x:\s*visible/);
-  assert.match(orbcommCss, /html:has\(\[data-orbcomm-status-table\]\)/);
-  assert.doesNotMatch(
-    orbcommCss,
-    /\.desk-main:has\(\[data-orbcomm-status-table\]\)\s*\{[^}]*overflow-x:\s*hidden/,
-  );
+  assert.doesNotMatch(orbcommCss, /html:has\(\[data-orbcomm-status-table\]\)/);
+  assert.doesNotMatch(orbcommCss, /\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]*overflow-x:\s*visible/);
+  assert.match(appShellUi, /data-orbcomm-page/);
+  assert.match(appShellUi, /\/fleet\/orbcomm/);
+  const orbcommPageOverflow =
+    orbcommCss.match(
+      /html\[data-orbcomm-page\],[\s\S]*?\.desk-shell\[data-orbcomm-page\] \.desk-main-inner \{[\s\S]*?\n  \}/,
+    )?.[0] ?? "";
+  assert.match(orbcommPageOverflow, /overflow-x:\s*clip/);
+  assert.doesNotMatch(orbcommPageOverflow, /:has\(/);
+  assert.doesNotMatch(orbcommPageOverflow, /overflow-x:\s*visible/);
   const orbcommScrollRule =
     orbcommCss.match(
       /\.orbcomm-status-scroll,\s*\[data-orbcomm-status-scroll\]\s*\{[\s\S]*?\n\}/,
@@ -1985,6 +2010,15 @@ async function main() {
   assert.match(orbcommScrollRule, /width:\s*100%/);
   assert.doesNotMatch(orbcommScrollRule, /overflow-x:\s*hidden/);
   assert.doesNotMatch(orbcommScrollRule, /margin-(left|inline-start):\s*-/);
+  const phoneCardLocationRule =
+    orbcommCss.match(
+      /\.orbcomm-status-card-location,[\s\S]*?\[data-orbcomm-status-card\] \[data-orbcomm-location\] \{[\s\S]*?\n\}/,
+    )?.[0] ?? "";
+  assert.match(phoneCardLocationRule, /white-space:\s*normal/);
+  assert.match(phoneCardLocationRule, /overflow:\s*visible/);
+  assert.match(phoneCardLocationRule, /overflow-wrap:\s*break-word/);
+  assert.doesNotMatch(phoneCardLocationRule, /white-space:\s*nowrap|overflow:\s*hidden|direction:\s*rtl|position:\s*sticky|text-align:\s*center/);
+  assert.match(orbcommCss, /\[data-orbcomm-phone-cards\] \.orbcomm-status-scroll[\s\S]*display:\s*none/);
   assert.match(orbcommCss, /board-end-stack/);
   assert.match(orbcommCss, /max-width:\s*79\.99rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
@@ -1997,7 +2031,7 @@ async function main() {
   assert.match(trailerSharePage, /LoadMapCanvas/);
   assert.doesNotMatch(trailerSharePage, /data-trailer-share-pins|<ol |Setpoint|Last update/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/[id]/page.tsx"), "utf8"), /TrailerShareLinkPanel/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Customer link/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), /Customer link/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /randomBytes/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /fromOfficeDateTime/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/trailer-share.ts"), "utf8"), /lastKnownOrbcommSnapshot/);
@@ -16087,6 +16121,12 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(shortPlaceLabel("South Sioux City, NE"), /UTH SIOUX/);
   assert.doesNotMatch(shortPlaceLabel("Hays, KS"), /^YS,/);
   assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
+  assert.equal(shortPlaceLabel("HASTINGS, NE"), "HASTINGS, NE");
+  assert.equal(shortPlaceLabel("BRONX, NY"), "BRONX, NY");
+  assert.equal(shortPlaceLabel("SOUTH SIOUX CITY, NE"), "SOUTH SIOUX CITY, NE");
+  assert.doesNotMatch(shortPlaceLabel("HASTINGS, NE"), /^STINGS/);
+  assert.doesNotMatch(shortPlaceLabel("BRONX, NY"), /^ONX/);
+  assert.doesNotMatch(shortPlaceLabel("SOUTH SIOUX CITY, NE"), /^UTH SIOUX/);
   const boardCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   const placeBlock = boardCss.match(/\.board-place\s*\{[^}]+\}/)?.[0] ?? "";
   const placeLine = boardCss.match(/\.board-place-line\s*\{[^}]+\}/)?.[0] ?? "";
@@ -16434,7 +16474,8 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /plate_state/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/truck-form.tsx"), "utf8"), /Cab type/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /cdl_endorsements/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-status-table/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /OrbcommStatusPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), /data-orbcomm-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-samsara-status-table/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Truck</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Mileage</);
@@ -16443,7 +16484,7 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8"), /truckStatusRows/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /formatSamsaraStatusHos/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /Parked|motion/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), />Message</);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-status-panel.tsx"), "utf8"), />Message</);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-message/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /data-orbcomm-live-note/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /live Orbcomm did not update/);
@@ -17964,7 +18005,7 @@ parked for next week
 
   const backhaulShared = await import("../lib/backhaul-shared");
   const backhaul = await import("../lib/backhaul");
-  const { haversineMiles } = await import("../lib/city-coords-shared");
+  const { findExactCityCenter, haversineMiles } = await import("../lib/city-coords-shared");
   assert.equal(backhaulShared.isHouseCustomerName("M&S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads"), true);
   assert.equal(backhaulShared.isHouseCustomerName("M & S Loads LLC"), true);
@@ -18092,6 +18133,14 @@ parked for next week
     pickup_start: "2026-05-01T12:00:00.000Z",
     delivery_start: "2026-05-02T12:00:00.000Z",
   });
+  const deliveryOnlyNearId = backhaulLaneLoad({
+    load_number: "MSE-BH55",
+    customer_id: westsideId,
+    origin: "Chicago, IL",
+    destination: "Newark, NJ",
+    pickup_start: "2026-05-10T12:00:00.000Z",
+    delivery_start: "2026-05-11T12:00:00.000Z",
+  });
   const missingId = backhaulLaneLoad({
     load_number: "MSE-BH30",
     customer_id: westsideId,
@@ -18102,7 +18151,7 @@ parked for next week
   });
   assert.equal(backhaulShared.isBlankPlacePart("TBD"), true);
   assert.equal(backhaulShared.isBlankPlacePart("Bronx"), false);
-  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId, cancelledId, missingId]) {
+  for (const id of [sourceId, nearId, midId, closestId, houseNearId, farId, deliveryOnlyNearId, cancelledId, missingId]) {
     stopsMod.ensureDefaultStops(id);
   }
   const found = await backhaul.findBackhaulForLoad(sourceId);
@@ -18118,15 +18167,26 @@ parked for next week
   assert.equal(foundNumbers.includes("MSE-BH00"), false, "M&S Loads house account must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH99"), false, "cancelled loads must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH20"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
+  assert.equal(
+    foundNumbers.includes("MSE-BH55"),
+    false,
+    "candidate whose delivery is near the center but pickup is far must be excluded",
+  );
   assert.equal(typeof found.total, "number");
   assert.ok(found.total >= found.loads.length);
   const bh72 = found.loads.find((row) => row.loadNumber === "MSE-BH72");
   const bh41 = found.loads.find((row) => row.loadNumber === "MSE-BH41");
   const bh98 = found.loads.find((row) => row.loadNumber === "MSE-BH98");
   assert.ok(bh72 && bh41 && bh98);
-  assert.ok(bh72.miles <= 5, "Bronx pickup is at the Bronx delivery center");
-  assert.ok(bh41.miles <= 15, "Newark is inside 15 mi of the Bronx");
-  assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "Edison/Philly is farther but inside 150 mi");
+  const exactBronx = findExactCityCenter("Bronx", "NY")!;
+  const exactNewark = findExactCityCenter("Newark", "NJ")!;
+  const exactEdison = findExactCityCenter("Edison", "NJ")!;
+  const newarkPickupMi = Math.round(haversineMiles(exactBronx.lat, exactBronx.lng, exactNewark.lat, exactNewark.lng));
+  const edisonPickupMi = Math.round(haversineMiles(exactBronx.lat, exactBronx.lng, exactEdison.lat, exactEdison.lng));
+  assert.ok(bh72.miles <= 5, "miles are Bronx delivery to Bronx pickup");
+  assert.equal(bh41.miles, newarkPickupMi, "shown miles must be Bronx delivery to Newark pickup");
+  assert.equal(bh98.miles, edisonPickupMi, "shown miles must be Bronx delivery to Edison pickup");
+  assert.ok(bh98.miles <= 150 && bh98.miles > bh41.miles, "Edison pickup is farther than Newark and inside 150 mi");
   assert.ok(
     found.loads.every((row, index, rows) => {
       if (index === 0) return true;
@@ -18147,6 +18207,8 @@ parked for next week
   assert.equal(missing.ok, false);
   assert.equal(missing.ok ? "" : missing.reason, "missing_delivery");
   assert.equal(missing.ok ? "" : missing.error, backhaulShared.BACKHAUL_MISSING_TITLE);
+  assert.equal(backhaulShared.BACKHAUL_RULE, "Loads whose pickup is within 150 mi of this delivery.");
+  assert.match(backhaulShared.backhaulEmptyDetail("Bronx, NY"), /No past pickups near Bronx, NY/);
   assert.match(backhaulShared.backhaulEmptyDetail("Bronx, NY"), /excluding M&S Loads/);
   const emptyCenter = backhaulLaneLoad({
     load_number: "MSE-BH40",

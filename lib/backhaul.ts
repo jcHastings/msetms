@@ -14,7 +14,7 @@ import {
   isBlankPlacePart,
   isHouseCustomerName,
   isWithinBackhaulRadius,
-  nearerMiles,
+  pickupMiles,
   rollupBackhaulCustomers,
   sortBackhaulLoads,
   splitCityState,
@@ -180,20 +180,14 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     const pickupStop = firstPickupStop(stops);
     const dropStop = lastDeliveryStop(stops);
     const pickup = await resolvePlace(pickupStop, load.origin, locations, false);
-    const drop = await resolvePlace(dropStop, load.destination, locations, false);
-    const miles = nearerMiles(center, pickup, drop);
+    const miles = pickupMiles(center, pickup);
     if (!isWithinBackhaulRadius(miles)) continue;
-    const nearerIsPickup =
-      pickup && (drop == null || haversineCompare(center, pickup, drop) <= 0);
-    const dateIso = loadDateIso(
-      nearerIsPickup ? pickupStop : dropStop,
-      nearerIsPickup ? load.pickup_start : load.delivery_start || load.pickup_start,
-    );
+    const dateIso = loadDateIso(pickupStop, load.pickup_start);
     candidates.push(
       toLoadRow(
         load,
         pickup?.label || placeFromStopOrLane(pickupStop, load.origin).label || load.origin,
-        drop?.label || placeFromStopOrLane(dropStop, load.destination).label || load.destination,
+        placeFromStopOrLane(dropStop, load.destination).label || load.destination,
         miles as number,
         dateIso,
       ),
@@ -217,14 +211,4 @@ export async function findBackhaulForLoad(loadId: number): Promise<BackhaulRespo
     customers: rollupBackhaulCustomers(sorted),
     total: sorted.length,
   };
-}
-
-function haversineCompare(
-  center: { lat: number; lng: number },
-  pickup: { lat: number; lng: number },
-  delivery: { lat: number; lng: number },
-): number {
-  const pu = nearerMiles(center, pickup, null) ?? Number.POSITIVE_INFINITY;
-  const del = nearerMiles(center, null, delivery) ?? Number.POSITIVE_INFINITY;
-  return pu - del;
 }
