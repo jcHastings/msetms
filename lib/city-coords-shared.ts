@@ -166,6 +166,33 @@ export function extractCityFromQuestion(question: string): string {
   return raw;
 }
 
+export function findExactCityCenter(
+  city: string,
+  state = "",
+  locations: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }> = [],
+): { label: string; lat: number; lng: number } | null {
+  const cityKey = normalizeCityKey(city);
+  const stateKey = normalizeCityKey(state);
+  if (!cityKey) return null;
+  const known = US_CITY_CENTERS.find((row) => {
+    const names = [row.city, ...row.aliases].map(normalizeCityKey);
+    const cityHit = names.includes(cityKey) || normalizeCityKey(row.label) === `${cityKey} ${stateKey}`.trim();
+    const stateHit = !stateKey || normalizeCityKey(row.state) === stateKey;
+    return cityHit && stateHit;
+  });
+  if (known) return { label: known.label, lat: known.lat, lng: known.lng };
+  const saved = locations.find((location) => {
+    if (location.lat == null || location.lng == null) return false;
+    const savedCity = normalizeCityKey(location.city);
+    const savedState = normalizeCityKey(location.state);
+    return savedCity === cityKey && (!stateKey || savedState === stateKey);
+  });
+  if (saved && saved.lat != null && saved.lng != null) {
+    return { label: `${saved.city} ${saved.state}`.trim(), lat: saved.lat, lng: saved.lng };
+  }
+  return findCityCenter([city, state].filter(Boolean).join(", "), locations);
+}
+
 export function findCityCenter(
   asked: string,
   locations: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }> = [],

@@ -1,4 +1,4 @@
-import { findCityCenter } from "./city-coords-shared";
+import { findExactCityCenter } from "./city-coords-shared";
 import { formatDate } from "./format";
 import { geocodeAddress } from "./places";
 import { getLoad, listLoads, listLocations } from "./queries";
@@ -83,9 +83,7 @@ function coordsFromKnown(
   if (linked?.latitude != null && linked.longitude != null) {
     return { lat: linked.latitude, lng: linked.longitude };
   }
-  const asked = formatCityState(place.city, place.state) || place.city;
-  if (!asked) return null;
-  const known = findCityCenter(asked, locationCoords(locations));
+  const known = findExactCityCenter(place.city, place.state, locationCoords(locations));
   if (!known) return null;
   return { lat: known.lat, lng: known.lng };
 }

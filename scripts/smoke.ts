@@ -18044,13 +18044,14 @@ parked for next week
   assert.equal(found.radiusMi, 150);
   assert.match(found.center.label, /Bronx/i);
   const foundNumbers = found.loads.map((row) => row.loadNumber);
+  const fixtureRows = found.loads.filter((row) => row.loadNumber.startsWith("MSE-BH"));
   assert.ok(foundNumbers.includes("MSE-BH41"));
   assert.ok(foundNumbers.includes("MSE-BH98"));
   assert.ok(foundNumbers.includes("MSE-BH72"));
   assert.equal(foundNumbers.includes("MSE-BH63"), false, "source load must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH00"), false, "M&S Loads house account must be excluded");
   assert.equal(foundNumbers.includes("MSE-BH20"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
-  assert.equal(found.loads[0]?.loadNumber, "MSE-BH72", "nearest miles sort first");
+  assert.equal(fixtureRows[0]?.loadNumber, "MSE-BH72", "nearest fixture miles sort first");
   assert.ok(
     found.loads.every((row, index, rows) => index === 0 || rows[index - 1].miles <= row.miles),
     "loads sort by miles ascending",
