@@ -160,8 +160,12 @@ async function BoardLiveSection({
                   <th className="board-hos-cell">HOS</th>
                   <th className="board-reefer-cell">Reefer</th>
                   <th className="board-rate-cell">Rate</th>
-                  <th className="board-move-cell">Move</th>
-                  <th className="board-edit-head"></th>
+                  <th className="board-end-cell" colSpan={2}>
+                    <div className="board-end-stack">
+                      <span className="board-move-cell">Move</span>
+                      <span className="board-edit-head" />
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -267,35 +271,39 @@ async function BoardLiveSection({
                       />
                     </td>
                     <td className="board-rate-cell whitespace-nowrap">{formatMoney(load.rate)}</td>
-                    <td className="board-move-cell">
-                      <LoadStatusSelect
-                        loadId={load.id}
-                        status={load.status}
-                        extraStatuses={customLoadStatuses()}
-                      />
-                    </td>
-                    <td className="board-edit-cell whitespace-nowrap">
-                      <div className="flex justify-end gap-2" data-load-card-actions="">
-                        <LoadCardFastActions
-                          loadId={load.id}
-                          loadNumber={load.load_number}
-                          stops={listStopAppointmentTargets(load.id)}
-                        />
-                        {!isClosedStatus(load.status) ? (
-                          <AssignDialog
+                    <td className="board-end-cell" colSpan={2}>
+                      <div className="board-end-stack" data-board-end-stack="">
+                        <div className="board-move-cell">
+                          <LoadStatusSelect
                             loadId={load.id}
-                            loadNumber={load.load_number}
-                            trucks={assignableTrucks}
-                            trailers={assignableTrailers}
-                            drivers={assignableDrivers}
-                            defaultOoPercent={defaultOoPercent()}
-                            alertWindows={complianceWindows()}
-                            label={load.driver_id ? "Change unit" : "Assign"}
+                            status={load.status}
+                            extraStatuses={customLoadStatuses()}
                           />
-                        ) : null}
-                        <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
-                          Edit
-                        </OverlayOpenLink>
+                        </div>
+                        <div className="board-edit-cell">
+                          <div className="board-end-actions" data-load-card-actions="">
+                            <LoadCardFastActions
+                              loadId={load.id}
+                              loadNumber={load.load_number}
+                              stops={listStopAppointmentTargets(load.id)}
+                            />
+                            {!isClosedStatus(load.status) ? (
+                              <AssignDialog
+                                loadId={load.id}
+                                loadNumber={load.load_number}
+                                trucks={assignableTrucks}
+                                trailers={assignableTrailers}
+                                drivers={assignableDrivers}
+                                defaultOoPercent={defaultOoPercent()}
+                                alertWindows={complianceWindows()}
+                                label={load.driver_id ? "Change unit" : "Assign"}
+                              />
+                            ) : null}
+                            <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
+                              Edit
+                            </OverlayOpenLink>
+                          </div>
+                        </div>
                       </div>
                     </td>
                   </BoardFilterRow>
