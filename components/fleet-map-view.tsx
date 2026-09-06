@@ -31,6 +31,10 @@ function messageTime(iso: string | undefined): string {
   return shown === "—" ? "" : shown;
 }
 
+function statusPlace(location: string | undefined): string {
+  return shortPlaceLabel(location ?? "") || location || "—";
+}
+
 export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: string }) {
   return (
     <>
@@ -154,7 +158,56 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
         </aside>
       </div>
       {model.statusRows?.length ? (
-        <section className="card mt-4" data-orbcomm-status-table="">
+        <section className="card mt-4" data-orbcomm-status-table="" data-orbcomm-phone-cards="">
+          <ul className="orbcomm-status-cards" data-orbcomm-status-cards="">
+            {model.statusRows.map((row) => (
+              <li key={`card-${row.id}`} className="orbcomm-status-card" data-orbcomm-status-card="">
+                <div className="orbcomm-status-card-head">
+                  <Link href={row.href} className="font-semibold underline" data-orbcomm-trailer="">
+                    {row.trailer}
+                  </Link>
+                  {row.alarm ? (
+                    <span className="orbcomm-status-card-alarm" data-orbcomm-alarm="">
+                      {row.alarm}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="orbcomm-location-cell" data-orbcomm-location="">
+                  {statusPlace(row.location)}
+                </div>
+                <dl className="orbcomm-status-card-meta">
+                  <div>
+                    <dt>Temp °F</dt>
+                    <dd className="orbcomm-temp-cell" data-orbcomm-temp="">
+                      {row.temperatureF == null ? "—" : `${row.temperatureF}`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Power</dt>
+                    <dd>{row.power}</dd>
+                  </div>
+                  <div>
+                    <dt>Setpoint °F</dt>
+                    <dd>{row.setpointF == null ? "—" : `${row.setpointF}`}</dd>
+                  </div>
+                  <div>
+                    <dt>Message</dt>
+                    <dd data-orbcomm-message="">{messageTime(row.messageAt)}</dd>
+                  </div>
+                </dl>
+                {row.trailerId ? (
+                  <div className="trailer-share-compact-cell">
+                    <TrailerShareLinkPanel
+                      trailerId={row.trailerId}
+                      sharePath={row.sharePath}
+                      expiresAt={row.shareExpiresAt}
+                      compact
+                    />
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
           <div className="orbcomm-status-scroll" data-orbcomm-status-scroll="">
             <table className="table-grid">
               <thead>
@@ -186,7 +239,7 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
                       {row.alarm || "—"}
                     </td>
                     <td className="orbcomm-location-cell" data-orbcomm-location="">
-                      {shortPlaceLabel(row.location) || row.location || "—"}
+                      {statusPlace(row.location)}
                     </td>
                     <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
                     <td className="trailer-share-compact-cell">

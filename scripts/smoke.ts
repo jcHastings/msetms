@@ -1950,19 +1950,28 @@ async function main() {
   const fleetMapUi = fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8");
   const orbcommCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(fleetMapUi, /trailer-share-compact-cell/);
-  // Pack C mobile smoke: Wave packs must not reintroduce Orbcomm left-edge clip
-  // (overflow:hidden / sticky / crushed 100% table eating CITY, ST and TEMP).
+  // Phone hard acceptance: stacked cards, not another overflow-x / H-scroll "fix".
+  // Live tip febd537 still left-clipped LOCATION (HASTINGS→STINGS) after scroll.
   assert.match(fleetMapUi, /data-orbcomm-status-scroll/);
+  assert.match(fleetMapUi, /data-orbcomm-status-cards/);
+  assert.match(fleetMapUi, /data-orbcomm-status-card/);
+  assert.match(fleetMapUi, /data-orbcomm-phone-cards/);
   assert.match(fleetMapUi, /data-orbcomm-location/);
   assert.match(fleetMapUi, /data-orbcomm-temp/);
+  assert.match(fleetMapUi, /statusPlace\(row\.location\)/);
+  const orbcommCardMarkup = fleetMapUi.match(/data-orbcomm-status-card=""[\s\S]*?<\/li>/)?.[0] ?? "";
+  assert.match(orbcommCardMarkup, /data-orbcomm-location/);
+  assert.ok(
+    orbcommCardMarkup.indexOf("data-orbcomm-location") < orbcommCardMarkup.indexOf("data-orbcomm-temp"),
+    "phone card must show LOCATION before TEMP",
+  );
   assert.match(orbcommCss, /orbcomm-status-scroll/);
+  assert.match(orbcommCss, /orbcomm-status-cards/);
   assert.match(orbcommCss, /\[data-orbcomm-status-table\] \.table-grid \{[\s\S]*width:\s*max-content;/);
   assert.match(orbcommCss, /td\[data-orbcomm-location\] \{[\s\S]*overflow:\s*visible;/);
   assert.match(orbcommCss, /td\[data-orbcomm-temp\] \{[\s\S]*min-width:\s*5\.5rem;/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-location\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
   assert.doesNotMatch(orbcommCss.match(/td\[data-orbcomm-temp\][\s\S]*?\}/)?.[0] ?? "", /overflow:\s*hidden|direction:\s*rtl|position:\s*sticky/);
-  // Live 390px regression: desk-main overflow-x:hidden competed with the table
-  // scrollport and ate HASTINGS→STINGS / TEMP fragments. Ancestors stay visible.
   const deskMainOrbcommRules = orbcommCss.match(/\.desk-main:has\(\[data-orbcomm-status-table\]\)[^{]*\{[^}]+\}/g) ?? [];
   assert.ok(deskMainOrbcommRules.length >= 1, "Orbcomm desk-main :has rule must exist");
   for (const rule of deskMainOrbcommRules) {
@@ -1985,6 +1994,16 @@ async function main() {
   assert.match(orbcommScrollRule, /width:\s*100%/);
   assert.doesNotMatch(orbcommScrollRule, /overflow-x:\s*hidden/);
   assert.doesNotMatch(orbcommScrollRule, /margin-(left|inline-start):\s*-/);
+  const phoneCardLocationRule =
+    orbcommCss.match(
+      /\[data-orbcomm-status-card\] \[data-orbcomm-location\] \{[\s\S]*?\n  \}/,
+    )?.[0] ?? "";
+  assert.match(phoneCardLocationRule, /white-space:\s*normal/);
+  assert.match(phoneCardLocationRule, /overflow:\s*visible/);
+  assert.match(phoneCardLocationRule, /overflow-wrap:\s*break-word/);
+  assert.doesNotMatch(phoneCardLocationRule, /white-space:\s*nowrap|overflow:\s*hidden|direction:\s*rtl|position:\s*sticky|text-align:\s*center/);
+  assert.match(orbcommCss, /\[data-orbcomm-phone-cards\] \.orbcomm-status-scroll[\s\S]*display:\s*none/);
+  assert.match(orbcommCss, /@media \(max-width:\s*47\.99rem\) \{[\s\S]*\[data-orbcomm-status-cards\]/);
   assert.match(orbcommCss, /board-end-stack/);
   assert.match(orbcommCss, /max-width:\s*79\.99rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname\.startsWith\("\/t\/"\)/);
@@ -16087,6 +16106,12 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(shortPlaceLabel("South Sioux City, NE"), /UTH SIOUX/);
   assert.doesNotMatch(shortPlaceLabel("Hays, KS"), /^YS,/);
   assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
+  assert.equal(shortPlaceLabel("HASTINGS, NE"), "HASTINGS, NE");
+  assert.equal(shortPlaceLabel("BRONX, NY"), "BRONX, NY");
+  assert.equal(shortPlaceLabel("SOUTH SIOUX CITY, NE"), "SOUTH SIOUX CITY, NE");
+  assert.doesNotMatch(shortPlaceLabel("HASTINGS, NE"), /^STINGS/);
+  assert.doesNotMatch(shortPlaceLabel("BRONX, NY"), /^ONX/);
+  assert.doesNotMatch(shortPlaceLabel("SOUTH SIOUX CITY, NE"), /^UTH SIOUX/);
   const boardCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   const placeBlock = boardCss.match(/\.board-place\s*\{[^}]+\}/)?.[0] ?? "";
   const placeLine = boardCss.match(/\.board-place-line\s*\{[^}]+\}/)?.[0] ?? "";
