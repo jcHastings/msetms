@@ -154,52 +154,56 @@ export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: 
         </aside>
       </div>
       {model.statusRows?.length ? (
-        <section className="card mt-4 overflow-x-auto" data-orbcomm-status-table="">
-          <table className="table-grid">
-            <thead>
-              <tr>
-                <th>Trailer</th>
-                <th>Power</th>
-                <th>Setpoint °F</th>
-                <th>Temp °F</th>
-                <th>Alarm</th>
-                <th>Location</th>
-                <th>Message</th>
-                <th>Customer link</th>
-              </tr>
-            </thead>
-            <tbody>
-              {model.statusRows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <Link href={row.href} className="font-semibold underline">
-                      {row.trailer}
-                    </Link>
-                  </td>
-                  <td>{row.power}</td>
-                  <td>{row.setpointF == null ? "—" : `${row.setpointF}`}</td>
-                  <td>{row.temperatureF == null ? "—" : `${row.temperatureF}`}</td>
-                  <td className={row.alarm ? "font-semibold text-rose-700" : undefined}>
-                    {row.alarm || "—"}
-                  </td>
-                  <td className="whitespace-nowrap text-left">
-                    {shortPlaceLabel(row.location) || row.location || "—"}
-                  </td>
-                  <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
-                  <td className="trailer-share-compact-cell">
-                    {row.trailerId ? (
-                      <TrailerShareLinkPanel
-                        trailerId={row.trailerId}
-                        sharePath={row.sharePath}
-                        expiresAt={row.shareExpiresAt}
-                        compact
-                      />
-                    ) : null}
-                  </td>
+        <section className="card mt-4" data-orbcomm-status-table="">
+          <div className="orbcomm-status-scroll" data-orbcomm-status-scroll="">
+            <table className="table-grid">
+              <thead>
+                <tr>
+                  <th>Trailer</th>
+                  <th>Power</th>
+                  <th>Setpoint °F</th>
+                  <th>Temp °F</th>
+                  <th>Alarm</th>
+                  <th>Location</th>
+                  <th>Message</th>
+                  <th>Customer link</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {model.statusRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link href={row.href} className="font-semibold underline">
+                        {row.trailer}
+                      </Link>
+                    </td>
+                    <td>{row.power}</td>
+                    <td>{row.setpointF == null ? "—" : `${row.setpointF}`}</td>
+                    <td className="orbcomm-temp-cell" data-orbcomm-temp="">
+                      {row.temperatureF == null ? "—" : `${row.temperatureF}`}
+                    </td>
+                    <td className={row.alarm ? "font-semibold text-rose-700" : undefined}>
+                      {row.alarm || "—"}
+                    </td>
+                    <td className="orbcomm-location-cell" data-orbcomm-location="">
+                      {shortPlaceLabel(row.location) || row.location || "—"}
+                    </td>
+                    <td data-orbcomm-message="">{messageTime(row.messageAt)}</td>
+                    <td className="trailer-share-compact-cell">
+                      {row.trailerId ? (
+                        <TrailerShareLinkPanel
+                          trailerId={row.trailerId}
+                          sharePath={row.sharePath}
+                          expiresAt={row.shareExpiresAt}
+                          compact
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
       {model.truckStatusRows?.length ? (
