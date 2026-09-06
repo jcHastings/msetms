@@ -17980,7 +17980,7 @@ parked for next week
     });
   }
   const sourceId = backhaulLaneLoad({
-    load_number: "MSE-1063",
+    load_number: "MSE-BH63",
     customer_id: riverCustomerId,
     origin: "Chicago, IL",
     destination: "Bronx, NY",
@@ -17988,7 +17988,7 @@ parked for next week
     delivery_start: "2026-09-03T12:00:00.000Z",
   });
   const nearId = backhaulLaneLoad({
-    load_number: "MSE-1041",
+    load_number: "MSE-BH41",
     customer_id: riverCustomerId,
     origin: "Newark, NJ",
     destination: "Bronx, NY",
@@ -17996,7 +17996,7 @@ parked for next week
     delivery_start: "2026-08-12T18:00:00.000Z",
   });
   const midId = backhaulLaneLoad({
-    load_number: "MSE-0998",
+    load_number: "MSE-BH98",
     customer_id: expressId,
     origin: "Edison, NJ",
     destination: "Philadelphia, PA",
@@ -18004,7 +18004,7 @@ parked for next week
     delivery_start: "2026-07-02T18:00:00.000Z",
   });
   const closestId = backhaulLaneLoad({
-    load_number: "MSE-0872",
+    load_number: "MSE-BH72",
     customer_id: westsideId,
     origin: "Bronx, NY",
     destination: "Chicago, IL",
@@ -18012,7 +18012,7 @@ parked for next week
     delivery_start: "2026-06-19T12:00:00.000Z",
   });
   const houseNearId = backhaulLaneLoad({
-    load_number: "MSE-0100",
+    load_number: "MSE-BH00",
     customer_id: houseCustomerId,
     origin: "Newark, NJ",
     destination: "Bronx, NY",
@@ -18020,7 +18020,7 @@ parked for next week
     delivery_start: "2026-08-01T18:00:00.000Z",
   });
   const farId = backhaulLaneLoad({
-    load_number: "MSE-0200",
+    load_number: "MSE-BH20",
     customer_id: farCustomerId,
     origin: "Chicago, IL",
     destination: "Dallas, TX",
@@ -18028,7 +18028,7 @@ parked for next week
     delivery_start: "2026-05-02T12:00:00.000Z",
   });
   const missingId = backhaulLaneLoad({
-    load_number: "MSE-0300",
+    load_number: "MSE-BH30",
     customer_id: westsideId,
     origin: "Chicago, IL",
     destination: "TBD",
@@ -18044,13 +18044,13 @@ parked for next week
   assert.equal(found.radiusMi, 150);
   assert.match(found.center.label, /Bronx/i);
   const foundNumbers = found.loads.map((row) => row.loadNumber);
-  assert.ok(foundNumbers.includes("MSE-1041"));
-  assert.ok(foundNumbers.includes("MSE-0998"));
-  assert.ok(foundNumbers.includes("MSE-0872"));
-  assert.equal(foundNumbers.includes("MSE-1063"), false, "source load must be excluded");
-  assert.equal(foundNumbers.includes("MSE-0100"), false, "M&S Loads house account must be excluded");
-  assert.equal(foundNumbers.includes("MSE-0200"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
-  assert.equal(found.loads[0]?.loadNumber, "MSE-0872", "nearest miles sort first");
+  assert.ok(foundNumbers.includes("MSE-BH41"));
+  assert.ok(foundNumbers.includes("MSE-BH98"));
+  assert.ok(foundNumbers.includes("MSE-BH72"));
+  assert.equal(foundNumbers.includes("MSE-BH63"), false, "source load must be excluded");
+  assert.equal(foundNumbers.includes("MSE-BH00"), false, "M&S Loads house account must be excluded");
+  assert.equal(foundNumbers.includes("MSE-BH20"), false, "Chicago/Dallas is outside 150 mi of the Bronx");
+  assert.equal(found.loads[0]?.loadNumber, "MSE-BH72", "nearest miles sort first");
   assert.ok(
     found.loads.every((row, index, rows) => index === 0 || rows[index - 1].miles <= row.miles),
     "loads sort by miles ascending",
@@ -18066,7 +18066,7 @@ parked for next week
   assert.equal(missing.ok, false);
   assert.equal(missing.ok ? "" : missing.reason, "missing_delivery");
   const emptyCenter = backhaulLaneLoad({
-    load_number: "MSE-0400",
+    load_number: "MSE-BH40",
     customer_id: westsideId,
     origin: "Phoenix, AZ",
     destination: "Los Angeles, CA",
