@@ -69,6 +69,13 @@ export const US_CITY_CENTERS: CityCenter[] = [
   { label: "Cincinnati, OH", city: "Cincinnati", state: "OH", lat: 39.1031, lng: -84.512, aliases: ["cincinnati"] },
   { label: "Louisville, KY", city: "Louisville", state: "KY", lat: 38.2527, lng: -85.7585, aliases: ["louisville"] },
   { label: "Columbus, OH", city: "Columbus", state: "OH", lat: 39.9612, lng: -82.9988, aliases: ["columbus"] },
+  { label: "New York, NY", city: "New York", state: "NY", lat: 40.7128, lng: -74.006, aliases: ["nyc", "new york city", "manhattan"] },
+  { label: "Bronx, NY", city: "Bronx", state: "NY", lat: 40.8448, lng: -73.8648, aliases: ["the bronx"] },
+  { label: "Brooklyn, NY", city: "Brooklyn", state: "NY", lat: 40.6782, lng: -73.9442, aliases: ["brooklyn"] },
+  { label: "Queens, NY", city: "Queens", state: "NY", lat: 40.7282, lng: -73.7949, aliases: ["queens"] },
+  { label: "Newark, NJ", city: "Newark", state: "NJ", lat: 40.7357, lng: -74.1724, aliases: ["newark"] },
+  { label: "Edison, NJ", city: "Edison", state: "NJ", lat: 40.5187, lng: -74.4121, aliases: ["edison"] },
+  { label: "Philadelphia, PA", city: "Philadelphia", state: "PA", lat: 39.9526, lng: -75.1652, aliases: ["philadelphia", "philly"] },
 ];
 
 const STATE_NAME_TO_ABBR: Record<string, string> = {
@@ -157,6 +164,33 @@ export function extractCityFromQuestion(question: string): string {
     if (match?.[1]) return match[1].replace(/\b(the|city of)\b/gi, " ").replace(/\s+/g, " ").trim();
   }
   return raw;
+}
+
+export function findExactCityCenter(
+  city: string,
+  state = "",
+  locations: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }> = [],
+): { label: string; lat: number; lng: number } | null {
+  const cityKey = normalizeCityKey(city);
+  const stateKey = normalizeCityKey(state);
+  if (!cityKey) return null;
+  const known = US_CITY_CENTERS.find((row) => {
+    const names = [row.city, ...row.aliases].map(normalizeCityKey);
+    const cityHit = names.includes(cityKey) || normalizeCityKey(row.label) === `${cityKey} ${stateKey}`.trim();
+    const stateHit = !stateKey || normalizeCityKey(row.state) === stateKey;
+    return cityHit && stateHit;
+  });
+  if (known) return { label: known.label, lat: known.lat, lng: known.lng };
+  const saved = locations.find((location) => {
+    if (location.lat == null || location.lng == null) return false;
+    const savedCity = normalizeCityKey(location.city);
+    const savedState = normalizeCityKey(location.state);
+    return savedCity === cityKey && (!stateKey || savedState === stateKey);
+  });
+  if (saved && saved.lat != null && saved.lng != null) {
+    return { label: `${saved.city} ${saved.state}`.trim(), lat: saved.lat, lng: saved.lng };
+  }
+  return findCityCenter([city, state].filter(Boolean).join(", "), locations);
 }
 
 export function findCityCenter(
