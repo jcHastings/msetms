@@ -1,19 +1,28 @@
 {
   "href": "http://127.0.0.1:3000/board",
   "title": "Dispatch board · MS Express TMS",
-  "bodyText": "Menu\nMS Express TMS\nSign out\nMS Express TMS\nWorkbench\nControl\nSearch\nDISPATCH\n▾\nBoard\nDesk\n+ New\nImport\nTemplates\nPlaces\nAudit\nFLEET\n▸\nCUSTOMERS\n▸\nACCOUNTING\n▸\nREPORTS\n▸\nSETTINGS\n▸\nAlerts\nMS Test\nAdmi",
+  "cssPx": 390,
   "viewport": {
     "width": 390,
-    "height": 1400
+    "height": 1400,
+    "devicePixelRatio": 1
   },
   "tabFlexWrap": "nowrap",
   "tabOverflowX": "auto",
+  "hasAtDel": true,
+  "hasDispatched": true,
+  "hasAvailable": true,
+  "pickupCrushed": false,
+  "stickyLeft": false,
+  "noOverlap": true,
   "pass": true,
   "results": [
     {
       "row": 1,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AT DEL",
       "pickupText": "09/05/26 6:00 AM",
       "status": {
@@ -37,6 +46,8 @@
       "row": 2,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "DISPATCHED",
       "pickupText": "09/06/26 3:00 AM",
       "status": {
@@ -60,6 +71,8 @@
       "row": 3,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "ASSIGNED",
       "pickupText": "09/08/26 2:30 AM",
       "status": {
@@ -83,6 +96,8 @@
       "row": 4,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/06/26 2:00 AM",
       "status": {
@@ -106,6 +121,8 @@
       "row": 5,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/07/26 5:00 AM",
       "status": {
@@ -129,6 +146,8 @@
       "row": 6,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/07/26 9:00 AM",
       "status": {
@@ -152,6 +171,8 @@
       "row": 7,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/08/26 4:00 AM",
       "status": {
@@ -175,6 +196,8 @@
       "row": 8,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/09/26 5:00 AM",
       "status": {
@@ -198,6 +221,8 @@
       "row": 9,
       "overlap": false,
       "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
       "statusText": "AVAILABLE",
       "pickupText": "09/10/26 3:00 AM",
       "status": {
