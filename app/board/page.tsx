@@ -77,17 +77,21 @@ export default async function BoardPage({
           </Link>
         }
       />
-      <BoardToolbar status={status} date={date} />
-      <Suspense fallback={<div className="card h-72 bg-slate-50" data-board-loading="" />}>
-        <BoardLiveSection
-          loads={loads}
-          current={current}
-          assignableTrucks={assignableTrucks}
-          assignableTrailers={assignableTrailers}
-          assignableDrivers={assignableDrivers}
-          relayLabels={relayLabels}
-        />
-      </Suspense>
+      <div className="card overflow-hidden">
+        <div className="px-3 pt-2">
+          <BoardToolbar status={status} date={date} />
+        </div>
+        <Suspense fallback={<div className="h-72" data-board-loading="" />}>
+          <BoardLiveSection
+            loads={loads}
+            current={current}
+            assignableTrucks={assignableTrucks}
+            assignableTrailers={assignableTrailers}
+            assignableDrivers={assignableDrivers}
+            relayLabels={relayLabels}
+          />
+        </Suspense>
+      </div>
       {openId ? (
         <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/board", current)} initialTab={openTab} />
       ) : null}
@@ -145,8 +149,7 @@ async function BoardLiveSection({
           {reefers.error}
         </p>
       ) : null}
-      <div className="card overflow-hidden">
-        {loads.length === 0 ? (
+      {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
           <div className="board-scroll" data-board-packed="">
@@ -317,7 +320,6 @@ async function BoardLiveSection({
             </table>
           </div>
         )}
-      </div>
     </>
   );
 }
