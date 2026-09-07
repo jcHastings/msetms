@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Lab 390px Board proof: screenshot + MOVE vs STATUS box intersection.
- * Prefers a live /board URL (BOARD_PROOF_URL). Falls back to the fixture HTML.
+ * Prefers live /board (BOARD_PROOF_URL) with a dispatcher cookie.
+ * Falls back to docs/board-phone-390/board-390-fixture.html.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -15,10 +16,11 @@ const FIXTURE = path.join(OUT_DIR, "board-390-fixture.html");
 const PNG = path.join(OUT_DIR, "board-390-proof.png");
 const JSON_OUT = path.join(OUT_DIR, "geometry.json");
 const WIDTH = 390;
-const HEIGHT = 844;
+const HEIGHT = Number(process.env.BOARD_PROOF_HEIGHT || 1400);
+const USER_DIR = "/tmp/board-phone-390-chrome";
 
-function boxesIntersect(a, b) {
-  return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+function chromePath() {
+  return process.env.CHROME_PATH || "google-chrome";
 }
 
 async function serveFixture() {
@@ -35,94 +37,98 @@ async function serveFixture() {
   });
 }
 
-function chromePath() {
-  return process.env.CHROME_PATH || "google-chrome";
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withChrome(url, cookie) {
+async function chromeReady(port, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
+      if (version?.webSocketDebuggerUrl) return version;
+    } catch {
+      /* retry */
+    }
+    await wait(200);
+  }
+  throw new Error("Chrome DevTools not ready");
+}
+
+async function cdpSession(wsUrl) {
+  const socket = new WebSocket(wsUrl);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve);
+    socket.addEventListener("error", reject);
+  });
+  let nextId = 1;
+  const pending = new Map();
+  socket.addEventListener("message", (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      if (msg.error) reject(new Error(JSON.stringify(msg.error)));
+      else resolve(msg.result);
+    }
+  });
+  async function send(method, params = {}) {
+    const id = nextId++;
+    const result = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    socket.send(JSON.stringify({ id, method, params }));
+    return result;
+  }
+  return { send, close: () => socket.close() };
+}
+
+async function measureAndShot(pageUrl, cookieValue) {
+  mkdirSync(USER_DIR, { recursive: true });
   const port = 9223;
   const args = [
     "--headless=new",
-    "--disable-gpu",
     "--no-sandbox",
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--disable-background-networking",
+    "--disable-default-apps",
+    "--disable-extensions",
+    "--disable-sync",
+    "--no-first-run",
     "--hide-scrollbars",
+    `--user-data-dir=${USER_DIR}`,
     `--remote-debugging-port=${port}`,
     `--window-size=${WIDTH},${HEIGHT}`,
     "--force-device-scale-factor=1",
-    url,
+    "about:blank",
   ];
-  if (cookie) {
-    args.push(`--user-data-dir=/tmp/board-phone-390-chrome`);
-  }
   const child = spawn(chromePath(), args, { stdio: "ignore" });
-  const deadline = Date.now() + 20000;
-  let version;
-  while (Date.now() < deadline) {
-    try {
-      version = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.json());
-      break;
-    } catch {
-      await new Promise((r) => setTimeout(r, 200));
-    }
-  }
-  if (!version?.webSocketDebuggerUrl) {
-    child.kill();
-    throw new Error("Chrome DevTools not ready");
-  }
-  return { child, ws: version.webSocketDebuggerUrl, port };
-}
-
-async function cdpCall(ws, method, params = {}, sessionId) {
-  const id = Math.floor(Math.random() * 1e9);
-  const payload = sessionId ? { id, method, params, sessionId } : { id, method, params };
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(ws);
-    const timer = setTimeout(() => {
-      socket.close();
-      reject(new Error(`CDP timeout ${method}`));
-    }, 15000);
-    socket.addEventListener("open", () => socket.send(JSON.stringify(payload)));
-    socket.addEventListener("message", (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.id === id) {
-        clearTimeout(timer);
-        socket.close();
-        if (msg.error) reject(new Error(JSON.stringify(msg.error)));
-        else resolve(msg.result);
-      }
-    });
-    socket.addEventListener("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
-}
-
-async function measureAndShot(pageUrl, cookieHeader) {
-  const { child, port } = await withChrome(pageUrl);
   try {
+    await chromeReady(port);
     const pages = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json());
     const page = pages.find((p) => p.type === "page") || pages[0];
-    const ws = page.webSocketDebuggerUrl;
-    if (cookieHeader) {
-      await cdpCall(ws, "Network.enable");
-      await cdpCall(ws, "Network.setCookie", {
-        name: "tms_dispatcher_id",
-        value: cookieHeader,
-        url: pageUrl,
-        path: "/",
-      });
-      await cdpCall(ws, "Page.reload", { ignoreCache: true });
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-    await cdpCall(ws, "Emulation.setDeviceMetricsOverride", {
+    const session = await cdpSession(page.webSocketDebuggerUrl);
+    await session.send("Emulation.setDeviceMetricsOverride", {
       width: WIDTH,
       height: HEIGHT,
       deviceScaleFactor: 1,
       mobile: true,
     });
-    await new Promise((r) => setTimeout(r, 800));
-    const evalResult = await cdpCall(ws, "Runtime.evaluate", {
+    if (cookieValue) {
+      await session.send("Network.enable");
+      await session.send("Network.setCookie", {
+        name: "tms_dispatcher_id",
+        value: cookieValue,
+        url: pageUrl,
+        path: "/",
+      });
+    }
+    await session.send("Page.enable");
+    await session.send("Page.navigate", { url: pageUrl });
+    await wait(2500);
+    await session.send("Runtime.evaluate", {
+      expression: `document.querySelector("nextjs-portal")?.remove(); document.getElementById("__next-build-watcher")?.remove();`,
+    });
+    const evalResult = await session.send("Runtime.evaluate", {
       awaitPromise: true,
       returnByValue: true,
       expression: `(() => {
@@ -138,39 +144,44 @@ async function measureAndShot(pageUrl, cookieHeader) {
             row: i + 1,
             overlap: intersect(sb, eb),
             gapPx: Math.round(eb.top - sb.bottom),
-            statusText: (status.innerText || "").trim(),
-            pickupText: (row.querySelector(".board-pickup-cell")?.innerText || "").trim(),
+            statusText: (status.innerText || "").replace(/\\s+/g, " ").trim(),
+            pickupText: (row.querySelector(".board-pickup-cell")?.innerText || "").replace(/\\s+/g, " ").trim(),
             status: { top: sb.top, right: sb.right, bottom: sb.bottom, left: sb.left, width: sb.width, height: sb.height },
             move: { top: eb.top, right: eb.right, bottom: eb.bottom, left: eb.left, width: eb.width, height: eb.height },
           };
         });
-        const tabs = getComputedStyle(document.querySelector(".load-list-tabs") || document.body);
+        const tabs = document.querySelector(".load-list-tabs");
+        const tabStyle = tabs ? getComputedStyle(tabs) : null;
         return {
           href: location.href,
+          title: document.title,
+          bodyText: (document.body.innerText || "").slice(0, 200),
           viewport: { width: window.innerWidth, height: window.innerHeight },
-          tabFlexWrap: tabs.flexWrap,
-          tabOverflowX: tabs.overflowX,
+          tabFlexWrap: tabStyle?.flexWrap ?? null,
+          tabOverflowX: tabStyle?.overflowX ?? null,
           pass: results.length > 0 && results.every((r) => !r.missing && !r.overlap && r.gapPx >= 0),
           results,
         };
       })()`,
     });
     const report = evalResult.result.value;
-    const shot = await cdpCall(ws, "Page.captureScreenshot", { format: "png" });
+    const shot = await session.send("Page.captureScreenshot", { format: "png", fromSurface: true });
     mkdirSync(OUT_DIR, { recursive: true });
     writeFileSync(PNG, Buffer.from(shot.data, "base64"));
     writeFileSync(JSON_OUT, JSON.stringify(report, null, 2) + "\n");
+    session.close();
     return report;
   } finally {
-    child.kill();
+    child.kill("SIGKILL");
   }
 }
 
-const liveUrl = process.env.BOARD_PROOF_URL;
-const cookie = process.env.BOARD_PROOF_COOKIE;
+const liveUrl = process.env.BOARD_PROOF_URL || "";
+const cookie = process.env.BOARD_PROOF_COOKIE || (liveUrl ? `1.${Date.now()}` : "");
 let server;
 let url = liveUrl;
 if (!url) {
+  if (!existsSync(FIXTURE)) throw new Error("Missing fixture HTML");
   const served = await serveFixture();
   server = served.server;
   url = served.url;

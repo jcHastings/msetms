@@ -111,7 +111,10 @@ function BoardWhenCell({
 }) {
   const { date, time } = formatBoardDateTime(start);
   return (
-    <td className={`board-when-cell board-${kind}-cell`} title={`to ${formatDateTime(end)}`}>
+    <td
+      className={kind === "pickup" ? "board-when-cell board-pickup-cell" : "board-when-cell board-delivery-cell"}
+      title={`to ${formatDateTime(end)}`}
+    >
       <div className="board-when">
         <div className="board-when-date">{date}</div>
         {time ? <div className="board-when-time">{time}</div> : null}
