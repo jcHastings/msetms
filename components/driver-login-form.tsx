@@ -2,13 +2,13 @@
 
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import type { ActionResult, DriverWithTruck } from "@/lib/types";
+import type { ActionResult } from "@/lib/types";
 
 export function DriverLoginForm({
   drivers,
   action,
 }: {
-  drivers: DriverWithTruck[];
+  drivers: Array<{ id: number; name: string }>;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);

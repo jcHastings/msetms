@@ -1,0 +1,22 @@
+DRIVER/CARRIER INFORMATION SHEET PO# 441902
+Name Phone Email Fax
+Morgan Hale 312-555-0144 x8821 morgan.hale@broker.example
+BOOKING CONTACT
+Pickup Dates Delivery Dates
+5/14/26 5/15/26
+CARRIER CONTACT
+Name Dispatcher Driver
+Ms Express (ne) jc Chris
+LOAD INFORMATION
+Mode Trailer Type Trailer Size Temperature
+FTL Reefer 53 ft 0F
+PICKUPS
+Shed City State Zip PU# Date Time
+North Dock Chicago IL 60666 PO#7177828 5/14/2026 FCFS 08:00 to 14:00
+Information:
+Phone: (915) 590-5914
+DROPS
+Consignee City State Zip Delivery PO Date Time
+South Dock Lenexa KS 66219 5/15/2026 Appt 11:00
+Billing Requirements:
+Carrier must send POD(s) to leftover.pod@broker.example immediately after delivery.
