@@ -5,9 +5,9 @@ import { ExceptionIssueLine } from "@/components/exception-issue-line";
 import { findCityCenter } from "@/lib/city-coords-shared";
 import {
   LOAD_MAP_MARKER_COLOR,
-  WORKBENCH_MAP_FIT_PADDING,
+  WORKBENCH_MAP_MIN_SPAN_DEG,
   pathThroughStops,
-  workbenchLaneMaxZoom,
+  workbenchCardMapFraming,
   type LoadMapPoint,
 } from "@/lib/load-map-shared";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
@@ -64,8 +64,7 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const maxLng = Math.max(...lngs);
   const rawLat = maxLat - minLat;
   const rawLng = maxLng - minLng;
-  const span = Math.max(rawLat, rawLng);
-  const floor = span >= 4 ? 8 : 0.35;
+  const floor = WORKBENCH_MAP_MIN_SPAN_DEG;
   const dLat = Math.max(rawLat, floor);
   const dLng = Math.max(rawLng, floor);
   const lat0 = minLat - (dLat - rawLat) / 2;
@@ -114,7 +113,7 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
   const points = lanePointsForCard(group, model.points);
   const path = model.path.length >= 2 ? model.path : pathThroughStops(points);
   const stops = listStopAppointmentTargets(group.loadId);
-  const laneFitPoints = path.length >= 2 ? path : points;
+  const framing = workbenchCardMapFraming(points);
 
   return (
     <article
@@ -129,8 +128,10 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             points={points}
             path={path}
             disableDefaultUi
-            fitPadding={WORKBENCH_MAP_FIT_PADDING}
-            maxZoom={workbenchLaneMaxZoom(laneFitPoints)}
+            fitPadding={framing.padding}
+            fitPoints={framing.fitPoints}
+            minZoom={framing.minZoom}
+            maxZoom={framing.maxZoom}
             className="h-full w-full overflow-hidden bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No map"

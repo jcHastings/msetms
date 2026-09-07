@@ -2546,9 +2546,12 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
-  assert.match(workbenchCardUi, /fitPadding=\{WORKBENCH_MAP_FIT_PADDING\}/);
-  assert.match(workbenchCardUi, /workbenchLaneMaxZoom/);
+  assert.match(workbenchCardUi, /workbenchCardMapFraming/);
+  assert.match(workbenchCardUi, /fitPoints=\{framing.fitPoints\}/);
+  assert.match(workbenchCardUi, /minZoom=\{framing.minZoom\}/);
+  assert.match(workbenchCardUi, /maxZoom=\{framing.maxZoom\}/);
   assert.match(workbenchCardUi, /const pad = 24;/);
+  assert.match(workbenchCardUi, /WORKBENCH_MAP_MIN_SPAN_DEG/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /data-workbench-map-pane/);
@@ -11979,20 +11982,23 @@ DISPATCH CONFIRMATION
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
   assert.equal(mapShared.WORKBENCH_MAP_FIT_PADDING, 56);
-  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 10);
+  assert.equal(mapShared.WORKBENCH_MAP_MIN_ZOOM, 3);
+  assert.equal(mapShared.WORKBENCH_MAP_MAX_ZOOM, 5);
+  assert.equal(mapShared.WORKBENCH_MAP_MIN_SPAN_DEG, 12);
+  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 5);
   assert.equal(
     mapShared.workbenchLaneMaxZoom([
       { lat: 41.15, lng: -96.0 },
       { lat: 41.25, lng: -95.9 },
     ]),
-    10,
+    5,
   );
   assert.equal(
     mapShared.workbenchLaneMaxZoom([
       { lat: 41.15, lng: -96.0 },
       { lat: 32.78, lng: -96.8 },
     ]),
-    7,
+    5,
   );
   const workbenchKsNy = [
     { lat: 37.9861, lng: -100.9957 },
@@ -12002,10 +12008,20 @@ DISPATCH CONFIRMATION
     { lat: 40.5861, lng: -98.3884 },
     { lat: 41.653, lng: -95.326 },
   ];
+  const workbenchCardPane = { width: 220, height: 232 };
   assert.equal(
     mapShared.workbenchLaneMaxZoom(workbenchKsNy),
     mapShared.workbenchLaneMaxZoom(workbenchNeIa),
     "Workbench cards share one maxZoom",
+  );
+  assert.equal(mapShared.clampFitPadding(56, 220, 232), 31);
+  const longZoom = mapShared.workbenchPredictedZoom(workbenchKsNy, workbenchCardPane);
+  const shortZoom = mapShared.workbenchPredictedZoom(workbenchNeIa, workbenchCardPane);
+  assert.ok(longZoom >= 3, `long haul must stay readable, got ${longZoom}`);
+  assert.ok(shortZoom <= 5, `short haul must not street-zoom, got ${shortZoom}`);
+  assert.ok(
+    Math.abs(longZoom - shortZoom) <= 2,
+    `Workbench framing delta ${longZoom} vs ${shortZoom}`,
   );
   const mapLib = await import("../lib/load-map");
   const mapPickupLoc = queries.createLocation({
@@ -16317,7 +16333,10 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /On time/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*overflow-wrap: break-word;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*word-break: normal;/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /fitBounds\(bounds, fitPadding\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /fitBounds\(bounds, appliedPadding\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /clampFitPadding/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /fitPoints/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /minZoom/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /WORKBENCH_MAP_FIT_PADDING = 56/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /fitPadding/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /fitPadding/);
