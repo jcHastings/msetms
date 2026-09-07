@@ -415,7 +415,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /remember-device/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.field \.password-field input/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle \{[\s\S]*min-height: 2\.75rem/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle:not\(:is\(\.login-canvas \*\)\) \{[\s\S]*min-height: 2\.75rem/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.login-canvas \.password-field-toggle \{[\s\S]*width: auto;[\s\S]*min-height: 0;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8"), /pathname.startsWith\("\/login\/"\)/);
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
