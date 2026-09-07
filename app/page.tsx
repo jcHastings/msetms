@@ -25,8 +25,13 @@ export default async function WorkbenchPage({
     <PageOverlayHost returnTo={overlayReturnTo("/", current)} serverOpenId={openId}>
       <PageHeader
         title="Workbench"
+        subtitle={
+          inbox.attentionCount === 0
+            ? "All loads are in tolerance"
+            : `${inbox.attentionCount} load${inbox.attentionCount === 1 ? "" : "s"} out of tolerance`
+        }
         actions={
-          <Link href="/board" className="btn btn-secondary" data-workbench-board="">
+          <Link href="/board" className="btn btn-primary" data-workbench-board="">
             Dispatch board
           </Link>
         }

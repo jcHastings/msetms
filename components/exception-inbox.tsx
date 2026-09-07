@@ -21,13 +21,9 @@ export function ExceptionInboxCard({
 }) {
   const groups = groupInboxExceptions(inbox.items);
   const workbench = variant === "workbench";
-  const summary = workbench
-    ? inbox.attentionCount === 0
-      ? "All loads are in tolerance"
-      : `${inbox.attentionCount} load${inbox.attentionCount === 1 ? "" : "s"} out of tolerance`
-    : inbox.attentionCount === 0
-      ? `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine`
-      : `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine · ${inbox.attentionCount} need attention`;
+  const summary = `${inbox.fineCount} load${inbox.fineCount === 1 ? "" : "s"} fine${
+    inbox.attentionCount === 0 ? "" : ` · ${inbox.attentionCount} need attention`
+  }`;
 
   const filters = (
     <div className="flex flex-wrap items-end gap-2">
@@ -62,15 +58,11 @@ export function ExceptionInboxCard({
   if (workbench) {
     return (
       <section data-attention-inbox="" data-workbench="">
-        <header className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Workbench</p>
-            <h2 className="text-sm font-semibold text-slate-900">{summary}</h2>
-          </div>
+        <div className="glass-panel workbench-filter-bar mb-4" data-workbench-filters="">
           {filters}
-        </header>
+        </div>
         {groups.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white px-5 py-8 text-sm text-slate-500">
+          <p className="glass-panel px-5 py-8 text-sm text-slate-500">
             All loads are in tolerance.
           </p>
         ) : (

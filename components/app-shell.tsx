@@ -61,7 +61,7 @@ export function AppShell({
 
   return (
     <div
-      className="desk-shell flex min-h-screen bg-background"
+      className="desk-shell desk-canvas flex min-h-screen"
       data-nav-open={navOpen ? "true" : "false"}
       data-orbcomm-page={orbcommPage ? "" : undefined}
     >
@@ -116,7 +116,7 @@ export function AppShell({
           </form>
         </div>
       </aside>
-      <div className="desk-main min-w-0 flex-1">
+      <div className="desk-main desk-canvas min-w-0 flex-1">
         <div className="desk-main-inner mx-auto w-full max-w-[1400px] px-8 py-7">
           <div data-desk-chrome="">
           <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
