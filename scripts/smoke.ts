@@ -16371,6 +16371,18 @@ DISPATCH CONFIRMATION
   const { filterTrucks } = await import("../lib/fleet-directory");
   assert.equal(filterTrucks([{ unit_number: "101", year: "", make: "Kenworth", model: "", plate: "", plate_state: "", type: "sleeper", samsara_vehicle_id: "" } as never], "kenworth").length, 1);
   assert.match(boardCss, /@media \(max-width: 79\.99rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(boardCss, /Phone Board restore \(~390px\)/);
+  const phoneBoardCss = boardCss.match(/Phone Board restore \(~390px\)[\s\S]*?\[data-load-list-chrome\] \.load-list-tabs \.load-tab\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(phoneBoardCss, /width:\s*6\.25rem/);
+  assert.match(phoneBoardCss, /left:\s*6\.25rem/);
+  assert.match(phoneBoardCss, /width:\s*5\.5rem/);
+  assert.match(phoneBoardCss, /width:\s*9\.5rem/);
+  assert.match(phoneBoardCss, /padding:\s*0\.12rem 0\.38rem/);
+  assert.match(phoneBoardCss, /font-size:\s*11px/);
+  assert.match(phoneBoardCss, /white-space:\s*nowrap/);
+  assert.match(boardCss, /\.table-grid-board \.board-load-cell \{[\s\S]*position:\s*sticky/);
+  assert.match(boardCss, /\.table-grid-board \.board-status-cell \{[\s\S]*position:\s*sticky/);
+  assert.match(boardCss, /\.table-grid-board \.board-end-cell \{[\s\S]*position:\s*sticky/);
   assert.match(boardCss, /board-place-with-pin/);
   assert.match(boardCss, /board-trailer-cell/);
   const trailerCell = boardCss.match(/td\.board-trailer-cell[\s\S]*?\}/)?.[0] ?? "";
