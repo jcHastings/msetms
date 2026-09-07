@@ -22,6 +22,12 @@
   --r-sm: 3px;
   --r-md: 4px;
   --logo-crimson: #e11d2e;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.95);
+  --glass-blur: 16px;
+  --glass-saturate: 145%;
+  --glass-shadow: 0 8px 28px rgba(7, 50, 90, 0.08);
+  --canvas-wash: linear-gradient(165deg, #c9daf0 0%, #e8eef5 42%, #f0f3f7 100%);
   /* Deprecated aliases — keep btn-primary / desk-nav working in one pass. */
   --navy: var(--sidebar);
   --navy-mid: var(--sidebar-mid);
@@ -73,6 +79,37 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+.desk-canvas {
+  background: var(--canvas-wash);
+}
+
+.glass-panel {
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--glass-shadow);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .desk-canvas .glass-panel,
+  .desk-canvas .card,
+  .desk-canvas .workbench-card,
+  .login-canvas .card,
+  .glass-panel,
+  .card,
+  .workbench-card,
+  .confirm-dialog,
+  .pay-item-dialog,
+  .document-preview-panel,
+  .backhaul-panel,
+  .office-bell-panel,
+  .action-phone-sheet {
+    background: rgba(255, 255, 255, 0.92);
+  }
 }
 
 .desk-link,
@@ -471,8 +508,10 @@ button {
   width: min(420px, 100%);
   margin-top: 4rem;
   padding: 1.1rem 1.15rem 1rem;
-  background: #fff;
-  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-xs);
   box-shadow: 0 18px 50px rgba(7, 50, 90, 0.28);
 }
@@ -533,6 +572,7 @@ button {
   border-bottom: 1px solid #edf1f5;
   vertical-align: top;
   font-size: 0.875rem;
+  background: #fff;
 }
 
 .board-scroll {
@@ -1016,10 +1056,12 @@ button {
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-sm);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow);
 }
 
 .menu-item {
@@ -1200,18 +1242,37 @@ button {
     max-width: 100%;
   }
 
+  /* Phone Board restore (~390px). Audit sticky LOAD+STATUS+MOVE may stay only
+     if they fit the padded scrollport. Table cells treat width as content-box,
+     so 5 + 6.5 + 9 plus cell padding stays under 390px minus 0.85rem gutters.
+     STATUS 6.5rem keeps DISPATCHED inside overflow:hidden. */
+  .table-grid-board .board-load-cell,
+  .table-grid-board .board-status-cell,
+  .table-grid-board .board-end-cell,
+  .table-grid-board thead .board-end-cell {
+    box-sizing: border-box;
+  }
+
   .table-grid-board .board-load-cell {
-    width: 8.75rem;
+    width: 5rem;
+    max-width: 5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
   }
 
   .table-grid-board .board-status-cell {
-    left: 8.75rem;
+    left: 5rem;
+    width: 6.5rem;
+    max-width: 6.5rem;
+    padding-left: 0.22rem;
+    padding-right: 0.22rem;
   }
 
   .table-grid-board .board-end-cell,
   .table-grid-board thead .board-end-cell {
-    width: 10.5rem;
-    min-width: 10.5rem;
+    width: 9rem;
+    min-width: 9rem;
+    max-width: 9rem;
   }
 
   /* Orbcomm phone: kill the competing overflow-x:auto scrollports without
@@ -1391,6 +1452,23 @@ button {
 [data-load-list-chrome] .load-list-tabs .load-tab-active:hover {
   background: var(--sidebar-mid) !important;
   color: #ffffff !important;
+}
+
+/* After base chip padding so phone compact wins. Acceptance ~390px. */
+@media (max-width: 47.99rem) {
+  [data-load-list-chrome] .load-list-tabs {
+    gap: 0.18rem;
+  }
+
+  [data-load-list-chrome] .load-list-tabs .load-tab {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0.12rem 0.38rem;
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
 }
 
 .load-list-search {
@@ -1777,7 +1855,10 @@ html:has([data-load-embed]) body {
   width: min(520px, 100%);
   max-height: calc(100vh - 2.5rem);
   overflow: auto;
-  background: #ffffff;
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
   box-shadow: 0 18px 50px rgba(7, 50, 90, 0.28);
   margin-top: 3rem;
@@ -2011,7 +2092,10 @@ html:has([data-load-embed]) body {
   max-height: calc(100vh - 1.5rem);
   margin: auto;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
   box-shadow: 0 20px 50px rgba(7, 50, 90, 0.25);
 }
@@ -2393,7 +2477,10 @@ html:has([data-load-embed]) body {
   max-height: 16rem;
   overflow: auto;
   padding: 0.55rem;
-  background: #ffffff;
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   color: #122033;
   border-radius: 0.4rem;
   box-shadow: 0 12px 28px rgba(11, 31, 58, 0.28);
@@ -2617,7 +2704,10 @@ html:has([data-load-embed]) body {
     margin-left: auto;
     height: 100%;
     min-height: 100%;
-    border-left: 1px solid var(--border);
+    background: var(--glass);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-left: 1px solid var(--glass-border);
     box-shadow: -16px 0 40px rgba(7, 50, 90, 0.18);
   }
 }
@@ -2663,7 +2753,12 @@ html:has([data-load-embed]) body {
   width: 100%;
   max-width: 26rem;
   border-radius: var(--r-sm);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow);
+}
+
+.login-canvas .remember-device {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: var(--glass-border);
 }
 
 .login-canvas a,
@@ -2845,9 +2940,16 @@ html:has([data-load-embed]) body {
   height: 100%;
   min-height: 14.5rem;
   overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-sm);
+  box-shadow: var(--glass-shadow);
+}
+
+.workbench-filter-bar {
+  padding: 0.7rem 0.85rem;
 }
 
 .workbench-map-pane {
@@ -2901,7 +3003,10 @@ html:has([data-load-embed]) body {
   width: min(420px, 100%);
   max-width: 560px;
   height: 100dvh;
-  background: var(--surface);
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-left: 1px solid var(--glass-border);
   box-shadow: -8px 0 28px rgba(7, 50, 90, 0.18);
   color: var(--text);
 }
@@ -2919,7 +3024,7 @@ html:has([data-load-embed]) body {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 1rem 1.1rem 0.85rem;
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--border);
 }
 
@@ -3144,7 +3249,10 @@ html:has([data-load-embed]) body {
     bottom: 0;
     z-index: 85;
     padding: 0.35rem 0.75rem 1rem;
-    background: var(--surface);
+    background: var(--glass);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -8px 28px rgba(7, 50, 90, 0.18);
   }
