@@ -11994,6 +11994,19 @@ DISPATCH CONFIRMATION
     ]),
     7,
   );
+  const workbenchKsNy = [
+    { lat: 37.9861, lng: -100.9957 },
+    { lat: 40.8448, lng: -73.8648 },
+  ];
+  const workbenchNeIa = [
+    { lat: 40.5861, lng: -98.3884 },
+    { lat: 41.653, lng: -95.326 },
+  ];
+  assert.equal(
+    mapShared.workbenchLaneMaxZoom(workbenchKsNy),
+    mapShared.workbenchLaneMaxZoom(workbenchNeIa),
+    "Workbench cards share one maxZoom",
+  );
   const mapLib = await import("../lib/load-map");
   const mapPickupLoc = queries.createLocation({
     name: "Map Pickup Yard",
