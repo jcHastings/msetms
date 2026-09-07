@@ -100,10 +100,18 @@ export default async function BoardPage({
   );
 }
 
-function BoardWhenCell({ start, end }: { start: string; end: string }) {
+function BoardWhenCell({
+  start,
+  end,
+  kind,
+}: {
+  start: string;
+  end: string;
+  kind: "pickup" | "delivery";
+}) {
   const { date, time } = formatBoardDateTime(start);
   return (
-    <td className="board-when-cell" title={`to ${formatDateTime(end)}`}>
+    <td className={`board-when-cell board-${kind}-cell`} title={`to ${formatDateTime(end)}`}>
       <div className="board-when">
         <div className="board-when-date">{date}</div>
         {time ? <div className="board-when-time">{time}</div> : null}
@@ -152,7 +160,7 @@ async function BoardLiveSection({
       {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
-          <div className="board-scroll" data-board-packed="">
+          <div className="board-scroll" data-board-packed="" data-board-phone-stack="">
             <table className="table-grid table-grid-board table-zones" data-dispatch-board="" data-table-zones="board">
               <thead>
                 <tr>
@@ -215,11 +223,11 @@ async function BoardLiveSection({
                         <div className="board-lane-line text-slate-500">→ {load.destination}</div>
                       </div>
                     </td>
-                    <td className="board-status-cell">
+                    <td className="board-status-cell" data-board-status="">
                       <LoadStatusBadge status={load.status} />
                     </td>
-                    <BoardWhenCell start={load.pickup_start} end={load.pickup_end} />
-                    <BoardWhenCell start={load.delivery_start} end={load.delivery_end} />
+                    <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />
+                    <BoardWhenCell kind="delivery" start={load.delivery_start} end={load.delivery_end} />
                     <td
                       className="board-unit-cell leading-tight text-xs"
                       title={[
@@ -277,7 +285,7 @@ async function BoardLiveSection({
                       />
                     </td>
                     <td className="board-rate-cell whitespace-nowrap">{formatMoney(load.rate)}</td>
-                    <td className="board-end-cell" colSpan={2}>
+                    <td className="board-end-cell" colSpan={2} data-board-end="">
                       <div className="board-end-stack" data-board-end-stack="">
                         <div className="board-move-cell">
                           <LoadStatusSelect

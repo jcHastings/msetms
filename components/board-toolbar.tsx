@@ -29,9 +29,13 @@ export function BoardToolbar({ status, date }: Props) {
             key={tab.value}
             href={tabHref(tab.value)}
             className={`load-tab ${currentTab === tab.value ? "load-tab-active" : ""}`}
+            aria-label={tab.label}
             aria-current={currentTab === tab.value ? "page" : undefined}
           >
-            {tab.label}
+            <span className="load-tab-full">{tab.label}</span>
+            <span className="load-tab-short" aria-hidden="true">
+              {tab.short}
+            </span>
           </Link>
         ))}
       </div>

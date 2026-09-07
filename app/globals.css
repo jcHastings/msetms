@@ -1242,37 +1242,144 @@ button {
     max-width: 100%;
   }
 
-  /* Phone Board restore (~390px). Audit sticky LOAD+STATUS+MOVE may stay only
-     if they fit the padded scrollport. Table cells treat width as content-box,
-     so 5 + 6.5 + 9 plus cell padding stays under 390px minus 0.85rem gutters.
-     STATUS 6.5rem keeps DISPATCHED inside overflow:hidden. */
+  /* Phone Board stack (~390px). Sticky LOAD+STATUS+MOVE failed twice on real
+     ~390 (PR 59 / tip). Each row is a card: LOAD + STATUS on one row, Pickup
+     labeled in full (never crushed to "P"), MOVE+Actions stacked below so the
+     MOVE box cannot intersect STATUS. Middle columns collapse. */
+  .board-scroll,
+  .board-scroll[data-board-packed],
+  .board-scroll[data-board-phone-stack] {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  .table-grid.table-grid-board {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: auto;
+  }
+
+  .table-grid-board thead {
+    display: none;
+  }
+
+  .table-grid-board tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    width: 100%;
+    padding: 0.45rem 0.5rem 0.7rem;
+  }
+
+  .table-grid-board tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "load status"
+      "pickup pickup"
+      "end end";
+    align-items: start;
+    gap: 0.4rem 0.65rem;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0.7rem 0.75rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: #fff;
+    box-sizing: border-box;
+  }
+
+  .table-grid-board tbody td {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    border-bottom: 0;
+    overflow: visible;
+    background: transparent;
+  }
+
   .table-grid-board .board-load-cell,
   .table-grid-board .board-status-cell,
   .table-grid-board .board-end-cell,
   .table-grid-board thead .board-end-cell {
-    box-sizing: border-box;
+    position: static;
+    left: auto;
+    right: auto;
+    z-index: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    box-shadow: none;
+    background: transparent;
   }
 
-  .table-grid-board .board-load-cell {
-    width: 5rem;
-    max-width: 5rem;
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
+  .table-grid-board tbody .board-load-cell {
+    grid-area: load;
   }
 
-  .table-grid-board .board-status-cell {
-    left: 5rem;
-    width: 6.5rem;
-    max-width: 6.5rem;
-    padding-left: 0.22rem;
-    padding-right: 0.22rem;
+  .table-grid-board tbody .board-status-cell {
+    grid-area: status;
+    justify-self: end;
   }
 
-  .table-grid-board .board-end-cell,
-  .table-grid-board thead .board-end-cell {
-    width: 9rem;
-    min-width: 9rem;
-    max-width: 9rem;
+  .table-grid-board tbody .board-pickup-cell {
+    grid-area: pickup;
+  }
+
+  .table-grid-board tbody .board-end-cell {
+    grid-area: end;
+    width: 100%;
+    padding: 0;
+  }
+
+  .table-grid-board tbody .board-delivery-cell,
+  .table-grid-board tbody .board-unit-cell,
+  .table-grid-board tbody .board-place-cell,
+  .table-grid-board tbody .board-hos-cell,
+  .table-grid-board tbody .board-reefer-cell,
+  .table-grid-board tbody .board-rate-cell {
+    display: none;
+  }
+
+  .table-grid-board tbody .board-pickup-cell::before {
+    content: "Pickup";
+    display: block;
+    margin-bottom: 0.1rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .table-grid-board .board-when-date,
+  .table-grid-board .board-when-time,
+  .table-grid-board .board-lane-line {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .table-grid-board .board-end-cell .board-move-cell,
+  .table-grid-board .board-end-cell .board-edit-cell {
+    padding: 0.2rem 0;
+  }
+
+  .board-end-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table-grid tbody tr:hover td.board-end-cell,
+  .table-grid tbody tr:hover td.board-load-cell,
+  .table-grid tbody tr:hover td.board-status-cell,
+  .table-grid tbody tr:hover td.board-rate-cell,
+  .table-grid tbody tr:hover td {
+    background: transparent;
   }
 
   /* Orbcomm phone: kill the competing overflow-x:auto scrollports without
@@ -1454,20 +1561,38 @@ button {
   color: #ffffff !important;
 }
 
-/* After base chip padding so phone compact wins. Acceptance ~390px. */
+.load-tab-short {
+  display: none;
+}
+
+/* After base chip padding so phone compact wins. Acceptance ~390px.
+   One scrolling chip row — never 3–4 wrap lines. Short labels on phone. */
 @media (max-width: 47.99rem) {
   [data-load-list-chrome] .load-list-tabs {
+    flex-wrap: nowrap;
     gap: 0.18rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
 
   [data-load-list-chrome] .load-list-tabs .load-tab {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     margin: 0;
     padding: 0.12rem 0.38rem;
     font-size: 11px;
     line-height: 1.15;
     white-space: nowrap;
+  }
+
+  [data-load-list-chrome] .load-tab-full {
+    display: none;
+  }
+
+  [data-load-list-chrome] .load-tab-short {
+    display: inline;
   }
 }
 

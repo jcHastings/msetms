@@ -1,13 +1,13 @@
 /** Client-safe load-list tabs and in-tab search. No db, env, or secrets. */
 
 export const LOAD_LIST_TABS = [
-  { value: "active", label: "Active Loads" },
-  { value: "planning", label: "Planning Loads" },
-  { value: "accounting", label: "Ready for Accounting Loads" },
-  { value: "misc", label: "Misc. Loads" },
-  { value: "all", label: "All Loads" },
-  { value: "mine", label: "My Loads" },
-  { value: "master", label: "Master Loads" },
+  { value: "active", label: "Active Loads", short: "Active" },
+  { value: "planning", label: "Planning Loads", short: "Planning" },
+  { value: "accounting", label: "Ready for Accounting Loads", short: "Accounting" },
+  { value: "misc", label: "Misc. Loads", short: "Misc." },
+  { value: "all", label: "All Loads", short: "All" },
+  { value: "mine", label: "My Loads", short: "Mine" },
+  { value: "master", label: "Master Loads", short: "Master" },
 ] as const;
 
 export type LoadListTab = (typeof LOAD_LIST_TABS)[number]["value"];
