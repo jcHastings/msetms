@@ -5,7 +5,6 @@ import { ExceptionIssueLine } from "@/components/exception-issue-line";
 import { findCityCenter } from "@/lib/city-coords-shared";
 import {
   LOAD_MAP_MARKER_COLOR,
-  WORKBENCH_MAP_MIN_SPAN_DEG,
   pathThroughStops,
   workbenchCardMapFraming,
   type LoadMapPoint,
@@ -64,7 +63,7 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const maxLng = Math.max(...lngs);
   const rawLat = maxLat - minLat;
   const rawLng = maxLng - minLng;
-  const floor = WORKBENCH_MAP_MIN_SPAN_DEG;
+  const floor = 0.25;
   const dLat = Math.max(rawLat, floor);
   const dLng = Math.max(rawLng, floor);
   const lat0 = minLat - (dLat - rawLat) / 2;

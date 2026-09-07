@@ -2551,7 +2551,8 @@ async function main() {
   assert.match(workbenchCardUi, /minZoom=\{framing.minZoom\}/);
   assert.match(workbenchCardUi, /maxZoom=\{framing.maxZoom\}/);
   assert.match(workbenchCardUi, /const pad = 24;/);
-  assert.match(workbenchCardUi, /WORKBENCH_MAP_MIN_SPAN_DEG/);
+  assert.match(workbenchCardUi, /const floor = 0\.25;/);
+  assert.doesNotMatch(workbenchCardUi, /WORKBENCH_MAP_MIN_SPAN_DEG/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /data-workbench-map-pane/);
@@ -11982,23 +11983,22 @@ DISPATCH CONFIRMATION
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
   assert.equal(mapShared.WORKBENCH_MAP_FIT_PADDING, 56);
-  assert.equal(mapShared.WORKBENCH_MAP_MIN_ZOOM, 3);
-  assert.equal(mapShared.WORKBENCH_MAP_MAX_ZOOM, 5);
-  assert.equal(mapShared.WORKBENCH_MAP_MIN_SPAN_DEG, 12);
-  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 5);
+  assert.equal(mapShared.WORKBENCH_MAP_MIN_ZOOM, 2);
+  assert.equal(mapShared.WORKBENCH_MAP_MAX_ZOOM, 10);
+  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 10);
   assert.equal(
     mapShared.workbenchLaneMaxZoom([
       { lat: 41.15, lng: -96.0 },
       { lat: 41.25, lng: -95.9 },
     ]),
-    5,
+    10,
   );
   assert.equal(
     mapShared.workbenchLaneMaxZoom([
       { lat: 41.15, lng: -96.0 },
       { lat: 32.78, lng: -96.8 },
     ]),
-    5,
+    10,
   );
   const workbenchKsNy = [
     { lat: 37.9861, lng: -100.9957 },
@@ -12009,20 +12009,21 @@ DISPATCH CONFIRMATION
     { lat: 41.653, lng: -95.326 },
   ];
   const workbenchCardPane = { width: 220, height: 232 };
-  assert.equal(
-    mapShared.workbenchLaneMaxZoom(workbenchKsNy),
-    mapShared.workbenchLaneMaxZoom(workbenchNeIa),
-    "Workbench cards share one maxZoom",
-  );
-  assert.equal(mapShared.clampFitPadding(56, 220, 232), 31);
+  assert.equal(mapShared.clampFitPadding(56, 220, 232), 56);
+  assert.ok(mapShared.clampFitPadding(56, 220, 232) >= 48);
+  const ksNyFraming = mapShared.workbenchCardMapFraming(workbenchKsNy, workbenchCardPane);
+  const neIaFraming = mapShared.workbenchCardMapFraming(workbenchNeIa, workbenchCardPane);
+  assert.deepEqual(ksNyFraming.fitPoints, workbenchKsNy);
+  assert.deepEqual(neIaFraming.fitPoints, workbenchNeIa);
+  assert.ok(mapShared.laneSpanDeg(neIaFraming.fitPoints) < 4, "short lane must not expand to a continent floor");
+  assert.ok(mapShared.laneSpanDeg(ksNyFraming.fitPoints) > 20, "long haul keeps its own span");
   const longZoom = mapShared.workbenchPredictedZoom(workbenchKsNy, workbenchCardPane);
   const shortZoom = mapShared.workbenchPredictedZoom(workbenchNeIa, workbenchCardPane);
-  assert.ok(longZoom >= 3, `long haul must stay readable, got ${longZoom}`);
-  assert.ok(shortZoom <= 5, `short haul must not street-zoom, got ${shortZoom}`);
-  assert.ok(
-    Math.abs(longZoom - shortZoom) <= 2,
-    `Workbench framing delta ${longZoom} vs ${shortZoom}`,
-  );
+  assert.equal(longZoom, 2, `KS-NY predicted zoom on ~220px pane, got ${longZoom}`);
+  assert.equal(shortZoom, 5, `NE-IA predicted zoom on ~220px pane, got ${shortZoom}`);
+  assert.ok(shortZoom >= longZoom + 2, `short haul must zoom in vs long haul: ${shortZoom} vs ${longZoom}`);
+  const longInset = mapShared.workbenchPredictedPinInsetPx(workbenchKsNy, workbenchCardPane);
+  assert.ok(longInset >= 48, `KS-NY pins need visible padding, got ${longInset.toFixed(1)}px`);
   const mapLib = await import("../lib/load-map");
   const mapPickupLoc = queries.createLocation({
     name: "Map Pickup Yard",
