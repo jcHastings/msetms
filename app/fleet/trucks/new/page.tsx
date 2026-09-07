@@ -1,20 +1,24 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { TruckForm } from "@/components/truck-form";
-import { createTruckAction } from "@/lib/actions";
+import { driverOption } from "@/lib/fleet-form-shared";
+import { listDrivers } from "@/lib/queries";
+
+export const dynamic = "force-dynamic";
 
 export default function NewTruckPage() {
+  const drivers = listDrivers().map(driverOption);
   return (
     <>
       <PageHeader
         title="Add truck"
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trucks" className="btn btn-secondary">
+            Back to trucks
           </Link>
         }
       />
-      <TruckForm action={createTruckAction} submitLabel="Create truck" />
+      <TruckForm drivers={drivers} submitLabel="Create truck" />
     </>
   );
 }

@@ -14,14 +14,17 @@ export function FleetDocsPanel({
   return (
     <section className="card mt-6 p-6">
       <h2 className="text-sm font-semibold">Documents</h2>
-      <p className="mt-1 text-sm text-slate-500">Stored in data/uploads/fleet. One-click view/download.</p>
       <form action={attachFleetDocFormAction} className="mt-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="owner_type" value={ownerType} />
         <input type="hidden" name="owner_id" value={ownerId} />
         <div className="field min-w-40">
           <label htmlFor={`kind-${ownerType}-${ownerId}`}>Type</label>
           <select id={`kind-${ownerType}-${ownerId}`} name="kind" defaultValue={ownerType === "driver" ? "cdl" : "registration"}>
-            {FLEET_DOC_KINDS.map((kind) => (
+            {FLEET_DOC_KINDS.filter((kind) =>
+              ownerType === "driver"
+                ? ["cdl", "med_card", "other"].includes(kind.value)
+                : ["registration", "dot_inspection", "other"].includes(kind.value),
+            ).map((kind) => (
               <option key={kind.value} value={kind.value}>
                 {kind.label}
               </option>

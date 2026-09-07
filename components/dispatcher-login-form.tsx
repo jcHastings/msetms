@@ -1,0 +1,119 @@
+"use client";
+
+import Link from "next/link";
+import { useActionState, useState } from "react";
+import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
+import type { ActionResult } from "@/lib/types";
+
+export function DispatcherLoginForm({
+  action,
+}: {
+  action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+}) {
+  const [state, formAction, pending] = useActionState(action, null);
+  const [useName, setUseName] = useState(false);
+  const needsEmailCode = Boolean(state?.ok && state.needsEmailCode);
+  const rememberDevice = Boolean(state && state.ok && state.rememberDevice);
+  return (
+    <form action={formAction} className="card space-y-4 p-6" data-office-login="">
+      <FormBanner result={state} hideOk={needsEmailCode} />
+      {needsEmailCode ? (
+        <>
+          <p className="text-sm text-slate-600">
+            {state && state.ok
+              ? state.message
+              : "Enter the sign-in code we emailed you."}
+          </p>
+          <div className="field">
+            <label htmlFor="email_code">Sign-in code</label>
+            <input
+              id="email_code"
+              name="email_code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              pattern="[0-9]{6}"
+              required
+            />
+          </div>
+          <RememberDeviceCheck defaultChecked={rememberDevice} />
+          <button className="btn btn-primary w-full" type="submit" disabled={pending}>
+            {pending ? "Checking…" : "Continue"}
+          </button>
+          <button
+            className="btn btn-ghost w-full"
+            type="submit"
+            name="resend"
+            value="1"
+            formNoValidate
+            disabled={pending}
+          >
+            {pending ? "Sending…" : "Resend code"}
+          </button>
+        </>
+      ) : (
+        <>
+          {useName ? (
+            <div className="field">
+              <label htmlFor="dispatcher_name">Name</label>
+              <input
+                id="dispatcher_name"
+                name="dispatcher_name"
+                type="text"
+                required
+                autoComplete="username"
+              />
+            </div>
+          ) : (
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" name="email" type="email" required autoComplete="username" />
+            </div>
+          )}
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <PasswordField
+              id="password"
+              name="password"
+              required
+              autoComplete="current-password"
+            />
+          </div>
+          <RememberDeviceCheck />
+          <button className="btn btn-primary w-full" type="submit" disabled={pending}>
+            {pending ? "Signing in…" : "Sign in"}
+          </button>
+          <div className="login-links">
+            <button
+              className="login-name-toggle"
+              type="button"
+              data-login-name-toggle=""
+              onClick={() => setUseName((open) => !open)}
+            >
+              {useName ? "Sign in with email" : "No email on your user? Sign in with your name"}
+            </button>
+            <Link href="/login/forgot" className="login-forgot">
+              Forgot password
+            </Link>
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
+function RememberDeviceCheck({ defaultChecked = false }: { defaultChecked?: boolean }) {
+  return (
+    <label className="remember-device">
+      <input
+        type="checkbox"
+        name="remember_device"
+        value="1"
+        defaultChecked={defaultChecked}
+        className="remember-device-check"
+      />
+      <span>Remember this device for 30 days</span>
+    </label>
+  );
+}

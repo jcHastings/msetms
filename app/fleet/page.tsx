@@ -1,51 +1,98 @@
 import Link from "next/link";
 import { ComplianceBadge } from "@/components/compliance-badge";
+import { DirectorySearch } from "@/components/directory-chrome";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge, DriverStatusBadge, TruckStatusBadge } from "@/components/status-badge";
 import { driverComplianceAlerts, trailerComplianceAlerts, truckComplianceAlerts } from "@/lib/compliance";
+import { deskMetadata } from "@/lib/desk-metadata";
+import { directoryHref } from "@/lib/directory-page";
+import {
+  FLEET_HUB_PAGE_SIZE,
+  filterDrivers,
+  filterTrailers,
+  filterTrucks,
+  pageFleetRows,
+} from "@/lib/fleet-directory";
 import { formatWeight } from "@/lib/format";
 import { listDrivers, listTrailers, listTrucks } from "@/lib/queries";
-import { labelForTrailerType, labelForTruckType } from "@/lib/types";
+import { complianceWindows } from "@/lib/settings";
+import { isOwnerOperator, labelForTrailerType, labelForTruckType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const metadata = deskMetadata("Fleet");
 
 export default async function FleetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; q?: string }>;
 }) {
-  const type = (await searchParams).type ?? "all";
-  const trucks = listTrucks();
-  const trailers = listTrailers();
-  const drivers = listDrivers().filter((driver) => {
-    if (type === "company_driver" || type === "owner_operator") return driver.driver_type === type;
-    return true;
-  });
+  const params = await searchParams;
+  const type = params.type ?? "all";
+  const q = String(params.q ?? "").trim();
+  const windows = complianceWindows();
+  const extra = type !== "all" ? { type } : undefined;
+  const trucks = pageFleetRows(filterTrucks(listTrucks(), q), 1, FLEET_HUB_PAGE_SIZE);
+  const trailers = pageFleetRows(filterTrailers(listTrailers(), q), 1, FLEET_HUB_PAGE_SIZE);
+  const drivers = pageFleetRows(
+    filterDrivers(
+      listDrivers().filter((driver) => {
+        if (type === "owner_operator") return isOwnerOperator(driver.driver_type);
+        if (type === "company_driver") return !isOwnerOperator(driver.driver_type);
+        return true;
+      }),
+      q,
+    ),
+    1,
+    FLEET_HUB_PAGE_SIZE,
+  );
 
   return (
     <>
       <PageHeader
         title="Fleet"
-        subtitle="Trucks, trailers, and drivers. Assign a unit to a load from the dispatch board."
         actions={
-          <div className="flex gap-2">
-            <Link href="/fleet/trucks/new" className="btn btn-secondary">
-              Add truck
+          <div className="flex flex-wrap gap-2">
+            <Link href="/fleet/drivers" className="btn btn-secondary">
+              Drivers
             </Link>
-            <Link href="/fleet/trailers/new" className="btn btn-secondary">
-              Add trailer
+            <Link href="/fleet/trucks" className="btn btn-secondary">
+              Trucks
             </Link>
-            <Link href="/fleet/drivers/new" className="btn btn-primary">
-              Add driver
+            <Link href="/fleet/trailers" className="btn btn-secondary">
+              Trailers
+            </Link>
+            <Link href="/fleet/samsara" className="btn btn-secondary">
+              Samsara
+            </Link>
+            <Link href="/fleet/orbcomm" className="btn btn-secondary">
+              Orbcomm
             </Link>
           </div>
         }
       />
 
+      <div className="mb-4 card" data-fleet-directory="">
+        <DirectorySearch
+          action="/fleet"
+          q={q}
+          extra={extra}
+          label="Search fleet"
+          placeholder="Unit, name, plate, phone, or Orbcomm"
+        />
+        <p className="px-4 pb-3 text-xs text-slate-500" data-fleet-summary="">
+          Showing {trucks.rows.length} of {trucks.total} trucks, {trailers.rows.length} of {trailers.total}{" "}
+          trailers, and {drivers.rows.length} of {drivers.total} drivers
+          {q ? ` matching “${q}”` : ""}.
+        </p>
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="card overflow-hidden">
-          <header className="border-b border-slate-200 px-5 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Trucks</h2>
+            <Link href={directoryHref("/fleet/trucks", q, 1)} className="text-xs font-semibold underline">
+              See all trucks
+            </Link>
           </header>
           <table className="table-grid">
             <thead>
@@ -59,13 +106,13 @@ export default async function FleetPage({
               </tr>
             </thead>
             <tbody>
-              {trucks.map((truck) => (
+              {trucks.rows.map((truck) => (
                 <tr key={truck.id}>
                   <td className="font-mono font-semibold">{truck.unit_number}</td>
                   <td>{labelForTruckType(truck.type)}</td>
                   <td>{formatWeight(truck.capacity_lbs)}</td>
                   <td>
-                    <ComplianceBadge alerts={truckComplianceAlerts(truck)} />
+                    <ComplianceBadge alerts={truckComplianceAlerts(truck, windows)} />
                   </td>
                   <td>
                     <TruckStatusBadge status={truck.status} />
@@ -82,27 +129,30 @@ export default async function FleetPage({
         </section>
 
         <section className="card overflow-hidden">
-          <header className="border-b border-slate-200 px-5 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Trailers</h2>
+            <Link href={directoryHref("/fleet/trailers", q, 1)} className="text-xs font-semibold underline">
+              See all trailers
+            </Link>
           </header>
           <table className="table-grid">
             <thead>
               <tr>
                 <th>Unit</th>
                 <th>Type</th>
-                <th>ORBCOMM</th>
+                <th>Orbcomm</th>
                 <th>Compliance</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {trailers.map((trailer) => (
+              {trailers.rows.map((trailer) => (
                 <tr key={trailer.id}>
                   <td className="font-mono font-semibold">{trailer.unit_number}</td>
                   <td>{labelForTrailerType(trailer.type)}</td>
                   <td className="text-xs text-slate-500">{trailer.orbcomm_asset_id ? "Mapped" : "—"}</td>
                   <td>
-                    <ComplianceBadge alerts={trailerComplianceAlerts(trailer)} />
+                    <ComplianceBadge alerts={trailerComplianceAlerts(trailer, windows)} />
                   </td>
                   <td className="text-right">
                     <Link href={`/fleet/trailers/${trailer.id}`} className="btn btn-ghost">
@@ -119,20 +169,26 @@ export default async function FleetPage({
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
             <h2 className="text-sm font-semibold">Drivers</h2>
             <div className="flex gap-2 text-xs">
-              <Link className={type === "all" ? "font-semibold" : "text-slate-500"} href="/fleet">
+              <Link
+                className={type === "all" ? "font-semibold" : "text-slate-500"}
+                href={directoryHref("/fleet", q, 1)}
+              >
                 All
               </Link>
               <Link
                 className={type === "company_driver" ? "font-semibold" : "text-slate-500"}
-                href="/fleet?type=company_driver"
+                href={directoryHref("/fleet", q, 1, { type: "company_driver" })}
               >
                 Company
               </Link>
               <Link
                 className={type === "owner_operator" ? "font-semibold" : "text-slate-500"}
-                href="/fleet?type=owner_operator"
+                href={directoryHref("/fleet", q, 1, { type: "owner_operator" })}
               >
                 Owner-operator
+              </Link>
+              <Link href={directoryHref("/fleet/drivers", q, 1)} className="font-semibold underline">
+                See all drivers
               </Link>
             </div>
           </header>
@@ -150,7 +206,7 @@ export default async function FleetPage({
               </tr>
             </thead>
             <tbody>
-              {drivers.map((driver) => (
+              {drivers.rows.map((driver) => (
                 <tr key={driver.id}>
                   <td className="font-semibold">{driver.name}</td>
                   <td>
@@ -160,9 +216,9 @@ export default async function FleetPage({
                     {[driver.license_state, driver.license_number].filter(Boolean).join("-") || driver.license || "—"}
                   </td>
                   <td>
-                    <ComplianceBadge alerts={driverComplianceAlerts(driver)} />
+                    <ComplianceBadge alerts={driverComplianceAlerts(driver, windows)} />
                   </td>
-                  <td className="font-mono">{driver.pin || "—"}</td>
+                  <td>{driver.pin ? "Set" : "—"}</td>
                   <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>
                   <td>
                     <DriverStatusBadge status={driver.status} />
