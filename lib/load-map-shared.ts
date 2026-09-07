@@ -127,10 +127,9 @@ export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
 }
 
 export const WORKBENCH_MAP_FIT_PADDING = 56;
-export const WORKBENCH_MAP_MIN_ZOOM = 3;
-export const WORKBENCH_MAP_MAX_ZOOM = 5;
-export const WORKBENCH_MAP_MIN_SPAN_DEG = 12;
-export const WORKBENCH_MAP_PADDING_PANE_FRACTION = 0.14;
+export const WORKBENCH_MAP_MIN_ZOOM = 2;
+export const WORKBENCH_MAP_MAX_ZOOM = 10;
+export const WORKBENCH_MAP_MIN_USABLE_PX = 64;
 
 export function workbenchLaneMaxZoom(_points?: Array<{ lat: number; lng: number }>): number {
   return WORKBENCH_MAP_MAX_ZOOM;
@@ -161,27 +160,12 @@ export function laneSpanDeg(points: Array<{ lat: number; lng: number }>): number
   return Math.max(maxLat - minLat, maxLng - minLng);
 }
 
-export function expandLaneSpan(
-  points: Array<{ lat: number; lng: number }>,
-  minSpanDeg = WORKBENCH_MAP_MIN_SPAN_DEG,
-): Array<{ lat: number; lng: number }> {
-  if (points.length === 0) return points;
-  const { minLat, maxLat, minLng, maxLng } = laneBounds(points);
-  const growLat = Math.max(0, minSpanDeg - (maxLat - minLat)) / 2;
-  const growLng = Math.max(0, minSpanDeg - (maxLng - minLng)) / 2;
-  if (growLat === 0 && growLng === 0) return points;
-  return [
-    ...points,
-    { lat: minLat - growLat, lng: minLng - growLng },
-    { lat: maxLat + growLat, lng: maxLng + growLng },
-  ];
-}
-
+/** Keep requested inset unless it would leave no usable map. */
 export function clampFitPadding(requested: number, paneWidth: number, paneHeight: number): number {
   const shortest = Math.min(paneWidth, paneHeight);
   if (!Number.isFinite(shortest) || shortest <= 0) return requested;
-  const cap = Math.round(shortest * WORKBENCH_MAP_PADDING_PANE_FRACTION);
-  return Math.min(requested, Math.max(16, cap));
+  const maxPad = Math.max(16, Math.floor((shortest - WORKBENCH_MAP_MIN_USABLE_PX) / 2));
+  return Math.min(requested, maxPad);
 }
 
 export function workbenchCardMapFraming(
@@ -194,7 +178,7 @@ export function workbenchCardMapFraming(
   maxZoom: number;
 } {
   return {
-    fitPoints: expandLaneSpan(points),
+    fitPoints: points,
     padding: pane
       ? clampFitPadding(WORKBENCH_MAP_FIT_PADDING, pane.width, pane.height)
       : WORKBENCH_MAP_FIT_PADDING,
@@ -212,6 +196,17 @@ export function workbenchPredictedZoom(
   const usable = Math.max(Math.min(pane.width, pane.height) - framing.padding * 2, 1);
   const raw = Math.log2(usable / ((256 * Math.max(span, 1e-6)) / 360));
   return Math.min(framing.maxZoom, Math.max(framing.minZoom, Math.floor(raw)));
+}
+
+/** Leftover pixels on each side after the lane span is drawn at the predicted zoom. */
+export function workbenchPredictedPinInsetPx(
+  points: Array<{ lat: number; lng: number }>,
+  pane: { width: number; height: number },
+): number {
+  const zoom = workbenchPredictedZoom(points, pane);
+  const span = laneSpanDeg(workbenchCardMapFraming(points, pane).fitPoints);
+  const occupied = (Math.max(span, 1e-6) * 256 * 2 ** zoom) / 360;
+  return (Math.min(pane.width, pane.height) - occupied) / 2;
 }
 
 export function stopAddressLine(stop: {
