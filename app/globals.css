@@ -1048,7 +1048,8 @@ button {
   display: block;
 }
 
-.desk-sidebar-brand .rounded-md {
+.desk-sidebar-brand .rounded-md,
+.desk-sidebar-brand .brand-mark-chip {
   width: fit-content;
   max-width: 100%;
 }
@@ -1057,6 +1058,19 @@ button {
   height: 1.75rem;
   width: auto;
   max-width: 9rem;
+}
+
+.desk-nav-parent-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.desk-nav-parent .desk-nav-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
 }
 
 .desk-nav-icons {
@@ -1137,6 +1151,17 @@ button {
     font-size: 0.875rem;
     font-weight: 700;
     white-space: nowrap;
+  }
+
+  .desk-phone-bar .brand-mark {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .desk-phone-bar .brand-mark-chip img {
+    height: 1.5rem;
+    max-width: 6.5rem;
   }
 
   .desk-nav-backdrop {
@@ -2377,12 +2402,22 @@ html:has([data-load-embed]) body {
 .status-pill {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
+  height: auto;
   border-radius: var(--r-xs);
   padding: 0.15rem 0.5rem;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
+  line-height: 1.25;
   text-transform: uppercase;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  text-overflow: unset;
   background: #e8eef6;
   color: var(--sidebar);
 }
@@ -2685,6 +2720,117 @@ html:has([data-load-embed]) body {
 
 .brand-mark-on-dark img {
   background: transparent;
+}
+
+.brand-mark-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.45rem;
+  background: #ffffff;
+  border-radius: var(--r-sm);
+}
+
+.brand-mark-chip img {
+  display: block;
+  background: transparent;
+}
+
+.login-canvas .brand-mark-chip {
+  padding: 0.45rem 0.65rem;
+}
+
+.report-ontime-chart {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.report-donut {
+  width: 5.5rem;
+  height: 5.5rem;
+  flex: 0 0 5.5rem;
+}
+
+.report-donut-label {
+  font-size: 7px;
+  font-weight: 700;
+  fill: var(--sidebar);
+}
+
+.report-ontime-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.report-swatch {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.4rem;
+  border-radius: var(--r-xs);
+  vertical-align: -0.05rem;
+}
+
+.report-swatch-success {
+  background: var(--success);
+}
+
+.report-swatch-warning {
+  background: var(--warning);
+}
+
+.report-revenue-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem 1.25rem 0.85rem;
+}
+
+.report-hbar {
+  display: grid;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-hbar-name,
+.report-hbar-value {
+  font-size: 0.75rem;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+}
+
+.report-hbar-name {
+  color: var(--text);
+}
+
+.report-hbar-value {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-hbar-track {
+  height: 0.65rem;
+  background: #e8eef6;
+  border-radius: var(--r-xs);
+  overflow: hidden;
+}
+
+.report-hbar-fill {
+  display: block;
+  height: 100%;
+  background: var(--sidebar);
+  border-radius: var(--r-xs);
 }
 
 .workbench-card {

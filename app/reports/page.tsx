@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { deskMetadata } from "@/lib/desk-metadata";
-
-export const metadata = deskMetadata("Reports");
 import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
+import { OnTimeDonut, RevenueBars } from "@/components/report-charts";
+import { OnTimeResultBadge } from "@/components/status-badge";
 import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { canExportCsv, canViewReports, getPageAccess } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 import { listLoads } from "@/lib/queries";
+
+export const metadata = deskMetadata("Reports");
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +88,7 @@ export default async function ReportsPage({
               </form>
             </div>
           </header>
+          <RevenueBars rows={revenue} />
           <table className="table-grid">
             <thead>
               <tr>
@@ -107,6 +110,7 @@ export default async function ReportsPage({
         </section>
         <section className="card overflow-hidden">
           <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">On-time (delivered)</header>
+          <OnTimeDonut onTimePct={recap.onTimePct} delivered={recap.delivered} late={recap.late} />
           <table className="table-grid">
             <thead>
               <tr>
@@ -122,7 +126,9 @@ export default async function ReportsPage({
                       {row.load_number}
                     </Link>
                   </td>
-                  <td>{row.onTime ? "On time" : "Late"}</td>
+                  <td>
+                    <OnTimeResultBadge onTime={row.onTime} />
+                  </td>
                 </tr>
               ))}
             </tbody>

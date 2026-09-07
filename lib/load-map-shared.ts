@@ -126,6 +126,30 @@ export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
     .map((point) => ({ lat: point.lat, lng: point.lng }));
 }
 
+/** Workbench cards: one fitBounds + padding, then a same-state / multi-state cap. */
+export const WORKBENCH_MAP_FIT_PADDING = 56;
+export const WORKBENCH_MAP_MAX_ZOOM_MULTI_STATE = 7;
+export const WORKBENCH_MAP_MAX_ZOOM_SAME_STATE = 10;
+export const WORKBENCH_MAP_MULTI_STATE_SPAN_DEG = 4;
+
+export function workbenchLaneMaxZoom(points: Array<{ lat: number; lng: number }>): number {
+  if (points.length < 2) return WORKBENCH_MAP_MAX_ZOOM_SAME_STATE;
+  let minLat = points[0].lat;
+  let maxLat = points[0].lat;
+  let minLng = points[0].lng;
+  let maxLng = points[0].lng;
+  for (const point of points) {
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+    minLng = Math.min(minLng, point.lng);
+    maxLng = Math.max(maxLng, point.lng);
+  }
+  const span = Math.max(maxLat - minLat, maxLng - minLng);
+  return span >= WORKBENCH_MAP_MULTI_STATE_SPAN_DEG
+    ? WORKBENCH_MAP_MAX_ZOOM_MULTI_STATE
+    : WORKBENCH_MAP_MAX_ZOOM_SAME_STATE;
+}
+
 export function stopAddressLine(stop: {
   street?: string;
   city?: string;

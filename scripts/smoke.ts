@@ -24,6 +24,14 @@ async function main() {
   assert.match(navSource, /href: "\/control"/);
   assert.match(navSource, /Control Center/);
   assert.match(navSource, /title: "Accounting"/);
+  assert.match(navSource, /icon: "clipboard"/);
+  assert.match(navSource, /icon: "truck"/);
+  assert.match(navSource, /icon: "people"/);
+  assert.match(navSource, /icon: "ledger"/);
+  assert.match(navSource, /icon: "chart"/);
+  assert.match(navSource, /icon: "gear"/);
+  assert.match(navSource, /data-nav-section-icon/);
+  assert.match(navSource, /desk-nav-parent-main/);
   assert.match(navSource, /href: "\/accounting"/);
   assert.match(navSource, /AR\/AP Report/);
   assert.match(navSource, /Invoices\/Bills/);
@@ -425,8 +433,11 @@ async function main() {
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo-on-dark\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-mark-chip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-wordmark/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.brand-mark-chip \{[\s\S]*background: #ffffff;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /LoginCanvas/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /email and password/);
@@ -2534,6 +2545,8 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
+  assert.match(workbenchCardUi, /fitPadding=\{WORKBENCH_MAP_FIT_PADDING\}/);
+  assert.match(workbenchCardUi, /workbenchLaneMaxZoom/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /data-workbench-map-pane/);
@@ -11963,6 +11976,22 @@ DISPATCH CONFIRMATION
   );
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
+  assert.equal(mapShared.WORKBENCH_MAP_FIT_PADDING, 56);
+  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 10);
+  assert.equal(
+    mapShared.workbenchLaneMaxZoom([
+      { lat: 41.15, lng: -96.0 },
+      { lat: 41.25, lng: -95.9 },
+    ]),
+    10,
+  );
+  assert.equal(
+    mapShared.workbenchLaneMaxZoom([
+      { lat: 41.15, lng: -96.0 },
+      { lat: 32.78, lng: -96.8 },
+    ]),
+    7,
+  );
   const mapLib = await import("../lib/load-map");
   const mapPickupLoc = queries.createLocation({
     name: "Map Pickup Yard",
@@ -16260,6 +16289,23 @@ DISPATCH CONFIRMATION
   assert.match(boardCss, /\.acct-page \.btn[\s\S]*font-size:\s*0\.875rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /btn-primary/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /data-reports-filter/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /OnTimeDonut/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /RevenueBars/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /OnTimeResultBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /data-reports-ontime-chart/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /data-reports-revenue-chart/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /slice\(0, 8\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /var\(--success\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /var\(--warning\)/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /linear-gradient|filter:|transform: rotateX/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /OnTimeResultBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /On time/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*overflow-wrap: break-word;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*word-break: normal;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /fitBounds\(bounds, fitPadding\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /WORKBENCH_MAP_FIT_PADDING = 56/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /fitPadding/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /fitPadding/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/page.tsx"), "utf8"), /data-settings-jump/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/page.tsx"), "utf8"), /Back to settings groups/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-forgot-form.tsx"), "utf8"), /402-302-0097/);

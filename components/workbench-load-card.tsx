@@ -3,7 +3,13 @@ import { LoadCardFastActions } from "@/components/load-card-fast-actions";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { ExceptionIssueLine } from "@/components/exception-issue-line";
 import { findCityCenter } from "@/lib/city-coords-shared";
-import { LOAD_MAP_MARKER_COLOR, pathThroughStops, type LoadMapPoint } from "@/lib/load-map-shared";
+import {
+  LOAD_MAP_MARKER_COLOR,
+  WORKBENCH_MAP_FIT_PADDING,
+  pathThroughStops,
+  workbenchLaneMaxZoom,
+  type LoadMapPoint,
+} from "@/lib/load-map-shared";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
 import { listStopAppointmentTargets } from "@/lib/stops";
@@ -100,6 +106,7 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
   const points = lanePointsForCard(group, model.points);
   const path = model.path.length >= 2 ? model.path : pathThroughStops(points);
   const stops = listStopAppointmentTargets(group.loadId);
+  const laneFitPoints = path.length >= 2 ? path : points;
 
   return (
     <article
@@ -114,6 +121,8 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             points={points}
             path={path}
             disableDefaultUi
+            fitPadding={WORKBENCH_MAP_FIT_PADDING}
+            maxZoom={workbenchLaneMaxZoom(laneFitPoints)}
             className="h-full w-full overflow-hidden bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No map"
