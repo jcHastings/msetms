@@ -2547,6 +2547,7 @@ async function main() {
   assert.match(workbenchCardUi, /LoadMapCanvas/);
   assert.match(workbenchCardUi, /fitPadding=\{WORKBENCH_MAP_FIT_PADDING\}/);
   assert.match(workbenchCardUi, /workbenchLaneMaxZoom/);
+  assert.match(workbenchCardUi, /const pad = 24;/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /data-workbench-map-pane/);
