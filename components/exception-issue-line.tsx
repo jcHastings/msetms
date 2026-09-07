@@ -24,7 +24,7 @@ export function ExceptionIssueLine({ item, compact = false }: { item: InboxExcep
     return (
       <li className="min-w-0" data-attention-issue={item.kind} title={tooltip}>
         <div className="exception-badge-stack">
-          <span className={`status-pill shrink-0 ${SEVERITY_CLASS[item.severity]}`}>
+          <span className={`status-pill ${SEVERITY_CLASS[item.severity]}`} title={attentionLabel(item)}>
             {attentionLabel(item)}
           </span>
           <span className="exception-reason" data-attention-reason="" title={tooltip}>
@@ -37,7 +37,9 @@ export function ExceptionIssueLine({ item, compact = false }: { item: InboxExcep
   return (
     <li className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0" data-attention-issue={item.kind}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`status-pill ${SEVERITY_CLASS[item.severity]}`}>{attentionLabel(item)}</span>
+        <span className={`status-pill ${SEVERITY_CLASS[item.severity]}`} title={attentionLabel(item)}>
+          {attentionLabel(item)}
+        </span>
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
           {labelForExceptionKind(item.kind)}
         </span>

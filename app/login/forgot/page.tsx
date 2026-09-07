@@ -1,4 +1,7 @@
 import { DispatcherForgotForm } from "@/components/dispatcher-forgot-form";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Forgot password");
 import { LoginCanvas } from "@/components/login-canvas";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { redirect } from "next/navigation";

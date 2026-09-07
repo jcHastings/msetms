@@ -1,4 +1,7 @@
 import { AccessDenied } from "@/components/access-denied";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Manage reports");
 import { ManageReportForm } from "@/components/manage-report-form";
 import { PageHeader } from "@/components/page-header";
 import { canViewReports, getPageAccess, listDispatchers } from "@/lib/dispatcher-session";

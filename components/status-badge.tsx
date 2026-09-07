@@ -40,7 +40,21 @@ function Pill({
 }
 
 export function LoadStatusBadge({ status }: { status: string }) {
-  return <Pill className={loadStatusBadgeClass(status)}>{labelForLoadStatus(status)}</Pill>;
+  const label = labelForLoadStatus(status);
+  return (
+    <Pill className={loadStatusBadgeClass(status)} title={label}>
+      {label}
+    </Pill>
+  );
+}
+
+export function OnTimeResultBadge({ onTime }: { onTime: boolean }) {
+  const label = onTime ? "On time" : "Late";
+  return (
+    <Pill className={onTime ? "status-tone-success" : "status-tone-warning"} title={label}>
+      {label}
+    </Pill>
+  );
 }
 
 export function CriticalTag({ reason }: { reason?: string }) {
@@ -58,18 +72,29 @@ export function CriticalTag({ reason }: { reason?: string }) {
 }
 
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {
-  return <Pill className={TRUCK_STYLES[status]}>{labelForTruckStatus(status)}</Pill>;
+  const label = labelForTruckStatus(status);
+  return (
+    <Pill className={TRUCK_STYLES[status]} title={label}>
+      {label}
+    </Pill>
+  );
 }
 
 export function DriverStatusBadge({ status }: { status: DriverStatus }) {
-  return <Pill className={DRIVER_STYLES[status]}>{labelForDriverStatus(status)}</Pill>;
+  const label = labelForDriverStatus(status);
+  return (
+    <Pill className={DRIVER_STYLES[status]} title={label}>
+      {label}
+    </Pill>
+  );
 }
 
 export function DriverKindBadge({ type }: { type: DriverKind | string }) {
   const ownerOperator = isOwnerOperator(type);
+  const label = labelForDriverKind(type);
   return (
-    <Pill className={ownerOperator ? "status-tone-navy" : "status-tone-slate"}>
-      {labelForDriverKind(type)}
+    <Pill className={ownerOperator ? "status-tone-navy" : "status-tone-slate"} title={label}>
+      {label}
     </Pill>
   );
 }

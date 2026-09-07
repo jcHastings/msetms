@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { DirectoryPager, DirectorySearch } from "@/components/directory-chrome";
+import { deskMetadata } from "@/lib/desk-metadata";
+import { filterTrucks, pageFleetRows } from "@/lib/fleet-directory";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { FleetRowActions } from "@/components/fleet-row-actions";
@@ -21,14 +24,22 @@ import { complianceWindows } from "@/lib/settings";
 import { fleetDivisionOf } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const metadata = deskMetadata("Trucks");
 
 function vehicleLabel(truck: { year: string; make: string; model: string }): string {
   return [truck.year, truck.make, truck.model].filter(Boolean).join(" ") || "—";
 }
 
-export default async function TrucksPage() {
+export default async function TrucksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const params = await searchParams;
+  const q = String(params.q ?? "").trim();
   const windows = complianceWindows();
-  const trucks = listTrucks();
+  const directory = pageFleetRows(filterTrucks(listTrucks(), q), params.page);
+  const trucks = directory.rows;
   const fleet = await getSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
@@ -62,7 +73,13 @@ export default async function TrucksPage() {
           {fleet.error}
         </p>
       ) : null}
-      <div className="card">
+      <div className="card" data-fleet-trucks-directory="" data-directory-mounted={trucks.length} data-directory-total={directory.total}>
+        <DirectorySearch action="/fleet/trucks" q={q} label="Search trucks" placeholder="Unit, plate, make, or model" />
+        <p className="px-4 pb-2 text-xs text-slate-500">
+          Showing {trucks.length} of {directory.total} truck{directory.total === 1 ? "" : "s"}
+          {q ? ` matching “${q}”` : ""}
+          {directory.pageCount > 1 ? ` · page ${directory.page} of ${directory.pageCount}` : ""}.
+        </p>
         <table className="table-grid">
           <thead>
             <tr>
@@ -158,6 +175,7 @@ export default async function TrucksPage() {
             )}
           </tbody>
         </table>
+        <DirectoryPager path="/fleet/trucks" q={q} page={directory.page} pageCount={directory.pageCount} />
       </div>
     </>
   );

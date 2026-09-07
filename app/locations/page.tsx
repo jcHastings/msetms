@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Locations");
 import { LocationCsvImport } from "@/components/location-csv-import";
 import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";

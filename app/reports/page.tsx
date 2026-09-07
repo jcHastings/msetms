@@ -1,21 +1,33 @@
 import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
+import { OnTimeDonut, RevenueBars } from "@/components/report-charts";
+import { OnTimeResultBadge } from "@/components/status-badge";
 import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { canExportCsv, canViewReports, getPageAccess } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
 import { listLoads } from "@/lib/queries";
 
+export const metadata = deskMetadata("Reports");
+
 export const dynamic = "force-dynamic";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const dispatcher = await getPageAccess(canViewReports);
   if (!dispatcher) {
     return <AccessDenied message="Reports are for Administrator." />;
   }
+  const q = String((await searchParams).q ?? "").trim();
   const recap = dailyRecap();
   const onTime = onTimeReport();
-  const revenue = revenueByCustomer();
+  const revenue = revenueByCustomer().filter((row) =>
+    q ? row.customer.toLowerCase().includes(q.toLowerCase()) : true,
+  );
   const csv = listLoads({ status: "all" })
     .map((load) =>
       [
@@ -39,15 +51,15 @@ export default async function ReportsPage() {
       <PageHeader
         title="Reports"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/reports/manage" className="btn btn-secondary">
-              Manage reports
-            </Link>
-            <Link href="/reports/statistics" className="btn btn-secondary">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/reports/statistics" className="btn btn-primary">
               Statistics
             </Link>
+            <Link href="/reports/manage" className="btn btn-ghost">
+              Manage reports
+            </Link>
             {canExportCsv(dispatcher.role) ? (
-              <a href={csvHref} download="mse-loads.csv" className="btn btn-secondary">
+              <a href={csvHref} download="mse-loads.csv" className="btn btn-ghost">
                 Download loads CSV
               </a>
             ) : null}
@@ -62,7 +74,21 @@ export default async function ReportsPage() {
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="card overflow-hidden">
-          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Revenue by customer</header>
+          <header className="border-b border-slate-100 px-5 py-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <h2 className="text-sm font-semibold">Revenue by customer</h2>
+              <form className="load-list-search p-0" method="get" action="/reports" data-reports-filter="">
+                <div className="field min-w-44">
+                  <label htmlFor="reports-q">Filter customers</label>
+                  <input id="reports-q" name="q" defaultValue={q} placeholder="Customer name" />
+                </div>
+                <button className="btn btn-secondary" type="submit">
+                  Filter
+                </button>
+              </form>
+            </div>
+          </header>
+          <RevenueBars rows={revenue} />
           <table className="table-grid">
             <thead>
               <tr>
@@ -84,6 +110,7 @@ export default async function ReportsPage() {
         </section>
         <section className="card overflow-hidden">
           <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">On-time (delivered)</header>
+          <OnTimeDonut onTimePct={recap.onTimePct} delivered={recap.delivered} late={recap.late} />
           <table className="table-grid">
             <thead>
               <tr>
@@ -99,7 +126,9 @@ export default async function ReportsPage() {
                       {row.load_number}
                     </Link>
                   </td>
-                  <td>{row.onTime ? "On time" : "Late"}</td>
+                  <td>
+                    <OnTimeResultBadge onTime={row.onTime} />
+                  </td>
                 </tr>
               ))}
             </tbody>

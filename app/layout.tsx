@@ -21,7 +21,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MS Express TMS",
+  title: {
+    default: "MS Express TMS",
+    template: "%s · MS Express TMS",
+  },
   description: "Transportation management for a small trucking fleet",
 };
 

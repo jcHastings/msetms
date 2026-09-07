@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { DirectoryPager, DirectorySearch } from "@/components/directory-chrome";
+import { deskMetadata } from "@/lib/desk-metadata";
+import { filterTrailers, pageFleetRows } from "@/lib/fleet-directory";
 import { ClickableRow } from "@/components/clickable-row";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { TrailerLocationBadge } from "@/components/fleet-badges";
@@ -13,6 +16,7 @@ import { complianceWindows } from "@/lib/settings";
 import { fleetDivisionOf, labelForTrailerType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const metadata = deskMetadata("Trailers");
 
 function reeferStub(trailer: {
   orbcomm_asset_id: string;
@@ -28,9 +32,16 @@ function reeferStub(trailer: {
   return "—";
 }
 
-export default async function TrailersPage() {
+export default async function TrailersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const params = await searchParams;
+  const q = String(params.q ?? "").trim();
   const windows = complianceWindows();
-  const trailers = listTrailers();
+  const directory = pageFleetRows(filterTrailers(listTrailers(), q), params.page);
+  const trailers = directory.rows;
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
   const assignedIds = assignedFleetAssetIds("trailer");
@@ -51,7 +62,13 @@ export default async function TrailersPage() {
         }
       />
       <OrbcommTrailerImport />
-      <div className="card">
+      <div className="card" data-fleet-trailers-directory="" data-directory-mounted={trailers.length} data-directory-total={directory.total}>
+        <DirectorySearch action="/fleet/trailers" q={q} label="Search trailers" placeholder="Unit, type, truck, or Orbcomm" />
+        <p className="px-4 pb-2 text-xs text-slate-500">
+          Showing {trailers.length} of {directory.total} trailer{directory.total === 1 ? "" : "s"}
+          {q ? ` matching “${q}”` : ""}
+          {directory.pageCount > 1 ? ` · page ${directory.page} of ${directory.pageCount}` : ""}.
+        </p>
         <table className="table-grid">
           <thead>
             <tr>
@@ -122,6 +139,7 @@ export default async function TrailersPage() {
             )}
           </tbody>
         </table>
+        <DirectoryPager path="/fleet/trailers" q={q} page={directory.page} pageCount={directory.pageCount} />
       </div>
     </>
   );

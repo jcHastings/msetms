@@ -1,4 +1,7 @@
 import { PageHeader } from "@/components/page-header";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("AR/AP Report");
 import { ArapReport } from "@/components/arap-report";
 import { listApReportRows, listArReportRows } from "@/lib/accounting-aging";
 

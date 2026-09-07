@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { DirectoryPager, DirectorySearch } from "@/components/directory-chrome";
+import { deskMetadata } from "@/lib/desk-metadata";
+import { filterDrivers, pageFleetRows } from "@/lib/fleet-directory";
 import { ClickableRow } from "@/components/clickable-row";
 import { DriverImport } from "@/components/driver-import";
 import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
@@ -13,10 +16,18 @@ import { fleetDivisionOf, formatCdlEndorsements, isOwnerOperator } from "@/lib/t
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
+export const metadata = deskMetadata("Drivers");
 
-export default async function DriversPage() {
+export default async function DriversPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  const params = await searchParams;
+  const q = String(params.q ?? "").trim();
   const windows = complianceWindows();
-  const drivers = listDrivers();
+  const directory = pageFleetRows(filterDrivers(listDrivers(), q), params.page);
+  const drivers = directory.rows;
   const trucks = listTrucks();
   const fleet = await getSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
@@ -42,7 +53,13 @@ export default async function DriversPage() {
         }
       />
       <DriverImport />
-      <div className="card">
+      <div className="card" data-fleet-drivers-directory="" data-directory-mounted={drivers.length} data-directory-total={directory.total}>
+        <DirectorySearch action="/fleet/drivers" q={q} label="Search drivers" placeholder="Name, phone, license, or unit" />
+        <p className="px-4 pb-2 text-xs text-slate-500">
+          Showing {drivers.length} of {directory.total} driver{directory.total === 1 ? "" : "s"}
+          {q ? ` matching “${q}”` : ""}
+          {directory.pageCount > 1 ? ` · page ${directory.page} of ${directory.pageCount}` : ""}.
+        </p>
         <table className="table-grid">
           <thead>
             <tr>
@@ -113,6 +130,7 @@ export default async function DriversPage() {
             )}
           </tbody>
         </table>
+        <DirectoryPager path="/fleet/drivers" q={q} page={directory.page} pageCount={directory.pageCount} />
       </div>
     </>
   );

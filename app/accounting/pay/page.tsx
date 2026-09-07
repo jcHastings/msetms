@@ -1,4 +1,7 @@
 import { PageHeader } from "@/components/page-header";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Driver pay");
 import { AccountingHub } from "@/components/accounting-hub";
 
 export const dynamic = "force-dynamic";

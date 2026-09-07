@@ -1,3 +1,7 @@
+export function settingsSectionId(title: string): string {
+  return `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
 export const SETTINGS_SECTIONS = [
   {
     title: "Company Settings",

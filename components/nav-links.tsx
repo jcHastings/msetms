@@ -15,7 +15,7 @@ import { canSeeNavHref } from "@/lib/settings-shared";
 type NavItem = { href: string; label: string; short: string; icon: string };
 type NavEntry =
   | { kind: "link"; item: NavItem }
-  | { kind: "section"; title: string; items: NavItem[] };
+  | { kind: "section"; title: string; icon: string; items: NavItem[] };
 
 const NAV: NavEntry[] = [
   { kind: "link", item: { href: "/", label: "Workbench", short: "Workbench", icon: "home" } },
@@ -24,6 +24,7 @@ const NAV: NavEntry[] = [
   {
     title: "Dispatch",
     kind: "section",
+    icon: "clipboard",
     items: [
       { href: "/board", label: "Dispatch board", short: "Board", icon: "board" },
       { href: "/desk", label: "Desk", short: "Desk", icon: "home" },
@@ -37,6 +38,7 @@ const NAV: NavEntry[] = [
   {
     kind: "section",
     title: "Fleet",
+    icon: "truck",
     items: [
       { href: "/fleet", label: "Fleet", short: "Fleet", icon: "fleet" },
       { href: "/fleet/drivers", label: "Drivers", short: "Drivers", icon: "drivers" },
@@ -53,11 +55,13 @@ const NAV: NavEntry[] = [
   {
     kind: "section",
     title: "Customers",
+    icon: "people",
     items: [{ href: "/customers", label: "Customers", short: "Customers", icon: "customers" }],
   },
   {
     kind: "section",
     title: "Accounting",
+    icon: "ledger",
     items: [
       { href: "/accounting", label: "AR/AP Report", short: "AR/AP", icon: "books" },
       { href: "/accounting/invoices", label: "Invoices/Bills", short: "Invoices/Bills", icon: "ar" },
@@ -69,6 +73,7 @@ const NAV: NavEntry[] = [
   {
     kind: "section",
     title: "Reports",
+    icon: "chart",
     items: [
       { href: "/reports", label: "Reports", short: "Reports", icon: "reports" },
       { href: "/reports/manage", label: "Manage reports", short: "Manage", icon: "manage" },
@@ -80,6 +85,7 @@ const NAV: NavEntry[] = [
   {
     kind: "section",
     title: "Settings",
+    icon: "gear",
     items: [
       { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
       { href: "/users", label: "Users", short: "Users", icon: "users" },
@@ -144,9 +150,13 @@ export function NavLinks({ role }: { role: string }) {
                 open ? "desk-nav-parent-open" : ""
               }`}
               aria-expanded={open}
+              data-nav-section-icon={entry.icon}
               onClick={() => setOpenSection((current) => nextDeskNavOpenSection(current, entry.title))}
             >
-              <span>{entry.title}</span>
+              <span className="desk-nav-parent-main">
+                <NavIcon name={entry.icon} />
+                <span>{entry.title}</span>
+              </span>
               <span className="desk-nav-chevron" aria-hidden>
                 {open ? "▾" : "▸"}
               </span>
@@ -167,7 +177,7 @@ export function NavLinks({ role }: { role: string }) {
 
 function NavIcon({ name }: { name: string }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <svg viewBox="0 0 24 24" className="desk-nav-icon h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
       {iconPath(name)}
     </svg>
   );
@@ -175,6 +185,14 @@ function NavIcon({ name }: { name: string }) {
 
 function iconPath(name: string) {
   switch (name) {
+    case "clipboard":
+      return (
+        <>
+          <path d="M9 4.5h6v2.5H9z" />
+          <path d="M8 6.5h8v13H8z" />
+          <path d="M10 11h4M10 14.5h3" />
+        </>
+      );
     case "home":
       return <path d="M4 11.5 12 5l8 6.5V20H4z" />;
     case "board":
@@ -205,6 +223,7 @@ function iconPath(name: string) {
           <path d="M5 19c1.2-3 3.4-4.5 7-4.5S17.8 16 19 19" />
         </>
       );
+    case "truck":
     case "trucks":
       return <path d="M3 16V8h11v8H3zm11-5h5l2 3v4h-7" />;
     case "trailers":
@@ -221,6 +240,7 @@ function iconPath(name: string) {
       return <path d="M12 4 5 7v6c0 4 3 6.5 7 7 4-.5 7-3 7-7V7l-7-3z" />;
     case "safety":
       return <path d="M12 3 5 6v6c0 4.2 3.2 7 7 8 3.8-1 7-3.8 7-8V6l-7-3z" />;
+    case "people":
     case "customers":
       return (
         <>
@@ -229,6 +249,7 @@ function iconPath(name: string) {
           <path d="M4 18c.8-2.4 2.4-3.5 5-3.5s4.2 1.1 5 3.5M14 18c.4-1.4 1.3-2.2 3-2.2s2.4.7 3 2.2" />
         </>
       );
+    case "ledger":
     case "books":
       return <path d="M5 5h6v14H5zM13 5h6v14h-6" />;
     case "ar":
@@ -250,14 +271,21 @@ function iconPath(name: string) {
       );
     case "claims":
       return <path d="M7 4h10v16H7zM9 9h6M9 13h6" />;
+    case "chart":
     case "reports":
       return <path d="M6 18V9h3v9H6zm5 0V6h3v12h-3zm5 0v-6h3v6h-3z" />;
     case "manage":
       return <path d="M5 7h14M5 12h14M5 17h9" />;
     case "stats":
       return <path d="M5 18V9l5 3 4-6 5 8" />;
+    case "gear":
     case "settings":
-      return <circle cx="12" cy="12" r="3" />;
+      return (
+        <>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 4.5v2.2M12 17.3v2.2M4.5 12h2.2M17.3 12h2.2M6.4 6.4l1.6 1.6M16 16l1.6 1.6M6.4 17.6l1.6-1.6M16 8l1.6-1.6" />
+        </>
+      );
     case "driver":
       return <path d="M4 16h16l-2-6H8L4 16zm4 3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm8 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" />;
     default:

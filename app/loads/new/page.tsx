@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("New load");
 import { LoadForm } from "@/components/load-form";
 import { LoadWorkspace } from "@/components/load-workspace";
 import { PageHeader } from "@/components/page-header";

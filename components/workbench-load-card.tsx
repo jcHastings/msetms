@@ -3,7 +3,13 @@ import { LoadCardFastActions } from "@/components/load-card-fast-actions";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { ExceptionIssueLine } from "@/components/exception-issue-line";
 import { findCityCenter } from "@/lib/city-coords-shared";
-import { LOAD_MAP_MARKER_COLOR, pathThroughStops, type LoadMapPoint } from "@/lib/load-map-shared";
+import {
+  LOAD_MAP_MARKER_COLOR,
+  WORKBENCH_MAP_FIT_PADDING,
+  pathThroughStops,
+  workbenchLaneMaxZoom,
+  type LoadMapPoint,
+} from "@/lib/load-map-shared";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
 import { listStopAppointmentTargets } from "@/lib/stops";
@@ -56,10 +62,18 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const dLat = Math.max(maxLat - minLat, 0.35);
-  const dLng = Math.max(maxLng - minLng, 0.35);
-  const xOf = (lng: number) => ((lng - minLng) / dLng) * 72 + 14;
-  const yOf = (lat: number) => (1 - (lat - minLat) / dLat) * 64 + 18;
+  const rawLat = maxLat - minLat;
+  const rawLng = maxLng - minLng;
+  const span = Math.max(rawLat, rawLng);
+  const floor = span >= 4 ? 8 : 0.35;
+  const dLat = Math.max(rawLat, floor);
+  const dLng = Math.max(rawLng, floor);
+  const lat0 = minLat - (dLat - rawLat) / 2;
+  const lng0 = minLng - (dLng - rawLng) / 2;
+  const pad = 24;
+  const inner = 100 - pad * 2;
+  const xOf = (lng: number) => ((lng - lng0) / dLng) * inner + pad;
+  const yOf = (lat: number) => (1 - (lat - lat0) / dLat) * inner + pad;
   const line = coords.map((p) => `${xOf(p.lng).toFixed(1)},${yOf(p.lat).toFixed(1)}`).join(" ");
   const pickup = points.find((p) => p.kind === "pickup") ?? points[0];
   const drop = [...points].reverse().find((p) => p.kind === "delivery") ?? points[points.length - 1];
@@ -100,6 +114,7 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
   const points = lanePointsForCard(group, model.points);
   const path = model.path.length >= 2 ? model.path : pathThroughStops(points);
   const stops = listStopAppointmentTargets(group.loadId);
+  const laneFitPoints = path.length >= 2 ? path : points;
 
   return (
     <article
@@ -114,6 +129,8 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             points={points}
             path={path}
             disableDefaultUi
+            fitPadding={WORKBENCH_MAP_FIT_PADDING}
+            maxZoom={workbenchLaneMaxZoom(laneFitPoints)}
             className="h-full w-full overflow-hidden bg-slate-100"
             missingKeyMessage="Map is off."
             emptyMessage="No map"
@@ -132,7 +149,12 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
               {group.loadNumber}
             </Link>
             <div className="flex shrink-0 items-center gap-1.5" data-workbench-fast-actions="">
-              <LoadCardFastActions loadId={group.loadId} loadNumber={group.loadNumber} stops={stops} />
+              <LoadCardFastActions
+                loadId={group.loadId}
+                loadNumber={group.loadNumber}
+                customerName={group.customerName}
+                stops={stops}
+              />
               <Link href={`/loads/${group.loadId}`} className="desk-link text-xs">
                 Open
               </Link>

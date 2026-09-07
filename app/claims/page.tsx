@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Claims");
 import { PageHeader } from "@/components/page-header";
 import { listClaims } from "@/lib/desk";
 

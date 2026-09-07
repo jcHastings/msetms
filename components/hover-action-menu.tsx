@@ -9,12 +9,14 @@ export { HOVER_MENU_CLOSE_DELAY_MS } from "@/lib/hover-menu";
 
 export function HoverActionMenu({
   label,
+  ariaLabel,
   children,
   align = "left",
   triggerClassName = "btn load-action-btn",
   sheetOnPhone = false,
 }: {
   label: ReactNode;
+  ariaLabel?: string;
   children: ReactNode;
   align?: "left" | "right";
   triggerClassName?: string;
@@ -80,6 +82,7 @@ export function HoverActionMenu({
       <button
         type="button"
         className={triggerClassName}
+        aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => {

@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Dispatch board");
 import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";
@@ -146,7 +149,7 @@ async function BoardLiveSection({
         {loads.length === 0 ? (
           <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
         ) : (
-          <div className="board-scroll">
+          <div className="board-scroll" data-board-packed="">
             <table className="table-grid table-grid-board table-zones" data-dispatch-board="" data-table-zones="board">
               <thead>
                 <tr>
@@ -285,6 +288,7 @@ async function BoardLiveSection({
                             <LoadCardFastActions
                               loadId={load.id}
                               loadNumber={load.load_number}
+                              customerName={load.customer_name}
                               stops={listStopAppointmentTargets(load.id)}
                             />
                             {!isClosedStatus(load.status) ? (

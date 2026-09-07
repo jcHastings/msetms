@@ -24,6 +24,14 @@ async function main() {
   assert.match(navSource, /href: "\/control"/);
   assert.match(navSource, /Control Center/);
   assert.match(navSource, /title: "Accounting"/);
+  assert.match(navSource, /icon: "clipboard"/);
+  assert.match(navSource, /icon: "truck"/);
+  assert.match(navSource, /icon: "people"/);
+  assert.match(navSource, /icon: "ledger"/);
+  assert.match(navSource, /icon: "chart"/);
+  assert.match(navSource, /icon: "gear"/);
+  assert.match(navSource, /data-nav-section-icon/);
+  assert.match(navSource, /desk-nav-parent-main/);
   assert.match(navSource, /href: "\/accounting"/);
   assert.match(navSource, /AR\/AP Report/);
   assert.match(navSource, /Invoices\/Bills/);
@@ -425,8 +433,11 @@ async function main() {
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo-on-dark\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-mark-chip/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-wordmark/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.brand-mark-chip \{[\s\S]*background: #ffffff;/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8"), /BrandMark/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /LoginCanvas/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/login/page.tsx"), "utf8"), /email and password/);
@@ -2534,6 +2545,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
   assert.match(workbenchCardUi, /LoadMapCanvas/);
+  assert.match(workbenchCardUi, /fitPadding=\{WORKBENCH_MAP_FIT_PADDING\}/);
+  assert.match(workbenchCardUi, /workbenchLaneMaxZoom/);
+  assert.match(workbenchCardUi, /const pad = 24;/);
   assert.match(workbenchCardUi, /buildStopsMapModel/);
   assert.match(workbenchCardUi, /data-workbench-card/);
   assert.match(workbenchCardUi, /data-workbench-map-pane/);
@@ -11963,6 +11977,22 @@ DISPATCH CONFIRMATION
   );
   const mapShared = await import("../lib/load-map-shared");
   assert.match(mapShared.stopAddressLine({ street: "1 Main", city: "Hastings", state: "NE", zip: "68901" }), /1 Main/);
+  assert.equal(mapShared.WORKBENCH_MAP_FIT_PADDING, 56);
+  assert.equal(mapShared.workbenchLaneMaxZoom([{ lat: 41.15, lng: -96.0 }]), 10);
+  assert.equal(
+    mapShared.workbenchLaneMaxZoom([
+      { lat: 41.15, lng: -96.0 },
+      { lat: 41.25, lng: -95.9 },
+    ]),
+    10,
+  );
+  assert.equal(
+    mapShared.workbenchLaneMaxZoom([
+      { lat: 41.15, lng: -96.0 },
+      { lat: 32.78, lng: -96.8 },
+    ]),
+    7,
+  );
   const mapLib = await import("../lib/load-map");
   const mapPickupLoc = queries.createLocation({
     name: "Map Pickup Yard",
@@ -13140,10 +13170,46 @@ DISPATCH CONFIRMATION
   const customersPage = fs.readFileSync(path.join(process.cwd(), "app/customers/page.tsx"), "utf8");
   assert.match(customersPage, /New customer/);
   assert.match(customersPage, /CustomersTable/);
+  assert.match(customersPage, /searchCustomersDirectory/);
+  assert.match(customersPage, /searchParams/);
+  assert.doesNotMatch(customersPage, /listCustomers\(\)/);
+  assert.doesNotMatch(customersPage, /getCustomer\(/);
   const customersTable = fs.readFileSync(path.join(process.cwd(), "components/customers-table.tsx"), "utf8");
   assert.match(customersTable, /CustomerRowActions/);
   assert.match(customersTable, /data-customers-list/);
+  assert.match(customersTable, /data-customers-search/);
+  assert.match(customersTable, /data-customers-pagination/);
+  assert.match(customersTable, /data-customers-mounted/);
   assert.doesNotMatch(customersTable, /overflow-hidden/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /CUSTOMERS_PAGE_SIZE = 25/);
+  const directoryPage = queries.searchCustomersDirectory({ q: "", page: 1, pageSize: 10 });
+  assert.ok(directoryPage.customers.length <= 10);
+  assert.ok(directoryPage.total >= directoryPage.customers.length);
+  assert.equal(directoryPage.page, 1);
+  assert.equal(directoryPage.pageSize, 10);
+  const uniqueDirectoryName = `Zzz Directory Filter ${Date.now()}`;
+  const directoryCustomerId = queries.createCustomer({
+    name: uniqueDirectoryName,
+    billing_notes: "Net 45 directory",
+    payment_terms: "Net 45",
+    contacts: [{ name: "Pat Directory", role: "", phone: "402-555-0199", email: "pat.directory@example.com" }],
+  });
+  const filteredDirectory = queries.searchCustomersDirectory({ q: uniqueDirectoryName, page: 1, pageSize: 25 });
+  assert.equal(filteredDirectory.total, 1);
+  assert.equal(filteredDirectory.customers.length, 1);
+  assert.equal(filteredDirectory.customers[0].id, directoryCustomerId);
+  assert.equal(filteredDirectory.customers[0].contactCount, 1);
+  assert.equal(filteredDirectory.customers[0].primary?.phone, "402-555-0199");
+  const phoneDirectory = queries.searchCustomersDirectory({ q: "402-555-0199", page: 1, pageSize: 25 });
+  assert.ok(phoneDirectory.customers.some((row) => row.id === directoryCustomerId));
+  const manyDirectory = queries.searchCustomersDirectory({ q: "", page: 1, pageSize: 5 });
+  const nextDirectory = queries.searchCustomersDirectory({ q: "", page: 2, pageSize: 5 });
+  assert.ok(manyDirectory.total > 5);
+  assert.equal(manyDirectory.customers.length, 5);
+  assert.ok(nextDirectory.customers.length <= 5);
+  const firstPageIds = new Set(manyDirectory.customers.map((row) => row.id));
+  assert.ok(nextDirectory.customers.every((row) => !firstPageIds.has(row.id)));
+  queries.deleteCustomer(directoryCustomerId);
   const customerRowActions = fs.readFileSync(path.join(process.cwd(), "components/customer-row-actions.tsx"), "utf8");
   assert.match(customerRowActions, /"Edit"/);
   assert.match(customerRowActions, /DeleteCustomerForm/);
@@ -16204,10 +16270,53 @@ DISPATCH CONFIRMATION
   assert.match(boardPage, /board-when-time/);
   assert.match(boardPage, /board-lane-line/);
   assert.match(boardPage, /board-scroll/);
+  assert.match(boardPage, /data-board-packed/);
   assert.doesNotMatch(boardPage, /whitespace-nowrap text-xs" title=\{`to \$\{formatDateTime/);
   assert.match(boardCss, /board-when-cell/);
   assert.match(boardCss, /board-scroll/);
-  assert.match(boardCss, /min-width:\s*103rem/);
+  assert.match(boardCss, /\.table-grid\.table-grid-board\s*\{[^}]*width:\s*100%/);
+  assert.match(boardCss, /\.table-grid\.table-grid-board\s*\{[^}]*min-width:\s*0/);
+  assert.doesNotMatch(boardCss, /min-width:\s*103rem/);
+  assert.doesNotMatch(boardCss, /width:\s*103rem/);
+  assert.match(boardCss, /left:\s*13%/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/layout.tsx"), "utf8"), /template: "%s · MS Express TMS"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8"), /deskMetadata\("Workbench"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-card-fast-actions.tsx"), "utf8"), /Actions for \$\{loadNumber\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/page.tsx"), "utf8"), /data-fleet-directory/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/page.tsx"), "utf8"), /filterTrucks/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /filterDrivers/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trailers/page.tsx"), "utf8"), /filterTrailers/);
+  assert.match(boardCss, /\.table-grid-acct td[\s\S]*font-size:\s*0\.875rem/);
+  assert.match(boardCss, /\.acct-page \.btn[\s\S]*font-size:\s*0\.875rem/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /btn-primary/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /data-reports-filter/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /OnTimeDonut/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /RevenueBars/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/reports/page.tsx"), "utf8"), /OnTimeResultBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /data-reports-ontime-chart/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /data-reports-revenue-chart/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /slice\(0, 8\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /var\(--success\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /var\(--warning\)/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/report-charts.tsx"), "utf8"), /linear-gradient|filter:|transform: rotateX/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /OnTimeResultBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /On time/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*overflow-wrap: break-word;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /\.status-pill \{[\s\S]*word-break: normal;/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /fitBounds\(bounds, fitPadding\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /WORKBENCH_MAP_FIT_PADDING = 56/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/control-center-view.tsx"), "utf8"), /fitPadding/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fleet-map-view.tsx"), "utf8"), /fitPadding/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/page.tsx"), "utf8"), /data-settings-jump/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/page.tsx"), "utf8"), /Back to settings groups/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-forgot-form.tsx"), "utf8"), /402-302-0097/);
+  const { paginateDirectory } = await import("../lib/directory-page");
+  const paged = paginateDirectory(Array.from({ length: 40 }, (_, i) => i), 2, 25);
+  assert.equal(paged.rows.length, 15);
+  assert.equal(paged.page, 2);
+  const { filterTrucks } = await import("../lib/fleet-directory");
+  assert.equal(filterTrucks([{ unit_number: "101", year: "", make: "Kenworth", model: "", plate: "", plate_state: "", type: "sleeper", samsara_vehicle_id: "" } as never], "kenworth").length, 1);
+  assert.match(boardCss, /@media \(max-width: 79\.99rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   assert.match(boardCss, /board-place-with-pin/);
   assert.match(boardCss, /board-trailer-cell/);
   const trailerCell = boardCss.match(/td\.board-trailer-cell[\s\S]*?\}/)?.[0] ?? "";
