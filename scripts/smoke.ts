@@ -16286,21 +16286,47 @@ DISPATCH CONFIRMATION
   assert.ok(assignResult.error);
 
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
-  assert.equal(shortPlaceLabel("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
-  assert.equal(shortPlaceLabel("Dakota City, NE"), "Dakota City, NE");
-  assert.equal(shortPlaceLabel("Holcomb, KS"), "Holcomb, KS");
-  assert.equal(shortPlaceLabel("South Sioux City, NE"), "South Sioux City, NE");
-  assert.equal(shortPlaceLabel("Hays, KS"), "Hays, KS");
-  assert.doesNotMatch(shortPlaceLabel("Holcomb, KS"), /LCOMB/);
-  assert.doesNotMatch(shortPlaceLabel("South Sioux City, NE"), /UTH SIOUX/);
-  assert.doesNotMatch(shortPlaceLabel("Hays, KS"), /^YS,/);
-  assert.doesNotMatch(shortPlaceLabel("Hastings, NE"), /STINGS/);
-  assert.equal(shortPlaceLabel("HASTINGS, NE"), "HASTINGS, NE");
-  assert.equal(shortPlaceLabel("BRONX, NY"), "BRONX, NY");
-  assert.equal(shortPlaceLabel("SOUTH SIOUX CITY, NE"), "SOUTH SIOUX CITY, NE");
-  assert.doesNotMatch(shortPlaceLabel("HASTINGS, NE"), /^STINGS/);
-  assert.doesNotMatch(shortPlaceLabel("BRONX, NY"), /^ONX/);
-  assert.doesNotMatch(shortPlaceLabel("SOUTH SIOUX CITY, NE"), /^UTH SIOUX/);
+  const shortPlaceFn =
+    fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8").match(
+      /const TRAILING_COUNTRY[\s\S]*?export function gpsMotionLabel/,
+    )?.[0] ?? "";
+  assert.match(shortPlaceFn, /trailingCityState/);
+  assert.doesNotMatch(shortPlaceFn, /matchAll/);
+  assert.doesNotMatch(shortPlaceFn, /at\(-1\)/);
+  const placeFixtures: Array<{ raw: string; cityState: string; chopped: RegExp }> = [
+    { raw: "400 N Burlington Ave, Hastings, NE 68901", cityState: "Hastings, NE", chopped: /STINGS/ },
+    { raw: "400 N BURLINGTON AVE, HASTINGS, NE 68901", cityState: "HASTINGS, NE", chopped: /^STINGS/ },
+    { raw: "C/O Cold Storage, 400 N BURLINGTON AVE, HASTINGS, NE, 68901, USA", cityState: "HASTINGS, NE", chopped: /STINGS/ },
+    { raw: "400 N BURLINGTON AVE, HASTINGS, NE, United States", cityState: "HASTINGS, NE", chopped: /STINGS/ },
+    { raw: "HASTINGS, NE", cityState: "HASTINGS, NE", chopped: /^STINGS/ },
+    { raw: "Hastings, NE", cityState: "Hastings, NE", chopped: /STINGS/ },
+    { raw: "Dakota City, NE", cityState: "Dakota City, NE", chopped: /^KOTA/ },
+    { raw: "1234 W 2ND ST, BRONX, NY 10451", cityState: "BRONX, NY", chopped: /^ONX/ },
+    { raw: "BRONX, NY", cityState: "BRONX, NY", chopped: /^ONX/ },
+    { raw: "100 SIOUX POINT RD, SOUTH SIOUX CITY, NE 68776", cityState: "SOUTH SIOUX CITY, NE", chopped: /^UTH SIOUX/ },
+    { raw: "SOUTH SIOUX CITY, NE", cityState: "SOUTH SIOUX CITY, NE", chopped: /^UTH SIOUX/ },
+    { raw: "South Sioux City, NE", cityState: "South Sioux City, NE", chopped: /UTH SIOUX/ },
+    { raw: "500 MAIN ST, HOLCOMB, KS 67851", cityState: "HOLCOMB, KS", chopped: /LCOMB/ },
+    { raw: "HOLCOMB, KS", cityState: "HOLCOMB, KS", chopped: /LCOMB/ },
+    { raw: "Holcomb, KS", cityState: "Holcomb, KS", chopped: /LCOMB/ },
+    { raw: "Hays, KS", cityState: "Hays, KS", chopped: /^YS,/ },
+    { raw: "100 N WASHINGTON ST, JUNCTION CITY, KS 66441", cityState: "JUNCTION CITY, KS", chopped: /NCTION CITY/ },
+    { raw: "JUNCTION CITY, KS", cityState: "JUNCTION CITY, KS", chopped: /NCTION CITY/ },
+    { raw: "200 E FRANKLIN ST, HAGERSTOWN, MD 21740", cityState: "HAGERSTOWN, MD", chopped: /GERSTOWN/ },
+    { raw: "HAGERSTOWN, MD", cityState: "HAGERSTOWN, MD", chopped: /GERSTOWN/ },
+    { raw: "300 CLIFTON AVE, LAKEWOOD, NJ 08701", cityState: "LAKEWOOD, NJ", chopped: /KEWOOD/ },
+    { raw: "LAKEWOOD, NJ", cityState: "LAKEWOOD, NJ", chopped: /KEWOOD/ },
+    { raw: "Dock 4, 1800 E 8th Ave, Lakewood, NJ, 08701, US", cityState: "Lakewood, NJ", chopped: /KEWOOD/ },
+  ];
+  for (const fixture of placeFixtures) {
+    assert.equal(shortPlaceLabel(fixture.raw), fixture.cityState, fixture.raw);
+    assert.doesNotMatch(shortPlaceLabel(fixture.raw), fixture.chopped);
+  }
+  assert.equal(
+    shortPlaceLabel("400 N BURLINGTON AVE, HASTINGS, NE 68901", { city: "HASTINGS", state: "NE" }),
+    "HASTINGS, NE",
+  );
+  assert.equal(shortPlaceLabel("ignored street", { city: "BRONX", state: "NY" }), "BRONX, NY");
   const boardCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   const placeBlock = boardCss.match(/\.board-place\s*\{[^}]+\}/)?.[0] ?? "";
   const placeLine = boardCss.match(/\.board-place-line\s*\{[^}]+\}/)?.[0] ?? "";
