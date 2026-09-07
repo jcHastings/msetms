@@ -1243,36 +1243,35 @@ button {
   }
 
   /* Phone Board restore (~390px). Audit sticky LOAD+STATUS+MOVE may stay only
-     if they fit the padded scrollport. 6.25 + 5.5 + 9.5 = 21.25rem (340px)
-     leaves room beside 0.85rem page gutters so MOVE cannot cover STATUS. */
+     if they fit the padded scrollport. Table cells treat width as content-box,
+     so 5 + 5.5 + 9 plus cell padding stays under 390px minus 0.85rem gutters. */
+  .table-grid-board .board-load-cell,
+  .table-grid-board .board-status-cell,
+  .table-grid-board .board-end-cell,
+  .table-grid-board thead .board-end-cell {
+    box-sizing: border-box;
+  }
+
   .table-grid-board .board-load-cell {
-    width: 6.25rem;
+    width: 5rem;
+    max-width: 5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
   }
 
   .table-grid-board .board-status-cell {
-    left: 6.25rem;
+    left: 5rem;
     width: 5.5rem;
+    max-width: 5.5rem;
+    padding-left: 0.22rem;
+    padding-right: 0.22rem;
   }
 
   .table-grid-board .board-end-cell,
   .table-grid-board thead .board-end-cell {
-    width: 9.5rem;
-    min-width: 9.5rem;
-    max-width: 9.5rem;
-  }
-
-  [data-load-list-chrome] .load-list-tabs {
-    gap: 0.18rem;
-  }
-
-  [data-load-list-chrome] .load-list-tabs .load-tab {
-    display: inline-flex;
-    align-items: center;
-    margin: 0;
-    padding: 0.12rem 0.38rem;
-    font-size: 11px;
-    line-height: 1.15;
-    white-space: nowrap;
+    width: 9rem;
+    min-width: 9rem;
+    max-width: 9rem;
   }
 
   /* Orbcomm phone: kill the competing overflow-x:auto scrollports without
@@ -1452,6 +1451,23 @@ button {
 [data-load-list-chrome] .load-list-tabs .load-tab-active:hover {
   background: var(--sidebar-mid) !important;
   color: #ffffff !important;
+}
+
+/* After base chip padding so phone compact wins. Acceptance ~390px. */
+@media (max-width: 47.99rem) {
+  [data-load-list-chrome] .load-list-tabs {
+    gap: 0.18rem;
+  }
+
+  [data-load-list-chrome] .load-list-tabs .load-tab {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0.12rem 0.38rem;
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
 }
 
 .load-list-search {
