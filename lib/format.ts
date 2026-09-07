@@ -265,13 +265,43 @@ export function loadTouchesToday(
   );
 }
 
-export function shortPlaceLabel(place: string): string {
-  const text = String(place ?? "").replace(/\s+/g, " ").trim();
+const TRAILING_COUNTRY = /^(?:USA|U\.S\.A\.|US|U\.S\.|United States(?: of America)?)$/i;
+
+function compactPlacePart(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function isStateCode(value: string): boolean {
+  return /^[A-Za-z]{2}$/.test(value);
+}
+
+/** Last `CITY, ST` only — never treat mid-address `AVE, HA` fragments as a state. */
+function trailingCityState(text: string): string {
+  const tokens = text.split(",").map((part) => compactPlacePart(part)).filter(Boolean);
+  let end = tokens.length - 1;
+  if (end >= 0 && TRAILING_COUNTRY.test(tokens[end] ?? "")) end -= 1;
+  if (end >= 0 && /^\d{5}(?:-\d{4})?$/.test(tokens[end] ?? "")) end -= 1;
+  if (end < 1) return "";
+
+  const stateTok = tokens[end] ?? "";
+  const stateZip = stateTok.match(/^([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/);
+  const city = tokens[end - 1] ?? "";
+  if (!stateZip || !isStateCode(stateZip[1]) || !city) return "";
+  return `${city}, ${stateZip[1].toUpperCase()}`;
+}
+
+export function shortPlaceLabel(
+  place: string,
+  parts?: { city?: string | null; state?: string | null },
+): string {
+  const city = compactPlacePart(parts?.city);
+  const state = compactPlacePart(parts?.state);
+  if (city && isStateCode(state)) return `${city}, ${state.toUpperCase()}`;
+  if (city) return city;
+
+  const text = compactPlacePart(place);
   if (!text) return "";
-  const matches = [...text.matchAll(/([A-Za-z][A-Za-z .'-]*?),\s*([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?/g)];
-  const last = matches.at(-1);
-  if (last) return `${last[1].replace(/\s+/g, " ").trim()}, ${last[2]}`;
-  return text;
+  return trailingCityState(text) || text;
 }
 
 export function gpsMotionLabel(speedMph: number | null | undefined): string {
