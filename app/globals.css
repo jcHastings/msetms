@@ -1200,18 +1200,37 @@ button {
     max-width: 100%;
   }
 
+  /* Phone Board restore (~390px). Audit sticky LOAD+STATUS+MOVE may stay only
+     if they fit the padded scrollport. 6.25 + 5.5 + 9.5 = 21.25rem (340px)
+     leaves room beside 0.85rem page gutters so MOVE cannot cover STATUS. */
   .table-grid-board .board-load-cell {
-    width: 8.75rem;
+    width: 6.25rem;
   }
 
   .table-grid-board .board-status-cell {
-    left: 8.75rem;
+    left: 6.25rem;
+    width: 5.5rem;
   }
 
   .table-grid-board .board-end-cell,
   .table-grid-board thead .board-end-cell {
-    width: 10.5rem;
-    min-width: 10.5rem;
+    width: 9.5rem;
+    min-width: 9.5rem;
+    max-width: 9.5rem;
+  }
+
+  [data-load-list-chrome] .load-list-tabs {
+    gap: 0.18rem;
+  }
+
+  [data-load-list-chrome] .load-list-tabs .load-tab {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0.12rem 0.38rem;
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: nowrap;
   }
 
   /* Orbcomm phone: kill the competing overflow-x:auto scrollports without
