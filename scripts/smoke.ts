@@ -16355,8 +16355,8 @@ DISPATCH CONFIRMATION
   assert.match(phoneBoardCss, /width:\s*5rem/);
   assert.match(phoneBoardCss, /max-width:\s*5rem/);
   assert.match(phoneBoardCss, /left:\s*5rem/);
-  assert.match(phoneBoardCss, /width:\s*5\.5rem/);
-  assert.match(phoneBoardCss, /max-width:\s*5\.5rem/);
+  assert.match(phoneBoardCss, /width:\s*6\.5rem/);
+  assert.match(phoneBoardCss, /max-width:\s*6\.5rem/);
   assert.match(phoneBoardCss, /width:\s*9rem/);
   const phoneTabCss = boardCss.match(/After base chip padding so phone compact wins[\s\S]*?white-space:\s*nowrap;/)?.[0] ?? "";
   assert.match(phoneTabCss, /padding:\s*0\.12rem 0\.38rem/);
