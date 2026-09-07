@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Statistics");
 import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
 import { StatsFilters } from "@/components/stats-filters";

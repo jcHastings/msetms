@@ -1,4 +1,7 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import { LoadOverlay } from "@/components/load-overlay";
+
+export const metadata = deskMetadata("Search");
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { LoadSearch } from "@/components/load-search";
 import { PageHeader } from "@/components/page-header";

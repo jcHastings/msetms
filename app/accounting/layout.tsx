@@ -1,4 +1,7 @@
 import { AccessDenied } from "@/components/access-denied";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Accounting");
 import { canAccessAccounting, getPageAccess } from "@/lib/dispatcher-session";
 
 export default async function AccountingLayout({ children }: { children: React.ReactNode }) {

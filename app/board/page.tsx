@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Dispatch board");
 import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";
@@ -285,6 +288,7 @@ async function BoardLiveSection({
                             <LoadCardFastActions
                               loadId={load.id}
                               loadNumber={load.load_number}
+                              customerName={load.customer_name}
                               stops={listStopAppointmentTargets(load.id)}
                             />
                             {!isClosedStatus(load.status) ? (

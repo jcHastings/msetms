@@ -26,10 +26,12 @@ type DialogKind = "exception" | "appointment" | "update";
 export function LoadCardFastActions({
   loadId,
   loadNumber,
+  customerName,
   stops,
 }: {
   loadId: number;
   loadNumber: string;
+  customerName?: string;
   stops: FastActionStop[];
 }) {
   const [dialog, setDialog] = useState<DialogKind | null>(null);
@@ -45,7 +47,15 @@ export function LoadCardFastActions({
     <>
       <BackhaulFinderHost loadId={loadId}>
         {(openFinder) => (
-          <HoverActionMenu label="Actions" align="right" triggerClassName="btn btn-ghost" sheetOnPhone>
+          <HoverActionMenu
+            label="Actions"
+            ariaLabel={
+              customerName ? `Actions for ${loadNumber} · ${customerName}` : `Actions for ${loadNumber}`
+            }
+            align="right"
+            triggerClassName="btn btn-ghost"
+            sheetOnPhone
+          >
             <button
               type="button"
               className="menu-item w-full text-left"

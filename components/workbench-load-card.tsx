@@ -132,7 +132,12 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
               {group.loadNumber}
             </Link>
             <div className="flex shrink-0 items-center gap-1.5" data-workbench-fast-actions="">
-              <LoadCardFastActions loadId={group.loadId} loadNumber={group.loadNumber} stops={stops} />
+              <LoadCardFastActions
+                loadId={group.loadId}
+                loadNumber={group.loadNumber}
+                customerName={group.customerName}
+                stops={stops}
+              />
               <Link href={`/loads/${group.loadId}`} className="desk-link text-xs">
                 Open
               </Link>

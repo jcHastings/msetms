@@ -1,4 +1,7 @@
 import { FleetMapView } from "@/components/fleet-map-view";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Orbcomm");
 import { buildOrbcommFleetMap } from "@/lib/fleet-map";
 import { mapsBrowserKey } from "@/lib/load-map";
 

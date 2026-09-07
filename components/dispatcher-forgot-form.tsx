@@ -14,6 +14,13 @@ export function DispatcherForgotForm() {
         Enter the email on your user record. If it matches, we send a reset link there — not by text.
         If this user has no email, ask an Administrator to set a temporary password on Users.
       </p>
+      <p className="text-sm text-slate-600" data-office-phone="">
+        Need help? Call the office at{" "}
+        <a className="font-semibold underline" href="tel:4023020097">
+          402-302-0097
+        </a>
+        .
+      </p>
       <div className="field">
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="email" />

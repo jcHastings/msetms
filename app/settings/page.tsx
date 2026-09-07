@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { canEditSettings, getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
-import { SETTINGS_SECTIONS } from "@/lib/settings-shared";
+import { SETTINGS_SECTIONS, settingsSectionId } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,20 @@ export default async function SettingsHubPage() {
           {dispatcher.permission_group !== "all" ? ` · ${dispatcher.permission_group}` : ""}
         </p>
       ) : null}
+      <nav
+        id="settings-groups"
+        className="settings-jump mb-4 flex flex-wrap gap-2"
+        aria-label="Settings groups"
+        data-settings-jump=""
+      >
+        {SETTINGS_SECTIONS.filter((section) =>
+          section.items.some((item) => item.href === "/settings/security" || (dispatcher ? canEditSettings(dispatcher.role) : false)),
+        ).map((section) => (
+          <a key={section.title} href={`#${settingsSectionId(section.title)}`} className="btn btn-secondary">
+            {section.title}
+          </a>
+        ))}
+      </nav>
       <div className="settings-page space-y-5">
         {SETTINGS_SECTIONS.map((section) => {
           const items = section.items.filter((item) => {
@@ -23,8 +37,9 @@ export default async function SettingsHubPage() {
             return dispatcher ? canEditSettings(dispatcher.role) : false;
           });
           if (items.length === 0) return null;
+          const sectionId = settingsSectionId(section.title);
           return (
-          <section key={section.title}>
+          <section key={section.title} id={sectionId} tabIndex={-1} className="settings-section-group">
             <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               {section.title}
             </h2>
@@ -38,6 +53,11 @@ export default async function SettingsHubPage() {
                 </Link>
               ))}
             </div>
+            <p className="mt-2">
+              <a href="#settings-groups" className="text-xs font-semibold underline">
+                Back to settings groups
+              </a>
+            </p>
           </section>
           );
         })}

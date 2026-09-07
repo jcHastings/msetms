@@ -1,4 +1,7 @@
 import { PageHeader } from "@/components/page-header";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Invoices");
 import { AccountingHub } from "@/components/accounting-hub";
 import { parseAccountingHubTab } from "@/lib/accounting-desk-shared";
 

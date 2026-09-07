@@ -1,4 +1,7 @@
 import { DispatcherLoginForm } from "@/components/dispatcher-login-form";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Sign in");
 import { LoginCanvas } from "@/components/login-canvas";
 import { dispatcherLoginAction } from "@/lib/dispatcher-actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";

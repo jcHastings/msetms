@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Audit");
 import { AccessDenied } from "@/components/access-denied";
 import { LoadAuditTable } from "@/components/load-audit-table";
 import { PageHeader } from "@/components/page-header";

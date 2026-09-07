@@ -1,4 +1,7 @@
 import { ControlCenterView } from "@/components/control-center-view";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Control");
 import { PageHeader } from "@/components/page-header";
 import { buildControlCenter } from "@/lib/control-center";
 import { mapsBrowserKey } from "@/lib/load-map";

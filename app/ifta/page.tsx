@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("IFTA");
 import { FuelMatchQueue, LoadTiedFuelReceipts } from "@/components/fuel-match-queue";
 import { PageHeader } from "@/components/page-header";
 import { formatMoney } from "@/lib/format";

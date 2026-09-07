@@ -148,20 +148,25 @@ a.hub-tab-active .hub-tab-label,
 }
 
 .table-grid-acct th {
-  padding: 0.28rem 0.4rem;
-  font-size: 11px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.75rem;
   letter-spacing: 0.03em;
+  white-space: normal;
 }
 
 .table-grid-acct td {
-  padding: 0.22rem 0.4rem;
-  font-size: 12.5px;
-  line-height: 1.25;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
   vertical-align: middle;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .table-grid-acct tbody tr {
-  height: 34px;
+  height: auto;
+  min-height: 2.5rem;
 }
 
 .acct-link,
@@ -205,25 +210,26 @@ button.acct-link:hover {
 }
 
 .acct-page .btn {
-  padding: 0.18rem 0.45rem;
-  font-size: 12px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.875rem;
   border-radius: var(--r-xs);
 }
 
 .acct-page .field {
-  gap: 0.12rem;
+  gap: 0.25rem;
 }
 
 .acct-page .field label {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .acct-page .field input,
 .acct-page .field select,
 .acct-page .field textarea {
-  padding: 0.2rem 0.4rem;
+  padding: 0.45rem 0.6rem;
   border-radius: var(--r-xs);
-  font-size: 12.5px;
+  font-size: 0.875rem;
+  min-height: 2.25rem;
 }
 
 .acct-page .hub-table-toolbar {
@@ -530,8 +536,11 @@ button {
 }
 
 .board-scroll {
-  overflow-x: auto;
+  display: block;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -540,6 +549,11 @@ button {
   width: 100%;
   min-width: 0;
   max-width: 100%;
+}
+
+.table-grid-board th,
+.table-grid-board td {
+  min-width: 0;
 }
 
 .table-grid-board th {
@@ -560,7 +574,7 @@ button {
   position: sticky;
   left: 0;
   z-index: 3;
-  width: 10.5rem;
+  width: 13%;
   background: #fff;
   box-shadow: 1px 0 0 var(--border);
 }
@@ -572,9 +586,9 @@ button {
 
 .table-grid-board .board-status-cell {
   position: sticky;
-  left: 10.5rem;
+  left: 13%;
   z-index: 3;
-  width: 6.25rem;
+  width: 8%;
   background: #fff;
   box-shadow: 1px 0 0 var(--border);
 }
@@ -585,7 +599,7 @@ button {
 }
 
 .table-grid-board .board-when-cell {
-  width: 4.75rem;
+  width: 6.5%;
 }
 
 .board-when-date,
@@ -605,29 +619,29 @@ button {
 }
 
 .table-grid-board .board-unit-cell {
-  width: 7.25rem;
+  width: 8%;
 }
 
 .table-grid-board .board-place-cell {
-  width: 8.25rem;
+  width: 9%;
 }
 
 .table-grid-board td.board-trailer-cell,
 .table-grid-board th.board-trailer-cell {
-  width: 9.5rem;
+  width: 10%;
   overflow: visible;
 }
 
 .table-grid-board .board-hos-cell {
-  width: 4rem;
+  width: 5%;
 }
 
 .table-grid-board .board-reefer-cell {
-  width: 4.5rem;
+  width: 5%;
 }
 
 .table-grid-board .board-rate-cell {
-  width: 4.5rem;
+  width: 5%;
 }
 
 .board-status-select {
@@ -639,8 +653,8 @@ button {
   position: sticky;
   right: 0;
   z-index: 3;
-  width: 16.5rem;
-  min-width: 16.5rem;
+  width: 24%;
+  min-width: 0;
   padding: 0;
   background: #fff;
   box-shadow: -1px 0 0 var(--border);
@@ -654,7 +668,7 @@ button {
 
 .board-end-stack {
   display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 7.25rem) minmax(0, 1fr);
   align-items: start;
   min-width: 0;
 }
@@ -696,8 +710,42 @@ button {
     max-width: none;
   }
 
+  .table-grid-board .board-load-cell {
+    width: 8.75rem;
+  }
+
   .table-grid-board .board-status-cell {
     left: 8.75rem;
+    width: 6.25rem;
+  }
+
+  .table-grid-board .board-when-cell {
+    width: 4.75rem;
+  }
+
+  .table-grid-board .board-unit-cell {
+    width: 7rem;
+  }
+
+  .table-grid-board .board-place-cell {
+    width: 8rem;
+  }
+
+  .table-grid-board td.board-trailer-cell,
+  .table-grid-board th.board-trailer-cell {
+    width: 9rem;
+  }
+
+  .table-grid-board .board-hos-cell {
+    width: 4rem;
+  }
+
+  .table-grid-board .board-reefer-cell {
+    width: 4.5rem;
+  }
+
+  .table-grid-board .board-rate-cell {
+    width: 4.5rem;
   }
 
   .table-grid-board .board-rate-cell,
@@ -2264,6 +2312,19 @@ html:has([data-load-embed]) body {
 
 .settings-alert-dialog {
   width: min(560px, 100%);
+}
+
+.settings-jump {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding: 0.45rem 0;
+  background: #f4f5f7;
+}
+
+.settings-section-group:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .settings-hub-card {

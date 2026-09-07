@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Fuel");
 import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelMatchQueue } from "@/components/fuel-match-queue";

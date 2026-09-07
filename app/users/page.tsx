@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Users");
 import { PageHeader } from "@/components/page-header";
 import { UsersTable } from "@/components/users-table";
 import { canManageUsers, getSignedInDispatcher } from "@/lib/dispatcher-session";

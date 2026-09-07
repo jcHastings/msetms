@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("Customers");
 import { CustomersTable } from "@/components/customers-table";
 import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
