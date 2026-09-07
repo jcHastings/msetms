@@ -8,6 +8,7 @@ import {
   shouldClusterMapPoints,
 } from "@/lib/map-cluster";
 import {
+  clampFitPadding,
   defaultLoadMapLabelOrigin,
   loadMapIconLayout,
   loadMapPinIconUrl,
@@ -86,6 +87,8 @@ export function LoadMapCanvas({
   cluster,
   disableDefaultUi = false,
   fitPadding,
+  fitPoints,
+  minZoom = 0,
   maxZoom = 20,
   onSelect,
 }: {
@@ -98,6 +101,8 @@ export function LoadMapCanvas({
   cluster?: boolean;
   disableDefaultUi?: boolean;
   fitPadding?: number;
+  fitPoints?: Array<{ lat: number; lng: number }>;
+  minZoom?: number;
   maxZoom?: number;
   onSelect?: (point: LoadMapPoint) => void;
 }) {
@@ -121,9 +126,13 @@ export function LoadMapCanvas({
       .then((maps) => {
         if (cancelled || !host.current) return;
         const start = points[0] ?? route[0];
+        const boundsSource = fitPoints && fitPoints.length > 0 ? fitPoints : null;
+        const appliedPadding =
+          fitPadding != null ? clampFitPadding(fitPadding, el.clientWidth, el.clientHeight) : undefined;
         const map = new maps.Map(host.current, {
           center: { lat: start.lat, lng: start.lng },
           zoom: points.length + route.length === 1 ? 15 : 5,
+          minZoom: minZoom > 0 ? minZoom : undefined,
           maxZoom,
           gestureHandling: disableDefaultUi ? "cooperative" : "greedy",
           disableDefaultUI: disableDefaultUi,
@@ -146,7 +155,9 @@ export function LoadMapCanvas({
             strokeOpacity: 0.85,
             strokeWeight: 4,
           });
-          for (const point of route) bounds.extend(point);
+          if (!boundsSource) {
+            for (const point of route) bounds.extend(point);
+          }
         }
 
         function clearMarkers() {
@@ -177,7 +188,7 @@ export function LoadMapCanvas({
                 map.setCenter?.(position);
               });
               markers.push(marker);
-              bounds.extend(position);
+              if (!boundsSource) bounds.extend(position);
               continue;
             }
             const point = item.point;
@@ -214,21 +225,26 @@ export function LoadMapCanvas({
               if (point.href) window.location.assign(point.href);
             });
             markers.push(marker);
-            bounds.extend(position);
+            if (!boundsSource) bounds.extend(position);
           }
         }
 
         drawPins();
         map.addListener?.("zoom_changed", drawPins);
+        if (boundsSource) {
+          for (const point of boundsSource) bounds.extend(point);
+        }
         const pinCount = points.length + route.length;
-        if (fitPadding != null && pinCount >= 1) {
-          map.fitBounds(bounds, fitPadding);
+        if (appliedPadding != null && pinCount >= 1) {
+          map.fitBounds(bounds, appliedPadding);
           let clamped = false;
           map.addListener?.("idle", () => {
             if (clamped) return;
             clamped = true;
             const zoom = map.getZoom?.();
-            if (zoom != null && zoom > maxZoom) map.setZoom?.(maxZoom);
+            if (zoom == null) return;
+            if (zoom > maxZoom) map.setZoom?.(maxZoom);
+            else if (minZoom > 0 && zoom < minZoom) map.setZoom?.(minZoom);
           });
         } else if (pinCount > 1) {
           map.fitBounds(bounds);
@@ -243,7 +259,7 @@ export function LoadMapCanvas({
       for (const marker of markers) marker.setMap(null);
       line?.setMap(null);
     };
-  }, [apiKey, hasMap, points, route, clusterPins, disableDefaultUi, fitPadding, maxZoom, onSelect]);
+  }, [apiKey, hasMap, points, route, clusterPins, disableDefaultUi, fitPadding, fitPoints, minZoom, maxZoom, onSelect]);
 
   if (!apiKey || failed) {
     return (
@@ -267,6 +283,7 @@ export function LoadMapCanvas({
       data-load-map=""
       data-map-cluster={clusterPins ? "" : undefined}
       data-map-fit-padding={fitPadding != null ? String(fitPadding) : undefined}
+      data-map-min-zoom={minZoom > 0 ? minZoom : undefined}
       data-map-max-zoom={maxZoom}
     />
   );

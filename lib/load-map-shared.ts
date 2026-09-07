@@ -126,14 +126,22 @@ export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
     .map((point) => ({ lat: point.lat, lng: point.lng }));
 }
 
-/** Workbench cards: one fitBounds + padding, then a same-state / multi-state cap. */
 export const WORKBENCH_MAP_FIT_PADDING = 56;
-export const WORKBENCH_MAP_MAX_ZOOM_MULTI_STATE = 7;
-export const WORKBENCH_MAP_MAX_ZOOM_SAME_STATE = 10;
-export const WORKBENCH_MAP_MULTI_STATE_SPAN_DEG = 4;
+export const WORKBENCH_MAP_MIN_ZOOM = 3;
+export const WORKBENCH_MAP_MAX_ZOOM = 5;
+export const WORKBENCH_MAP_MIN_SPAN_DEG = 12;
+export const WORKBENCH_MAP_PADDING_PANE_FRACTION = 0.14;
 
-export function workbenchLaneMaxZoom(points: Array<{ lat: number; lng: number }>): number {
-  if (points.length < 2) return WORKBENCH_MAP_MAX_ZOOM_SAME_STATE;
+export function workbenchLaneMaxZoom(_points?: Array<{ lat: number; lng: number }>): number {
+  return WORKBENCH_MAP_MAX_ZOOM;
+}
+
+function laneBounds(points: Array<{ lat: number; lng: number }>): {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+} {
   let minLat = points[0].lat;
   let maxLat = points[0].lat;
   let minLng = points[0].lng;
@@ -144,10 +152,66 @@ export function workbenchLaneMaxZoom(points: Array<{ lat: number; lng: number }>
     minLng = Math.min(minLng, point.lng);
     maxLng = Math.max(maxLng, point.lng);
   }
-  const span = Math.max(maxLat - minLat, maxLng - minLng);
-  return span >= WORKBENCH_MAP_MULTI_STATE_SPAN_DEG
-    ? WORKBENCH_MAP_MAX_ZOOM_MULTI_STATE
-    : WORKBENCH_MAP_MAX_ZOOM_SAME_STATE;
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+export function laneSpanDeg(points: Array<{ lat: number; lng: number }>): number {
+  if (points.length === 0) return 0;
+  const { minLat, maxLat, minLng, maxLng } = laneBounds(points);
+  return Math.max(maxLat - minLat, maxLng - minLng);
+}
+
+export function expandLaneSpan(
+  points: Array<{ lat: number; lng: number }>,
+  minSpanDeg = WORKBENCH_MAP_MIN_SPAN_DEG,
+): Array<{ lat: number; lng: number }> {
+  if (points.length === 0) return points;
+  const { minLat, maxLat, minLng, maxLng } = laneBounds(points);
+  const growLat = Math.max(0, minSpanDeg - (maxLat - minLat)) / 2;
+  const growLng = Math.max(0, minSpanDeg - (maxLng - minLng)) / 2;
+  if (growLat === 0 && growLng === 0) return points;
+  return [
+    ...points,
+    { lat: minLat - growLat, lng: minLng - growLng },
+    { lat: maxLat + growLat, lng: maxLng + growLng },
+  ];
+}
+
+export function clampFitPadding(requested: number, paneWidth: number, paneHeight: number): number {
+  const shortest = Math.min(paneWidth, paneHeight);
+  if (!Number.isFinite(shortest) || shortest <= 0) return requested;
+  const cap = Math.round(shortest * WORKBENCH_MAP_PADDING_PANE_FRACTION);
+  return Math.min(requested, Math.max(16, cap));
+}
+
+export function workbenchCardMapFraming(
+  points: Array<{ lat: number; lng: number }>,
+  pane?: { width: number; height: number },
+): {
+  fitPoints: Array<{ lat: number; lng: number }>;
+  padding: number;
+  minZoom: number;
+  maxZoom: number;
+} {
+  return {
+    fitPoints: expandLaneSpan(points),
+    padding: pane
+      ? clampFitPadding(WORKBENCH_MAP_FIT_PADDING, pane.width, pane.height)
+      : WORKBENCH_MAP_FIT_PADDING,
+    minZoom: WORKBENCH_MAP_MIN_ZOOM,
+    maxZoom: WORKBENCH_MAP_MAX_ZOOM,
+  };
+}
+
+export function workbenchPredictedZoom(
+  points: Array<{ lat: number; lng: number }>,
+  pane: { width: number; height: number },
+): number {
+  const framing = workbenchCardMapFraming(points, pane);
+  const span = laneSpanDeg(framing.fitPoints);
+  const usable = Math.max(Math.min(pane.width, pane.height) - framing.padding * 2, 1);
+  const raw = Math.log2(usable / ((256 * Math.max(span, 1e-6)) / 360));
+  return Math.min(framing.maxZoom, Math.max(framing.minZoom, Math.floor(raw)));
 }
 
 export function stopAddressLine(stop: {
