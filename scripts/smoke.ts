@@ -41,6 +41,9 @@ async function main() {
   assert.match(navSource, /Commissions/);
   assert.match(navSource, /QuickBooks/);
   assert.match(navSource, /href: "\/compliance"/);
+  assert.match(navSource, /label: "Compliance"/);
+  assert.match(navSource, /short: "Compliance"/);
+  assert.doesNotMatch(navSource, /short: "DOT"/);
   assert.match(navSource, /href: "\/fuel"/);
   assert.match(navSource, /label: "Fuel"/);
   assert.match(navSource, /href: "\/ifta"/);
@@ -7737,6 +7740,93 @@ DISPATCH CONFIRMATION
   });
   assert.ok(bothWindows.some((alert) => alert.kind === "registration"));
   assert.ok(bothWindows.some((alert) => alert.kind === "dot_inspection"));
+  assert.equal(upcoming.some((alert) => alert.kind === "drug_test"), false, "doc list stays docs-only");
+  const {
+    deriveDrugTestStatus,
+    isFailedDrugTest,
+    isPendingDrugTest,
+    matchesDrugTestFilters,
+  } = await import("../lib/drug-tests");
+  assert.equal(deriveDrugTestStatus("positive", "pending"), "failed");
+  assert.equal(deriveDrugTestStatus("refused", "ordered"), "failed");
+  assert.equal(deriveDrugTestStatus("negative", "pending"), "clear");
+  assert.equal(deriveDrugTestStatus("pending", "ordered"), "ordered");
+  assert.equal(deriveDrugTestStatus("cancelled", "failed"), "cancelled");
+  const { failedDrugTestAlerts } = await import("../lib/compliance");
+  const tyrellTestId = queries.createDrugTest({
+    driver_id: tyrell.id,
+    test_type: "random",
+    vendor: "Quest",
+    ordered_on: "2026-08-28",
+    collected_on: "2026-09-01",
+    result: "positive",
+    status: "pending",
+    notes: "",
+  });
+  const deniseTestId = queries.createDrugTest({
+    driver_id: denise.id,
+    test_type: "pre-employment",
+    vendor: "Concentra",
+    ordered_on: "2026-09-02",
+    collected_on: "",
+    result: "pending",
+    status: "pending",
+    notes: "",
+  });
+  const clearTestId = queries.createDrugTest({
+    driver_id: denise.id,
+    test_type: "random",
+    vendor: "Quest",
+    ordered_on: "2026-08-10",
+    collected_on: "2026-08-12",
+    result: "negative",
+    status: "ordered",
+    notes: "",
+  });
+  const savedFailed = queries.getDrugTest(tyrellTestId);
+  const savedPending = queries.getDrugTest(deniseTestId);
+  const savedClear = queries.getDrugTest(clearTestId);
+  assert.ok(savedFailed && savedPending && savedClear);
+  assert.equal(savedFailed.status, "failed");
+  assert.equal(savedPending.status, "pending");
+  assert.equal(savedClear.status, "clear");
+  assert.equal(isFailedDrugTest(savedFailed), true);
+  assert.equal(isPendingDrugTest(savedPending), true);
+  const failedAlerts = failedDrugTestAlerts(queries.listDrugTests());
+  assert.ok(failedAlerts.some((alert) => alert.driverId === tyrell.id && alert.severity === "failed"));
+  assert.equal(failedAlerts.some((alert) => alert.driverId === denise.id), false);
+  assert.ok(queries.listFailedDrugTestAlerts().some((alert) => /FAILED TEST/.test(alert.message)));
+  assert.equal(queries.listUpcomingCompliance().some((alert) => alert.kind === "drug_test"), false);
+  assert.equal(queries.failedDrugTestDriverIds().has(tyrell.id), true);
+  const filteredFailed = queries.listDrugTests({ status: "failed", type: "random" });
+  assert.ok(filteredFailed.some((test) => test.id === tyrellTestId));
+  assert.equal(filteredFailed.some((test) => test.id === deniseTestId), false);
+  assert.ok(matchesDrugTestFilters(savedPending, { driver: "Ortega" }));
+  queries.updateDrugTest(deniseTestId, {
+    driver_id: denise.id,
+    test_type: "pre-employment",
+    vendor: "Concentra",
+    ordered_on: "2026-09-02",
+    collected_on: "2026-09-03",
+    result: "negative",
+    status: "pending",
+    notes: "cleared",
+  });
+  assert.equal(queries.getDrugTest(deniseTestId)?.status, "clear");
+  queries.deleteDrugTest(clearTestId);
+  assert.equal(queries.getDrugTest(clearTestId), null);
+  const badgeSrc = fs.readFileSync(path.join(process.cwd(), "components/compliance-badge.tsx"), "utf8");
+  assert.match(badgeSrc, /Failed test/);
+  assert.match(badgeSrc, /severity === "failed"/);
+  const hubPage = fs.readFileSync(path.join(process.cwd(), "app/compliance/page.tsx"), "utf8");
+  assert.match(hubPage, /listUpcomingCompliance/);
+  assert.match(hubPage, /tab === "drug"/);
+  assert.match(hubPage, /No drug or alcohol tests yet/);
+  assert.match(hubPage, /Nothing expiring in those windows/);
+  assert.doesNotMatch(hubPage, /OK\/30\/EXPIRED|standalone expiry board/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8"), /DriverDrugTestsCard/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /Failed test/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /short: "Compliance"/);
 
   const confirmation = await import("../lib/load-confirmation");
   const { getCompanyProfile } = await import("../lib/company");

@@ -67,6 +67,7 @@ On this PR. Packet names and phones are layout examples only — not hardcoded.
 - Daily recap (delivered, late, on-time %, claims).
 - Watch list.
 - Compliance expirations surfaced; full list on **Compliance**.
+- **Compliance** hub (`/compliance`, sidebar was DOT): Overview reuses `listUpcomingCompliance()` + Workbench desk deep-link. **Drug & alcohol** is net-new CRUD (type, vendor, ordered/collected, result, status). Failed tests use the existing danger badge / Workbench list — no second expiry board. Driver detail shows last 5 tests. Board can chip **Failed test** on the assigned driver only.
 
 ## Accounting (nav section)
 

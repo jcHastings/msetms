@@ -1,19 +1,22 @@
+import { failedDrugTestIssue, isFailedDrugTest, type DrugTest } from "./drug-tests";
 import { formatDate } from "./format";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "./settings-shared";
 import type { Driver, Trailer, Truck } from "./types";
 
 export type { ComplianceWindows };
 
-export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection";
+export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection" | "drug_test";
 
 export type ComplianceAlert = {
-  severity: "expired" | "expiring";
+  severity: "expired" | "expiring" | "failed";
   kind: ComplianceKind;
   subject: string;
   label: string;
   expiresOn: string;
   days: number;
   message: string;
+  driverId?: number;
+  href?: string;
 };
 
 function resolvedWindows(windows?: ComplianceWindows): ComplianceWindows {
@@ -107,6 +110,7 @@ export function collectAssignmentAlerts(
 
 export function complianceShortLabel(alerts: ComplianceAlert[]): string {
   if (alerts.length === 0) return "";
+  if (alerts.some((alert) => alert.severity === "failed" || alert.kind === "drug_test")) return "failed test";
   return alerts.some((alert) => alert.severity === "expired") ? "expired docs" : "docs expiring";
 }
 
@@ -117,4 +121,33 @@ export function requireAssignmentOverride(alerts: ComplianceAlert[], confirmed: 
   throw new Error(
     `Expired documents — confirm to assign anyway. ${expired.map((alert) => alert.message).join(" ")}`,
   );
+}
+
+export function failedDrugTestAlert(test: DrugTest): ComplianceAlert {
+  return {
+    severity: "failed",
+    kind: "drug_test",
+    subject: test.driver_name,
+    label: "FAILED TEST",
+    expiresOn: test.collected_on || test.ordered_on,
+    days: 0,
+    message: `${test.driver_name}: FAILED TEST — ${failedDrugTestIssue(test)}.`,
+    driverId: test.driver_id,
+    href: `/compliance/tests/${test.id}`,
+  };
+}
+
+export function failedDrugTestAlerts(tests: DrugTest[]): ComplianceAlert[] {
+  return tests.filter(isFailedDrugTest).map(failedDrugTestAlert);
+}
+
+export function failedDrugTestAlertsByDriver(tests: DrugTest[]): Map<number, ComplianceAlert[]> {
+  const map = new Map<number, ComplianceAlert[]>();
+  for (const alert of failedDrugTestAlerts(tests)) {
+    if (alert.driverId == null) continue;
+    const current = map.get(alert.driverId) ?? [];
+    current.push(alert);
+    map.set(alert.driverId, current);
+  }
+  return map;
 }

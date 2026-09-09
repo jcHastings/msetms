@@ -1,9 +1,20 @@
 import {
   driverComplianceAlerts,
+  failedDrugTestAlerts,
   trailerComplianceAlerts,
   truckComplianceAlerts,
   type ComplianceAlert,
 } from "./compliance";
+import {
+  deriveDrugTestStatus,
+  isDrugTestResult,
+  isDrugTestStatus,
+  isDrugTestType,
+  matchesDrugTestFilters,
+  type DrugTest,
+  type DrugTestFilters,
+  type DrugTestInput,
+} from "./drug-tests";
 import {
   customerName,
   driverName,
@@ -2186,6 +2197,105 @@ export function listUpcomingCompliance(): ComplianceAlert[] {
     ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck, windows)),
     ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer, windows)),
   ].sort((a, b) => a.days - b.days);
+}
+
+const DRUG_TEST_SELECT = `SELECT driver_drug_tests.*, drivers.name AS driver_name
+         FROM driver_drug_tests
+         JOIN drivers ON drivers.id = driver_drug_tests.driver_id`;
+
+function asDrugTest(row: DrugTest): DrugTest {
+  const result = isDrugTestResult(row.result) ? row.result : "pending";
+  const rawStatus = isDrugTestStatus(row.status) ? row.status : "pending";
+  const testType = isDrugTestType(row.test_type) ? row.test_type : "other";
+  return {
+    ...row,
+    test_type: testType,
+    result,
+    status: deriveDrugTestStatus(result, rawStatus),
+    vendor: row.vendor ?? "",
+    ordered_on: row.ordered_on ?? "",
+    collected_on: row.collected_on ?? "",
+    notes: row.notes ?? "",
+    driver_name: row.driver_name ?? "",
+  };
+}
+
+export function listDrugTests(filters: DrugTestFilters = {}): DrugTest[] {
+  const rows = getDb()
+    .prepare(`${DRUG_TEST_SELECT} ORDER BY driver_drug_tests.ordered_on DESC, driver_drug_tests.id DESC`)
+    .all() as DrugTest[];
+  return rows.map(asDrugTest).filter((test) => matchesDrugTestFilters(test, filters));
+}
+
+export function listDriverDrugTests(driverId: number, limit = 5): DrugTest[] {
+  return listDrugTests().filter((test) => test.driver_id === driverId).slice(0, limit);
+}
+
+export function getDrugTest(id: number): DrugTest | null {
+  const row = getDb().prepare(`${DRUG_TEST_SELECT} WHERE driver_drug_tests.id = ?`).get(id) as DrugTest | undefined;
+  return row ? asDrugTest(row) : null;
+}
+
+export function createDrugTest(input: DrugTestInput): number {
+  if (!getDriver(input.driver_id)) throw new Error("Driver is required.");
+  if (!input.ordered_on) throw new Error("Ordered date is required.");
+  const timestamp = now();
+  const status = deriveDrugTestStatus(input.result, input.status);
+  const result = getDb()
+    .prepare(
+      `INSERT INTO driver_drug_tests (
+        driver_id, test_type, vendor, ordered_on, collected_on, result, status, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.driver_id,
+      input.test_type,
+      input.vendor,
+      cleanDateInput(input.ordered_on),
+      cleanDateInput(input.collected_on),
+      input.result,
+      status,
+      input.notes,
+      timestamp,
+      timestamp,
+    );
+  return Number(result.lastInsertRowid);
+}
+
+export function updateDrugTest(id: number, input: DrugTestInput): void {
+  if (!getDrugTest(id)) throw new Error("Test not found.");
+  if (!getDriver(input.driver_id)) throw new Error("Driver is required.");
+  if (!input.ordered_on) throw new Error("Ordered date is required.");
+  getDb()
+    .prepare(
+      `UPDATE driver_drug_tests
+       SET driver_id = ?, test_type = ?, vendor = ?, ordered_on = ?, collected_on = ?, result = ?, status = ?, notes = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      input.driver_id,
+      input.test_type,
+      input.vendor,
+      cleanDateInput(input.ordered_on),
+      cleanDateInput(input.collected_on),
+      input.result,
+      deriveDrugTestStatus(input.result, input.status),
+      input.notes,
+      now(),
+      id,
+    );
+}
+
+export function deleteDrugTest(id: number): void {
+  getDb().prepare("DELETE FROM driver_drug_tests WHERE id = ?").run(id);
+}
+
+export function listFailedDrugTestAlerts(): ComplianceAlert[] {
+  return failedDrugTestAlerts(listDrugTests());
+}
+
+export function failedDrugTestDriverIds(): Set<number> {
+  return new Set(listFailedDrugTestAlerts().map((alert) => alert.driverId).filter((id): id is number => id != null));
 }
 
 export function cloneLoad(loadId: number): number {

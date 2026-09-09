@@ -8,10 +8,10 @@ import { ActiveStatusCell, ExpiryCell } from "@/components/expiry-cell";
 import { FleetRowActions } from "@/components/fleet-row-actions";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
-import { driverComplianceAlerts } from "@/lib/compliance";
+import { driverComplianceAlerts, failedDrugTestAlertsByDriver } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
-import { assignedFleetAssetIds, listDrivers, listTrucks } from "@/lib/queries";
+import { assignedFleetAssetIds, listDrivers, listDrugTests, listTrucks } from "@/lib/queries";
 import { fleetDivisionOf, formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
 
@@ -26,6 +26,7 @@ export default async function DriversPage({
   const params = await searchParams;
   const q = String(params.q ?? "").trim();
   const windows = complianceWindows();
+  const failedByDriver = failedDrugTestAlertsByDriver(listDrugTests());
   const directory = pageFleetRows(filterDrivers(listDrivers(), q), params.page);
   const drivers = directory.rows;
   const trucks = listTrucks();
@@ -95,6 +96,9 @@ export default async function DriversPage({
                   >
                     <td>
                       <span className="font-semibold hover:underline">{driver.name}</span>
+                      {failedByDriver.has(driver.id) ? (
+                        <span className="status-pill status-tone-danger ml-2">Failed test</span>
+                      ) : null}
                     </td>
                     <td>{fleetDivisionOf(driver)}</td>
                     <td>{driver.phone || "—"}</td>

@@ -25,12 +25,16 @@ import {
   deleteSavedReport,
   deleteTrailer,
   deleteTruck,
+  createDrugTest,
+  deleteDrugTest,
   getDriver,
+  getDrugTest,
   getTrailer,
   getTruck,
   importLocationsFromCsv,
   updateCustomer,
   updateDriver,
+  updateDrugTest,
   updateLoad,
   updateLoadDetails,
   updateLoadStatus,
@@ -71,6 +75,11 @@ import {
 } from "./types";
 import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
+import {
+  parseDrugTestResult,
+  parseDrugTestStatus,
+  parseDrugTestType,
+} from "./drug-tests";
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
@@ -1919,6 +1928,68 @@ export async function confirmLoadsImportAction(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Load import failed." };
   }
+}
+
+function parseDrugTestForm(formData: FormData) {
+  const driverId = parseOptionalInt(formData.get("driver_id"));
+  if (driverId == null) throw new Error("Driver is required.");
+  return {
+    driver_id: driverId,
+    test_type: parseDrugTestType(formData.get("test_type")),
+    vendor: String(formData.get("vendor") ?? "").trim(),
+    ordered_on: parseDateField(formData.get("ordered_on")),
+    collected_on: parseDateField(formData.get("collected_on")),
+    result: parseDrugTestResult(formData.get("result")),
+    status: parseDrugTestStatus(formData.get("status")),
+    notes: String(formData.get("notes") ?? "").trim(),
+  };
+}
+
+function drugTestReturnTo(formData: FormData, fallback: string): string {
+  return safeReturnTo(String(formData.get("return_to") ?? ""), fallback);
+}
+
+export async function createDrugTestAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Compliance is for Administrator and Standard.");
+    const id = createDrugTest(parseDrugTestForm(formData));
+    refresh();
+    redirect(drugTestReturnTo(formData, "/compliance?tab=drug"));
+    return { ok: true, id };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateDrugTestAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Compliance is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("id"));
+    if (id == null || !getDrugTest(id)) throw new Error("Test not found.");
+    updateDrugTest(id, parseDrugTestForm(formData));
+    refresh();
+    redirect(drugTestReturnTo(formData, "/compliance?tab=drug"));
+    return { ok: true, id };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function deleteDrugTestAction(formData: FormData): Promise<void> {
+  await requireCapability(canEditFleet, "Compliance is for Administrator and Standard.");
+  const id = parseOptionalInt(formData.get("id"));
+  if (id == null) throw new Error("Test not found.");
+  deleteDrugTest(id);
+  refresh();
+  redirect(drugTestReturnTo(formData, "/compliance?tab=drug"));
 }
 
 type LoadImportPreviewState = import("./load-import-shared").LoadImportPreviewState;

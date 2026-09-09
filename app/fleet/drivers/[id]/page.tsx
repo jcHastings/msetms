@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DriverComplianceCard } from "@/components/driver-compliance-card";
+import { DriverDrugTestsCard } from "@/components/driver-drug-tests-card";
 import { DriverFuelCard } from "@/components/driver-fuel-card";
 import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { listFleetDocuments } from "@/lib/files";
 import { driverFormValues } from "@/lib/fleet-form-shared";
-import { getDriver } from "@/lib/queries";
+import { getDriver, listDriverDrugTests } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function EditDriverPage({
         }
       />
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
+      <DriverDrugTestsCard driverId={Number(driver.id)} tests={listDriverDrugTests(Number(driver.id), 5)} />
       <DriverFuelCard driverId={Number(driver.id)} />
       <DriverForm
         driver={driverFormValues({

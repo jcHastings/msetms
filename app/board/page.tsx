@@ -35,7 +35,13 @@ import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-s
 import { loadStatusRowClass } from "@/lib/load-status-style";
 import { sortMasterFamilies } from "@/lib/master-load-shared";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
-import { listAssignableDrivers, listAssignableTrailers, listAssignableTrucks, listLoads } from "@/lib/queries";
+import {
+  failedDrugTestDriverIds,
+  listAssignableDrivers,
+  listAssignableTrailers,
+  listAssignableTrucks,
+  listLoads,
+} from "@/lib/queries";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -138,6 +144,7 @@ async function BoardLiveSection({
   assignableDrivers: ReturnType<typeof listAssignableDrivers>;
   relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
 }) {
+  const failedDrivers = failedDrugTestDriverIds();
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
@@ -247,6 +254,11 @@ async function BoardLiveSection({
                             {assignedLoadName(load)}
                             {relayLabels.get(load.id) ? ` ${relayLabels.get(load.id)}` : ""}
                           </div>
+                          {load.driver_id && failedDrivers.has(load.driver_id) ? (
+                            <span className="status-pill status-tone-danger mt-1" data-failed-test-chip="">
+                              Failed test
+                            </span>
+                          ) : null}
                         </>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>

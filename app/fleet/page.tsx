@@ -3,7 +3,12 @@ import { ComplianceBadge } from "@/components/compliance-badge";
 import { DirectorySearch } from "@/components/directory-chrome";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge, DriverStatusBadge, TruckStatusBadge } from "@/components/status-badge";
-import { driverComplianceAlerts, trailerComplianceAlerts, truckComplianceAlerts } from "@/lib/compliance";
+import {
+  driverComplianceAlerts,
+  failedDrugTestAlertsByDriver,
+  trailerComplianceAlerts,
+  truckComplianceAlerts,
+} from "@/lib/compliance";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { directoryHref } from "@/lib/directory-page";
 import {
@@ -14,7 +19,7 @@ import {
   pageFleetRows,
 } from "@/lib/fleet-directory";
 import { formatWeight } from "@/lib/format";
-import { listDrivers, listTrailers, listTrucks } from "@/lib/queries";
+import { listDrivers, listDrugTests, listTrailers, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 import { isOwnerOperator, labelForTrailerType, labelForTruckType } from "@/lib/types";
 
@@ -30,6 +35,7 @@ export default async function FleetPage({
   const type = params.type ?? "all";
   const q = String(params.q ?? "").trim();
   const windows = complianceWindows();
+  const failedByDriver = failedDrugTestAlertsByDriver(listDrugTests());
   const extra = type !== "all" ? { type } : undefined;
   const trucks = pageFleetRows(filterTrucks(listTrucks(), q), 1, FLEET_HUB_PAGE_SIZE);
   const trailers = pageFleetRows(filterTrailers(listTrailers(), q), 1, FLEET_HUB_PAGE_SIZE);
@@ -216,7 +222,12 @@ export default async function FleetPage({
                     {[driver.license_state, driver.license_number].filter(Boolean).join("-") || driver.license || "—"}
                   </td>
                   <td>
-                    <ComplianceBadge alerts={driverComplianceAlerts(driver, windows)} />
+                    <ComplianceBadge
+                      alerts={[
+                        ...driverComplianceAlerts(driver, windows),
+                        ...(failedByDriver.get(driver.id) ?? []),
+                      ]}
+                    />
                   </td>
                   <td>{driver.pin ? "Set" : "—"}</td>
                   <td>{driver.truck_unit ? `Unit ${driver.truck_unit}` : "—"}</td>

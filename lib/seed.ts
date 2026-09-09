@@ -542,6 +542,26 @@ export function seedDatabase(db: Database): void {
     patchDriver.run("104552", "MS", isoDate(400), isoDate(-400), isoDate(-10), "company_driver", null, "", "Tyrell Brooks");
     patchDriver.run("667320", "KS", isoDate(400), isoDate(-90), isoDate(210), "owner_operator", 80, "Keene Transport", "Sam Keene");
 
+    const insertTest = db.prepare(
+      `INSERT INTO driver_drug_tests (
+        driver_id, test_type, vendor, ordered_on, collected_on, result, status, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const seedDriverId = (name: string) =>
+      (db.prepare("SELECT id FROM drivers WHERE name = ?").get(name) as { id: number } | undefined)?.id;
+    const tyrellId = seedDriverId("Tyrell Brooks");
+    const deniseId = seedDriverId("Denise Ortega");
+    const marcusId = seedDriverId("Marcus Hale");
+    if (tyrellId) {
+      insertTest.run(tyrellId, "random", "Quest", isoDate(-8), isoDate(-7), "positive", "failed", "", created, created);
+    }
+    if (deniseId) {
+      insertTest.run(deniseId, "pre-employment", "Concentra", isoDate(-6), "", "pending", "pending", "", created, created);
+    }
+    if (marcusId) {
+      insertTest.run(marcusId, "random", "Quest", isoDate(-20), isoDate(-18), "negative", "clear", "", created, created);
+    }
+
     seedDemoLocations(db);
   });
 

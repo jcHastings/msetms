@@ -400,7 +400,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/locations") return canEditLocations(role) || accessRole(role) === "read_only";
   if (href === "/audit") return canViewAudit(role);
   if (href === "/settings/sign-in") return canManageUsers(role);
-  if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href === "/safety") {
+  if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href.startsWith("/compliance/") || href === "/safety") {
     return canEditFleet(role);
   }
   if (href === "/fuel") return canUploadFuel(role);

@@ -26,8 +26,10 @@ import {
   listLoads,
   listMovingLoads,
   listTrucks,
+  listFailedDrugTestAlerts,
   listUpcomingCompliance,
   listCustomers,
+  listFailedDrugTestAlerts,
   listLocations,
   listTrailers,
   listWatchedLoads,
@@ -64,6 +66,7 @@ export default async function DashboardPage({
   const availableTrucks = trucks.filter((truck) => truck.status === "available");
   const onDuty = drivers.filter((driver) => driver.status === "on_duty");
   const expirations = listUpcomingCompliance();
+  const failedTests = listFailedDrugTestAlerts();
   const inboxRaw = listLiveExceptionInbox({ kind: params.kind, q: params.q });
   const inboxItems = inboxRaw.items.filter((item) => {
     const load = getLoad(item.loadId);
@@ -299,6 +302,14 @@ export default async function DashboardPage({
               <ComplianceList alerts={expirations} />
             )}
           </div>
+          {failedTests.length > 0 ? (
+            <div className="mt-4" data-failed-drug-tests="">
+              <h3 className="text-xs font-semibold uppercase text-slate-500">Failed tests</h3>
+              <div className="mt-2">
+                <ComplianceList alerts={failedTests} />
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="card overflow-hidden xl:col-span-3">

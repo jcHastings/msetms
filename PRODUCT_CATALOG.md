@@ -199,7 +199,7 @@ Credentials stay in gitignored `.env`. Demo is labeled. A failed live API is an 
 140. [v1] Remaining drive time from Samsara HOS clocks (live or labeled demo).
 141. CDL class and endorsements (hazmat, tanker).
 142. Twic / passport / FAST.
-143. Drug test / clearinghouse status.
+143. [v1] Drug & alcohol tests (CRUD + list + failed-test badge). Clearinghouse API later.
 144. Hire date / termination date.
 145. Emergency contact.
 146. Preferred home time.

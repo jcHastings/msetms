@@ -980,6 +980,21 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_load_chat_load ON load_chat_messages(load_id, id);
+    CREATE TABLE IF NOT EXISTS driver_drug_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      test_type TEXT NOT NULL,
+      vendor TEXT NOT NULL DEFAULT '',
+      ordered_on TEXT NOT NULL DEFAULT '',
+      collected_on TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL DEFAULT 'pending',
+      status TEXT NOT NULL DEFAULT 'ordered',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_driver ON driver_drug_tests(driver_id, ordered_on DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_status ON driver_drug_tests(status, id DESC);
   `);
 
   backfillDispatchers(db);

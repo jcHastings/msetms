@@ -48,7 +48,7 @@ const NAV: NavEntry[] = [
       { href: "/fleet/orbcomm", label: "Orbcomm", short: "Orbcomm", icon: "orbcomm" },
       { href: "/fuel", label: "Fuel", short: "Fuel", icon: "fuel" },
       { href: "/ifta", label: "IFTA", short: "IFTA", icon: "ifta" },
-      { href: "/compliance", label: "Compliance", short: "DOT", icon: "compliance" },
+      { href: "/compliance", label: "Compliance", short: "Compliance", icon: "compliance" },
       { href: "/safety", label: "Safety", short: "Safety", icon: "safety" },
     ],
   },
