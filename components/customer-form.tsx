@@ -40,6 +40,28 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
           <label htmlFor="name">Customer name</label>
           <input id="name" name="name" required defaultValue={customer?.name} />
         </div>
+        <div className="field">
+          <label htmlFor="main_email">Main email</label>
+          <input
+            id="main_email"
+            name="main_email"
+            type="email"
+            defaultValue={customer?.main_email}
+            placeholder="Office / dispatch"
+            data-customer-main-email=""
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="billing_email">Billing email</label>
+          <input
+            id="billing_email"
+            name="billing_email"
+            type="email"
+            defaultValue={customer?.billing_email}
+            placeholder="Invoices go here"
+            data-customer-billing-email=""
+          />
+        </div>
         <div className="field md:col-span-2">
           <label htmlFor="billing_notes">Billing notes</label>
           <textarea
@@ -47,9 +69,22 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
             name="billing_notes"
             rows={3}
             defaultValue={customer?.billing_notes}
-            placeholder="Terms, invoice email, special billing instructions"
+            placeholder="Terms, special billing instructions"
           />
         </div>
+        <div className="field">
+          <label htmlFor="payment_terms">Payment terms</label>
+          <input
+            id="payment_terms"
+            name="payment_terms"
+            defaultValue={customer?.payment_terms}
+            placeholder="Net 30"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="credit_hold" value="1" defaultChecked={Boolean(customer?.credit_hold)} />
+          Credit hold
+        </label>
       </div>
       <div>
         <div className="mb-3 flex items-center justify-between">

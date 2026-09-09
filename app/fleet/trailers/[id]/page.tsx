@@ -4,10 +4,13 @@ import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { TrailerForm } from "@/components/trailer-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
-import { updateTrailerAction } from "@/lib/actions";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
-import { getTrailer } from "@/lib/queries";
+import { trailerFormValues, truckOption } from "@/lib/fleet-form-shared";
+import { TrailerShareLinkPanel } from "@/components/trailer-share-link";
+import { getTrailer, listTrucks } from "@/lib/queries";
+import { complianceWindows } from "@/lib/settings";
+import { latestTrailerShareLink, trailerSharePath } from "@/lib/trailer-share";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +21,15 @@ export default async function EditTrailerPage({
 }) {
   const trailer = getTrailer(Number.parseInt((await params).id, 10));
   if (!trailer) notFound();
-  const boundAction = updateTrailerAction.bind(null, trailer.id);
+  const latestShare = latestTrailerShareLink(trailer.id);
 
   return (
     <>
       <PageHeader
         title={`Trailer ${trailer.unit_number}`}
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trailers" className="btn btn-secondary">
+            Back to trailers
           </Link>
         }
       />
@@ -35,10 +38,27 @@ export default async function EditTrailerPage({
         registrationExpires={trailer.registration_expires}
         inspectedOn={trailer.dot_inspected_on}
         inspectionExpires={trailer.dot_expires}
-        alerts={trailerComplianceAlerts(trailer)}
+        alerts={trailerComplianceAlerts(trailer, complianceWindows())}
       />
-      <TrailerForm trailer={trailer} action={boundAction} submitLabel="Save trailer" />
-      <FleetDocsPanel ownerType="trailer" ownerId={trailer.id} documents={listFleetDocuments("trailer", trailer.id)} />
+      {trailer.orbcomm_asset_id.trim() ? (
+        <div className="mb-6">
+          <TrailerShareLinkPanel
+            trailerId={trailer.id}
+            sharePath={latestShare ? trailerSharePath(latestShare.token) : ""}
+            expiresAt={latestShare?.expires_at ?? ""}
+          />
+        </div>
+      ) : null}
+      <TrailerForm
+        trailer={trailerFormValues(trailer)}
+        trucks={listTrucks().map(truckOption)}
+        submitLabel="Save trailer"
+      />
+      <FleetDocsPanel
+        ownerType="trailer"
+        ownerId={Number(trailer.id)}
+        documents={listFleetDocuments("trailer", trailer.id)}
+      />
     </>
   );
 }

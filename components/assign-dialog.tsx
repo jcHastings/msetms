@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useDismissable } from "@/components/use-dismissable";
 import { ComplianceList } from "@/components/compliance-badge";
 import { assignLoadAction } from "@/lib/actions";
 import {
@@ -10,7 +12,8 @@ import {
   trailerComplianceAlerts,
   truckComplianceAlerts,
 } from "@/lib/compliance";
-import type { DriverWithTruck, Trailer, Truck } from "@/lib/types";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import { fleetDivisionOf, isOwnerOperator, type DriverWithTruck, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
   loadId: number;
@@ -19,24 +22,51 @@ type Props = {
   trailers: Trailer[];
   drivers: DriverWithTruck[];
   label?: string;
+  defaultOoPercent?: number;
+  alertWindows?: ComplianceWindows;
 };
 
-export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, label = "Assign" }: Props) {
+export function AssignDialog({
+  loadId,
+  loadNumber,
+  trucks,
+  trailers,
+  drivers,
+  label = "Assign",
+  defaultOoPercent = 75,
+  alertWindows = DEFAULT_COMPLIANCE_WINDOWS,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [truckId, setTruckId] = useState("");
   const [trailerId, setTrailerId] = useState("");
   const [driverId, setDriverId] = useState("");
-  const [ooPercent, setOoPercent] = useState("75");
+  const [ooPercent, setOoPercent] = useState(String(defaultOoPercent));
   const [confirmed, setConfirmed] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const panelRef = useRef<HTMLFormElement>(null);
+  useDismissable(open, () => setOpen(false), panelRef);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   const driver = drivers.find((item) => String(item.id) === driverId);
   const truck = trucks.find((item) => String(item.id) === truckId);
   const trailer = trailers.find((item) => String(item.id) === trailerId);
   const alerts = useMemo(
-    () => collectAssignmentAlerts({ driver, truck, trailer }),
-    [driver, truck, trailer],
+    () => collectAssignmentAlerts({ driver, truck, trailer }, alertWindows),
+    [driver, truck, trailer, alertWindows],
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
 
@@ -44,11 +74,14 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
     setDriverId(value);
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
-    if (next?.driver_type === "owner_operator") {
-      setOoPercent(String(next.pay_percent ?? 75));
+    if (next && isOwnerOperator(next.driver_type)) {
+      setOoPercent(String(next.pay_percent ?? defaultOoPercent));
     }
     if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
       setTruckId(String(next.truck_id));
+    }
+    if (next?.last_trailer_id && trailers.some((item) => item.id === next.last_trailer_id)) {
+      setTrailerId(String(next.last_trailer_id));
     }
   }
 
@@ -65,17 +98,19 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
     setOpen(false);
   }
 
-  return (
-    <>
-      <button className="btn btn-secondary" type="button" onClick={() => setOpen(true)}>
-        {label}
-      </button>
-      {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6">
-          <form className="card w-full max-w-md p-5 shadow-xl" onSubmit={onSubmit}>
+  const panel = (
+    <div
+      className="fixed inset-0 z-[80] overflow-y-auto overscroll-contain bg-slate-900/40 p-3 sm:flex sm:items-center sm:justify-center sm:p-6"
+      data-assign-overlay=""
+    >
+      <form
+        ref={panelRef}
+        className="card mx-auto my-3 w-full max-w-md p-5 shadow-xl sm:my-0"
+        data-assign-panel=""
+        onSubmit={onSubmit}
+      >
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Assign {loadNumber}</h2>
-              <p className="mt-1 text-sm text-slate-500">Pair a truck, trailer, and driver.</p>
             </div>
             <input type="hidden" name="load_id" value={loadId} />
             {confirmed ? <input type="hidden" name="confirm_expired" value="1" /> : null}
@@ -93,9 +128,10 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                   {drivers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
-                      {item.driver_type === "owner_operator" ? " · OO" : ""}
+                      {` · ${fleetDivisionOf(item)}`}
+                      {isOwnerOperator(item.driver_type) ? " · OO" : ""}
                       {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
-                      {driverOptionNote(item)}
+                      {driverOptionNote(item, alertWindows)}
                     </option>
                   ))}
                 </select>
@@ -115,8 +151,9 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                   <option value="">Select truck</option>
                   {trucks.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.unit_number} · {item.type.replaceAll("_", " ")}
-                      {optionNote(truckComplianceAlerts(item))}
+                      {item.unit_number}
+                      {` · ${fleetDivisionOf(item)}`}
+                      {optionNote(truckComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}
                 </select>
@@ -135,13 +172,13 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
                   <option value="">None</option>
                   {trailers.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.unit_number} · {item.type.replaceAll("_", " ")}
-                      {optionNote(trailerComplianceAlerts(item))}
+                      {item.unit_number} · {fleetDivisionOf(item)} · {item.type.replaceAll("_", " ")}
+                      {optionNote(trailerComplianceAlerts(item, alertWindows))}
                     </option>
                   ))}
                 </select>
               </div>
-              {driver?.driver_type === "owner_operator" ? (
+              {isOwnerOperator(driver?.driver_type) ? (
                 <div className="field">
                   <label htmlFor={`oo-${loadId}`}>Owner-operator %</label>
                   <input
@@ -173,23 +210,33 @@ export function AssignDialog({ loadId, loadNumber, trucks, trailers, drivers, la
               ) : null}
               {error ? <p className="text-sm text-rose-700">{error}</p> : null}
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" type="submit" disabled={pending || (expired && !confirmed)}>
-                {pending ? "Assigning…" : "Assign unit"}
+              <button className="btn btn-secondary" name="dispatch" value="" type="submit" disabled={pending || (expired && !confirmed)}>
+                {pending ? "Assigning…" : "Assign"}
+              </button>
+              <button className="btn btn-primary" name="dispatch" value="1" type="submit" disabled={pending || (expired && !confirmed)}>
+                {pending ? "Dispatching…" : "Assign & Dispatch"}
               </button>
             </div>
-          </form>
-        </div>
-      ) : null}
+      </form>
+    </div>
+  );
+
+  return (
+    <>
+      <button className="btn btn-secondary" type="button" data-assign-open="" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+      {open && mounted ? createPortal(panel, document.body) : null}
     </>
   );
 }
 
-function driverOptionNote(driver: DriverWithTruck): string {
-  return optionNote(driverComplianceAlerts(driver));
+function driverOptionNote(driver: DriverWithTruck, windows: ComplianceWindows): string {
+  return optionNote(driverComplianceAlerts(driver, windows));
 }
 
 function optionNote(alerts: ReturnType<typeof truckComplianceAlerts>): string {

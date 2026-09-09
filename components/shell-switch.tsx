@@ -1,12 +1,72 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
+import type { MikeMessage } from "@/lib/mike-shared";
+import type { PublicDispatcher } from "@/lib/settings-shared";
 
-export function ShellSwitch({ children }: { children: React.ReactNode }) {
+export function ShellSwitch({
+  children,
+  dispatcher,
+  requireTwoFactor = false,
+  mikeConfigured = false,
+  mikeMessages = [],
+  officeNotifications = [],
+}: {
+  children: React.ReactNode;
+  dispatcher: PublicDispatcher | null;
+  requireTwoFactor?: boolean;
+  mikeConfigured?: boolean;
+  mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
+}) {
   const pathname = usePathname();
-  if (pathname.startsWith("/driver")) {
+  const router = useRouter();
+  const publicPath =
+    pathname.startsWith("/driver") ||
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname.startsWith("/t/") ||
+    pathname.startsWith("/l/");
+  const changePath = pathname === "/login/change-password";
+
+  useEffect(() => {
+    if (!publicPath && !dispatcher) {
+      router.replace("/login");
+    }
+    if (dispatcher?.must_change_password && !changePath && !pathname.startsWith("/driver")) {
+      router.replace("/login/change-password");
+    }
+  }, [publicPath, changePath, dispatcher, pathname, router]);
+
+  if (publicPath) {
     return <>{children}</>;
   }
-  return <AppShell>{children}</AppShell>;
+  if (dispatcher?.must_change_password) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Redirecting to set your password…
+      </div>
+    );
+  }
+  if (!dispatcher) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Redirecting to dispatcher login…
+      </div>
+    );
+  }
+  return (
+    <AppShell
+      dispatcher={dispatcher}
+      requireTwoFactor={requireTwoFactor}
+      mikeConfigured={mikeConfigured}
+      mikeMessages={mikeMessages}
+      officeNotifications={officeNotifications}
+    >
+      {children}
+    </AppShell>
+  );
 }

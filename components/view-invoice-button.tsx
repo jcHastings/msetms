@@ -1,0 +1,85 @@
+"use client";
+
+import { useState } from "react";
+import { downloadAndOpenPdf, filenameFromContentDisposition } from "@/lib/open-generated-pdf";
+import { isBillableStatus } from "@/lib/types";
+
+export function ViewInvoiceButton({
+  loadId,
+  status,
+  attachmentId = null,
+}: {
+  loadId: number;
+  status: string;
+  attachmentId?: number | null;
+}) {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const canInvoice = isBillableStatus(status);
+
+  async function onClick() {
+    setError("");
+    setPending(true);
+    const preview = window.open("about:blank", "_blank");
+    try {
+      if (attachmentId) {
+        const stored = await fetch(`/api/attachments/${attachmentId}`);
+        if (stored.ok) {
+          const blob = await stored.blob();
+          downloadAndOpenPdf(blob, "invoice.pdf", preview, {
+            openUrl: `/api/attachments/${attachmentId}`,
+            downloadUrl: `/api/attachments/${attachmentId}?download=1`,
+          });
+          return;
+        }
+      }
+      const response = await fetch(`/api/loads/${loadId}/invoice`, { method: "POST" });
+      if (!response.ok) {
+        preview?.close();
+        const raw = await response.text();
+        let message = raw.trim();
+        try {
+          const parsed = JSON.parse(raw) as { error?: string };
+          if (parsed?.error) message = parsed.error;
+        } catch {
+          // plain-text error from generate
+        }
+        setError(message || "Could not create invoice.");
+        return;
+      }
+      const blob = await response.blob();
+      const filename = filenameFromContentDisposition(response.headers.get("content-disposition"), "invoice.pdf");
+      const createdId = response.headers.get("X-Attachment-Id");
+      downloadAndOpenPdf(
+        blob,
+        filename,
+        preview,
+        createdId
+          ? {
+              openUrl: `/api/attachments/${createdId}`,
+              downloadUrl: `/api/attachments/${createdId}?download=1`,
+            }
+          : undefined,
+      );
+    } catch (cause) {
+      preview?.close();
+      setError(cause instanceof Error ? cause.message : "Could not open invoice.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex flex-col items-start gap-1">
+      <button
+        className="btn btn-secondary"
+        type="button"
+        onClick={onClick}
+        disabled={pending || (!attachmentId && !canInvoice)}
+      >
+        {pending ? "Opening…" : "View Invoice"}
+      </button>
+      {error ? <span className="text-xs text-rose-700">{error}</span> : null}
+    </span>
+  );
+}
