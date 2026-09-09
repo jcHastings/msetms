@@ -85,8 +85,10 @@ export default async function CompliancePage({
             </section>
             <section className="card p-5" data-compliance-tests-attention="">
               <h2 className="text-sm font-semibold">Drug & alcohol attention</h2>
-              {attention.length === 0 ? (
+              {allTests.length === 0 ? (
                 <EmptyDrugTests />
+              ) : attention.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-500">No failed or pending tests.</p>
               ) : (
                 <div className="mt-3 overflow-x-auto">
                   <table className="table-grid">
@@ -190,10 +192,12 @@ export default async function CompliancePage({
             </Link>
           </form>
           <section className="card overflow-hidden" data-drug-test-list="">
-            {tests.length === 0 ? (
+            {allTests.length === 0 ? (
               <div className="p-6">
                 <EmptyDrugTests />
               </div>
+            ) : tests.length === 0 ? (
+              <p className="p-6 text-sm text-slate-500">No tests match these filters.</p>
             ) : (
               <table className="table-grid">
                 <thead>
