@@ -26,7 +26,6 @@ import {
   listLoads,
   listMovingLoads,
   listTrucks,
-  listFailedDrugTestAlerts,
   listUpcomingCompliance,
   listCustomers,
   listFailedDrugTestAlerts,

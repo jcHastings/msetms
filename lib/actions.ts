@@ -1976,7 +1976,7 @@ export async function updateDrugTestAction(
     updateDrugTest(id, parseDrugTestForm(formData));
     refresh();
     redirect(drugTestReturnTo(formData, "/compliance?tab=drug"));
-    return { ok: true, id };
+    return { ok: true, id: id ?? undefined };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);

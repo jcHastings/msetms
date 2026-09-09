@@ -233,6 +233,7 @@ export default async function CompliancePage({
                           Open
                         </Link>
                       </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
