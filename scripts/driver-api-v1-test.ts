@@ -76,6 +76,35 @@ async function read(res: Response): Promise<{ status: number; json: unknown; hea
   return { status: res.status, json, headers: res.headers };
 }
 
+const API_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const DATETIME_KEYS = new Set([
+  "expires_at",
+  "pickup_start",
+  "pickup_end",
+  "delivery_start",
+  "delivery_end",
+  "window_start",
+  "window_end",
+  "arrived_at",
+  "departed_at",
+  "created_at",
+]);
+
+function assertApiDateTimes(value: unknown, trail = "$"): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertApiDateTimes(item, `${trail}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  for (const [key, item] of Object.entries(record)) {
+    if (DATETIME_KEYS.has(key) && typeof item === "string" && item.trim()) {
+      assert.match(item, API_DATETIME, `${trail}.${key} must be ISO-8601 with timezone`);
+    }
+    assertApiDateTimes(item, `${trail}.${key}`);
+  }
+}
+
 function assertNoSecrets(value: unknown, trail = "$"): void {
   if (Array.isArray(value)) {
     value.forEach((item, index) => assertNoSecrets(item, `${trail}[${index}]`));
@@ -225,7 +254,9 @@ async function main() {
   assert.equal(session.driver.display_name, "Alex Rivera");
   assert.equal(session.driver.first_name, "Alex");
   assert.equal(session.driver.phone, "555-0101");
+  assert.match(session.expires_at, API_DATETIME);
   assertNoSecrets(session);
+  assertApiDateTimes(session);
 
   const auth = { Authorization: `Bearer ${session.token}` };
 
@@ -248,6 +279,7 @@ async function main() {
   assert.deepEqual(summary.next_actions.allowed_progress, ["en_route_pickup"]);
   assert.equal(summary.next_actions.can_check_stops, true);
   assertNoSecrets(active.json);
+  assertApiDateTimes(active.json);
 
   const recent = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=recent`, { headers: auth })));
   assert.equal(recent.status, 200);
@@ -284,6 +316,18 @@ async function main() {
   assert.ok(loadDetail.stops.some((stop) => stop.kind === "pickup"));
   assert.ok(loadDetail.stops.some((stop) => stop.kind === "delivery"));
   assertNoSecrets(detail.json);
+  assertApiDateTimes(detail.json);
+
+  const { getDb } = await import("../lib/db");
+  getDb().prepare("UPDATE loads SET pickup_start = ? WHERE id = ?").run("2026-09-11T15:00:00", activeId);
+  const naive = await read(
+    await loadRoute.GET(request(`${BASE}/loads/${activeId}`, { headers: auth }), {
+      params: Promise.resolve({ id: String(activeId) }),
+    }),
+  );
+  const naiveStart = (naive.json as { pickup_start: string }).pickup_start;
+  assert.match(naiveStart, API_DATETIME, "naive pickup_start is rewritten with timezone");
+  assert.notEqual(naiveStart, "2026-09-11T15:00:00");
 
   const loginC = await read(
     await loginRoute.POST(
@@ -413,6 +457,43 @@ async function main() {
   assert.equal(attachment.original_name, "pod.png");
   assert.match(attachment.uploaded_by, /Alex Rivera|driver/);
   assertNoSecrets(uploaded.json);
+  assertApiDateTimes(uploaded.json);
+
+  const otherForm = new FormData();
+  otherForm.set("kind", "other");
+  otherForm.set("client_request_id", "other-1");
+  otherForm.set("file", new File([bytes], "note.png", { type: "image/png" }));
+  const otherUpload = await read(
+    await attachRoute.POST(
+      request(`${BASE}/loads/${activeId}/attachments`, { method: "POST", headers: auth, body: otherForm }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    ),
+  );
+  assert.equal(otherUpload.status, 200, `other kind ${JSON.stringify(otherUpload.json)}`);
+  assert.equal((otherUpload.json as { attachment: { kind: string } }).attachment.kind, "other");
+
+  const rateForm = new FormData();
+  rateForm.set("kind", "rate_con");
+  rateForm.set("client_request_id", "rate-1");
+  rateForm.set("file", new File([bytes], "rate.png", { type: "image/png" }));
+  const rateUpload = await read(
+    await attachRoute.POST(
+      request(`${BASE}/loads/${activeId}/attachments`, { method: "POST", headers: auth, body: rateForm }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    ),
+  );
+  assert.equal(rateUpload.status, 409);
+
+  const { DRIVER_API_ATTACHMENT_KINDS, toDriverApiDateTime } = await import("../lib/driver-api");
+  assert.match(toDriverApiDateTime("2026-09-11T15:00:00-05:00"), API_DATETIME);
+  assert.equal(toDriverApiDateTime("2026-09-11T20:00:00.000Z"), "2026-09-11T20:00:00.000Z");
+  assert.equal(toDriverApiDateTime(""), "");
+  assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("rate_con"), true);
+  assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("invoice"), true);
+  assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("ifta"), true);
+  assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("claim"), true);
+  assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("other"), true);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/auth/refresh/route.ts")), false);
 
   const replayUpload = await read(
     await attachRoute.POST(

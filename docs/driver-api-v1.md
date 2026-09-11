@@ -11,6 +11,8 @@ Rules:
 - No customer rate, invoices, or owner-operator pay on any DTO
 - No office cookies (`tms_driver_id` is not set)
 - Writes are idempotent via `client_request_id` (same driver + id returns the same success)
+- All datetime strings are ISO-8601 with a timezone (`2026-09-11T15:00:00.000Z` or `…-05:00`). Empty means unset.
+- No refresh-token endpoint in v1. `401` is enough for the client to clear Keychain and return to PIN login.
 
 ## Enums
 
@@ -18,7 +20,7 @@ Rules:
 | --- | --- |
 | `DriverProgress` | `en_route_pickup` \| `loaded` \| `en_route_delivery` \| `delivered` |
 | `StopCheckKind` | `arrive` \| `depart` |
-| `AttachmentKind` (driver upload) | `fuel_receipt`, `carrier_invoice`, `scale_ticket`, `bol`, `pod`, `lumper`, `photo_trailer`, `photo_product`, `photo_seals`, `temp_log` |
+| `AttachmentKind` | Full TMS enum: `rate_con`, `invoice`, `carrier_invoice`, `bol`, `pod`, `lumper`, `photo_trailer`, `photo_product`, `photo_seals`, `ifta`, `temp_log`, `scale_ticket`, `fuel_receipt`, `claim`, `unclassified`, `other`. iOS UI subsets what the driver can pick. `rate_con` / `invoice` never upload or return (customer rate). |
 | `ScheduleType` | `APPT` \| `FCFS` (mapped from existing `appointment` / `fcfs` helpers) |
 
 ## Errors
@@ -48,6 +50,8 @@ Success: `{ "token", "expires_at", "driver": { "id", "display_name", "first_name
 ### `POST /auth/logout`
 
 Revokes the current bearer token. `204` empty body.
+
+There is no `/auth/refresh` in v1. When the token expires or is revoked, the API returns `401` and the client should clear Keychain.
 
 ### `GET /me`
 
@@ -79,7 +83,7 @@ Same rules as `driverStopCheckAction`: pickup depart before delivery arrive; che
 
 ### `POST /loads/{id}/attachments`
 
-`multipart/form-data`: `kind`, `file`, `client_request_id`. Reuses `addAttachment` with driver upload. `pod` may trigger `maybeAutoInvoiceLoad` like the web driver app.
+`multipart/form-data`: `kind`, `file`, `client_request_id`. `kind` is the full `AttachmentKind` enum (UI subsets). `rate_con` / `invoice` are rejected. Reuses `addAttachment` with driver upload. `pod` may trigger `maybeAutoInvoiceLoad` like the web driver app.
 
 ## Example curls
 

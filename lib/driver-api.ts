@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { runWithAuditActor } from "./audit";
 import { getDb } from "./db";
-import { isDriverUploadKind } from "./driver-docs";
 import {
   DriverOpsError,
   performDriverProgress,
@@ -10,7 +9,7 @@ import {
   requireAssignedLoad,
 } from "./driver-ops";
 import { listAttachments } from "./files";
-import { isAppointmentSchedule, isFcfsSchedule } from "./format";
+import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
 import { isCustomerRateDocument } from "./load-documents-shared";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
 import { authenticateDriver, getDriver, isDriverLoginEligible, listDriversForLogin, listLoadsForDriver } from "./queries";
@@ -18,10 +17,12 @@ import { relayForDriver } from "./relay-store";
 import { formatRelayLane } from "./relays";
 import { ensureDefaultStops, type LoadStop } from "./stops";
 import {
+  ATTACHMENT_KINDS,
   DRIVER_PROGRESS,
   isClosedStatus,
   isDriverProgress,
   type Attachment,
+  type AttachmentKind,
   type DriverProgress,
   type DriverWithTruck,
   type LoadView,
@@ -111,9 +112,11 @@ export type DriverApiStop = {
   delivered: number;
 };
 
+export const DRIVER_API_ATTACHMENT_KINDS = ATTACHMENT_KINDS.map((item) => item.value);
+
 export type DriverApiAttachment = {
   id: number;
-  kind: string;
+  kind: AttachmentKind;
   original_name: string;
   mime_type: string;
   uploaded_by: string;
@@ -143,6 +146,39 @@ function sha256Hex(value: string): string {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+const HAS_TIMEZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** ISO-8601 with timezone (Z or ±HH:MM). Empty stays empty. Naive values use office wall time. */
+export function toDriverApiDateTime(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (HAS_TIMEZONE.test(raw)) {
+    const dated = new Date(raw);
+    return Number.isNaN(dated.getTime()) ? "" : dated.toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    try {
+      return fromOfficeDateTime(`${raw}T00:00:00`);
+    } catch {
+      return "";
+    }
+  }
+  const local = raw.includes("T") ? raw : raw.replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(local)) {
+    try {
+      return fromOfficeDateTime(local.length === 16 ? `${local}:00` : local);
+    } catch {
+      // fall through
+    }
+  }
+  const dated = new Date(raw);
+  return Number.isNaN(dated.getTime()) ? "" : dated.toISOString();
+}
+
+export function isDriverApiUploadKind(value: string): value is AttachmentKind {
+  return ATTACHMENT_KINDS.some((item) => item.value === value) && !isCustomerRateDocument({ kind: value });
 }
 
 function parseId(value: string | undefined): number {
@@ -216,10 +252,10 @@ function toLoadSummary(load: LoadView, driverId: number): DriverApiLoadSummary {
     driver_progress: isDriverProgress(load.driver_progress) ? load.driver_progress : "",
     origin: load.origin,
     destination: load.destination,
-    pickup_start: load.pickup_start,
-    pickup_end: load.pickup_end,
-    delivery_start: load.delivery_start,
-    delivery_end: load.delivery_end,
+    pickup_start: toDriverApiDateTime(load.pickup_start),
+    pickup_end: toDriverApiDateTime(load.pickup_end),
+    delivery_start: toDriverApiDateTime(load.delivery_start),
+    delivery_end: toDriverApiDateTime(load.delivery_end),
     customer_name: load.customer_name,
     commodity: load.commodity,
     weight: load.weight,
@@ -249,16 +285,16 @@ function toStopDto(stop: LoadStop): DriverApiStop {
     state: stop.state,
     zip: stop.zip,
     phone: stop.phone,
-    window_start: stop.window_start,
-    window_end: stop.window_end,
+    window_start: toDriverApiDateTime(stop.window_start),
+    window_end: toDriverApiDateTime(stop.window_end),
     schedule_type: mapScheduleType(stop.schedule_type),
     confirmation: stop.confirmation,
     cargo: stop.cargo,
     reference: stop.reference,
     instructions: stop.instructions,
     notes: stop.notes,
-    arrived_at: stop.arrived_at,
-    departed_at: stop.departed_at,
+    arrived_at: toDriverApiDateTime(stop.arrived_at),
+    departed_at: toDriverApiDateTime(stop.departed_at),
     delivered: stop.delivered,
   };
 }
@@ -270,7 +306,7 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
     original_name: file.original_name,
     mime_type: file.mime_type,
     uploaded_by: file.uploaded_by,
-    created_at: file.created_at,
+    created_at: toDriverApiDateTime(file.created_at),
   };
 }
 
@@ -510,7 +546,7 @@ export async function handleDriverLogin(request: Request): Promise<Response> {
     const issued = issueDriverApiToken(driver.id);
     return Response.json({
       token: issued.token,
-      expires_at: issued.expiresAt,
+      expires_at: toDriverApiDateTime(issued.expiresAt),
       driver: toDriverApiDriver(driver),
     });
   } catch (error) {
@@ -666,7 +702,7 @@ export async function handleDriverAttachment(
     const clientRequestId = readClientRequestId(form.get("client_request_id"));
     const kind = String(form.get("kind") ?? "").trim();
     const file = form.get("file");
-    if (!isDriverUploadKind(kind)) {
+    if (!isDriverApiUploadKind(kind)) {
       throw new DriverApiHttpError(409, "Pick a document type.", "CONFLICT");
     }
     if (!(file instanceof File) || file.size === 0) {

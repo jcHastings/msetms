@@ -1,6 +1,6 @@
-import { isDriverUploadKind } from "./driver-docs";
 import { progressForStopEvent, type DriverStopActionKind } from "./driver-stops";
 import { addAttachment, fileToBuffer, isPdfOrImage } from "./files";
+import { isCustomerRateDocument } from "./load-documents-shared";
 import { getLoad, updateDriverProgress } from "./queries";
 import { driverAssignedToLoad } from "./relay-store";
 import { getStop, listStops, stampStopTime } from "./stops";
@@ -107,7 +107,7 @@ export async function performDriverUpload(input: {
     throw new DriverOpsError("conflict", "Choose a photo or PDF.");
   }
   const kindRaw = String(input.kind ?? "").trim();
-  if (!isDriverUploadKind(kindRaw) || !ATTACHMENT_KINDS.some((item) => item.value === kindRaw)) {
+  if (!ATTACHMENT_KINDS.some((item) => item.value === kindRaw) || isCustomerRateDocument({ kind: kindRaw })) {
     throw new DriverOpsError("conflict", "Pick a document type.");
   }
   const kind = kindRaw as AttachmentKind;
