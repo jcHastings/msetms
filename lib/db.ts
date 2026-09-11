@@ -995,6 +995,26 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_driver ON driver_drug_tests(driver_id, ordered_on DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_status ON driver_drug_tests(status, id DESC);
+    CREATE TABLE IF NOT EXISTS driver_api_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_driver_api_tokens_hash ON driver_api_tokens(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_driver_api_tokens_driver ON driver_api_tokens(driver_id, revoked_at);
+    CREATE TABLE IF NOT EXISTS driver_api_idempotency (
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      client_request_id TEXT NOT NULL,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (driver_id, client_request_id)
+    );
   `);
 
   backfillDispatchers(db);

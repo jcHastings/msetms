@@ -425,6 +425,11 @@ async function main() {
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
   assert.match(driverLoginPage, /listDriversForLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /\/api\/driver\/v1/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/driver/v1/auth/login/route.ts"), "utf8"), /handleDriverLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /FORBIDDEN_DRIVER_API_FIELDS/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /tms_driver_id/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /Check out of pickup first/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /parseDriverPin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /listDriversForLogin/);
