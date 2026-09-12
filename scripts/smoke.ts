@@ -427,7 +427,10 @@ async function main() {
   assert.match(driverLoginPage, /listDriversForLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /\/api\/driver\/v1/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /No refresh-token endpoint/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /rate_con.*invoice.*carrier_invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /## AttachmentKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /rate_con/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /carrier_invoice/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/auth/refresh/route.ts")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/driver/v1/auth/login/route.ts"), "utf8"), /handleDriverLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /FORBIDDEN_DRIVER_API_FIELDS/);
