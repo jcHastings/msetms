@@ -160,7 +160,7 @@ export default async function DashboardPage({
               rows={4}
               defaultValue={handoff}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Late PU on MSE-1045, reefer alarm, Tyrell med card expired…"
+              placeholder="Shift notes for the next dispatcher"
             />
             <button className="btn btn-secondary mt-2" type="submit">
               Save handoff

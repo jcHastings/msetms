@@ -41,9 +41,7 @@ export function LoadSheetImport() {
             id="load-sheet-text"
             name="report_text"
             rows={4}
-            placeholder={
-              "Load #, Tie Sheet, WSF PO, LAREDO, SALT, Transfer, DAW, Avenel, Status, Ship Date, Del Date, Customer, Shipper, Shipper City, Shipper St., Consignee, Consignee City, Consignee St., Truck, Trailer, Equipment Type"
-            }
+            placeholder="Paste CSV rows here"
           />
         </div>
         <div>

@@ -49,9 +49,7 @@ export function OrbcommTrailerImport() {
             id="orbcomm-fleet-text"
             name="report_text"
             rows={4}
-            placeholder={
-              "Asset ID,Device Serial Number,Asset Type,City\nMS2201,GSSC0001,Reefer,Oklahoma City"
-            }
+            placeholder="Paste CSV rows here"
           />
         </div>
         <div>
