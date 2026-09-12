@@ -55,7 +55,9 @@ Uniform body: `{ "ok": false, "error": "...", "code?": "UNAUTHORIZED" | "FORBIDD
 
 ### `GET /auth/roster`
 
-Unauthenticated name picker. Returns `[{ id, display_name }]` only (no PIN). Same class as the dispatcher login name list. Capped at 60 GETs / 15 minutes / IP so a PIN picker (one fetch on open) is unaffected. Login PIN attempts stay at 5 / 15 minutes.
+Unauthenticated name picker. Returns `{ "drivers": [ { "id", "display_name" }, … ] }` only (no PIN). Same class as the dispatcher login name list. Capped at 60 GETs / 15 minutes / IP so a PIN picker (one fetch on open) is unaffected. Login PIN attempts stay at 5 / 15 minutes.
+
+v1.0.x additive wrap (path unchanged): frozen OpenAPI requires the `drivers` object envelope, not a bare array.
 
 Rate-limit IP (roster and login):
 

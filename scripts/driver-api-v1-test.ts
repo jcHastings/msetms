@@ -211,13 +211,17 @@ async function main() {
 
   const roster = await read(await rosterRoute.GET(request(`${BASE}/auth/roster`)));
   assert.equal(roster.status, 200);
-  const names = roster.json as Array<{ id: number; display_name: string }>;
+  const rosterBody = roster.json as { drivers: Array<{ id: number; display_name: string }> };
+  assert.equal(Array.isArray(roster.json), false, "roster is an object envelope, not a bare array");
+  assert.equal(Array.isArray(rosterBody.drivers), true);
+  const names = rosterBody.drivers;
   assert.equal(names.some((row) => row.id === driverA && row.display_name === "Alex Rivera"), true);
   assert.equal(
     names.every((row) => Object.keys(row).length === 2 && "id" in row && "display_name" in row),
     true,
     "roster is id + display_name only",
   );
+  assert.equal(Object.keys(rosterBody).length, 1, "roster envelope is drivers only");
   assertNoSecrets(roster.json);
 
   const badLogin = await read(

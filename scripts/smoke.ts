@@ -449,6 +449,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /45 seconds/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /TRUSTED_PROXY/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2026-09-11-mse-driver-api-v1-frozen/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /"drivers": \[ \{ "id", "display_name" \}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /v1\.0\.x additive wrap/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /drivers: listDriversForLogin\(\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);

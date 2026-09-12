@@ -60,6 +60,9 @@ export type DriverApiDriver = {
 
 export type DriverApiRosterEntry = { id: number; display_name: string };
 
+/** Frozen OpenAPI roster envelope. v1.0.x additive wrap — path unchanged. */
+export type DriverApiRoster = { drivers: DriverApiRosterEntry[] };
+
 export type DriverApiScheduleType = "APPT" | "FCFS";
 
 export type DriverApiNextActions = {
@@ -664,10 +667,12 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 export async function handleDriverRoster(request: Request): Promise<Response> {
   try {
     assertRosterNotRateLimited(requestIp(request));
-    const roster: DriverApiRosterEntry[] = listDriversForLogin().map((driver) => ({
-      id: driver.id,
-      display_name: driverDisplayName(driver),
-    }));
+    const roster: DriverApiRoster = {
+      drivers: listDriversForLogin().map((driver) => ({
+        id: driver.id,
+        display_name: driverDisplayName(driver),
+      })),
+    };
     return Response.json(roster);
   } catch (error) {
     return fromOpsError(error);
