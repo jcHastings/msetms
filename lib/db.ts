@@ -995,7 +995,36 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_driver ON driver_drug_tests(driver_id, ordered_on DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_driver_drug_tests_status ON driver_drug_tests(status, id DESC);
+    CREATE TABLE IF NOT EXISTS driver_api_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_driver_api_tokens_hash ON driver_api_tokens(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_driver_api_tokens_driver ON driver_api_tokens(driver_id, revoked_at);
+    CREATE TABLE IF NOT EXISTS driver_api_idempotency (
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      client_request_id TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (driver_id, method, path, client_request_id)
+    );
+    CREATE TABLE IF NOT EXISTS driver_api_rate_hits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      ip_address TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_driver_api_rate_hits ON driver_api_rate_hits(kind, ip_address, created_at);
   `);
+
+  migrateDriverApiIdempotencyKey(db);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1004,6 +1033,34 @@ export function migrate(db: Database): void {
   backfillTruncatedDispatchNotes(db);
   backfillLoadNumbering(db);
   backfillSampleLoads(db);
+}
+
+/** Widen UNIQUE from (driver_id, client_request_id) to include method + path. */
+function migrateDriverApiIdempotencyKey(db: Database): void {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'driver_api_idempotency'")
+    .get() as { sql?: string } | undefined;
+  const sql = String(row?.sql ?? "");
+  if (!sql || sql.includes("PRIMARY KEY (driver_id, method, path, client_request_id)")) return;
+  db.exec(`
+    ALTER TABLE driver_api_idempotency RENAME TO driver_api_idempotency_legacy;
+    CREATE TABLE driver_api_idempotency (
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      client_request_id TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (driver_id, method, path, client_request_id)
+    );
+    INSERT OR IGNORE INTO driver_api_idempotency (
+      driver_id, method, path, client_request_id, status, body, created_at
+    )
+    SELECT driver_id, method, path, client_request_id, status, body, created_at
+    FROM driver_api_idempotency_legacy;
+    DROP TABLE driver_api_idempotency_legacy;
+  `);
 }
 
 function backfillDispatchers(db: Database): void {
