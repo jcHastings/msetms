@@ -1,0 +1,21 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Repo-wide `npm run lint` still fails on pre-existing stacked-tip issues.
+      # Gate this BFF on the Driver API surface.
+      - run: npx eslint lib/driver-api.ts lib/driver-ops.ts lib/driver-actions.ts lib/db.ts app/api/driver --max-warnings 0

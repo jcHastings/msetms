@@ -99,10 +99,15 @@ export async function driverUploadAction(formData: FormData): Promise<ActionResu
     if (!(file instanceof File)) {
       throw new Error("Choose a photo or PDF.");
     }
+    const kind = String(formData.get("kind") ?? "").trim();
+    if (!isDriverUploadKind(kind)) {
+      throw new Error("Pick a document type.");
+    }
     await performDriverUpload({
       driver,
       loadId,
-      kind: String(formData.get("kind") ?? "").trim(),
+      kind,
+      allowKinds: "web",
       file,
       fuel: {
         gallons: Number.parseFloat(String(formData.get("gallons") ?? "")) || null,

@@ -435,6 +435,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_ATTACHMENT_KINDS/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /tms_driver_id/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /Check out of pickup first/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /isDriverUploadKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /allowKinds/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /isDriverUploadKind\(kind\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /BEGIN IMMEDIATE/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /eslint lib\/driver-api/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /parseDriverPin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /listDriversForLogin/);

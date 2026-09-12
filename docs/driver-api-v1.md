@@ -10,9 +10,11 @@ Rules:
 
 - No customer rate, invoices, or owner-operator pay on any DTO
 - No office cookies (`tms_driver_id` is not set)
-- Writes are idempotent via `client_request_id` (same driver + id returns the same success)
+- Writes are idempotent via `client_request_id`. Uniqueness is `(driver_id, method, path, client_request_id)` claimed in a `BEGIN IMMEDIATE` transaction (no check-then-act). Same UUID on another endpoint does not replay.
+- Successful PIN login revokes that driver's other bearer tokens (single session).
 - All datetime strings are ISO-8601 with a timezone (`2026-09-11T15:00:00.000Z` or `…-05:00`). Empty means unset.
 - No refresh-token endpoint in v1. `401` is enough for the client to clear Keychain and return to PIN login.
+- Phone **web** `/driver` upload stays on `DRIVER_UPLOAD_KINDS`. This native API accepts the wider `AttachmentKind` enum (UI subsets); `rate_con` / `invoice` still rejected.
 
 ## Enums
 
@@ -33,19 +35,21 @@ Uniform body: `{ "ok": false, "error": "...", "code?": "UNAUTHORIZED" | "FORBIDD
 | 403 | Load exists but is not assigned (primary or relay) |
 | 404 | Unknown load or stop |
 | 409 | Stop-check order, progress not the next step, validation |
-| 429 | Too many failed PIN attempts (5 / 15 minutes / driver or IP) |
+| 429 | Too many failed PIN attempts (5 / 15 minutes / driver or IP), or roster hammering (60 / 15 minutes / IP) |
 
 ## Endpoints
 
 ### `GET /auth/roster`
 
-Unauthenticated name picker. Returns `[{ id, display_name }]` only (no PIN).
+Unauthenticated name picker. Returns `[{ id, display_name }]` only (no PIN). Same class as the dispatcher login name list. Capped at 60 GETs / 15 minutes / IP so a PIN picker (one fetch on open) is unaffected. Login PIN attempts stay at 5 / 15 minutes.
 
 ### `POST /auth/login`
 
 Body: `{ "driver_id": 12, "pin": "4321" }`
 
 Success: `{ "token", "expires_at", "driver": { "id", "display_name", "first_name", "phone" } }`
+
+A new login revokes every other token for that driver. The previous device gets `401` and should clear Keychain.
 
 ### `POST /auth/logout`
 
@@ -83,7 +87,7 @@ Same rules as `driverStopCheckAction`: pickup depart before delivery arrive; che
 
 ### `POST /loads/{id}/attachments`
 
-`multipart/form-data`: `kind`, `file`, `client_request_id`. `kind` is the full `AttachmentKind` enum (UI subsets). `rate_con` / `invoice` are rejected. Reuses `addAttachment` with driver upload. `pod` may trigger `maybeAutoInvoiceLoad` like the web driver app.
+`multipart/form-data`: `kind`, `file`, `client_request_id`. Native API `kind` is the full `AttachmentKind` enum (iOS UI subsets). `rate_con` / `invoice` are rejected. Phone **web** `/driver` still gates on `isDriverUploadKind` and cannot pick `ifta` / `claim` / `other` / `unclassified`. Reuses `addAttachment` with driver upload. `pod` may trigger `maybeAutoInvoiceLoad` like the web driver app.
 
 ## Example curls
 

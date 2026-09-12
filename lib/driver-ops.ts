@@ -1,3 +1,4 @@
+import { isDriverUploadKind } from "./driver-docs";
 import { progressForStopEvent, type DriverStopActionKind } from "./driver-stops";
 import { addAttachment, fileToBuffer, isPdfOrImage } from "./files";
 import { isCustomerRateDocument } from "./load-documents-shared";
@@ -98,6 +99,8 @@ export async function performDriverUpload(input: {
   kind: string;
   file: File;
   fuel?: { gallons?: number | null; state?: string; station?: string };
+  /** API may accept the full TMS enum minus customer rate docs. Web stays on DRIVER_UPLOAD_KINDS. */
+  allowKinds?: "web" | "api";
 }): Promise<{ loadId: number; attachment: Attachment }> {
   requireAssignedLoad(input.loadId, input.driver.id);
   if (!(input.file instanceof File) || input.file.size === 0) {
@@ -107,7 +110,11 @@ export async function performDriverUpload(input: {
     throw new DriverOpsError("conflict", "Choose a photo or PDF.");
   }
   const kindRaw = String(input.kind ?? "").trim();
-  if (!ATTACHMENT_KINDS.some((item) => item.value === kindRaw) || isCustomerRateDocument({ kind: kindRaw })) {
+  const allowApi = input.allowKinds === "api";
+  const allowed = allowApi
+    ? ATTACHMENT_KINDS.some((item) => item.value === kindRaw) && !isCustomerRateDocument({ kind: kindRaw })
+    : isDriverUploadKind(kindRaw);
+  if (!allowed) {
     throw new DriverOpsError("conflict", "Pick a document type.");
   }
   const kind = kindRaw as AttachmentKind;

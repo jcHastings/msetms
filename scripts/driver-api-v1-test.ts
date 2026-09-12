@@ -208,7 +208,7 @@ async function main() {
     driver_id: driverC,
   });
 
-  const roster = await read(await rosterRoute.GET());
+  const roster = await read(await rosterRoute.GET(request(`${BASE}/auth/roster`)));
   assert.equal(roster.status, 200);
   const names = roster.json as Array<{ id: number; display_name: string }>;
   assert.equal(names.some((row) => row.id === driverA && row.display_name === "Alex Rivera"), true);
@@ -484,6 +484,50 @@ async function main() {
   );
   assert.equal(rateUpload.status, 409);
 
+  const invoiceForm = new FormData();
+  invoiceForm.set("kind", "invoice");
+  invoiceForm.set("client_request_id", "invoice-1");
+  invoiceForm.set("file", new File([bytes], "invoice.png", { type: "image/png" }));
+  const invoiceUpload = await read(
+    await attachRoute.POST(
+      request(`${BASE}/loads/${activeId}/attachments`, { method: "POST", headers: auth, body: invoiceForm }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    ),
+  );
+  assert.equal(invoiceUpload.status, 409, "kind=invoice rejected on upload");
+
+  const { performDriverUpload } = await import("../lib/driver-ops");
+  const driverRow = queries.getDriver(driverA)!;
+  await assert.rejects(
+    () =>
+      performDriverUpload({
+        driver: driverRow,
+        loadId: activeId,
+        kind: "ifta",
+        file: new File([bytes], "ifta.png", { type: "image/png" }),
+        allowKinds: "web",
+      }),
+    /Pick a document type/,
+  );
+  await assert.rejects(
+    () =>
+      performDriverUpload({
+        driver: driverRow,
+        loadId: activeId,
+        kind: "claim",
+        file: new File([bytes], "claim.png", { type: "image/png" }),
+      }),
+    /Pick a document type/,
+  );
+  const webBlocked = await performDriverUpload({
+    driver: driverRow,
+    loadId: activeId,
+    kind: "ifta",
+    file: new File([bytes], "ifta.png", { type: "image/png" }),
+    allowKinds: "api",
+  });
+  assert.equal(webBlocked.attachment.kind, "ifta");
+
   const { DRIVER_API_ATTACHMENT_KINDS, toDriverApiDateTime } = await import("../lib/driver-api");
   assert.match(toDriverApiDateTime("2026-09-11T15:00:00-05:00"), API_DATETIME);
   assert.equal(toDriverApiDateTime("2026-09-11T20:00:00.000Z"), "2026-09-11T20:00:00.000Z");
@@ -521,6 +565,65 @@ async function main() {
   const files = (afterUpload.json as { attachments: Array<{ kind: string }> }).attachments;
   assert.equal(files.some((file) => file.kind === "pod"), true);
 
+  const sharedId = "shared-cross-endpoint";
+  const sharedProgress = await read(
+    await progressRoute.POST(
+      request(`${BASE}/loads/${activeId}/progress`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ progress: "loaded", client_request_id: sharedId }),
+      }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    ),
+  );
+  assert.equal(sharedProgress.status, 200, `shared progress ${JSON.stringify(sharedProgress.json)}`);
+  const sharedCheck = await read(
+    await checkRoute.POST(
+      request(`${BASE}/loads/${activeId}/stops/${pickup.id}/check`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ kind: "depart", client_request_id: sharedId }),
+      }),
+      { params: Promise.resolve({ id: String(activeId), stopId: String(pickup.id) }) },
+    ),
+  );
+  assert.equal(sharedCheck.status, 200, `scoped idempotency ${JSON.stringify(sharedCheck.json)}`);
+  const afterShared = await read(
+    await loadRoute.GET(request(`${BASE}/loads/${activeId}`, { headers: auth }), {
+      params: Promise.resolve({ id: String(activeId) }),
+    }),
+  );
+  const departed = (afterShared.json as { stops: Array<{ kind: string; departed_at: string }> }).stops.find(
+    (stop) => stop.kind === "pickup",
+  );
+  assert.ok(departed?.departed_at, "same UUID on another path must not replay progress");
+
+  const concurrentId = "concurrent-pod";
+  const concurrentBodies = [1, 2].map(() => {
+    const form = new FormData();
+    form.set("kind", "bol");
+    form.set("client_request_id", concurrentId);
+    form.set("file", new File([bytes], "bol.png", { type: "image/png" }));
+    return attachRoute.POST(
+      request(`${BASE}/loads/${activeId}/attachments`, { method: "POST", headers: auth, body: form }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    );
+  });
+  const concurrent = await Promise.all(concurrentBodies);
+  const concurrentReads = await Promise.all(concurrent.map((res) => read(res)));
+  assert.equal(concurrentReads[0]?.status, 200);
+  assert.equal(concurrentReads[1]?.status, 200);
+  assert.deepEqual(concurrentReads[0]?.json, concurrentReads[1]?.json);
+  const afterConcurrent = await read(
+    await loadRoute.GET(request(`${BASE}/loads/${activeId}`, { headers: auth }), {
+      params: Promise.resolve({ id: String(activeId) }),
+    }),
+  );
+  const bols = (afterConcurrent.json as { attachments: Array<{ kind: string; original_name: string }> }).attachments.filter(
+    (file) => file.kind === "bol" && file.original_name === "bol.png",
+  );
+  assert.equal(bols.length, 1, "concurrent same client_request_id applies once");
+
   const loggedOut = await read(await logoutRoute.POST(request(`${BASE}/auth/logout`, { method: "POST", headers: auth })));
   assert.equal(loggedOut.status, 204);
   const meAfter = await read(await meRoute.GET(request(`${BASE}/me`, { headers: auth })));
@@ -549,6 +652,32 @@ async function main() {
   );
   assert.equal(limited.status, 429);
   assert.equal((limited.json as { code?: string }).code, "RATE_LIMITED");
+
+  const relogin1 = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ driver_id: driverB, pin: "2222" }),
+      }),
+    ),
+  );
+  const tokenB1 = (relogin1.json as { token: string }).token;
+  const relogin2 = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ driver_id: driverB, pin: "2222" }),
+      }),
+    ),
+  );
+  const tokenB2 = (relogin2.json as { token: string }).token;
+  const oldMe = await read(await meRoute.GET(request(`${BASE}/me`, { headers: { Authorization: `Bearer ${tokenB1}` } })));
+  const newMe = await read(await meRoute.GET(request(`${BASE}/me`, { headers: { Authorization: `Bearer ${tokenB2}` } })));
+  assert.equal(oldMe.status, 401, "prior bearer revoked on relogin");
+  assert.equal(newMe.status, 200);
+  assert.equal((newMe.json as { id: number }).id, driverB);
 
   console.log("driver-api-v1-test: ok");
 }

@@ -32,6 +32,11 @@ export const DRIVER_API_BASE = "/api/driver/v1";
 export const DRIVER_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const DRIVER_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const DRIVER_LOGIN_MAX_FAILURES = 5;
+export const DRIVER_ROSTER_WINDOW_MS = 15 * 60 * 1000;
+export const DRIVER_ROSTER_MAX_HITS = 60;
+const IDEMPOTENCY_PENDING = 0;
+const IDEMPOTENCY_WAIT_MS = 15;
+const IDEMPOTENCY_WAIT_TRIES = 40;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const CLIENT_REQUEST_ID_MAX = 128;
 
@@ -361,12 +366,22 @@ function bearerToken(request: Request): string {
 export function issueDriverApiToken(driverId: number): { token: string; expiresAt: string } {
   const token = `drv_${randomBytes(32).toString("hex")}`;
   const expiresAt = new Date(Date.now() + DRIVER_TOKEN_TTL_MS).toISOString();
-  getDb()
-    .prepare(
-      `INSERT INTO driver_api_tokens (driver_id, token_hash, expires_at, revoked_at, created_at)
-       VALUES (?, ?, ?, '', ?)`,
-    )
-    .run(driverId, sha256Hex(token), expiresAt, nowIso());
+  const createdAt = nowIso();
+  getDb().transaction(() => {
+    getDb()
+      .prepare(
+        `UPDATE driver_api_tokens
+         SET revoked_at = ?
+         WHERE driver_id = ? AND revoked_at = ''`,
+      )
+      .run(createdAt, driverId);
+    getDb()
+      .prepare(
+        `INSERT INTO driver_api_tokens (driver_id, token_hash, expires_at, revoked_at, created_at)
+         VALUES (?, ?, ?, '', ?)`,
+      )
+      .run(driverId, sha256Hex(token), expiresAt, createdAt);
+  })();
   return { token, expiresAt };
 }
 
@@ -419,39 +434,81 @@ function readClientRequestId(value: unknown): string {
 
 type StoredIdempotency = { status: number; body: string };
 
-function readIdempotency(driverId: number, clientRequestId: string): StoredIdempotency | null {
+type IdempotencyKey = {
+  driverId: number;
+  method: string;
+  path: string;
+  clientRequestId: string;
+};
+
+function idempotencyKey(driverId: number, request: Request, clientRequestId: string): IdempotencyKey {
+  return {
+    driverId,
+    method: request.method.toUpperCase(),
+    path: requestPath(request),
+    clientRequestId,
+  };
+}
+
+function readIdempotency(key: IdempotencyKey): StoredIdempotency | null {
   return (
     (getDb()
       .prepare(
         `SELECT status, body FROM driver_api_idempotency
-         WHERE driver_id = ? AND client_request_id = ?`,
+         WHERE driver_id = ? AND method = ? AND path = ? AND client_request_id = ?`,
       )
-      .get(driverId, clientRequestId) as StoredIdempotency | undefined) ?? null
+      .get(key.driverId, key.method, key.path, key.clientRequestId) as StoredIdempotency | undefined) ?? null
   );
 }
 
-function writeIdempotency(
-  driverId: number,
-  clientRequestId: string,
-  request: Request,
-  status: number,
-  body: unknown,
-): void {
+type IdempotencyClaim = { kind: "claimed" } | { kind: "stored"; stored: StoredIdempotency } | { kind: "pending" };
+
+function claimIdempotency(key: IdempotencyKey): IdempotencyClaim {
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const inserted = db
+      .prepare(
+        `INSERT OR IGNORE INTO driver_api_idempotency
+          (driver_id, method, path, client_request_id, status, body, created_at)
+         VALUES (?, ?, ?, ?, ?, '', ?)`,
+      )
+      .run(key.driverId, key.method, key.path, key.clientRequestId, IDEMPOTENCY_PENDING, nowIso());
+    if (inserted.changes === 1) {
+      db.exec("COMMIT");
+      return { kind: "claimed" };
+    }
+    const row = readIdempotency(key);
+    db.exec("COMMIT");
+    if (row && row.status >= 100) return { kind: "stored", stored: row };
+    return { kind: "pending" };
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // connection already aborted
+    }
+    throw error;
+  }
+}
+
+function completeIdempotency(key: IdempotencyKey, status: number, body: unknown): void {
   getDb()
     .prepare(
-      `INSERT OR IGNORE INTO driver_api_idempotency
-        (driver_id, client_request_id, method, path, status, body, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `UPDATE driver_api_idempotency
+       SET status = ?, body = ?
+       WHERE driver_id = ? AND method = ? AND path = ? AND client_request_id = ?`,
     )
-    .run(
-      driverId,
-      clientRequestId,
-      request.method,
-      requestPath(request),
-      status,
-      JSON.stringify(body),
-      nowIso(),
-    );
+    .run(status, JSON.stringify(body), key.driverId, key.method, key.path, key.clientRequestId);
+}
+
+function releaseIdempotency(key: IdempotencyKey): void {
+  getDb()
+    .prepare(
+      `DELETE FROM driver_api_idempotency
+       WHERE driver_id = ? AND method = ? AND path = ? AND client_request_id = ? AND status = ?`,
+    )
+    .run(key.driverId, key.method, key.path, key.clientRequestId, IDEMPOTENCY_PENDING);
 }
 
 function replayResponse(stored: StoredIdempotency): Response {
@@ -461,17 +518,34 @@ function replayResponse(stored: StoredIdempotency): Response {
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function withIdempotency(
   request: Request,
   driver: DriverWithTruck,
   clientRequestId: string,
   run: () => Promise<{ status: number; body: unknown }>,
 ): Promise<Response> {
-  const existing = readIdempotency(driver.id, clientRequestId);
-  if (existing) return replayResponse(existing);
-  const result = await run();
-  writeIdempotency(driver.id, clientRequestId, request, result.status, result.body);
-  return Response.json(result.body, { status: result.status });
+  const key = idempotencyKey(driver.id, request, clientRequestId);
+  for (let attempt = 0; attempt < IDEMPOTENCY_WAIT_TRIES; attempt += 1) {
+    const claim = claimIdempotency(key);
+    if (claim.kind === "stored") return replayResponse(claim.stored);
+    if (claim.kind === "pending") {
+      await sleep(IDEMPOTENCY_WAIT_MS);
+      continue;
+    }
+    try {
+      const result = await run();
+      completeIdempotency(key, result.status, result.body);
+      return Response.json(result.body, { status: result.status });
+    } catch (error) {
+      releaseIdempotency(key);
+      throw error;
+    }
+  }
+  throw new DriverApiHttpError(409, "That request is still in progress.", "CONFLICT");
 }
 
 function loginFailureCount(driverId: number | null, ip: string): number {
@@ -498,6 +572,31 @@ function assertLoginNotRateLimited(driverId: number | null, ip: string): void {
   }
 }
 
+function rosterHitCount(ip: string): number {
+  const since = new Date(Date.now() - DRIVER_ROSTER_WINDOW_MS).toISOString();
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM driver_api_rate_hits
+       WHERE kind = 'roster' AND ip_address = ? AND created_at >= ?`,
+    )
+    .get(ip, since) as { count: number };
+  return row.count;
+}
+
+function assertRosterNotRateLimited(ip: string): void {
+  if (!ip) return;
+  getDb()
+    .prepare("DELETE FROM driver_api_rate_hits WHERE kind = 'roster' AND created_at < ?")
+    .run(new Date(Date.now() - DRIVER_ROSTER_WINDOW_MS).toISOString());
+  if (rosterHitCount(ip) >= DRIVER_ROSTER_MAX_HITS) {
+    throw new DriverApiHttpError(429, "Too many roster requests. Try again later.", "RATE_LIMITED");
+  }
+  getDb()
+    .prepare("INSERT INTO driver_api_rate_hits (kind, ip_address, created_at) VALUES ('roster', ?, ?)")
+    .run(ip, nowIso());
+}
+
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = (await request.json()) as unknown;
@@ -511,12 +610,17 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
   }
 }
 
-export async function handleDriverRoster(): Promise<Response> {
-  const roster: DriverApiRosterEntry[] = listDriversForLogin().map((driver) => ({
-    id: driver.id,
-    display_name: driverDisplayName(driver),
-  }));
-  return Response.json(roster);
+export async function handleDriverRoster(request: Request): Promise<Response> {
+  try {
+    assertRosterNotRateLimited(requestIp(request));
+    const roster: DriverApiRosterEntry[] = listDriversForLogin().map((driver) => ({
+      id: driver.id,
+      display_name: driverDisplayName(driver),
+    }));
+    return Response.json(roster);
+  } catch (error) {
+    return fromOpsError(error);
+  }
 }
 
 export async function handleDriverLogin(request: Request): Promise<Response> {
@@ -713,7 +817,7 @@ export async function handleDriverAttachment(
     }
     return await withIdempotency(request, driver, clientRequestId, async () => {
       return runWithAuditActor({ name: driver.name, kind: "driver" }, async () => {
-        const uploaded = await performDriverUpload({ driver, loadId, kind, file });
+        const uploaded = await performDriverUpload({ driver, loadId, kind, file, allowKinds: "api" });
         const next = requireAssignedLoad(loadId, driver.id, { allowCancelled: true });
         return {
           status: 200,
