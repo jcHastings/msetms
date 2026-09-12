@@ -7,6 +7,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tms-driver-api-"));
 process.env.TMS_DB_PATH = path.join(tmp, "tms.db");
 process.env.TMS_DATA_DIR = tmp;
 process.env.TMS_SKIP_SEED = "1";
+process.env.TRUSTED_PROXY = "1";
 
 const FIXTURE = path.join(process.cwd(), "scripts/fixtures/driver-api/pod.png");
 const BASE = "http://localhost:3000/api/driver/v1";
@@ -528,7 +529,13 @@ async function main() {
   });
   assert.equal(webBlocked.attachment.kind, "ifta");
 
-  const { DRIVER_API_ATTACHMENT_KINDS, toDriverApiDateTime } = await import("../lib/driver-api");
+  const {
+    DRIVER_API_ATTACHMENT_KINDS,
+    DRIVER_API_UPLOAD_KINDS,
+    DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS,
+    driverApiRequestIp,
+    toDriverApiDateTime,
+  } = await import("../lib/driver-api");
   assert.match(toDriverApiDateTime("2026-09-11T15:00:00-05:00"), API_DATETIME);
   assert.equal(toDriverApiDateTime("2026-09-11T20:00:00.000Z"), "2026-09-11T20:00:00.000Z");
   assert.equal(toDriverApiDateTime(""), "");
@@ -537,6 +544,31 @@ async function main() {
   assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("ifta"), true);
   assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("claim"), true);
   assert.equal(DRIVER_API_ATTACHMENT_KINDS.includes("other"), true);
+  assert.equal(DRIVER_API_UPLOAD_KINDS.includes("ifta"), true);
+  assert.equal(DRIVER_API_UPLOAD_KINDS.includes("other"), true);
+  assert.equal(DRIVER_API_UPLOAD_KINDS.includes("rate_con"), false);
+  assert.equal(DRIVER_API_UPLOAD_KINDS.includes("invoice"), false);
+  assert.equal(DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS, 45_000);
+  const savedProxy = process.env.TRUSTED_PROXY;
+  delete process.env.TRUSTED_PROXY;
+  assert.equal(
+    driverApiRequestIp(request(`${BASE}/auth/roster`, { headers: { "x-forwarded-for": "203.0.113.9" } })),
+    "",
+    "XFF ignored without TRUSTED_PROXY",
+  );
+  assert.equal(
+    driverApiRequestIp(request(`${BASE}/auth/roster`, { headers: { "cf-connecting-ip": "198.51.100.2" } })),
+    "198.51.100.2",
+    "Cloudflare Connecting-IP works without TRUSTED_PROXY",
+  );
+  process.env.TRUSTED_PROXY = "1";
+  assert.equal(
+    driverApiRequestIp(
+      request(`${BASE}/auth/roster`, { headers: { "x-forwarded-for": "203.0.113.9, 10.0.0.1" } }),
+    ),
+    "203.0.113.9",
+  );
+  process.env.TRUSTED_PROXY = savedProxy;
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/auth/refresh/route.ts")), false);
 
   const replayUpload = await read(
@@ -623,6 +655,32 @@ async function main() {
     (file) => file.kind === "bol" && file.original_name === "bol.png",
   );
   assert.equal(bols.length, 1, "concurrent same client_request_id applies once");
+
+  const stalePath = `/api/driver/v1/loads/${activeId}/attachments`;
+  const staleAt = new Date(Date.now() - 60_000).toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO driver_api_idempotency
+        (driver_id, method, path, client_request_id, status, body, created_at)
+       VALUES (?, 'POST', ?, 'stale-reclaim-1', 0, '', ?)`,
+    )
+    .run(driverA, stalePath, staleAt);
+  const reclaimForm = new FormData();
+  reclaimForm.set("kind", "scale_ticket");
+  reclaimForm.set("client_request_id", "stale-reclaim-1");
+  reclaimForm.set("file", new File([bytes], "scale.png", { type: "image/png" }));
+  const reclaimed = await read(
+    await attachRoute.POST(
+      request(`http://localhost:3000${stalePath}`, {
+        method: "POST",
+        headers: auth,
+        body: reclaimForm,
+      }),
+      { params: Promise.resolve({ id: String(activeId) }) },
+    ),
+  );
+  assert.equal(reclaimed.status, 200, `stale pending reclaim ${JSON.stringify(reclaimed.json)}`);
+  assert.equal((reclaimed.json as { attachment: { kind: string } }).attachment.kind, "scale_ticket");
 
   const loggedOut = await read(await logoutRoute.POST(request(`${BASE}/auth/logout`, { method: "POST", headers: auth })));
   assert.equal(loggedOut.status, 204);

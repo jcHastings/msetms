@@ -34,6 +34,8 @@ export const DRIVER_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const DRIVER_LOGIN_MAX_FAILURES = 5;
 export const DRIVER_ROSTER_WINDOW_MS = 15 * 60 * 1000;
 export const DRIVER_ROSTER_MAX_HITS = 60;
+/** Orphan pending claims (status=0) older than this are deleted so a retry can proceed. */
+export const DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS = 45_000;
 const IDEMPOTENCY_PENDING = 0;
 const IDEMPOTENCY_WAIT_MS = 15;
 const IDEMPOTENCY_WAIT_TRIES = 40;
@@ -117,7 +119,13 @@ export type DriverApiStop = {
   delivered: number;
 };
 
+/** Full TMS AttachmentKind values (response `kind`). Includes office-only kinds that never upload. */
 export const DRIVER_API_ATTACHMENT_KINDS = ATTACHMENT_KINDS.map((item) => item.value);
+
+/** Native API upload allowlist: full TMS minus customer rate_con / invoice. */
+export const DRIVER_API_UPLOAD_KINDS = DRIVER_API_ATTACHMENT_KINDS.filter(
+  (kind) => !isCustomerRateDocument({ kind }),
+);
 
 export type DriverApiAttachment = {
   id: number;
@@ -183,7 +191,30 @@ export function toDriverApiDateTime(value: string | null | undefined): string {
 }
 
 export function isDriverApiUploadKind(value: string): value is AttachmentKind {
-  return ATTACHMENT_KINDS.some((item) => item.value === value) && !isCustomerRateDocument({ kind: value });
+  return DRIVER_API_UPLOAD_KINDS.includes(value as AttachmentKind);
+}
+
+function trustForwardedClientIp(): boolean {
+  const raw = String(process.env.TRUSTED_PROXY ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "cloudflare";
+}
+
+/**
+ * Client IP for roster/login rate limits.
+ * Always uses CF-Connecting-IP (Cloudflare Tunnel staging).
+ * X-Forwarded-For / X-Real-IP only when TRUSTED_PROXY is set — spoofable otherwise.
+ * Empty IP skips the limit (direct Node / no edge).
+ */
+export function driverApiRequestIp(request: Request): string {
+  const cf = (request.headers.get("cf-connecting-ip") ?? "").trim();
+  if (cf) return cf.slice(0, 80);
+  if (trustForwardedClientIp()) {
+    const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+    if (forwarded) return forwarded.slice(0, 80);
+    const real = (request.headers.get("x-real-ip") ?? "").trim();
+    if (real) return real.slice(0, 80);
+  }
+  return "";
 }
 
 function parseId(value: string | undefined): number {
@@ -192,9 +223,7 @@ function parseId(value: string | undefined): number {
 }
 
 function requestIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
-  if (forwarded) return forwarded.slice(0, 80);
-  return (request.headers.get("x-real-ip") ?? request.headers.get("cf-connecting-ip") ?? "").trim().slice(0, 80);
+  return driverApiRequestIp(request);
 }
 
 function requestUserAgent(request: Request): string {
@@ -432,7 +461,13 @@ function readClientRequestId(value: unknown): string {
   return id;
 }
 
-type StoredIdempotency = { status: number; body: string };
+type StoredIdempotency = { status: number; body: string; created_at: string };
+
+function isStalePending(row: StoredIdempotency): boolean {
+  if (row.status !== IDEMPOTENCY_PENDING) return false;
+  const created = Date.parse(row.created_at);
+  return Number.isFinite(created) && Date.now() - created >= DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS;
+}
 
 type IdempotencyKey = {
   driverId: number;
@@ -454,7 +489,7 @@ function readIdempotency(key: IdempotencyKey): StoredIdempotency | null {
   return (
     (getDb()
       .prepare(
-        `SELECT status, body FROM driver_api_idempotency
+        `SELECT status, body, created_at FROM driver_api_idempotency
          WHERE driver_id = ? AND method = ? AND path = ? AND client_request_id = ?`,
       )
       .get(key.driverId, key.method, key.path, key.clientRequestId) as StoredIdempotency | undefined) ?? null
@@ -479,8 +514,24 @@ function claimIdempotency(key: IdempotencyKey): IdempotencyClaim {
       return { kind: "claimed" };
     }
     const row = readIdempotency(key);
+    if (row && row.status >= 100) {
+      db.exec("COMMIT");
+      return { kind: "stored", stored: row };
+    }
+    if (row && isStalePending(row)) {
+      db.prepare(
+        `DELETE FROM driver_api_idempotency
+         WHERE driver_id = ? AND method = ? AND path = ? AND client_request_id = ? AND status = ?`,
+      ).run(key.driverId, key.method, key.path, key.clientRequestId, IDEMPOTENCY_PENDING);
+      db.prepare(
+        `INSERT INTO driver_api_idempotency
+          (driver_id, method, path, client_request_id, status, body, created_at)
+         VALUES (?, ?, ?, ?, ?, '', ?)`,
+      ).run(key.driverId, key.method, key.path, key.clientRequestId, IDEMPOTENCY_PENDING, nowIso());
+      db.exec("COMMIT");
+      return { kind: "claimed" };
+    }
     db.exec("COMMIT");
-    if (row && row.status >= 100) return { kind: "stored", stored: row };
     return { kind: "pending" };
   } catch (error) {
     try {

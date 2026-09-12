@@ -439,6 +439,13 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /allowKinds/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /isDriverUploadKind\(kind\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /BEGIN IMMEDIATE/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /TRUSTED_PROXY/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_UPLOAD_KINDS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /## AttachmentKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /45 seconds/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /TRUSTED_PROXY/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2026-09-11-mse-driver-api-v1-frozen/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
