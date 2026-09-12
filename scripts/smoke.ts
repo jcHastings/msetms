@@ -1924,6 +1924,9 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /DriverImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Import drivers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Driver spreadsheet/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Paste CSV rows here/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Christopher Howell|555-0100|Hastings,NE/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /defaultValue/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Show Pay|Passport Expiry|Ascend|FAST|hazmat|team-2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /Christopher Howell/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /passport|fast card|hazmat|show pay/);
