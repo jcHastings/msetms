@@ -42,8 +42,9 @@ export default async function DriverHomePage() {
       {(() => {
         const current = pickDriverDestinationLoad(active, delivered);
         const loadHref = current ? `/driver/loads/${current.id}` : "";
+        const hasTrailer = Boolean(current && driverLoadHasAssignedTrailer(current));
         const items = [
-          { href: "/driver/dispatch", label: "Dispatch" },
+          { href: "/driver/dispatch", label: "Dispatch", featured: true },
           { href: current ? `${loadHref}#upload` : "/driver/dispatch", label: "Upload", disabled: !current },
           {
             href: current ? `/api/loads/${current.id}/confirmation?packet=internal` : "/driver/dispatch",
@@ -51,10 +52,12 @@ export default async function DriverHomePage() {
             disabled: !current,
           },
           { href: "/driver/fuel", label: "Fuel" },
+          {
+            href: hasTrailer ? `${loadHref}/trailer` : "/driver/dispatch",
+            label: "Trailer",
+            disabled: !hasTrailer,
+          },
         ];
-        if (current && driverLoadHasAssignedTrailer(current)) {
-          items.push({ href: `${loadHref}/trailer`, label: "Trailer" });
-        }
         return <DriverDestinations items={items} />;
       })()}
     </div>

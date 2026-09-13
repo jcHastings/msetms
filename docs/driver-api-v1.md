@@ -153,7 +153,10 @@ Body: `{ "fuel_transaction_id": 12, "client_request_id": "uuid" }`. Manual overr
 
 ## Client home / Dispatch (JC IA lock)
 
-Driver **home** (web `/driver` and native) is **tile buttons only**: Dispatch, Upload, Confirmation, Fuel, Trailer, ….
+Driver **home** (web `/driver` and native) is **tile buttons only**. Layout lock:
+
+1. **Dispatch** — one larger full-width button on top
+2. Two rows of two: **Upload | Confirmation**, then **Fuel | Trailer**
 
 **Active | Delivered** filters and boards live **only inside Dispatch** (web `/driver/dispatch`). They are not home tiles and must not appear on the main home screen.
 

@@ -15862,11 +15862,15 @@ DISPATCH CONFIRMATION
   const driverDestUi = fs.readFileSync(path.join(process.cwd(), "components/driver-destinations.tsx"), "utf8");
   assert.match(driverDestUi, /driver-dest-label/);
   assert.match(driverDestUi, /driver-dest-off/);
+  assert.match(driverDestUi, /featured/);
+  assert.match(driverDestUi, /driver-dest-featured/);
   const driverCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(driverCss, /a\.driver-dest/);
   assert.match(driverCss, /#122033 !important/);
   assert.match(driverCss, /\.driver-dest-off[\s\S]*#334155/);
   assert.match(driverCss, /\.driver-app a\.btn-secondary/);
+  assert.match(driverCss, /driver-dest-featured[\s\S]*grid-column: 1 \/ -1/);
+  assert.match(driverCss, /driver-dest-featured[\s\S]*1\.35rem/);
   assert.match(driverHome, /Dispatch/);
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /Confirmation/);
@@ -15874,6 +15878,12 @@ DISPATCH CONFIRMATION
   assert.match(driverHome, /label: "Fuel"/);
   assert.match(driverHome, /\/driver\/fuel/);
   assert.match(driverHome, /\/driver\/dispatch/);
+  assert.match(driverHome, /featured: true/);
+  assert.match(
+    driverHome,
+    /label: "Dispatch"[\s\S]*label: "Upload"[\s\S]*label: "Confirmation"[\s\S]*label: "Fuel"[\s\S]*label: "Trailer"/,
+  );
+  assert.doesNotMatch(driverHome, /items\.push/);
   assert.doesNotMatch(driverHome, /DriverDispatchBoard/);
   assert.doesNotMatch(driverHome, /data-driver-dispatch/);
   assert.match(driverHome, /driverLoadHasAssignedTrailer/);
@@ -15882,6 +15892,10 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
   assert.match(driverHome, /pickDriverDestinationLoad/);
+  const driverApiDocs = fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8");
+  assert.match(driverApiDocs, /larger full-width button on top/);
+  assert.match(driverApiDocs, /Upload \| Confirmation/);
+  assert.match(driverApiDocs, /Fuel \| Trailer/);
   const driverDispatchPage = fs.readFileSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx"), "utf8");
   assert.match(driverDispatchPage, /DriverDispatchBoard/);
   const dispatchBoard = fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8");
