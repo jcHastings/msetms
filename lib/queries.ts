@@ -25,6 +25,14 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import {
+  assertUniqueDriverEmail,
+  DRIVER_PASSWORD_NOT_RECOGNIZED,
+  findDriverIdByLoginEmail,
+  setDriverPassword,
+  verifyDriverPassword,
+} from "./driver-password";
+import { isUsableEmail } from "./mail-shared";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
 import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
@@ -1087,15 +1095,24 @@ export function persistedTruckLocation(truck: {
   };
 }
 
+function withoutDriverPasswordHash<T extends object>(row: T): T {
+  if (row && "password_hash" in row) {
+    delete (row as { password_hash?: string }).password_hash;
+  }
+  return row;
+}
+
 export function listDrivers(): DriverWithTruck[] {
-  return getDb()
-    .prepare(
-      `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
-       FROM drivers
-       LEFT JOIN trucks ON trucks.id = drivers.truck_id
-       ORDER BY drivers.name COLLATE NOCASE`,
-    )
-    .all() as DriverWithTruck[];
+  return (
+    getDb()
+      .prepare(
+        `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
+         FROM drivers
+         LEFT JOIN trucks ON trucks.id = drivers.truck_id
+         ORDER BY drivers.name COLLATE NOCASE`,
+      )
+      .all() as DriverWithTruck[]
+  ).map((row) => withoutDriverPasswordHash(row));
 }
 
 export function isDriverLoginEligible(driver: { active: number; termination_date?: string | null }): boolean {
@@ -1103,20 +1120,22 @@ export function isDriverLoginEligible(driver: { active: number; termination_date
 }
 
 export function listDriversForLogin(): DriverWithTruck[] {
-  return getDb()
-    .prepare(
-      `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
-       FROM drivers
-       LEFT JOIN trucks ON trucks.id = drivers.truck_id
-       WHERE drivers.active != 0
-         AND TRIM(COALESCE(drivers.termination_date, '')) = ''
-       ORDER BY drivers.name COLLATE NOCASE`,
-    )
-    .all() as DriverWithTruck[];
+  return (
+    getDb()
+      .prepare(
+        `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
+         FROM drivers
+         LEFT JOIN trucks ON trucks.id = drivers.truck_id
+         WHERE drivers.active != 0
+           AND TRIM(COALESCE(drivers.termination_date, '')) = ''
+         ORDER BY drivers.name COLLATE NOCASE`,
+      )
+      .all() as DriverWithTruck[]
+  ).map((row) => withoutDriverPasswordHash(row));
 }
 
 export function getDriver(id: number): DriverWithTruck | null {
-  return (
+  const row =
     (getDb()
       .prepare(
         `SELECT drivers.*, trucks.unit_number AS truck_unit, trucks.type AS truck_type
@@ -1124,8 +1143,8 @@ export function getDriver(id: number): DriverWithTruck | null {
          LEFT JOIN trucks ON trucks.id = drivers.truck_id
          WHERE drivers.id = ?`,
       )
-      .get(id) as DriverWithTruck | undefined) ?? null
-  );
+      .get(id) as DriverWithTruck | undefined) ?? null;
+  return row ? withoutDriverPasswordHash(row) : null;
 }
 
 export function createDriver(input: {
@@ -1136,6 +1155,7 @@ export function createDriver(input: {
   active?: number;
   license: string;
   pin?: string;
+  password?: string;
   samsara_driver_id?: string;
   license_number?: string;
   license_state?: string;
@@ -1165,6 +1185,10 @@ export function createDriver(input: {
 }): number {
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
+  }
+  assertUniqueDriverEmail(input.email ?? "");
+  if (input.password && !isUsableEmail(input.email)) {
+    throw new Error("Add an email before setting a driver login password.");
   }
   const timestamp = now();
   const result = getDb()
@@ -1216,6 +1240,7 @@ export function createDriver(input: {
     );
   const id = Number(result.lastInsertRowid);
   setFleetDivision("drivers", id, input.division);
+  if (input.password) setDriverPassword(id, input.password);
   return id;
 }
 
@@ -1229,6 +1254,7 @@ export function updateDriver(
     active?: number;
     license: string;
     pin?: string;
+    password?: string;
     resetPin?: boolean;
     samsara_driver_id?: string;
     license_number?: string;
@@ -1262,6 +1288,10 @@ export function updateDriver(
   if (!current) throw new Error("Driver not found.");
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
+  }
+  assertUniqueDriverEmail(input.email ?? "", id);
+  if (input.password && !isUsableEmail(input.email ?? current.email)) {
+    throw new Error("Add an email before setting a driver login password.");
   }
   const pin = input.resetPin ? "" : input.pin != null && input.pin.trim() !== "" ? input.pin.trim() : current.pin;
   getDb()
@@ -1315,12 +1345,22 @@ export function updateDriver(
       id,
     );
   if (input.division !== undefined) setFleetDivision("drivers", id, input.division);
+  if (input.password) setDriverPassword(id, input.password);
 }
 
 export function authenticateDriver(driverId: number, pin: string): DriverWithTruck {
   const driver = getDriver(driverId);
   if (!driver || !isDriverLoginEligible(driver) || !driver.pin || driver.pin !== pin.trim()) {
     throw new Error("Driver or PIN is not recognized.");
+  }
+  return driver;
+}
+
+export function authenticateDriverByEmail(email: string, password: string): DriverWithTruck {
+  const driverId = findDriverIdByLoginEmail(email);
+  const driver = driverId ? getDriver(driverId) : null;
+  if (!driver || !isDriverLoginEligible(driver) || !verifyDriverPassword(driver.id, password)) {
+    throw new Error(DRIVER_PASSWORD_NOT_RECOGNIZED);
   }
   return driver;
 }

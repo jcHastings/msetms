@@ -393,6 +393,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "trucks", "notes", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "drivers", "email", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "drivers", "password_hash", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "notes", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "drivers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "drivers", "alt_phone", "TEXT NOT NULL DEFAULT ''");

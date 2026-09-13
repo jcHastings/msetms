@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
 import { parseOptionalInt } from "./format";
 import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
-import { authenticateDriver } from "./queries";
+import { authenticateDriverByEmail } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
 import { performDriverProgress, performDriverStopCheck, performDriverUpload } from "./driver-ops";
@@ -23,15 +23,15 @@ export async function driverLoginAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const driverId = parseOptionalInt(formData.get("driver_id"));
   try {
-    const pin = String(formData.get("pin") ?? "").trim();
-    if (!driverId || !pin) throw new Error("Pick your name and enter your PIN.");
-    const driver = authenticateDriver(driverId, pin);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    if (!email || !password) throw new Error("Enter your email and password.");
+    const driver = authenticateDriverByEmail(email, password);
     await recordLoginAttemptFromRequest({
       kind: "driver",
       outcome: "success",
-      step: "pin",
+      step: "password",
       userId: driver.id,
     });
     await setDriverSession(driver.id);
@@ -42,8 +42,8 @@ export async function driverLoginAction(
     await recordLoginAttemptFromRequest({
       kind: "driver",
       outcome: "failure",
-      step: "pin",
-      userId: driverId,
+      step: "password",
+      userId: null,
       detail: publicLoginFailureDetail(error),
     });
     return fail(error);

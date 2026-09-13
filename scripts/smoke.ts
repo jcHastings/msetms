@@ -412,7 +412,13 @@ async function main() {
   assert.match(passwordField, /Hide password/);
   assert.match(passwordField, /visible \? "Hide password" : "Show password"/);
   assert.match(passwordField, /type=\{visible \? "text" : "password"\}/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password|remember_device|Remember this device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /name="email"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /name="password"/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"),
+    /remember_device|Remember this device|Forgot password|driver_id|name="pin"|listDrivers/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-reset-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
@@ -424,7 +430,9 @@ async function main() {
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
-  assert.match(driverLoginPage, /listDriversForLogin/);
+  assert.doesNotMatch(driverLoginPage, /listDriversForLogin/);
+  assert.match(driverLoginPage, /DriverLoginForm/);
+  assert.doesNotMatch(driverLoginPage, /drivers=/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /\/api\/driver\/v1/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /No refresh-token endpoint/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /## AttachmentKind/);
@@ -449,9 +457,16 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /45 seconds/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /TRUSTED_PROXY/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2026-09-11-mse-driver-api-v1-frozen/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /"drivers": \[ \{ "id", "display_name" \}/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /v1\.0\.x additive wrap/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /drivers: listDriversForLogin\(\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /"email": "driver@example.com"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/auth\/roster/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /404/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2FA lock for v1/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /drivers: listDriversForLogin\(\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /authenticateDriverByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Use email and password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /authenticateDriverByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /Driver login password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /DISPATCHER_PASSWORD_HINT/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
@@ -6746,6 +6761,29 @@ DISPATCH CONFIRMATION
   });
   queries.authenticateDriver(noPinDriverId, "4567");
   assert.throws(() => queries.authenticateDriver(noPinDriverId, "1125"));
+  const loginDriverId = queries.createDriver({
+    name: "Email Login Driver",
+    phone: "555-0188",
+    email: "email.login@msloads.test",
+    license: "XX-EMAIL",
+    pin: "",
+    password: "Driver1$ab",
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.authenticateDriverByEmail("email.login@msloads.test", "Driver1$ab").id, loginDriverId);
+  assert.throws(() => queries.authenticateDriverByEmail("email.login@msloads.test", "Wrong1$ab"));
+  assert.throws(() => queries.authenticateDriverByEmail("nobody@msloads.test", "Driver1$ab"));
+  assert.throws(() =>
+    queries.createDriver({
+      name: "Dup Email",
+      phone: "555-0187",
+      email: "email.login@msloads.test",
+      license: "XX-DUP",
+      truck_id: null,
+      status: "available",
+    }),
+  );
   const deniseLoads = queries.listLoadsForDriver(denise.id);
   assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
   const orbcomm = await import("../lib/integrations/orbcomm");

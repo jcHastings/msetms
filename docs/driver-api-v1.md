@@ -4,16 +4,26 @@ BFF for the native iOS Driver app. **Not office deploy.** Do not treat this as l
 
 Base path: `/api/driver/v1`
 
-Auth after PIN login: `Authorization: Bearer <token>`
+Auth after email+password login: `Authorization: Bearer <token>`
+
+## Auth model
+
+Drivers sign in with **email + password** stored on the `drivers` row (`email`, `password_hash`). Hash/verify and complexity reuse office helpers (`hashDispatcherPassword`, `passwordHashMatches`, `dispatcher-password-shared.ts`: min 8, upper, lower, digit, symbol from `$&@!?#%^*+`). Dispatch sets or resets the password on Fleet → Drivers.
+
+This is a **breaking** change vs the 2026-09-11 frozen OpenAPI (PIN + `driver_id` + public roster). `GET /auth/roster` is disabled (404). `POST /auth/login` bodies with `driver_id`+`pin` or `name_or_email`+`pin` are rejected (`409`).
+
+**2FA lock for v1:** office email OTP / TOTP does **not** apply to `/api/driver/v1` or `/driver/login`. Email+password only. Office dispatcher login keeps its own 2FA.
+
+PIN may still exist on the driver record for other TMS uses. It is **not** used for web or API login.
 
 Rules:
 
 - No customer rate, invoices, or owner-operator pay on any DTO
 - No office cookies (`tms_driver_id` is not set)
 - Writes are idempotent via `client_request_id`. Uniqueness is `(driver_id, method, path, client_request_id)` claimed in a `BEGIN IMMEDIATE` transaction (no check-then-act). Same UUID on another endpoint does not replay. A pending claim (`status=0`) older than **45 seconds** is reclaimed so a crash mid-write cannot 409 forever.
-- Successful PIN login revokes that driver's other bearer tokens (single session).
+- Successful login revokes that driver's other bearer tokens (single session).
 - All datetime strings are ISO-8601 with a timezone (`2026-09-11T15:00:00.000Z` or `…-05:00`). Empty means unset.
-- No refresh-token endpoint in v1. `401` is enough for the client to clear Keychain and return to PIN login.
+- No refresh-token endpoint in v1. `401` is enough for the client to clear Keychain and return to email+password login.
 - Phone **web** `/driver` upload stays on `DRIVER_UPLOAD_KINDS`. Native API upload allowlist is wider (see AttachmentKind).
 
 ## Enums
@@ -45,25 +55,17 @@ Uniform body: `{ "ok": false, "error": "...", "code?": "UNAUTHORIZED" | "FORBIDD
 
 | Status | When |
 | --- | --- |
-| 401 | Missing/invalid bearer, or PIN login failed |
+| 401 | Missing/invalid bearer, or email+password login failed (same message for unknown email vs bad password) |
 | 403 | Load exists but is not assigned (primary or relay) |
-| 404 | Unknown load or stop |
-| 409 | Stop-check order, progress not the next step, validation |
-| 429 | Too many failed PIN attempts (5 / 15 minutes / driver or IP), or roster hammering (60 / 15 minutes / IP) |
+| 404 | Unknown load or stop, or `GET /auth/roster` |
+| 409 | Stop-check order, progress not the next step, validation, or rejected PIN/`driver_id` login body |
+| 429 | Too many failed login attempts (5 / 15 minutes / driver or IP) |
 
 ## Endpoints
 
 ### `GET /auth/roster`
 
-Unauthenticated name picker. Returns `{ "drivers": [ { "id", "display_name" }, … ] }` only (no PIN). Same class as the dispatcher login name list. Capped at 60 GETs / 15 minutes / IP so a PIN picker (one fetch on open) is unaffected. Login PIN attempts stay at 5 / 15 minutes.
-
-v1.0.x additive wrap (path unchanged): frozen OpenAPI requires the `drivers` object envelope, not a bare array.
-
-Rate-limit IP (roster and login):
-
-- Always use `CF-Connecting-IP` when present (Cloudflare Tunnel staging; no extra env).
-- Use the first `X-Forwarded-For` / `X-Real-IP` **only** when `TRUSTED_PROXY=1` (or `true` / `cloudflare`). Those headers are spoofable without a trusted edge.
-- If no usable IP (direct `node` / no proxy headers), the limit is skipped.
+Disabled. Unauthenticated clients get **404**. The fleet is not listed.
 
 ### Idempotency pending TTL
 
@@ -71,11 +73,21 @@ Writes insert a `status=0` claim, then store the JSON body. If the process dies 
 
 ### `POST /auth/login`
 
-Body: `{ "driver_id": 12, "pin": "4321" }`
+Body: `{ "email": "driver@example.com", "password": "…" }`
 
 Success: `{ "token", "expires_at", "driver": { "id", "display_name", "first_name", "phone" } }`
 
+Unknown email and bad password both return `401` `{ "ok": false, "error": "Driver or password is not recognized.", "code": "UNAUTHORIZED" }`.
+
+`driver_id`+`pin` and `name_or_email`+`pin` are rejected with `409`.
+
 A new login revokes every other token for that driver. The previous device gets `401` and should clear Keychain.
+
+Login rate-limit IP:
+
+- Always use `CF-Connecting-IP` when present (Cloudflare Tunnel staging; no extra env).
+- Use the first `X-Forwarded-For` / `X-Real-IP` **only** when `TRUSTED_PROXY=1` (or `true` / `cloudflare`). Those headers are spoofable without a trusted edge.
+- If no usable IP (direct `node` / no proxy headers), the IP half of the limit is skipped; per-driver failures still count.
 
 ### `POST /auth/logout`
 
@@ -117,14 +129,12 @@ Same rules as `driverStopCheckAction`: pickup depart before delivery arrive; che
 
 ## Example curls
 
-Roster and PIN login (no cookie):
+Email+password login (no cookie):
 
 ```bash
-curl -sS http://localhost:3000/api/driver/v1/auth/roster
-
 curl -sS -X POST http://localhost:3000/api/driver/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"driver_id":1,"pin":"YOUR_PIN"}'
+  -d '{"email":"driver@example.com","password":"YOUR_PASSWORD"}'
 ```
 
 Authenticated reads and an idempotent progress write:
@@ -169,6 +179,6 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/driv
 ## Local exercise
 
 1. `npm install` and run `npm run dev` against a local SQLite DB (default `data/tms.db`).
-2. Set a PIN on a driver in Fleet → Drivers (web).
-3. Use the curls above. `GET /auth/roster` lists eligible names only.
+2. Set an email and login password on a driver in Fleet → Drivers (web).
+3. Use the curls above. `GET /auth/roster` returns 404.
 4. `npm test` runs `scripts/smoke.ts` then `scripts/driver-api-v1-test.ts` (route-level, temp DB).

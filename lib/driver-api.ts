@@ -12,7 +12,8 @@ import { listAttachments } from "./files";
 import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
 import { isCustomerRateDocument } from "./load-documents-shared";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
-import { authenticateDriver, getDriver, isDriverLoginEligible, listDriversForLogin, listLoadsForDriver } from "./queries";
+import { DRIVER_PASSWORD_NOT_RECOGNIZED, findDriverIdByLoginEmail } from "./driver-password";
+import { authenticateDriverByEmail, getDriver, isDriverLoginEligible, listLoadsForDriver } from "./queries";
 import { relayForDriver } from "./relay-store";
 import { formatRelayLane } from "./relays";
 import { ensureDefaultStops, type LoadStop } from "./stops";
@@ -32,8 +33,6 @@ export const DRIVER_API_BASE = "/api/driver/v1";
 export const DRIVER_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const DRIVER_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const DRIVER_LOGIN_MAX_FAILURES = 5;
-export const DRIVER_ROSTER_WINDOW_MS = 15 * 60 * 1000;
-export const DRIVER_ROSTER_MAX_HITS = 60;
 /** Orphan pending claims (status=0) older than this are deleted so a retry can proceed. */
 export const DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS = 45_000;
 const IDEMPOTENCY_PENDING = 0;
@@ -57,11 +56,6 @@ export type DriverApiDriver = {
   first_name: string;
   phone: string;
 };
-
-export type DriverApiRosterEntry = { id: number; display_name: string };
-
-/** Frozen OpenAPI roster envelope. v1.0.x additive wrap — path unchanged. */
-export type DriverApiRoster = { drivers: DriverApiRosterEntry[] };
 
 export type DriverApiScheduleType = "APPT" | "FCFS";
 
@@ -626,31 +620,6 @@ function assertLoginNotRateLimited(driverId: number | null, ip: string): void {
   }
 }
 
-function rosterHitCount(ip: string): number {
-  const since = new Date(Date.now() - DRIVER_ROSTER_WINDOW_MS).toISOString();
-  const row = getDb()
-    .prepare(
-      `SELECT COUNT(*) AS count
-       FROM driver_api_rate_hits
-       WHERE kind = 'roster' AND ip_address = ? AND created_at >= ?`,
-    )
-    .get(ip, since) as { count: number };
-  return row.count;
-}
-
-function assertRosterNotRateLimited(ip: string): void {
-  if (!ip) return;
-  getDb()
-    .prepare("DELETE FROM driver_api_rate_hits WHERE kind = 'roster' AND created_at < ?")
-    .run(new Date(Date.now() - DRIVER_ROSTER_WINDOW_MS).toISOString());
-  if (rosterHitCount(ip) >= DRIVER_ROSTER_MAX_HITS) {
-    throw new DriverApiHttpError(429, "Too many roster requests. Try again later.", "RATE_LIMITED");
-  }
-  getDb()
-    .prepare("INSERT INTO driver_api_rate_hits (kind, ip_address, created_at) VALUES ('roster', ?, ?)")
-    .run(ip, nowIso());
-}
-
 async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = (await request.json()) as unknown;
@@ -664,19 +633,8 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
   }
 }
 
-export async function handleDriverRoster(request: Request): Promise<Response> {
-  try {
-    assertRosterNotRateLimited(requestIp(request));
-    const roster: DriverApiRoster = {
-      drivers: listDriversForLogin().map((driver) => ({
-        id: driver.id,
-        display_name: driverDisplayName(driver),
-      })),
-    };
-    return Response.json(roster);
-  } catch (error) {
-    return fromOpsError(error);
-  }
+export async function handleDriverRoster(_request: Request): Promise<Response> {
+  return driverApiError(404, "Not found.", "NOT_FOUND");
 }
 
 export async function handleDriverLogin(request: Request): Promise<Response> {
@@ -685,20 +643,21 @@ export async function handleDriverLogin(request: Request): Promise<Response> {
   let driverId = 0;
   try {
     const body = await readJsonBody(request);
-    driverId = Number(body.driver_id);
-    if (!Number.isFinite(driverId) || driverId <= 0) {
-      driverId = 0;
+    if (body.driver_id != null || body.pin != null || body.name_or_email != null || body.name != null) {
+      throw new DriverApiHttpError(409, "Use email and password.", "CONFLICT");
     }
+    const email = String(body.email ?? "").trim();
+    const password = String(body.password ?? "");
+    driverId = findDriverIdByLoginEmail(email) ?? 0;
     assertLoginNotRateLimited(driverId || null, ip);
-    const pin = String(body.pin ?? "").trim();
-    if (!driverId || !pin) {
-      throw new DriverApiHttpError(401, "Driver or PIN is not recognized.", "UNAUTHORIZED");
+    if (!email || !password) {
+      throw new DriverApiHttpError(401, DRIVER_PASSWORD_NOT_RECOGNIZED, "UNAUTHORIZED");
     }
-    const driver = authenticateDriver(driverId, pin);
+    const driver = authenticateDriverByEmail(email, password);
     recordLoginAttempt({
       kind: "driver",
       outcome: "success",
-      step: "pin",
+      step: "password",
       userId: driver.id,
       ipAddress: ip,
       userAgent,
@@ -713,11 +672,14 @@ export async function handleDriverLogin(request: Request): Promise<Response> {
     if (error instanceof DriverApiHttpError && error.status === 429) {
       return fromOpsError(error);
     }
+    if (error instanceof DriverApiHttpError && error.status === 409) {
+      return fromOpsError(error);
+    }
     const detail = publicLoginFailureDetail(error);
     recordLoginAttempt({
       kind: "driver",
       outcome: "failure",
-      step: "pin",
+      step: "password",
       userId: driverId || null,
       ipAddress: ip,
       userAgent,
@@ -726,7 +688,7 @@ export async function handleDriverLogin(request: Request): Promise<Response> {
     if (error instanceof DriverApiHttpError && error.status === 401) {
       return fromOpsError(error);
     }
-    return driverApiError(401, "Driver or PIN is not recognized.", "UNAUTHORIZED");
+    return driverApiError(401, DRIVER_PASSWORD_NOT_RECOGNIZED, "UNAUTHORIZED");
   }
 }
 

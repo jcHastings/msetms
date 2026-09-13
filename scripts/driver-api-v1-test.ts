@@ -11,6 +11,11 @@ process.env.TRUSTED_PROXY = "1";
 
 const FIXTURE = path.join(process.cwd(), "scripts/fixtures/driver-api/pod.png");
 const BASE = "http://localhost:3000/api/driver/v1";
+const DRIVER_PASSWORD = "Driver1$ab";
+
+function loginPayload(email: string, password = DRIVER_PASSWORD) {
+  return JSON.stringify({ email, password });
+}
 
 function loadInput(
   customerId: number,
@@ -148,32 +153,40 @@ async function main() {
   const driverA = queries.createDriver({
     name: "Alex Rivera",
     phone: "555-0101",
+    email: "alex.rivera@msloads.test",
     license: "TN-CDL-A",
     pin: "4321",
+    password: DRIVER_PASSWORD,
     truck_id: null,
     status: "available",
   });
   const driverB = queries.createDriver({
     name: "Blake Soto",
     phone: "555-0102",
+    email: "blake.soto@msloads.test",
     license: "TN-CDL-B",
     pin: "2222",
+    password: DRIVER_PASSWORD,
     truck_id: null,
     status: "available",
   });
   const driverC = queries.createDriver({
     name: "Casey Relay",
     phone: "555-0103",
+    email: "casey.relay@msloads.test",
     license: "TN-CDL-C",
     pin: "3333",
+    password: DRIVER_PASSWORD,
     truck_id: null,
     status: "available",
   });
   const limiter = queries.createDriver({
     name: "Limit Test",
     phone: "555-0199",
+    email: "limit.test@msloads.test",
     license: "TN-CDL-L",
     pin: "9999",
+    password: DRIVER_PASSWORD,
     truck_id: null,
     status: "available",
   });
@@ -210,26 +223,41 @@ async function main() {
   });
 
   const roster = await read(await rosterRoute.GET(request(`${BASE}/auth/roster`)));
-  assert.equal(roster.status, 200);
-  const rosterBody = roster.json as { drivers: Array<{ id: number; display_name: string }> };
-  assert.equal(Array.isArray(roster.json), false, "roster is an object envelope, not a bare array");
-  assert.equal(Array.isArray(rosterBody.drivers), true);
-  const names = rosterBody.drivers;
-  assert.equal(names.some((row) => row.id === driverA && row.display_name === "Alex Rivera"), true);
-  assert.equal(
-    names.every((row) => Object.keys(row).length === 2 && "id" in row && "display_name" in row),
-    true,
-    "roster is id + display_name only",
+  assert.equal(roster.status, 404);
+  const rosterBody = roster.json as { ok: false; error: string; code?: string };
+  assert.equal(rosterBody.ok, false);
+  assert.equal(rosterBody.code, "NOT_FOUND");
+  assert.equal(JSON.stringify(roster.json).includes("Alex Rivera"), false, "roster does not list drivers");
+
+  const pinLogin = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ driver_id: driverA, pin: "4321" }),
+      }),
+    ),
   );
-  assert.equal(Object.keys(rosterBody).length, 1, "roster envelope is drivers only");
-  assertNoSecrets(roster.json);
+  assert.equal(pinLogin.status, 409);
+  assert.equal((pinLogin.json as { code?: string }).code, "CONFLICT");
+
+  const namePinLogin = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name_or_email: "Alex Rivera", pin: "4321" }),
+      }),
+    ),
+  );
+  assert.equal(namePinLogin.status, 409);
 
   const badLogin = await read(
     await loginRoute.POST(
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ driver_id: driverA, pin: "0000" }),
+        body: loginPayload("alex.rivera@msloads.test", "Wrong1$ab"),
       }),
     ),
   );
@@ -237,13 +265,26 @@ async function main() {
   const badBody = badLogin.json as { ok: false; error: string; code?: string };
   assert.equal(badBody.ok, false);
   assert.equal(badBody.code, "UNAUTHORIZED");
+  assert.match(badBody.error, /Driver or password is not recognized/);
+
+  const unknownEmail = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: loginPayload("nobody@msloads.test", DRIVER_PASSWORD),
+      }),
+    ),
+  );
+  assert.equal(unknownEmail.status, 401);
+  assert.equal((unknownEmail.json as { error?: string }).error, badBody.error);
 
   const goodLogin = await read(
     await loginRoute.POST(
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ driver_id: driverA, pin: "4321" }),
+        body: loginPayload("alex.rivera@msloads.test"),
       }),
     ),
   );
@@ -339,7 +380,7 @@ async function main() {
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ driver_id: driverC, pin: "3333" }),
+        body: loginPayload("casey.relay@msloads.test"),
       }),
     ),
   );
@@ -697,7 +738,7 @@ async function main() {
         request(`${BASE}/auth/login`, {
           method: "POST",
           headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.10" },
-          body: JSON.stringify({ driver_id: limiter, pin: "0000" }),
+          body: loginPayload("limit.test@msloads.test", "Wrong1$ab"),
         }),
       ),
     );
@@ -708,7 +749,7 @@ async function main() {
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.10" },
-        body: JSON.stringify({ driver_id: limiter, pin: "9999" }),
+        body: loginPayload("limit.test@msloads.test"),
       }),
     ),
   );
@@ -720,7 +761,7 @@ async function main() {
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ driver_id: driverB, pin: "2222" }),
+        body: loginPayload("blake.soto@msloads.test"),
       }),
     ),
   );
@@ -730,7 +771,7 @@ async function main() {
       request(`${BASE}/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ driver_id: driverB, pin: "2222" }),
+        body: loginPayload("blake.soto@msloads.test"),
       }),
     ),
   );

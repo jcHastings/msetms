@@ -1,6 +1,6 @@
 /**
  * Office / dispatcher password rules. Safe to import from client components.
- * Driver PIN login is a different path and is not governed by this file.
+ * Driver app login (web `/driver` and `/api/driver/v1`) uses the same parameters.
  */
 export const DISPATCHER_PASSWORD_SYMBOLS = "$&@!?#%^*+";
 

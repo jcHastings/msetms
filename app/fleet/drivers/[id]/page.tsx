@@ -8,6 +8,7 @@ import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { listFleetDocuments } from "@/lib/files";
 import { driverFormValues } from "@/lib/fleet-form-shared";
+import { hasDriverPassword } from "@/lib/driver-password";
 import { getDriver, listDriverDrugTests } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
@@ -38,7 +39,7 @@ export default async function EditDriverPage({
       <DriverForm
         driver={driverFormValues({
           ...driverWithoutPin,
-          has_app_login: String(pin ?? "").trim() ? 1 : 0,
+          has_app_login: hasDriverPassword(Number(driver.id)) ? 1 : 0,
         })}
         filesHref="#driver-files"
         submitLabel="Save"

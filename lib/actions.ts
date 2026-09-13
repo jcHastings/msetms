@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
+import { parseDriverLoginPassword } from "./driver-password";
 import { cleanDateInput, parseDriverPin, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import { parseLoadInput } from "./load-input";
 import { safeReturnTo } from "./load-page-shared";
@@ -416,6 +417,7 @@ export async function createDriverAction(
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
       pin: parseDriverPin(formData.get("pin")),
+      password: parseDriverLoginPassword(formData.get("password"), false) || undefined,
       cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
       division: parseFleetDivision(formData.get("division")),
     });
@@ -447,6 +449,7 @@ export async function updateDriverAction(
       active: parseActive(formData),
       license: String(formData.get("license_number") ?? "").trim() || current.license,
       pin: parseDriverPin(formData.get("pin")),
+      password: parseDriverLoginPassword(formData.get("password"), false) || undefined,
       samsara_driver_id: current.samsara_driver_id,
       license_number: String(formData.get("license_number") ?? "").trim(),
       license_state: current.license_state,
