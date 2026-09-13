@@ -1373,6 +1373,7 @@ export async function importLocationsCsvAction(
     if (file.size > 5 * 1024 * 1024) {
       return { ok: false, error: "CSV is too large (max 5 MB)." };
     }
+    const { fileToBuffer } = await import("./files");
     const text = decodeCsvBuffer(await fileToBuffer(file));
     const result = importLocationsFromCsv(text);
     refresh();
