@@ -151,7 +151,13 @@ This driver's receipt photos. Omit `status` to return both.
 
 Body: `{ "fuel_transaction_id": 12, "client_request_id": "uuid" }`. Manual override. Office fuel spreadsheet import also auto-matches pending photos (date / amount / gallons / merchant / card last4). Auto-apply when score ≥ 70 **and** amount or last4 matches. If the top two scores are within 8 points, the photo stays `pending_match`.
 
-Web `/driver` has one **Dispatch** tile (Active | Delivered filters on that screen) plus a **Fuel** tile at `/driver/fuel`.
+## Client home / Dispatch (JC IA lock)
+
+Driver **home** (web `/driver` and native) is **tile buttons only**: Dispatch, Upload, Confirmation, Fuel, Trailer, ….
+
+**Active | Delivered** filters and boards live **only inside Dispatch** (web `/driver/dispatch`). They are not home tiles and must not appear on the main home screen.
+
+`GET /loads?scope=active|recent` (`scope=delivered` aliases `recent`) is the API those Dispatch boards call. Fuel is a separate home tile (`/driver/fuel` on web).
 
 ## Example curls
 
