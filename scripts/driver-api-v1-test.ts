@@ -25,6 +25,7 @@ function loadInput(
     destination: string;
     status: string;
     driver_id: number | null;
+    trailer_id: number | null;
     rate: number | null;
     oo_pay: number | null;
     reference_number: string;
@@ -60,6 +61,7 @@ function loadInput(
     status: extra.status ?? "assigned",
     truck_id: null,
     driver_id: extra.driver_id ?? null,
+    trailer_id: extra.trailer_id ?? null,
     load_number: extra.load_number,
     oo_pay: extra.oo_pay ?? 350,
   };
@@ -95,6 +97,7 @@ const DATETIME_KEYS = new Set([
   "departed_at",
   "created_at",
   "occurred_at",
+  "recorded_at",
 ]);
 
 function assertApiDateTimes(value: unknown, trail = "$"): void {
@@ -142,6 +145,7 @@ async function main() {
   const meRoute = await import("../app/api/driver/v1/me/route");
   const loadsRoute = await import("../app/api/driver/v1/loads/route");
   const loadRoute = await import("../app/api/driver/v1/loads/[id]/route");
+  const trailerRoute = await import("../app/api/driver/v1/loads/[id]/trailer/route");
   const progressRoute = await import("../app/api/driver/v1/loads/[id]/progress/route");
   const checkRoute = await import("../app/api/driver/v1/loads/[id]/stops/[stopId]/check/route");
   const attachRoute = await import("../app/api/driver/v1/loads/[id]/attachments/route");
@@ -479,6 +483,90 @@ async function main() {
   );
   assert.equal(relayDetail.status, 200, "relay driver can open the load");
   assert.ok((relayDetail.json as { relay_leg?: { lane: string } }).relay_leg?.lane);
+
+  const noTrailer = await read(
+    await trailerRoute.GET(request(`${BASE}/loads/${activeId}/trailer`, { headers: auth }), {
+      params: Promise.resolve({ id: String(activeId) }),
+    }),
+  );
+  assert.equal(noTrailer.status, 404, "assigned load without trailer is 404");
+  assert.equal((noTrailer.json as { code?: string }).code, "NOT_FOUND");
+
+  const forbiddenTrailer = await read(
+    await trailerRoute.GET(request(`${BASE}/loads/${otherId}/trailer`, { headers: auth }), {
+      params: Promise.resolve({ id: String(otherId) }),
+    }),
+  );
+  assert.equal(forbiddenTrailer.status, 403);
+  assert.equal((forbiddenTrailer.json as { code?: string }).code, "FORBIDDEN");
+
+  const trailerId = queries.createTrailer({
+    unit_number: "MS2201",
+    type: "reefer",
+    orbcomm_asset_id: "orbcomm-api-trailer",
+  });
+  const trailerLoadId = queries.createLoad(
+    loadInput(customerId, {
+      load_number: "MSE-API-TRAILER",
+      driver_id: driverA,
+      status: "assigned",
+      trailer_id: trailerId,
+    }),
+  );
+  const emptyGps = await read(
+    await trailerRoute.GET(request(`${BASE}/loads/${trailerLoadId}/trailer`, { headers: auth }), {
+      params: Promise.resolve({ id: String(trailerLoadId) }),
+    }),
+  );
+  assert.equal(emptyGps.status, 200, "trailer with no coords is 200");
+  const emptyGpsBody = emptyGps.json as {
+    trailer_id: number;
+    unit_number: string;
+    latitude: number | null;
+    longitude: number | null;
+    source: string | null;
+    point: { lat: number; lng: number } | null;
+  };
+  assert.equal(emptyGpsBody.trailer_id, trailerId);
+  assert.equal(emptyGpsBody.unit_number, "MS2201");
+  assert.equal(emptyGpsBody.latitude, null);
+  assert.equal(emptyGpsBody.longitude, null);
+  assert.equal(emptyGpsBody.point, null);
+  assertNoSecrets(emptyGps.json);
+
+  queries.saveTrailerGps(trailerId, {
+    latitude: 41.12,
+    longitude: -96.0,
+    address: "Driver API trailer pin",
+    recordedAt: "2026-08-20T14:00:00.000Z",
+    source: "orbcomm",
+  });
+  const withGps = await read(
+    await trailerRoute.GET(request(`${BASE}/loads/${trailerLoadId}/trailer`, { headers: auth }), {
+      params: Promise.resolve({ id: String(trailerLoadId) }),
+    }),
+  );
+  assert.equal(withGps.status, 200);
+  const gpsBody = withGps.json as {
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+    recorded_at: string;
+    source: string | null;
+    heading_deg: number | null;
+    speed_mph: number | null;
+    point: { lat: number; lng: number } | null;
+  };
+  assert.equal(gpsBody.latitude, 41.12);
+  assert.equal(gpsBody.longitude, -96.0);
+  assert.equal(gpsBody.address, "Driver API trailer pin");
+  assert.equal(gpsBody.source, "stored");
+  assert.equal(gpsBody.point?.lat, 41.12);
+  assert.equal(gpsBody.point?.lng, -96.0);
+  assert.equal(gpsBody.heading_deg, null);
+  assert.equal(gpsBody.speed_mph, null);
+  assertApiDateTimes(withGps.json);
+  assertNoSecrets(withGps.json);
 
   const progressBody = { progress: "en_route_pickup", client_request_id: "progress-1" };
   const firstProgress = await read(

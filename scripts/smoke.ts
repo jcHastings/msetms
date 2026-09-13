@@ -459,6 +459,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2026-09-11-mse-driver-api-v1-frozen/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /"email": "driver@example.com"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/auth\/roster/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/loads\/\{id\}\/trailer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /404/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2FA lock for v1/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /drivers: listDriversForLogin\(\)/);
@@ -16007,6 +16008,13 @@ DISPATCH CONFIRMATION
   assert.equal(emptyTrailerView.point, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /data-driver-trailer-map/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /cluster=\{false\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /mapTypeControl/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /mapTypeControl = false/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /mapTypeIds: \["roadmap", "satellite"\]/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/loads/[id]/trailer/route.ts")), true);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /handleDriverLoadTrailer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /driverAssignedTrailerLocation/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /source === "orbcomm"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /LOAD_MAP_PIN_TIP_Y/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /r="9"/);
   const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");

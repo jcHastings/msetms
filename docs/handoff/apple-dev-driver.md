@@ -23,6 +23,8 @@ Credentials:
 
 `TMS_SKIP_SEED` does **not** create this row.
 
+Native Trailer map: `GET /api/driver/v1/loads/{id}/trailer` (bearer). Web Trailer screen has Map / Satellite.
+
 ## Office password set/reset
 
 Fleet → Drivers add/edit: **Email Address** + **Driver login password** (same complexity as dispatcher: `dispatcher-password-shared.ts`). Leave password blank on edit to keep the hash.

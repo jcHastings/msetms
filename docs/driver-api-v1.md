@@ -111,6 +111,31 @@ Omitted forever: billed `rate`, `oo_pay` / `oo_percent`, customer invoice number
 
 `LoadDetail` = summary + `stops` + driver-facing `attachments`. `403` if not assigned (relays included via `driverAssignedToLoad`). Customer rate-con / invoice files are omitted.
 
+### `GET /loads/{id}/trailer`
+
+Assigned trailer location for the native Trailer map. Bearer + driver-scoped (`requireAssignedLoad`).
+
+- No assigned trailer on the load → `404`
+- Trailer present but no plottable coords → `200` with `latitude` / `longitude` / `point` null
+- Live Orbcomm (`source === "orbcomm"`) first; else persisted last-known (`source: "stored"`). Never invents coordinates.
+
+```json
+{
+  "trailer_id": 1,
+  "unit_number": "MS2201",
+  "latitude": 41.12,
+  "longitude": -96.0,
+  "address": "…",
+  "recorded_at": "2026-08-20T14:00:00.000Z",
+  "source": "orbcomm",
+  "heading_deg": null,
+  "speed_mph": null,
+  "point": { "lat": 41.12, "lng": -96.0 }
+}
+```
+
+Web `/driver/loads/{id}/trailer` uses the same resolution and enables Google **Map / Satellite** (`MapTypeControl`) so the driver can switch to satellite and zoom to the pin.
+
 ### `POST /loads/{id}/progress`
 
 Body: `{ "progress": "loaded", "client_request_id": "uuid" }`
@@ -157,6 +182,8 @@ Driver **home** (web `/driver` and native) is **tile buttons only**. Layout lock
 
 1. **Dispatch** — one larger full-width button on top
 2. Two rows of two: **Upload | Confirmation**, then **Fuel | Trailer**
+
+Trailer tile opens the load Trailer map (web) or `GET /loads/{id}/trailer` (native). Web map has Map / Satellite.
 
 **Active | Delivered** filters and boards live **only inside Dispatch** (web `/driver/dispatch`). They are not home tiles and must not appear on the main home screen.
 

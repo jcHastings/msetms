@@ -35,6 +35,7 @@ export default async function DriverLoadTrailerPage({
           apiKey={mapsBrowserKey()}
           points={view.point ? [view.point] : []}
           cluster={false}
+          mapTypeControl
           className="h-[28rem] w-full bg-slate-800"
           missingKeyMessage="Map is off."
           emptyMessage="No trailer location yet."

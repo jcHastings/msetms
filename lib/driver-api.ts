@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { runWithAuditActor } from "./audit";
 import { getDb } from "./db";
+import { driverAssignedTrailerLocation } from "./driver-trailer";
 import {
   DriverOpsError,
   performDriverProgress,
@@ -781,6 +782,48 @@ export async function handleDriverLoadDetail(
     if (!loadId) return driverApiError(404, "Load not found.", "NOT_FOUND");
     const load = requireAssignedLoad(loadId, driver.id, { allowCancelled: true });
     return Response.json(toLoadDetail(load, driver.id));
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+export type DriverApiTrailerLocation = {
+  trailer_id: number;
+  unit_number: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
+  recorded_at: string;
+  source: "orbcomm" | "stored" | null;
+  heading_deg: number | null;
+  speed_mph: number | null;
+  point: { lat: number; lng: number } | null;
+};
+
+export async function handleDriverLoadTrailer(
+  request: Request,
+  params: Promise<{ id: string }>,
+): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    const loadId = parseId((await params).id);
+    if (!loadId) return driverApiError(404, "Load not found.", "NOT_FOUND");
+    const load = requireAssignedLoad(loadId, driver.id, { allowCancelled: true });
+    const location = await driverAssignedTrailerLocation(load);
+    if (!location) return driverApiError(404, "Trailer not found.", "NOT_FOUND");
+    const body: DriverApiTrailerLocation = {
+      trailer_id: location.trailerId,
+      unit_number: location.unitNumber,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+      recorded_at: toDriverApiDateTime(location.recordedAt),
+      source: location.source,
+      heading_deg: location.headingDeg,
+      speed_mph: location.speedMph,
+      point: location.point,
+    };
+    return Response.json(body);
   } catch (error) {
     return fromOpsError(error);
   }
