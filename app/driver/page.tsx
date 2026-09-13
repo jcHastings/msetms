@@ -5,7 +5,7 @@ import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
 import { DriverDestinations } from "@/components/driver-destinations";
 import { pickDriverDestinationLoad } from "@/lib/driver-destinations-shared";
-import { driverLoadHasAssignedTrailer } from "@/lib/driver-trailer";
+import { driverTrailerPageHref } from "@/lib/driver-trailer";
 import { isActiveLoadStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export default async function DriverHomePage() {
       {(() => {
         const current = pickDriverDestinationLoad(active, delivered);
         const loadHref = current ? `/driver/loads/${current.id}` : "";
-        const hasTrailer = Boolean(current && driverLoadHasAssignedTrailer(current));
+        const trailerHref = driverTrailerPageHref(current);
         const items = [
           { href: "/driver/dispatch", label: "Dispatch", featured: true },
           { href: current ? `${loadHref}#upload` : "/driver/dispatch", label: "Upload", disabled: !current },
@@ -53,9 +53,9 @@ export default async function DriverHomePage() {
           },
           { href: "/driver/fuel", label: "Fuel" },
           {
-            href: hasTrailer ? `${loadHref}/trailer` : "/driver/dispatch",
+            href: trailerHref ?? "",
             label: "Trailer",
-            disabled: !hasTrailer,
+            disabled: !trailerHref,
           },
         ];
         return <DriverDestinations items={items} />;

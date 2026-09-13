@@ -15887,7 +15887,15 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(driverHome, /items\.push/);
   assert.doesNotMatch(driverHome, /DriverDispatchBoard/);
   assert.doesNotMatch(driverHome, /data-driver-dispatch/);
-  assert.match(driverHome, /driverLoadHasAssignedTrailer/);
+  assert.match(driverHome, /driverTrailerPageHref/);
+  assert.doesNotMatch(driverHome, /["']\/driver\/trailer["']/);
+  assert.match(driverDestUi, /data-driver-dest-href=\{item\.href\}/);
+  assert.doesNotMatch(driverDestUi, /next\/link/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/trailer/page.tsx")), true);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/driver/trailer/page.tsx"), "utf8"),
+    /driverTrailerPageHref/,
+  );
   assert.doesNotMatch(driverHome, /label: "Active"/);
   assert.doesNotMatch(driverHome, /label: "Delivered"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
@@ -15917,9 +15925,12 @@ DISPATCH CONFIRMATION
     33,
   );
   assert.equal(pickDriverDestinationLoad([], []), null);
-  const { driverLoadHasAssignedTrailer, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
+  const { driverLoadHasAssignedTrailer, driverTrailerPageHref, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
   assert.equal(driverLoadHasAssignedTrailer({ trailer_id: null }), false);
   assert.equal(driverLoadHasAssignedTrailer({ trailer_id: 9 }), true);
+  assert.equal(driverTrailerPageHref({ id: 42, trailer_id: 9 }), "/driver/loads/42/trailer");
+  assert.equal(driverTrailerPageHref({ id: 42, trailer_id: null }), null);
+  assert.equal(driverTrailerPageHref(null), null);
   const driverPinTrailerId = queries.createTrailer({
     unit_number: "TR-DRV-PIN",
     type: "reefer",

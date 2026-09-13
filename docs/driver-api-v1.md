@@ -183,7 +183,7 @@ Driver **home** (web `/driver` and native) is **tile buttons only**. Layout lock
 1. **Dispatch** — one larger full-width button on top
 2. Two rows of two: **Upload | Confirmation**, then **Fuel | Trailer**
 
-Trailer tile opens the load Trailer map (web) or `GET /loads/{id}/trailer` (native). Web map has Map / Satellite.
+Trailer tile opens the load Trailer map at `/driver/loads/{id}/trailer` (web) or `GET /loads/{id}/trailer` (native). Web map has Map / Satellite. `/driver/trailer` redirects to that assigned-load page when a trailer is assigned.
 
 **Active | Delivered** filters and boards live **only inside Dispatch** (web `/driver/dispatch`). They are not home tiles and must not appear on the main home screen.
 

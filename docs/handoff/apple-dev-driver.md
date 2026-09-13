@@ -23,7 +23,7 @@ Credentials:
 
 `TMS_SKIP_SEED` does **not** create this row.
 
-Native Trailer map: `GET /api/driver/v1/loads/{id}/trailer` (bearer). Web Trailer screen has Map / Satellite.
+Native Trailer map: `GET /api/driver/v1/loads/{id}/trailer` (bearer). Web Trailer tile href is `/driver/loads/{id}/trailer` (not `/driver/trailer`). Web map has Map / Satellite.
 
 ## Office password set/reset
 

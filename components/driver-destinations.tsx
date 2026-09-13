@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 export type DriverDestination = {
   href: string;
   label: string;
@@ -12,14 +10,19 @@ export function DriverDestinations({ items }: { items: DriverDestination[] }) {
     <nav className="mb-5 grid grid-cols-2 gap-3" data-driver-destinations="">
       {items.map((item) => {
         const featuredClass = item.featured ? " driver-dest-featured" : "";
-        return item.disabled ? (
+        return item.disabled || !item.href ? (
           <span key={item.label} className={`driver-dest-off${featuredClass}`}>
             {item.label}
           </span>
         ) : (
-          <Link key={item.label} href={item.href} className={`driver-dest${featuredClass}`}>
+          <a
+            key={item.label}
+            href={item.href}
+            className={`driver-dest${featuredClass}`}
+            data-driver-dest-href={item.href}
+          >
             <span className="driver-dest-label">{item.label}</span>
-          </Link>
+          </a>
         );
       })}
     </nav>

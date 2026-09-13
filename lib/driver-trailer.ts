@@ -23,6 +23,14 @@ export function driverLoadHasAssignedTrailer(load: Pick<LoadView, "trailer_id">)
   return load.trailer_id != null && load.trailer_id > 0;
 }
 
+/** Per-load Trailer map. Home tiles must not use `/driver/trailer` as the href. */
+export function driverTrailerPageHref(
+  load: Pick<LoadView, "id" | "trailer_id"> | null | undefined,
+): string | null {
+  if (!load || !driverLoadHasAssignedTrailer(load)) return null;
+  return `/driver/loads/${load.id}/trailer`;
+}
+
 /** Live Orbcomm first; else persisted last-known. Never invents coordinates. */
 export async function driverAssignedTrailerLocation(load: LoadView): Promise<DriverTrailerLocation | null> {
   if (!driverLoadHasAssignedTrailer(load) || load.trailer_id == null) return null;
