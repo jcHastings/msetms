@@ -127,11 +127,11 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
         <input id="country" name="country" required defaultValue={driver?.country || "USA"} />
       </div>
       <div className="field">
-        <label htmlFor="state">State {driver ? "" : "*"}</label>
+        <label htmlFor="state">State *</label>
         <input id="state" name="state" required={!driver} defaultValue={driver?.state} />
       </div>
       <div className="field">
-        <label htmlFor="city">City {driver ? "" : "*"}</label>
+        <label htmlFor="city">City *</label>
         <input id="city" name="city" required={!driver} defaultValue={driver?.city} />
       </div>
       <div className="field">
