@@ -633,7 +633,7 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
   }
 }
 
-export async function handleDriverRoster(_request: Request): Promise<Response> {
+export async function handleDriverRoster(): Promise<Response> {
   return driverApiError(404, "Not found.", "NOT_FOUND");
 }
 
