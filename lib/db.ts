@@ -643,8 +643,6 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
-    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_driver_status ON fuel_receipts(driver_id, status);
-    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_tx ON fuel_receipts(fuel_transaction_id);
     CREATE TABLE IF NOT EXISTS fuel_week_reports (
       week_start_ymd TEXT PRIMARY KEY,
       week_end_ymd TEXT NOT NULL,
@@ -1048,74 +1046,147 @@ export function migrate(db: Database): void {
   backfillTruncatedDispatchNotes(db);
   backfillLoadNumbering(db);
   backfillSampleLoads(db);
+  migrateFuelReceiptsForDriverOrphans(db);
 }
 
-/** Allow orphan early-upload receipts (nullable load_id + pending_match status). */
-function migrateFuelReceiptsForDriverOrphans(db: Database): void {
-  const columns = db.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{
-    name: string;
-    notnull: number;
-  }>;
-  if (columns.length === 0) return;
-  const names = new Set(columns.map((col) => col.name));
-  const loadCol = columns.find((col) => col.name === "load_id");
-  const hasStatus = names.has("status");
-  if (loadCol && loadCol.notnull === 0 && hasStatus) {
-    ensureColumn(db, "fuel_receipts", "amount", "REAL");
-    ensureColumn(db, "fuel_receipts", "merchant", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "fuel_receipts", "card_last4", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "fuel_receipts", "stored_name", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "fuel_receipts", "original_name", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "fuel_receipts", "mime_type", "TEXT NOT NULL DEFAULT ''");
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_fuel_receipts_driver_status ON fuel_receipts(driver_id, status)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_fuel_receipts_tx ON fuel_receipts(fuel_transaction_id)`);
-    return;
-  }
-
-  const amountSql = names.has("amount") ? "amount" : "NULL";
-  const merchantSql = names.has("merchant") ? "merchant" : "''";
-  const cardSql = names.has("card_last4") ? "card_last4" : "''";
-  const statusSql = names.has("status")
-    ? "status"
-    : `CASE WHEN fuel_transaction_id IS NOT NULL OR load_id IS NOT NULL THEN 'matched' ELSE 'pending_match' END`;
-  const storedSql = names.has("stored_name") ? "stored_name" : "''";
-  const originalSql = names.has("original_name") ? "original_name" : "''";
-  const mimeSql = names.has("mime_type") ? "mime_type" : "''";
-
-  db.exec(`
-    ALTER TABLE fuel_receipts RENAME TO fuel_receipts_legacy;
-    CREATE TABLE fuel_receipts (
+/** Office cutover copy of fuel_receipts before orphan receipts (NOT NULL load_id, no status). */
+export const LEGACY_FUEL_RECEIPTS_TABLE_SQL = `CREATE TABLE fuel_receipts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
       driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
       attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL,
       fuel_transaction_id INTEGER REFERENCES fuel_transactions(id) ON DELETE SET NULL,
       occurred_at TEXT NOT NULL DEFAULT '',
       gallons REAL,
-      amount REAL,
       state TEXT NOT NULL DEFAULT '',
       station TEXT NOT NULL DEFAULT '',
-      merchant TEXT NOT NULL DEFAULT '',
-      card_last4 TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending_match',
-      stored_name TEXT NOT NULL DEFAULT '',
-      original_name TEXT NOT NULL DEFAULT '',
-      mime_type TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
-    );
-    INSERT INTO fuel_receipts (
-      id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, amount,
-      state, station, merchant, card_last4, status, stored_name, original_name, mime_type, created_at
-    )
-    SELECT
-      id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, ${amountSql},
-      state, station, ${merchantSql}, ${cardSql}, ${statusSql}, ${storedSql}, ${originalSql}, ${mimeSql}, created_at
-    FROM fuel_receipts_legacy;
-    DROP TABLE fuel_receipts_legacy;
-    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
-    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_driver_status ON fuel_receipts(driver_id, status);
-    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_tx ON fuel_receipts(fuel_transaction_id);
-  `);
+    )`;
+
+function sqliteTableExists(db: Database, name: string): boolean {
+  return Boolean(
+    db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?").get(name),
+  );
+}
+
+function fuelReceiptColumns(db: Database): Array<{ name: string; notnull: number }> {
+  if (!sqliteTableExists(db, "fuel_receipts")) return [];
+  return db.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{ name: string; notnull: number }>;
+}
+
+function fuelReceiptsNeedOrphanRebuild(db: Database): boolean {
+  const columns = fuelReceiptColumns(db);
+  if (columns.length === 0) return false;
+  const loadCol = columns.find((col) => col.name === "load_id");
+  const hasStatus = columns.some((col) => col.name === "status");
+  if (!loadCol || loadCol.notnull === 1 || !hasStatus) return true;
+  const sql = String(
+    (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'fuel_receipts'").get() as
+      | { sql?: string }
+      | undefined)?.sql ?? "",
+  );
+  return /load_id INTEGER NOT NULL/i.test(sql);
+}
+
+function recoverInterruptedFuelReceiptsMigrate(db: Database): void {
+  if (!sqliteTableExists(db, "fuel_receipts_legacy")) return;
+  if (!sqliteTableExists(db, "fuel_receipts")) {
+    db.exec("ALTER TABLE fuel_receipts_legacy RENAME TO fuel_receipts");
+    return;
+  }
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    const names = new Set(fuelReceiptColumns(db).map((col) => col.name));
+    if (names.has("status")) {
+      db.exec(`
+        INSERT OR IGNORE INTO fuel_receipts (
+          id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, amount,
+          state, station, merchant, card_last4, status, stored_name, original_name, mime_type, created_at
+        )
+        SELECT
+          id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, NULL,
+          state, station, '', '',
+          CASE WHEN fuel_transaction_id IS NOT NULL OR load_id IS NOT NULL THEN 'matched' ELSE 'pending_match' END,
+          '', '', '', created_at
+        FROM fuel_receipts_legacy;
+        DROP TABLE fuel_receipts_legacy;
+      `);
+      return;
+    }
+    db.exec("DROP TABLE fuel_receipts");
+    db.exec("ALTER TABLE fuel_receipts_legacy RENAME TO fuel_receipts");
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
+/** Allow orphan early-upload receipts (nullable load_id + pending_match status). Safe on first getDb(). */
+export function migrateFuelReceiptsForDriverOrphans(db: Database): void {
+  recoverInterruptedFuelReceiptsMigrate(db);
+  const columns = fuelReceiptColumns(db);
+  if (columns.length === 0) return;
+  const names = new Set(columns.map((col) => col.name));
+
+  if (fuelReceiptsNeedOrphanRebuild(db)) {
+    const amountSql = names.has("amount") ? "amount" : "NULL";
+    const merchantSql = names.has("merchant") ? "merchant" : "''";
+    const cardSql = names.has("card_last4") ? "card_last4" : "''";
+    const statusSql = names.has("status")
+      ? "status"
+      : `CASE WHEN fuel_transaction_id IS NOT NULL OR load_id IS NOT NULL THEN 'matched' ELSE 'pending_match' END`;
+    const storedSql = names.has("stored_name") ? "stored_name" : "''";
+    const originalSql = names.has("original_name") ? "original_name" : "''";
+    const mimeSql = names.has("mime_type") ? "mime_type" : "''";
+    db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      db.exec(`
+        DROP INDEX IF EXISTS idx_fuel_receipts_driver_status;
+        DROP INDEX IF EXISTS idx_fuel_receipts_tx;
+        DROP INDEX IF EXISTS idx_fuel_receipts_load;
+        ALTER TABLE fuel_receipts RENAME TO fuel_receipts_legacy;
+        CREATE TABLE fuel_receipts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+          driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+          attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL,
+          fuel_transaction_id INTEGER REFERENCES fuel_transactions(id) ON DELETE SET NULL,
+          occurred_at TEXT NOT NULL DEFAULT '',
+          gallons REAL,
+          amount REAL,
+          state TEXT NOT NULL DEFAULT '',
+          station TEXT NOT NULL DEFAULT '',
+          merchant TEXT NOT NULL DEFAULT '',
+          card_last4 TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending_match',
+          stored_name TEXT NOT NULL DEFAULT '',
+          original_name TEXT NOT NULL DEFAULT '',
+          mime_type TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO fuel_receipts (
+          id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, amount,
+          state, station, merchant, card_last4, status, stored_name, original_name, mime_type, created_at
+        )
+        SELECT
+          id, load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, ${amountSql},
+          state, station, ${merchantSql}, ${cardSql}, ${statusSql}, ${storedSql}, ${originalSql}, ${mimeSql}, created_at
+        FROM fuel_receipts_legacy;
+        DROP TABLE fuel_receipts_legacy;
+      `);
+    } finally {
+      db.exec("PRAGMA foreign_keys = ON");
+    }
+  }
+
+  ensureColumn(db, "fuel_receipts", "amount", "REAL");
+  ensureColumn(db, "fuel_receipts", "merchant", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_receipts", "card_last4", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_receipts", "stored_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_receipts", "original_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "fuel_receipts", "mime_type", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fuel_receipts_driver_status ON fuel_receipts(driver_id, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_fuel_receipts_tx ON fuel_receipts(fuel_transaction_id)`);
 }
 
 /** Widen UNIQUE from (driver_id, client_request_id) to include method + path. */

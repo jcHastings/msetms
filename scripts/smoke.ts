@@ -1553,7 +1553,7 @@ async function main() {
   assert.match(docsPage, /when="stops"/);
   assert.match(docsPage, /LoadStopsMap/);
 
-  const { closeDb, getDb, migrate } = await import("../lib/db");
+  const { closeDb, getDb, migrate, LEGACY_FUEL_RECEIPTS_TABLE_SQL } = await import("../lib/db");
   const queries = await import("../lib/queries");
   const { Database } = await import("../lib/sqlite");
   const oldRelayPath = path.join(os.tmpdir(), `tms-old-relays-${Date.now()}.db`);
@@ -1580,6 +1580,77 @@ async function main() {
   const relayCols = oldRelayDb.prepare("PRAGMA table_info(load_relays)").all() as Array<{ name: string }>;
   assert.ok(relayCols.some((col) => col.name === "from_driver_id"), "existing DBs must gain from_driver_id");
   oldRelayDb.close();
+
+  const legacyFuelPath = path.join(os.tmpdir(), `tms-legacy-fuel-receipts-${Date.now()}.db`);
+  const legacyFuelDb = new Database(legacyFuelPath);
+  migrate(legacyFuelDb);
+  const legacyNow = new Date().toISOString();
+  const legacyCustomerId = Number(
+    legacyFuelDb
+      .prepare(
+        "INSERT INTO customers (name, billing_notes, created_at, updated_at) VALUES (?, '', ?, ?)",
+      )
+      .run("Legacy Fuel Shipper", legacyNow, legacyNow).lastInsertRowid,
+  );
+  const legacyLoadId = Number(
+    legacyFuelDb
+      .prepare(
+        `INSERT INTO loads (
+          load_number, customer_id, origin, destination, pickup_start, pickup_end,
+          delivery_start, delivery_end, commodity, notes, status, created_at, updated_at
+        ) VALUES (?, ?, 'Jackson, MS', 'Memphis, TN', ?, ?, ?, ?, '', '', 'assigned', ?, ?)`,
+      )
+      .run("MSE-LEGACY-FUEL", legacyCustomerId, legacyNow, legacyNow, legacyNow, legacyNow, legacyNow, legacyNow)
+      .lastInsertRowid,
+  );
+  legacyFuelDb.exec(`
+    DROP INDEX IF EXISTS idx_fuel_receipts_driver_status;
+    DROP INDEX IF EXISTS idx_fuel_receipts_tx;
+    DROP INDEX IF EXISTS idx_fuel_receipts_load;
+    DROP TABLE fuel_receipts;
+    ${LEGACY_FUEL_RECEIPTS_TABLE_SQL};
+    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
+  `);
+  const legacyColsBefore = legacyFuelDb.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  assert.equal(legacyColsBefore.some((col) => col.name === "status"), false);
+  assert.equal(legacyColsBefore.find((col) => col.name === "load_id")?.notnull, 1);
+  legacyFuelDb
+    .prepare(
+      `INSERT INTO fuel_receipts (load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, state, station, created_at)
+       VALUES (?, NULL, NULL, NULL, ?, 12.5, 'TN', 'Pilot Legacy', ?)`,
+    )
+    .run(legacyLoadId, legacyNow, legacyNow);
+  migrate(legacyFuelDb);
+  const legacyColsAfter = legacyFuelDb.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  assert.equal(legacyColsAfter.find((col) => col.name === "load_id")?.notnull, 0, "office cutover must drop NOT NULL load_id");
+  assert.equal(legacyColsAfter.some((col) => col.name === "status"), true);
+  const kept = legacyFuelDb.prepare("SELECT load_id, status, station FROM fuel_receipts WHERE station = 'Pilot Legacy'").get() as {
+    load_id: number;
+    status: string;
+    station: string;
+  };
+  assert.equal(kept.load_id, legacyLoadId);
+  assert.equal(kept.status, "matched");
+  legacyFuelDb
+    .prepare(
+      `INSERT INTO fuel_receipts (
+        load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, amount,
+        state, station, merchant, card_last4, status, stored_name, original_name, mime_type, created_at
+      ) VALUES (NULL, NULL, NULL, NULL, ?, NULL, 9.99, '', 'Orphan', 'Pilot', '1234', 'pending_match', '', 'r.png', 'image/png', ?)`,
+    )
+    .run(legacyNow, legacyNow);
+  assert.equal(
+    (legacyFuelDb.prepare("SELECT COUNT(*) AS count FROM fuel_receipts WHERE status = 'pending_match'").get() as { count: number })
+      .count,
+    1,
+  );
+  legacyFuelDb.close();
 
   getDb();
   const seeded = queries.getDashboardStats();
@@ -11370,6 +11441,8 @@ DISPATCH CONFIRMATION
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/fuel/import/route.ts")), true);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /LEGACY_FUEL_RECEIPTS_TABLE_SQL/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /recoverInterruptedFuelReceiptsMigrate/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import-http.ts"), "utf8"), /TMS_FUEL_IMPORT_TOKEN/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import.ts"), "utf8"), /importFuelFromText/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/handoff/fuel-import.md"), "utf8"), /POST \/api\/fuel\/import/);
