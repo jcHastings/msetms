@@ -587,8 +587,14 @@ async function main() {
   assert.match(backhaulUi, /BACKHAUL_RULE/);
   assert.doesNotMatch(backhaulUi, /PU \/ Del/);
   assert.doesNotMatch(backhaulUi, /backhaul-stop-kind/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /sheetOnPhone/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /action-phone-sheet/);
+  const hoverActionMenuUi = fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8");
+  assert.match(hoverActionMenuUi, /sheetOnPhone/);
+  assert.match(hoverActionMenuUi, /action-phone-sheet/);
+  assert.match(hoverActionMenuUi, /createPortal/);
+  assert.match(hoverActionMenuUi, /document\.body/);
+  assert.match(hoverActionMenuUi, /fixed z-50/);
+  assert.match(hoverActionMenuUi, /data-hover-action-menu-panel/);
+  assert.doesNotMatch(hoverActionMenuUi, /absolute z-20 min-w-56/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/backhaul/route.ts"), "utf8"), /findBackhaulForLoad/);
   assert.match(workspaceSource, /load-tabs/);
   assert.match(workspaceSource, /load-tab-active/);
@@ -715,6 +721,7 @@ async function main() {
   assert.match(fastActionsUi, /Backhaul Finder/);
   assert.match(fastActionsUi, /data-backhaul-finder-action/);
   assert.match(fastActionsUi, /sheetOnPhone/);
+  assert.doesNotMatch(fastActionsUi, /Relay/);
   assert.match(boardUi, /LoadCardFastActions/);
   assert.match(boardUi, /AssignDialog/);
   assert.match(boardUi, />\s*Edit\s*</);
@@ -11798,6 +11805,17 @@ DISPATCH CONFIRMATION
   assert.ok(fuelTyrell);
   fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
   assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 1);
+  const unknownFuelLoad =
+    queries.listLoads({ status: "all" }).find((load) => load.status !== "cancelled") ?? queries.getLoad(loadId);
+  assert.ok(unknownFuelLoad);
+  fuelStore.assignFuelTransactionLoad(unknownFuel.id, unknownFuelLoad.id);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  assert.equal(fuelStore.getFuelTransaction(unknownFuel.id)?.driver_id, fuelTyrell.id);
+  assert.equal(fuelStore.getFuelTransaction(unknownFuel.id)?.load_id, unknownFuelLoad.id);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === unknownFuel.id),
+    false,
+  );
   const fuelDenise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
   assert.ok(fuelDenise);
   const deniseFuel = fuelStore.getDriverFuelRollup(fuelDenise.id);
@@ -16879,6 +16897,39 @@ DISPATCH CONFIRMATION
   const assignResult = await assignFuelDriverAction(null, emptyAssign);
   assert.equal(assignResult.ok, false);
   assert.ok(assignResult.error);
+
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_transactions (
+        occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
+        card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+        prompt_data, dedup_key, created_at
+      ) VALUES (?, NULL, NULL, 'OMAHA NE', 40.1, 3.10, 124.31, '', 'manual-assign', 'truck_diesel', '32', '', '', '', 'manual-assign-howell', ?)`,
+    )
+    .run(new Date().toISOString(), new Date().toISOString());
+  const manualAssignId = (
+    getDb().prepare("SELECT id FROM fuel_transactions WHERE dedup_key = 'manual-assign-howell'").get() as {
+      id: number;
+    }
+  ).id;
+  const howellAssign = new FormData();
+  howellAssign.set("fuel_id", String(manualAssignId));
+  howellAssign.set("driver_id", String(howellId));
+  howellAssign.set("load_id", String(loadId));
+  const howellAssignResult = await assignFuelDriverAction(null, howellAssign);
+  assert.equal(howellAssignResult.ok, true);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  const persistedAssign = fuelStore.getFuelTransaction(manualAssignId);
+  assert.equal(persistedAssign?.driver_id, howellId);
+  assert.equal(persistedAssign?.load_id, loadId);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === manualAssignId),
+    false,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
+    /rematchFuelTransactionDrivers\(\{ unmatchedOnly: true \}\)/,
+  );
 
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
   const shortPlaceFn =

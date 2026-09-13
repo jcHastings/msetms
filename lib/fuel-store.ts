@@ -125,6 +125,7 @@ function applyParsedFuelDriverNames(
     prompt?: string;
     dedupKey?: string;
   }>,
+  unmatchedOnly = false,
 ): number {
   const drivers = listDrivers();
   const trucks = listTrucks();
@@ -165,6 +166,7 @@ function applyParsedFuelDriverNames(
     );
     for (const hit of existing) {
       if (isMoneyCodeCategory(hit.category)) continue;
+      if (unmatchedOnly && hit.driver_id) continue;
       if (!parsedFuelRowMatchesExisting(row, hit)) continue;
       const nextName = row.driverName.trim() || hit.driver_name_raw;
       const nextInvoice = row.invoice.trim() || hit.invoice_number;
@@ -203,7 +205,7 @@ function parsedFuelRowMatchesExisting(
   return invoiceHit || unitHit;
 }
 
-function applyStoredFuelImportNames(): number {
+function applyStoredFuelImportNames(unmatchedOnly = false): number {
   const sources = getDb().prepare("SELECT source_file, text FROM fuel_import_sources").all() as Array<{
     source_file: string;
     text: string;
@@ -216,7 +218,7 @@ function applyStoredFuelImportNames(): number {
     } catch {
       continue;
     }
-    updated += applyParsedFuelDriverNames(parsed.rows);
+    updated += applyParsedFuelDriverNames(parsed.rows, unmatchedOnly);
   }
   return updated;
 }
@@ -240,8 +242,9 @@ function looksLikeTruckOrLoadAssign(
   return loads.some((load) => sameId(load.truck_id, row.truck_id) && sameId(load.driver_id, row.driver_id));
 }
 
-export function rematchFuelTransactionDrivers(): number {
-  let updated = applyStoredFuelImportNames();
+export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolean }): number {
+  const unmatchedOnly = Boolean(options?.unmatchedOnly);
+  let updated = applyStoredFuelImportNames(unmatchedOnly);
   const drivers = listDrivers();
   const trucks = listTrucks();
   const loads = listFuelMatchLoads();
@@ -263,6 +266,7 @@ export function rematchFuelTransactionDrivers(): number {
   const update = db.prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?");
   db.transaction(() => {
     for (const row of rows) {
+      if (unmatchedOnly && row.driver_id) continue;
       if (isMoneyCodeCategory(row.category)) continue;
       const name = fuelRowDriverName(row);
       const match = matchFuelDriver(
@@ -290,7 +294,7 @@ export function rematchFuelTransactionDrivers(): number {
 }
 
 export function rematchUnmatchedFuelTransactions(): number {
-  return rematchFuelTransactionDrivers();
+  return rematchFuelTransactionDrivers({ unmatchedOnly: true });
 }
 
 export function importFuelFromText(
@@ -365,9 +369,18 @@ export function assignFuelTransactionDriver(id: number, driverId: number): void 
   const driver = listDrivers().find((item) => item.id === driverId);
   if (!driver) throw new Error("Pick a driver.");
   const truckId = row.truck_id ?? driver.truck_id;
+  const rawName = row.driver_name_raw.trim() || driver.name;
   getDb()
-    .prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?")
-    .run(driverId, truckId, id);
+    .prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ?, driver_name_raw = ? WHERE id = ?")
+    .run(driverId, truckId, rawName, id);
+}
+
+export function assignFuelTransaction(id: number, input: { driverId?: number | null; loadId?: number | null }): void {
+  if (!input.driverId && !input.loadId) throw new Error("Pick a driver or a load.");
+  getDb().transaction(() => {
+    if (input.driverId) assignFuelTransactionDriver(id, input.driverId);
+    if (input.loadId) assignFuelTransactionLoad(id, input.loadId);
+  })();
 }
 
 export function deleteFuelTransaction(id: number): void {

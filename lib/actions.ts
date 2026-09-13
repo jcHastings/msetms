@@ -87,8 +87,7 @@ import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
 import {
-  assignFuelTransactionDriver,
-  assignFuelTransactionLoad,
+  assignFuelTransaction,
   deleteFuelTransaction,
 } from "./fuel-store";
 import {
@@ -1428,8 +1427,7 @@ export async function assignFuelDriverAction(
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!id) return { ok: false, error: "Fuel row is missing." };
     if (!driverId && !loadId) return { ok: false, error: "Pick a driver or a load." };
-    if (driverId) assignFuelTransactionDriver(id, driverId);
-    if (loadId) assignFuelTransactionLoad(id, loadId);
+    assignFuelTransaction(id, { driverId, loadId });
     refresh();
     return { ok: true };
   } catch (error) {
