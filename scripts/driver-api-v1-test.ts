@@ -192,6 +192,61 @@ async function main() {
     status: "available",
   });
 
+  const { hasDriverPassword } = await import("../lib/driver-password");
+  const fleetSaveId = queries.createDriver({
+    name: "Fleet Save Repro",
+    phone: "555-0744",
+    license: "MS-CDL-SAVE",
+    truck_id: null,
+    status: "available",
+    city: "",
+    state: "",
+  });
+  assert.equal(queries.getDriver(fleetSaveId)?.email, "");
+  assert.equal(hasDriverPassword(fleetSaveId), false);
+  assert.throws(
+    () =>
+      queries.updateDriver(fleetSaveId, {
+        name: "Fleet Save Repro",
+        phone: "555-0744",
+        email: "apple.dev.live@msloads.test",
+        license: "MS-CDL-SAVE",
+        password: "short",
+        truck_id: null,
+        status: "available",
+      }),
+    /8 characters|uppercase|symbol/i,
+  );
+  assert.equal(queries.getDriver(fleetSaveId)?.email, "", "invalid password must not persist email");
+  assert.equal(hasDriverPassword(fleetSaveId), false);
+
+  queries.updateDriver(fleetSaveId, {
+    name: "Fleet Save Repro",
+    phone: "555-0744",
+    email: "apple.dev.live@msloads.test",
+    license: "MS-CDL-SAVE",
+    password: "Demo1234!",
+    truck_id: null,
+    status: "available",
+    city: "",
+    state: "",
+  });
+  assert.equal(queries.getDriver(fleetSaveId)?.email, "apple.dev.live@msloads.test");
+  assert.equal(hasDriverPassword(fleetSaveId), true, "updateDriver must persist password_hash with email");
+  assert.equal(queries.authenticateDriverByEmail("apple.dev.live@msloads.test", "Demo1234!").id, fleetSaveId);
+
+  queries.updateDriver(fleetSaveId, {
+    name: "Fleet Save Repro",
+    phone: "555-0744",
+    email: "",
+    license: "MS-CDL-SAVE",
+    password: "Demo5678!",
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.getDriver(fleetSaveId)?.email, "apple.dev.live@msloads.test");
+  assert.equal(queries.authenticateDriverByEmail("apple.dev.live@msloads.test", "Demo5678!").id, fleetSaveId);
+
   const activeId = queries.createLoad(
     loadInput(customerId, { load_number: "MSE-API-1", driver_id: driverA, status: "assigned" }),
   );

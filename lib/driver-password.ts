@@ -38,14 +38,15 @@ export function hasDriverPassword(driverId: number): boolean {
   return Boolean(String(row?.password_hash ?? "").trim());
 }
 
-export function setDriverPassword(driverId: number, password: string): void {
+export function setDriverPassword(driverId: number, password: string, email?: string): void {
   const error = dispatcherPasswordError(password);
   if (error) throw new Error(error);
   const row = getDb()
     .prepare(`SELECT email FROM drivers WHERE id = ?`)
     .get(driverId) as { email?: string } | undefined;
   if (!row) throw new Error("Driver not found.");
-  if (!isUsableEmail(row.email)) {
+  // Prefer the incoming email so a same-submit change is not lost to a re-read race.
+  if (!isUsableEmail(email ?? row.email)) {
     throw new Error("Add an email before setting a driver login password.");
   }
   getDb()

@@ -175,8 +175,12 @@ function parseContacts(formData: FormData) {
 }
 
 
-function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
-  const type = String(value ?? "").trim();
+function parseDriverKind(formData: FormData): DriverKind {
+  const values = formData
+    .getAll("driver_type")
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  const type = values[values.length - 1] ?? "";
   if (!type) throw new Error("Pick a driver type.");
   if (type === "single") return "company_driver";
   if (!DRIVER_TYPES.some((item) => item.value === type)) {
@@ -385,7 +389,7 @@ export async function createDriverAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
-    const driverType = parseDriverKind(formData.get("driver_type"));
+    const driverType = parseDriverKind(formData);
     const id = createDriver({
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -439,7 +443,7 @@ export async function updateDriverAction(
     if (id == null) throw new Error("Driver not found.");
     const current = getDriver(id);
     if (!current) throw new Error("Driver not found.");
-    const driverType = parseDriverKind(formData.get("driver_type"));
+    const driverType = parseDriverKind(formData);
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -464,9 +468,9 @@ export async function updateDriverAction(
       cell_phone: String(formData.get("cell_phone") ?? "").trim(),
       pager: String(formData.get("pager") ?? "").trim(),
       address: String(formData.get("address") ?? "").trim(),
-      country: requiredString(formData.get("country"), "Country") || "USA",
-      city: requiredString(formData.get("city"), "City"),
-      state: requiredString(formData.get("state"), "State"),
+      country: String(formData.get("country") ?? "").trim() || current.country || "USA",
+      city: String(formData.get("city") ?? "").trim() || current.city,
+      state: String(formData.get("state") ?? "").trim() || current.state,
       postal_zip: String(formData.get("postal_zip") ?? "").trim(),
       date_of_birth: parseDateField(formData.get("date_of_birth")),
       date_of_hire: parseDateField(formData.get("date_of_hire")),

@@ -32,6 +32,7 @@ import {
   setDriverPassword,
   verifyDriverPassword,
 } from "./driver-password";
+import { dispatcherPasswordError } from "./dispatcher-password-shared";
 import { isUsableEmail } from "./mail-shared";
 import { cleanDateInput } from "./format";
 import { persistReeferMode } from "./reefer-shared";
@@ -1186,62 +1187,69 @@ export function createDriver(input: {
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
   }
-  assertUniqueDriverEmail(input.email ?? "");
-  if (input.password && !isUsableEmail(input.email)) {
-    throw new Error("Add an email before setting a driver login password.");
+  const email = String(input.email ?? "").trim();
+  assertUniqueDriverEmail(email);
+  if (input.password) {
+    const passwordError = dispatcherPasswordError(input.password);
+    if (passwordError) throw new Error(passwordError);
+    if (!isUsableEmail(email)) {
+      throw new Error("Add an email before setting a driver login password.");
+    }
   }
   const timestamp = now();
-  const result = getDb()
-    .prepare(
-      `INSERT INTO drivers (
-        name, phone, email, notes, active, license, license_number, license_state, license_expires,
-        medical_issued, medical_expires, driver_type, company_name, pay_percent,
-        pin, samsara_driver_id, truck_id, status,
-        alt_phone, cell_phone, pager, address, country, city, state, postal_zip,
-        date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date, cdl_endorsements,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      input.name,
-      input.phone,
-      input.email ?? "",
-      input.notes ?? "",
-      input.active ?? 1,
-      input.license,
-      input.license_number ?? "",
-      input.license_state ?? "",
-      cleanDateInput(input.license_expires),
-      cleanDateInput(input.medical_issued),
-      cleanDateInput(input.medical_expires),
-      normalizeDriverKind(input.driver_type),
-      isOwnerOperator(input.driver_type) ? String(input.company_name ?? "").trim() : "",
-      input.pay_percent ?? null,
-      input.pin ?? "",
-      input.samsara_driver_id ?? "",
-      input.truck_id,
-      input.status,
-      input.alt_phone ?? "",
-      input.cell_phone ?? "",
-      input.pager ?? "",
-      input.address ?? "",
-      input.country ?? "USA",
-      input.city ?? "",
-      input.state ?? "",
-      input.postal_zip ?? "",
-      cleanDateInput(input.date_of_birth),
-      cleanDateInput(input.date_of_hire),
-      cleanDateInput(input.drug_test_last),
-      cleanDateInput(input.drug_test_next),
-      cleanDateInput(input.termination_date),
-      String(input.cdl_endorsements ?? "").trim(),
-      timestamp,
-      timestamp,
-    );
-  const id = Number(result.lastInsertRowid);
-  setFleetDivision("drivers", id, input.division);
-  if (input.password) setDriverPassword(id, input.password);
-  return id;
+  return getDb().transaction(() => {
+    const result = getDb()
+      .prepare(
+        `INSERT INTO drivers (
+          name, phone, email, notes, active, license, license_number, license_state, license_expires,
+          medical_issued, medical_expires, driver_type, company_name, pay_percent,
+          pin, samsara_driver_id, truck_id, status,
+          alt_phone, cell_phone, pager, address, country, city, state, postal_zip,
+          date_of_birth, date_of_hire, drug_test_last, drug_test_next, termination_date, cdl_endorsements,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.name,
+        input.phone,
+        email,
+        input.notes ?? "",
+        input.active ?? 1,
+        input.license,
+        input.license_number ?? "",
+        input.license_state ?? "",
+        cleanDateInput(input.license_expires),
+        cleanDateInput(input.medical_issued),
+        cleanDateInput(input.medical_expires),
+        normalizeDriverKind(input.driver_type),
+        isOwnerOperator(input.driver_type) ? String(input.company_name ?? "").trim() : "",
+        input.pay_percent ?? null,
+        input.pin ?? "",
+        input.samsara_driver_id ?? "",
+        input.truck_id,
+        input.status,
+        input.alt_phone ?? "",
+        input.cell_phone ?? "",
+        input.pager ?? "",
+        input.address ?? "",
+        input.country ?? "USA",
+        input.city ?? "",
+        input.state ?? "",
+        input.postal_zip ?? "",
+        cleanDateInput(input.date_of_birth),
+        cleanDateInput(input.date_of_hire),
+        cleanDateInput(input.drug_test_last),
+        cleanDateInput(input.drug_test_next),
+        cleanDateInput(input.termination_date),
+        String(input.cdl_endorsements ?? "").trim(),
+        timestamp,
+        timestamp,
+      );
+    const id = Number(result.lastInsertRowid);
+    setFleetDivision("drivers", id, input.division);
+    if (input.password) setDriverPassword(id, input.password, email);
+    return id;
+  })();
 }
 
 export function updateDriver(
@@ -1289,63 +1297,70 @@ export function updateDriver(
   if (input.truck_id && !getTruck(input.truck_id)) {
     throw new Error("Assigned truck not found.");
   }
-  assertUniqueDriverEmail(input.email ?? "", id);
-  if (input.password && !isUsableEmail(input.email ?? current.email)) {
-    throw new Error("Add an email before setting a driver login password.");
+  const nextEmail = String(input.email ?? "").trim() || String(current.email ?? "").trim();
+  assertUniqueDriverEmail(nextEmail, id);
+  if (input.password) {
+    const passwordError = dispatcherPasswordError(input.password);
+    if (passwordError) throw new Error(passwordError);
+    if (!isUsableEmail(nextEmail)) {
+      throw new Error("Add an email before setting a driver login password.");
+    }
   }
   const pin = input.resetPin ? "" : input.pin != null && input.pin.trim() !== "" ? input.pin.trim() : current.pin;
-  getDb()
-    .prepare(
-      `UPDATE drivers
-       SET name = ?, phone = ?, email = ?, notes = ?, active = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
-           medical_issued = ?, medical_expires = ?, driver_type = ?, company_name = ?, pay_percent = ?,
-           pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?,
-           alt_phone = ?, cell_phone = ?, pager = ?, address = ?, country = ?, city = ?, state = ?, postal_zip = ?,
-           date_of_birth = ?, date_of_hire = ?, drug_test_last = ?, drug_test_next = ?, termination_date = ?,
-           cdl_endorsements = ?,
-           updated_at = ?
-       WHERE id = ?`,
-    )
-    .run(
-      input.name,
-      input.phone,
-      input.email ?? "",
-      input.notes ?? "",
-      input.active ?? 1,
-      input.license,
-      input.license_number ?? "",
-      input.license_state ?? current.license_state,
-      cleanDateInput(input.license_expires ?? current.license_expires),
-      cleanDateInput(input.medical_issued ?? current.medical_issued),
-      cleanDateInput(input.medical_expires ?? current.medical_expires),
-      normalizeDriverKind(input.driver_type ?? current.driver_type),
-      isOwnerOperator(input.driver_type ?? current.driver_type)
-        ? String(input.company_name ?? current.company_name ?? "").trim()
-        : "",
-      input.pay_percent === undefined ? current.pay_percent : input.pay_percent,
-      pin,
-      input.samsara_driver_id ?? current.samsara_driver_id,
-      input.truck_id,
-      input.status,
-      input.alt_phone ?? current.alt_phone,
-      input.cell_phone ?? current.cell_phone,
-      input.pager ?? current.pager,
-      input.address ?? current.address,
-      input.country ?? current.country ?? "USA",
-      input.city ?? current.city,
-      input.state ?? current.state,
-      input.postal_zip ?? current.postal_zip,
-      cleanDateInput(input.date_of_birth ?? current.date_of_birth),
-      cleanDateInput(input.date_of_hire ?? current.date_of_hire),
-      cleanDateInput(input.drug_test_last ?? current.drug_test_last),
-      cleanDateInput(input.drug_test_next ?? current.drug_test_next),
-      cleanDateInput(input.termination_date ?? current.termination_date),
-      input.cdl_endorsements === undefined ? current.cdl_endorsements : String(input.cdl_endorsements ?? "").trim(),
-      now(),
-      id,
-    );
-  if (input.division !== undefined) setFleetDivision("drivers", id, input.division);
-  if (input.password) setDriverPassword(id, input.password);
+  getDb().transaction(() => {
+    getDb()
+      .prepare(
+        `UPDATE drivers
+         SET name = ?, phone = ?, email = ?, notes = ?, active = ?, license = ?, license_number = ?, license_state = ?, license_expires = ?,
+             medical_issued = ?, medical_expires = ?, driver_type = ?, company_name = ?, pay_percent = ?,
+             pin = ?, samsara_driver_id = ?, truck_id = ?, status = ?,
+             alt_phone = ?, cell_phone = ?, pager = ?, address = ?, country = ?, city = ?, state = ?, postal_zip = ?,
+             date_of_birth = ?, date_of_hire = ?, drug_test_last = ?, drug_test_next = ?, termination_date = ?,
+             cdl_endorsements = ?,
+             updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        input.name,
+        input.phone,
+        nextEmail,
+        input.notes ?? "",
+        input.active ?? 1,
+        input.license,
+        input.license_number ?? "",
+        input.license_state ?? current.license_state,
+        cleanDateInput(input.license_expires ?? current.license_expires),
+        cleanDateInput(input.medical_issued ?? current.medical_issued),
+        cleanDateInput(input.medical_expires ?? current.medical_expires),
+        normalizeDriverKind(input.driver_type ?? current.driver_type),
+        isOwnerOperator(input.driver_type ?? current.driver_type)
+          ? String(input.company_name ?? current.company_name ?? "").trim()
+          : "",
+        input.pay_percent === undefined ? current.pay_percent : input.pay_percent,
+        pin,
+        input.samsara_driver_id ?? current.samsara_driver_id,
+        input.truck_id,
+        input.status,
+        input.alt_phone ?? current.alt_phone,
+        input.cell_phone ?? current.cell_phone,
+        input.pager ?? current.pager,
+        input.address ?? current.address,
+        input.country ?? current.country ?? "USA",
+        String(input.city ?? "").trim() || current.city,
+        String(input.state ?? "").trim() || current.state,
+        input.postal_zip ?? current.postal_zip,
+        cleanDateInput(input.date_of_birth ?? current.date_of_birth),
+        cleanDateInput(input.date_of_hire ?? current.date_of_hire),
+        cleanDateInput(input.drug_test_last ?? current.drug_test_last),
+        cleanDateInput(input.drug_test_next ?? current.drug_test_next),
+        cleanDateInput(input.termination_date ?? current.termination_date),
+        input.cdl_endorsements === undefined ? current.cdl_endorsements : String(input.cdl_endorsements ?? "").trim(),
+        now(),
+        id,
+      );
+    if (input.division !== undefined) setFleetDivision("drivers", id, input.division);
+    if (input.password) setDriverPassword(id, input.password, nextEmail);
+  })();
 }
 
 export function authenticateDriver(driverId: number, pin: string): DriverWithTruck {

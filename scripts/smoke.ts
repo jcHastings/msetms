@@ -465,8 +465,14 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /authenticateDriverByEmail/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Use email and password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /authenticateDriverByEmail/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /Driver login password/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /DISPATCHER_PASSWORD_HINT/);
+  const driverFormSource = fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8");
+  assert.match(driverFormSource, /Driver login password/);
+  assert.match(driverFormSource, /DISPATCHER_PASSWORD_HINT/);
+  assert.match(driverFormSource, /type="hidden"[^>]*name="driver_type"|name="driver_type"[^>]*type="hidden"/);
+  assert.match(driverFormSource, /name="password"/);
+  assert.doesNotMatch(driverFormSource, /pattern="\\d\{4,8\}"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /setDriverPassword\(id, input\.password, (?:email|nextEmail)\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-password.ts"), "utf8"), /email \?\? row\.email/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /demo\.driver@msexpress\.local/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /Demo1234!/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /appleDevDriverFixtureEnabled/);
