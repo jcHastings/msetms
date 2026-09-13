@@ -16931,6 +16931,72 @@ DISPATCH CONFIRMATION
     /rematchFuelTransactionDrivers\(\{ unmatchedOnly: true \}\)/,
   );
 
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_transactions (
+        occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
+        card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+        prompt_data, dedup_key, created_at
+      ) VALUES (?, NULL, NULL, 'SUNOCO PA', 50.1, 3.20, 160.32, '', 'video-unassigned', 'truck_diesel', '32', 'Chris Howell', '', '', 'video-chris-howell-32', ?)`,
+    )
+    .run(new Date().toISOString(), new Date().toISOString());
+  const videoAssignId = (
+    getDb().prepare("SELECT id FROM fuel_transactions WHERE dedup_key = 'video-chris-howell-32'").get() as {
+      id: number;
+    }
+  ).id;
+  assert.equal(fuelStore.getFuelTransaction(videoAssignId)?.driver_id, null);
+  const videoLoadNumber = "1006203";
+  const videoLoadId =
+    (getDb().prepare("SELECT id FROM loads WHERE load_number = ?").get(videoLoadNumber) as { id: number } | undefined)
+      ?.id ??
+    queries.createLoad({
+      customer_id: customerId,
+      load_number: videoLoadNumber,
+      origin: "Omaha, NE",
+      destination: "Elite Cold Storage",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 32000,
+      commodity: "Produce",
+      rate: 1800,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "available",
+      truck_id: null,
+      driver_id: null,
+    });
+  const videoLoad = queries.getLoad(videoLoadId);
+  assert.ok(videoLoad);
+  assert.equal(videoLoad.load_number, videoLoadNumber);
+  const chrisHowellMatch = matchFuelDriver(
+    { driverName: "Chris Howell", driverIdRaw: "", unitNumber: "32", prompt: "" },
+    queries.listDrivers(),
+    queries.listTrucks(),
+  );
+  assert.equal(chrisHowellMatch.driverId, null, "Chris Howell stays unmatched until Assign");
+  const videoAssign = new FormData();
+  videoAssign.set("fuel_id", String(videoAssignId));
+  videoAssign.set("driver_id", String(howellId));
+  videoAssign.set("load_id", videoLoadNumber);
+  const videoAssignResult = await assignFuelDriverAction(null, videoAssign);
+  assert.equal(videoAssignResult.ok, true, videoAssignResult.ok ? "" : videoAssignResult.error);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  const videoPersisted = fuelStore.getFuelTransaction(videoAssignId);
+  assert.equal(videoPersisted?.driver_id, howellId);
+  assert.equal(videoPersisted?.load_id, videoLoad.id);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === videoAssignId),
+    false,
+  );
+
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
   const shortPlaceFn =
     fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8").match(
@@ -17116,10 +17182,13 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /rematchUnmatchedFuelTransactions/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /rematchFuelTransactionDrivers/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /driverAssignedToTruck/);
-  assert.match(
-    fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8"),
-    /disabled=\{pending \|\| !canAssign\}/,
-  );
+  const fuelAssignUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8");
+  assert.match(fuelAssignUi, /disabled=\{pending \|\| !canAssign\}/);
+  assert.match(fuelAssignUi, /<input type="hidden" name="driver_id"/);
+  assert.match(fuelAssignUi, /<input type="hidden" name="load_id"/);
+  assert.match(fuelAssignUi, /data-fuel-assign-form/);
+  assert.doesNotMatch(fuelAssignUi, /<select\s+name="driver_id"/);
+  assert.doesNotMatch(fuelAssignUi, /<select\s+name="load_id"/);
 
   const { buildSearchExportGrid } = await import("../lib/search-export");
   const searchGrid = buildSearchExportGrid(

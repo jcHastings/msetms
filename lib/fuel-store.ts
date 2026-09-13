@@ -393,12 +393,23 @@ export function deleteFuelTransaction(id: number): void {
   })();
 }
 
+function resolveFuelAssignLoadId(loadId: number): number | null {
+  const db = getDb();
+  const byId = db.prepare("SELECT id FROM loads WHERE id = ?").get(loadId) as { id: number } | undefined;
+  if (byId) return byId.id;
+  const key = String(loadId);
+  const byNumber = db
+    .prepare("SELECT id FROM loads WHERE load_number = ? OR load_number = ?")
+    .get(key, `MSE-${key}`) as { id: number } | undefined;
+  return byNumber?.id ?? null;
+}
+
 export function assignFuelTransactionLoad(id: number, loadId: number): void {
   const row = getFuelTransaction(id);
   if (!row) throw new Error("Fuel row is missing.");
-  const load = getDb().prepare("SELECT id FROM loads WHERE id = ?").get(loadId) as { id: number } | undefined;
-  if (!load) throw new Error("Pick a load.");
-  getDb().prepare("UPDATE fuel_transactions SET load_id = ? WHERE id = ?").run(loadId, id);
+  const resolved = resolveFuelAssignLoadId(loadId);
+  if (!resolved) throw new Error("Pick a load.");
+  getDb().prepare("UPDATE fuel_transactions SET load_id = ? WHERE id = ?").run(resolved, id);
 }
 
 function addToPeriod(period: FuelPeriodTotals, row: FuelTransactionView): void {
