@@ -24,6 +24,7 @@ import {
   type FuelWeekPaidStats,
 } from "./fuel";
 import { extractNProductDriverName } from "./fuel-fleetone";
+import { autoMatchPendingFuelReceipts } from "./fuel-receipt-match";
 import { listDrivers, listTrucks } from "./queries";
 
 function nowIso(): string {
@@ -350,6 +351,7 @@ export function importFuelFromText(
   })();
   applyParsedFuelDriverNames(parsed.rows);
   rematchUnmatchedFuelTransactions();
+  autoMatchPendingFuelReceipts();
   return { created, skipped, unmatched, errors: parsed.errors };
 }
 

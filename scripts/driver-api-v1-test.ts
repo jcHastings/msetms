@@ -94,6 +94,7 @@ const DATETIME_KEYS = new Set([
   "arrived_at",
   "departed_at",
   "created_at",
+  "occurred_at",
 ]);
 
 function assertApiDateTimes(value: unknown, trail = "$"): void {
@@ -281,7 +282,13 @@ async function main() {
 
   const dbMod = await import("../lib/db");
   const fixture = await import("../lib/driver-login-fixture");
-  fixture.ensureAppleDevDriverLogin(dbMod.getDb());
+  assert.equal(fixture.appleDevDriverFixtureEnabled(), false);
+  const fixtureBefore = dbMod
+    .getDb()
+    .prepare("SELECT id FROM drivers WHERE LOWER(TRIM(email)) = ?")
+    .get(fixture.APPLE_DEV_DRIVER_EMAIL) as { id: number } | undefined;
+  assert.equal(fixtureBefore, undefined, "getDb() must not seed demo.driver without APPLE_DEV_DRIVER_FIXTURE");
+  fixture.ensureAppleDevDriverLogin(dbMod.getDb(), { force: true });
   const appleDevLogin = await read(
     await loginRoute.POST(
       request(`${BASE}/auth/login`, {
@@ -328,6 +335,8 @@ async function main() {
 
   const unauth = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`)));
   assert.equal(unauth.status, 401);
+  assert.equal((unauth.json as { error?: string }).error, "Sign in with your email and password.");
+  assert.doesNotMatch(String((unauth.json as { error?: string }).error), /PIN/);
 
   const active = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`, { headers: auth })));
   assert.equal(active.status, 200);
@@ -348,6 +357,13 @@ async function main() {
   const recentIds = (recent.json as Array<{ id: number }>).map((row) => row.id);
   assert.equal(recentIds.includes(recentId), true);
   assert.equal(recentIds.includes(activeId), false);
+  const deliveredScope = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=delivered`, { headers: auth })));
+  assert.equal(deliveredScope.status, 200);
+  assert.deepEqual(
+    (deliveredScope.json as Array<{ id: number }>).map((row) => row.id),
+    recentIds,
+    "scope=delivered is an alias of recent",
+  );
 
   const missing = await read(
     await loadRoute.GET(request(`${BASE}/loads/999999`, { headers: auth }), { params: Promise.resolve({ id: "999999" }) }),
@@ -742,6 +758,113 @@ async function main() {
   );
   assert.equal(reclaimed.status, 200, `stale pending reclaim ${JSON.stringify(reclaimed.json)}`);
   assert.equal((reclaimed.json as { attachment: { kind: string } }).attachment.kind, "scale_ticket");
+
+  const fuelTxRoute = await import("../app/api/driver/v1/fuel/transactions/route");
+  const fuelTxIdRoute = await import("../app/api/driver/v1/fuel/transactions/[id]/route");
+  const fuelTxReceiptRoute = await import("../app/api/driver/v1/fuel/transactions/[id]/receipt/route");
+  const fuelReceiptsRoute = await import("../app/api/driver/v1/fuel/receipts/route");
+  const fuelMatchRoute = await import("../app/api/driver/v1/fuel/receipts/[id]/match/route");
+  const nowFuel = new Date().toISOString();
+  const insertFuel = dbMod.getDb().prepare(
+    `INSERT INTO fuel_transactions (
+      occurred_at, driver_id, truck_id, load_id, location, gallons, price_per_gallon, amount,
+      card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+      prompt_data, dedup_key, created_at
+    ) VALUES (?, ?, NULL, NULL, ?, ?, NULL, ?, ?, 'driver-api', 'truck_diesel', '', '', '', '', ?, ?)`,
+  );
+  const fuelA = Number(
+    insertFuel.run(nowFuel, driverA, "Pilot Jackson MS", 40, 140.4, "8899", "api-fuel-a", nowFuel).lastInsertRowid,
+  );
+  const fuelB = Number(
+    insertFuel.run(nowFuel, driverB, "Loves Memphis", 20, 70.2, "2211", "api-fuel-b", nowFuel).lastInsertRowid,
+  );
+
+  const fuelList = await read(await fuelTxRoute.GET(request(`${BASE}/fuel/transactions`, { headers: auth })));
+  assert.equal(fuelList.status, 200);
+  const fuelRows = fuelList.json as Array<{ id: number; receipt_id: number | null; amount: number | null }>;
+  assert.equal(fuelRows.some((row) => row.id === fuelA), true);
+  assert.equal(fuelRows.some((row) => row.id === fuelB), false);
+  assertNoSecrets(fuelList.json);
+  assertApiDateTimes(fuelList.json);
+
+  const fuelForbidden = await read(
+    await fuelTxIdRoute.GET(request(`${BASE}/fuel/transactions/${fuelB}`, { headers: auth }), {
+      params: Promise.resolve({ id: String(fuelB) }),
+    }),
+  );
+  assert.equal(fuelForbidden.status, 403);
+
+  const orphanForm = new FormData();
+  orphanForm.set("client_request_id", "fuel-orphan-1");
+  orphanForm.set("file", new File([bytes], "fuel.png", { type: "image/png" }));
+  orphanForm.set("amount", "140.40");
+  orphanForm.set("gallons", "40");
+  orphanForm.set("merchant", "Pilot Jackson MS");
+  orphanForm.set("card_last4", "8899");
+  orphanForm.set("occurred_at", nowFuel);
+  const orphan = await read(
+    await fuelReceiptsRoute.POST(request(`${BASE}/fuel/receipts`, { method: "POST", headers: auth, body: orphanForm })),
+  );
+  assert.equal(orphan.status, 200, `orphan ${JSON.stringify(orphan.json)}`);
+  const orphanReceipt = (orphan.json as { receipt: { id: number; status: string; fuel_transaction_id: number | null } }).receipt;
+  assert.equal(orphanReceipt.status, "matched");
+  assert.equal(orphanReceipt.fuel_transaction_id, fuelA);
+
+  const pendingList = await read(
+    await fuelReceiptsRoute.GET(request(`${BASE}/fuel/receipts?status=pending_match`, { headers: auth })),
+  );
+  assert.equal(pendingList.status, 200);
+  assert.equal((pendingList.json as Array<{ id: number }>).some((row) => row.id === orphanReceipt.id), false);
+
+  const matchedList = await read(
+    await fuelReceiptsRoute.GET(request(`${BASE}/fuel/receipts?status=matched`, { headers: auth })),
+  );
+  assert.equal((matchedList.json as Array<{ id: number }>).some((row) => row.id === orphanReceipt.id), true);
+
+  const laterForm = new FormData();
+  laterForm.set("client_request_id", "fuel-orphan-2");
+  laterForm.set("file", new File([bytes], "fuel-late.png", { type: "image/png" }));
+  laterForm.set("amount", "55.00");
+  laterForm.set("card_last4", "3344");
+  const later = await read(
+    await fuelReceiptsRoute.POST(request(`${BASE}/fuel/receipts`, { method: "POST", headers: auth, body: laterForm })),
+  );
+  assert.equal(later.status, 200);
+  const laterReceipt = (later.json as { receipt: { id: number; status: string } }).receipt;
+  assert.equal(laterReceipt.status, "pending_match");
+
+  const manualTx = Number(
+    insertFuel.run(nowFuel, driverA, "TA Nashville", 12, 55, "3344", "api-fuel-manual", nowFuel).lastInsertRowid,
+  );
+  const matchedManual = await read(
+    await fuelMatchRoute.POST(
+      request(`${BASE}/fuel/receipts/${laterReceipt.id}/match`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ fuel_transaction_id: manualTx, client_request_id: "fuel-match-1" }),
+      }),
+      { params: Promise.resolve({ id: String(laterReceipt.id) }) },
+    ),
+  );
+  assert.equal(matchedManual.status, 200, `match ${JSON.stringify(matchedManual.json)}`);
+  assert.equal((matchedManual.json as { receipt: { status: string; fuel_transaction_id: number } }).receipt.status, "matched");
+  assert.equal((matchedManual.json as { receipt: { fuel_transaction_id: number } }).receipt.fuel_transaction_id, manualTx);
+
+  const attachForm = new FormData();
+  attachForm.set("client_request_id", "fuel-on-tx");
+  attachForm.set("file", new File([bytes], "on-tx.png", { type: "image/png" }));
+  const extraTx = Number(
+    insertFuel.run(nowFuel, driverA, "Shell Birmingham", 8, 28.8, "5566", "api-fuel-attach", nowFuel).lastInsertRowid,
+  );
+  const attached = await read(
+    await fuelTxReceiptRoute.POST(
+      request(`${BASE}/fuel/transactions/${extraTx}/receipt`, { method: "POST", headers: auth, body: attachForm }),
+      { params: Promise.resolve({ id: String(extraTx) }) },
+    ),
+  );
+  assert.equal(attached.status, 200, `tx receipt ${JSON.stringify(attached.json)}`);
+  assert.equal((attached.json as { receipt: { status: string; fuel_transaction_id: number } }).receipt.status, "matched");
+  assert.equal((attached.json as { receipt: { fuel_transaction_id: number } }).receipt.fuel_transaction_id, extraTx);
 
   const loggedOut = await read(await logoutRoute.POST(request(`${BASE}/auth/logout`, { method: "POST", headers: auth })));
   assert.equal(loggedOut.status, 204);

@@ -469,8 +469,24 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /DISPATCHER_PASSWORD_HINT/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /demo\.driver@msexpress\.local/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /Demo1234!/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /ensureAppleDevDriverLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /appleDevDriverFixtureEnabled/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /APPLE_DEV_DRIVER_FIXTURE/);
+  const dbSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
+  assert.match(dbSource, /appleDevDriverFixtureEnabled\(\)/);
+  assert.match(dbSource, /ensureAppleDevDriverLogin/);
+  assert.doesNotMatch(dbSource, /TMS_SKIP_SEED !== "1"[\s\S]{0,80}ensureAppleDevDriverLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /demo\.driver@msexpress\.local/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /APPLE_DEV_DRIVER_FIXTURE=1/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your email and password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-session.ts"), "utf8"), /Sign in with your email and password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8"), /PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /scope=delivered/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/fuel\/transactions/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /POST \/fuel\/receipts/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /scope === "delivered"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-receipt-match.ts"), "utf8"), /FUEL_AUTO_MATCH_MIN_SCORE = 70/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /autoMatchPendingFuelReceipts/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
@@ -1569,6 +1585,11 @@ async function main() {
   assert.ok(driverCountAfterSeed >= 1, "empty-dev seed may create demo drivers");
   (await import("../lib/seed")).seedDatabase(getDb());
   assert.equal(queries.listDrivers().length, driverCountAfterSeed, "never insert demo drivers when a roster exists");
+  assert.equal(
+    queries.listDrivers().some((driver) => String(driver.email ?? "").toLowerCase() === "demo.driver@msexpress.local"),
+    false,
+    "Apple Dev fixture stays off unless APPLE_DEV_DRIVER_FIXTURE=1",
+  );
 
   const { listenAddress } = await import("../scripts/listen-address.mjs");
   const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
@@ -6778,7 +6799,14 @@ DISPATCH CONFIRMATION
   assert.equal(queries.authenticateDriverByEmail("email.login@msloads.test", "Driver1$ab").id, loginDriverId);
   assert.throws(() => queries.authenticateDriverByEmail("email.login@msloads.test", "Wrong1$ab"));
   assert.throws(() => queries.authenticateDriverByEmail("nobody@msloads.test", "Driver1$ab"));
-  const { APPLE_DEV_DRIVER_EMAIL, APPLE_DEV_DRIVER_PASSWORD } = await import("../lib/driver-login-fixture");
+  const {
+    APPLE_DEV_DRIVER_EMAIL,
+    APPLE_DEV_DRIVER_PASSWORD,
+    appleDevDriverFixtureEnabled,
+    ensureAppleDevDriverLogin,
+  } = await import("../lib/driver-login-fixture");
+  assert.equal(appleDevDriverFixtureEnabled(), false, "smoke must not opt in the Apple Dev fixture via env");
+  ensureAppleDevDriverLogin(getDb(), { force: true });
   const appleLoginRoute = await import("../app/api/driver/v1/auth/login/route");
   const appleLoginRes = await appleLoginRoute.POST(
     new Request("http://localhost:3000/api/driver/v1/auth/login", {
@@ -11511,6 +11539,64 @@ DISPATCH CONFIRMATION
   assert.equal(deniseFuel.week.def.gallons, 0);
   assert.equal(deniseFuel.week.scale.amount, 0);
   const {
+    scoreFuelReceiptMatch,
+    pickFuelAutoMatch,
+    autoMatchPendingFuelReceipts,
+  } = await import("../lib/fuel-receipt-match");
+  const exactFuelScore = scoreFuelReceiptMatch(
+    {
+      occurredAt: "2026-09-13T12:00:00.000Z",
+      amount: 100,
+      gallons: 30,
+      merchant: "Pilot Memphis",
+      cardLast4: "4321",
+    },
+    {
+      occurredAt: "2026-09-13T14:00:00.000Z",
+      amount: 100,
+      gallons: 30,
+      merchant: "Pilot Memphis TN",
+      cardLast4: "4321",
+    },
+  );
+  assert.ok(exactFuelScore.score >= 70);
+  assert.equal(exactFuelScore.amountMatched, true);
+  assert.equal(exactFuelScore.last4Matched, true);
+  assert.equal(
+    pickFuelAutoMatch([
+      { id: 1, score: 80, amountMatched: true, last4Matched: false },
+      { id: 2, score: 75, amountMatched: true, last4Matched: false },
+    ]),
+    null,
+    "top-2 within 8 points stay pending",
+  );
+  assert.equal(
+    pickFuelAutoMatch([
+      { id: 1, score: 80, amountMatched: true, last4Matched: false },
+      { id: 2, score: 60, amountMatched: false, last4Matched: false },
+    ]),
+    1,
+  );
+  assert.equal(pickFuelAutoMatch([{ id: 1, score: 90, amountMatched: false, last4Matched: false }]), null);
+  const deniseCard = fuelStore.listFuelTransactions({ driverId: fuelDenise.id })[0];
+  assert.ok(deniseCard);
+  const { addFuelReceipt: addPendingFuelReceipt, getFuelReceipt } = await import("../lib/fuel-receipts");
+  const pendingReceiptId = addPendingFuelReceipt({
+    loadId: null,
+    driverId: fuelDenise.id,
+    attachmentId: null,
+    occurredAt: deniseCard.occurred_at,
+    gallons: deniseCard.gallons,
+    amount: deniseCard.amount,
+    merchant: deniseCard.location,
+    cardLast4: deniseCard.card_last4,
+    status: "pending_match",
+  });
+  assert.equal(autoMatchPendingFuelReceipts().matched, 1);
+  const autoMatched = getFuelReceipt(pendingReceiptId);
+  assert.equal(autoMatched?.status, "matched");
+  assert.equal(autoMatched?.fuel_transaction_id, deniseCard.id);
+  const {
     listDriverMpg,
     odometerDeltaMiles,
     officialGoogleMilesForLoad,
@@ -15694,11 +15780,19 @@ DISPATCH CONFIRMATION
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /Confirmation/);
   assert.match(driverHome, /label: "Trailer"/);
+  assert.match(driverHome, /label: "Fuel"/);
+  assert.match(driverHome, /\/driver\/fuel/);
+  assert.match(driverHome, /DriverDispatchBoard/);
   assert.match(driverHome, /driverLoadHasAssignedTrailer/);
-  assert.doesNotMatch(driverHome, /label: "Fuel"/);
+  assert.doesNotMatch(driverHome, /label: "Active"/);
+  assert.doesNotMatch(driverHome, /label: "Delivered"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
   assert.match(driverHome, /pickDriverDestinationLoad/);
+  const dispatchBoard = fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8");
+  assert.match(dispatchBoard, /data-driver-dispatch/);
+  assert.match(dispatchBoard, /data-dispatch-filter/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/fuel/page.tsx")), true);
   const { pickDriverDestinationLoad } = await import("../lib/driver-destinations-shared");
   assert.equal(pickDriverDestinationLoad([{ id: 11 }], [{ id: 22, delivery_end: "2026-08-01T00:00:00.000Z" }])?.id, 11);
   assert.equal(

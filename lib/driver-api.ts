@@ -8,7 +8,19 @@ import {
   performDriverUpload,
   requireAssignedLoad,
 } from "./driver-ops";
-import { listAttachments } from "./files";
+import { fileToBuffer, isPdfOrImage, listAttachments, saveOrphanFuelReceiptFile } from "./files";
+import { autoMatchPendingFuelReceipts } from "./fuel-receipt-match";
+import {
+  addFuelReceipt,
+  getFuelReceipt,
+  linkFuelReceipt,
+  listDriverFuelReceipts,
+  receiptIdForTransaction,
+  type FuelReceipt,
+  type FuelReceiptStatus,
+} from "./fuel-receipts";
+import { getFuelTransaction, listFuelTransactions } from "./fuel-store";
+import type { FuelTransactionView } from "./fuel";
 import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
 import { isCustomerRateDocument } from "./load-documents-shared";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
@@ -123,6 +135,31 @@ export const DRIVER_API_ATTACHMENT_KINDS = ATTACHMENT_KINDS.map((item) => item.v
 export const DRIVER_API_UPLOAD_KINDS = DRIVER_API_ATTACHMENT_KINDS.filter(
   (kind) => !isCustomerRateDocument({ kind }),
 );
+
+export type DriverApiFuelTransaction = {
+  id: number;
+  occurred_at: string;
+  location: string;
+  gallons: number | null;
+  amount: number | null;
+  card_last4: string;
+  category: string;
+  unit_number: string;
+  receipt_id: number | null;
+};
+
+export type DriverApiFuelReceipt = {
+  id: number;
+  status: FuelReceiptStatus;
+  occurred_at: string;
+  gallons: number | null;
+  amount: number | null;
+  merchant: string;
+  card_last4: string;
+  original_name: string;
+  fuel_transaction_id: number | null;
+  created_at: string;
+};
 
 export type DriverApiAttachment = {
   id: number;
@@ -441,11 +478,11 @@ export function driverFromApiToken(token: string): DriverWithTruck | null {
 export function requireDriverApiAuth(request: Request): DriverWithTruck {
   const token = bearerToken(request);
   if (!token) {
-    throw new DriverApiHttpError(401, "Sign in with your PIN.", "UNAUTHORIZED");
+    throw new DriverApiHttpError(401, "Sign in with your email and password.", "UNAUTHORIZED");
   }
   const driver = driverFromApiToken(token);
   if (!driver) {
-    throw new DriverApiHttpError(401, "Sign in with your PIN.", "UNAUTHORIZED");
+    throw new DriverApiHttpError(401, "Sign in with your email and password.", "UNAUTHORIZED");
   }
   return driver;
 }
@@ -714,10 +751,11 @@ export async function handleDriverMe(request: Request): Promise<Response> {
 
 function scopedLoads(driverId: number, scope: string): LoadView[] {
   const loads = listLoadsForDriver(driverId);
-  if (scope === "recent") {
+  const normalized = scope === "delivered" ? "recent" : scope;
+  if (normalized === "recent") {
     return loads.filter((load) => load.status === "delivered" || load.status === "completed");
   }
-  if (scope === "active" || !scope) {
+  if (normalized === "active" || !normalized) {
     return loads.filter((load) => !isClosedStatus(load.status));
   }
   throw new DriverApiHttpError(409, "scope must be active or recent.", "CONFLICT");
@@ -845,6 +883,211 @@ export async function handleDriverAttachment(
           },
         };
       });
+    });
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+function toFuelTransactionDto(row: FuelTransactionView): DriverApiFuelTransaction {
+  return {
+    id: row.id,
+    occurred_at: toDriverApiDateTime(row.occurred_at),
+    location: row.location,
+    gallons: row.gallons,
+    amount: row.amount,
+    card_last4: row.card_last4,
+    category: row.category,
+    unit_number: row.unit_number,
+    receipt_id: receiptIdForTransaction(row.id),
+  };
+}
+
+function toFuelReceiptDto(row: FuelReceipt): DriverApiFuelReceipt {
+  return {
+    id: row.id,
+    status: row.status,
+    occurred_at: toDriverApiDateTime(row.occurred_at),
+    gallons: row.gallons,
+    amount: row.amount,
+    merchant: row.merchant || row.station,
+    card_last4: row.card_last4,
+    original_name: row.original_name,
+    fuel_transaction_id: row.fuel_transaction_id,
+    created_at: toDriverApiDateTime(row.created_at),
+  };
+}
+
+function requireOwnFuelTransaction(driverId: number, id: number): FuelTransactionView {
+  if (!id) throw new DriverApiHttpError(404, "Fuel transaction not found.", "NOT_FOUND");
+  const row = getFuelTransaction(id);
+  if (!row) throw new DriverApiHttpError(404, "Fuel transaction not found.", "NOT_FOUND");
+  if (row.driver_id !== driverId) {
+    throw new DriverApiHttpError(403, "This fuel row is not on your card.", "FORBIDDEN");
+  }
+  return row;
+}
+
+function requireOwnFuelReceipt(driverId: number, id: number): FuelReceipt {
+  if (!id) throw new DriverApiHttpError(404, "Fuel receipt not found.", "NOT_FOUND");
+  const row = getFuelReceipt(id);
+  if (!row) throw new DriverApiHttpError(404, "Fuel receipt not found.", "NOT_FOUND");
+  if (row.driver_id !== driverId) {
+    throw new DriverApiHttpError(403, "This receipt is not yours.", "FORBIDDEN");
+  }
+  return row;
+}
+
+function requireUploadFile(file: FormDataEntryValue | null): File {
+  if (!(file instanceof File) || file.size === 0) {
+    throw new DriverApiHttpError(409, "Choose a photo or PDF.", "CONFLICT");
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new DriverApiHttpError(409, "File is too large.", "CONFLICT");
+  }
+  if (!isPdfOrImage(file)) {
+    throw new DriverApiHttpError(409, "Choose a photo or PDF.", "CONFLICT");
+  }
+  return file;
+}
+
+function optionalFormNumber(value: FormDataEntryValue | null): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function optionalFormText(value: FormDataEntryValue | null): string {
+  return String(value ?? "").trim();
+}
+
+async function storeFuelReceiptUpload(file: File) {
+  const saved = saveOrphanFuelReceiptFile({
+    originalName: file.name,
+    buffer: await fileToBuffer(file),
+    mimeType: file.type,
+  });
+  return saved;
+}
+
+export async function handleDriverFuelTransactions(request: Request): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    return Response.json(listFuelTransactions({ driverId: driver.id }).map(toFuelTransactionDto));
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+export async function handleDriverFuelTransactionDetail(
+  request: Request,
+  params: Promise<{ id: string }>,
+): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    const row = requireOwnFuelTransaction(driver.id, parseId((await params).id));
+    return Response.json(toFuelTransactionDto(row));
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+export async function handleDriverFuelTransactionReceipt(
+  request: Request,
+  params: Promise<{ id: string }>,
+): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    const transaction = requireOwnFuelTransaction(driver.id, parseId((await params).id));
+    const form = await request.formData();
+    const clientRequestId = readClientRequestId(form.get("client_request_id"));
+    const file = requireUploadFile(form.get("file"));
+    return await withIdempotency(request, driver, clientRequestId, async () => {
+      const existing = receiptIdForTransaction(transaction.id);
+      if (existing) {
+        const receipt = getFuelReceipt(existing);
+        if (receipt) return { status: 200, body: { receipt: toFuelReceiptDto(receipt) } };
+      }
+      const saved = await storeFuelReceiptUpload(file);
+      const receiptId = addFuelReceipt({
+        loadId: transaction.load_id,
+        driverId: driver.id,
+        attachmentId: null,
+        fuelTransactionId: transaction.id,
+        occurredAt: optionalFormText(form.get("occurred_at")) || transaction.occurred_at,
+        gallons: optionalFormNumber(form.get("gallons")) ?? transaction.gallons,
+        amount: optionalFormNumber(form.get("amount")) ?? transaction.amount,
+        station: optionalFormText(form.get("merchant")) || optionalFormText(form.get("station")) || transaction.location,
+        merchant: optionalFormText(form.get("merchant")) || transaction.location,
+        cardLast4: optionalFormText(form.get("card_last4")) || transaction.card_last4,
+        status: "matched",
+        storedName: saved.storedName,
+        originalName: saved.originalName,
+        mimeType: saved.mimeType,
+      });
+      return { status: 200, body: { receipt: toFuelReceiptDto(getFuelReceipt(receiptId)!) } };
+    });
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+export async function handleDriverFuelReceipts(request: Request): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    if (request.method === "GET") {
+      const status = new URL(request.url).searchParams.get("status")?.trim() ?? "";
+      if (status && status !== "pending_match" && status !== "matched") {
+        throw new DriverApiHttpError(409, "status must be pending_match or matched.", "CONFLICT");
+      }
+      const rows = listDriverFuelReceipts(driver.id, status ? (status as FuelReceiptStatus) : undefined);
+      return Response.json(rows.map(toFuelReceiptDto));
+    }
+
+    const form = await request.formData();
+    const clientRequestId = readClientRequestId(form.get("client_request_id"));
+    const file = requireUploadFile(form.get("file"));
+    return await withIdempotency(request, driver, clientRequestId, async () => {
+      const saved = await storeFuelReceiptUpload(file);
+      const receiptId = addFuelReceipt({
+        loadId: null,
+        driverId: driver.id,
+        attachmentId: null,
+        occurredAt: optionalFormText(form.get("occurred_at")) || nowIso(),
+        gallons: optionalFormNumber(form.get("gallons")),
+        amount: optionalFormNumber(form.get("amount")),
+        station: optionalFormText(form.get("station")) || optionalFormText(form.get("merchant")),
+        merchant: optionalFormText(form.get("merchant")) || optionalFormText(form.get("station")),
+        cardLast4: optionalFormText(form.get("card_last4")),
+        status: "pending_match",
+        storedName: saved.storedName,
+        originalName: saved.originalName,
+        mimeType: saved.mimeType,
+      });
+      autoMatchPendingFuelReceipts();
+      return { status: 200, body: { receipt: toFuelReceiptDto(getFuelReceipt(receiptId)!) } };
+    });
+  } catch (error) {
+    return fromOpsError(error);
+  }
+}
+
+export async function handleDriverFuelReceiptMatch(
+  request: Request,
+  params: Promise<{ id: string }>,
+): Promise<Response> {
+  try {
+    const driver = requireDriverApiAuth(request);
+    const receipt = requireOwnFuelReceipt(driver.id, parseId((await params).id));
+    const body = await readJsonBody(request);
+    const clientRequestId = readClientRequestId(body.client_request_id);
+    return await withIdempotency(request, driver, clientRequestId, async () => {
+      const transactionId = Number.parseInt(String(body.fuel_transaction_id ?? ""), 10);
+      const transaction = requireOwnFuelTransaction(driver.id, transactionId);
+      linkFuelReceipt(receipt.id, transaction.id);
+      const next = getFuelReceipt(receipt.id);
+      return { status: 200, body: { receipt: toFuelReceiptDto(next!) } };
     });
   } catch (error) {
     return fromOpsError(error);

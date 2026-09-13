@@ -101,7 +101,7 @@ Returns the driver object from login.
 
 ### `GET /loads?scope=active|recent`
 
-`LoadSummary[]`. `active` is assigned and not closed. `recent` is delivered/completed.
+`LoadSummary[]`. `active` is assigned and not closed. `recent` is delivered/completed. `scope=delivered` is accepted as an alias of `recent`.
 
 Each summary includes `next_actions.allowed_progress` (next linear `DriverProgress` only) and `next_actions.can_check_stops` (assigned and not cancelled/delivered/completed/accounting).
 
@@ -126,6 +126,32 @@ Same rules as `driverStopCheckAction`: pickup depart before delivery arrive; che
 ### `POST /loads/{id}/attachments`
 
 `multipart/form-data`: `kind`, `file`, `client_request_id`. See [AttachmentKind](#attachmentkind). Reuses `addAttachment` with driver upload. `pod` may trigger `maybeAutoInvoiceLoad` like the web driver app.
+
+### `GET /fuel/transactions`
+
+This driver's fuel card rows. Each row includes `receipt_id` when a photo is matched.
+
+### `GET /fuel/transactions/{id}`
+
+One card row. `403` if it is not this driver's.
+
+### `POST /fuel/transactions/{id}/receipt`
+
+`multipart/form-data`: `file`, `client_request_id`, optional `amount`, `gallons`, `merchant`, `card_last4`, `occurred_at`. Attaches the photo and marks the receipt `matched`.
+
+### `POST /fuel/receipts`
+
+Orphan early upload. `multipart/form-data`: `file`, `client_request_id`, optional amount / gallons / merchant / card last4 / occurred_at. Status starts as `pending_match`. Existing card rows may auto-match.
+
+### `GET /fuel/receipts?status=pending_match|matched`
+
+This driver's receipt photos. Omit `status` to return both.
+
+### `POST /fuel/receipts/{id}/match`
+
+Body: `{ "fuel_transaction_id": 12, "client_request_id": "uuid" }`. Manual override. Office fuel spreadsheet import also auto-matches pending photos (date / amount / gallons / merchant / card last4). Auto-apply when score ≥ 70 **and** amount or last4 matches. If the top two scores are within 8 points, the photo stays `pending_match`.
+
+Web `/driver` has one **Dispatch** tile (Active | Delivered filters on that screen) plus a **Fuel** tile at `/driver/fuel`.
 
 ## Example curls
 
@@ -178,7 +204,11 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/driv
 
 ## Apple Dev / staging fixture
 
-Migrate/boot ensures this driver exists (email + office-complexity password). Dispatch can also set any driver's login on Fleet → Drivers.
+**Opt-in only.** `getDb()` creates this row when `APPLE_DEV_DRIVER_FIXTURE=1` (or `true` / `yes`). Default is off. Office and production must not set that flag. `TMS_SKIP_SEED` does **not** create this login — it is an allowlist, not an opt-out.
+
+Dispatch can also set any driver's email + password on Fleet → Drivers.
+
+When the flag is set:
 
 - email: `demo.driver@msexpress.local`
 - password: `Demo1234!`
@@ -186,6 +216,6 @@ Migrate/boot ensures this driver exists (email + office-complexity password). Di
 ## Local exercise
 
 1. `npm install` and run `npm run dev` against a local SQLite DB (default `data/tms.db`).
-2. Sign in with the Apple Dev fixture above, or set an email and password on a driver in Fleet → Drivers (web).
+2. Sign in with a Fleet → Drivers email/password, or set `APPLE_DEV_DRIVER_FIXTURE=1` once for the Apple Dev fixture above.
 3. Use the curls above. `GET /auth/roster` returns 404.
 4. `npm test` runs `scripts/smoke.ts` then `scripts/driver-api-v1-test.ts` (route-level, temp DB).

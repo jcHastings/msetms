@@ -1,12 +1,25 @@
 import { hashDispatcherPassword } from "./dispatcher-password";
 import type { Database } from "./sqlite";
 
-/** Apple Dev / staging driver login. Created on migrate so existing office DBs get it. */
+/** Apple Dev / staging driver login. Never inserted unless explicitly opted in. */
 export const APPLE_DEV_DRIVER_EMAIL = "demo.driver@msexpress.local";
 export const APPLE_DEV_DRIVER_PASSWORD = "Demo1234!";
 export const APPLE_DEV_DRIVER_NAME = "Demo Driver";
+export const APPLE_DEV_DRIVER_FIXTURE_ENV = "APPLE_DEV_DRIVER_FIXTURE";
 
-export function ensureAppleDevDriverLogin(db: Database): void {
+/** Allowlist only. Default off. `TMS_SKIP_SEED` must not create this row. */
+export function appleDevDriverFixtureEnabled(): boolean {
+  const raw = String(process.env.APPLE_DEV_DRIVER_FIXTURE ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+/**
+ * Inserts or repairs the Apple Dev login row.
+ * `getDb()` calls this only when `appleDevDriverFixtureEnabled()` is true.
+ * Tests may pass `{ force: true }` to create the row without flipping process env.
+ */
+export function ensureAppleDevDriverLogin(db: Database, options?: { force?: boolean }): void {
+  if (!options?.force && !appleDevDriverFixtureEnabled()) return;
   const now = new Date().toISOString();
   const row = db
     .prepare(`SELECT id, password_hash FROM drivers WHERE LOWER(TRIM(email)) = ?`)

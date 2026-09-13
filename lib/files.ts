@@ -58,6 +58,22 @@ export function attachInboxToLoad(
   });
 }
 
+export function saveOrphanFuelReceiptFile(input: {
+  originalName: string;
+  buffer: Buffer;
+  mimeType: string;
+}): { storedName: string; originalName: string; mimeType: string } {
+  const originalName = sanitizeName(input.originalName || "receipt.bin");
+  const storedName = `${randomUUID()}-${originalName}`;
+  const dir = uploadsDir("fuel-receipts");
+  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.buffer);
+  return {
+    storedName,
+    originalName,
+    mimeType: input.mimeType || guessMime(originalName),
+  };
+}
+
 export function addAttachment(input: {
   loadId: number;
   kind: AttachmentKind;
