@@ -15873,17 +15873,22 @@ DISPATCH CONFIRMATION
   assert.match(driverHome, /label: "Trailer"/);
   assert.match(driverHome, /label: "Fuel"/);
   assert.match(driverHome, /\/driver\/fuel/);
-  assert.match(driverHome, /DriverDispatchBoard/);
+  assert.match(driverHome, /\/driver\/dispatch/);
+  assert.doesNotMatch(driverHome, /DriverDispatchBoard/);
+  assert.doesNotMatch(driverHome, /data-driver-dispatch/);
   assert.match(driverHome, /driverLoadHasAssignedTrailer/);
   assert.doesNotMatch(driverHome, /label: "Active"/);
   assert.doesNotMatch(driverHome, /label: "Delivered"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
   assert.match(driverHome, /pickDriverDestinationLoad/);
+  const driverDispatchPage = fs.readFileSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx"), "utf8");
+  assert.match(driverDispatchPage, /DriverDispatchBoard/);
   const dispatchBoard = fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8");
   assert.match(dispatchBoard, /data-driver-dispatch/);
   assert.match(dispatchBoard, /data-dispatch-filter/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/fuel/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx")), true);
   const { pickDriverDestinationLoad } = await import("../lib/driver-destinations-shared");
   assert.equal(pickDriverDestinationLoad([{ id: 11 }], [{ id: 22, delivery_end: "2026-08-01T00:00:00.000Z" }])?.id, 11);
   assert.equal(
@@ -18109,7 +18114,8 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /data-critical-reason/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /DriverDispatchBoard/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /DriverDispatchBoard/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx"), "utf8"), /DriverDispatchBoard/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8"), /id="dispatch"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8"), /data-dispatch-filter/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-doc-classify.tsx"), "utf8"), /Needs type/);
