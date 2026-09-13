@@ -8,6 +8,7 @@ import {
 } from "./document-copy";
 import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database } from "./sqlite";
+import { ensureAppleDevDriverLogin } from "./driver-login-fixture";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -60,6 +61,9 @@ export function getDb(): Database {
   backfillSampleLoads(db);
   backfillLoadNumbering(db);
   backfillCustomerMainEmail(db);
+  if (process.env.TMS_SKIP_SEED !== "1") {
+    ensureAppleDevDriverLogin(db);
+  }
 
   connection = db;
   connectedPath = dbPath;

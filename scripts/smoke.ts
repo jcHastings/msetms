@@ -467,6 +467,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /authenticateDriverByEmail/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /Driver login password/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /DISPATCHER_PASSWORD_HINT/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /demo\.driver@msexpress\.local/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /Demo1234!/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /ensureAppleDevDriverLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /demo\.driver@msexpress\.local/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
@@ -6774,6 +6778,19 @@ DISPATCH CONFIRMATION
   assert.equal(queries.authenticateDriverByEmail("email.login@msloads.test", "Driver1$ab").id, loginDriverId);
   assert.throws(() => queries.authenticateDriverByEmail("email.login@msloads.test", "Wrong1$ab"));
   assert.throws(() => queries.authenticateDriverByEmail("nobody@msloads.test", "Driver1$ab"));
+  const { APPLE_DEV_DRIVER_EMAIL, APPLE_DEV_DRIVER_PASSWORD } = await import("../lib/driver-login-fixture");
+  const appleLoginRoute = await import("../app/api/driver/v1/auth/login/route");
+  const appleLoginRes = await appleLoginRoute.POST(
+    new Request("http://localhost:3000/api/driver/v1/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: APPLE_DEV_DRIVER_EMAIL, password: APPLE_DEV_DRIVER_PASSWORD }),
+    }),
+  );
+  assert.equal(appleLoginRes.status, 200, "Apple Dev fixture logs in via POST /auth/login");
+  const appleSession = (await appleLoginRes.json()) as { token: string; driver: { display_name: string } };
+  assert.match(appleSession.token, /^drv_/);
+  assert.equal(appleSession.driver.display_name, "Demo Driver");
   assert.throws(() =>
     queries.createDriver({
       name: "Dup Email",

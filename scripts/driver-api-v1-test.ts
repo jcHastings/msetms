@@ -279,6 +279,22 @@ async function main() {
   assert.equal(unknownEmail.status, 401);
   assert.equal((unknownEmail.json as { error?: string }).error, badBody.error);
 
+  const dbMod = await import("../lib/db");
+  const fixture = await import("../lib/driver-login-fixture");
+  fixture.ensureAppleDevDriverLogin(dbMod.getDb());
+  const appleDevLogin = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: loginPayload(fixture.APPLE_DEV_DRIVER_EMAIL, fixture.APPLE_DEV_DRIVER_PASSWORD),
+      }),
+    ),
+  );
+  assert.equal(appleDevLogin.status, 200, `Apple Dev fixture ${JSON.stringify(appleDevLogin.json)}`);
+  assert.match((appleDevLogin.json as { token: string }).token, /^drv_/);
+  assert.equal((appleDevLogin.json as { driver: { display_name: string } }).driver.display_name, "Demo Driver");
+
   const goodLogin = await read(
     await loginRoute.POST(
       request(`${BASE}/auth/login`, {

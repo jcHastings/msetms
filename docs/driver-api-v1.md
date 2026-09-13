@@ -176,9 +176,16 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/driv
   -H "Authorization: Bearer $TOKEN"
 ```
 
+## Apple Dev / staging fixture
+
+Migrate/boot ensures this driver exists (email + office-complexity password). Dispatch can also set any driver's login on Fleet → Drivers.
+
+- email: `demo.driver@msexpress.local`
+- password: `Demo1234!`
+
 ## Local exercise
 
 1. `npm install` and run `npm run dev` against a local SQLite DB (default `data/tms.db`).
-2. Set an email and login password on a driver in Fleet → Drivers (web).
+2. Sign in with the Apple Dev fixture above, or set an email and password on a driver in Fleet → Drivers (web).
 3. Use the curls above. `GET /auth/roster` returns 404.
 4. `npm test` runs `scripts/smoke.ts` then `scripts/driver-api-v1-test.ts` (route-level, temp DB).
