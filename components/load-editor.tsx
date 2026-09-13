@@ -221,6 +221,7 @@ export async function LoadEditor({
             locations={locations}
             drivers={drivers}
             load={load}
+            relays={relays}
             equipmentChoices={equipmentChoices}
             returnTo={returnTo}
             {...formSettings}

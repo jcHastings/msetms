@@ -297,9 +297,11 @@ async function main() {
   const relayPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8");
   assert.match(relayPanelSource, /\+ Add Relay/);
   assert.doesNotMatch(relayPanelSource, /Internal handoff|Not billed/);
-  assert.match(relayPanelSource, /Driver A/);
-  assert.match(relayPanelSource, /Driver B/);
+  assert.match(relayPanelSource, /Driver 1 \(first leg\)/);
+  assert.match(relayPanelSource, /Driver 2 \(receiving\)/);
   assert.match(relayPanelSource, /Relay point/);
+  assert.match(relayPanelSource, /Relay completed/);
+  assert.match(relayPanelSource, /datetime-local/);
   assert.doesNotMatch(relayPanelSource, /Save leg|Internal OO %|name="pickup"|blank waiting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
   const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
@@ -901,9 +903,14 @@ async function main() {
   assert.doesNotMatch(customerChunk, /credit_hold|MC#|EDI/);
   assert.match(assetsChunk, /Company driver/);
   assert.match(assetsChunk, /Owner-operator/);
-  assert.match(assetsChunk, /name="driver_id"/);
-  assert.match(assetsChunk, /name="truck_id"/);
-  assert.match(assetsChunk, /name="trailer_id"/);
+  assert.match(assetsChunk, /driver: "driver_id"|name="driver_id"/);
+  assert.match(assetsChunk, /truck: "truck_id"|name="truck_id"/);
+  assert.match(assetsChunk, /trailer: "trailer_id"|name="trailer_id"/);
+  assert.match(assetsChunk, /Driver 1 — first leg \/ pre-relay/);
+  assert.match(assetsChunk, /Driver 2 — post-relay receiver/);
+  assert.match(assetsChunk, /Relay completed/);
+  assert.match(assetsChunk, /datetime-local/);
+  assert.match(assetsChunk, /updateRelayAssignmentAction/);
   assert.match(assetsChunk, /useLoadAssignPersist/);
   assert.match(assetsChunk, /handleAssign/);
   const persistHook = fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8");
@@ -1484,7 +1491,9 @@ async function main() {
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
   const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
+  const completedColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "completed_at"');
   assert.ok(fromColAt >= 0 && fromIdxAt > fromColAt, "add from_driver_id before indexing it");
+  assert.ok(completedColAt > fromColAt, "add completed_at on existing load_relays");
   const parentColAt = dbMigrateSource.indexOf('ensureColumn(db, "loads", "parent_load_id"');
   const parentIdxAt = dbMigrateSource.indexOf("idx_loads_parent");
   assert.ok(parentColAt >= 0 && parentIdxAt > parentColAt, "add parent_load_id before indexing it");
@@ -1586,6 +1595,9 @@ async function main() {
   migrate(oldRelayDb);
   const relayCols = oldRelayDb.prepare("PRAGMA table_info(load_relays)").all() as Array<{ name: string }>;
   assert.ok(relayCols.some((col) => col.name === "from_driver_id"), "existing DBs must gain from_driver_id");
+  assert.ok(relayCols.some((col) => col.name === "from_truck_id"), "existing DBs must gain from_truck_id");
+  assert.ok(relayCols.some((col) => col.name === "from_trailer_id"), "existing DBs must gain from_trailer_id");
+  assert.ok(relayCols.some((col) => col.name === "completed_at"), "existing DBs must gain completed_at");
   oldRelayDb.close();
 
   const legacyFuelPath = path.join(os.tmpdir(), `tms-legacy-fuel-receipts-${Date.now()}.db`);
@@ -9356,6 +9368,172 @@ DISPATCH CONFIRMATION
   );
   assert.doesNotMatch(handoffQbo.memo, /Memphis|Handoff Baker/);
   assert.doesNotMatch(formatLoadSummary(queries.getLoad(handoffLoadId)!), /Memphis|Handoff Baker/);
+
+  const {
+    currentAssignmentFromRelays,
+    lastCompletedRelay,
+    relayIsCompleted,
+    assertRelayCompletionTime,
+  } = await import("../lib/relays");
+  const flipTruckA = queries.createTruck({
+    unit_number: "FLIP-A",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const flipTruckB = queries.createTruck({
+    unit_number: "FLIP-B",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const flipTrailerA = queries.createTrailer({
+    unit_number: "FLIP-TA",
+    type: "dry_van",
+    status: "available",
+  });
+  const flipTrailerB = queries.createTrailer({
+    unit_number: "FLIP-TB",
+    type: "dry_van",
+    status: "available",
+  });
+  const flipDriverA = queries.createDriver({
+    name: "Flip Able",
+    phone: "555-0811",
+    license: "NE-CDL-FLIPA",
+    pin: "8110",
+    truck_id: flipTruckA,
+    status: "available",
+    driver_type: "company_driver",
+  });
+  const flipDriverB = queries.createDriver({
+    name: "Flip Baker",
+    phone: "555-0812",
+    license: "IN-CDL-FLIPB",
+    pin: "8111",
+    truck_id: flipTruckB,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const flipLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Bayonne, NJ",
+    destination: "Hastings, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Relay flip freight",
+    rate: 4100,
+    notes: "Keep financials",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-FLIP",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: flipTruckA,
+    trailer_id: flipTrailerA,
+    driver_id: flipDriverA,
+  });
+  const flipStopsBefore = (await import("../lib/stops")).listStops(flipLoadId).length;
+  const flipRelayId = relayStore.addRelay(flipLoadId, {
+    from_driver_id: flipDriverA,
+    driver_id: flipDriverB,
+    delivery: "Gary, IN",
+  });
+  let flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "incomplete relay keeps Driver 1 on the load");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  assert.equal(flipLoad?.rate, 4100);
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore);
+  const flipRow = relayStore.getRelay(flipRelayId);
+  assert.equal(flipRow?.from_driver_id, flipDriverA);
+  assert.equal(flipRow?.from_truck_id, flipTruckA);
+  assert.equal(flipRow?.from_trailer_id, flipTrailerA);
+  assert.equal(flipRow?.driver_id, flipDriverB);
+  assert.equal(relayIsCompleted(flipRow!), false);
+  assert.equal(lastCompletedRelay(relayStore.listRelays(flipLoadId)), null);
+  assert.equal(
+    currentAssignmentFromRelays(flipLoad!, relayStore.listRelays(flipLoadId)).driver_id,
+    flipDriverA,
+  );
+  assert.throws(
+    () =>
+      assertRelayCompletionTime({
+        driver_id: flipDriverB,
+        truck_id: flipTruckB,
+        trailer_id: flipTrailerB,
+        completed_at: "",
+      }),
+    /date and time this relay was completed/,
+  );
+  assert.throws(
+    () =>
+      relayStore.updateRelay(flipRelayId, {
+        delivery: "Gary, IN",
+        from_driver_id: flipDriverA,
+        driver_id: flipDriverB,
+        truck_id: flipTruckB,
+        trailer_id: flipTrailerB,
+      }),
+    /date and time this relay was completed/,
+  );
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "failed complete-without-time does not flip assignment");
+  const completedAt = new Date().toISOString();
+  relayStore.updateRelayAssignment(flipRelayId, {
+    truck_id: flipTruckB,
+    trailer_id: flipTrailerB,
+    completed_at: completedAt,
+  });
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverB, "completed relay flips current driver to Driver 2");
+  assert.equal(flipLoad?.truck_id, flipTruckB, "completed relay flips current truck to Driver 2");
+  assert.equal(flipLoad?.trailer_id, flipTrailerB, "completed relay flips current trailer to Driver 2");
+  assert.equal(flipLoad?.rate, 4100, "relay complete must not wipe the rate");
+  assert.equal(flipLoad?.notes, "Keep financials");
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore, "relay complete must not wipe stops");
+  const flippedRow = relayStore.getRelay(flipRelayId);
+  assert.equal(relayIsCompleted(flippedRow!), true);
+  assert.equal(flippedRow?.from_driver_id, flipDriverA, "Driver 1 history stays on the relay");
+  assert.equal(flippedRow?.from_truck_id, flipTruckA);
+  assert.equal(flippedRow?.from_trailer_id, flipTrailerA);
+  assert.equal(flippedRow?.driver_type, "owner_operator");
+  assert.equal(flippedRow?.from_driver_type, "company_driver");
+  assert.equal(
+    currentAssignmentFromRelays(flipLoad!, relayStore.listRelays(flipLoadId)).driver_id,
+    flipDriverB,
+  );
+  const boardLoads = queries.listLoads({ status: "assigned" });
+  const boardFlip = boardLoads.find((row) => row.id === flipLoadId);
+  assert.equal(boardFlip?.driver_id, flipDriverB, "board list shows Driver 2 after completed relay");
+  assert.equal(boardFlip?.truck_unit, "FLIP-B");
+  assert.equal(boardFlip?.trailer_unit, "FLIP-TB");
+  assert.equal(boardFlip?.driver_name, "Flip Baker");
+  relayStore.updateRelayAssignment(flipRelayId, { completed_at: "" });
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "clearing completed time restores Driver 1");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  relayStore.updateRelayAssignment(flipRelayId, {
+    truck_id: flipTruckB,
+    trailer_id: flipTrailerB,
+    completed_at: completedAt,
+  });
+  assert.equal(queries.getLoad(flipLoadId)?.driver_id, flipDriverB);
+  relayStore.deleteRelay(flipRelayId);
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "remove relay restores Driver 1");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  assert.equal(flipLoad?.rate, 4100, "remove relay must not wipe the rate");
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore);
+  assert.equal(relayStore.listRelays(flipLoadId).length, 0);
 
   const { pathToFileURL } = await import("node:url");
   const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);

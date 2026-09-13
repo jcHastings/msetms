@@ -10,6 +10,7 @@ import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
+import type { LoadRelayView } from "@/lib/relays";
 import { isOwnerOperator, type ActionResult, type Customer, type DriverWithTruck, type Load, type Location, type Trailer, type Truck } from "@/lib/types";
 
 export type LoadFormScreen = "basics" | "customer" | "assets" | "all";
@@ -21,6 +22,7 @@ type Props = {
   drivers: DriverWithTruck[];
   locations?: Location[];
   load?: Load;
+  relays?: LoadRelayView[];
   defaults?: LoadFormDefaults;
   inboxId?: string;
   commodities?: string[];
@@ -47,6 +49,7 @@ export function LoadForm({
   drivers,
   locations = [],
   load,
+  relays = [],
   defaults,
   inboxId,
   commodities = [],
@@ -162,6 +165,7 @@ export function LoadForm({
           trucks={trucks}
           trailers={trailers}
           load={load}
+          relays={relays}
           defaultOoPercent={defaultOoPercent}
           alertWindows={alertWindows}
           card={card}

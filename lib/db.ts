@@ -473,11 +473,14 @@ export function migrate(db: Database): void {
       pickup TEXT NOT NULL DEFAULT '',
       delivery TEXT NOT NULL DEFAULT '',
       from_driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      from_truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      from_trailer_id INTEGER REFERENCES trailers(id) ON DELETE SET NULL,
       driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
       truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
       trailer_id INTEGER REFERENCES trailers(id) ON DELETE SET NULL,
       oo_percent REAL,
       oo_pay REAL,
+      completed_at TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -486,8 +489,11 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_load_relays_driver ON load_relays(driver_id);
   `);
   ensureColumn(db, "load_relays", "from_driver_id", "INTEGER");
+  ensureColumn(db, "load_relays", "from_truck_id", "INTEGER");
+  ensureColumn(db, "load_relays", "from_trailer_id", "INTEGER");
   ensureColumn(db, "load_relays", "from_leg_miles", "REAL");
   ensureColumn(db, "load_relays", "to_leg_miles", "REAL");
+  ensureColumn(db, "load_relays", "completed_at", "TEXT NOT NULL DEFAULT ''");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
   db.exec(`
 

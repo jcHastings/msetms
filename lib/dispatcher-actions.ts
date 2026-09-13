@@ -6,6 +6,7 @@ import { recordLoadAudit, withRequestAuditActor } from "./audit";
 import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import {
   fromInputDateTime,
+  fromOfficeDateTime,
   isAppointmentSchedule,
   parseOptionalFloat,
   parseOptionalInt,
@@ -60,7 +61,8 @@ import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } fr
 import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
 import { refreshRelayLegMilesQuiet } from "./relay-routing";
-import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay } from "./relay-store";
+import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay, updateRelayAssignment } from "./relay-store";
+import type { RelayAssignmentPatch } from "./relays";
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
 import {
   addStop,
@@ -307,6 +309,13 @@ export async function saveLoadDetailsAction(formData: FormData): Promise<void> {
   });
 }
 
+function parseRelayCompletedAt(formData: FormData): string | undefined {
+  if (!formData.has("completed_at")) return undefined;
+  const raw = String(formData.get("completed_at") ?? "").trim();
+  if (!raw) return "";
+  return fromOfficeDateTime(raw);
+}
+
 function parseRelayForm(formData: FormData) {
   const handoff = String(formData.get("handoff") ?? formData.get("delivery") ?? "").trim();
   const pickup = String(formData.get("pickup") ?? "").trim();
@@ -314,9 +323,12 @@ function parseRelayForm(formData: FormData) {
     pickup: pickup || undefined,
     delivery: requiredString(handoff, "Relay point"),
     from_driver_id: parseOptionalInt(formData.get("from_driver_id") ?? formData.get("driver_a_id")),
+    from_truck_id: parseOptionalInt(formData.get("from_truck_id")),
+    from_trailer_id: parseOptionalInt(formData.get("from_trailer_id")),
     driver_id: parseOptionalInt(formData.get("driver_id") ?? formData.get("driver_b_id")),
     truck_id: parseOptionalInt(formData.get("truck_id")),
     trailer_id: parseOptionalInt(formData.get("trailer_id")),
+    completed_at: parseRelayCompletedAt(formData),
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
     oo_pay: parseOptionalFloat(formData.get("oo_pay")),
     notes: String(formData.get("notes") ?? "").trim(),
@@ -349,6 +361,34 @@ export async function updateRelayAction(formData: FormData): Promise<ActionResul
       updateRelay(id, parseRelayForm(formData));
       const relay = getRelay(id);
       if (relay) await refreshRelayLegMilesQuiet(relay.load_id);
+      refresh();
+      return { ok: true, id };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
+}
+
+function parseAssignmentPatch(formData: FormData): RelayAssignmentPatch {
+  const patch: RelayAssignmentPatch = {};
+  if (formData.has("from_driver_id")) patch.from_driver_id = parseOptionalInt(formData.get("from_driver_id"));
+  if (formData.has("from_truck_id")) patch.from_truck_id = parseOptionalInt(formData.get("from_truck_id"));
+  if (formData.has("from_trailer_id")) patch.from_trailer_id = parseOptionalInt(formData.get("from_trailer_id"));
+  if (formData.has("driver_id")) patch.driver_id = parseOptionalInt(formData.get("driver_id"));
+  if (formData.has("truck_id")) patch.truck_id = parseOptionalInt(formData.get("truck_id"));
+  if (formData.has("trailer_id")) patch.trailer_id = parseOptionalInt(formData.get("trailer_id"));
+  if (formData.has("completed_at")) patch.completed_at = parseRelayCompletedAt(formData) ?? "";
+  return patch;
+}
+
+export async function updateRelayAssignmentAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const id = parseOptionalInt(formData.get("relay_id"));
+      if (!id) throw new Error("Relay is missing.");
+      updateRelayAssignment(id, parseAssignmentPatch(formData));
       refresh();
       return { ok: true, id };
     } catch (error) {
