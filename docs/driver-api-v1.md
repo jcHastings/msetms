@@ -206,9 +206,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/driv
 
 **Opt-in only.** `getDb()` creates this row when `APPLE_DEV_DRIVER_FIXTURE=1` (or `true` / `yes`). Default is off. Office and production must not set that flag. `TMS_SKIP_SEED` does **not** create this login — it is an allowlist, not an opt-out.
 
-Dispatch can also set any driver's email + password on Fleet → Drivers.
+One-shot (staging / Apple Dev, no env flag required):
 
-When the flag is set:
+```bash
+npx tsx scripts/ensure-apple-dev-driver.ts
+```
+
+See [docs/handoff/apple-dev-driver.md](handoff/apple-dev-driver.md).
+
+Dispatch sets any driver's email + password on Fleet → Drivers (same complexity as `dispatcher-password-shared.ts`).
+
+When the fixture exists:
 
 - email: `demo.driver@msexpress.local`
 - password: `Demo1234!`
@@ -216,6 +224,6 @@ When the flag is set:
 ## Local exercise
 
 1. `npm install` and run `npm run dev` against a local SQLite DB (default `data/tms.db`).
-2. Sign in with a Fleet → Drivers email/password, or set `APPLE_DEV_DRIVER_FIXTURE=1` once for the Apple Dev fixture above.
+2. Sign in with a Fleet → Drivers email/password, or run the one-shot script above / set `APPLE_DEV_DRIVER_FIXTURE=1`.
 3. Use the curls above. `GET /auth/roster` returns 404.
 4. `npm test` runs `scripts/smoke.ts` then `scripts/driver-api-v1-test.ts` (route-level, temp DB).

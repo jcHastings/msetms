@@ -477,6 +477,13 @@ async function main() {
   assert.doesNotMatch(dbSource, /TMS_SKIP_SEED !== "1"[\s\S]{0,80}ensureAppleDevDriverLogin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /demo\.driver@msexpress\.local/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /APPLE_DEV_DRIVER_FIXTURE=1/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /ensure-apple-dev-driver/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/handoff/apple-dev-driver.md"), "utf8"), /npx tsx scripts\/ensure-apple-dev-driver.ts/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "scripts/ensure-apple-dev-driver.ts")), true);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PIN/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /parseDriverLoginPassword/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-password.ts"), "utf8"), /dispatcherPasswordError/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your email and password/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your PIN/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-session.ts"), "utf8"), /Sign in with your email and password/);
@@ -11362,6 +11369,10 @@ DISPATCH CONFIRMATION
   assert.match(fuelRollupUi, /FUEL_BUCKETS/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/fuel/import/route.ts")), true);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import-http.ts"), "utf8"), /TMS_FUEL_IMPORT_TOKEN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import.ts"), "utf8"), /importFuelFromText/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/handoff/fuel-import.md"), "utf8"), /POST \/api\/fuel\/import/);
   assert.match(fuelImportUi, /Fuel file/);
   assert.doesNotMatch(fuelImportUi, /Official IFTA|Ascend|<code>\.env/);
   assert.match(driversListPage, /href="\/fuel"/);
@@ -11371,6 +11382,7 @@ DISPATCH CONFIRMATION
   for (const file of ["app/api/fuel/template/route.ts", "app/api/fuel/export/route.ts"]) {
     assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /dispatcherCsvResponse/);
   }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fuel/import/route.ts"), "utf8"), /authorizeFuelImport/);
 
   const {
     cardLast4From,

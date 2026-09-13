@@ -866,6 +866,33 @@ async function main() {
   assert.equal((attached.json as { receipt: { status: string; fuel_transaction_id: number } }).receipt.status, "matched");
   assert.equal((attached.json as { receipt: { fuel_transaction_id: number } }).receipt.fuel_transaction_id, extraTx);
 
+  const fuelImportRoute = await import("../app/api/fuel/import/route");
+  const unauthImport = await read(
+    await fuelImportRoute.POST(request("http://localhost:3000/api/fuel/import", { method: "POST" })),
+  );
+  assert.equal(unauthImport.status, 401);
+  process.env.TMS_FUEL_IMPORT_TOKEN = "fuel-bot-test-token";
+  const botCsv = [
+    "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
+    "9/13/2026,08:00,Alex Rivera,,1,Pilot Jackson,Diesel,10,3.00,30.00,****8899",
+  ].join("\n");
+  const botForm = new FormData();
+  botForm.set("file", new File([botCsv], "bot.csv", { type: "text/csv" }));
+  const botImport = await read(
+    await fuelImportRoute.POST(
+      request("http://localhost:3000/api/fuel/import", {
+        method: "POST",
+        headers: { Authorization: "Bearer fuel-bot-test-token" },
+        body: botForm,
+      }),
+    ),
+  );
+  assert.equal(botImport.status, 200, `fuel import ${JSON.stringify(botImport.json)}`);
+  const botBody = botImport.json as { ok: boolean; created?: number; unmatched?: number };
+  assert.equal(botBody.ok, true);
+  assert.ok((botBody.created ?? 0) + (botBody.unmatched ?? 0) >= 1);
+  delete process.env.TMS_FUEL_IMPORT_TOKEN;
+
   const loggedOut = await read(await logoutRoute.POST(request(`${BASE}/auth/logout`, { method: "POST", headers: auth })));
   assert.equal(loggedOut.status, 204);
   const meAfter = await read(await meRoute.GET(request(`${BASE}/me`, { headers: auth })));

@@ -84,13 +84,12 @@ import {
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
-import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
+import { importFuelFromUpload } from "./fuel-import";
 import {
   assignFuelTransactionDriver,
   assignFuelTransactionLoad,
   deleteFuelTransaction,
-  importFuelFromText,
 } from "./fuel-store";
 import {
   requireCapability,
@@ -1385,53 +1384,13 @@ export async function importFuelCsvAction(
 ): Promise<FuelImportResult> {
   try {
     await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
-    const file = formData.get("csv");
+    const file = formData.get("csv") ?? formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Choose a CSV, Excel, or PDF." };
     }
-    const name = file.name.toLowerCase();
-    const mime = (file.type || "").toLowerCase();
-    const { isFuelPdfUpload, readFuelUploadText } = await import("./fuel-pdf");
-    const nameHintPdf = isFuelPdfUpload(file.name, mime);
-    const isXlsx = name.endsWith(".xlsx") || mime.includes("spreadsheet");
-    if (file.size > 15 * 1024 * 1024) {
-      return { ok: false, error: "PDF is too large (max 15 MB)." };
-    }
-    if (!nameHintPdf && file.size > 5 * 1024 * 1024) {
-      return { ok: false, error: "File is too large (max 5 MB)." };
-    }
-    if (name.endsWith(".xls") && !isXlsx) {
-      return { ok: false, error: "Save the workbook as .xlsx or CSV UTF-8." };
-    }
-    const buffer = await fileToBuffer(file);
-    const isPdf = isFuelPdfUpload(file.name, mime, buffer);
-    if (isPdf && buffer.length > 15 * 1024 * 1024) {
-      return { ok: false, error: "PDF is too large (max 15 MB)." };
-    }
-    let text = "";
-    if (isPdf) {
-      const extracted = await readFuelUploadText(buffer, file.name, mime);
-      text = extracted.text;
-      if (!text.trim()) {
-        return { ok: false, error: "Couldn't read text from this PDF. Save the report as CSV and upload that." };
-      }
-    } else if (isXlsx) {
-      const { recordsFromFirstSheet } = await import("./xlsx-first-sheet");
-      const records = recordsFromFirstSheet(new Uint8Array(buffer));
-      if (!records.length) return { ok: false, error: "Excel sheet is empty." };
-      const headers = Object.keys(records[0] ?? {});
-      text = [
-        headers.join(","),
-        ...records.map((row) =>
-          headers.map((header) => `"${String(row[header] ?? "").replaceAll('"', '""')}"`).join(","),
-        ),
-      ].join("\n");
-    } else {
-      text = decodeCsvBuffer(buffer);
-    }
-    const result = importFuelFromText(text, file.name || "fuel.csv");
-    refresh();
-    return { ok: true, ...result };
+    const result = await importFuelFromUpload(file);
+    if (result.ok) refresh();
+    return result;
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
   }
