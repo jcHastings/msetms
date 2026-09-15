@@ -1,7 +1,6 @@
 import { BrandMark } from "@/components/brand-mark";
 import { driverLoginAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
-import { listDriversForLogin } from "@/lib/queries";
 import { redirect } from "next/navigation";
 import { DriverLoginForm } from "@/components/driver-login-form";
 
@@ -17,14 +16,11 @@ export default async function DriverLoginPage() {
         <BrandMark size="lg" />
         <h1 className="mt-4 text-3xl font-semibold text-white">Driver dispatch</h1>
         <p className="mt-2 text-base text-slate-300">
-          Sign in with your name and the PIN dispatch set on your driver record. No PIN yet — ask dispatch to set
-          one on the Drivers page.
+          Sign in with the email and password dispatch set on your driver record. No login yet — ask
+          dispatch to set one on the Drivers page.
         </p>
       </div>
-      <DriverLoginForm
-        drivers={listDriversForLogin().map((driver) => ({ id: driver.id, name: driver.name }))}
-        action={driverLoginAction}
-      />
+      <DriverLoginForm action={driverLoginAction} />
     </div>
   );
 }

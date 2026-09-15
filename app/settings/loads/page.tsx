@@ -16,7 +16,7 @@ export default async function LoadManagementPage() {
     <SettingsAdminGate>
       <SettingsBack />
       <PageHeader
-        title="Load numbers and sample data"
+        title="Load numbers"
       />
       <section className="card p-6">
         <p className="mb-4 text-sm text-slate-600">
@@ -44,7 +44,7 @@ export default async function LoadManagementPage() {
               value="1"
               defaultChecked={Boolean(settings.show_sample_data)}
             />
-            Show sample / seeded loads
+            Show seeded demo loads
           </label>
         </SettingsForm>
       </section>

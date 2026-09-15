@@ -30,7 +30,7 @@ export async function clearDriverSession(): Promise<void> {
 export async function requireDriver(): Promise<DriverWithTruck> {
   const driver = await getSignedInDriver();
   if (!driver) {
-    throw new Error("Sign in with your PIN.");
+    throw new Error("Sign in with your email and password.");
   }
   return driver;
 }

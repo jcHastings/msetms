@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
+import { parseDriverLoginPassword } from "./driver-password";
 import { cleanDateInput, parseDriverPin, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
 import { parseLoadInput } from "./load-input";
 import { safeReturnTo } from "./load-page-shared";
@@ -83,13 +84,11 @@ import {
 import { complianceWindows, isKnownLoadStatus } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
-import { fileToBuffer } from "./files";
 import { type FuelImportResult } from "./fuel";
+import { importFuelFromUpload } from "./fuel-import";
 import {
-  assignFuelTransactionDriver,
-  assignFuelTransactionLoad,
+  assignFuelTransaction,
   deleteFuelTransaction,
-  importFuelFromText,
 } from "./fuel-store";
 import {
   requireCapability,
@@ -175,8 +174,12 @@ function parseContacts(formData: FormData) {
 }
 
 
-function parseDriverKind(value: FormDataEntryValue | null): DriverKind {
-  const type = String(value ?? "").trim();
+function parseDriverKind(formData: FormData): DriverKind {
+  const values = formData
+    .getAll("driver_type")
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  const type = values[values.length - 1] ?? "";
   if (!type) throw new Error("Pick a driver type.");
   if (type === "single") return "company_driver";
   if (!DRIVER_TYPES.some((item) => item.value === type)) {
@@ -385,7 +388,7 @@ export async function createDriverAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
-    const driverType = parseDriverKind(formData.get("driver_type"));
+    const driverType = parseDriverKind(formData);
     const id = createDriver({
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -416,6 +419,7 @@ export async function createDriverAction(
       drug_test_next: parseDateField(formData.get("drug_test_next")),
       termination_date: parseDateField(formData.get("termination_date")),
       pin: parseDriverPin(formData.get("pin")),
+      password: parseDriverLoginPassword(formData.get("password"), false) || undefined,
       cdl_endorsements: parseCdlEndorsements(formData.getAll("cdl_endorsements")).join(","),
       division: parseFleetDivision(formData.get("division")),
     });
@@ -438,7 +442,7 @@ export async function updateDriverAction(
     if (id == null) throw new Error("Driver not found.");
     const current = getDriver(id);
     if (!current) throw new Error("Driver not found.");
-    const driverType = parseDriverKind(formData.get("driver_type"));
+    const driverType = parseDriverKind(formData);
     updateDriver(id, {
       name: requiredString(formData.get("name"), "Name"),
       phone: requiredString(formData.get("phone"), "Telephone"),
@@ -447,6 +451,7 @@ export async function updateDriverAction(
       active: parseActive(formData),
       license: String(formData.get("license_number") ?? "").trim() || current.license,
       pin: parseDriverPin(formData.get("pin")),
+      password: parseDriverLoginPassword(formData.get("password"), false) || undefined,
       samsara_driver_id: current.samsara_driver_id,
       license_number: String(formData.get("license_number") ?? "").trim(),
       license_state: current.license_state,
@@ -462,9 +467,9 @@ export async function updateDriverAction(
       cell_phone: String(formData.get("cell_phone") ?? "").trim(),
       pager: String(formData.get("pager") ?? "").trim(),
       address: String(formData.get("address") ?? "").trim(),
-      country: requiredString(formData.get("country"), "Country") || "USA",
-      city: requiredString(formData.get("city"), "City"),
-      state: requiredString(formData.get("state"), "State"),
+      country: String(formData.get("country") ?? "").trim() || current.country || "USA",
+      city: String(formData.get("city") ?? "").trim() || current.city,
+      state: String(formData.get("state") ?? "").trim() || current.state,
       postal_zip: String(formData.get("postal_zip") ?? "").trim(),
       date_of_birth: parseDateField(formData.get("date_of_birth")),
       date_of_hire: parseDateField(formData.get("date_of_hire")),
@@ -1367,6 +1372,7 @@ export async function importLocationsCsvAction(
     if (file.size > 5 * 1024 * 1024) {
       return { ok: false, error: "CSV is too large (max 5 MB)." };
     }
+    const { fileToBuffer } = await import("./files");
     const text = decodeCsvBuffer(await fileToBuffer(file));
     const result = importLocationsFromCsv(text);
     refresh();
@@ -1382,53 +1388,13 @@ export async function importFuelCsvAction(
 ): Promise<FuelImportResult> {
   try {
     await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
-    const file = formData.get("csv");
+    const file = formData.get("csv") ?? formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Choose a CSV, Excel, or PDF." };
     }
-    const name = file.name.toLowerCase();
-    const mime = (file.type || "").toLowerCase();
-    const { isFuelPdfUpload, readFuelUploadText } = await import("./fuel-pdf");
-    const nameHintPdf = isFuelPdfUpload(file.name, mime);
-    const isXlsx = name.endsWith(".xlsx") || mime.includes("spreadsheet");
-    if (file.size > 15 * 1024 * 1024) {
-      return { ok: false, error: "PDF is too large (max 15 MB)." };
-    }
-    if (!nameHintPdf && file.size > 5 * 1024 * 1024) {
-      return { ok: false, error: "File is too large (max 5 MB)." };
-    }
-    if (name.endsWith(".xls") && !isXlsx) {
-      return { ok: false, error: "Save the workbook as .xlsx or CSV UTF-8." };
-    }
-    const buffer = await fileToBuffer(file);
-    const isPdf = isFuelPdfUpload(file.name, mime, buffer);
-    if (isPdf && buffer.length > 15 * 1024 * 1024) {
-      return { ok: false, error: "PDF is too large (max 15 MB)." };
-    }
-    let text = "";
-    if (isPdf) {
-      const extracted = await readFuelUploadText(buffer, file.name, mime);
-      text = extracted.text;
-      if (!text.trim()) {
-        return { ok: false, error: "Couldn't read text from this PDF. Save the report as CSV and upload that." };
-      }
-    } else if (isXlsx) {
-      const { recordsFromFirstSheet } = await import("./xlsx-first-sheet");
-      const records = recordsFromFirstSheet(new Uint8Array(buffer));
-      if (!records.length) return { ok: false, error: "Excel sheet is empty." };
-      const headers = Object.keys(records[0] ?? {});
-      text = [
-        headers.join(","),
-        ...records.map((row) =>
-          headers.map((header) => `"${String(row[header] ?? "").replaceAll('"', '""')}"`).join(","),
-        ),
-      ].join("\n");
-    } else {
-      text = decodeCsvBuffer(buffer);
-    }
-    const result = importFuelFromText(text, file.name || "fuel.csv");
-    refresh();
-    return { ok: true, ...result };
+    const result = await importFuelFromUpload(file);
+    if (result.ok) refresh();
+    return result;
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
   }
@@ -1461,8 +1427,7 @@ export async function assignFuelDriverAction(
     const loadId = parseOptionalInt(formData.get("load_id"));
     if (!id) return { ok: false, error: "Fuel row is missing." };
     if (!driverId && !loadId) return { ok: false, error: "Pick a driver or a load." };
-    if (driverId) assignFuelTransactionDriver(id, driverId);
-    if (loadId) assignFuelTransactionLoad(id, loadId);
+    assignFuelTransaction(id, { driverId, loadId });
     refresh();
     return { ok: true };
   } catch (error) {

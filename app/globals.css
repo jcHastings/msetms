@@ -344,6 +344,15 @@ a.driver-dest .driver-dest-label,
   color: #334155;
 }
 
+.driver-dest-featured,
+a.driver-dest-featured,
+a.driver-dest-featured:hover,
+.driver-dest-off.driver-dest-featured {
+  grid-column: 1 / -1;
+  padding: 1.85rem 1rem;
+  font-size: 1.35rem;
+}
+
 .driver-app a.btn-secondary {
   color: #1c2b3c !important;
 }

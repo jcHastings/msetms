@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
+import { PasswordField } from "@/components/password-field";
 import { createDriverAction, updateDriverAction } from "@/lib/actions";
+import { DISPATCHER_PASSWORD_HINT } from "@/lib/dispatcher-password-shared";
 import type { DriverFormValues } from "@/lib/fleet-form-shared";
 import { CDL_ENDORSEMENTS, DRIVER_TYPES, FLEET_DIVISIONS, normalizeDriverKind, parseCdlEndorsements } from "@/lib/types";
 
@@ -25,6 +27,7 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
       </div>
       <fieldset className="field md:col-span-2">
         <legend className="text-sm font-semibold text-slate-900">Driver Type *</legend>
+        <input type="hidden" name="driver_type" value={driverKind} />
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {DRIVER_TYPES.map((type) => (
             <label
@@ -104,7 +107,16 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="email">Email Address</label>
-        <input id="email" name="email" type="email" defaultValue={driver?.email} />
+        <input id="email" name="email" type="text" inputMode="email" defaultValue={driver?.email} autoComplete="off" />
+        <p className="mt-1 text-xs text-slate-500">Used for driver app sign-in (web and native). No office 2FA.</p>
+      </div>
+      <div className="field md:col-span-2">
+        <label htmlFor="password">Driver login password {driver ? "(leave blank to keep)" : ""}</label>
+        <PasswordField id="password" name="password" defaultValue="" autoComplete="new-password" />
+        <p className="mt-1 text-xs text-slate-500">
+          {driver?.has_app_login ? "A login password is set. " : "No login password yet. "}
+          {DISPATCHER_PASSWORD_HINT}
+        </p>
       </div>
       <div className="field md:col-span-2">
         <label htmlFor="address">Address</label>
@@ -116,11 +128,11 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
       </div>
       <div className="field">
         <label htmlFor="state">State *</label>
-        <input id="state" name="state" required defaultValue={driver?.state} />
+        <input id="state" name="state" required={!driver} defaultValue={driver?.state} />
       </div>
       <div className="field">
         <label htmlFor="city">City *</label>
-        <input id="city" name="city" required defaultValue={driver?.city} />
+        <input id="city" name="city" required={!driver} defaultValue={driver?.city} />
       </div>
       <div className="field">
         <label htmlFor="postal_zip">Postal/Zip</label>
@@ -186,16 +198,14 @@ export function DriverForm({ driver, filesHref, submitLabel = "Save" }: Props) {
         </select>
       </div>
       <div className="field">
-        <label htmlFor="pin">Driver app PIN</label>
+        <label htmlFor="pin">PIN</label>
         <input
           id="pin"
           name="pin"
           inputMode="numeric"
           autoComplete="off"
-          minLength={4}
           maxLength={8}
-          pattern="\d{4,8}"
-          placeholder={driver?.has_app_login ? "Leave blank to keep current" : "4–8 digits"}
+          placeholder="4–8 digits, not used for app login"
         />
       </div>
       <div className="field md:col-span-2">

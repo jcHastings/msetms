@@ -86,6 +86,7 @@ export function LoadMapCanvas({
   emptyMessage,
   cluster,
   disableDefaultUi = false,
+  mapTypeControl = false,
   fitPadding,
   fitPoints,
   minZoom = 0,
@@ -100,6 +101,7 @@ export function LoadMapCanvas({
   emptyMessage?: string;
   cluster?: boolean;
   disableDefaultUi?: boolean;
+  mapTypeControl?: boolean;
   fitPadding?: number;
   fitPoints?: Array<{ lat: number; lng: number }>;
   minZoom?: number;
@@ -137,7 +139,8 @@ export function LoadMapCanvas({
           gestureHandling: disableDefaultUi ? "cooperative" : "greedy",
           disableDefaultUI: disableDefaultUi,
           zoomControl: !disableDefaultUi,
-          mapTypeControl: false,
+          mapTypeControl,
+          mapTypeControlOptions: mapTypeControl ? { mapTypeIds: ["roadmap", "satellite"] } : undefined,
           streetViewControl: false,
           fullscreenControl: !disableDefaultUi,
           cameraControl: !disableDefaultUi,
@@ -259,7 +262,7 @@ export function LoadMapCanvas({
       for (const marker of markers) marker.setMap(null);
       line?.setMap(null);
     };
-  }, [apiKey, hasMap, points, route, clusterPins, disableDefaultUi, fitPadding, fitPoints, minZoom, maxZoom, onSelect]);
+  }, [apiKey, hasMap, points, route, clusterPins, disableDefaultUi, mapTypeControl, fitPadding, fitPoints, minZoom, maxZoom, onSelect]);
 
   if (!apiKey || failed) {
     return (
@@ -281,6 +284,7 @@ export function LoadMapCanvas({
       ref={host}
       className={className ?? "h-80 w-full rounded-lg bg-slate-100"}
       data-load-map=""
+      data-map-type-control={mapTypeControl ? "" : undefined}
       data-map-cluster={clusterPins ? "" : undefined}
       data-map-fit-padding={fitPadding != null ? String(fitPadding) : undefined}
       data-map-min-zoom={minZoom > 0 ? minZoom : undefined}

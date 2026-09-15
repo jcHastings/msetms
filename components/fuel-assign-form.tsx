@@ -21,14 +21,16 @@ export function FuelAssignForm({
   const canAssign = Boolean(driverId || loadId);
 
   return (
-    <form action={formAction} className="flex flex-col gap-1">
+    <form action={formAction} className="flex flex-col gap-1" data-fuel-assign-form="">
       <input type="hidden" name="fuel_id" value={fuelId} />
+      <input type="hidden" name="driver_id" value={driverId} />
+      <input type="hidden" name="load_id" value={loadId} />
       <div className="flex flex-wrap items-center gap-2">
         <select
-          name="driver_id"
           className="rounded-md border border-slate-300 px-2 py-1 text-sm"
           value={driverId}
           onChange={(event) => setDriverId(event.target.value)}
+          aria-label="Driver"
         >
           <option value="">Driver…</option>
           {drivers.map((driver) => (
@@ -38,10 +40,10 @@ export function FuelAssignForm({
           ))}
         </select>
         <select
-          name="load_id"
           className="rounded-md border border-slate-300 px-2 py-1 text-sm"
           value={loadId}
           onChange={(event) => setLoadId(event.target.value)}
+          aria-label="Load"
         >
           <option value="">Load…</option>
           {loads.map((load) => (

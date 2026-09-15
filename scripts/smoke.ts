@@ -297,9 +297,11 @@ async function main() {
   const relayPanelSource = fs.readFileSync(path.join(process.cwd(), "components/load-relays-panel.tsx"), "utf8");
   assert.match(relayPanelSource, /\+ Add Relay/);
   assert.doesNotMatch(relayPanelSource, /Internal handoff|Not billed/);
-  assert.match(relayPanelSource, /Driver A/);
-  assert.match(relayPanelSource, /Driver B/);
+  assert.match(relayPanelSource, /Driver 1 \(first leg\)/);
+  assert.match(relayPanelSource, /Driver 2 \(receiving\)/);
   assert.match(relayPanelSource, /Relay point/);
+  assert.match(relayPanelSource, /Relay completed/);
+  assert.match(relayPanelSource, /datetime-local/);
   assert.doesNotMatch(relayPanelSource, /Save leg|Internal OO %|name="pickup"|blank waiting/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /\+1 relay|relayLabels/);
   const qboSettingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/quickbooks/page.tsx"), "utf8");
@@ -412,7 +414,13 @@ async function main() {
   assert.match(passwordField, /Hide password/);
   assert.match(passwordField, /visible \? "Hide password" : "Show password"/);
   assert.match(passwordField, /type=\{visible \? "text" : "password"\}/);
-  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField|Show password|remember_device|Remember this device/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PasswordField/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /name="email"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /name="password"/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"),
+    /remember_device|Remember this device|Forgot password|driver_id|name="pin"|listDrivers/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-reset-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/dispatcher-change-password-form.tsx"), "utf8"), /PasswordField/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /password-field-toggle/);
@@ -424,7 +432,81 @@ async function main() {
   const driverLoginPage = fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8");
   assert.doesNotMatch(driverLoginPage, /totp|authenticator|email_code/i);
   assert.doesNotMatch(driverLoginPage, /Demo PINs|Denise Ortega|1125|Marcus Hale/);
-  assert.match(driverLoginPage, /listDriversForLogin/);
+  assert.doesNotMatch(driverLoginPage, /listDriversForLogin/);
+  assert.match(driverLoginPage, /DriverLoginForm/);
+  assert.doesNotMatch(driverLoginPage, /drivers=/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /\/api\/driver\/v1/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /No refresh-token endpoint/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /## AttachmentKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /rate_con/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /invoice/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /carrier_invoice/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/auth/refresh/route.ts")), false);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/driver/v1/auth/login/route.ts"), "utf8"), /handleDriverLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /FORBIDDEN_DRIVER_API_FIELDS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /toDriverApiDateTime/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_ATTACHMENT_KINDS/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /tms_driver_id/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /Check out of pickup first/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /isDriverUploadKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-ops.ts"), "utf8"), /allowKinds/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /isDriverUploadKind\(kind\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /BEGIN IMMEDIATE/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_IDEMPOTENCY_PENDING_TTL_MS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /TRUSTED_PROXY/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /DRIVER_API_UPLOAD_KINDS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /## AttachmentKind/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /45 seconds/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /TRUSTED_PROXY/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2026-09-11-mse-driver-api-v1-frozen/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /"email": "driver@example.com"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/auth\/roster/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/loads\/\{id\}\/trailer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /404/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /2FA lock for v1/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /drivers: listDriversForLogin\(\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /authenticateDriverByEmail/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Use email and password/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /authenticateDriverByEmail/);
+  const driverFormSource = fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8");
+  assert.match(driverFormSource, /Driver login password/);
+  assert.match(driverFormSource, /DISPATCHER_PASSWORD_HINT/);
+  assert.match(driverFormSource, /type="hidden"[^>]*name="driver_type"|name="driver_type"[^>]*type="hidden"/);
+  assert.match(driverFormSource, /name="password"/);
+  assert.doesNotMatch(driverFormSource, /pattern="\\d\{4,8\}"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /setDriverPassword\(id, input\.password, (?:email|nextEmail)\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-password.ts"), "utf8"), /email \?\? row\.email/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /demo\.driver@msexpress\.local/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /Demo1234!/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /appleDevDriverFixtureEnabled/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-login-fixture.ts"), "utf8"), /APPLE_DEV_DRIVER_FIXTURE/);
+  const dbSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
+  assert.match(dbSource, /appleDevDriverFixtureEnabled\(\)/);
+  assert.match(dbSource, /ensureAppleDevDriverLogin/);
+  assert.doesNotMatch(dbSource, /TMS_SKIP_SEED !== "1"[\s\S]{0,80}ensureAppleDevDriverLogin/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /demo\.driver@msexpress\.local/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /APPLE_DEV_DRIVER_FIXTURE=1/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /ensure-apple-dev-driver/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/handoff/apple-dev-driver.md"), "utf8"), /npx tsx scripts\/ensure-apple-dev-driver.ts/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "scripts/ensure-apple-dev-driver.ts")), true);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-login-form.tsx"), "utf8"), /PIN/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-actions.ts"), "utf8"), /PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /parseDriverLoginPassword/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-password.ts"), "utf8"), /dispatcherPasswordError/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your email and password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /Sign in with your PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-session.ts"), "utf8"), /Sign in with your email and password/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/login/page.tsx"), "utf8"), /PIN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /scope=delivered/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /GET \/fuel\/transactions/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8"), /POST \/fuel\/receipts/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /scope === "delivered"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-receipt-match.ts"), "utf8"), /FUEL_AUTO_MATCH_MIN_SCORE = 70/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /autoMatchPendingFuelReceipts/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /revoked_at = \?[\s\S]*driver_id = \? AND revoked_at = ''/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /PRIMARY KEY \(driver_id, method, path, client_request_id\)/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /npm test/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".github/workflows/test.yml"), "utf8"), /eslint lib\/driver-api/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-form.tsx"), "utf8"), /name="pin"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8"), /parseDriverPin/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /listDriversForLogin/);
@@ -505,8 +587,14 @@ async function main() {
   assert.match(backhaulUi, /BACKHAUL_RULE/);
   assert.doesNotMatch(backhaulUi, /PU \/ Del/);
   assert.doesNotMatch(backhaulUi, /backhaul-stop-kind/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /sheetOnPhone/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8"), /action-phone-sheet/);
+  const hoverActionMenuUi = fs.readFileSync(path.join(process.cwd(), "components/hover-action-menu.tsx"), "utf8");
+  assert.match(hoverActionMenuUi, /sheetOnPhone/);
+  assert.match(hoverActionMenuUi, /action-phone-sheet/);
+  assert.match(hoverActionMenuUi, /createPortal/);
+  assert.match(hoverActionMenuUi, /document\.body/);
+  assert.match(hoverActionMenuUi, /fixed z-50/);
+  assert.match(hoverActionMenuUi, /data-hover-action-menu-panel/);
+  assert.doesNotMatch(hoverActionMenuUi, /absolute z-20 min-w-56/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/backhaul/route.ts"), "utf8"), /findBackhaulForLoad/);
   assert.match(workspaceSource, /load-tabs/);
   assert.match(workspaceSource, /load-tab-active/);
@@ -633,8 +721,12 @@ async function main() {
   assert.match(fastActionsUi, /Backhaul Finder/);
   assert.match(fastActionsUi, /data-backhaul-finder-action/);
   assert.match(fastActionsUi, /sheetOnPhone/);
+  assert.doesNotMatch(fastActionsUi, /Relay/);
+  assert.match(fastActionsUi, /assignItem/);
   assert.match(boardUi, /LoadCardFastActions/);
   assert.match(boardUi, /AssignDialog/);
+  assert.match(boardUi, /assignItem=/);
+  assert.match(boardUi, /triggerClassName="menu-item w-full text-left"/);
   assert.match(boardUi, />\s*Edit\s*</);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
@@ -821,9 +913,14 @@ async function main() {
   assert.doesNotMatch(customerChunk, /credit_hold|MC#|EDI/);
   assert.match(assetsChunk, /Company driver/);
   assert.match(assetsChunk, /Owner-operator/);
-  assert.match(assetsChunk, /name="driver_id"/);
-  assert.match(assetsChunk, /name="truck_id"/);
-  assert.match(assetsChunk, /name="trailer_id"/);
+  assert.match(assetsChunk, /driver: "driver_id"|name="driver_id"/);
+  assert.match(assetsChunk, /truck: "truck_id"|name="truck_id"/);
+  assert.match(assetsChunk, /trailer: "trailer_id"|name="trailer_id"/);
+  assert.match(assetsChunk, /Driver 1 — first leg \/ pre-relay/);
+  assert.match(assetsChunk, /Driver 2 — post-relay receiver/);
+  assert.match(assetsChunk, /Relay completed/);
+  assert.match(assetsChunk, /datetime-local/);
+  assert.match(assetsChunk, /updateRelayAssignmentAction/);
   assert.match(assetsChunk, /useLoadAssignPersist/);
   assert.match(assetsChunk, /handleAssign/);
   const persistHook = fs.readFileSync(path.join(process.cwd(), "components/use-load-assign-persist.ts"), "utf8");
@@ -1367,11 +1464,15 @@ async function main() {
   assert.match(nextConfigSource, /poweredByHeader:\s*false/);
   assert.match(nextConfigSource, /Content-Security-Policy/);
   assert.match(nextConfigSource, /X-Frame-Options/);
+  assert.match(nextConfigSource, /SAMEORIGIN/);
   assert.match(nextConfigSource, /X-Content-Type-Options/);
   assert.match(nextConfigSource, /Referrer-Policy/);
   assert.match(nextConfigSource, /Permissions-Policy/);
   assert.match(nextConfigSource, /Strict-Transport-Security/);
-  assert.match(nextConfigSource, /frame-ancestors 'none'/);
+  assert.match(nextConfigSource, /frame-src 'self'/);
+  assert.match(nextConfigSource, /frame-ancestors 'self'/);
+  assert.doesNotMatch(nextConfigSource, /frame-ancestors 'none'/);
+  assert.doesNotMatch(nextConfigSource, /X-Frame-Options.*DENY/);
   const robotsTxt = fs.readFileSync(path.join(process.cwd(), "app/robots.txt"), "utf8");
   assert.match(robotsTxt, /User-agent:\s*\*/);
   assert.match(robotsTxt, /Disallow:\s*\//);
@@ -1404,7 +1505,9 @@ async function main() {
   const dbMigrateSource = fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8");
   const fromColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "from_driver_id"');
   const fromIdxAt = dbMigrateSource.indexOf("idx_load_relays_from_driver");
+  const completedColAt = dbMigrateSource.indexOf('ensureColumn(db, "load_relays", "completed_at"');
   assert.ok(fromColAt >= 0 && fromIdxAt > fromColAt, "add from_driver_id before indexing it");
+  assert.ok(completedColAt > fromColAt, "add completed_at on existing load_relays");
   const parentColAt = dbMigrateSource.indexOf('ensureColumn(db, "loads", "parent_load_id"');
   const parentIdxAt = dbMigrateSource.indexOf("idx_loads_parent");
   assert.ok(parentColAt >= 0 && parentIdxAt > parentColAt, "add parent_load_id before indexing it");
@@ -1480,7 +1583,7 @@ async function main() {
   assert.match(docsPage, /when="stops"/);
   assert.match(docsPage, /LoadStopsMap/);
 
-  const { closeDb, getDb, migrate } = await import("../lib/db");
+  const { closeDb, getDb, migrate, LEGACY_FUEL_RECEIPTS_TABLE_SQL } = await import("../lib/db");
   const queries = await import("../lib/queries");
   const { Database } = await import("../lib/sqlite");
   const oldRelayPath = path.join(os.tmpdir(), `tms-old-relays-${Date.now()}.db`);
@@ -1506,7 +1609,81 @@ async function main() {
   migrate(oldRelayDb);
   const relayCols = oldRelayDb.prepare("PRAGMA table_info(load_relays)").all() as Array<{ name: string }>;
   assert.ok(relayCols.some((col) => col.name === "from_driver_id"), "existing DBs must gain from_driver_id");
+  assert.ok(relayCols.some((col) => col.name === "from_truck_id"), "existing DBs must gain from_truck_id");
+  assert.ok(relayCols.some((col) => col.name === "from_trailer_id"), "existing DBs must gain from_trailer_id");
+  assert.ok(relayCols.some((col) => col.name === "completed_at"), "existing DBs must gain completed_at");
   oldRelayDb.close();
+
+  const legacyFuelPath = path.join(os.tmpdir(), `tms-legacy-fuel-receipts-${Date.now()}.db`);
+  const legacyFuelDb = new Database(legacyFuelPath);
+  migrate(legacyFuelDb);
+  const legacyNow = new Date().toISOString();
+  const legacyCustomerId = Number(
+    legacyFuelDb
+      .prepare(
+        "INSERT INTO customers (name, billing_notes, created_at, updated_at) VALUES (?, '', ?, ?)",
+      )
+      .run("Legacy Fuel Shipper", legacyNow, legacyNow).lastInsertRowid,
+  );
+  const legacyLoadId = Number(
+    legacyFuelDb
+      .prepare(
+        `INSERT INTO loads (
+          load_number, customer_id, origin, destination, pickup_start, pickup_end,
+          delivery_start, delivery_end, commodity, notes, status, created_at, updated_at
+        ) VALUES (?, ?, 'Jackson, MS', 'Memphis, TN', ?, ?, ?, ?, '', '', 'assigned', ?, ?)`,
+      )
+      .run("MSE-LEGACY-FUEL", legacyCustomerId, legacyNow, legacyNow, legacyNow, legacyNow, legacyNow, legacyNow)
+      .lastInsertRowid,
+  );
+  legacyFuelDb.exec(`
+    DROP INDEX IF EXISTS idx_fuel_receipts_driver_status;
+    DROP INDEX IF EXISTS idx_fuel_receipts_tx;
+    DROP INDEX IF EXISTS idx_fuel_receipts_load;
+    DROP TABLE fuel_receipts;
+    ${LEGACY_FUEL_RECEIPTS_TABLE_SQL};
+    CREATE INDEX IF NOT EXISTS idx_fuel_receipts_load ON fuel_receipts(load_id);
+  `);
+  const legacyColsBefore = legacyFuelDb.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  assert.equal(legacyColsBefore.some((col) => col.name === "status"), false);
+  assert.equal(legacyColsBefore.find((col) => col.name === "load_id")?.notnull, 1);
+  legacyFuelDb
+    .prepare(
+      `INSERT INTO fuel_receipts (load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, state, station, created_at)
+       VALUES (?, NULL, NULL, NULL, ?, 12.5, 'TN', 'Pilot Legacy', ?)`,
+    )
+    .run(legacyLoadId, legacyNow, legacyNow);
+  migrate(legacyFuelDb);
+  const legacyColsAfter = legacyFuelDb.prepare("PRAGMA table_info(fuel_receipts)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  assert.equal(legacyColsAfter.find((col) => col.name === "load_id")?.notnull, 0, "office cutover must drop NOT NULL load_id");
+  assert.equal(legacyColsAfter.some((col) => col.name === "status"), true);
+  const kept = legacyFuelDb.prepare("SELECT load_id, status, station FROM fuel_receipts WHERE station = 'Pilot Legacy'").get() as {
+    load_id: number;
+    status: string;
+    station: string;
+  };
+  assert.equal(kept.load_id, legacyLoadId);
+  assert.equal(kept.status, "matched");
+  legacyFuelDb
+    .prepare(
+      `INSERT INTO fuel_receipts (
+        load_id, driver_id, attachment_id, fuel_transaction_id, occurred_at, gallons, amount,
+        state, station, merchant, card_last4, status, stored_name, original_name, mime_type, created_at
+      ) VALUES (NULL, NULL, NULL, NULL, ?, NULL, 9.99, '', 'Orphan', 'Pilot', '1234', 'pending_match', '', 'r.png', 'image/png', ?)`,
+    )
+    .run(legacyNow, legacyNow);
+  assert.equal(
+    (legacyFuelDb.prepare("SELECT COUNT(*) AS count FROM fuel_receipts WHERE status = 'pending_match'").get() as { count: number })
+      .count,
+    1,
+  );
+  legacyFuelDb.close();
 
   getDb();
   const seeded = queries.getDashboardStats();
@@ -1519,6 +1696,11 @@ async function main() {
   assert.ok(driverCountAfterSeed >= 1, "empty-dev seed may create demo drivers");
   (await import("../lib/seed")).seedDatabase(getDb());
   assert.equal(queries.listDrivers().length, driverCountAfterSeed, "never insert demo drivers when a roster exists");
+  assert.equal(
+    queries.listDrivers().some((driver) => String(driver.email ?? "").toLowerCase() === "demo.driver@msexpress.local"),
+    false,
+    "Apple Dev fixture stays off unless APPLE_DEV_DRIVER_FIXTURE=1",
+  );
 
   const { listenAddress } = await import("../scripts/listen-address.mjs");
   const noBind = { ...process.env, HOSTNAME: "cursor", HOST: undefined, LISTEN_HOST: undefined, BIND_HOST: undefined };
@@ -1893,6 +2075,23 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8"), /DriverImport/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Import drivers/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Driver spreadsheet/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Paste CSV rows here/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Christopher Howell|555-0100|Hastings,NE/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /defaultValue/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /Paste CSV rows here/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/orbcomm-trailer-import.tsx"), "utf8"), /MS2201|GSSC0001|Oklahoma City/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8"), /Paste CSV rows here/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-sheet-import.tsx"), "utf8"), /LAREDO|Avenel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /Shift notes for the next dispatcher/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8"), /MSE-1045|Tyrell/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/audit/page.tsx"), "utf8"), /placeholder="Load number"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/audit/page.tsx"), "utf8"), /placeholder="User name"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/audit/page.tsx"), "utf8"), /MSE-1045|MS Test/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/loads/page.tsx"), "utf8"), /title="Load numbers"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/settings/loads/page.tsx"), "utf8"), /sample data/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/settings/loads/page.tsx"), "utf8"), /Show seeded demo loads/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8"), /label: "Load numbers"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/settings-shared.ts"), "utf8"), /sample data/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-import.tsx"), "utf8"), /Show Pay|Passport Expiry|Ascend|FAST|hazmat|team-2/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /Christopher Howell/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/driver-import-shared.ts"), "utf8"), /passport|fast card|hazmat|show pay/);
@@ -6698,6 +6897,49 @@ DISPATCH CONFIRMATION
   });
   queries.authenticateDriver(noPinDriverId, "4567");
   assert.throws(() => queries.authenticateDriver(noPinDriverId, "1125"));
+  const loginDriverId = queries.createDriver({
+    name: "Email Login Driver",
+    phone: "555-0188",
+    email: "email.login@msloads.test",
+    license: "XX-EMAIL",
+    pin: "",
+    password: "Driver1$ab",
+    truck_id: null,
+    status: "available",
+  });
+  assert.equal(queries.authenticateDriverByEmail("email.login@msloads.test", "Driver1$ab").id, loginDriverId);
+  assert.throws(() => queries.authenticateDriverByEmail("email.login@msloads.test", "Wrong1$ab"));
+  assert.throws(() => queries.authenticateDriverByEmail("nobody@msloads.test", "Driver1$ab"));
+  const {
+    APPLE_DEV_DRIVER_EMAIL,
+    APPLE_DEV_DRIVER_PASSWORD,
+    appleDevDriverFixtureEnabled,
+    ensureAppleDevDriverLogin,
+  } = await import("../lib/driver-login-fixture");
+  assert.equal(appleDevDriverFixtureEnabled(), false, "smoke must not opt in the Apple Dev fixture via env");
+  ensureAppleDevDriverLogin(getDb(), { force: true });
+  const appleLoginRoute = await import("../app/api/driver/v1/auth/login/route");
+  const appleLoginRes = await appleLoginRoute.POST(
+    new Request("http://localhost:3000/api/driver/v1/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: APPLE_DEV_DRIVER_EMAIL, password: APPLE_DEV_DRIVER_PASSWORD }),
+    }),
+  );
+  assert.equal(appleLoginRes.status, 200, "Apple Dev fixture logs in via POST /auth/login");
+  const appleSession = (await appleLoginRes.json()) as { token: string; driver: { display_name: string } };
+  assert.match(appleSession.token, /^drv_/);
+  assert.equal(appleSession.driver.display_name, "Demo Driver");
+  assert.throws(() =>
+    queries.createDriver({
+      name: "Dup Email",
+      phone: "555-0187",
+      email: "email.login@msloads.test",
+      license: "XX-DUP",
+      truck_id: null,
+      status: "available",
+    }),
+  );
   const deniseLoads = queries.listLoadsForDriver(denise.id);
   assert.ok(deniseLoads.some((load) => load.load_number === "MSE-1045"));
   const orbcomm = await import("../lib/integrations/orbcomm");
@@ -9141,6 +9383,172 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(handoffQbo.memo, /Memphis|Handoff Baker/);
   assert.doesNotMatch(formatLoadSummary(queries.getLoad(handoffLoadId)!), /Memphis|Handoff Baker/);
 
+  const {
+    currentAssignmentFromRelays,
+    lastCompletedRelay,
+    relayIsCompleted,
+    assertRelayCompletionTime,
+  } = await import("../lib/relays");
+  const flipTruckA = queries.createTruck({
+    unit_number: "FLIP-A",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const flipTruckB = queries.createTruck({
+    unit_number: "FLIP-B",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const flipTrailerA = queries.createTrailer({
+    unit_number: "FLIP-TA",
+    type: "dry_van",
+    status: "available",
+  });
+  const flipTrailerB = queries.createTrailer({
+    unit_number: "FLIP-TB",
+    type: "dry_van",
+    status: "available",
+  });
+  const flipDriverA = queries.createDriver({
+    name: "Flip Able",
+    phone: "555-0811",
+    license: "NE-CDL-FLIPA",
+    pin: "8110",
+    truck_id: flipTruckA,
+    status: "available",
+    driver_type: "company_driver",
+  });
+  const flipDriverB = queries.createDriver({
+    name: "Flip Baker",
+    phone: "555-0812",
+    license: "IN-CDL-FLIPB",
+    pin: "8111",
+    truck_id: flipTruckB,
+    status: "available",
+    driver_type: "owner_operator",
+    pay_percent: 80,
+  });
+  const flipLoadId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Bayonne, NJ",
+    destination: "Hastings, NE",
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+    weight: 40000,
+    commodity: "Relay flip freight",
+    rate: 4100,
+    notes: "Keep financials",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "RC-FLIP",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: flipTruckA,
+    trailer_id: flipTrailerA,
+    driver_id: flipDriverA,
+  });
+  const flipStopsBefore = (await import("../lib/stops")).listStops(flipLoadId).length;
+  const flipRelayId = relayStore.addRelay(flipLoadId, {
+    from_driver_id: flipDriverA,
+    driver_id: flipDriverB,
+    delivery: "Gary, IN",
+  });
+  let flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "incomplete relay keeps Driver 1 on the load");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  assert.equal(flipLoad?.rate, 4100);
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore);
+  const flipRow = relayStore.getRelay(flipRelayId);
+  assert.equal(flipRow?.from_driver_id, flipDriverA);
+  assert.equal(flipRow?.from_truck_id, flipTruckA);
+  assert.equal(flipRow?.from_trailer_id, flipTrailerA);
+  assert.equal(flipRow?.driver_id, flipDriverB);
+  assert.equal(relayIsCompleted(flipRow!), false);
+  assert.equal(lastCompletedRelay(relayStore.listRelays(flipLoadId)), null);
+  assert.equal(
+    currentAssignmentFromRelays(flipLoad!, relayStore.listRelays(flipLoadId)).driver_id,
+    flipDriverA,
+  );
+  assert.throws(
+    () =>
+      assertRelayCompletionTime({
+        driver_id: flipDriverB,
+        truck_id: flipTruckB,
+        trailer_id: flipTrailerB,
+        completed_at: "",
+      }),
+    /date and time this relay was completed/,
+  );
+  assert.throws(
+    () =>
+      relayStore.updateRelay(flipRelayId, {
+        delivery: "Gary, IN",
+        from_driver_id: flipDriverA,
+        driver_id: flipDriverB,
+        truck_id: flipTruckB,
+        trailer_id: flipTrailerB,
+      }),
+    /date and time this relay was completed/,
+  );
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "failed complete-without-time does not flip assignment");
+  const completedAt = new Date().toISOString();
+  relayStore.updateRelayAssignment(flipRelayId, {
+    truck_id: flipTruckB,
+    trailer_id: flipTrailerB,
+    completed_at: completedAt,
+  });
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverB, "completed relay flips current driver to Driver 2");
+  assert.equal(flipLoad?.truck_id, flipTruckB, "completed relay flips current truck to Driver 2");
+  assert.equal(flipLoad?.trailer_id, flipTrailerB, "completed relay flips current trailer to Driver 2");
+  assert.equal(flipLoad?.rate, 4100, "relay complete must not wipe the rate");
+  assert.equal(flipLoad?.notes, "Keep financials");
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore, "relay complete must not wipe stops");
+  const flippedRow = relayStore.getRelay(flipRelayId);
+  assert.equal(relayIsCompleted(flippedRow!), true);
+  assert.equal(flippedRow?.from_driver_id, flipDriverA, "Driver 1 history stays on the relay");
+  assert.equal(flippedRow?.from_truck_id, flipTruckA);
+  assert.equal(flippedRow?.from_trailer_id, flipTrailerA);
+  assert.equal(flippedRow?.driver_type, "owner_operator");
+  assert.equal(flippedRow?.from_driver_type, "company_driver");
+  assert.equal(
+    currentAssignmentFromRelays(flipLoad!, relayStore.listRelays(flipLoadId)).driver_id,
+    flipDriverB,
+  );
+  const boardLoads = queries.listLoads({ status: "assigned" });
+  const boardFlip = boardLoads.find((row) => row.id === flipLoadId);
+  assert.equal(boardFlip?.driver_id, flipDriverB, "board list shows Driver 2 after completed relay");
+  assert.equal(boardFlip?.truck_unit, "FLIP-B");
+  assert.equal(boardFlip?.trailer_unit, "FLIP-TB");
+  assert.equal(boardFlip?.driver_name, "Flip Baker");
+  relayStore.updateRelayAssignment(flipRelayId, { completed_at: "" });
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "clearing completed time restores Driver 1");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  relayStore.updateRelayAssignment(flipRelayId, {
+    truck_id: flipTruckB,
+    trailer_id: flipTrailerB,
+    completed_at: completedAt,
+  });
+  assert.equal(queries.getLoad(flipLoadId)?.driver_id, flipDriverB);
+  relayStore.deleteRelay(flipRelayId);
+  flipLoad = queries.getLoad(flipLoadId);
+  assert.equal(flipLoad?.driver_id, flipDriverA, "remove relay restores Driver 1");
+  assert.equal(flipLoad?.truck_id, flipTruckA);
+  assert.equal(flipLoad?.trailer_id, flipTrailerA);
+  assert.equal(flipLoad?.rate, 4100, "remove relay must not wipe the rate");
+  assert.equal((await import("../lib/stops")).listStops(flipLoadId).length, flipStopsBefore);
+  assert.equal(relayStore.listRelays(flipLoadId).length, 0);
+
   const { pathToFileURL } = await import("node:url");
   const browserPdfkit = await import(pathToFileURL(path.join(process.cwd(), "node_modules/pdfkit/js/pdfkit.browser.mjs")).href);
   const Helvetica = (await import("pdfkit/standard-fonts/Helvetica")).default;
@@ -11231,6 +11639,12 @@ DISPATCH CONFIRMATION
   assert.match(fuelRollupUi, /FUEL_BUCKETS/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/fuel/import/route.ts")), true);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /LEGACY_FUEL_RECEIPTS_TABLE_SQL/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /recoverInterruptedFuelReceiptsMigrate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import-http.ts"), "utf8"), /TMS_FUEL_IMPORT_TOKEN/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-import.ts"), "utf8"), /importFuelFromText/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/handoff/fuel-import.md"), "utf8"), /POST \/api\/fuel\/import/);
   assert.match(fuelImportUi, /Fuel file/);
   assert.doesNotMatch(fuelImportUi, /Official IFTA|Ascend|<code>\.env/);
   assert.match(driversListPage, /href="\/fuel"/);
@@ -11240,6 +11654,7 @@ DISPATCH CONFIRMATION
   for (const file of ["app/api/fuel/template/route.ts", "app/api/fuel/export/route.ts"]) {
     assert.match(fs.readFileSync(path.join(process.cwd(), file), "utf8"), /dispatcherCsvResponse/);
   }
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fuel/import/route.ts"), "utf8"), /authorizeFuelImport/);
 
   const {
     cardLast4From,
@@ -11397,6 +11812,17 @@ DISPATCH CONFIRMATION
   assert.ok(fuelTyrell);
   fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
   assert.equal(fuelStore.listFuelTransactions({ unmatchedOnly: true }).length, 1);
+  const unknownFuelLoad =
+    queries.listLoads({ status: "all" }).find((load) => load.status !== "cancelled") ?? queries.getLoad(loadId);
+  assert.ok(unknownFuelLoad);
+  fuelStore.assignFuelTransactionLoad(unknownFuel.id, unknownFuelLoad.id);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  assert.equal(fuelStore.getFuelTransaction(unknownFuel.id)?.driver_id, fuelTyrell.id);
+  assert.equal(fuelStore.getFuelTransaction(unknownFuel.id)?.load_id, unknownFuelLoad.id);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === unknownFuel.id),
+    false,
+  );
   const fuelDenise = queries.listDrivers().find((driver) => driver.name === "Denise Ortega");
   assert.ok(fuelDenise);
   const deniseFuel = fuelStore.getDriverFuelRollup(fuelDenise.id);
@@ -11407,6 +11833,64 @@ DISPATCH CONFIRMATION
   assert.equal(deniseFuel.week.reefer_diesel.gallons, 0);
   assert.equal(deniseFuel.week.def.gallons, 0);
   assert.equal(deniseFuel.week.scale.amount, 0);
+  const {
+    scoreFuelReceiptMatch,
+    pickFuelAutoMatch,
+    autoMatchPendingFuelReceipts,
+  } = await import("../lib/fuel-receipt-match");
+  const exactFuelScore = scoreFuelReceiptMatch(
+    {
+      occurredAt: "2026-09-13T12:00:00.000Z",
+      amount: 100,
+      gallons: 30,
+      merchant: "Pilot Memphis",
+      cardLast4: "4321",
+    },
+    {
+      occurredAt: "2026-09-13T14:00:00.000Z",
+      amount: 100,
+      gallons: 30,
+      merchant: "Pilot Memphis TN",
+      cardLast4: "4321",
+    },
+  );
+  assert.ok(exactFuelScore.score >= 70);
+  assert.equal(exactFuelScore.amountMatched, true);
+  assert.equal(exactFuelScore.last4Matched, true);
+  assert.equal(
+    pickFuelAutoMatch([
+      { id: 1, score: 80, amountMatched: true, last4Matched: false },
+      { id: 2, score: 75, amountMatched: true, last4Matched: false },
+    ]),
+    null,
+    "top-2 within 8 points stay pending",
+  );
+  assert.equal(
+    pickFuelAutoMatch([
+      { id: 1, score: 80, amountMatched: true, last4Matched: false },
+      { id: 2, score: 60, amountMatched: false, last4Matched: false },
+    ]),
+    1,
+  );
+  assert.equal(pickFuelAutoMatch([{ id: 1, score: 90, amountMatched: false, last4Matched: false }]), null);
+  const deniseCard = fuelStore.listFuelTransactions({ driverId: fuelDenise.id })[0];
+  assert.ok(deniseCard);
+  const { addFuelReceipt: addPendingFuelReceipt, getFuelReceipt } = await import("../lib/fuel-receipts");
+  const pendingReceiptId = addPendingFuelReceipt({
+    loadId: null,
+    driverId: fuelDenise.id,
+    attachmentId: null,
+    occurredAt: deniseCard.occurred_at,
+    gallons: deniseCard.gallons,
+    amount: deniseCard.amount,
+    merchant: deniseCard.location,
+    cardLast4: deniseCard.card_last4,
+    status: "pending_match",
+  });
+  assert.equal(autoMatchPendingFuelReceipts().matched, 1);
+  const autoMatched = getFuelReceipt(pendingReceiptId);
+  assert.equal(autoMatched?.status, "matched");
+  assert.equal(autoMatched?.fuel_transaction_id, deniseCard.id);
   const {
     listDriverMpg,
     odometerDeltaMiles,
@@ -14078,7 +14562,14 @@ DISPATCH CONFIRMATION
   assert.match(assignUi, /document\.body/);
   assert.match(assignUi, /data-assign-overlay/);
   assert.match(assignUi, /overflow-y-auto/);
+  assert.match(assignUi, /load-overlay-backdrop/);
+  assert.match(assignUi, /load-overlay-panel/);
+  assert.match(assignUi, /data-assign-close/);
+  assert.match(assignUi, /name="driver_id"/);
   assert.match(assignUi, /name="truck_id"[\s\S]*?\{item\.unit_number\}[\s\S]*?name="trailer_id"/);
+  assert.match(boardUi, /currentDriverId=\{load\.driver_id\}/);
+  assert.match(boardUi, /currentTruckId=\{load\.truck_id\}/);
+  assert.match(boardUi, /currentTrailerId=\{load\.trailer_id\}/);
   assert.doesNotMatch(assignUi, /name="truck_id"[\s\S]*?item\.type[\s\S]*?name="trailer_id"/);
   assert.doesNotMatch(assignUi, /dry van/i);
   const dashUi = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
@@ -15582,20 +16073,55 @@ DISPATCH CONFIRMATION
   const driverDestUi = fs.readFileSync(path.join(process.cwd(), "components/driver-destinations.tsx"), "utf8");
   assert.match(driverDestUi, /driver-dest-label/);
   assert.match(driverDestUi, /driver-dest-off/);
+  assert.match(driverDestUi, /featured/);
+  assert.match(driverDestUi, /driver-dest-featured/);
   const driverCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(driverCss, /a\.driver-dest/);
   assert.match(driverCss, /#122033 !important/);
   assert.match(driverCss, /\.driver-dest-off[\s\S]*#334155/);
   assert.match(driverCss, /\.driver-app a\.btn-secondary/);
+  assert.match(driverCss, /driver-dest-featured[\s\S]*grid-column: 1 \/ -1/);
+  assert.match(driverCss, /driver-dest-featured[\s\S]*1\.35rem/);
   assert.match(driverHome, /Dispatch/);
   assert.match(driverHome, /Upload/);
   assert.match(driverHome, /Confirmation/);
   assert.match(driverHome, /label: "Trailer"/);
-  assert.match(driverHome, /driverLoadHasAssignedTrailer/);
-  assert.doesNotMatch(driverHome, /label: "Fuel"/);
+  assert.match(driverHome, /label: "Fuel"/);
+  assert.match(driverHome, /\/driver\/fuel/);
+  assert.match(driverHome, /\/driver\/dispatch/);
+  assert.match(driverHome, /featured: true/);
+  assert.match(
+    driverHome,
+    /label: "Dispatch"[\s\S]*label: "Upload"[\s\S]*label: "Confirmation"[\s\S]*label: "Fuel"[\s\S]*label: "Trailer"/,
+  );
+  assert.doesNotMatch(driverHome, /items\.push/);
+  assert.doesNotMatch(driverHome, /DriverDispatchBoard/);
+  assert.doesNotMatch(driverHome, /data-driver-dispatch/);
+  assert.match(driverHome, /driverTrailerPageHref/);
+  assert.doesNotMatch(driverHome, /["']\/driver\/trailer["']/);
+  assert.match(driverDestUi, /data-driver-dest-href=\{item\.href\}/);
+  assert.doesNotMatch(driverDestUi, /next\/link/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/trailer/page.tsx")), true);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/driver/trailer/page.tsx"), "utf8"),
+    /driverTrailerPageHref/,
+  );
+  assert.doesNotMatch(driverHome, /label: "Active"/);
+  assert.doesNotMatch(driverHome, /label: "Delivered"/);
   assert.doesNotMatch(driverHome, /label: "BOL"/);
   assert.doesNotMatch(driverHome, /#fuel|#bol/);
   assert.match(driverHome, /pickDriverDestinationLoad/);
+  const driverApiDocs = fs.readFileSync(path.join(process.cwd(), "docs/driver-api-v1.md"), "utf8");
+  assert.match(driverApiDocs, /larger full-width button on top/);
+  assert.match(driverApiDocs, /Upload \| Confirmation/);
+  assert.match(driverApiDocs, /Fuel \| Trailer/);
+  const driverDispatchPage = fs.readFileSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx"), "utf8");
+  assert.match(driverDispatchPage, /DriverDispatchBoard/);
+  const dispatchBoard = fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8");
+  assert.match(dispatchBoard, /data-driver-dispatch/);
+  assert.match(dispatchBoard, /data-dispatch-filter/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/fuel/page.tsx")), true);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx")), true);
   const { pickDriverDestinationLoad } = await import("../lib/driver-destinations-shared");
   assert.equal(pickDriverDestinationLoad([{ id: 11 }], [{ id: 22, delivery_end: "2026-08-01T00:00:00.000Z" }])?.id, 11);
   assert.equal(
@@ -15609,9 +16135,12 @@ DISPATCH CONFIRMATION
     33,
   );
   assert.equal(pickDriverDestinationLoad([], []), null);
-  const { driverLoadHasAssignedTrailer, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
+  const { driverLoadHasAssignedTrailer, driverTrailerPageHref, driverAssignedTrailerMap } = await import("../lib/driver-trailer");
   assert.equal(driverLoadHasAssignedTrailer({ trailer_id: null }), false);
   assert.equal(driverLoadHasAssignedTrailer({ trailer_id: 9 }), true);
+  assert.equal(driverTrailerPageHref({ id: 42, trailer_id: 9 }), "/driver/loads/42/trailer");
+  assert.equal(driverTrailerPageHref({ id: 42, trailer_id: null }), null);
+  assert.equal(driverTrailerPageHref(null), null);
   const driverPinTrailerId = queries.createTrailer({
     unit_number: "TR-DRV-PIN",
     type: "reefer",
@@ -15700,6 +16229,13 @@ DISPATCH CONFIRMATION
   assert.equal(emptyTrailerView.point, null);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /data-driver-trailer-map/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /cluster=\{false\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/trailer/page.tsx"), "utf8"), /mapTypeControl/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /mapTypeControl = false/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8"), /mapTypeIds: \["roadmap", "satellite"\]/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/driver/v1/loads/[id]/trailer/route.ts")), true);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8"), /handleDriverLoadTrailer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /driverAssignedTrailerLocation/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/driver-trailer.ts"), "utf8"), /source === "orbcomm"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /LOAD_MAP_PIN_TIP_Y/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/load-map-shared.ts"), "utf8"), /r="9"/);
   const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
@@ -16376,6 +16912,105 @@ DISPATCH CONFIRMATION
   assert.equal(assignResult.ok, false);
   assert.ok(assignResult.error);
 
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_transactions (
+        occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
+        card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+        prompt_data, dedup_key, created_at
+      ) VALUES (?, NULL, NULL, 'OMAHA NE', 40.1, 3.10, 124.31, '', 'manual-assign', 'truck_diesel', '32', '', '', '', 'manual-assign-howell', ?)`,
+    )
+    .run(new Date().toISOString(), new Date().toISOString());
+  const manualAssignId = (
+    getDb().prepare("SELECT id FROM fuel_transactions WHERE dedup_key = 'manual-assign-howell'").get() as {
+      id: number;
+    }
+  ).id;
+  const howellAssign = new FormData();
+  howellAssign.set("fuel_id", String(manualAssignId));
+  howellAssign.set("driver_id", String(howellId));
+  howellAssign.set("load_id", String(loadId));
+  const howellAssignResult = await assignFuelDriverAction(null, howellAssign);
+  assert.equal(howellAssignResult.ok, true);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  const persistedAssign = fuelStore.getFuelTransaction(manualAssignId);
+  assert.equal(persistedAssign?.driver_id, howellId);
+  assert.equal(persistedAssign?.load_id, loadId);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === manualAssignId),
+    false,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
+    /rematchFuelTransactionDrivers\(\{ unmatchedOnly: true \}\)/,
+  );
+
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_transactions (
+        occurred_at, driver_id, truck_id, location, gallons, price_per_gallon, amount,
+        card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
+        prompt_data, dedup_key, created_at
+      ) VALUES (?, NULL, NULL, 'SUNOCO PA', 50.1, 3.20, 160.32, '', 'video-unassigned', 'truck_diesel', '32', 'Chris Howell', '', '', 'video-chris-howell-32', ?)`,
+    )
+    .run(new Date().toISOString(), new Date().toISOString());
+  const videoAssignId = (
+    getDb().prepare("SELECT id FROM fuel_transactions WHERE dedup_key = 'video-chris-howell-32'").get() as {
+      id: number;
+    }
+  ).id;
+  assert.equal(fuelStore.getFuelTransaction(videoAssignId)?.driver_id, null);
+  const videoLoadNumber = "1006203";
+  const videoLoadId =
+    (getDb().prepare("SELECT id FROM loads WHERE load_number = ?").get(videoLoadNumber) as { id: number } | undefined)
+      ?.id ??
+    queries.createLoad({
+      customer_id: customerId,
+      load_number: videoLoadNumber,
+      origin: "Omaha, NE",
+      destination: "Elite Cold Storage",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 32000,
+      commodity: "Produce",
+      rate: 1800,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "available",
+      truck_id: null,
+      driver_id: null,
+    });
+  const videoLoad = queries.getLoad(videoLoadId);
+  assert.ok(videoLoad);
+  assert.equal(videoLoad.load_number, videoLoadNumber);
+  const chrisHowellMatch = matchFuelDriver(
+    { driverName: "Chris Howell", driverIdRaw: "", unitNumber: "32", prompt: "" },
+    queries.listDrivers(),
+    queries.listTrucks(),
+  );
+  assert.equal(chrisHowellMatch.driverId, null, "Chris Howell stays unmatched until Assign");
+  const videoAssign = new FormData();
+  videoAssign.set("fuel_id", String(videoAssignId));
+  videoAssign.set("driver_id", String(howellId));
+  videoAssign.set("load_id", videoLoadNumber);
+  const videoAssignResult = await assignFuelDriverAction(null, videoAssign);
+  assert.equal(videoAssignResult.ok, true, videoAssignResult.ok ? "" : videoAssignResult.error);
+  fuelStore.rematchUnmatchedFuelTransactions();
+  const videoPersisted = fuelStore.getFuelTransaction(videoAssignId);
+  assert.equal(videoPersisted?.driver_id, howellId);
+  assert.equal(videoPersisted?.load_id, videoLoad.id);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === videoAssignId),
+    false,
+  );
+
   assert.doesNotMatch(formatDateTime("08/25/26 12:00 AM"), /NaN|Invalid/);
   const shortPlaceFn =
     fs.readFileSync(path.join(process.cwd(), "lib/format.ts"), "utf8").match(
@@ -16561,10 +17196,13 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /rematchUnmatchedFuelTransactions/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /rematchFuelTransactionDrivers/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /driverAssignedToTruck/);
-  assert.match(
-    fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8"),
-    /disabled=\{pending \|\| !canAssign\}/,
-  );
+  const fuelAssignUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-assign-form.tsx"), "utf8");
+  assert.match(fuelAssignUi, /disabled=\{pending \|\| !canAssign\}/);
+  assert.match(fuelAssignUi, /<input type="hidden" name="driver_id"/);
+  assert.match(fuelAssignUi, /<input type="hidden" name="load_id"/);
+  assert.match(fuelAssignUi, /data-fuel-assign-form/);
+  assert.doesNotMatch(fuelAssignUi, /<select\s+name="driver_id"/);
+  assert.doesNotMatch(fuelAssignUi, /<select\s+name="load_id"/);
 
   const { buildSearchExportGrid } = await import("../lib/search-export");
   const searchGrid = buildSearchExportGrid(
@@ -17821,8 +18459,10 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /data-critical-reason/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8"), /desk-nav-icons/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="active"/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /id="delivered"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8"), /DriverDispatchBoard/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/driver/dispatch/page.tsx"), "utf8"), /DriverDispatchBoard/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8"), /id="dispatch"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-dispatch-board.tsx"), "utf8"), /data-dispatch-filter/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/driver-doc-classify.tsx"), "utf8"), /Needs type/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/driver-load-actions.tsx"), "utf8"), /Unclassified|ATTACHMENT_KINDS/);
 

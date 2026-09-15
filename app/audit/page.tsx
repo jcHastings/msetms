@@ -43,11 +43,11 @@ export default async function AuditPage({
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
         <div className="field">
           <label htmlFor="load">Load #</label>
-          <input id="load" name="load" defaultValue={filters.load ?? ""} placeholder="MSE-1045" />
+          <input id="load" name="load" defaultValue={filters.load ?? ""} placeholder="Load number" />
         </div>
         <div className="field">
           <label htmlFor="user">User</label>
-          <input id="user" name="user" defaultValue={filters.user ?? ""} placeholder="MS Test" list="audit-actors" />
+          <input id="user" name="user" defaultValue={filters.user ?? ""} placeholder="User name" list="audit-actors" />
           <datalist id="audit-actors">
             {actors.map((actor) => (
               <option key={actor} value={actor} />

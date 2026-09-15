@@ -73,7 +73,7 @@ export const SETTINGS_SECTIONS = [
     items: [
       {
         href: "/settings/loads",
-        label: "Load numbers and sample data",
+        label: "Load numbers",
         hint: "Prefix and next number",
       },
     ],

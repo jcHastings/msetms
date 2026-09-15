@@ -185,9 +185,13 @@ export function LoadTiedFuelReceipts() {
               return (
                 <tr key={receipt.id} className="border-t border-slate-100">
                   <td className="px-5 py-2">
-                    <Link href={`/loads/${receipt.load_id}`} className="font-semibold underline">
-                      {match?.loadNumber || receipt.load_id}
-                    </Link>
+                    {receipt.load_id ? (
+                      <Link href={`/loads/${receipt.load_id}`} className="font-semibold underline">
+                        {match?.loadNumber || receipt.load_id}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-500">Pending match</span>
+                    )}
                   </td>
                   <td className="px-5 py-2">{formatDateTime(receipt.occurred_at || receipt.created_at)}</td>
                   <td className="px-5 py-2 tabular-nums">{receipt.gallons ?? "—"}</td>

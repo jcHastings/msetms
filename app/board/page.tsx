@@ -106,6 +106,41 @@ export default async function BoardPage({
   );
 }
 
+function BoardAssignDialog({
+  load,
+  trucks,
+  trailers,
+  drivers,
+  ooPercent,
+  windows,
+  triggerClassName,
+}: {
+  load: ReturnType<typeof listLoads>[number];
+  trucks: ReturnType<typeof listAssignableTrucks>;
+  trailers: ReturnType<typeof listAssignableTrailers>;
+  drivers: ReturnType<typeof listAssignableDrivers>;
+  ooPercent: number;
+  windows: ReturnType<typeof complianceWindows>;
+  triggerClassName?: string;
+}) {
+  return (
+    <AssignDialog
+      loadId={load.id}
+      loadNumber={load.load_number}
+      trucks={trucks}
+      trailers={trailers}
+      drivers={drivers}
+      defaultOoPercent={ooPercent}
+      alertWindows={windows}
+      label={load.driver_id ? "Change unit" : "Assign"}
+      currentDriverId={load.driver_id}
+      currentTruckId={load.truck_id}
+      currentTrailerId={load.trailer_id}
+      triggerClassName={triggerClassName}
+    />
+  );
+}
+
 function BoardWhenCell({
   start,
   end,
@@ -145,6 +180,8 @@ async function BoardLiveSection({
   relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
 }) {
   const failedDrivers = failedDrugTestDriverIds();
+  const ooPercent = defaultOoPercent();
+  const windows = complianceWindows();
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
@@ -316,17 +353,28 @@ async function BoardLiveSection({
                               loadNumber={load.load_number}
                               customerName={load.customer_name}
                               stops={listStopAppointmentTargets(load.id)}
+                              assignItem={
+                                !isClosedStatus(load.status) ? (
+                                  <BoardAssignDialog
+                                    load={load}
+                                    trucks={assignableTrucks}
+                                    trailers={assignableTrailers}
+                                    drivers={assignableDrivers}
+                                    ooPercent={ooPercent}
+                                    windows={windows}
+                                    triggerClassName="menu-item w-full text-left"
+                                  />
+                                ) : null
+                              }
                             />
                             {!isClosedStatus(load.status) ? (
-                              <AssignDialog
-                                loadId={load.id}
-                                loadNumber={load.load_number}
+                              <BoardAssignDialog
+                                load={load}
                                 trucks={assignableTrucks}
                                 trailers={assignableTrailers}
                                 drivers={assignableDrivers}
-                                defaultOoPercent={defaultOoPercent()}
-                                alertWindows={complianceWindows()}
-                                label={load.driver_id ? "Change unit" : "Assign"}
+                                ooPercent={ooPercent}
+                                windows={windows}
                               />
                             ) : null}
                             <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">

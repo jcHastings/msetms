@@ -1,9 +1,13 @@
 import { driverName, recordLoadAudit, trailerUnit, truckUnit } from "./audit";
 import { getDb } from "./db";
 import {
+  assertRelayCompletionTime,
+  currentAssignmentFromRelays,
   extraRelayCount,
   formatRelayLane,
   type LoadRelayView,
+  type RelayAssignment,
+  type RelayAssignmentPatch,
   type RelayInput,
 } from "./relays";
 import { computeOwnerOperatorPay } from "./settlement";
@@ -12,6 +16,8 @@ const RELAY_SELECT = `SELECT load_relays.*,
   from_drivers.name AS from_driver_name,
   from_drivers.driver_type AS from_driver_type,
   from_drivers.company_name AS from_driver_company_name,
+  from_trucks.unit_number AS from_truck_unit,
+  from_trailers.unit_number AS from_trailer_unit,
   drivers.name AS driver_name,
   drivers.driver_type AS driver_type,
   drivers.company_name AS driver_company_name,
@@ -19,6 +25,8 @@ const RELAY_SELECT = `SELECT load_relays.*,
   trailers.unit_number AS trailer_unit
   FROM load_relays
   LEFT JOIN drivers AS from_drivers ON from_drivers.id = load_relays.from_driver_id
+  LEFT JOIN trucks AS from_trucks ON from_trucks.id = load_relays.from_truck_id
+  LEFT JOIN trailers AS from_trailers ON from_trailers.id = load_relays.from_trailer_id
   LEFT JOIN drivers ON drivers.id = load_relays.driver_id
   LEFT JOIN trucks ON trucks.id = load_relays.truck_id
   LEFT JOIN trailers ON trailers.id = load_relays.trailer_id`;
@@ -37,14 +45,82 @@ function optionalId(value: number | null | undefined): number | null {
   return value ?? null;
 }
 
-function loadOriginDest(loadId: number): { origin: string; destination: string; driver_id: number | null; rate: number | null } {
+function loadOriginDest(loadId: number): {
+  origin: string;
+  destination: string;
+  driver_id: number | null;
+  truck_id: number | null;
+  trailer_id: number | null;
+  rate: number | null;
+} {
   const row = getDb()
-    .prepare("SELECT origin, destination, driver_id, rate FROM loads WHERE id = ?")
+    .prepare("SELECT origin, destination, driver_id, truck_id, trailer_id, rate FROM loads WHERE id = ?")
     .get(loadId) as
-    | { origin: string; destination: string; driver_id: number | null; rate: number | null }
+    | {
+        origin: string;
+        destination: string;
+        driver_id: number | null;
+        truck_id: number | null;
+        trailer_id: number | null;
+        rate: number | null;
+      }
     | undefined;
   if (!row) throw new Error("Load not found.");
   return row;
+}
+
+function completedAtValue(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
+function sameAssignment(left: RelayAssignment, right: RelayAssignment): boolean {
+  return left.driver_id === right.driver_id && left.truck_id === right.truck_id && left.trailer_id === right.trailer_id;
+}
+
+function snapshotFirstLegIfMissing(loadId: number): void {
+  const load = loadOriginDest(loadId);
+  const first = listRelays(loadId)[0];
+  if (!first) return;
+  if (first.driver_id && load.driver_id === first.driver_id) return;
+  const fromDriverId = first.from_driver_id ?? load.driver_id;
+  const fromTruckId = first.from_truck_id ?? load.truck_id;
+  const fromTrailerId = first.from_trailer_id ?? load.trailer_id;
+  if (
+    fromDriverId === first.from_driver_id &&
+    fromTruckId === first.from_truck_id &&
+    fromTrailerId === first.from_trailer_id
+  ) {
+    return;
+  }
+  getDb()
+    .prepare(
+      "UPDATE load_relays SET from_driver_id = ?, from_truck_id = ?, from_trailer_id = ?, updated_at = ? WHERE id = ?",
+    )
+    .run(fromDriverId, fromTruckId, fromTrailerId, nowIso(), first.id);
+}
+
+export function applyCurrentLoadAssignment(
+  loadId: number,
+  emptyFallback?: RelayAssignment,
+): void {
+  snapshotFirstLegIfMissing(loadId);
+  const load = loadOriginDest(loadId);
+  const relays = listRelays(loadId);
+  const next = relays.length
+    ? currentAssignmentFromRelays(load, relays)
+    : emptyFallback ?? { driver_id: load.driver_id, truck_id: load.truck_id, trailer_id: load.trailer_id };
+  if (sameAssignment(load, next)) return;
+  const timestamp = nowIso();
+  getDb()
+    .prepare("UPDATE loads SET driver_id = ?, truck_id = ?, trailer_id = ?, updated_at = ? WHERE id = ?")
+    .run(next.driver_id, next.truck_id, next.trailer_id, timestamp, loadId);
+  recordLoadAudit({
+    loadId,
+    action: "assign",
+    field: "current",
+    oldValue: describeAssignment(load),
+    newValue: describeAssignment(next),
+  });
 }
 
 export function listRelays(loadId: number): LoadRelayView[] {
@@ -118,6 +194,16 @@ function settleRelayPay(loadRate: number | null, input: RelayInput): { percent: 
   return { percent, pay };
 }
 
+function describeAssignment(assignment: RelayAssignment): string {
+  return [
+    assignment.driver_id ? driverName(assignment.driver_id) : "Unassigned",
+    assignment.truck_id ? truckUnit(assignment.truck_id) : "",
+    assignment.trailer_id ? trailerUnit(assignment.trailer_id) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function describeRelay(relay: {
   pickup: string;
   delivery: string;
@@ -127,6 +213,7 @@ function describeRelay(relay: {
   trailer_id: number | null;
   oo_percent: number | null;
   oo_pay: number | null;
+  completed_at?: string | null;
 }): string {
   const bits = [
     `${relay.from_driver_id ? driverName(relay.from_driver_id) : "Unassigned"} → ${
@@ -135,6 +222,7 @@ function describeRelay(relay: {
   ];
   if (relay.truck_id) bits.push(truckUnit(relay.truck_id));
   if (relay.trailer_id) bits.push(trailerUnit(relay.trailer_id));
+  if (relay.completed_at) bits.push(`completed ${relay.completed_at}`);
   if (relay.oo_pay != null) bits.push(`internal $${relay.oo_pay}`);
   else if (relay.oo_percent != null) bits.push(`internal ${relay.oo_percent}%`);
   return bits.filter(Boolean).join(" · ");
@@ -165,6 +253,12 @@ export function addRelay(loadId: number, input: RelayInput): number {
   const load = loadOriginDest(loadId);
   const { pickup, delivery } = resolveRelayPlaces(loadId, input);
   const { fromDriverId, driverId } = resolveRelayDrivers(input, loadId);
+  const fromTruckId = optionalId(input.from_truck_id) ?? load.truck_id;
+  const fromTrailerId = optionalId(input.from_trailer_id) ?? load.trailer_id;
+  const completedAt = completedAtValue(input.completed_at);
+  const truckId = optionalId(input.truck_id);
+  const trailerId = optionalId(input.trailer_id);
+  assertRelayCompletionTime({ driver_id: driverId, truck_id: truckId, trailer_id: trailerId, completed_at: completedAt });
   const settled = settleRelayPay(load.rate, input);
   const nextSeq =
     (
@@ -176,19 +270,22 @@ export function addRelay(loadId: number, input: RelayInput): number {
   const result = getDb()
     .prepare(
       `INSERT INTO load_relays (
-        load_id, sequence, pickup, delivery, from_driver_id, driver_id, truck_id, trailer_id,
-        oo_percent, oo_pay, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, sequence, pickup, delivery, from_driver_id, from_truck_id, from_trailer_id,
+        driver_id, truck_id, trailer_id, completed_at, oo_percent, oo_pay, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       loadId,
       nextSeq,
       pickup,
       delivery,
-      fromDriverId,
+      fromDriverId ?? load.driver_id,
+      fromTruckId,
+      fromTrailerId,
       driverId,
-      input.truck_id ?? null,
-      input.trailer_id ?? null,
+      truckId,
+      trailerId,
+      completedAt,
       settled.percent,
       settled.pay,
       (input.notes ?? "").trim(),
@@ -211,14 +308,16 @@ export function addRelay(loadId: number, input: RelayInput): number {
     newValue: describeRelay({
       pickup,
       delivery,
-      from_driver_id: fromDriverId,
+      from_driver_id: fromDriverId ?? load.driver_id,
       driver_id: driverId,
-      truck_id: input.truck_id ?? null,
-      trailer_id: input.trailer_id ?? null,
+      truck_id: truckId,
+      trailer_id: trailerId,
       oo_percent: settled.percent,
       oo_pay: settled.pay,
+      completed_at: completedAt,
     }),
   });
+  applyCurrentLoadAssignment(loadId);
   return id;
 }
 
@@ -228,11 +327,20 @@ export function updateRelay(id: number, input: RelayInput): void {
   const { pickup, delivery } = resolveRelayPlaces(existing.load_id, input, existing.pickup);
   const { fromDriverId, driverId } = resolveRelayDrivers(input, existing.load_id);
   const load = loadOriginDest(existing.load_id);
+  const truckId = input.truck_id !== undefined ? optionalId(input.truck_id) : existing.truck_id;
+  const trailerId = input.trailer_id !== undefined ? optionalId(input.trailer_id) : existing.trailer_id;
+  const fromTruckId = input.from_truck_id !== undefined ? optionalId(input.from_truck_id) : existing.from_truck_id;
+  const fromTrailerId =
+    input.from_trailer_id !== undefined ? optionalId(input.from_trailer_id) : existing.from_trailer_id;
+  const completedAt =
+    input.completed_at !== undefined ? completedAtValue(input.completed_at) : completedAtValue(existing.completed_at);
+  assertRelayCompletionTime({ driver_id: driverId, truck_id: truckId, trailer_id: trailerId, completed_at: completedAt });
   const settled = settleRelayPay(load.rate, input);
   getDb()
     .prepare(
       `UPDATE load_relays
-       SET pickup = ?, delivery = ?, from_driver_id = ?, driver_id = ?, truck_id = ?, trailer_id = ?,
+       SET pickup = ?, delivery = ?, from_driver_id = ?, from_truck_id = ?, from_trailer_id = ?,
+           driver_id = ?, truck_id = ?, trailer_id = ?, completed_at = ?,
            oo_percent = ?, oo_pay = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
     )
@@ -240,9 +348,12 @@ export function updateRelay(id: number, input: RelayInput): void {
       pickup,
       delivery,
       fromDriverId,
+      fromTruckId,
+      fromTrailerId,
       driverId,
-      input.truck_id ?? existing.truck_id,
-      input.trailer_id ?? existing.trailer_id,
+      truckId,
+      trailerId,
+      completedAt,
       settled.percent,
       settled.pay,
       (input.notes ?? "").trim(),
@@ -259,12 +370,58 @@ export function updateRelay(id: number, input: RelayInput): void {
       delivery,
       from_driver_id: fromDriverId,
       driver_id: driverId,
-      truck_id: input.truck_id ?? existing.truck_id,
-      trailer_id: input.trailer_id ?? existing.trailer_id,
+      truck_id: truckId,
+      trailer_id: trailerId,
       oo_percent: settled.percent,
       oo_pay: settled.pay,
+      completed_at: completedAt,
     }),
   });
+  applyCurrentLoadAssignment(existing.load_id);
+}
+
+export function updateRelayAssignment(id: number, patch: RelayAssignmentPatch): void {
+  const existing = getRelay(id);
+  if (!existing) throw new Error("Relay is missing.");
+  const next = {
+    from_driver_id: patch.from_driver_id !== undefined ? optionalId(patch.from_driver_id) : existing.from_driver_id,
+    from_truck_id: patch.from_truck_id !== undefined ? optionalId(patch.from_truck_id) : existing.from_truck_id,
+    from_trailer_id: patch.from_trailer_id !== undefined ? optionalId(patch.from_trailer_id) : existing.from_trailer_id,
+    driver_id: patch.driver_id !== undefined ? optionalId(patch.driver_id) : existing.driver_id,
+    truck_id: patch.truck_id !== undefined ? optionalId(patch.truck_id) : existing.truck_id,
+    trailer_id: patch.trailer_id !== undefined ? optionalId(patch.trailer_id) : existing.trailer_id,
+    completed_at:
+      patch.completed_at !== undefined ? completedAtValue(patch.completed_at) : completedAtValue(existing.completed_at),
+  };
+  if (next.from_driver_id && next.driver_id && next.from_driver_id === next.driver_id) {
+    throw new Error("Pick two different drivers for the handoff.");
+  }
+  getDb()
+    .prepare(
+      `UPDATE load_relays
+       SET from_driver_id = ?, from_truck_id = ?, from_trailer_id = ?,
+           driver_id = ?, truck_id = ?, trailer_id = ?, completed_at = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      next.from_driver_id,
+      next.from_truck_id,
+      next.from_trailer_id,
+      next.driver_id,
+      next.truck_id,
+      next.trailer_id,
+      next.completed_at,
+      nowIso(),
+      id,
+    );
+  recordLoadAudit({
+    loadId: existing.load_id,
+    action: "relay",
+    field: "assignment",
+    oldValue: describeRelay(existing),
+    newValue: describeRelay({ ...existing, ...next }),
+  });
+  applyCurrentLoadAssignment(existing.load_id);
 }
 
 export function deleteRelay(id: number): void {
@@ -278,6 +435,11 @@ export function deleteRelay(id: number): void {
     field: "leg",
     oldValue: describeRelay(existing),
     newValue: "",
+  });
+  applyCurrentLoadAssignment(existing.load_id, {
+    driver_id: existing.from_driver_id,
+    truck_id: existing.from_truck_id,
+    trailer_id: existing.from_trailer_id,
   });
 }
 

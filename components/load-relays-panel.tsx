@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { addRelayAction, deleteRelayAction } from "@/lib/dispatcher-actions";
-import { formatRelayHandoff, type LoadRelayView } from "@/lib/relays";
+import { formatDateTime } from "@/lib/format";
+import { formatRelayHandoff, relayIsCompleted, type LoadRelayView } from "@/lib/relays";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { isOwnerOperator } from "@/lib/types";
 
@@ -62,6 +63,9 @@ export function LoadRelaysPanel({
                 </div>
                 <div className="text-xs text-slate-500">
                   {driverKindLabel(relay.from_driver_type)} → {driverKindLabel(relay.driver_type)}
+                  {relayIsCompleted(relay)
+                    ? ` · completed ${formatDateTime(relay.completed_at)}`
+                    : " · waiting on completed date/time"}
                 </div>
               </div>
               <form
@@ -131,7 +135,7 @@ function RelayDialog({
         <h3 className="text-sm font-semibold">Add Relay</h3>
         <input type="hidden" name="load_id" value={loadId} />
         <div className="field">
-          <label htmlFor="relay-driver-a">Driver A</label>
+          <label htmlFor="relay-driver-a">Driver 1 (first leg)</label>
           <select
             id="relay-driver-a"
             name="from_driver_id"
@@ -148,7 +152,7 @@ function RelayDialog({
           </select>
         </div>
         <div className="field">
-          <label htmlFor="relay-driver-b">Driver B</label>
+          <label htmlFor="relay-driver-b">Driver 2 (receiving)</label>
           <select
             id="relay-driver-b"
             name="driver_id"
@@ -167,6 +171,13 @@ function RelayDialog({
         <div className="field">
           <label htmlFor="relay-handoff">Relay point</label>
           <input id="relay-handoff" name="handoff" required placeholder="Handoff city" />
+        </div>
+        <div className="field">
+          <label htmlFor="relay-completed-at">Relay completed</label>
+          <input id="relay-completed-at" name="completed_at" type="datetime-local" />
+          <p className="mt-1 text-xs text-slate-500">
+            Date and time the handoff happened. Required once Driver 2 has a truck and trailer on the load.
+          </p>
         </div>
         {error ? <p className="text-sm text-rose-700">{error}</p> : null}
         <div className="flex justify-end gap-2">

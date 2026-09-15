@@ -42,7 +42,7 @@ export function DriverImport() {
             id="driver-roster-text"
             name="report_text"
             rows={4}
-            placeholder={"Status,Team,Name,Telephone,City,Province,Country\nActive,single,Christopher Howell,555-0100,Hastings,NE,USA"}
+            placeholder="Paste CSV rows here"
           />
         </div>
         <div>
