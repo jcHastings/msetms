@@ -7,17 +7,19 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.gstatic.com",
-  "frame-src https://maps.googleapis.com https://maps.google.com",
+  // Same-origin frames: Dispatch board slide-out loads /loads/:id?embed=1.
+  // frame-src without 'self' + DENY/none painted a blank panel (broken document icon).
+  "frame-src 'self' https://maps.googleapis.com https://maps.google.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self'",
 ].join("; ");
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: contentSecurityPolicy },
-  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
