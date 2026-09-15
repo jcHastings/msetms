@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { BackhaulFinderHost } from "@/components/backhaul-finder";
 import { HoverActionMenu } from "@/components/hover-action-menu";
@@ -28,11 +28,13 @@ export function LoadCardFastActions({
   loadNumber,
   customerName,
   stops,
+  assignItem,
 }: {
   loadId: number;
   loadNumber: string;
   customerName?: string;
   stops: FastActionStop[];
+  assignItem?: ReactNode;
 }) {
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -56,6 +58,7 @@ export function LoadCardFastActions({
             triggerClassName="btn btn-ghost"
             sheetOnPhone
           >
+            {assignItem}
             <button
               type="button"
               className="menu-item w-full text-left"
