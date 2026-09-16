@@ -126,9 +126,15 @@ export function normalizePlate(value: string): string {
   return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
-/** Digits only so labeled names like Truck 12 or #12 match the same TMS unit. Does not tokenize UUIDs. */
+/**
+ * Digits only so labeled names like Truck 12 or #12 match the same TMS unit.
+ * A slash suffix is a second identifier, not more unit digits: 26/590710 is 26.
+ * Does not tokenize UUIDs.
+ */
 export function unitDigits(value: string): string {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  const raw = String(value ?? "");
+  const primary = raw.includes("/") ? raw.split("/")[0] : raw;
+  const digits = primary.replace(/\D/g, "");
   if (!digits) return "";
   return digits.replace(/^0+/, "") || "0";
 }
@@ -216,6 +222,15 @@ function unitAgrees(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boo
   return exact === truckUnit;
 }
 
+/** VIN match still wins when the TMS unit has a slash suffix the Samsara name does not. */
+function vinAllowsUnit(truck: SamsaraMatchTruck, vehicle: SamsaraMatchVehicle): boolean {
+  if (unitAgrees(truck, vehicle)) return true;
+  const truckUnit = unitDigits(truck.unit_number);
+  if (!truckUnit) return true;
+  if (!String(truck.unit_number).includes("/")) return false;
+  return samsaraUnitTokenSet(vehicle).includes(truckUnit);
+}
+
 function uniqueUnclaimedTruck(
   trucks: SamsaraMatchTruck[],
   claimedTruckIds: Set<number> | undefined,
@@ -250,7 +265,7 @@ export function matchTruckForSamsara(
     const byVin = uniqueUnclaimedTruck(
       trucks,
       claimedTruckIds,
-      (truck) => normalizeVin(truck.vin ?? "") === vin && unitAgrees(truck, vehicle),
+      (truck) => normalizeVin(truck.vin ?? "") === vin && vinAllowsUnit(truck, vehicle),
     );
     if (byVin) return { id: byVin.id, matchBy: "vin" };
   }
