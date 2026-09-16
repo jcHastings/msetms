@@ -81,6 +81,8 @@ import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { extractStateCode, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
+import { normalizeVin, unitDigits } from "./fleet-import-shared";
+import { moveFleetUploads } from "./files";
 import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
 import {
   defaultSearchCriteria,
@@ -2634,18 +2636,78 @@ function deleteFleetDocuments(ownerType: FleetAssetKind, ownerId: number): void 
   getDb().prepare("DELETE FROM fleet_documents WHERE owner_type = ? AND owner_id = ?").run(ownerType, ownerId);
 }
 
+function uniqueOtherTruck(
+  doomed: Truck,
+  predicate: (truck: Truck) => boolean,
+): TruckWithDriver | null {
+  const hits = listTrucks().filter((truck) => truck.id !== doomed.id && predicate(truck));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Surviving VIN/unit row when this truck is a Samsara-import duplicate. */
+export function findDuplicateTruckSurvivor(id: number): TruckWithDriver | null {
+  const doomed = getTruck(id);
+  if (!doomed) return null;
+  const vin = normalizeVin(doomed.vin ?? "");
+  if (vin) {
+    const byVin = uniqueOtherTruck(doomed, (truck) => normalizeVin(truck.vin ?? "") === vin);
+    if (byVin) return byVin;
+  }
+  const unit = unitDigits(doomed.unit_number);
+  if (unit) {
+    const byUnit = uniqueOtherTruck(doomed, (truck) => unitDigits(truck.unit_number) === unit);
+    if (byUnit) return byUnit;
+  }
+  return null;
+}
+
+function remapTruckDocuments(fromId: number, toId: number): void {
+  getDb()
+    .prepare("UPDATE fleet_documents SET owner_id = ? WHERE owner_type = 'truck' AND owner_id = ?")
+    .run(toId, fromId);
+}
+
+function mergeTruckComplianceDates(from: Truck, toId: number): void {
+  getDb()
+    .prepare(
+      `UPDATE trucks
+       SET registration_issued = CASE WHEN TRIM(registration_issued) = '' THEN ? ELSE registration_issued END,
+           registration_expires = CASE WHEN TRIM(registration_expires) = '' THEN ? ELSE registration_expires END,
+           dot_inspected_on = CASE WHEN TRIM(dot_inspected_on) = '' THEN ? ELSE dot_inspected_on END,
+           dot_expires = CASE WHEN TRIM(dot_expires) = '' THEN ? ELSE dot_expires END,
+           updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      from.registration_issued ?? "",
+      from.registration_expires ?? "",
+      from.dot_inspected_on ?? "",
+      from.dot_expires ?? "",
+      now(),
+      toId,
+    );
+}
+
 export function deleteTruck(id: number): void {
-  if (!getTruck(id)) throw new Error("Truck not found.");
+  const doomed = getTruck(id);
+  if (!doomed) throw new Error("Truck not found.");
   if (fleetAssetIsAssigned("truck", id)) throw new Error(fleetAssignedDeleteMessage("truck"));
+  const survivor = findDuplicateTruckSurvivor(id);
   const db = getDb();
   db.transaction(() => {
-    deleteFleetDocuments("truck", id);
+    if (survivor) {
+      remapTruckDocuments(id, survivor.id);
+      mergeTruckComplianceDates(doomed, survivor.id);
+    } else {
+      deleteFleetDocuments("truck", id);
+    }
     db.prepare("UPDATE loads SET truck_id = NULL WHERE truck_id = ?").run(id);
     db.prepare("UPDATE load_relays SET truck_id = NULL WHERE truck_id = ?").run(id);
     db.prepare("UPDATE drivers SET truck_id = NULL WHERE truck_id = ?").run(id);
     db.prepare("UPDATE trailers SET truck_id = NULL WHERE truck_id = ?").run(id);
     db.prepare("DELETE FROM trucks WHERE id = ?").run(id);
   })();
+  if (survivor) moveFleetUploads("truck", id, survivor.id);
 }
 
 export function deleteDriver(id: number): void {

@@ -2167,6 +2167,11 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /keepActiveSamsaraVehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /samsaraRecordIsActive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /matchTruckForSamsaraLive/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /26\/590710 is 26/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fleet-import-shared.ts"), "utf8"), /vinAllowsUnit/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /findDuplicateTruckSurvivor/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/queries.ts"), "utf8"), /remapTruckDocuments/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/files.ts"), "utf8"), /moveFleetUploads/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /matchTruckForSamsaraLive/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"), /Fetch Samsara vehicles/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /resetSamsaraCache/);
@@ -9702,6 +9707,7 @@ DISPATCH CONFIRMATION
     matchTruckForSamsaraLive,
     samsaraReturnedNames,
     samsaraUnmatchedUnitsWarning,
+    unitDigits,
     unitNumberFromSamsaraName,
     fleetUnitTokens,
     unionSamsaraVehicles,
@@ -9824,6 +9830,33 @@ DISPATCH CONFIRMATION
   );
   assert.equal(vinPair?.id, 2);
   assert.equal(vinPair?.matchBy, "vin");
+  assert.equal(unitDigits("26/590710"), "26", "slash suffix is not more unit digits");
+  assert.equal(unitDigits("26 / 590710"), "26");
+  assert.equal(unitDigits("027/511697"), "27");
+  assert.equal(unitDigits("26"), "26");
+  assert.notEqual(unitDigits("26/590710"), "26590710");
+  const slashVin = matchTruckForSamsara(
+    [{ id: 9, unit_number: "26/590710", samsara_vehicle_id: "", vin: "VINSLASH26AAA" }],
+    { samsaraVehicleId: "sam-26", unitNumber: "26", name: "26", vin: "VINSLASH26AAA" },
+  );
+  assert.equal(slashVin?.id, 9, "VIN must update the slash-suffix TMS row instead of creating a duplicate");
+  assert.equal(slashVin?.matchBy, "vin");
+  assert.equal(
+    matchTruckForSamsara([{ id: 9, unit_number: "26/590710", samsara_vehicle_id: "", vin: "" }], {
+      samsaraVehicleId: "sam-26",
+      unitNumber: "26",
+      name: "26",
+    })?.id,
+    9,
+    "26/590710 and 26 are the same unit when VIN is missing",
+  );
+  const slashPreview = buildSamsaraTruckPreview(
+    [{ id: "sam-26", name: "26", vin: "VINSLASH26AAA", year: "", make: "", model: "", licensePlate: "" }],
+    [{ id: 9, unit_number: "26/590710", samsara_vehicle_id: "", vin: "VINSLASH26AAA" }],
+  );
+  assert.equal(slashPreview[0]?.action, "update");
+  assert.equal(slashPreview[0]?.matchTruckId, 9);
+  assert.equal(slashPreview[0]?.matchBy, "vin");
   const mixedPreview = buildSamsaraTruckPreview(
     [
       { id: "v-pete", name: "Pete", vin: "VINPETE", year: "", make: "", model: "", licensePlate: "PPP" },
@@ -10114,6 +10147,40 @@ DISPATCH CONFIRMATION
   assert.equal(samsaraSecondImport.created, 0, "second Samsara import must not duplicate");
   assert.ok(samsaraSecondImport.updated >= 1);
   assert.equal(queries.listTrucks().filter((truck) => truck.samsara_vehicle_id === "veh-777").length, 1);
+
+  const slashSuffixId = queries.createTruck({
+    unit_number: "817/590710",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    vin: "VINSLASH817AAA",
+    registration_issued: "2026-03-01",
+    registration_expires: "2027-02-28",
+    dot_inspected_on: "2026-07-15",
+    dot_expires: "2027-07-14",
+  });
+  const slashSuffixPreview = buildSamsaraTruckPreview(
+    [{ id: "sam-817", name: "817", vin: "VINSLASH817AAA", year: "", make: "", model: "", licensePlate: "" }],
+    queries.listTrucks().map((truck) => ({
+      id: truck.id,
+      unit_number: truck.unit_number,
+      samsara_vehicle_id: truck.samsara_vehicle_id,
+      vin: truck.vin,
+      plate: truck.plate,
+    })),
+  );
+  assert.equal(
+    slashSuffixPreview.find((row) => row.samsaraVehicleId === "sam-817")?.action,
+    "update",
+    "Samsara unit 817 must update 817/590710, not create a second truck",
+  );
+  assert.equal(slashSuffixPreview.find((row) => row.samsaraVehicleId === "sam-817")?.matchTruckId, slashSuffixId);
+  const slashSuffixImport = applySamsaraTruckImport(slashSuffixPreview.filter((row) => row.samsaraVehicleId === "sam-817"));
+  assert.equal(slashSuffixImport.created, 0);
+  assert.equal(slashSuffixImport.updated, 1);
+  assert.equal(queries.getTruck(slashSuffixId)?.samsara_vehicle_id, "sam-817");
+  assert.equal(queries.getTruck(slashSuffixId)?.registration_issued, "2026-03-01");
+  assert.equal(queries.listTrucks().filter((truck) => truck.vin === "VINSLASH817AAA").length, 1);
 
   const typedUnitId = queries.createTruck({
     unit_number: "SMOKE112",
@@ -15487,6 +15554,70 @@ DISPATCH CONFIRMATION
   queries.setTruckActive(spareTruckId, true);
   queries.deleteTruck(spareTruckId);
   assert.equal(queries.getTruck(spareTruckId), null);
+
+  const survivingTruckId = queries.createTruck({
+    unit_number: "816",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    vin: "VINSLASH816AAA",
+  });
+  const duplicateTruckId = queries.createTruck({
+    unit_number: "816/590710",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    vin: "VINSLASH816AAA",
+    registration_issued: "2026-03-01",
+    registration_expires: "2027-02-28",
+    dot_inspected_on: "2026-07-15",
+    dot_expires: "2027-07-14",
+  });
+  const remappedDoc = addFleetDocument({
+    ownerType: "truck",
+    ownerId: duplicateTruckId,
+    kind: "registration",
+    originalName: "816-reg.pdf",
+    buffer: Buffer.from("%PDF-1.4 remap"),
+    mimeType: "application/pdf",
+  });
+  const { getFleetDocumentPath } = await import("../lib/files");
+  const oldUploadDir = path.join(getDataDir(), "uploads", "fleet", "truck", String(duplicateTruckId));
+  const oldUploadPath = path.join(oldUploadDir, remappedDoc.stored_name);
+  assert.equal(fs.existsSync(oldUploadPath), true);
+  assert.equal(queries.findDuplicateTruckSurvivor(duplicateTruckId)?.id, survivingTruckId);
+  queries.deleteTruck(duplicateTruckId);
+  assert.equal(queries.getTruck(duplicateTruckId), null);
+  const keptDocs = listFleetDocuments("truck", survivingTruckId);
+  assert.equal(keptDocs.some((file) => file.stored_name === remappedDoc.stored_name), true);
+  assert.equal(listFleetDocuments("truck", duplicateTruckId).length, 0);
+  const survivor = queries.getTruck(survivingTruckId);
+  assert.equal(survivor?.registration_issued, "2026-03-01");
+  assert.equal(survivor?.registration_expires, "2027-02-28");
+  assert.equal(survivor?.dot_inspected_on, "2026-07-15");
+  assert.equal(survivor?.dot_expires, "2027-07-14");
+  const remapped = keptDocs.find((file) => file.stored_name === remappedDoc.stored_name);
+  assert.ok(remapped);
+  assert.equal(fs.existsSync(getFleetDocumentPath(remapped)), true);
+  assert.equal(fs.existsSync(oldUploadPath), false);
+  queries.deleteTruck(survivingTruckId);
+
+  const loneDocTruckId = queries.createTruck({
+    unit_number: "DEL-DOCS",
+    type: "dry_van",
+    capacity_lbs: 40000,
+    status: "available",
+  });
+  addFleetDocument({
+    ownerType: "truck",
+    ownerId: loneDocTruckId,
+    kind: "registration",
+    originalName: "lone-reg.pdf",
+    buffer: Buffer.from("%PDF-1.4 lone"),
+    mimeType: "application/pdf",
+  });
+  queries.deleteTruck(loneDocTruckId);
+  assert.equal(listFleetDocuments("truck", loneDocTruckId).length, 0);
 
   const assignedTruckId = queries.createTruck({
     unit_number: "DEL-2",

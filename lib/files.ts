@@ -314,3 +314,31 @@ export function getFleetDocumentPath(doc: FleetDocument): string {
     doc.stored_name,
   );
 }
+
+/** Move on-disk fleet uploads when a duplicate row is deleted and docs are remapped. */
+export function moveFleetUploads(
+  ownerType: "driver" | "truck" | "trailer",
+  fromOwnerId: number,
+  toOwnerId: number,
+): void {
+  if (fromOwnerId === toOwnerId) return;
+  const fromDir = path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "fleet", ownerType, String(fromOwnerId));
+  if (!fs.existsSync(/*turbopackIgnore: true*/ fromDir)) return;
+  const toDir = uploadsDir("fleet", ownerType, String(toOwnerId));
+  for (const name of fs.readdirSync(/*turbopackIgnore: true*/ fromDir)) {
+    const fromPath = path.join(/*turbopackIgnore: true*/ fromDir, name);
+    const toPath = path.join(/*turbopackIgnore: true*/ toDir, name);
+    if (fs.existsSync(/*turbopackIgnore: true*/ toPath)) continue;
+    try {
+      fs.renameSync(/*turbopackIgnore: true*/ fromPath, toPath);
+    } catch {
+      fs.copyFileSync(/*turbopackIgnore: true*/ fromPath, toPath);
+      fs.unlinkSync(/*turbopackIgnore: true*/ fromPath);
+    }
+  }
+  try {
+    fs.rmdirSync(/*turbopackIgnore: true*/ fromDir);
+  } catch {
+    /* leftover files stay if the survivor already had the same name */
+  }
+}
