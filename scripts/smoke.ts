@@ -5778,10 +5778,12 @@ Email: nophone@broker.example
   assert.doesNotMatch(rateConImportUi, /Liftgate|Inside Pickup|Inside Delivery/);
   assert.doesNotMatch(rateConImportUi, /auto-reject|cannot book|blocked from confirm/i);
   const laneAvgUi = fs.readFileSync(path.join(process.cwd(), "components/lane-avg-badge.tsx"), "utf8");
-  assert.match(laneAvgUi, /Below your lane avg/);
-  assert.match(laneAvgUi, /At your lane avg/);
-  assert.match(laneAvgUi, /Above your lane avg/);
   assert.match(laneAvgUi, /data-lane-avg/);
+  assert.match(laneAvgUi, /laneAvgHeadline/);
+  const laneAvgCopy = fs.readFileSync(path.join(process.cwd(), "lib/lane-average-shared.ts"), "utf8");
+  assert.match(laneAvgCopy, /Below your lane avg/);
+  assert.match(laneAvgCopy, /At your lane avg/);
+  assert.match(laneAvgCopy, /Above your lane avg/);
   const finePrintUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-fine-print.tsx"), "utf8");
   assert.match(finePrintUi, /review before you book/i);
   assert.match(finePrintUi, /Does not block confirm/);
@@ -19341,11 +19343,11 @@ parked for next week
   } = await import("../lib/lane-average-shared");
   const { scanRateConFinePrint } = await import("../lib/rate-con-fine-print-shared");
   const { laneAverageForLoad, laneAverageSnapshot, laneAveragesForLoads } = await import("../lib/lane-average");
-  assert.equal(laneKey("Hastings, NE", "El Paso, TX"), "hastings|NE→el paso|TX");
-  assert.equal(laneKey("100 Packer Rd, Hastings, NE 68901", "El Paso, TX 79901"), "hastings|NE→el paso|TX");
-  assert.equal(laneKey("HASTINGS NE", "EL PASO TX"), "hastings|NE→el paso|TX");
+  assert.equal(laneKey("Scottsbluff, NE", "Las Cruces, NM"), "scottsbluff|NE→las cruces|NM");
+  assert.equal(laneKey("100 Packer Rd, Scottsbluff, NE 69361", "Las Cruces, NM 88001"), "scottsbluff|NE→las cruces|NM");
+  assert.equal(laneKey("SCOTTSBLUFF NE", "LAS CRUCES NM"), "scottsbluff|NE→las cruces|NM");
   assert.equal(lanePointFromText("Kansas City, MO")?.city, "Kansas City");
-  assert.equal(laneLabel("hastings, ne", "el paso, tx"), "Hastings, NE → El Paso, TX");
+  assert.equal(laneLabel("scottsbluff, ne", "las cruces, nm"), "Scottsbluff, NE → Las Cruces, NM");
   const laneWindow = {
     pickup_start: pickup.toISOString(),
     pickup_end: pickupEnd.toISOString(),
@@ -19354,8 +19356,8 @@ parked for next week
   };
   const laneHistA = queries.createLoad({
     customer_id: customerId,
-    origin: "Hastings, NE",
-    destination: "El Paso, TX",
+    origin: "Scottsbluff, NE",
+    destination: "Las Cruces, NM",
     ...laneWindow,
     weight: 40000,
     commodity: "Beef",
@@ -19373,8 +19375,8 @@ parked for next week
   });
   const laneHistB = queries.createLoad({
     customer_id: customerId,
-    origin: "Hastings, NE 68901",
-    destination: "El Paso, TX",
+    origin: "Scottsbluff, NE 69361",
+    destination: "Las Cruces, NM",
     ...laneWindow,
     weight: 40000,
     commodity: "Beef",
@@ -19392,8 +19394,8 @@ parked for next week
   });
   const laneCancelled = queries.createLoad({
     customer_id: customerId,
-    origin: "Hastings, NE",
-    destination: "El Paso, TX",
+    origin: "Scottsbluff, NE",
+    destination: "Las Cruces, NM",
     ...laneWindow,
     weight: 40000,
     commodity: "Beef",
@@ -19411,8 +19413,8 @@ parked for next week
   });
   const otherLane = queries.createLoad({
     customer_id: customerId,
-    origin: "Chicago, IL",
-    destination: "Dallas, TX",
+    origin: "Kodiak, AK",
+    destination: "Hilo, HI",
     ...laneWindow,
     weight: 40000,
     commodity: "Beef",
@@ -19431,8 +19433,8 @@ parked for next week
   getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id IN (?, ?)").run(laneHistA, laneHistB);
   const liveLane = queries.createLoad({
     customer_id: customerId,
-    origin: "Hastings, NE",
-    destination: "El Paso, TX",
+    origin: "Scottsbluff, NE",
+    destination: "Las Cruces, NM",
     ...laneWindow,
     weight: 40000,
     commodity: "Beef",
@@ -19450,15 +19452,15 @@ parked for next week
   });
   getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id = ?").run(liveLane);
   const laneSnap = laneAverageSnapshot({
-    origin: "Hastings, NE",
-    destination: "El Paso, TX",
+    origin: "Scottsbluff, NE",
+    destination: "Las Cruces, NM",
     excludeLoadId: liveLane,
   });
   assert.ok(laneSnap);
-  assert.equal(laneSnap.key, "hastings|NE→el paso|TX");
+  assert.equal(laneSnap.key, "scottsbluff|NE→las cruces|NM");
   assert.equal(laneSnap.sampleSize, 2, "cancelled and other lanes stay out");
   assert.equal(laneSnap.avgRate, 2200);
-  assert.equal(laneSnap.avgPerMile, 2200 / 1200);
+  assert.equal(laneSnap.avgPerMile, 1.83);
   const below = laneAverageForLoad(queries.getLoad(liveLane)!);
   assert.equal(below.band, "below");
   assert.equal(below.sampleSize, 2);
@@ -19477,7 +19479,7 @@ parked for next week
   ]);
   assert.equal(boardMap.get(liveLane)?.band, "below");
   assert.equal(boardMap.get(otherLane)?.sampleSize, 0);
-  assert.equal(boardMap.get(laneCancelled)?.sampleSize, 2);
+  assert.equal(boardMap.get(laneCancelled)?.sampleSize, 3, "cancelled row still sees the live lane history");
 
   const fineHits = scanRateConFinePrint(`
     Carrier freight $2,400. Detention $75/hr after 2 hours free time.

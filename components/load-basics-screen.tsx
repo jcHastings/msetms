@@ -162,11 +162,7 @@ export function LoadBasicsScreen({
         ) : null}
       </div>
       {!load || defaults.rate != null ? (
-        <LoadRateFields
-          defaultsRate={defaults.rate ?? load?.rate ?? null}
-          laneAverage={laneAverage}
-          miles={load?.route_miles ?? null}
-        />
+        <LoadRateFields defaultsRate={defaults.rate ?? load?.rate ?? null} laneAverage={laneAverage} />
       ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>

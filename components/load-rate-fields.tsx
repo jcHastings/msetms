@@ -61,7 +61,7 @@ export function CustomerRateField({
         </p>
       ) : null}
       <LaneAvgBadge
-        compare={compareLaneAverage(rate === "" ? null : Number(rate), laneAverage, miles ?? load?.route_miles)}
+        compare={compareLaneAverage(rate === "" ? null : Number(rate), laneAverage, miles)}
       />
     </div>
   );

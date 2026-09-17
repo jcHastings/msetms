@@ -24,6 +24,7 @@ export function LoadPayItems({
   ownerOperators = [],
   defaultOoPercent = null,
   laneAverage = null,
+  laneMiles = null,
 }: {
   load: Load;
   items: LoadPayItem[];
@@ -33,6 +34,7 @@ export function LoadPayItems({
   ownerOperators?: string[];
   defaultOoPercent?: number | null;
   laneAverage?: LaneAverageSnapshot | null;
+  laneMiles?: number | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
@@ -100,7 +102,7 @@ export function LoadPayItems({
               load={load}
               onRateChange={setLiveRate}
               laneAverage={laneAverage}
-              miles={load.route_miles}
+              miles={laneMiles}
             />
             <EmptyMoveField load={load} />
           </div>

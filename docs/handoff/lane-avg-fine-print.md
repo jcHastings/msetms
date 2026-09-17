@@ -1,6 +1,6 @@
 # Lane avg + RC fine print (advisory)
 
-Stacked on draft PR #65 tip `7b890c91bb8375296a241c2ea9ab7d190e2d882c`. This tip SHA is the commit on `cursor/lane-avg-fine-print-4929` after push.
+Stacked on draft PR #65 tip `7b890c91bb8375296a241c2ea9ab7d190e2d882c`. **This tip SHA:** `87375382193544a31fb0120781c549161e965c1d`.
 
 AI rate-con PDF import is unchanged. These two checks are review-only. Last yes for book/confirm stays on the human.
 

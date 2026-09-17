@@ -318,6 +318,7 @@ export async function LoadEditor({
                   destination: load.destination,
                   excludeLoadId: load.id,
                 })}
+                laneMiles={load.route_miles}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => assignedLoadName(driver))}
