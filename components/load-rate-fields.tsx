@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
+import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { computeOwnerOperatorPay, impliedOwnerOperatorPercent } from "@/lib/settlement";
 import type { Load } from "@/lib/types";
 
@@ -19,10 +21,14 @@ export function CustomerRateField({
   load,
   defaultsRate = null,
   onRateChange,
+  laneAverage = null,
+  miles = null,
 }: {
   load?: Load;
   defaultsRate?: number | null;
   onRateChange?: (rate: string) => void;
+  laneAverage?: LaneAverageSnapshot | null;
+  miles?: number | null;
 }) {
   const { persistFields } = useLoadAssignPersist(load?.id);
   const [rate, setRate] = useState(
@@ -54,6 +60,9 @@ export function CustomerRateField({
           This becomes the customer rate on Income / Budget.
         </p>
       ) : null}
+      <LaneAvgBadge
+        compare={compareLaneAverage(rate === "" ? null : Number(rate), laneAverage, miles)}
+      />
     </div>
   );
 }
@@ -176,9 +185,15 @@ export function OwnerOperatorPayFields({
 export function LoadRateFields({
   load,
   defaultsRate = null,
+  laneAverage = null,
+  miles = null,
 }: {
   load?: Load;
   defaultsRate?: number | null;
+  laneAverage?: LaneAverageSnapshot | null;
+  miles?: number | null;
 }) {
-  return <CustomerRateField load={load} defaultsRate={defaultsRate} />;
+  return (
+    <CustomerRateField load={load} defaultsRate={defaultsRate} laneAverage={laneAverage} miles={miles} />
+  );
 }

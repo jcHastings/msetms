@@ -3,11 +3,15 @@
 import { useActionState, useRef, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
+import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
+import { RateConFinePrint } from "@/components/rate-con-fine-print";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, updateLoadAction } from "@/lib/actions";
+import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { customerRefFromRateCon, rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
+import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
@@ -63,9 +67,11 @@ export function RateConApply({
           }
           event.preventDefault();
           setLocalError("");
+          next.data.set("exclude_load_id", String(load.id));
           formAction(next.data);
         }}
       >
+        <input type="hidden" name="exclude_load_id" value={load.id} />
         <div>
           <h2 className="text-sm font-semibold">Apply a rate confirmation</h2>
         </div>
@@ -113,6 +119,9 @@ export function RateConApply({
           parsed={parsed}
           inboxId={state.inboxId}
           load={load}
+          finePrint={"finePrint" in state ? state.finePrint : []}
+          laneAverage={"laneAverage" in state ? state.laneAverage : null}
+          laneMiles={"laneMiles" in state ? state.laneMiles : null}
           customers={customers}
           trucks={trucks}
           trailers={trailers}
@@ -130,6 +139,9 @@ function RateConAppliedLoad({
   parsed,
   inboxId,
   load,
+  finePrint,
+  laneAverage,
+  laneMiles,
   customers,
   trucks,
   trailers,
@@ -141,6 +153,9 @@ function RateConAppliedLoad({
   parsed: ParsedRateCon;
   inboxId: string;
   load: Load;
+  finePrint: FinePrintHit[];
+  laneAverage: LaneAverageSnapshot | null;
+  laneMiles: number | null;
   customers: Customer[];
   trucks: Truck[];
   trailers: Trailer[];
@@ -171,6 +186,8 @@ function RateConAppliedLoad({
     <div data-rate-con-draft="">
       <RateConFieldFlags parsed={parsed} />
       <RateConNeedsReviewNote parsed={parsed} />
+      <LaneAvgBadge compare={compareLaneAverage(parsed.rate ?? load.rate, laneAverage, laneMiles ?? load.route_miles)} />
+      {parsed.raw_text || finePrint.length ? <RateConFinePrint hits={finePrint} /> : null}
       {book.review}
       <LoadForm
         key={book.formKey}
@@ -182,6 +199,8 @@ function RateConAppliedLoad({
         trailers={trailers}
         locations={book.book}
         drivers={drivers}
+        laneAverage={laneAverage}
+        laneMiles={laneMiles ?? load.route_miles}
         load={{
           ...load,
           origin: parsed.origin || load.origin,

@@ -5,6 +5,7 @@ import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
 import { CustomerRateField, OwnerOperatorPayFields } from "@/components/load-rate-fields";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { formatMoney } from "@/lib/format";
+import type { LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { officeSharePercentForOoLoad } from "@/lib/settlement";
 import { labelForPayCategory, PAY_ITEM_CATEGORIES, type PayItemSide } from "@/lib/load-page-shared";
 import type { LoadPayItem } from "@/lib/pay-items";
@@ -22,6 +23,8 @@ export function LoadPayItems({
   driverType,
   ownerOperators = [],
   defaultOoPercent = null,
+  laneAverage = null,
+  laneMiles = null,
 }: {
   load: Load;
   items: LoadPayItem[];
@@ -30,6 +33,8 @@ export function LoadPayItems({
   driverType?: string | null;
   ownerOperators?: string[];
   defaultOoPercent?: number | null;
+  laneAverage?: LaneAverageSnapshot | null;
+  laneMiles?: number | null;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
@@ -93,7 +98,12 @@ export function LoadPayItems({
         emptyText="No extra line items. Detention, fuel, and lumpers go here."
         lead={
           <div className="grid gap-4 md:grid-cols-2">
-            <CustomerRateField load={load} onRateChange={setLiveRate} />
+            <CustomerRateField
+              load={load}
+              onRateChange={setLiveRate}
+              laneAverage={laneAverage}
+              miles={laneMiles}
+            />
             <EmptyMoveField load={load} />
           </div>
         }

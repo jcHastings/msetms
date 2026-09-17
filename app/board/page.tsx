@@ -13,7 +13,9 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
+import { laneAveragesForBoard } from "@/lib/lane-average";
 import { orbcommMapPinFromReading } from "@/lib/fleet-map-shared";
 import {
   getDemoReeferForLoad,
@@ -182,6 +184,7 @@ async function BoardLiveSection({
   const failedDrivers = failedDrugTestDriverIds();
   const ooPercent = defaultOoPercent();
   const windows = complianceWindows();
+  const laneAvgs = laneAveragesForBoard(loads);
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
@@ -269,6 +272,7 @@ async function BoardLiveSection({
                         <div className="board-lane-line">{load.origin}</div>
                         <div className="board-lane-line text-slate-500">→ {load.destination}</div>
                       </div>
+                      <LaneAvgBadge compare={laneAvgs.get(load.id)} compact />
                     </td>
                     <td className="board-status-cell" data-board-status="">
                       <LoadStatusBadge status={load.status} />

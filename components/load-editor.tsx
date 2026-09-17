@@ -27,6 +27,8 @@ import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
 import { listDefaultedDocuments } from "@/lib/load-documents";
 import { RateConApply } from "@/components/rate-con-apply";
+import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
+import { laneAverageSnapshot } from "@/lib/lane-average";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
 import { updateLoadAction } from "@/lib/actions";
@@ -311,6 +313,14 @@ export async function LoadEditor({
                 driverName={assignedLoadName(load)}
                 driverType={load.driver_type}
                 defaultOoPercent={formSettings.defaultOoPercent}
+                laneAverage={laneAverageSnapshot({
+                  origin: load.origin,
+                  destination: load.destination,
+                  excludeLoadId: load.id,
+                  shipper_location_id: load.shipper_location_id,
+                  consignee_location_id: load.consignee_location_id,
+                })}
+                laneMiles={load.route_miles}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => assignedLoadName(driver))}
@@ -349,6 +359,7 @@ export async function LoadEditor({
             documents={listDefaultedDocuments(load.id)}
           />
           <AssignedFleetDocs driverId={load.driver_id} truckId={load.truck_id} trailerId={load.trailer_id} />
+          <RateConFinePrintScan loadId={load.id} attachments={attachments} />
           <RateConApply
             load={load}
             customers={customers}
