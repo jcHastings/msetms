@@ -53,6 +53,7 @@ export function LoadBasicsScreen({
   equipmentChoices = [],
   card = true,
   laneAverage = null,
+  laneMiles = null,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -62,6 +63,7 @@ export function LoadBasicsScreen({
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
   laneAverage?: LaneAverageSnapshot | null;
+  laneMiles?: number | null;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
   const [status, setStatus] = useState<string>(load?.status ?? "available");
@@ -162,7 +164,11 @@ export function LoadBasicsScreen({
         ) : null}
       </div>
       {!load || defaults.rate != null ? (
-        <LoadRateFields defaultsRate={defaults.rate ?? load?.rate ?? null} laneAverage={laneAverage} />
+        <LoadRateFields
+          defaultsRate={defaults.rate ?? load?.rate ?? null}
+          laneAverage={laneAverage}
+          miles={laneMiles}
+        />
       ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>

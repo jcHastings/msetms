@@ -317,6 +317,8 @@ export async function LoadEditor({
                   origin: load.origin,
                   destination: load.destination,
                   excludeLoadId: load.id,
+                  shipper_location_id: load.shipper_location_id,
+                  consignee_location_id: load.consignee_location_id,
                 })}
                 laneMiles={load.route_miles}
                 ownerOperators={drivers

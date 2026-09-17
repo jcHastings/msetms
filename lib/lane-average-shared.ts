@@ -1,7 +1,22 @@
-/** City/state lane key + compare. Client-safe. Fleet history only — no market APIs. */
+/** Lane avg compare. Client-safe. Fleet history only — no market APIs. */
+
+import { findCityCenter, haversineMiles } from "./city-coords-shared";
 
 export const LANE_AVG_FLAT_BAND = 75;
 export const LANE_AVG_PCT_BAND = 0.05;
+/** Pickup AND delivery must both sit inside this radius of the candidate. */
+export const LANE_AVG_RADIUS_MILES = 200;
+/** Below / At / Above only after this many fleet loads sit in the radius. */
+export const LANE_AVG_MIN_SAMPLES = 3;
+
+export type LaneLatLng = { lat: number; lng: number };
+export type LaneLocationHint = {
+  name?: string;
+  city: string;
+  state: string;
+  lat: number | null;
+  lng: number | null;
+};
 
 export type LaneAverageSnapshot = {
   key: string;
@@ -66,6 +81,57 @@ export function laneLabel(origin: string, destination: string): string {
   return `${from} → ${to}`;
 }
 
+export function resolveLanePoint(
+  raw: string,
+  locations: LaneLocationHint[] = [],
+): LaneLatLng | null {
+  const found = findCityCenter(String(raw ?? ""), locations);
+  if (!found) return null;
+  return { lat: found.lat, lng: found.lng };
+}
+
+export function laneEndMiles(a: LaneLatLng, b: LaneLatLng): number {
+  return haversineMiles(a.lat, a.lng, b.lat, b.lng);
+}
+
+/** True only when pickup AND delivery are each within the radius. */
+export function laneEndsWithinRadius(
+  candidatePu: LaneLatLng,
+  candidateDel: LaneLatLng,
+  historyPu: LaneLatLng,
+  historyDel: LaneLatLng,
+  radius = LANE_AVG_RADIUS_MILES,
+): boolean {
+  return (
+    laneEndMiles(candidatePu, historyPu) <= radius && laneEndMiles(candidateDel, historyDel) <= radius
+  );
+}
+
+export function laneAvgShouldShow(compare: LaneAvgCompare | null | undefined): boolean {
+  return Boolean(
+    compare?.key &&
+      compare.sampleSize >= LANE_AVG_MIN_SAMPLES &&
+      compare.avgRate != null,
+  );
+}
+
+/** Printed trip miles on an RC — do not invent from haversine. */
+export function parsePrintedLaneMiles(text: string): number | null {
+  const raw = String(text ?? "").replace(/\s+/g, " ");
+  if (!raw) return null;
+  const patterns = [
+    /\b(?:total|loaded|trip)?\s*(?:miles|mileage)\s*[:=]\s*(\d{1,5}(?:,\d{3})?(?:\.\d{1,2})?)\b/i,
+    /\b(\d{1,5}(?:,\d{3})?(?:\.\d{1,2})?)\s*(?:loaded\s+)?miles\b/i,
+  ];
+  for (const re of patterns) {
+    const match = re.exec(raw);
+    if (!match) continue;
+    const value = Number(String(match[1]).replace(/,/g, ""));
+    if (Number.isFinite(value) && value >= 10 && value <= 5000) return value;
+  }
+  return null;
+}
+
 export function emptyLaneAverage(): LaneAverageSnapshot {
   return { key: "", label: "", sampleSize: 0, avgRate: null, avgPerMile: null };
 }
@@ -95,7 +161,7 @@ export function compareLaneAverage(
   if (!snapshot?.key) {
     return { ...emptyLaneCompare(), rate: live, perMile };
   }
-  if (snapshot.sampleSize < 1 || snapshot.avgRate == null) {
+  if (snapshot.sampleSize < LANE_AVG_MIN_SAMPLES || snapshot.avgRate == null) {
     return {
       ...snapshot,
       band: "none",
@@ -129,9 +195,8 @@ export function laneAvgHeadline(compare: LaneAvgCompare): string {
   if (compare.band === "below") return "Below your lane avg";
   if (compare.band === "above") return "Above your lane avg";
   if (compare.band === "at") return "At your lane avg";
-  if (compare.key && compare.sampleSize < 1) return "No lane history yet";
-  if (compare.sampleSize > 0 && compare.avgRate != null) return "Your lane avg";
-  return "";
+  if (compare.sampleSize >= LANE_AVG_MIN_SAMPLES && compare.avgRate != null) return "Your lane avg";
+  return "not enough lane history";
 }
 
 export function formatLanePerMile(value: number | null | undefined): string {

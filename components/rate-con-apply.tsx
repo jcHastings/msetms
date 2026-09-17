@@ -121,6 +121,7 @@ export function RateConApply({
           load={load}
           finePrint={"finePrint" in state ? state.finePrint : []}
           laneAverage={"laneAverage" in state ? state.laneAverage : null}
+          laneMiles={"laneMiles" in state ? state.laneMiles : null}
           customers={customers}
           trucks={trucks}
           trailers={trailers}
@@ -140,6 +141,7 @@ function RateConAppliedLoad({
   load,
   finePrint,
   laneAverage,
+  laneMiles,
   customers,
   trucks,
   trailers,
@@ -153,6 +155,7 @@ function RateConAppliedLoad({
   load: Load;
   finePrint: FinePrintHit[];
   laneAverage: LaneAverageSnapshot | null;
+  laneMiles: number | null;
   customers: Customer[];
   trucks: Truck[];
   trailers: Trailer[];
@@ -183,7 +186,7 @@ function RateConAppliedLoad({
     <div data-rate-con-draft="">
       <RateConFieldFlags parsed={parsed} />
       <RateConNeedsReviewNote parsed={parsed} />
-      <LaneAvgBadge compare={compareLaneAverage(parsed.rate ?? load.rate, laneAverage, load.route_miles)} />
+      <LaneAvgBadge compare={compareLaneAverage(parsed.rate ?? load.rate, laneAverage, laneMiles ?? load.route_miles)} />
       {parsed.raw_text || finePrint.length ? <RateConFinePrint hits={finePrint} /> : null}
       {book.review}
       <LoadForm
@@ -197,6 +200,7 @@ function RateConAppliedLoad({
         locations={book.book}
         drivers={drivers}
         laneAverage={laneAverage}
+        laneMiles={laneMiles ?? load.route_miles}
         load={{
           ...load,
           origin: parsed.origin || load.origin,

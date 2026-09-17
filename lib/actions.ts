@@ -727,6 +727,7 @@ export type RateConParseState = {
   parsed: import("./rate-con-shared").ParsedRateCon;
   finePrint: import("./rate-con-fine-print-shared").FinePrintHit[];
   laneAverage: import("./lane-average-shared").LaneAverageSnapshot | null;
+  laneMiles: number | null;
 } | ActionResult;
 
 export type FinePrintScanState = {
@@ -795,6 +796,7 @@ export async function parseRateConAction(
         parsed,
         finePrint: [],
         laneAverage: null,
+        laneMiles: null,
       };
     }
     const customers = listCustomers();
@@ -828,6 +830,7 @@ export async function parseRateConAction(
     writeInboxParse(inboxId, parsed);
     const { scanRateConFinePrint } = await import("./rate-con-fine-print-shared");
     const { cityStateFromStop } = await import("./rate-con-shared");
+    const { parsePrintedLaneMiles } = await import("./lane-average-shared");
     const { laneAverageSnapshot } = await import("./lane-average");
     const origin = parsed.origin || cityStateFromStop(parsed.shipper);
     const destination = parsed.destination || cityStateFromStop(parsed.consignee);
@@ -842,7 +845,10 @@ export async function parseRateConAction(
         origin,
         destination,
         excludeLoadId: Number(formData.get("exclude_load_id")) || null,
+        shipper_location_id: parsed.shipper_location_id,
+        consignee_location_id: parsed.consignee_location_id,
       }),
+      laneMiles: parsePrintedLaneMiles(parsed.raw_text || text),
     };
   } catch (error) {
     return fail(error);

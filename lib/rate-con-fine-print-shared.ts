@@ -33,7 +33,7 @@ const RULES: Array<{ kind: FinePrintKind; label: string; re: RegExp }> = [
   {
     kind: "lumper",
     label: "Lumper",
-    re: /\blumper\b|\bdriver (to )?(pay|unload)\b|\bunload(ing)? (fee|at (the )?driver|responsibility)\b/i,
+    re: /\blumper\b|\bunload(?:ing)? (?:fee|charge)\b|\bunload(?:ing)? at (?:the )?driver'?s? (?:expense|responsibility)\b/i,
   },
   {
     kind: "late_fee",
@@ -43,7 +43,7 @@ const RULES: Array<{ kind: FinePrintKind; label: string; re: RegExp }> = [
   {
     kind: "penalty",
     label: "Money penalty",
-    re: /\b(chargebacks?|fine of|penalty of|\$\s?\d[\d,]*(?:\.\d{2})?\s*(fine|penalty))\b/i,
+    re: /\b(?:fine of|penalty of|chargebacks? (?:for|on) (?:cargo|claim|claims|damage)|cargo (?:claim )?chargebacks?|\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:fine|penalty))\b/i,
   },
 ];
 

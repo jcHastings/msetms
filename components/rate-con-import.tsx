@@ -124,6 +124,7 @@ export function RateConImport({
           warning={state.warning}
           finePrint={"finePrint" in state ? state.finePrint : []}
           laneAverage={"laneAverage" in state ? state.laneAverage : null}
+          laneMiles={"laneMiles" in state ? state.laneMiles : null}
           customers={customers}
           trucks={trucks}
           trailers={trailers}
@@ -145,6 +146,7 @@ function RateConImportedLoad({
   warning,
   finePrint,
   laneAverage,
+  laneMiles,
   customers,
   trucks,
   trailers,
@@ -158,6 +160,7 @@ function RateConImportedLoad({
   warning?: string;
   finePrint: FinePrintHit[];
   laneAverage: LaneAverageSnapshot | null;
+  laneMiles: number | null;
   customers: Customer[];
   trucks: Truck[];
   trailers: Trailer[];
@@ -190,7 +193,7 @@ function RateConImportedLoad({
       ) : null}
       <RateConFieldFlags parsed={parsed} />
       <RateConNeedsReviewNote parsed={parsed} />
-      <LaneAvgBadge compare={compareLaneAverage(parsed.rate, laneAverage)} />
+      <LaneAvgBadge compare={compareLaneAverage(parsed.rate, laneAverage, laneMiles)} />
       {parsed.raw_text || finePrint.length ? <RateConFinePrint hits={finePrint} /> : null}
       {book.review}
       <LoadForm
@@ -205,6 +208,7 @@ function RateConImportedLoad({
         drivers={drivers}
         inboxId={inboxId}
         laneAverage={laneAverage}
+        laneMiles={laneMiles}
         defaults={{
           ...book.defaults,
           ...rateConApplyContactFields(parsed),

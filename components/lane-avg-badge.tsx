@@ -2,6 +2,7 @@ import { formatMoney } from "@/lib/format";
 import {
   formatLanePerMile,
   laneAvgHeadline,
+  laneAvgShouldShow,
   type LaneAvgCompare,
 } from "@/lib/lane-average-shared";
 
@@ -19,17 +20,18 @@ export function LaneAvgBadge({
   compare: LaneAvgCompare | null | undefined;
   compact?: boolean;
 }) {
-  if (!compare?.key) return null;
+  if (!laneAvgShouldShow(compare)) return null;
   const headline = laneAvgHeadline(compare);
-  if (!headline) return null;
+  if (!headline || headline === "not enough lane history") return null;
   const avg = compare.avgRate != null ? formatMoney(compare.avgRate) : "";
   const perMile = formatLanePerMile(compare.perMile ?? compare.avgPerMile);
   const samples =
     compare.sampleSize > 0 ? `${compare.sampleSize} load${compare.sampleSize === 1 ? "" : "s"}` : "";
-  const detail = [avg ? `${avg} avg` : "", perMile, samples].filter(Boolean).join(" · ");
+  const detail = ["200-mi radius", avg ? `${avg} avg` : "", perMile, samples].filter(Boolean).join(" · ");
   if (compact) {
     const short =
-      compare.band === "below" ? "Below" : compare.band === "above" ? "Above" : compare.band === "at" ? "At" : "No hist";
+      compare.band === "below" ? "Below" : compare.band === "above" ? "Above" : compare.band === "at" ? "At" : "";
+    if (!short) return null;
     return (
       <div className="mt-0.5 leading-tight" data-lane-avg="" data-lane-avg-band={compare.band} data-lane-avg-compact="">
         <span className={`status-pill ${TONE[compare.band]}`}>{short} avg</span>

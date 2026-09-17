@@ -5784,6 +5784,28 @@ Email: nophone@broker.example
   assert.match(laneAvgCopy, /Below your lane avg/);
   assert.match(laneAvgCopy, /At your lane avg/);
   assert.match(laneAvgCopy, /Above your lane avg/);
+  assert.match(laneAvgCopy, /LANE_AVG_RADIUS_MILES = 200/);
+  assert.match(laneAvgCopy, /LANE_AVG_MIN_SAMPLES = 3/);
+  assert.match(laneAvgCopy, /parsePrintedLaneMiles/);
+  assert.match(laneAvgCopy, /not enough lane history/);
+  assert.match(laneAvgCopy, /laneEndsWithinRadius/);
+  assert.match(laneAvgUi, /200-mi radius/);
+  const laneAvgServer = fs.readFileSync(path.join(process.cwd(), "lib/lane-average.ts"), "utf8");
+  assert.match(laneAvgServer, /laneEndsWithinRadius/);
+  assert.match(laneAvgServer, /getResolvedFleetLaneRates/);
+  assert.match(laneAvgServer, /laneAveragesForBoard/);
+  assert.doesNotMatch(laneAvgServer, /laneKey\(row\.origin, row\.destination\) === key/);
+  const boardLaneAvg = fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8");
+  assert.match(boardLaneAvg, /laneAveragesForBoard/);
+  assert.doesNotMatch(boardLaneAvg, /listFleetLaneRates/);
+  assert.doesNotMatch(boardLaneAvg, /laneAveragesForLoads/);
+  const rateConImportMiles = fs.readFileSync(path.join(process.cwd(), "components/rate-con-import.tsx"), "utf8");
+  assert.match(rateConImportMiles, /compareLaneAverage\(parsed\.rate, laneAverage, laneMiles\)/);
+  assert.match(rateConImportMiles, /laneMiles=\{laneMiles\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /parsePrintedLaneMiles/);
+  const lumperRule = fs.readFileSync(path.join(process.cwd(), "lib/rate-con-fine-print-shared.ts"), "utf8");
+  assert.doesNotMatch(lumperRule, /driver \(to \)\?\(pay\|unload\)/);
+  assert.doesNotMatch(lumperRule, /chargebacks\?\|fine of/);
   const finePrintUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-fine-print.tsx"), "utf8");
   assert.match(finePrintUi, /review before you book/i);
   assert.match(finePrintUi, /Does not block confirm/);
@@ -19337,134 +19359,141 @@ parked for next week
 
   const {
     compareLaneAverage,
+    LANE_AVG_MIN_SAMPLES,
+    LANE_AVG_RADIUS_MILES,
+    laneAvgShouldShow,
+    laneEndMiles,
+    laneEndsWithinRadius,
     laneKey,
     laneLabel,
     lanePointFromText,
+    parsePrintedLaneMiles,
+    resolveLanePoint,
   } = await import("../lib/lane-average-shared");
   const { scanRateConFinePrint } = await import("../lib/rate-con-fine-print-shared");
-  const { laneAverageForLoad, laneAverageSnapshot, laneAveragesForLoads } = await import("../lib/lane-average");
-  assert.equal(laneKey("Scottsbluff, NE", "Las Cruces, NM"), "scottsbluff|NE→las cruces|NM");
-  assert.equal(laneKey("100 Packer Rd, Scottsbluff, NE 69361", "Las Cruces, NM 88001"), "scottsbluff|NE→las cruces|NM");
-  assert.equal(laneKey("SCOTTSBLUFF NE", "LAS CRUCES NM"), "scottsbluff|NE→las cruces|NM");
+  const { laneAverageForLoad, laneAverageMatchIds, laneAverageSnapshot, laneAveragesForBoard } =
+    await import("../lib/lane-average");
+  assert.equal(LANE_AVG_RADIUS_MILES, 200);
+  assert.equal(LANE_AVG_MIN_SAMPLES, 3);
+  assert.equal(parsePrintedLaneMiles("Rate $2,400. Miles: 1,200. Weight 40,000"), 1200);
+  assert.equal(parsePrintedLaneMiles("Loaded 880 miles. Rate $1800."), 880);
+  assert.equal(parsePrintedLaneMiles("Rate $2400. Weight 40000 lbs."), null);
+  assert.equal(laneKey("Omaha, NE", "Dallas, TX"), "omaha|NE→dallas|TX");
   assert.equal(lanePointFromText("Kansas City, MO")?.city, "Kansas City");
-  assert.equal(laneLabel("scottsbluff, ne", "las cruces, nm"), "Scottsbluff, NE → Las Cruces, NM");
+  assert.equal(laneLabel("omaha, ne", "dallas, tx"), "Omaha, NE → Dallas, TX");
+  const omaha = resolveLanePoint("Omaha, NE");
+  const lincoln = resolveLanePoint("Lincoln, NE");
+  const dallas = resolveLanePoint("Dallas, TX");
+  const fortWorth = resolveLanePoint("Fort Worth, TX");
+  const houston = resolveLanePoint("Houston, TX");
+  const chicago = resolveLanePoint("Chicago, IL");
+  const phoenix = resolveLanePoint("Phoenix, AZ");
+  assert.ok(omaha && lincoln && dallas && fortWorth && houston && chicago && phoenix);
+  const omahaLincolnMi = laneEndMiles(omaha, lincoln);
+  const dallasFwMi = laneEndMiles(dallas, fortWorth);
+  const dallasHoustonMi = laneEndMiles(dallas, houston);
+  const omahaChicagoMi = laneEndMiles(omaha, chicago);
+  assert.ok(omahaLincolnMi < 200, `Lincoln is nearby Omaha (${omahaLincolnMi.toFixed(0)} mi)`);
+  assert.ok(dallasFwMi < 200, `Fort Worth is nearby Dallas (${dallasFwMi.toFixed(0)} mi)`);
+  assert.ok(dallasHoustonMi > 200, `Houston is outside Dallas 200-mi (${dallasHoustonMi.toFixed(0)} mi)`);
+  assert.ok(omahaChicagoMi > 200, `Chicago is outside Omaha 200-mi (${omahaChicagoMi.toFixed(0)} mi)`);
+  assert.equal(laneEndsWithinRadius(omaha, dallas, lincoln, fortWorth), true, "nearby city both ends counts");
+  assert.equal(laneEndsWithinRadius(omaha, dallas, omaha, dallas), true, "same cities count");
+  assert.equal(laneEndsWithinRadius(omaha, dallas, lincoln, houston), false, "far dest is out even if pickup is close");
+  assert.equal(laneEndsWithinRadius(omaha, dallas, chicago, fortWorth), false, "far pickup is out even if dest is close");
+  assert.equal(laneEndsWithinRadius(omaha, dallas, phoenix, houston), false, "far city both ends is out");
   const laneWindow = {
     pickup_start: pickup.toISOString(),
     pickup_end: pickupEnd.toISOString(),
     delivery_start: delivery.toISOString(),
     delivery_end: deliveryEnd.toISOString(),
   };
-  const laneHistA = queries.createLoad({
-    customer_id: customerId,
-    origin: "Scottsbluff, NE",
-    destination: "Las Cruces, NM",
-    ...laneWindow,
-    weight: 40000,
-    commodity: "Beef",
-    rate: 2400,
-    notes: "",
-    special_instructions: "",
-    appointment_notes: "",
-    reference_number: "",
-    po_number: "",
-    reefer_setpoint_f: null,
-    trailer_number: "",
-    status: "completed",
-    truck_id: null,
-    driver_id: null,
+  const dodge = resolveLanePoint("Dodge City, KS");
+  const holcomb = resolveLanePoint("Holcomb, KS");
+  const cedarRapids = resolveLanePoint("Cedar Rapids, IA");
+  const davenport = resolveLanePoint("Davenport, IA");
+  assert.ok(dodge && holcomb && cedarRapids && davenport);
+  assert.ok(laneEndMiles(dodge, holcomb) < 200, "Holcomb is inside Dodge City 200-mi");
+  assert.ok(laneEndMiles(cedarRapids, davenport) < 200, "Davenport is inside Cedar Rapids 200-mi");
+  assert.ok(laneEndMiles(cedarRapids, houston) > 200, "Houston is outside Cedar Rapids 200-mi");
+  assert.ok(laneEndMiles(dodge, chicago) > 200, "Chicago is outside Dodge City 200-mi");
+  const laneHist = (
+    origin: string,
+    destination: string,
+    rate: number,
+    status: "completed" | "delivered" | "cancelled" | "available" = "completed",
+    extra: { shipper_location_id?: number } = {},
+  ) =>
+    queries.createLoad({
+      customer_id: customerId,
+      origin,
+      destination,
+      ...laneWindow,
+      weight: 40000,
+      commodity: "Beef",
+      rate,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status,
+      truck_id: null,
+      driver_id: null,
+      ...extra,
+    });
+  const nearbyHist = laneHist("Holcomb, KS", "Davenport, IA", 2400);
+  const oneSample = laneAverageSnapshot({
+    origin: "Dodge City, KS",
+    destination: "Cedar Rapids, IA",
   });
-  const laneHistB = queries.createLoad({
-    customer_id: customerId,
-    origin: "Scottsbluff, NE 69361",
-    destination: "Las Cruces, NM",
-    ...laneWindow,
-    weight: 40000,
-    commodity: "Beef",
-    rate: 2000,
-    notes: "",
-    special_instructions: "",
-    appointment_notes: "",
-    reference_number: "",
-    po_number: "",
-    reefer_setpoint_f: null,
-    trailer_number: "",
-    status: "delivered",
-    truck_id: null,
-    driver_id: null,
+  assert.equal(oneSample?.sampleSize, 1);
+  assert.equal(laneAvgShouldShow(compareLaneAverage(1800, oneSample, 1200)), false, "do not badge on n=1");
+  assert.equal(compareLaneAverage(1800, oneSample).band, "none");
+  const exactHist = laneHist("Dodge City, KS", "Cedar Rapids, IA", 2000, "delivered");
+  const twoSample = laneAverageSnapshot({
+    origin: "Dodge City, KS",
+    destination: "Cedar Rapids, IA",
   });
-  const laneCancelled = queries.createLoad({
-    customer_id: customerId,
-    origin: "Scottsbluff, NE",
-    destination: "Las Cruces, NM",
-    ...laneWindow,
-    weight: 40000,
-    commodity: "Beef",
-    rate: 900,
-    notes: "",
-    special_instructions: "",
-    appointment_notes: "",
-    reference_number: "",
-    po_number: "",
-    reefer_setpoint_f: null,
-    trailer_number: "",
-    status: "cancelled",
-    truck_id: null,
-    driver_id: null,
-  });
-  const otherLane = queries.createLoad({
-    customer_id: customerId,
-    origin: "Kodiak, AK",
-    destination: "Hilo, HI",
-    ...laneWindow,
-    weight: 40000,
-    commodity: "Beef",
-    rate: 5000,
-    notes: "",
-    special_instructions: "",
-    appointment_notes: "",
-    reference_number: "",
-    po_number: "",
-    reefer_setpoint_f: null,
-    trailer_number: "",
-    status: "completed",
-    truck_id: null,
-    driver_id: null,
-  });
-  getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id IN (?, ?)").run(laneHistA, laneHistB);
-  const liveLane = queries.createLoad({
-    customer_id: customerId,
-    origin: "Scottsbluff, NE",
-    destination: "Las Cruces, NM",
-    ...laneWindow,
-    weight: 40000,
-    commodity: "Beef",
-    rate: 1800,
-    notes: "",
-    special_instructions: "",
-    appointment_notes: "",
-    reference_number: "",
-    po_number: "",
-    reefer_setpoint_f: null,
-    trailer_number: "",
-    status: "available",
-    truck_id: null,
-    driver_id: null,
-  });
+  assert.equal(twoSample?.sampleSize, 2);
+  assert.equal(laneAvgShouldShow(compareLaneAverage(1800, twoSample)), false, "n=2 is still below min samples");
+  const thirdHist = laneHist("Dodge City, KS", "Davenport, IA", 2200);
+  const farDestHist = laneHist("Holcomb, KS", "Houston, TX", 5000);
+  const farPickupHist = laneHist("Chicago, IL", "Davenport, IA", 5100);
+  const farBothHist = laneHist("Phoenix, AZ", "Houston, TX", 5200);
+  const laneCancelled = laneHist("Holcomb, KS", "Cedar Rapids, IA", 900, "cancelled");
+  getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id IN (?, ?, ?)").run(nearbyHist, exactHist, thirdHist);
+  const liveLane = laneHist("Dodge City, KS", "Cedar Rapids, IA", 1800, "available");
   getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id = ?").run(liveLane);
   const laneSnap = laneAverageSnapshot({
-    origin: "Scottsbluff, NE",
-    destination: "Las Cruces, NM",
+    origin: "Dodge City, KS",
+    destination: "Cedar Rapids, IA",
     excludeLoadId: liveLane,
   });
   assert.ok(laneSnap);
-  assert.equal(laneSnap.key, "scottsbluff|NE→las cruces|NM");
-  assert.equal(laneSnap.sampleSize, 2, "cancelled and other lanes stay out");
+  assert.equal(laneSnap.sampleSize, 3, "nearby + exact + third in; far dest/PU/both out; cancelled out");
   assert.equal(laneSnap.avgRate, 2200);
   assert.equal(laneSnap.avgPerMile, 1.83);
+  const matchIds = laneAverageMatchIds({
+    origin: "Dodge City, KS",
+    destination: "Cedar Rapids, IA",
+    excludeLoadId: liveLane,
+  });
+  assert.ok(matchIds?.includes(nearbyHist), "Holcomb→Davenport is inside 200-mi both ends");
+  assert.ok(matchIds?.includes(exactHist), "exact Dodge→Cedar counts");
+  assert.ok(matchIds?.includes(thirdHist), "Dodge→Davenport dest is inside Cedar Rapids 200-mi");
+  assert.equal(matchIds?.includes(farDestHist), false, "far dest is out even if PU were close");
+  assert.equal(matchIds?.includes(farPickupHist), false, "far PU is out even if dest were close");
+  assert.equal(matchIds?.includes(farBothHist), false, "far both ends is out");
+  assert.equal(matchIds?.includes(laneCancelled), false, "cancelled never joins the history pool");
+  assert.equal(matchIds?.includes(liveLane), false);
   const below = laneAverageForLoad(queries.getLoad(liveLane)!);
   assert.equal(below.band, "below");
-  assert.equal(below.sampleSize, 2);
+  assert.equal(below.sampleSize, 3);
   assert.match(String(below.perMile), /1\.5/);
+  assert.equal(laneAvgShouldShow(below), true);
   const atRate = compareLaneAverage(2180, laneSnap, 1200);
   assert.equal(atRate.band, "at");
   const above = compareLaneAverage(2800, laneSnap);
@@ -19472,14 +19501,55 @@ parked for next week
   const none = compareLaneAverage(1800, laneAverageSnapshot({ origin: "Boise, ID", destination: "Reno, NV" }));
   assert.equal(none.band, "none");
   assert.equal(none.sampleSize, 0);
-  const boardMap = laneAveragesForLoads([
+  assert.equal(laneAvgShouldShow(none), false, "empty / ungeocoded set hides the badge");
+  const lonely = compareLaneAverage(
+    1800,
+    laneAverageSnapshot({ origin: "Minneapolis, MN", destination: "Detroit, MI" }),
+  );
+  assert.equal(lonely.sampleSize, 0, "geocoded city with no radius history is empty");
+  assert.equal(laneAvgShouldShow(lonely), false);
+  const boardMap = laneAveragesForBoard([
     queries.getLoad(liveLane)!,
-    queries.getLoad(otherLane)!,
+    queries.getLoad(farBothHist)!,
     queries.getLoad(laneCancelled)!,
   ]);
   assert.equal(boardMap.get(liveLane)?.band, "below");
-  assert.equal(boardMap.get(otherLane)?.sampleSize, 0);
-  assert.equal(boardMap.get(laneCancelled)?.sampleSize, 3, "cancelled row still sees the live lane history");
+  assert.equal(boardMap.get(farBothHist)?.sampleSize, 0, "Phoenix→Houston is outside the Dodge→Cedar 200-mi radius");
+  assert.equal(
+    boardMap.get(laneCancelled)?.sampleSize,
+    4,
+    "cancelled Holcomb→Cedar still sees live + nearby + exact + third",
+  );
+  const cimarronYard = queries.createLocation({
+    name: "Cimarron Yard",
+    street: "100 County Rd",
+    city: "Cimarron",
+    state: "KS",
+    zip: "67835",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 37.8067,
+    longitude: -100.3482,
+  });
+  const storedPickup = laneHist("Cimarron, KS", "Davenport, IA", 2100, "completed", {
+    shipper_location_id: cimarronYard,
+  });
+  getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id = ?").run(storedPickup);
+  const afterStored = laneAverageSnapshot({
+    origin: "Dodge City, KS",
+    destination: "Cedar Rapids, IA",
+    excludeLoadId: liveLane,
+  });
+  assert.equal(
+    afterStored?.sampleSize,
+    4,
+    "Cimarron stored lat/lng is inside Dodge 200-mi even though Cimarron is not a catalog city",
+  );
+  assert.ok(queries.getLoad(storedPickup));
 
   const fineHits = scanRateConFinePrint(`
     Carrier freight $2,400. Detention $75/hr after 2 hours free time.
@@ -19497,11 +19567,18 @@ parked for next week
   assert.match(fineHits.find((hit) => hit.kind === "tonu")?.snippet ?? "", /TONU \$250/);
   const cleanHits = scanRateConFinePrint("Allen Lund Company. Pickup Hastings NE. Deliver El Paso TX. Rate $2400.");
   assert.equal(cleanHits.length, 0);
+  const lumperFalse = scanRateConFinePrint(
+    "Driver will unload at the dock. Driver pay is via settlement. Rate $2400.",
+  );
+  assert.equal(lumperFalse.some((hit) => hit.kind === "lumper"), false, "bare driver unload/pay is not lumper");
+  assert.equal(lumperFalse.some((hit) => hit.kind === "penalty"), false, "a dollar rate is not a penalty");
+  const chargebackFalse = scanRateConFinePrint("Chargebacks apply to all invoices.");
+  assert.equal(chargebackFalse.some((hit) => hit.kind === "penalty"), false, "bare chargeback is not a penalty");
   const fineForm = new FormData();
   fineForm.set(
     "rate_con",
     new File(
-      ["Detention $60/hr after free time. TONU $200. Carrier pays lumper. Late fee $80."],
+      ["Detention $60/hr after free time. TONU $200. Carrier pays lumper. Late fee $80. Miles: 1200."],
       "money-terms.txt",
       { type: "text/plain" },
     ),
@@ -19513,6 +19590,7 @@ parked for next week
     assert.ok(fineExtract.finePrint.some((hit) => hit.kind === "tonu"));
     assert.ok(fineExtract.finePrint.some((hit) => hit.kind === "lumper"));
     assert.ok("laneAverage" in fineExtract);
+    assert.equal(fineExtract.laneMiles, 1200, "import draft gets printed miles for $/mi");
   }
 
   closeDb();

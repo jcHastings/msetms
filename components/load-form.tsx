@@ -42,6 +42,7 @@ type Props = {
   screen?: LoadFormScreen;
   includeLane?: boolean;
   laneAverage?: LaneAverageSnapshot | null;
+  laneMiles?: number | null;
 };
 
 export function LoadForm({
@@ -67,6 +68,7 @@ export function LoadForm({
   screen,
   includeLane = false,
   laneAverage = null,
+  laneMiles = null,
 }: Props) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -148,6 +150,7 @@ export function LoadForm({
           equipmentChoices={equipmentChoices}
           card={card}
           laneAverage={laneAverage}
+          laneMiles={laneMiles}
         />
         {liveOoPercent != null ? <input type="hidden" name="oo_percent" value={String(liveOoPercent)} /> : null}
       </div>

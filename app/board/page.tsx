@@ -15,7 +15,7 @@ import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
-import { laneAveragesForLoads } from "@/lib/lane-average";
+import { laneAveragesForBoard } from "@/lib/lane-average";
 import { orbcommMapPinFromReading } from "@/lib/fleet-map-shared";
 import {
   getDemoReeferForLoad,
@@ -184,7 +184,7 @@ async function BoardLiveSection({
   const failedDrivers = failedDrugTestDriverIds();
   const ooPercent = defaultOoPercent();
   const windows = complianceWindows();
-  const laneAvgs = laneAveragesForLoads(loads);
+  const laneAvgs = laneAveragesForBoard(loads);
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
