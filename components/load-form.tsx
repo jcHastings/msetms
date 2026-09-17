@@ -9,6 +9,7 @@ import { LoadCustomerScreen } from "@/components/load-customer-screen";
 import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import type { LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
 import type { LoadRelayView } from "@/lib/relays";
 import { isOwnerOperator, type ActionResult, type Customer, type DriverWithTruck, type Load, type Location, type Trailer, type Truck } from "@/lib/types";
@@ -40,6 +41,7 @@ type Props = {
   standalone?: boolean;
   screen?: LoadFormScreen;
   includeLane?: boolean;
+  laneAverage?: LaneAverageSnapshot | null;
 };
 
 export function LoadForm({
@@ -64,6 +66,7 @@ export function LoadForm({
   standalone = false,
   screen,
   includeLane = false,
+  laneAverage = null,
 }: Props) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -144,6 +147,7 @@ export function LoadForm({
           weightUnit={weightUnit}
           equipmentChoices={equipmentChoices}
           card={card}
+          laneAverage={laneAverage}
         />
         {liveOoPercent != null ? <input type="hidden" name="oo_percent" value={String(liveOoPercent)} /> : null}
       </div>

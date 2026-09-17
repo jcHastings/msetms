@@ -3,11 +3,15 @@
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadForm } from "@/components/load-form";
+import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { extractRateConFormData, RateConPicker } from "@/components/rate-con-picker";
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
+import { RateConFinePrint } from "@/components/rate-con-fine-print";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
 import { parseRateConAction, createLoadAction } from "@/lib/actions";
+import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
+import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
 import type { Customer, DriverWithTruck, Location, Trailer, Truck } from "@/lib/types";
 
@@ -118,6 +122,8 @@ export function RateConImport({
           inboxId={state.inboxId}
           fileName={state.fileName}
           warning={state.warning}
+          finePrint={"finePrint" in state ? state.finePrint : []}
+          laneAverage={"laneAverage" in state ? state.laneAverage : null}
           customers={customers}
           trucks={trucks}
           trailers={trailers}
@@ -137,6 +143,8 @@ function RateConImportedLoad({
   inboxId,
   fileName,
   warning,
+  finePrint,
+  laneAverage,
   customers,
   trucks,
   trailers,
@@ -148,6 +156,8 @@ function RateConImportedLoad({
   inboxId: string;
   fileName: string;
   warning?: string;
+  finePrint: FinePrintHit[];
+  laneAverage: LaneAverageSnapshot | null;
   customers: Customer[];
   trucks: Truck[];
   trailers: Trailer[];
@@ -180,6 +190,8 @@ function RateConImportedLoad({
       ) : null}
       <RateConFieldFlags parsed={parsed} />
       <RateConNeedsReviewNote parsed={parsed} />
+      <LaneAvgBadge compare={compareLaneAverage(parsed.rate, laneAverage)} />
+      {parsed.raw_text || finePrint.length ? <RateConFinePrint hits={finePrint} /> : null}
       {book.review}
       <LoadForm
         key={book.formKey}
@@ -192,6 +204,7 @@ function RateConImportedLoad({
         locations={book.book}
         drivers={drivers}
         inboxId={inboxId}
+        laneAverage={laneAverage}
         defaults={{
           ...book.defaults,
           ...rateConApplyContactFields(parsed),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LoadRateFields } from "@/components/load-rate-fields";
+import type { LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { LOAD_SIZES, truckStatusOptions } from "@/lib/load-page-shared";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { REEFER_MODES } from "@/lib/reefer-shared";
@@ -51,6 +52,7 @@ export function LoadBasicsScreen({
   weightUnit = "lb",
   equipmentChoices = [],
   card = true,
+  laneAverage = null,
 }: {
   load?: Load;
   defaults?: LoadFormDefaults;
@@ -59,6 +61,7 @@ export function LoadBasicsScreen({
   weightUnit?: string;
   equipmentChoices?: Array<{ value: string; label: string }>;
   card?: boolean;
+  laneAverage?: LaneAverageSnapshot | null;
 }) {
   const { handleAssign, blurPersist } = useLoadAssignPersist(load?.id);
   const [status, setStatus] = useState<string>(load?.status ?? "available");
@@ -159,7 +162,11 @@ export function LoadBasicsScreen({
         ) : null}
       </div>
       {!load || defaults.rate != null ? (
-        <LoadRateFields defaultsRate={defaults.rate ?? load?.rate ?? null} />
+        <LoadRateFields
+          defaultsRate={defaults.rate ?? load?.rate ?? null}
+          laneAverage={laneAverage}
+          miles={load?.route_miles ?? null}
+        />
       ) : null}
       <div className="field">
         <label htmlFor="weight">Weight ({weightUnit})</label>

@@ -725,6 +725,14 @@ export type RateConParseState = {
   fileName: string;
   warning?: string;
   parsed: import("./rate-con-shared").ParsedRateCon;
+  finePrint: import("./rate-con-fine-print-shared").FinePrintHit[];
+  laneAverage: import("./lane-average-shared").LaneAverageSnapshot | null;
+} | ActionResult;
+
+export type FinePrintScanState = {
+  ok: true;
+  hits: import("./rate-con-fine-print-shared").FinePrintHit[];
+  fileName: string;
 } | ActionResult;
 
 export async function parseRateConAction(
@@ -785,6 +793,8 @@ export async function parseRateConAction(
         fileName: file.name,
         warning: warning || "Couldn't read text from this PDF",
         parsed,
+        finePrint: [],
+        laneAverage: null,
       };
     }
     const customers = listCustomers();
@@ -816,12 +826,62 @@ export async function parseRateConAction(
         "Read the file, but almost no load fields were in the text. Finish the form by hand — the original file stays attached. Nothing was saved.";
     }
     writeInboxParse(inboxId, parsed);
+    const { scanRateConFinePrint } = await import("./rate-con-fine-print-shared");
+    const { cityStateFromStop } = await import("./rate-con-shared");
+    const { laneAverageSnapshot } = await import("./lane-average");
+    const origin = parsed.origin || cityStateFromStop(parsed.shipper);
+    const destination = parsed.destination || cityStateFromStop(parsed.consignee);
     return {
       ok: true,
       inboxId,
       fileName: file.name,
       warning: warning || undefined,
       parsed,
+      finePrint: scanRateConFinePrint(parsed.raw_text),
+      laneAverage: laneAverageSnapshot({
+        origin,
+        destination,
+        excludeLoadId: Number(formData.get("exclude_load_id")) || null,
+      }),
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function scanAttachedRateConAction(
+  _prev: FinePrintScanState | null,
+  formData: FormData,
+): Promise<FinePrintScanState> {
+  try {
+    await requireLoadEditor();
+    const loadId = Number(formData.get("load_id"));
+    const attachmentId = Number(formData.get("attachment_id"));
+    const { getAttachment, getAttachmentPath } = await import("./files");
+    const { scanRateConFinePrint } = await import("./rate-con-fine-print-shared");
+    const attachment = getAttachment(attachmentId);
+    if (!attachment || attachment.load_id !== loadId) {
+      throw new Error("Rate con not found on this load.");
+    }
+    if (attachment.kind !== "rate_con") {
+      throw new Error("Pick a rate confirmation.");
+    }
+    const stored = getAttachmentPath(attachment);
+    const fs = await import("node:fs");
+    if (!fs.existsSync(stored)) {
+      throw new Error("File is missing.");
+    }
+    const buffer = fs.readFileSync(stored);
+    const { extractDocumentText } = await import("./rate-con");
+    const text = await extractDocumentText(
+      buffer,
+      attachment.mime_type || "",
+      attachment.original_name,
+    );
+    return {
+      ok: true,
+      hits: scanRateConFinePrint(text),
+      fileName: attachment.original_name,
     };
   } catch (error) {
     return fail(error);

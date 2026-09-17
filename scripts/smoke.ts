@@ -2509,6 +2509,9 @@ async function main() {
     "components/rate-con-apply.tsx",
     "components/rate-con-location-review.tsx",
     "components/rate-con-review.tsx",
+    "components/rate-con-fine-print.tsx",
+    "components/rate-con-fine-print-scan.tsx",
+    "components/lane-avg-badge.tsx",
     "components/load-form.tsx",
     "components/load-basics-screen.tsx",
     "components/load-rate-fields.tsx",
@@ -2517,6 +2520,8 @@ async function main() {
     "components/load-carrier-screen.tsx",
     "components/load-lane-fields.tsx",
     "lib/rate-con-shared.ts",
+    "lib/lane-average-shared.ts",
+    "lib/rate-con-fine-print-shared.ts",
     "lib/reefer-shared.ts",
     "components/make-bol-button.tsx",
     "components/defaulted-documents.tsx",
@@ -2530,6 +2535,7 @@ async function main() {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con["']/, `${file} must not import server rate-con`);
     assert.doesNotMatch(source, /from ["']@\/lib\/rate-con-ai["']/, `${file} must not import server rate-con AI`);
+    assert.doesNotMatch(source, /from ["']@\/lib\/lane-average["']/, `${file} must not import server lane-average`);
     assert.doesNotMatch(source, /from ["']@\/lib\/(db|env|settings|places|bol)["']/, `${file} must stay client-safe`);
   }
   const bolFormSource = fs.readFileSync(path.join(process.cwd(), "components/make-bol-button.tsx"), "utf8");
@@ -5767,7 +5773,28 @@ Email: nophone@broker.example
   assert.match(rateConImportUi, /Discard draft/);
   assert.match(rateConImportUi, /data-rate-con-discard/);
   assert.match(rateConImportUi, /RateConFieldFlags/);
+  assert.match(rateConImportUi, /LaneAvgBadge/);
+  assert.match(rateConImportUi, /RateConFinePrint/);
   assert.doesNotMatch(rateConImportUi, /Liftgate|Inside Pickup|Inside Delivery/);
+  assert.doesNotMatch(rateConImportUi, /auto-reject|cannot book|blocked from confirm/i);
+  const laneAvgUi = fs.readFileSync(path.join(process.cwd(), "components/lane-avg-badge.tsx"), "utf8");
+  assert.match(laneAvgUi, /Below your lane avg/);
+  assert.match(laneAvgUi, /At your lane avg/);
+  assert.match(laneAvgUi, /Above your lane avg/);
+  assert.match(laneAvgUi, /data-lane-avg/);
+  const finePrintUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-fine-print.tsx"), "utf8");
+  assert.match(finePrintUi, /review before you book/i);
+  assert.match(finePrintUi, /Does not block confirm/);
+  assert.match(finePrintUi, /data-rate-con-fine-print/);
+  assert.doesNotMatch(finePrintUi, /reject this load|cannot confirm/i);
+  const finePrintScanUi = fs.readFileSync(path.join(process.cwd(), "components/rate-con-fine-print-scan.tsx"), "utf8");
+  assert.match(finePrintScanUi, /Scan RC fine print/);
+  assert.match(finePrintScanUi, /does not reject/i);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /RateConFinePrintScan/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/page.tsx"), "utf8"), /LaneAvgBadge/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /scanRateConFinePrint/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /laneAverageSnapshot/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /scanAttachedRateConAction/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /gpt-4o-mini|MIKE_OPENAI_MODEL/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /console\.log/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/rate-con-ai.ts"), "utf8"), /redactRateConSecrets/);
@@ -19304,6 +19331,186 @@ parked for next week
       false,
       "Bronx fixtures must not appear around Amarillo",
     );
+  }
+
+  const {
+    compareLaneAverage,
+    laneKey,
+    laneLabel,
+    lanePointFromText,
+  } = await import("../lib/lane-average-shared");
+  const { scanRateConFinePrint } = await import("../lib/rate-con-fine-print-shared");
+  const { laneAverageForLoad, laneAverageSnapshot, laneAveragesForLoads } = await import("../lib/lane-average");
+  assert.equal(laneKey("Hastings, NE", "El Paso, TX"), "hastings|NE→el paso|TX");
+  assert.equal(laneKey("100 Packer Rd, Hastings, NE 68901", "El Paso, TX 79901"), "hastings|NE→el paso|TX");
+  assert.equal(laneKey("HASTINGS NE", "EL PASO TX"), "hastings|NE→el paso|TX");
+  assert.equal(lanePointFromText("Kansas City, MO")?.city, "Kansas City");
+  assert.equal(laneLabel("hastings, ne", "el paso, tx"), "Hastings, NE → El Paso, TX");
+  const laneWindow = {
+    pickup_start: pickup.toISOString(),
+    pickup_end: pickupEnd.toISOString(),
+    delivery_start: delivery.toISOString(),
+    delivery_end: deliveryEnd.toISOString(),
+  };
+  const laneHistA = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    ...laneWindow,
+    weight: 40000,
+    commodity: "Beef",
+    rate: 2400,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "completed",
+    truck_id: null,
+    driver_id: null,
+  });
+  const laneHistB = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE 68901",
+    destination: "El Paso, TX",
+    ...laneWindow,
+    weight: 40000,
+    commodity: "Beef",
+    rate: 2000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  const laneCancelled = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    ...laneWindow,
+    weight: 40000,
+    commodity: "Beef",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "cancelled",
+    truck_id: null,
+    driver_id: null,
+  });
+  const otherLane = queries.createLoad({
+    customer_id: customerId,
+    origin: "Chicago, IL",
+    destination: "Dallas, TX",
+    ...laneWindow,
+    weight: 40000,
+    commodity: "Beef",
+    rate: 5000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "completed",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id IN (?, ?)").run(laneHistA, laneHistB);
+  const liveLane = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    ...laneWindow,
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+  });
+  getDb().prepare("UPDATE loads SET route_miles = 1200 WHERE id = ?").run(liveLane);
+  const laneSnap = laneAverageSnapshot({
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    excludeLoadId: liveLane,
+  });
+  assert.ok(laneSnap);
+  assert.equal(laneSnap.key, "hastings|NE→el paso|TX");
+  assert.equal(laneSnap.sampleSize, 2, "cancelled and other lanes stay out");
+  assert.equal(laneSnap.avgRate, 2200);
+  assert.equal(laneSnap.avgPerMile, 2200 / 1200);
+  const below = laneAverageForLoad(queries.getLoad(liveLane)!);
+  assert.equal(below.band, "below");
+  assert.equal(below.sampleSize, 2);
+  assert.match(String(below.perMile), /1\.5/);
+  const atRate = compareLaneAverage(2180, laneSnap, 1200);
+  assert.equal(atRate.band, "at");
+  const above = compareLaneAverage(2800, laneSnap);
+  assert.equal(above.band, "above");
+  const none = compareLaneAverage(1800, laneAverageSnapshot({ origin: "Boise, ID", destination: "Reno, NV" }));
+  assert.equal(none.band, "none");
+  assert.equal(none.sampleSize, 0);
+  const boardMap = laneAveragesForLoads([
+    queries.getLoad(liveLane)!,
+    queries.getLoad(otherLane)!,
+    queries.getLoad(laneCancelled)!,
+  ]);
+  assert.equal(boardMap.get(liveLane)?.band, "below");
+  assert.equal(boardMap.get(otherLane)?.sampleSize, 0);
+  assert.equal(boardMap.get(laneCancelled)?.sampleSize, 2);
+
+  const fineHits = scanRateConFinePrint(`
+    Carrier freight $2,400. Detention $75/hr after 2 hours free time.
+    TONU $250 if cancelled after dispatch. Layover $200 per night.
+    FourKites tracking required. Failure to update tracking is a $50 penalty.
+    Appointment window 0600-0800. Missed appointment fee $150.
+    Carrier pays lumper and submits receipt. Late fee $100 after 14:00.
+    Chargeback for cargo claims.
+  `);
+  assert.deepEqual(
+    fineHits.map((hit) => hit.kind),
+    ["detention", "tonu", "layover", "tracking", "appointment", "lumper", "late_fee", "penalty"],
+  );
+  assert.match(fineHits.find((hit) => hit.kind === "detention")?.snippet ?? "", /Detention \$75/);
+  assert.match(fineHits.find((hit) => hit.kind === "tonu")?.snippet ?? "", /TONU \$250/);
+  const cleanHits = scanRateConFinePrint("Allen Lund Company. Pickup Hastings NE. Deliver El Paso TX. Rate $2400.");
+  assert.equal(cleanHits.length, 0);
+  const fineForm = new FormData();
+  fineForm.set(
+    "rate_con",
+    new File(
+      ["Detention $60/hr after free time. TONU $200. Carrier pays lumper. Late fee $80."],
+      "money-terms.txt",
+      { type: "text/plain" },
+    ),
+  );
+  const fineExtract = await (await import("../lib/actions")).parseRateConAction(null, fineForm);
+  assert.equal(fineExtract.ok, true);
+  if (fineExtract.ok && "finePrint" in fineExtract) {
+    assert.ok(fineExtract.finePrint.some((hit) => hit.kind === "detention"));
+    assert.ok(fineExtract.finePrint.some((hit) => hit.kind === "tonu"));
+    assert.ok(fineExtract.finePrint.some((hit) => hit.kind === "lumper"));
+    assert.ok("laneAverage" in fineExtract);
   }
 
   closeDb();
