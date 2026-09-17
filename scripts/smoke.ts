@@ -19381,27 +19381,27 @@ parked for next week
   assert.equal(laneKey("Omaha, NE", "Dallas, TX"), "omaha|NE→dallas|TX");
   assert.equal(lanePointFromText("Kansas City, MO")?.city, "Kansas City");
   assert.equal(laneLabel("omaha, ne", "dallas, tx"), "Omaha, NE → Dallas, TX");
-  const omaha = resolveLanePoint("Omaha, NE");
-  const lincoln = resolveLanePoint("Lincoln, NE");
-  const dallas = resolveLanePoint("Dallas, TX");
-  const fortWorth = resolveLanePoint("Fort Worth, TX");
-  const houston = resolveLanePoint("Houston, TX");
-  const chicago = resolveLanePoint("Chicago, IL");
-  const phoenix = resolveLanePoint("Phoenix, AZ");
-  assert.ok(omaha && lincoln && dallas && fortWorth && houston && chicago && phoenix);
-  const omahaLincolnMi = laneEndMiles(omaha, lincoln);
-  const dallasFwMi = laneEndMiles(dallas, fortWorth);
-  const dallasHoustonMi = laneEndMiles(dallas, houston);
-  const omahaChicagoMi = laneEndMiles(omaha, chicago);
+  const laneOmaha = resolveLanePoint("Omaha, NE");
+  const laneLincoln = resolveLanePoint("Lincoln, NE");
+  const laneDallas = resolveLanePoint("Dallas, TX");
+  const laneFortWorth = resolveLanePoint("Fort Worth, TX");
+  const laneHouston = resolveLanePoint("Houston, TX");
+  const laneChicago = resolveLanePoint("Chicago, IL");
+  const lanePhoenix = resolveLanePoint("Phoenix, AZ");
+  assert.ok(laneOmaha && laneLincoln && laneDallas && laneFortWorth && laneHouston && laneChicago && lanePhoenix);
+  const omahaLincolnMi = laneEndMiles(laneOmaha, laneLincoln);
+  const dallasFwMi = laneEndMiles(laneDallas, laneFortWorth);
+  const dallasHoustonMi = laneEndMiles(laneDallas, laneHouston);
+  const omahaChicagoMi = laneEndMiles(laneOmaha, laneChicago);
   assert.ok(omahaLincolnMi < 200, `Lincoln is nearby Omaha (${omahaLincolnMi.toFixed(0)} mi)`);
   assert.ok(dallasFwMi < 200, `Fort Worth is nearby Dallas (${dallasFwMi.toFixed(0)} mi)`);
   assert.ok(dallasHoustonMi > 200, `Houston is outside Dallas 200-mi (${dallasHoustonMi.toFixed(0)} mi)`);
   assert.ok(omahaChicagoMi > 200, `Chicago is outside Omaha 200-mi (${omahaChicagoMi.toFixed(0)} mi)`);
-  assert.equal(laneEndsWithinRadius(omaha, dallas, lincoln, fortWorth), true, "nearby city both ends counts");
-  assert.equal(laneEndsWithinRadius(omaha, dallas, omaha, dallas), true, "same cities count");
-  assert.equal(laneEndsWithinRadius(omaha, dallas, lincoln, houston), false, "far dest is out even if pickup is close");
-  assert.equal(laneEndsWithinRadius(omaha, dallas, chicago, fortWorth), false, "far pickup is out even if dest is close");
-  assert.equal(laneEndsWithinRadius(omaha, dallas, phoenix, houston), false, "far city both ends is out");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneLincoln, laneFortWorth), true, "nearby city both ends counts");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneOmaha, laneDallas), true, "same cities count");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneLincoln, laneHouston), false, "far dest is out even if pickup is close");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneChicago, laneFortWorth), false, "far pickup is out even if dest is close");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, lanePhoenix, laneHouston), false, "far city both ends is out");
   const laneWindow = {
     pickup_start: pickup.toISOString(),
     pickup_end: pickupEnd.toISOString(),
@@ -19415,8 +19415,8 @@ parked for next week
   assert.ok(dodge && holcomb && cedarRapids && davenport);
   assert.ok(laneEndMiles(dodge, holcomb) < 200, "Holcomb is inside Dodge City 200-mi");
   assert.ok(laneEndMiles(cedarRapids, davenport) < 200, "Davenport is inside Cedar Rapids 200-mi");
-  assert.ok(laneEndMiles(cedarRapids, houston) > 200, "Houston is outside Cedar Rapids 200-mi");
-  assert.ok(laneEndMiles(dodge, chicago) > 200, "Chicago is outside Dodge City 200-mi");
+  assert.ok(laneEndMiles(cedarRapids, laneHouston) > 200, "Houston is outside Cedar Rapids 200-mi");
+  assert.ok(laneEndMiles(dodge, laneChicago) > 200, "Chicago is outside Dodge City 200-mi");
   const laneHist = (
     origin: string,
     destination: string,
