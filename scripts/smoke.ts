@@ -19074,7 +19074,7 @@ parked for next week
   assert.ok(findCityCenter("Newark, NJ"), "Newark must geocode from the public city table");
   const bronx = findCityCenter("Bronx, NY")!;
   const newark = findCityCenter("Newark, NJ")!;
-  const chicago = findCityCenter("Chicago, IL")!;
+  const chicagoCenter = findCityCenter("Chicago, IL")!;
   const exactBuffalo = findExactCityCenter("Buffalo", "NY");
   const exactBrooklynPark = findExactCityCenter("Brooklyn Park", "MN");
   const exactMaspeth = findExactCityCenter("Maspeth", "NY");
@@ -19095,7 +19095,7 @@ parked for next week
   assert.ok(brooklynParkMi > 150, `Brooklyn Park MN cannot be ≤150 mi from the Bronx, got ${brooklynParkMi}`);
   assert.ok(maspethMi <= 150, `Maspeth NY is a real nearby pickup, got ${maspethMi}`);
   const newarkMi = haversineMiles(bronx.lat, bronx.lng, newark.lat, newark.lng);
-  const chicagoMi = haversineMiles(bronx.lat, bronx.lng, chicago.lat, chicago.lng);
+  const chicagoMi = haversineMiles(bronx.lat, bronx.lng, chicagoCenter.lat, chicagoCenter.lng);
   assert.ok(backhaulShared.isWithinBackhaulRadius(newarkMi), "Newark is inside 150 mi of the Bronx");
   assert.equal(backhaulShared.isWithinBackhaulRadius(chicagoMi), false, "Chicago is outside 150 mi of the Bronx");
   const houseCustomerId = queries.findOrCreateCustomer("M&S Loads");
@@ -19386,13 +19386,13 @@ parked for next week
   const laneDallas = resolveLanePoint("Dallas, TX");
   const laneFortWorth = resolveLanePoint("Fort Worth, TX");
   const laneHouston = resolveLanePoint("Houston, TX");
-  const laneChicago = resolveLanePoint("Chicago, IL");
+  const chicagoLane = resolveLanePoint("Chicago, IL");
   const lanePhoenix = resolveLanePoint("Phoenix, AZ");
-  assert.ok(laneOmaha && laneLincoln && laneDallas && laneFortWorth && laneHouston && laneChicago && lanePhoenix);
+  assert.ok(laneOmaha && laneLincoln && laneDallas && laneFortWorth && laneHouston && chicagoLane && lanePhoenix);
   const omahaLincolnMi = laneEndMiles(laneOmaha, laneLincoln);
   const dallasFwMi = laneEndMiles(laneDallas, laneFortWorth);
   const dallasHoustonMi = laneEndMiles(laneDallas, laneHouston);
-  const omahaChicagoMi = laneEndMiles(laneOmaha, laneChicago);
+  const omahaChicagoMi = laneEndMiles(laneOmaha, chicagoLane);
   assert.ok(omahaLincolnMi < 200, `Lincoln is nearby Omaha (${omahaLincolnMi.toFixed(0)} mi)`);
   assert.ok(dallasFwMi < 200, `Fort Worth is nearby Dallas (${dallasFwMi.toFixed(0)} mi)`);
   assert.ok(dallasHoustonMi > 200, `Houston is outside Dallas 200-mi (${dallasHoustonMi.toFixed(0)} mi)`);
@@ -19400,7 +19400,7 @@ parked for next week
   assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneLincoln, laneFortWorth), true, "nearby city both ends counts");
   assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneOmaha, laneDallas), true, "same cities count");
   assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneLincoln, laneHouston), false, "far dest is out even if pickup is close");
-  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, laneChicago, laneFortWorth), false, "far pickup is out even if dest is close");
+  assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, chicagoLane, laneFortWorth), false, "far pickup is out even if dest is close");
   assert.equal(laneEndsWithinRadius(laneOmaha, laneDallas, lanePhoenix, laneHouston), false, "far city both ends is out");
   const laneWindow = {
     pickup_start: pickup.toISOString(),
@@ -19416,7 +19416,7 @@ parked for next week
   assert.ok(laneEndMiles(dodge, holcomb) < 200, "Holcomb is inside Dodge City 200-mi");
   assert.ok(laneEndMiles(cedarRapids, davenport) < 200, "Davenport is inside Cedar Rapids 200-mi");
   assert.ok(laneEndMiles(cedarRapids, laneHouston) > 200, "Houston is outside Cedar Rapids 200-mi");
-  assert.ok(laneEndMiles(dodge, laneChicago) > 200, "Chicago is outside Dodge City 200-mi");
+  assert.ok(laneEndMiles(dodge, chicagoLane) > 200, "Chicago is outside Dodge City 200-mi");
   const laneHist = (
     origin: string,
     destination: string,
