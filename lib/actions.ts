@@ -632,6 +632,31 @@ export async function refreshIftaAction(
   }
 }
 
+export async function fetchSamsaraStillAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) return { ok: false, error: "Load is missing." };
+      const { fetchSamsaraStillForLoad } = await import("./integrations/samsara-still");
+      const result = await fetchSamsaraStillForLoad({
+        loadId,
+        timeChoice: String(formData.get("time_choice") ?? "now"),
+        customValue: String(formData.get("captured_at") ?? ""),
+        facing: String(formData.get("facing") ?? "road"),
+      });
+      if (!result.ok) return { ok: false, error: result.message };
+      refresh();
+      return { ok: true, id: result.attachment.id, message: "Samsara still saved on Load documents." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
 export async function disconnectQuickbooksAction(): Promise<void> {
   await requireSettingsEditor();
   const { clearStoredQuickbooksTokens } = await import("./integrations/quickbooks");

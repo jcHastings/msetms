@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
 import { TmsInvoicePanel } from "@/components/tms-invoice-panel";
 import { DefaultedDocuments } from "@/components/defaulted-documents";
+import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { MasterLoadPanel } from "@/components/master-load-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
@@ -45,7 +46,7 @@ import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
-import { isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
+import { isTwilioConfigured, isWhatsAppConfigured, loadRuntimeEnv } from "@/lib/env";
 import { loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
@@ -58,7 +59,8 @@ import {
   resolveLoadCustomerEmail,
   resolveLoadDriverEmail,
 } from "@/lib/load-mail";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, toOfficeDateTime } from "@/lib/format";
+import { getSamsaraStillPanel } from "@/lib/integrations/samsara-still";
 import { formatLoadSummary } from "@/lib/load-summary";
 import { formatLoadLaneFromStops } from "@/lib/locations";
 import { formatRelayLane } from "@/lib/relays";
@@ -93,6 +95,8 @@ export async function LoadEditor({
   const tab = requestedTab === "financials" && !showFinancials ? "basics" : requestedTab;
   const boundAction = updateLoadAction.bind(null, load.id);
   const attachments = listAttachments(load.id);
+  await loadRuntimeEnv();
+  const samsaraStill = getSamsaraStillPanel(load);
   const checklist = requiredDocumentsForLoad(load);
   const formSettings = loadFormSettings();
   const customers = listCustomers();
@@ -388,6 +392,14 @@ export async function LoadEditor({
             </ul>
           </section>
           <MakeBolPanel loadId={load.id} attachments={attachments} prefill={bolPrefillForLoad(load)} />
+          <FetchSamsaraStillPanel
+            loadId={load.id}
+            vehicleId={samsaraStill.vehicleId}
+            canFetch={samsaraStill.canFetch}
+            setupMessage={samsaraStill.setupMessage}
+            stopTimes={samsaraStill.stopTimes}
+            nowValue={toOfficeDateTime(new Date().toISOString())}
+          />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
           </div>
         </LoadTabPanel>

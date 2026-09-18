@@ -2025,6 +2025,7 @@ async function main() {
     "components/samsara-truck-import.tsx",
     "components/orbcomm-trailer-import.tsx",
     "components/driver-import.tsx",
+    "components/fetch-samsara-still.tsx",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(source, /["']use client["']/);
@@ -2111,6 +2112,18 @@ async function main() {
     fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"),
     /Fetch Samsara vehicles/,
   );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Fetch Samsara still/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Road-facing/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Driver-facing/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /FetchSamsaraStillPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /FetchSamsaraStillPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /\/cameras\/media\/retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /mediaType: "image"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /samsara_still/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "samsara_still"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /fetchSamsaraStillAction/);
   const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
   const unit28Copy = /unit 28|including 28|Unit 28|JC.?s unit \*\*28/i;
   const unit38Copy = /unit 38|including 38|Unit 38|old truck 38/i;
@@ -11124,6 +11137,244 @@ DISPATCH CONFIRMATION
     globalThis.fetch = iftaFetch;
     if (previousSamsara == null) delete process.env.SAMSARA_API_TOKEN;
     else process.env.SAMSARA_API_TOKEN = previousSamsara;
+  }
+
+  {
+    const stillShared = await import("../lib/samsara-still-shared");
+    const still = await import("../lib/integrations/samsara-still");
+    still.setSamsaraStillPollForTests({ attempts: 3, ms: 0 });
+    const savedStillToken = process.env.SAMSARA_API_TOKEN;
+    const stillFetch = globalThis.fetch;
+    const pngStill = Buffer.from(
+      "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8cfc000000101000118dd8db00000000049454e44ae426082",
+      "hex",
+    );
+    const stillTruckMapped = queries.createTruck({
+      unit_number: "STILL-MAP",
+      type: "sleeper",
+      capacity_lbs: 80000,
+      status: "available",
+      samsara_vehicle_id: "281474977075805",
+    });
+    const stillTruckBare = queries.createTruck({
+      unit_number: "STILL-BARE",
+      type: "sleeper",
+      capacity_lbs: 80000,
+      status: "available",
+      samsara_vehicle_id: "",
+    });
+    const stillLoadMapped = queries.createLoad({
+      customer_id: customerId,
+      origin: "Dallas, TX",
+      destination: "Houston, TX",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 10000,
+      commodity: "Dry",
+      rate: 900,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "STILL-MAPPED",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "assigned",
+      truck_id: stillTruckMapped,
+      driver_id: null,
+    });
+    const stillLoadBare = queries.createLoad({
+      customer_id: customerId,
+      origin: "Dallas, TX",
+      destination: "Austin, TX",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 10000,
+      commodity: "Dry",
+      rate: 800,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "STILL-BARE",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "assigned",
+      truck_id: stillTruckBare,
+      driver_id: null,
+    });
+    const { listAttachments: listStillFiles } = await import("../lib/files");
+    const { stampStopTime, listStops } = await import("../lib/stops");
+    const { ensureDefaultStops } = await import("../lib/stops");
+    ensureDefaultStops(stillLoadMapped);
+    const firstStop = listStops(stillLoadMapped)[0];
+    if (firstStop) stampStopTime(firstStop.id, "arrived_at", "2026-09-18T14:00:00.000Z");
+    assert.equal(
+      stillShared.classifySamsaraStillError({ status: 401, bodyText: "Invalid token." }),
+      "scopes_insufficient",
+    );
+    assert.equal(
+      stillShared.classifySamsaraStillError({ status: 429, bodyText: "Monthly media quota exceeded" }),
+      "quota",
+    );
+    assert.equal(stillShared.classifySamsaraStillError({ mediaStatus: "failed", bodyText: "device offline" }), "offline");
+    assert.ok(stillShared.stillStopTimes(listStops(stillLoadMapped)).some((item) => item.key.startsWith("arrive:")));
+
+    delete process.env.SAMSARA_API_TOKEN;
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const missingToken = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(missingToken.ok, false);
+    if (!missingToken.ok) {
+      assert.equal(missingToken.reason, "token_missing");
+      assert.equal(missingToken.setupBlocker, true);
+      assert.match(missingToken.message, /Samsara is not connected/);
+      assert.match(missingToken.message, /Write Media Retrieval/);
+    }
+    assert.equal(fetchCalls, 0, "missing token must not call Samsara");
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+    const missingVehicle = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadBare,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(missingVehicle.ok, false);
+    if (!missingVehicle.ok) {
+      assert.equal(missingVehicle.reason, "vehicle_unmapped");
+      assert.match(missingVehicle.message, /No Samsara ID on this truck/);
+    }
+    assert.equal(fetchCalls, 0, "vehicle miss must not call Samsara");
+
+    globalThis.fetch = (async (input) => {
+      fetchCalls += 1;
+      const url = String(input);
+      if (url.includes("/cameras/media/retrieval") && !url.includes("retrievalId=")) {
+        return new Response(JSON.stringify({ message: "Monthly media quota exceeded" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const quotaFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(quotaFail.ok, false);
+    if (!quotaFail.ok) {
+      assert.equal(quotaFail.reason, "quota");
+      assert.match(quotaFail.message, /quota/i);
+      assert.equal(quotaFail.setupBlocker, false);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    globalThis.fetch = (async (input) => {
+      fetchCalls += 1;
+      const url = String(input);
+      if (url.includes("/cameras/media/retrieval") && !url.includes("retrievalId=")) {
+        return new Response(JSON.stringify({ data: { retrievalId: "ret-offline", quotaStatus: "ok" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("retrievalId=ret-offline")) {
+        return new Response(
+          JSON.stringify({ data: { media: [{ status: "failed", vehicleId: "281474977075805" }] }, message: "device offline" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const offlineFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(offlineFail.ok, false);
+    if (!offlineFail.ok) {
+      assert.equal(offlineFail.reason, "offline");
+      assert.match(offlineFail.message, /offline/i);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input);
+      const method = String(init?.method ?? "GET").toUpperCase();
+      if (url.includes("/cameras/media/retrieval") && method === "POST") {
+        return new Response(JSON.stringify({ data: { retrievalId: "ret-still-1", quotaStatus: "ok" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("retrievalId=ret-still-1")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              media: [
+                {
+                  status: "available",
+                  urlInfo: { url: "https://example.test/still.jpg" },
+                  vehicleId: "281474977075805",
+                  input: "dashcamRoadFacing",
+                  mediaType: "image",
+                  startTime: "2026-09-18T17:00:00Z",
+                  endTime: "2026-09-18T17:00:00Z",
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("example.test/still.jpg")) {
+        return new Response(pngStill, { status: 200, headers: { "Content-Type": "image/jpeg" } });
+      }
+      return new Response("not mocked", { status: 500 });
+    }) as typeof fetch;
+    const happy = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(happy.ok, true);
+    if (happy.ok) {
+      assert.equal(happy.attachment.kind, "samsara_still");
+      assert.equal(happy.attachment.uploaded_by, "samsara");
+      assert.match(happy.attachment.original_name, /samsara-road/);
+      assert.equal(happy.vehicleId, "281474977075805");
+      const stored = listStillFiles(stillLoadMapped).find((file) => file.kind === "samsara_still");
+      assert.ok(stored);
+      assert.equal(stored?.id, happy.attachment.id);
+      const { getAttachmentPath } = await import("../lib/files");
+      assert.ok(fs.existsSync(getAttachmentPath(stored!)));
+    }
+    const afterSave = queries.getLoad(stillLoadMapped);
+    assert.ok(afterSave);
+    assert.equal(afterSave.status, "assigned", "media miss/success must not change load status");
+
+    still.setSamsaraStillPollForTests(null);
+    globalThis.fetch = stillFetch;
+    if (savedStillToken == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = savedStillToken;
   }
 
   queries.updateLoadStatus(loadId, "delivered");
