@@ -108,6 +108,18 @@ export type FuelImportResult = {
   errors?: FuelCsvRowError[];
 };
 
+/** Sheet / FleetOne already named a driver — Unassigned is only for blank rows. */
+export function fuelHasSheetDriver(name: string | null | undefined): boolean {
+  return Boolean(String(name ?? "").trim());
+}
+
+export function isFuelUnassignedRow(row: {
+  driver_id?: number | null;
+  driver_name_raw?: string | null;
+}): boolean {
+  return !row.driver_id && !fuelHasSheetDriver(row.driver_name_raw);
+}
+
 export type FuelPeriodTotals = FuelBucketTotals & { gallons: number; amount: number };
 
 export type FuelRollup = {

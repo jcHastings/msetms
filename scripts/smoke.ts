@@ -11998,8 +11998,11 @@ DISPATCH CONFIRMATION
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
   assert.match(fuelPage, /FuelViewTabs/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-view-tabs/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-tx-tabs/);
+  const fuelListsUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8");
+  assert.match(fuelListsUi, /data-fuel-view-tabs/);
+  assert.match(fuelListsUi, /data-fuel-tx-tabs/);
+  assert.doesNotMatch(fuelListsUi, /<th>Source<\/th>/);
+  assert.doesNotMatch(fuelListsUi, /row\.source_file/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/diesel")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/money")), false);
   assert.doesNotMatch(navSource, /\/fuel\/(diesel|reefer|scale|money)/);
@@ -12084,6 +12087,8 @@ DISPATCH CONFIRMATION
   const {
     cardLast4From,
     matchFuelDriver,
+    fuelHasSheetDriver,
+    isFuelUnassignedRow,
     classifyFuelCategory,
     fuelWeekPaidStats,
     fuelWeekPaidStatsForWeek,
@@ -12214,6 +12219,11 @@ DISPATCH CONFIRMATION
   const parsedFuel = parseFuelCsv(fuelCsv);
   assert.equal(parsedFuel.rows.length, 4);
   assert.equal(parsedFuel.skipped, 0);
+  assert.equal(fuelHasSheetDriver("Denise Ortega"), true);
+  assert.equal(fuelHasSheetDriver("  "), false);
+  assert.equal(isFuelUnassignedRow({ driver_id: null, driver_name_raw: "Denise Ortega" }), false);
+  assert.equal(isFuelUnassignedRow({ driver_id: null, driver_name_raw: "" }), true);
+  assert.equal(isFuelUnassignedRow({ driver_id: 4, driver_name_raw: "" }), false);
   const deniseMatch = matchFuelDriver(parsedFuel.rows[0]!, queries.listDrivers(), queries.listTrucks());
   assert.equal(queries.getDriver(deniseMatch.driverId ?? 0)?.name, "Denise Ortega");
   const unitMatch = matchFuelDriver(parsedFuel.rows[1]!, queries.listDrivers(), queries.listTrucks());
@@ -12222,17 +12232,52 @@ DISPATCH CONFIRMATION
   assert.equal(unknownMatch.driverId, null);
 
   const firstFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily.csv");
-  assert.equal(firstFuel.created, 1);
-  assert.equal(firstFuel.unmatched, 2);
+  assert.equal(firstFuel.created, 2);
+  assert.equal(firstFuel.unmatched, 1);
   assert.equal(firstFuel.skipped, 1);
   const secondFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily-again.csv");
   assert.equal(secondFuel.created, 0);
   assert.equal(secondFuel.unmatched, 0);
   assert.equal(secondFuel.skipped, 4);
   const unmatchedFuel = fuelStore.listFuelTransactions({ unmatchedOnly: true });
-  assert.equal(unmatchedFuel.length, 2);
-  const unknownFuel = unmatchedFuel.find((row) => row.driver_name_raw === "Unknown Driver");
+  assert.equal(unmatchedFuel.length, 1);
+  assert.equal(unmatchedFuel[0]?.driver_name_raw, "");
+  const unknownFuel = fuelStore.listFuelTransactions().find((row) => row.driver_name_raw === "Unknown Driver");
   assert.ok(unknownFuel);
+  assert.equal(unknownFuel.driver_id, null);
+  assert.equal(isFuelUnassignedRow(unknownFuel), false);
+  assert.equal(
+    unmatchedFuel.some((row) => row.id === unknownFuel.id),
+    false,
+    "sheet row with driver is not Unassigned",
+  );
+  const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
+  const { importFuelFromUpload } = await import("../lib/fuel-import");
+  const namedSheet = await importFuelFromUpload(
+    new File(
+      [
+        buildXlsxFromGrid([
+          ["Date", "Time", "Driver Name", "Unit", "Category", "Gallons", "Price", "Total", "Invoice"],
+          [fuelDate, "11:05", "Sheet Only Driver", "999", "Diesel", 10, 3, 30, "SHEET-NAMED-1"],
+        ]),
+      ],
+      "fleetone-named.xlsx",
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    ),
+  );
+  assert.equal(namedSheet.ok, true, namedSheet.ok ? "" : namedSheet.error);
+  assert.equal(namedSheet.unmatched, 0, "sheet row with driver is not unmatched");
+  assert.ok((namedSheet.created ?? 0) >= 1);
+  const sheetNamed = fuelStore.listFuelTransactions().find((row) => row.invoice_number === "SHEET-NAMED-1");
+  assert.ok(sheetNamed);
+  assert.equal(sheetNamed.driver_name_raw, "Sheet Only Driver");
+  assert.equal(sheetNamed.driver_id, null);
+  assert.equal(isFuelUnassignedRow(sheetNamed), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === sheetNamed.id),
+    false,
+    "sheet row with driver → not Unassigned after import",
+  );
   const fuelTyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(fuelTyrell);
   fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
@@ -17137,6 +17182,14 @@ DISPATCH CONFIRMATION
   assert.equal(officeRows.find((row) => row.amount === 21.19)?.driver_id, avila);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_name_raw, "Ceferino Oquendo Garcia");
+  const ceferinoRow = officeRows.find((row) => row.amount === 417.36);
+  assert.ok(ceferinoRow);
+  assert.equal(isFuelUnassignedRow(ceferinoRow), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === ceferinoRow.id),
+    false,
+    "FleetOne row with driver is not Unassigned",
+  );
   assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
   const { extractNProductDriverName, stitchFleetOneNName } = await import("../lib/fuel-fleetone");
   assert.equal(extractNProductDriverName("Christoph Howell"), "Christoph Howell");
@@ -17369,6 +17422,12 @@ DISPATCH CONFIRMATION
     fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
     /rematchFuelTransactionDrivers\(\{ unmatchedOnly: true \}\)/,
   );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
+    /TRIM\(COALESCE\(fuel_transactions\.driver_name_raw/,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelHasSheetDriver/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /fuelHasSheetDriver\(row\.driverName\)/);
 
   getDb()
     .prepare(
@@ -17385,6 +17444,12 @@ DISPATCH CONFIRMATION
     }
   ).id;
   assert.equal(fuelStore.getFuelTransaction(videoAssignId)?.driver_id, null);
+  assert.equal(isFuelUnassignedRow(fuelStore.getFuelTransaction(videoAssignId)!), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === videoAssignId),
+    false,
+    "FleetOne/sheet driver name is not Unassigned",
+  );
   const videoLoadNumber = "1006203";
   const videoLoadId =
     (getDb().prepare("SELECT id FROM loads WHERE load_number = ?").get(videoLoadNumber) as { id: number } | undefined)

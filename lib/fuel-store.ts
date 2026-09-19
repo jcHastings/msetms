@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import {
   emptyPeriodTotals,
+  fuelHasSheetDriver,
   fuelRowInWeek,
   fuelWeekAnchorDate,
   fuelWeekPaidStatsForWeek,
@@ -59,6 +60,7 @@ export function listFuelTransactions(filters?: {
   }
   if (filters?.unmatchedOnly) {
     clauses.push("fuel_transactions.driver_id IS NULL");
+    clauses.push("TRIM(COALESCE(fuel_transactions.driver_name_raw, '')) = ''");
   }
   if (filters?.fromIso) {
     clauses.push("fuel_transactions.occurred_at >= ?");
@@ -349,7 +351,7 @@ export function importFuelFromText(
         nowIso(),
       );
       seen.add(row.dedupKey);
-      if (match.driverId) created += 1;
+      if (match.driverId || fuelHasSheetDriver(row.driverName)) created += 1;
       else unmatched += 1;
     }
   })();
