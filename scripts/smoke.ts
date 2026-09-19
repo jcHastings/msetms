@@ -12270,6 +12270,7 @@ DISPATCH CONFIRMATION
     false,
     "sheet row with driver → not Unassigned after import",
   );
+  fuelStore.deleteFuelTransaction(sheetNamed.id);
   const fuelTyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(fuelTyrell);
   fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
