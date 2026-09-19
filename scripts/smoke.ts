@@ -12251,12 +12251,12 @@ DISPATCH CONFIRMATION
     false,
     "sheet row with driver is not Unassigned",
   );
-  const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
+  const { buildXlsxFromGrid: buildFuelNamedSheet } = await import("../lib/xlsx-first-sheet");
   const { importFuelFromUpload } = await import("../lib/fuel-import");
   const namedSheet = await importFuelFromUpload(
     new File(
       [
-        buildXlsxFromGrid([
+        buildFuelNamedSheet([
           ["Date", "Time", "Driver Name", "Unit", "Category", "Gallons", "Price", "Total", "Invoice"],
           [fuelDate, "11:05", "Sheet Only Driver", "999", "Diesel", 10, 3, 30, "SHEET-NAMED-1"],
         ]),
