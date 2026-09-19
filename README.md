@@ -245,4 +245,6 @@ Remove-Item -Recurse -Force data\tms.db, data\tms.db-wal, data\tms.db-shm, data\
 
 Next.js (App Router), TypeScript, Tailwind CSS, Node built-in SQLite (`node:sqlite`), `dotenv`, `unpdf`, optional `tesseract.js`. No `better-sqlite3` / node-gyp.
 
+**Frontend/UI tips:** read and follow Taste Skill (`design-taste-frontend`) at [`.cursor/skills/design-taste-frontend/`](./.cursor/skills/design-taste-frontend/SKILL.md) — anti-slop; audit-first on redesigns. Do not rewrite the MS Express voice pack.
+
 See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.
