@@ -1,5 +1,11 @@
 import { formatFuelMoney, formatMdYDisplay } from "@/lib/format";
-import type { FuelPageView, FuelTxListKind, FuelWeekOption, FuelWeekPaidStats } from "@/lib/fuel";
+import type {
+  FuelPageView,
+  FuelTxListKind,
+  FuelWeekOption,
+  FuelWeekPaidStats,
+  FuelWeekSpentTotals,
+} from "@/lib/fuel";
 
 function formatPpg(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -17,6 +23,33 @@ function WeekStat({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-semibold uppercase text-slate-500">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
     </div>
+  );
+}
+
+export function FuelWeekSpendCards({
+  spent,
+  current,
+}: {
+  spent: FuelWeekSpentTotals;
+  current: boolean;
+}) {
+  return (
+    <section className="card mb-6 overflow-hidden" data-fuel-week-spend="">
+      <header className="border-b border-slate-200 px-5 py-3">
+        <h2 className="text-sm font-semibold">{current ? "Spent this week" : "Spent"}</h2>
+      </header>
+      <div className="grid gap-4 px-5 py-4 sm:grid-cols-3">
+        <div data-fuel-spend="fuel">
+          <WeekStat label="Fuel" value={formatFuelMoney(spent.fuel)} />
+        </div>
+        <div data-fuel-spend="reefer">
+          <WeekStat label="Reefer" value={formatFuelMoney(spent.reefer)} />
+        </div>
+        <div data-fuel-spend="scale">
+          <WeekStat label="Scale" value={formatFuelMoney(spent.scale)} />
+        </div>
+      </div>
+    </section>
   );
 }
 

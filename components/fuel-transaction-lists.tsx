@@ -53,7 +53,6 @@ function FuelRowsTable({
             <th>Load</th>
             <th>Assign</th>
             <th></th>
-            <th>Source</th>
           </tr>
         </thead>
         <tbody>
@@ -99,7 +98,6 @@ function FuelRowsTable({
               <td>
                 <FuelDeleteButton fuelId={row.id} />
               </td>
-              <td className="text-xs text-slate-500">{row.source_file || "—"}</td>
             </tr>
           ))}
         </tbody>
