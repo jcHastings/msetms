@@ -22,10 +22,6 @@ export type SamsaraStillFailureReason =
 /** Dashcam stills stay under this cap. Soft-fail oversize. Save / Confirm stay open. */
 export const SAMSARA_STILL_MAX_BYTES = 8 * 1024 * 1024;
 
-/** Shown when Camera is Driver-facing. Does not block fetch. */
-export const SAMSARA_STILL_CABIN_NOTE =
-  "Cabin camera. People in the cab can be in the shot. Fetch still works.";
-
 export type SamsaraStillFailure = {
   ok: false;
   reason: SamsaraStillFailureReason;

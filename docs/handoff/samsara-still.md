@@ -40,8 +40,6 @@ Soft-fail copy covers offline, monthly media quota, no still at that time, a mis
 
 `downloadStill` only follows https Samsara hosts and Samsara-named S3 buckets. Oversize or a bad host fails the still, not the load.
 
-Driver-facing shows a cabin-camera privacy note. Fetch stays enabled.
-
 ## Out of scope
 
 Live video, hyperlapse, auto-poll every minute, trailer Orbcomm cameras, Office Update, merge.

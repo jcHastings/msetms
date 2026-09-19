@@ -2115,8 +2115,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Fetch Samsara still/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Road-facing/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Driver-facing/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /SAMSARA_STILL_CABIN_NOTE/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /facing === "driver"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Cabin camera|privacy note|SAMSARA_STILL_CABIN_NOTE|samsara-still-cabin-note/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"),
     /disabled=\{pending \|\| !canFetch \|\| !selectedLoadId\}/,
@@ -2131,7 +2130,7 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /samsara_still/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /host_rejected/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Cabin camera/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Cabin camera|SAMSARA_STILL_CABIN_NOTE/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "samsara_still"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /fetchSamsaraStillAction/);

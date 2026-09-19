@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { fetchSamsaraStillAction } from "@/lib/actions";
-import { SAMSARA_STILL_CABIN_NOTE, type SamsaraStillStopTime } from "@/lib/samsara-still-shared";
+import type { SamsaraStillStopTime } from "@/lib/samsara-still-shared";
 import type { ActionResult } from "@/lib/types";
 
 export function FetchSamsaraStillPanel({
@@ -27,7 +27,6 @@ export function FetchSamsaraStillPanel({
     null,
   );
   const [selectedLoadId, setSelectedLoadId] = useState(loadId ?? loads?.[0]?.id ?? 0);
-  const [facing, setFacing] = useState("road");
   const activeStops =
     loads?.find((item) => item.id === selectedLoadId)?.stopTimes ?? stopTimes;
   const showLoadPicker = Boolean(loads && loads.length > 1);
@@ -97,20 +96,10 @@ export function FetchSamsaraStillPanel({
         </fieldset>
         <div className="field max-w-xs">
           <label htmlFor="samsara-still-facing">Camera</label>
-          <select
-            id="samsara-still-facing"
-            name="facing"
-            value={facing}
-            onChange={(event) => setFacing(event.target.value)}
-          >
+          <select id="samsara-still-facing" name="facing" defaultValue="road">
             <option value="road">Road-facing</option>
             <option value="driver">Driver-facing</option>
           </select>
-          {facing === "driver" ? (
-            <p className="mt-2 text-sm text-slate-600" data-samsara-still-cabin-note>
-              {SAMSARA_STILL_CABIN_NOTE}
-            </p>
-          ) : null}
         </div>
         <button className="btn btn-secondary" type="submit" disabled={pending || !canFetch || !selectedLoadId}>
           {pending ? "Fetching…" : "Fetch Samsara still"}
