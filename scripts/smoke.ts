@@ -2474,6 +2474,9 @@ async function main() {
   assert.match(mikeSrc, /Never say no trucks ranked closest/);
   assert.match(mikeSrc, /tmsStats/);
   assert.match(mikeSrc, /answerMikeTmsQuestion/);
+  assert.match(mikeSrc, /answerMikeFuelAuditQuestion/);
+  assert.match(mikeSrc, /fuelAudit/);
+  assert.match(mikeSrc, /Never email or text a driver about fuel/);
   assert.match(mikeSrc, /answerMikeReeferFromOrbcomm/);
   assert.match(mikeSrc, /loadStopSummaries/);
   assert.match(mikeSrc, /await geocode\(asked\)/);
@@ -11998,6 +12001,7 @@ DISPATCH CONFIRMATION
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /FuelWeekSpendCards/);
+  assert.match(fuelPage, /FuelAuditStrip/);
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
@@ -12044,6 +12048,10 @@ DISPATCH CONFIRMATION
   assert.match(fuelWeekUi, /label="Scale"/);
   assert.match(fuelWeekUi, /label="DEF"/);
   assert.match(fuelWeekUi, /label="Money code"/);
+  const fuelAuditUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-audit-strip.tsx"), "utf8");
+  assert.match(fuelAuditUi, /data-fuel-audit/);
+  assert.match(fuelAuditUi, /data-fuel-audit-flag/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-audit.md"), "utf8"), /FUEL_AUDIT_THRESHOLDS/);
   assert.match(fuelPage, /loadFuelWeekView/);
   assert.match(fuelPage, /weekView\.spent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
@@ -12229,6 +12237,246 @@ DISPATCH CONFIRMATION
   assert.equal(priorWeekSpent.scale, 12);
   assert.equal(priorWeekSpent.def, 9);
   assert.equal(priorWeekSpent.money, 30);
+  const {
+    fuelAuditProduct,
+    fuelAuditSubject,
+    fuelAuditWindowForWeek,
+    median,
+    resolveFuelAuditWindow,
+    scoreFuelAudit,
+  } = await import("../lib/fuel-audit");
+  const auditNow = new Date("2026-08-26T15:00:00.000Z");
+  const auditWeek = resolveFuelAuditWindow("week", auditNow);
+  assert.equal(auditWeek.startYmd, "2026-08-24");
+  assert.equal(auditWeek.endYmd, "2026-08-30");
+  assert.equal(fuelAuditWindowForWeek("2026-08-24").fromIso, auditWeek.fromIso);
+  assert.equal(resolveFuelAuditWindow("last_7", auditNow).days, 7);
+  assert.equal(resolveFuelAuditWindow("last_14", auditNow).days, 14);
+  assert.equal(resolveFuelAuditWindow("last_30", auditNow).days, 30);
+  assert.equal(median([2, 2, 2, 6]), 2);
+  assert.equal(fuelAuditProduct("truck_diesel"), "diesel");
+  assert.equal(fuelAuditProduct("def"), "def");
+  assert.equal(fuelAuditProduct("reefer_diesel"), "reefer");
+  assert.equal(fuelAuditProduct("money_code"), null);
+  assert.equal(fuelAuditProduct("scale"), null);
+  const auditTx = (row: {
+    id: number;
+    occurred_at: string;
+    driver_id?: number | null;
+    location?: string;
+    gallons?: number | null;
+    amount?: number | null;
+    category?: string;
+    unit_number?: string;
+    driver_name_raw?: string;
+    driver_name?: string | null;
+    truck_unit?: string | null;
+  }) => ({
+    id: row.id,
+    occurred_at: row.occurred_at,
+    driver_id: row.driver_id ?? null,
+    location: row.location ?? "Pilot",
+    gallons: row.gallons ?? 100,
+    amount: row.amount ?? 350,
+    category: row.category ?? "truck_diesel",
+    unit_number: row.unit_number ?? "",
+    driver_name_raw: row.driver_name_raw ?? "",
+    driver_name: row.driver_name ?? null,
+    truck_unit: row.truck_unit ?? null,
+  });
+  const peerFills = [1, 2, 3].flatMap((driverId) => [
+    auditTx({
+      id: driverId * 10,
+      occurred_at: "2026-08-25T14:00:00.000Z",
+      driver_id: driverId,
+      driver_name: `Peer ${driverId}`,
+      truck_unit: `1${driverId}`,
+    }),
+    auditTx({
+      id: driverId * 10 + 1,
+      occurred_at: "2026-08-26T14:00:00.000Z",
+      driver_id: driverId,
+      driver_name: `Peer ${driverId}`,
+      truck_unit: `1${driverId}`,
+    }),
+  ]);
+  const heavyFills = [0, 1, 2, 3, 4, 5].map((slot) =>
+    auditTx({
+      id: 100 + slot,
+      occurred_at: `2026-08-2${4 + (slot % 3)}T1${slot}:00:00.000Z`,
+      driver_id: 9,
+      driver_name: "Audit Heavy",
+      truck_unit: "77",
+    }),
+  );
+  const oftenReport = scoreFuelAudit([...peerFills, ...heavyFills], auditWeek);
+  assert.ok(oftenReport.flags.some((flag) => flag.kind === "too_often" && flag.driverName === "Audit Heavy"));
+  const oftenFlag = oftenReport.flags.find((flag) => flag.reason === "fill_count" && flag.driverName === "Audit Heavy");
+  assert.ok(oftenFlag);
+  assert.match(oftenFlag.metric, /6 fills/);
+  assert.ok(oftenFlag.txs.some((tx) => tx.id === 100));
+  const shortGapReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 201,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 11,
+        driver_name: "Gap Diesel",
+        truck_unit: "40",
+      }),
+      auditTx({
+        id: 202,
+        occurred_at: "2026-08-25T14:00:00.000Z",
+        driver_id: 11,
+        driver_name: "Gap Diesel",
+        truck_unit: "40",
+      }),
+      auditTx({
+        id: 203,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 12,
+        driver_name: "Gap Def",
+        truck_unit: "41",
+        category: "def",
+        gallons: 10,
+        amount: 40,
+      }),
+      auditTx({
+        id: 204,
+        occurred_at: "2026-08-25T14:00:00.000Z",
+        driver_id: 12,
+        driver_name: "Gap Def",
+        truck_unit: "41",
+        category: "def",
+        gallons: 10,
+        amount: 40,
+      }),
+    ],
+    auditWeek,
+  );
+  assert.ok(shortGapReport.flags.some((flag) => flag.reason === "short_gap" && flag.driverName === "Gap Diesel"));
+  assert.equal(
+    shortGapReport.flags.some((flag) => flag.reason === "short_gap" && flag.driverName === "Gap Def"),
+    false,
+  );
+  const tooMuchReport = scoreFuelAudit(
+    [
+      ...peerFills,
+      auditTx({
+        id: 301,
+        occurred_at: "2026-08-25T15:00:00.000Z",
+        driver_id: 13,
+        driver_name: "Big Fill",
+        truck_unit: "50",
+        gallons: 200,
+        amount: 700,
+      }),
+    ],
+    auditWeek,
+  );
+  const tooMuch = tooMuchReport.flags.find((flag) => flag.kind === "too_much" && flag.driverName === "Big Fill");
+  assert.ok(tooMuch);
+  assert.match(tooMuch.why, /fleet median/);
+  assert.ok(tooMuch.txs.some((tx) => tx.id === 301));
+  const ownBaselineReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 310,
+        occurred_at: "2026-08-10T14:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+      }),
+      auditTx({
+        id: 311,
+        occurred_at: "2026-08-12T14:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+      }),
+      auditTx({
+        id: 312,
+        occurred_at: "2026-08-25T15:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+        gallons: 160,
+        amount: 560,
+      }),
+      ...peerFills,
+    ],
+    auditWeek,
+  );
+  const ownFlag = ownBaselineReport.flags.find((flag) => flag.kind === "too_much" && flag.driverName === "Own Base");
+  assert.ok(ownFlag);
+  assert.match(ownFlag.why, /own median/);
+  const dupReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 401,
+        occurred_at: "2026-08-25T13:00:00.000Z",
+        driver_id: 15,
+        driver_name: "Dup Swipe",
+        truck_unit: "60",
+        location: "Pilot 123 Memphis TN",
+        gallons: 100.2,
+      }),
+      auditTx({
+        id: 402,
+        occurred_at: "2026-08-25T16:00:00.000Z",
+        driver_id: 15,
+        driver_name: "Dup Swipe",
+        truck_unit: "60",
+        location: "PILOT 123 MEMPHIS TN",
+        gallons: 100,
+      }),
+    ],
+    auditWeek,
+  );
+  const dupFlag = dupReport.flags.find((flag) => flag.kind === "duplicate" && flag.driverName === "Dup Swipe");
+  assert.ok(dupFlag);
+  assert.deepEqual(
+    dupFlag.txs.map((tx) => tx.id),
+    [401, 402],
+  );
+  const unitOnly = [0, 1, 2, 3, 4, 5].map((slot) =>
+    auditTx({
+      id: 500 + slot,
+      occurred_at: `2026-08-2${4 + (slot % 3)}T0${slot}:00:00.000Z`,
+      unit_number: "101",
+      gallons: 90,
+    }),
+  );
+  const unitReport = scoreFuelAudit([...peerFills, ...unitOnly], auditWeek);
+  const unitFlag = unitReport.flags.find((flag) => flag.kind === "too_often" && flag.unit === "101");
+  assert.ok(unitFlag);
+  assert.equal(unitFlag.driverName, "Unassigned");
+  assert.equal(fuelAuditSubject(unitOnly[0]!).key, "u:101");
+  const ignoredReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 601,
+        occurred_at: "2026-08-25T10:00:00.000Z",
+        driver_id: 16,
+        driver_name: "Money Only",
+        category: "money_code",
+        gallons: null,
+        amount: 500,
+      }),
+      auditTx({
+        id: 602,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 16,
+        driver_name: "Money Only",
+        category: "scale",
+        gallons: null,
+        amount: 18,
+      }),
+    ],
+    auditWeek,
+  );
+  assert.equal(ignoredReport.scoredCount, 0);
+  assert.equal(ignoredReport.flags.length, 0);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
@@ -16535,6 +16783,47 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(String(liveDriverAsk), /I don't have information/i);
   assert.match(String(liveMilesAsk), /TMS miles/i);
   assert.doesNotMatch(String(liveMilesAsk), /I don't have information/i);
+  const {
+    answerMikeFuelAuditQuestion,
+    formatMikeFuelAuditReply,
+    parseMikeFuelAuditQuestion,
+  } = await import("../lib/mike-fuel-audit");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit")?.windowKind, "week");
+  assert.equal(parseMikeFuelAuditQuestion("who's fueling too much")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("any weird fuel this week")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("weird fuel last 14 days")?.windowKind, "last_14");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit last 7 days")?.windowKind, "last_7");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit last 30")?.windowKind, "last_30");
+  assert.equal(parseMikeFuelAuditQuestion("import fuel"), null);
+  assert.equal(parseMikeFuelAuditQuestion("Who is our top customer on 2026?"), null);
+  const auditAskRows = [
+    ...peerFills,
+    ...heavyFills,
+    auditTx({
+      id: 301,
+      occurred_at: "2026-08-25T15:00:00.000Z",
+      driver_id: 13,
+      driver_name: "Big Fill",
+      truck_unit: "50",
+      gallons: 200,
+      amount: 700,
+    }),
+  ];
+  const liveAuditAsk = answerMikeFuelAuditQuestion("fuel audit", auditNow, auditAskRows);
+  assert.match(String(liveAuditAsk), /Fuel audit/);
+  assert.match(String(liveAuditAsk), /Soft flags only/);
+  assert.match(String(liveAuditAsk), /Audit Heavy/);
+  assert.match(String(liveAuditAsk), /unit 77/);
+  assert.match(String(liveAuditAsk), /#100/);
+  assert.doesNotMatch(String(liveAuditAsk), /I don't have information/i);
+  const tooMuchAsk = answerMikeFuelAuditQuestion("who's fueling too much", auditNow, auditAskRows);
+  assert.match(String(tooMuchAsk), /Big Fill/);
+  assert.match(String(tooMuchAsk), /too much|200g/i);
+  const formattedAudit = formatMikeFuelAuditReply(oftenReport);
+  assert.match(formattedAudit, /Nothing sent to drivers/);
+  assert.match(formattedAudit, /Audit Heavy/);
+  assert.equal(answerMikeFuelAuditQuestion("import fuel csv"), null);
   assert.equal(parseMikeReeferQuestion("What's the Reefer temperature on trailer MS1519"), "MS1519");
   assert.equal(sameTrailerUnit("MS1519", "1519"), true);
   assert.equal(sameTrailerUnit("MS1519", "MS-1519"), true);
