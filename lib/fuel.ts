@@ -699,11 +699,13 @@ export type FuelWeekSpentTotals = {
   fuel: number;
   reefer: number;
   scale: number;
+  def: number;
+  money: number;
 };
 
 export function emptyFuelWeekSpentTotals(weekStartYmd: string): FuelWeekSpentTotals {
   const { startYmd, endYmd } = localWeekRange(weekStartYmd);
-  return { weekStartYmd: startYmd, weekEndYmd: endYmd, fuel: 0, reefer: 0, scale: 0 };
+  return { weekStartYmd: startYmd, weekEndYmd: endYmd, fuel: 0, reefer: 0, scale: 0, def: 0, money: 0 };
 }
 
 export function fuelWeekSpentTotalsForWeek(
@@ -718,6 +720,8 @@ export function fuelWeekSpentTotalsForWeek(
     if (kind === "truck_diesel") totals.fuel += row.amount;
     else if (kind === "reefer") totals.reefer += row.amount;
     else if (kind === "scale") totals.scale += row.amount;
+    else if (kind === "def") totals.def += row.amount;
+    else if (kind === "money_code") totals.money += row.amount;
   }
   return totals;
 }

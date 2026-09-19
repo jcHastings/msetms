@@ -38,7 +38,7 @@ export function FuelWeekSpendCards({
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">{current ? "Spent this week" : "Spent"}</h2>
       </header>
-      <div className="grid gap-4 px-5 py-4 sm:grid-cols-3">
+      <div className="grid gap-4 px-5 py-4 sm:grid-cols-5">
         <div data-fuel-spend="fuel">
           <WeekStat label="Fuel" value={formatFuelMoney(spent.fuel)} />
         </div>
@@ -47,6 +47,12 @@ export function FuelWeekSpendCards({
         </div>
         <div data-fuel-spend="scale">
           <WeekStat label="Scale" value={formatFuelMoney(spent.scale)} />
+        </div>
+        <div data-fuel-spend="def">
+          <WeekStat label="DEF" value={formatFuelMoney(spent.def)} />
+        </div>
+        <div data-fuel-spend="money">
+          <WeekStat label="Money code" value={formatFuelMoney(spent.money)} />
         </div>
       </div>
     </section>
