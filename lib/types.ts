@@ -226,6 +226,7 @@ export const ATTACHMENT_KINDS = [
   { value: "photo_trailer", label: "Trailer photo" },
   { value: "photo_product", label: "Product photo" },
   { value: "photo_seals", label: "Seal photo" },
+  { value: "samsara_still", label: "Samsara still" },
   { value: "ifta", label: "IFTA report" },
   { value: "temp_log", label: "Temp log" },
   { value: "scale_ticket", label: "Scale ticket" },
@@ -719,6 +720,7 @@ export function labelForUploader(value: string): string {
   if (value === "dispatcher") return "Dispatcher";
   if (value === "driver") return "Driver";
   if (value === "system") return "System";
+  if (value === "samsara") return "Samsara";
   return value || "Dispatcher";
 }
 

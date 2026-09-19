@@ -2025,6 +2025,7 @@ async function main() {
     "components/samsara-truck-import.tsx",
     "components/orbcomm-trailer-import.tsx",
     "components/driver-import.tsx",
+    "components/fetch-samsara-still.tsx",
   ]) {
     const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(source, /["']use client["']/);
@@ -2111,6 +2112,28 @@ async function main() {
     fs.readFileSync(path.join(process.cwd(), "components/samsara-truck-import.tsx"), "utf8"),
     /Fetch Samsara vehicles/,
   );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Fetch Samsara still/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Road-facing/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Driver-facing/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Cabin camera|privacy note|SAMSARA_STILL_CABIN_NOTE|samsara-still-cabin-note/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"),
+    /disabled=\{pending \|\| !canFetch \|\| !selectedLoadId\}/,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /FetchSamsaraStillPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /submitLabel="Save load"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /FetchSamsaraStillPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /\/cameras\/media\/retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /mediaType: "image"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /isSamsaraSignedMediaUrl/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /SAMSARA_STILL_MAX_BYTES/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /samsara_still/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /host_rejected/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Cabin camera|SAMSARA_STILL_CABIN_NOTE/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "samsara_still"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /fetchSamsaraStillAction/);
   const unit36Copy = /unit 36|including 36|Unit 36|JC.?s unit \*\*36/i;
   const unit28Copy = /unit 28|including 28|Unit 28|JC.?s unit \*\*28/i;
   const unit38Copy = /unit 38|including 38|Unit 38|old truck 38/i;
@@ -11126,6 +11149,357 @@ DISPATCH CONFIRMATION
     else process.env.SAMSARA_API_TOKEN = previousSamsara;
   }
 
+  {
+    const stillShared = await import("../lib/samsara-still-shared");
+    const still = await import("../lib/integrations/samsara-still");
+    still.setSamsaraStillPollForTests({ attempts: 3, ms: 0 });
+    const savedStillToken = process.env.SAMSARA_API_TOKEN;
+    const stillFetch = globalThis.fetch;
+    const pngStill = Buffer.from(
+      "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f8cfc000000101000118dd8db00000000049454e44ae426082",
+      "hex",
+    );
+    const stillTruckMapped = queries.createTruck({
+      unit_number: "STILL-MAP",
+      type: "sleeper",
+      capacity_lbs: 80000,
+      status: "available",
+      samsara_vehicle_id: "281474977075805",
+    });
+    const stillTruckBare = queries.createTruck({
+      unit_number: "STILL-BARE",
+      type: "sleeper",
+      capacity_lbs: 80000,
+      status: "available",
+      samsara_vehicle_id: "",
+    });
+    const stillLoadMapped = queries.createLoad({
+      customer_id: customerId,
+      origin: "Dallas, TX",
+      destination: "Houston, TX",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 10000,
+      commodity: "Dry",
+      rate: 900,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "STILL-MAPPED",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "assigned",
+      truck_id: stillTruckMapped,
+      driver_id: null,
+    });
+    const stillLoadBare = queries.createLoad({
+      customer_id: customerId,
+      origin: "Dallas, TX",
+      destination: "Austin, TX",
+      pickup_start: pickup.toISOString(),
+      pickup_end: pickupEnd.toISOString(),
+      delivery_start: delivery.toISOString(),
+      delivery_end: deliveryEnd.toISOString(),
+      weight: 10000,
+      commodity: "Dry",
+      rate: 800,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "STILL-BARE",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "assigned",
+      truck_id: stillTruckBare,
+      driver_id: null,
+    });
+    const { listAttachments: listStillFiles } = await import("../lib/files");
+    const { stampStopTime, listStops } = await import("../lib/stops");
+    const { ensureDefaultStops } = await import("../lib/stops");
+    ensureDefaultStops(stillLoadMapped);
+    const firstStop = listStops(stillLoadMapped)[0];
+    if (firstStop) stampStopTime(firstStop.id, "arrived_at", "2026-09-18T14:00:00.000Z");
+    assert.equal(
+      stillShared.classifySamsaraStillError({ status: 401, bodyText: "Invalid token." }),
+      "scopes_insufficient",
+    );
+    assert.equal(
+      stillShared.classifySamsaraStillError({ status: 429, bodyText: "Monthly media quota exceeded" }),
+      "quota",
+    );
+    assert.equal(stillShared.classifySamsaraStillError({ mediaStatus: "failed", bodyText: "device offline" }), "offline");
+    assert.ok(stillShared.stillStopTimes(listStops(stillLoadMapped)).some((item) => item.key.startsWith("arrive:")));
+
+    delete process.env.SAMSARA_API_TOKEN;
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const missingToken = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(missingToken.ok, false);
+    if (!missingToken.ok) {
+      assert.equal(missingToken.reason, "token_missing");
+      assert.equal(missingToken.setupBlocker, true);
+      assert.match(missingToken.message, /Samsara is not connected/);
+      assert.match(missingToken.message, /Write Media Retrieval/);
+    }
+    assert.equal(fetchCalls, 0, "missing token must not call Samsara");
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+    const missingVehicle = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadBare,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(missingVehicle.ok, false);
+    if (!missingVehicle.ok) {
+      assert.equal(missingVehicle.reason, "vehicle_unmapped");
+      assert.match(missingVehicle.message, /No Samsara ID on this truck/);
+    }
+    assert.equal(fetchCalls, 0, "vehicle miss must not call Samsara");
+
+    globalThis.fetch = (async (input) => {
+      fetchCalls += 1;
+      const url = String(input);
+      if (url.includes("/cameras/media/retrieval") && !url.includes("retrievalId=")) {
+        return new Response(JSON.stringify({ message: "Monthly media quota exceeded" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const quotaFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(quotaFail.ok, false);
+    if (!quotaFail.ok) {
+      assert.equal(quotaFail.reason, "quota");
+      assert.match(quotaFail.message, /quota/i);
+      assert.equal(quotaFail.setupBlocker, false);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    globalThis.fetch = (async (input) => {
+      fetchCalls += 1;
+      const url = String(input);
+      if (url.includes("/cameras/media/retrieval") && !url.includes("retrievalId=")) {
+        return new Response(JSON.stringify({ data: { retrievalId: "ret-offline", quotaStatus: "ok" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("retrievalId=ret-offline")) {
+        return new Response(
+          JSON.stringify({ data: { media: [{ status: "failed", vehicleId: "281474977075805" }] }, message: "device offline" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    const offlineFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(offlineFail.ok, false);
+    if (!offlineFail.ok) {
+      assert.equal(offlineFail.reason, "offline");
+      assert.match(offlineFail.message, /offline/i);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://media.samsara.com/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://s3.us-west-2.amazonaws.com/samsara-dashcam-videos/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://example.test/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://evil.example/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("http://samsara.com/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://localhost/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://169.254.169.254/latest/meta-data"), false);
+
+    let stillMediaFetches = 0;
+    globalThis.fetch = (async (input) => {
+      stillMediaFetches += 1;
+      return new Response("blocked", { status: 200, headers: { "Content-Type": "image/jpeg" } });
+    }) as typeof fetch;
+    const allowlistDirect = await still.downloadStill("https://evil.example/still.jpg");
+    assert.equal(allowlistDirect.ok, false);
+    if (!allowlistDirect.ok) {
+      assert.equal(allowlistDirect.reason, "host_rejected");
+      assert.equal(allowlistDirect.setupBlocker, false);
+      assert.match(allowlistDirect.message, /not a Samsara media host/);
+    }
+    assert.equal(stillMediaFetches, 0, "bad host must not download");
+
+    globalThis.fetch = (async () => {
+      stillMediaFetches += 1;
+      return new Response("tiny", {
+        status: 200,
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Length": String(stillShared.SAMSARA_STILL_MAX_BYTES + 1),
+        },
+      });
+    }) as typeof fetch;
+    stillMediaFetches = 0;
+    const oversizeDirect = await still.downloadStill(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
+    assert.equal(oversizeDirect.ok, false);
+    if (!oversizeDirect.ok) {
+      assert.equal(oversizeDirect.reason, "oversize");
+      assert.equal(oversizeDirect.setupBlocker, false);
+      assert.match(oversizeDirect.message, /over 8 MB/);
+    }
+    assert.equal(stillMediaFetches, 1);
+
+    globalThis.fetch = (async () =>
+      new Response(Buffer.alloc(stillShared.SAMSARA_STILL_MAX_BYTES + 1, 1), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      })) as typeof fetch;
+    const oversizeBody = await still.downloadStill(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
+    assert.equal(oversizeBody.ok, false);
+    if (!oversizeBody.ok) {
+      assert.equal(oversizeBody.reason, "oversize");
+      assert.equal(oversizeBody.setupBlocker, false);
+    }
+
+    const mockStillRetrieval = (mediaUrl: string, image: BodyInit = pngStill, headers: HeadersInit = { "Content-Type": "image/jpeg" }) =>
+      (async (input, init) => {
+        const url = String(input);
+        const method = String(init?.method ?? "GET").toUpperCase();
+        if (url.includes("/cameras/media/retrieval") && method === "POST") {
+          return new Response(JSON.stringify({ data: { retrievalId: "ret-still-1", quotaStatus: "ok" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("retrievalId=")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                media: [
+                  {
+                    status: "available",
+                    urlInfo: { url: mediaUrl },
+                    vehicleId: "281474977075805",
+                    input: "dashcamRoadFacing",
+                    mediaType: "image",
+                    startTime: "2026-09-18T17:00:00Z",
+                    endTime: "2026-09-18T17:00:00Z",
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url === mediaUrl) {
+          return new Response(image, { status: 200, headers });
+        }
+        return new Response("not mocked", { status: 500 });
+      }) as typeof fetch;
+
+    stillMediaFetches = 0;
+    globalThis.fetch = ((input, init) => {
+      const url = String(input);
+      if (!url.includes("api.samsara.com")) stillMediaFetches += 1;
+      return mockStillRetrieval("https://evil.example/still.jpg")(input, init);
+    }) as typeof fetch;
+    const hostFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(hostFail.ok, false);
+    if (!hostFail.ok) {
+      assert.equal(hostFail.reason, "host_rejected");
+      assert.equal(hostFail.setupBlocker, false);
+    }
+    assert.equal(stillMediaFetches, 0, "allowlist reject must not fetch the signed URL");
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    globalThis.fetch = mockStillRetrieval(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+      "tiny",
+      {
+        "Content-Type": "image/jpeg",
+        "Content-Length": String(stillShared.SAMSARA_STILL_MAX_BYTES + 1),
+      },
+    );
+    const oversizeFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(oversizeFail.ok, false);
+    if (!oversizeFail.ok) {
+      assert.equal(oversizeFail.reason, "oversize");
+      assert.equal(oversizeFail.setupBlocker, false);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    const afterStillFail = queries.getLoad(stillLoadMapped);
+    assert.ok(afterStillFail);
+    assert.equal(afterStillFail.status, "assigned", "still soft-fail must not change load status");
+    queries.updateLoadDetails(stillLoadMapped, { appointment_confirmation: "CONF-STILL-OK" });
+    assert.equal(queries.getLoad(stillLoadMapped)?.appointment_confirmation, "CONF-STILL-OK");
+    queries.updateLoadStatus(stillLoadMapped, "assigned");
+    assert.equal(queries.getLoad(stillLoadMapped)?.status, "assigned", "confirm / save path stays clean after still miss");
+
+    globalThis.fetch = mockStillRetrieval(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
+    const happy = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(happy.ok, true);
+    if (happy.ok) {
+      assert.equal(happy.attachment.kind, "samsara_still");
+      assert.equal(happy.attachment.uploaded_by, "samsara");
+      assert.match(happy.attachment.original_name, /samsara-road/);
+      assert.equal(happy.vehicleId, "281474977075805");
+      const stored = listStillFiles(stillLoadMapped).find((file) => file.kind === "samsara_still");
+      assert.ok(stored);
+      assert.equal(stored?.id, happy.attachment.id);
+      const { getAttachmentPath } = await import("../lib/files");
+      assert.ok(fs.existsSync(getAttachmentPath(stored!)));
+    }
+    const afterSave = queries.getLoad(stillLoadMapped);
+    assert.ok(afterSave);
+    assert.equal(afterSave.status, "assigned", "media miss/success must not change load status");
+
+    still.setSamsaraStillPollForTests(null);
+    globalThis.fetch = stillFetch;
+    if (savedStillToken == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = savedStillToken;
+  }
+
   queries.updateLoadStatus(loadId, "delivered");
   const delivered = queries.getLoad(loadId);
   assert.ok(delivered);
@@ -11620,12 +11994,16 @@ DISPATCH CONFIRMATION
   const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
+  assert.match(fuelPage, /FuelWeekSpendCards/);
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
   assert.match(fuelPage, /FuelViewTabs/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-view-tabs/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /data-fuel-tx-tabs/);
+  const fuelListsUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8");
+  assert.match(fuelListsUi, /data-fuel-view-tabs/);
+  assert.match(fuelListsUi, /data-fuel-tx-tabs/);
+  assert.doesNotMatch(fuelListsUi, /<th>Source<\/th>/);
+  assert.doesNotMatch(fuelListsUi, /row\.source_file/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/diesel")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/money")), false);
   assert.doesNotMatch(navSource, /\/fuel\/(diesel|reefer|scale|money)/);
@@ -11647,10 +12025,22 @@ DISPATCH CONFIRMATION
   assert.match(fuelPage, /FuelMatchQueue/);
   assert.match(fuelMatchUi, /data-fuel-match-queue/);
   assert.match(fuelMatchUi, /Receipt match/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-reports/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Saved weeks/);
+  const fuelWeekUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8");
+  assert.match(fuelWeekUi, /data-fuel-week-strip/);
+  assert.match(fuelWeekUi, /data-fuel-week-reports/);
+  assert.match(fuelWeekUi, /Saved weeks/);
+  assert.match(fuelWeekUi, /data-fuel-week-spend/);
+  assert.match(fuelWeekUi, /Spent this week/);
+  assert.match(fuelWeekUi, /data-fuel-spend="fuel"/);
+  assert.match(fuelWeekUi, /data-fuel-spend="reefer"/);
+  assert.match(fuelWeekUi, /data-fuel-spend="scale"/);
+  assert.match(fuelWeekUi, /label="Fuel"/);
+  assert.match(fuelWeekUi, /label="Reefer"/);
+  assert.match(fuelWeekUi, /label="Scale"/);
   assert.match(fuelPage, /loadFuelWeekView/);
+  assert.match(fuelPage, /weekView\.spent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
   assert.match(fuelPage, /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
@@ -11710,9 +12100,12 @@ DISPATCH CONFIRMATION
   const {
     cardLast4From,
     matchFuelDriver,
+    fuelHasSheetDriver,
+    isFuelUnassignedRow,
     classifyFuelCategory,
     fuelWeekPaidStats,
     fuelWeekPaidStatsForWeek,
+    fuelWeekSpentTotalsForWeek,
     isTruckDieselCategory,
     fuelTxListKind,
     parseEfsFuelText,
@@ -11782,6 +12175,35 @@ DISPATCH CONFIRMATION
   assert.equal(priorWeekPaid.minAmount, 50);
   assert.equal(priorWeekPaid.weekStartYmd, "2026-08-17");
   assert.equal(priorWeekPaid.weekEndYmd, "2026-08-23");
+  const weekSpent = fuelWeekSpentTotalsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100 },
+      { occurred_at: "2026-08-26T12:00:00.000Z", category: "Truck diesel", amount: 200 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "reefer_diesel", amount: 300 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "scale", amount: 18 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "def", amount: 20 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "money_code", amount: 500 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
+    ],
+    "2026-08-24",
+  );
+  assert.equal(weekSpent.weekStartYmd, "2026-08-24");
+  assert.equal(weekSpent.weekEndYmd, "2026-08-30");
+  assert.equal(weekSpent.fuel, 300);
+  assert.equal(weekSpent.reefer, 300);
+  assert.equal(weekSpent.scale, 18);
+  const priorWeekSpent = fuelWeekSpentTotalsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
+      { occurred_at: "2026-08-20T15:00:00.000Z", category: "reefer_diesel", amount: 40 },
+      { occurred_at: "2026-08-21T15:00:00.000Z", category: "scale", amount: 12 },
+    ],
+    "2026-08-17",
+  );
+  assert.equal(priorWeekSpent.fuel, 50);
+  assert.equal(priorWeekSpent.reefer, 40);
+  assert.equal(priorWeekSpent.scale, 12);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
@@ -11840,6 +12262,11 @@ DISPATCH CONFIRMATION
   const parsedFuel = parseFuelCsv(fuelCsv);
   assert.equal(parsedFuel.rows.length, 4);
   assert.equal(parsedFuel.skipped, 0);
+  assert.equal(fuelHasSheetDriver("Denise Ortega"), true);
+  assert.equal(fuelHasSheetDriver("  "), false);
+  assert.equal(isFuelUnassignedRow({ driver_id: null, driver_name_raw: "Denise Ortega" }), false);
+  assert.equal(isFuelUnassignedRow({ driver_id: null, driver_name_raw: "" }), true);
+  assert.equal(isFuelUnassignedRow({ driver_id: 4, driver_name_raw: "" }), false);
   const deniseMatch = matchFuelDriver(parsedFuel.rows[0]!, queries.listDrivers(), queries.listTrucks());
   assert.equal(queries.getDriver(deniseMatch.driverId ?? 0)?.name, "Denise Ortega");
   const unitMatch = matchFuelDriver(parsedFuel.rows[1]!, queries.listDrivers(), queries.listTrucks());
@@ -11848,17 +12275,45 @@ DISPATCH CONFIRMATION
   assert.equal(unknownMatch.driverId, null);
 
   const firstFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily.csv");
-  assert.equal(firstFuel.created, 1);
-  assert.equal(firstFuel.unmatched, 2);
+  assert.equal(firstFuel.created, 2);
+  assert.equal(firstFuel.unmatched, 1);
   assert.equal(firstFuel.skipped, 1);
   const secondFuel = fuelStore.importFuelFromCsv(fuelCsv, "daily-again.csv");
   assert.equal(secondFuel.created, 0);
   assert.equal(secondFuel.unmatched, 0);
   assert.equal(secondFuel.skipped, 4);
   const unmatchedFuel = fuelStore.listFuelTransactions({ unmatchedOnly: true });
-  assert.equal(unmatchedFuel.length, 2);
-  const unknownFuel = unmatchedFuel.find((row) => row.driver_name_raw === "Unknown Driver");
+  assert.equal(unmatchedFuel.length, 1);
+  assert.equal(unmatchedFuel[0]?.driver_name_raw, "");
+  const unknownFuel = fuelStore.listFuelTransactions().find((row) => row.driver_name_raw === "Unknown Driver");
   assert.ok(unknownFuel);
+  assert.equal(unknownFuel.driver_id, null);
+  assert.equal(isFuelUnassignedRow(unknownFuel), false);
+  assert.equal(
+    unmatchedFuel.some((row) => row.id === unknownFuel.id),
+    false,
+    "sheet row with driver is not Unassigned",
+  );
+  const namedSheet = fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
+      `${fuelDate},11:05,Sheet Only Driver,999,Diesel,10,3.00,30.00,SHEET-NAMED-1`,
+    ].join("\n"),
+    "sheet-named.csv",
+  );
+  assert.equal(namedSheet.unmatched, 0, "sheet row with driver is not unmatched");
+  assert.equal(namedSheet.created, 1);
+  const sheetNamed = fuelStore.listFuelTransactions().find((row) => row.invoice_number === "SHEET-NAMED-1");
+  assert.ok(sheetNamed);
+  assert.equal(sheetNamed.driver_name_raw, "Sheet Only Driver");
+  assert.equal(sheetNamed.driver_id, null);
+  assert.equal(isFuelUnassignedRow(sheetNamed), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === sheetNamed.id),
+    false,
+    "sheet row with driver → not Unassigned after import",
+  );
+  fuelStore.deleteFuelTransaction(sheetNamed.id);
   const fuelTyrell = queries.listDrivers().find((driver) => driver.name === "Tyrell Brooks");
   assert.ok(fuelTyrell);
   fuelStore.assignFuelTransactionDriver(unknownFuel.id, fuelTyrell.id);
@@ -16763,6 +17218,14 @@ DISPATCH CONFIRMATION
   assert.equal(officeRows.find((row) => row.amount === 21.19)?.driver_id, avila);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_id, null);
   assert.equal(officeRows.find((row) => row.amount === 417.36)?.driver_name_raw, "Ceferino Oquendo Garcia");
+  const ceferinoRow = officeRows.find((row) => row.amount === 417.36);
+  assert.ok(ceferinoRow);
+  assert.equal(isFuelUnassignedRow(ceferinoRow), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === ceferinoRow.id),
+    false,
+    "FleetOne row with driver is not Unassigned",
+  );
   assert.ok(!officeRows.some((row) => row.amount === 3262.28 || row.amount === 340.25));
   const { extractNProductDriverName, stitchFleetOneNName } = await import("../lib/fuel-fleetone");
   assert.equal(extractNProductDriverName("Christoph Howell"), "Christoph Howell");
@@ -16995,6 +17458,12 @@ DISPATCH CONFIRMATION
     fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
     /rematchFuelTransactionDrivers\(\{ unmatchedOnly: true \}\)/,
   );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"),
+    /TRIM\(COALESCE\(fuel_transactions\.driver_name_raw/,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelHasSheetDriver/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /fuelHasSheetDriver\(row\.driverName\)/);
 
   getDb()
     .prepare(
@@ -17011,6 +17480,12 @@ DISPATCH CONFIRMATION
     }
   ).id;
   assert.equal(fuelStore.getFuelTransaction(videoAssignId)?.driver_id, null);
+  assert.equal(isFuelUnassignedRow(fuelStore.getFuelTransaction(videoAssignId)!), false);
+  assert.equal(
+    fuelStore.listFuelTransactions({ unmatchedOnly: true }).some((row) => row.id === videoAssignId),
+    false,
+    "FleetOne/sheet driver name is not Unassigned",
+  );
   const videoLoadNumber = "1006203";
   const videoLoadId =
     (getDb().prepare("SELECT id FROM loads WHERE load_number = ?").get(videoLoadNumber) as { id: number } | undefined)

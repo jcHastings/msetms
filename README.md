@@ -133,7 +133,7 @@ Both integrations are required. They do not share data:
 
 | Source | Used for | Never used for | Env (gitignored `.env` only) |
 | --- | --- | --- | --- |
-| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles | Reefer temps, trailer location | `SAMSARA_API_TOKEN` |
+| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles, camera stills on a load | Reefer temps, trailer location, live video | `SAMSARA_API_TOKEN` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (rate + lumper) | Owner-operator settlement / bills / relays | `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, optional `QBO_SANDBOX=true` |
 | **Google Maps** | Places autocomplete, Directions miles, and the per-load map (Maps JavaScript API) | Scraping maps.google.com; a fleet map of every truck | `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_API_KEY`. Enable Places, Geocoding, Directions, and Maps JavaScript API. If the key is used in the browser for the load map, restrict it by HTTP referrer. |
@@ -153,6 +153,8 @@ The driver app shows remaining drive time (Samsara) and reefer temp/setpoint (OR
 3. On **Fleet → Trucks**, use **Import from Samsara** (preview, then confirm) or set the Samsara vehicle ID by hand. Set the Samsara driver ID on the driver.
 
 When the token is set, the app calls `GET https://api.samsara.com/fleet/vehicles` for truck import, plus `GET https://api.samsara.com/fleet/vehicles/stats?types=gps` and `GET https://api.samsara.com/fleet/hos/clocks`. The board and load page show last-known **tractor** location and remaining drive time. The token is never logged.
+
+**Fetch Samsara still** on a load (**Documents**) or truck page pulls one road-facing (or driver-facing) image via `POST /cameras/media/retrieval` (`mediaType=image`), polls `GET /cameras/media/retrieval?retrievalId=`, and saves it under `data/uploads` as a Load document (`samsara_still`). Time defaults to now; arrive/depart on the load are offered when those stop times exist. Soft-fail only (offline, monthly media quota, no media at that time, missing truck link, missing/invalid token). Does not block Confirm. Token needs **Write Media Retrieval** and **Read Media Retrieval**. Signed URLs expire in about 8 hours, so the file is stored immediately. No live video, hyperlapse, or trailer Orbcomm cameras.
 
 In-transit and delivered loads can **Refresh IFTA from Samsara** when the assigned truck has a Samsara vehicle ID. The app uses the current IFTA APIs:
 
@@ -242,5 +244,7 @@ Remove-Item -Recurse -Force data\tms.db, data\tms.db-wal, data\tms.db-shm, data\
 ## Stack
 
 Next.js (App Router), TypeScript, Tailwind CSS, Node built-in SQLite (`node:sqlite`), `dotenv`, `unpdf`, optional `tesseract.js`. No `better-sqlite3` / node-gyp.
+
+**Frontend/UI tips:** read and follow Taste Skill (`design-taste-frontend`) at [`.cursor/skills/design-taste-frontend/`](./.cursor/skills/design-taste-frontend/SKILL.md) — anti-slop; audit-first on redesigns. Do not rewrite the MS Express voice pack.
 
 See [PRODUCT_CATALOG.md](./PRODUCT_CATALOG.md) for the full 300-feature catalog and extension modules (source of truth). See [ROADMAP.md](./ROADMAP.md) for what ships now vs next vs later. Do not implement the catalog in one pass.

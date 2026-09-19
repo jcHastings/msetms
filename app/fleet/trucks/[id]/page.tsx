@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { PageHeader } from "@/components/page-header";
@@ -17,7 +18,10 @@ import {
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
+import { toOfficeDateTime } from "@/lib/format";
+import { getSamsaraStillPanel, loadsForSamsaraStill } from "@/lib/integrations/samsara-still";
 import { getTruck, listDrivers } from "@/lib/queries";
+import { samsaraVehicleIdForTruck } from "@/lib/samsara-still-shared";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +102,40 @@ export default async function EditTruckPage({
         drivers={listDrivers().map(driverOption)}
         submitLabel="Save truck"
       />
+      <SamsaraStillOnTruck truckId={truck.id} vehicleId={samsaraVehicleIdForTruck(truck)} />
       <FleetDocsPanel ownerType="truck" ownerId={Number(truck.id)} documents={listFleetDocuments("truck", truck.id)} />
     </>
+  );
+}
+
+function SamsaraStillOnTruck({ truckId, vehicleId }: { truckId: number; vehicleId: string }) {
+  const loads = loadsForSamsaraStill(truckId);
+  const first = loads[0];
+  const panel = first
+    ? getSamsaraStillPanel(first)
+    : {
+        tokenSet: false,
+        vehicleId,
+        canFetch: false,
+        setupMessage: "Open a load on this truck, then fetch the still onto that load's documents.",
+        stopTimes: [],
+      };
+  return (
+    <FetchSamsaraStillPanel
+      loads={loads.map((load) => ({
+        id: load.id,
+        loadNumber: load.load_number,
+        stopTimes: getSamsaraStillPanel(load).stopTimes,
+      }))}
+      vehicleId={vehicleId || panel.vehicleId}
+      canFetch={Boolean(first) && panel.canFetch}
+      setupMessage={
+        first
+          ? panel.setupMessage
+          : "Open a load on this truck, then fetch the still onto that load's documents."
+      }
+      stopTimes={panel.stopTimes}
+      nowValue={toOfficeDateTime(new Date().toISOString())}
+    />
   );
 }
