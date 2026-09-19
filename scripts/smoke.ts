@@ -12256,7 +12256,7 @@ DISPATCH CONFIRMATION
       "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
       `${fuelDate},11:05,Sheet Only Driver,999,Diesel,10,3.00,30.00,SHEET-NAMED-1`,
     ].join("\n"),
-    "fleetone-named.csv",
+    "sheet-named.csv",
   );
   assert.equal(namedSheet.unmatched, 0, "sheet row with driver is not unmatched");
   assert.equal(namedSheet.created, 1);
