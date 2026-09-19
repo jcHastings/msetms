@@ -693,6 +693,35 @@ export type FuelWeekPaidStats = {
   avgPpg: number | null;
 };
 
+export type FuelWeekSpentTotals = {
+  weekStartYmd: string;
+  weekEndYmd: string;
+  fuel: number;
+  reefer: number;
+  scale: number;
+};
+
+export function emptyFuelWeekSpentTotals(weekStartYmd: string): FuelWeekSpentTotals {
+  const { startYmd, endYmd } = localWeekRange(weekStartYmd);
+  return { weekStartYmd: startYmd, weekEndYmd: endYmd, fuel: 0, reefer: 0, scale: 0 };
+}
+
+export function fuelWeekSpentTotalsForWeek(
+  rows: Array<Pick<FuelTransaction, "occurred_at" | "category" | "amount">>,
+  weekStartYmd: string,
+): FuelWeekSpentTotals {
+  const totals = emptyFuelWeekSpentTotals(weekStartYmd);
+  for (const row of rows) {
+    if (!fuelRowInWeek(row.occurred_at, totals.weekStartYmd)) continue;
+    if (row.amount == null || !Number.isFinite(row.amount)) continue;
+    const kind = fuelTxListKind(row.category);
+    if (kind === "truck_diesel") totals.fuel += row.amount;
+    else if (kind === "reefer") totals.reefer += row.amount;
+    else if (kind === "scale") totals.scale += row.amount;
+  }
+  return totals;
+}
+
 export function isDieselPaidCategory(category: string): boolean {
   if (category === "truck_diesel" || category === "reefer_diesel") return true;
   const classified = classifyFuelCategory(category);

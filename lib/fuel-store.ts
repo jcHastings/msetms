@@ -5,6 +5,7 @@ import {
   fuelRowInWeek,
   fuelWeekAnchorDate,
   fuelWeekPaidStatsForWeek,
+  fuelWeekSpentTotalsForWeek,
   isCurrentFuelWeek,
   isFuelBucket,
   isMoneyCodeCategory,
@@ -644,6 +645,9 @@ export function loadFuelWeekView(weekParam?: string, now = new Date()) {
     stats: useLive
       ? fuelWeekPaidStatsForWeek(listFuelTransactions(), weekStartYmd)
       : (snapshot?.stats ?? fuelWeekPaidStatsForWeek([], weekStartYmd)),
+    spent: useLive
+      ? fuelWeekSpentTotalsForWeek(listFuelTransactions(), weekStartYmd)
+      : fuelWeekSpentTotalsForWeek(weekRows, weekStartYmd),
     driverRollups: useLive ? listFuelRollups(anchor) : (snapshot?.driverRollups ?? []),
     truckRollups: useLive ? listTruckFuelRollups(anchor) : (snapshot?.truckRollups ?? []),
     weeks: listFuelWeekOptions(now),

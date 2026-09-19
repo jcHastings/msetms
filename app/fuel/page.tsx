@@ -7,7 +7,7 @@ import { FuelCsvImport } from "@/components/fuel-csv-import";
 import { FuelMatchQueue } from "@/components/fuel-match-queue";
 import { FuelMpgTable } from "@/components/fuel-mpg-table";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
-import { FuelWeekStrip } from "@/components/fuel-week-strip";
+import { FuelWeekSpendCards, FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs, fuelPageHref } from "@/components/fuel-transaction-lists";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
@@ -91,6 +91,7 @@ export default async function FuelPage({
           </>
         }
       />
+      <FuelWeekSpendCards spent={weekView.spent} current={weekView.current} />
       <FuelWeekStrip
         stats={weekView.stats}
         weeks={weekView.weeks}

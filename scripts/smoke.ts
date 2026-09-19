@@ -11994,6 +11994,7 @@ DISPATCH CONFIRMATION
   const driversListPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/page.tsx"), "utf8");
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
+  assert.match(fuelPage, /FuelWeekSpendCards/);
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
@@ -12024,10 +12025,22 @@ DISPATCH CONFIRMATION
   assert.match(fuelPage, /FuelMatchQueue/);
   assert.match(fuelMatchUi, /data-fuel-match-queue/);
   assert.match(fuelMatchUi, /Receipt match/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-strip/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /data-fuel-week-reports/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Saved weeks/);
+  const fuelWeekUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8");
+  assert.match(fuelWeekUi, /data-fuel-week-strip/);
+  assert.match(fuelWeekUi, /data-fuel-week-reports/);
+  assert.match(fuelWeekUi, /Saved weeks/);
+  assert.match(fuelWeekUi, /data-fuel-week-spend/);
+  assert.match(fuelWeekUi, /Spent this week/);
+  assert.match(fuelWeekUi, /data-fuel-spend="fuel"/);
+  assert.match(fuelWeekUi, /data-fuel-spend="reefer"/);
+  assert.match(fuelWeekUi, /data-fuel-spend="scale"/);
+  assert.match(fuelWeekUi, /label="Fuel"/);
+  assert.match(fuelWeekUi, /label="Reefer"/);
+  assert.match(fuelWeekUi, /label="Scale"/);
   assert.match(fuelPage, /loadFuelWeekView/);
+  assert.match(fuelPage, /weekView\.spent/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
   assert.match(fuelPage, /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
@@ -12092,6 +12105,7 @@ DISPATCH CONFIRMATION
     classifyFuelCategory,
     fuelWeekPaidStats,
     fuelWeekPaidStatsForWeek,
+    fuelWeekSpentTotalsForWeek,
     isTruckDieselCategory,
     fuelTxListKind,
     parseEfsFuelText,
@@ -12161,6 +12175,35 @@ DISPATCH CONFIRMATION
   assert.equal(priorWeekPaid.minAmount, 50);
   assert.equal(priorWeekPaid.weekStartYmd, "2026-08-17");
   assert.equal(priorWeekPaid.weekEndYmd, "2026-08-23");
+  const weekSpent = fuelWeekSpentTotalsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100 },
+      { occurred_at: "2026-08-26T12:00:00.000Z", category: "Truck diesel", amount: 200 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "reefer_diesel", amount: 300 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "scale", amount: 18 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "def", amount: 20 },
+      { occurred_at: "2026-08-26T14:00:00.000Z", category: "money_code", amount: 500 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
+    ],
+    "2026-08-24",
+  );
+  assert.equal(weekSpent.weekStartYmd, "2026-08-24");
+  assert.equal(weekSpent.weekEndYmd, "2026-08-30");
+  assert.equal(weekSpent.fuel, 300);
+  assert.equal(weekSpent.reefer, 300);
+  assert.equal(weekSpent.scale, 18);
+  const priorWeekSpent = fuelWeekSpentTotalsForWeek(
+    [
+      { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100 },
+      { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
+      { occurred_at: "2026-08-20T15:00:00.000Z", category: "reefer_diesel", amount: 40 },
+      { occurred_at: "2026-08-21T15:00:00.000Z", category: "scale", amount: 12 },
+    ],
+    "2026-08-17",
+  );
+  assert.equal(priorWeekSpent.fuel, 50);
+  assert.equal(priorWeekSpent.reefer, 40);
+  assert.equal(priorWeekSpent.scale, 12);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
