@@ -12034,9 +12034,11 @@ DISPATCH CONFIRMATION
   assert.match(fuelWeekUi, /data-fuel-spend="fuel"/);
   assert.match(fuelWeekUi, /data-fuel-spend="reefer"/);
   assert.match(fuelWeekUi, /data-fuel-spend="scale"/);
+  assert.match(fuelWeekUi, /data-fuel-spend="def"/);
   assert.match(fuelWeekUi, /label="Fuel"/);
   assert.match(fuelWeekUi, /label="Reefer"/);
   assert.match(fuelWeekUi, /label="Scale"/);
+  assert.match(fuelWeekUi, /label="DEF"/);
   assert.match(fuelPage, /loadFuelWeekView/);
   assert.match(fuelPage, /weekView\.spent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
@@ -12182,6 +12184,7 @@ DISPATCH CONFIRMATION
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "reefer_diesel", amount: 300 },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "scale", amount: 18 },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "def", amount: 20 },
+      { occurred_at: "2026-08-26T15:00:00.000Z", category: "DIESEL EXHAUST FLUID", amount: 7 },
       { occurred_at: "2026-08-26T14:00:00.000Z", category: "money_code", amount: 500 },
       { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
     ],
@@ -12192,18 +12195,21 @@ DISPATCH CONFIRMATION
   assert.equal(weekSpent.fuel, 300);
   assert.equal(weekSpent.reefer, 300);
   assert.equal(weekSpent.scale, 18);
+  assert.equal(weekSpent.def, 27);
   const priorWeekSpent = fuelWeekSpentTotalsForWeek(
     [
       { occurred_at: "2026-08-25T14:00:00.000Z", category: "truck_diesel", amount: 100 },
       { occurred_at: "2026-08-20T14:00:00.000Z", category: "truck_diesel", amount: 50 },
       { occurred_at: "2026-08-20T15:00:00.000Z", category: "reefer_diesel", amount: 40 },
       { occurred_at: "2026-08-21T15:00:00.000Z", category: "scale", amount: 12 },
+      { occurred_at: "2026-08-21T16:00:00.000Z", category: "def", amount: 9 },
     ],
     "2026-08-17",
   );
   assert.equal(priorWeekSpent.fuel, 50);
   assert.equal(priorWeekSpent.reefer, 40);
   assert.equal(priorWeekSpent.scale, 12);
+  assert.equal(priorWeekSpent.def, 9);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
