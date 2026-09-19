@@ -2115,12 +2115,23 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Fetch Samsara still/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Road-facing/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /Driver-facing/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /SAMSARA_STILL_CABIN_NOTE/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"), /facing === "driver"/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "components/fetch-samsara-still.tsx"), "utf8"),
+    /disabled=\{pending \|\| !canFetch \|\| !selectedLoadId\}/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /FetchSamsaraStillPanel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-editor.tsx"), "utf8"), /submitLabel="Save load"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8"), /FetchSamsaraStillPanel/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /\/cameras\/media\/retrieval/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /mediaType: "image"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /isSamsaraSignedMediaUrl/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-still.ts"), "utf8"), /SAMSARA_STILL_MAX_BYTES/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /samsara_still/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /host_rejected/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/samsara-still-shared.ts"), "utf8"), /Cabin camera/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/types.ts"), "utf8"), /value: "samsara_still"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /Write Media Retrieval \+ Read Media Retrieval/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /fetchSamsaraStillAction/);
@@ -11315,40 +11326,153 @@ DISPATCH CONFIRMATION
     }
     assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
 
-    globalThis.fetch = (async (input, init) => {
-      const url = String(input);
-      const method = String(init?.method ?? "GET").toUpperCase();
-      if (url.includes("/cameras/media/retrieval") && method === "POST") {
-        return new Response(JSON.stringify({ data: { retrievalId: "ret-still-1", quotaStatus: "ok" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      if (url.includes("retrievalId=ret-still-1")) {
-        return new Response(
-          JSON.stringify({
-            data: {
-              media: [
-                {
-                  status: "available",
-                  urlInfo: { url: "https://example.test/still.jpg" },
-                  vehicleId: "281474977075805",
-                  input: "dashcamRoadFacing",
-                  mediaType: "image",
-                  startTime: "2026-09-18T17:00:00Z",
-                  endTime: "2026-09-18T17:00:00Z",
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-      if (url.includes("example.test/still.jpg")) {
-        return new Response(pngStill, { status: 200, headers: { "Content-Type": "image/jpeg" } });
-      }
-      return new Response("not mocked", { status: 500 });
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://media.samsara.com/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://s3.us-west-2.amazonaws.com/samsara-dashcam-videos/still.jpg"), true);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://example.test/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://evil.example/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("http://samsara.com/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://localhost/still.jpg"), false);
+    assert.equal(stillShared.isSamsaraSignedMediaUrl("https://169.254.169.254/latest/meta-data"), false);
+
+    let stillMediaFetches = 0;
+    globalThis.fetch = (async (input) => {
+      stillMediaFetches += 1;
+      return new Response("blocked", { status: 200, headers: { "Content-Type": "image/jpeg" } });
     }) as typeof fetch;
+    const allowlistDirect = await still.downloadStill("https://evil.example/still.jpg");
+    assert.equal(allowlistDirect.ok, false);
+    if (!allowlistDirect.ok) {
+      assert.equal(allowlistDirect.reason, "host_rejected");
+      assert.equal(allowlistDirect.setupBlocker, false);
+      assert.match(allowlistDirect.message, /not a Samsara media host/);
+    }
+    assert.equal(stillMediaFetches, 0, "bad host must not download");
+
+    globalThis.fetch = (async () => {
+      stillMediaFetches += 1;
+      return new Response("tiny", {
+        status: 200,
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Length": String(stillShared.SAMSARA_STILL_MAX_BYTES + 1),
+        },
+      });
+    }) as typeof fetch;
+    stillMediaFetches = 0;
+    const oversizeDirect = await still.downloadStill(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
+    assert.equal(oversizeDirect.ok, false);
+    if (!oversizeDirect.ok) {
+      assert.equal(oversizeDirect.reason, "oversize");
+      assert.equal(oversizeDirect.setupBlocker, false);
+      assert.match(oversizeDirect.message, /over 8 MB/);
+    }
+    assert.equal(stillMediaFetches, 1);
+
+    globalThis.fetch = (async () =>
+      new Response(Buffer.alloc(stillShared.SAMSARA_STILL_MAX_BYTES + 1, 1), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      })) as typeof fetch;
+    const oversizeBody = await still.downloadStill(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
+    assert.equal(oversizeBody.ok, false);
+    if (!oversizeBody.ok) {
+      assert.equal(oversizeBody.reason, "oversize");
+      assert.equal(oversizeBody.setupBlocker, false);
+    }
+
+    const mockStillRetrieval = (mediaUrl: string, image: BodyInit = pngStill, headers: HeadersInit = { "Content-Type": "image/jpeg" }) =>
+      (async (input, init) => {
+        const url = String(input);
+        const method = String(init?.method ?? "GET").toUpperCase();
+        if (url.includes("/cameras/media/retrieval") && method === "POST") {
+          return new Response(JSON.stringify({ data: { retrievalId: "ret-still-1", quotaStatus: "ok" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("retrievalId=")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                media: [
+                  {
+                    status: "available",
+                    urlInfo: { url: mediaUrl },
+                    vehicleId: "281474977075805",
+                    input: "dashcamRoadFacing",
+                    mediaType: "image",
+                    startTime: "2026-09-18T17:00:00Z",
+                    endTime: "2026-09-18T17:00:00Z",
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (url === mediaUrl) {
+          return new Response(image, { status: 200, headers });
+        }
+        return new Response("not mocked", { status: 500 });
+      }) as typeof fetch;
+
+    stillMediaFetches = 0;
+    globalThis.fetch = ((input, init) => {
+      const url = String(input);
+      if (!url.includes("api.samsara.com")) stillMediaFetches += 1;
+      return mockStillRetrieval("https://evil.example/still.jpg")(input, init);
+    }) as typeof fetch;
+    const hostFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(hostFail.ok, false);
+    if (!hostFail.ok) {
+      assert.equal(hostFail.reason, "host_rejected");
+      assert.equal(hostFail.setupBlocker, false);
+    }
+    assert.equal(stillMediaFetches, 0, "allowlist reject must not fetch the signed URL");
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    globalThis.fetch = mockStillRetrieval(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+      "tiny",
+      {
+        "Content-Type": "image/jpeg",
+        "Content-Length": String(stillShared.SAMSARA_STILL_MAX_BYTES + 1),
+      },
+    );
+    const oversizeFail = await still.fetchSamsaraStillForLoad({
+      loadId: stillLoadMapped,
+      timeChoice: "now",
+      customValue: "",
+      facing: "road",
+    });
+    assert.equal(oversizeFail.ok, false);
+    if (!oversizeFail.ok) {
+      assert.equal(oversizeFail.reason, "oversize");
+      assert.equal(oversizeFail.setupBlocker, false);
+    }
+    assert.equal(listStillFiles(stillLoadMapped).some((file) => file.kind === "samsara_still"), false);
+
+    const afterStillFail = queries.getLoad(stillLoadMapped);
+    assert.ok(afterStillFail);
+    assert.equal(afterStillFail.status, "assigned", "still soft-fail must not change load status");
+    queries.updateLoadDetails(stillLoadMapped, { appointment_confirmation: "CONF-STILL-OK" });
+    assert.equal(queries.getLoad(stillLoadMapped)?.appointment_confirmation, "CONF-STILL-OK");
+    queries.updateLoadStatus(stillLoadMapped, "assigned");
+    assert.equal(queries.getLoad(stillLoadMapped)?.status, "assigned", "confirm / save path stays clean after still miss");
+
+    globalThis.fetch = mockStillRetrieval(
+      "https://samsara-dashcam-videos.s3.us-west-2.amazonaws.com/still.jpg",
+    );
     const happy = await still.fetchSamsaraStillForLoad({
       loadId: stillLoadMapped,
       timeChoice: "now",

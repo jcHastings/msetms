@@ -5,9 +5,11 @@ import { fromOfficeDateTime } from "../format";
 import { getLoad, getTruck, listLoads } from "../queries";
 import {
   classifySamsaraStillError,
+  isSamsaraSignedMediaUrl,
   parseSamsaraStillFacing,
   resolveStillCapturedAt,
   SAMSARA_STILL_KIND,
+  SAMSARA_STILL_MAX_BYTES,
   samsaraStillFailure,
   samsaraStillInput,
   samsaraVehicleIdForTruck,
@@ -243,17 +245,47 @@ async function pollRetrieval(
   return samsaraStillFailure(classifySamsaraStillError({ mediaStatus: lastStatus, bodyText: lastBody }));
 }
 
-async function downloadStill(url: string): Promise<{ ok: true; buffer: Buffer; mimeType: string } | SamsaraStillFailure> {
+const MAX_STILL_REDIRECTS = 3;
+
+export async function downloadStill(
+  url: string,
+): Promise<{ ok: true; buffer: Buffer; mimeType: string } | SamsaraStillFailure> {
+  return downloadStillAt(url, 0);
+}
+
+async function downloadStillAt(
+  url: string,
+  hops: number,
+): Promise<{ ok: true; buffer: Buffer; mimeType: string } | SamsaraStillFailure> {
+  if (!isSamsaraSignedMediaUrl(url)) return samsaraStillFailure("host_rejected");
   try {
     const response = await fetch(url, {
       cache: "no-store",
+      redirect: "manual",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location || hops >= MAX_STILL_REDIRECTS) return samsaraStillFailure("request_failed");
+      let next: string;
+      try {
+        next = new URL(location, url).toString();
+      } catch {
+        return samsaraStillFailure("host_rejected");
+      }
+      if (!isSamsaraSignedMediaUrl(next)) return samsaraStillFailure("host_rejected");
+      return downloadStillAt(next, hops + 1);
+    }
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
       return samsaraStillFailure(classifySamsaraStillError({ status: response.status, bodyText }));
     }
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > SAMSARA_STILL_MAX_BYTES) {
+      return samsaraStillFailure("oversize");
+    }
+    const buffer = await readStillBody(response);
+    if (buffer === "oversize") return samsaraStillFailure("oversize");
     if (!buffer.length) return samsaraStillFailure("no_media");
     const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
     return { ok: true, buffer, mimeType };
@@ -263,6 +295,27 @@ async function downloadStill(url: string): Promise<{ ok: true; buffer: Buffer; m
     }
     return samsaraStillFailure("request_failed");
   }
+}
+
+async function readStillBody(response: Response): Promise<Buffer | "oversize"> {
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return buffer.length > SAMSARA_STILL_MAX_BYTES ? "oversize" : buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > SAMSARA_STILL_MAX_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return "oversize";
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return total ? Buffer.concat(chunks, total) : Buffer.alloc(0);
 }
 
 async function samsaraJson<T>(

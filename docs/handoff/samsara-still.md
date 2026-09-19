@@ -36,7 +36,11 @@ Missing token or 401/403 is a setup blocker on the panel. It does not 500 and do
 6. After success the image is in **Load documents** as **Samsara still**.
 7. Same control is on **Fleet → Trucks → unit** when that truck has a load.
 
-Soft-fail copy covers offline, monthly media quota, no still at that time, and a missing vehicle id. Saving the load / Confirm is unchanged.
+Soft-fail copy covers offline, monthly media quota, no still at that time, a missing vehicle id, a still URL that is not a Samsara media host, and a still over 8 MB. Saving the load / Confirm is unchanged.
+
+`downloadStill` only follows https Samsara hosts and Samsara-named S3 buckets. Oversize or a bad host fails the still, not the load.
+
+Driver-facing shows a cabin-camera privacy note. Fetch stays enabled.
 
 ## Out of scope
 

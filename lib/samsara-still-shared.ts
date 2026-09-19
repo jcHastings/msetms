@@ -15,7 +15,16 @@ export type SamsaraStillFailureReason =
   | "quota"
   | "no_media"
   | "timeout"
+  | "host_rejected"
+  | "oversize"
   | "request_failed";
+
+/** Dashcam stills stay under this cap. Soft-fail oversize. Save / Confirm stay open. */
+export const SAMSARA_STILL_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Shown when Camera is Driver-facing. Does not block fetch. */
+export const SAMSARA_STILL_CABIN_NOTE =
+  "Cabin camera. People in the cab can be in the shot. Fetch still works.";
 
 export type SamsaraStillFailure = {
   ok: false;
@@ -38,6 +47,8 @@ export const SAMSARA_STILL_MESSAGES: Record<SamsaraStillFailureReason, string> =
   quota: "Monthly Samsara media quota is used up. Try again next month.",
   no_media: "No still at that time.",
   timeout: "Samsara is still preparing the still. Try again in a minute.",
+  host_rejected: "Still URL is not a Samsara media host. Nothing was saved.",
+  oversize: "That still is over 8 MB. Nothing was saved.",
   request_failed: "Samsara still request failed. The load is unchanged.",
 };
 
@@ -62,6 +73,27 @@ export function samsaraStillInput(facing: SamsaraStillFacing): "dashcamRoadFacin
 
 export function samsaraVehicleIdForTruck(truck: { samsara_vehicle_id?: string | null } | null | undefined): string {
   return String(truck?.samsara_vehicle_id ?? "").trim();
+}
+
+/** Signed stills only: https Samsara hosts and Samsara-named S3 buckets. */
+export function isSamsaraSignedMediaUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:") return false;
+  if (parsed.username || parsed.password) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (!host || host.includes(":") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;
+  if (host === "samsara.com" || host.endsWith(".samsara.com")) return true;
+  if (/(^|\.)samsara[a-z0-9-]*\.s3([.-][a-z0-9-]+)*\.amazonaws\.com$/.test(host)) return true;
+  if (/^s3([.-][a-z0-9-]+)*\.amazonaws\.com$/.test(host)) {
+    const bucket = parsed.pathname.split("/").filter(Boolean)[0] ?? "";
+    return /^samsara[a-z0-9-]*$/i.test(bucket);
+  }
+  return false;
 }
 
 export function classifySamsaraStillError(input: {
