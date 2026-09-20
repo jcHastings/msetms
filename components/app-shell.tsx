@@ -1,30 +1,137 @@
-import Link from "next/link";
-import { NavLinks } from "@/components/nav-links";
+"use client";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
+import { MikeLauncher } from "@/components/mike-launcher";
+import { NavLinks } from "@/components/nav-links";
+import { OfficeNotificationBell } from "@/components/office-notification-bell";
+import type { OfficeNotification } from "@/lib/alert-rules-shared";
+import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
+import type { MikeMessage } from "@/lib/mike-shared";
+import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
+
+export function AppShell({
+  children,
+  dispatcher,
+  mikeConfigured = false,
+  mikeMessages = [],
+  officeNotifications = [],
+}: {
+  children: React.ReactNode;
+  dispatcher: PublicDispatcher;
+  requireTwoFactor?: boolean;
+  mikeConfigured?: boolean;
+  mikeMessages?: MikeMessage[];
+  officeNotifications?: OfficeNotification[];
+}) {
+  const pathname = usePathname();
+  const orbcommPage = pathname === "/fleet/orbcomm" || pathname.startsWith("/fleet/orbcomm/");
+  const [navOpen, setNavOpen] = useState(false);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    if (orbcommPage) {
+      root.setAttribute("data-orbcomm-page", "");
+      body.setAttribute("data-orbcomm-page", "");
+    } else {
+      root.removeAttribute("data-orbcomm-page");
+      body.removeAttribute("data-orbcomm-page");
+    }
+    return () => {
+      root.removeAttribute("data-orbcomm-page");
+      body.removeAttribute("data-orbcomm-page");
+    };
+  }, [orbcommPage]);
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-navy text-slate-100">
-        <div className="border-b border-white/10 px-5 py-5">
-          <Link href="/" className="block">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-              MSE Transport
-            </div>
-            <div className="mt-1 text-xl font-semibold tracking-tight">TMS</div>
+    <div
+      className="desk-shell desk-canvas flex min-h-screen"
+      data-nav-open={navOpen ? "true" : "false"}
+      data-orbcomm-page={orbcommPage ? "" : undefined}
+    >
+      <header className="desk-phone-bar" data-desk-phone-bar="">
+        <button
+          type="button"
+          className="desk-phone-menu"
+          aria-expanded={navOpen}
+          aria-controls="desk-sidebar"
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          Menu
+        </button>
+        <Link href="/" className="desk-phone-brand min-w-0 flex-1">
+          <BrandMark variant="dark" size="sm" />
+        </Link>
+        <form action={dispatcherLogoutAction}>
+          <button className="desk-phone-signout" type="submit">
+            Sign out
+          </button>
+        </form>
+      </header>
+      {navOpen ? (
+        <button
+          type="button"
+          className="desk-nav-backdrop"
+          aria-label="Close menu"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+      <aside
+        id="desk-sidebar"
+        className="desk-sidebar sticky top-0 flex h-dvh max-h-dvh min-h-0 w-60 shrink-0 flex-col overflow-x-hidden"
+        data-desk-chrome=""
+      >
+        <div className="desk-sidebar-brand shrink-0 border-b border-white/10 px-3 py-3">
+          <Link href="/" className="block w-fit max-w-full">
+            <BrandMark variant="dark" size="sm" />
           </Link>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            Local dispatch for a small fleet
-          </p>
         </div>
-        <NavLinks />
-        <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-500">
-          Single-tenant local v1
-          <br />
-          No login required
+        <NavLinks role={dispatcher.role} />
+        <div className="desk-sidebar-user shrink-0 border-t border-white/10 px-3 py-3 text-xs text-slate-400">
+          <OfficeNotificationBell items={officeNotifications} />
+          <div className="font-medium text-slate-200" title={dispatcher.name}>
+            {dispatcher.name}
+          </div>
+          <div>{roleLabel(dispatcher.role)}</div>
+          <form action={dispatcherLogoutAction} className="mt-2">
+            <button className="btn btn-ghost w-full justify-start px-2 text-xs text-slate-300" type="submit">
+              Sign out
+            </button>
+          </form>
         </div>
       </aside>
-      <div className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-[1400px] px-8 py-7">{children}</div>
+      <div className="desk-main desk-canvas min-w-0 flex-1">
+        <div className="desk-main-inner mx-auto w-full max-w-[1400px] px-8 py-7">
+          <div data-desk-chrome="">
+          <MikeLauncher configured={mikeConfigured} initialMessages={mikeMessages} />
+          </div>
+          {!dispatcher.email?.trim() ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add an email on this user. Sign-in uses your password only until then. After an email is
+              saved, the next sign-in emails a one-time code.{" "}
+              <Link href="/settings/security" className="font-semibold underline">
+                Add email
+              </Link>
+            </div>
+          ) : null}
+          {children}
+        </div>
       </div>
     </div>
   );

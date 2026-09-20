@@ -1,0 +1,187 @@
+                                                          Transaction Activity Report
+
+                                                                                                                            Page:             1 of 3
+
+
+
+        M & S Loads LLC                                                               Report Date                                 09/18/2026
+        228 E ROUTE 59 #190                                                           Customer Number                         3770001903818
+        NANUET, NY 10954                                                              Voice Number
+                                                                                      Fax
+                                                                                      Email                           dispatch@msloads.com
+
+
+
+        Funded Activity                                                               Direct Bill Activity
+        Diesel                                              1,924.04                  Direct Bill Total                                      0.00
+        Cash Adv                                               35.00
+        DEF                                                    76.42
+        Money Code                                            205.00                  NOTE: This is not a Billing Statement. Please pay by
+                                                                                      Billing Statement only
+        Scale                                                  35.75
+        Reefer                                                 77.92
+        Funded Total                                        2,354.13
+
+
+
+
+Funded Fuel Transaction Summary
+         Fuel Type     Count       Total Volume       Gross PPU        Sub Total         Discount Amount      Net PPU       Total Amount
+              Diesel           4             311.24          0.000         2,024.88                  101.34         0.000          1,924.04
+              Reefer           2              12.17          0.000            79.39                    3.97         0.000             77.92
+          Unleaded             0               1.00          0.000             0.00                    0.00         0.000              0.00
+               CNG             0               1.00          0.000             0.00                    0.00         0.000              0.00
+                LNG            0               1.00          0.000             0.00                    0.00         0.000              0.00
+           Propane             0               1.00          0.000             0.00                    0.00         0.000              0.00
+          Kerosene             0               1.00          0.000             0.00                    0.00         0.000              0.00
+                DEF            2               2.00          0.000            75.92                    0.00         0.000             76.42
+
+
+
+
+Direct Bill Fuel Transaction Summary
+         Fuel Type     Count       Total Volume       Gross PPU        Sub Total        Discount Amount       Net PPU       Total Amount
+              Diesel           0              1.00           0.000             0.00                   0.00          0.000             0.00
+              Reefer           0              1.00           0.000             0.00                   0.00          0.000             0.00
+          Unleaded             0              1.00           0.000             0.00                   0.00          0.000             0.00
+               CNG             0              1.00           0.000             0.00                   0.00          0.000             0.00
+                LNG            0              1.00           0.000             0.00                   0.00          0.000             0.00
+           Propane             0              1.00           0.000             0.00                   0.00          0.000             0.00
+          Kerosene             0              1.00           0.000             0.00                   0.00          0.000             0.00
+                DEF            0              1.00           0.000             0.00                   0.00          0.000             0.00
+
+
+
+
+                                                                                                                                          / Dm­2019­02
+M & S Loads LLC
+228 E ROUTE 59 #190                                                                                                                                                                              Page:           2 of 3
+NANUET NY 10954
+UNITED STATES
+Fax / Email dispatch@msloads.com                                                                                                                                    Report Date:                        09/18/2026
+                                                                                                                                                                    Customer Number:                3770001903818
+
+
+
+
+                                                                         INVOICE # /                                                               GROSS    SALES        FED    GROSS     DISC                      TOTAL
+                                                                                                               CITY
+        DB
+
+
+
+
+DATE         CATEGORY   DESCRIPTION                 UNIT   PROMPT DATA   CHECK #       LOC #   LOCATION NAME                    ST          QTY      PPG      TAX        TAX      AMT     AMT            FEES         AMT
+
+
+
+             CARD       00260
+09/18   N    Diesel     ULTRA LOW SULFUR DIESEL     28      D­075        158115282 544144 PILOT 1323 TRAVEL    FAUCETT               MO 105.310    6.5190    0.00       0.00    686.54   32.67         0.00      653.87
+                                                                         5
+                                                            N­Kelvin
+                                                            Whaley
+                                                            O­259915
+                                                            #­1006211
+09/18   N    DEF        DIESEL EXHAUST FLUID UREA   28      D­075        158115282 544144 PILOT 1323 TRAVEL    FAUCETT               MO   12.170   4.7990    0.00       0.00     58.39    0.00         0.50       58.89
+                                                                         5
+                                                            N­Kelvin
+                                                            Whaley
+                                                            O­259915
+                                                            #­1006211
+
+
+             CARD       00435
+09/18   N    Cash Adv   CASH ADVANCE                41      D­95         158092174 231011 FJ­JACKSON 630       JACKSON               GA    1.000    .0000    0.00       0.00     35.00    0.00         0.00       35.00
+                                                                         9
+                                                            N­Jose L
+                                                            Torres
+                                                            O­162915
+                                                            #­01
+09/18   N    Reefer     REEFER ULTRA LOW SULFUR     41      D­95         158092174 231011 FJ­JACKSON 630       JACKSON               GA    7.190   6.3990    0.00       0.00     46.02    0.87         2.00       47.15
+                                                                         9
+                                                            N­Jose L
+                                                            Torres
+                                                            O­162915
+                                                            #­01
+09/18   N    Diesel     ULTRA LOW SULFUR DIESEL     41      D­95         158092174 231011 FJ­JACKSON 630       JACKSON               GA   60.260   6.3990    0.00       0.00    385.58    7.21         0.00      378.37
+                                                                         9
+                                                            N­Jose L
+                                                            Torres
+                                                            O­162915
+                                                            #­01
+
+
+             CARD       00500
+09/18   N    DEF        DIESEL EXHAUST FLUID UREA   36      D­38         158110943 516201 PILOT COUNCIL BLUF   COUNCIL BLUFFS        IA    3.650   4.7990    0.00       0.00     17.53    0.00         0.00       17.53
+                                                                         9
+                                                            N­German
+                                                            Avilla
+                                                            O­518343
+09/18   N    Diesel     ULTRA LOW SULFUR DIESEL     36      D­38         158110943 516201 PILOT COUNCIL BLUF   COUNCIL BLUFFS        IA   87.940   6.6990    0.00       0.00    589.14   54.55         0.00      534.59
+                                                                         9
+                                                                                                                                                                                                 p/Ds­2019­02 / Dm­2019­02
+    M & S Loads LLC
+    228 E ROUTE 59 #190                                                                                                                                                                                  Page:           3 of 3
+    NANUET NY 10954
+    UNITED STATES
+    Fax / Email dispatch@msloads.com                                                                                                                                      Report Date:                          09/18/2026
+                                                                                                                                                                          Customer Number:                  3770001903818
+
+
+
+
+                                                                             INVOICE # /                                                                GROSS     SALES        FED    GROSS       DISC                      TOTAL
+                                                                                                                   CITY
+            DB
+
+
+
+
+    DATE         CATEGORY      DESCRIPTION              UNIT   PROMPT DATA   CHECK #       LOC #   LOCATION NAME                    ST           QTY      PPG       TAX        TAX      AMT       AMT            FEES         AMT
+
+                                                                N­German
+                                                                Avilla
+                                                                O­518343
+    09/18   N    Reefer       REEFER ULTRA LOW SULFUR   36      D­38         158110943 516201 PILOT COUNCIL BLUF   COUNCIL BLUFFS        IA     4.980    6.6990    0.00       0.00     33.37      3.10         0.50       30.77
+                                                                             9
+                                                                N­German
+                                                                Avilla
+                                                                O­518343
+
+
+                 CARD         00518
+    09/18   N    Scale        SCALES                    32      D­84         158098949 771720 CAT SCALES LOVES C   DODGE CITY            KS     1.000     .0000    0.00       0.00     15.25      0.00         0.00       15.25
+                                                                             1
+                                                                N­Chris
+                                                                Howell
+                                                                #­1
+    09/18   N    Scale        SCALES                    32      D­84         158099301 771720 CAT SCALES LOVES C   DODGE CITY            KS     1.000     .0000    0.00       0.00       5.25     0.00         0.00         5.25
+                                                                             5
+                                                                N­Chris
+                                                                Howell
+                                                                #­1
+    09/18   N    Diesel       ULTRA LOW SULFUR DIESEL   32      D­84         158105583 541571 CASEYS GENERAL STO   NORTON                KS    57.730    6.2990    0.00       0.00    363.62      6.91         0.50      357.21
+                                                                             6
+                                                                N­Chris
+                                                                Howell
+                                                                O­1
+                                                                #­1
+    09/18   N    Scale        SCALES                    32      D­84         158119921 771075 CAT SCALES BOSSEL    GRAND ISLAND          NE     1.000     .0000    0.00       0.00     15.25      0.00         0.00       15.25
+                                                                             2
+                                                                N­Chris
+                                                                Howell
+                                                                #­1
+
+
+                 CARD         Money Code
+    09/18   N    Money Code MONEY CODE                                       215382793                                                          1.000     .0000    0.00       0.00    202.00      0.00         3.00      205.00
+
+.                                                                            5
+
+                    Report Total                                                                                                              344.230   48.6120    0.00       0.00   2,452.94   105.31         6.50     2,354.13
+
+
+
+
+                                                                                                                                                                                                         p/Ds­2019­02 / Dm­2019­02
+

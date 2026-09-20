@@ -1,7 +1,7 @@
-import { getSamsaraApiToken, isSamsaraTokenSet } from "../env";
+import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import { addAttachment } from "../files";
 import { getIftaReport, getLoad, getTruck, saveIftaReport } from "../queries";
-import type { IftaJurisdictionRow, IftaReport, LoadView } from "../types";
+import { isIftaEligibleStatus, type IftaJurisdictionRow, type IftaReport, type LoadView } from "../types";
 
 const SAMSARA_BASE = "https://api.samsara.com";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -131,7 +131,7 @@ export function parseIftaDetailCsv(csv: string): IftaJurisdictionRow[] {
 
 export function getIftaPanel(load: LoadView): IftaPanel {
   const report = getIftaReport(load.id);
-  const eligible = load.status === "in_transit" || load.status === "delivered";
+  const eligible = isIftaEligibleStatus(load.status);
   if (!eligible) {
     return {
       report,
@@ -166,14 +166,15 @@ export async function ensureDemoIfta(load: LoadView): Promise<IftaReport | null>
   const existing = getIftaReport(load.id);
   if (existing) return existing;
   if (isSamsaraTokenSet()) return null;
-  if (load.status !== "in_transit" && load.status !== "delivered") return null;
+  if (!isIftaEligibleStatus(load.status)) return null;
   return refreshIftaForLoad(load.id);
 }
 
 export async function refreshIftaForLoad(loadId: number): Promise<IftaReport> {
+  await loadRuntimeEnv();
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (load.status !== "in_transit" && load.status !== "delivered") {
+  if (!isIftaEligibleStatus(load.status)) {
     throw new Error("Refresh IFTA after the load is in transit or delivered.");
   }
   const window = loadWindow(load);
@@ -494,7 +495,7 @@ function isAuthError(error: unknown): boolean {
 
 function iftaStatusMessage(status: number, context: string): string {
   if (status === 401 || status === 403) {
-    return `Samsara ${context} failed (HTTP ${status}). Check SAMSARA_API_TOKEN and the Read IFTA (US) / Write IFTA (US) scopes.`;
+    return `Samsara ${context} failed (HTTP ${status}).`;
   }
   if (status === 429) return `Samsara rate-limited the ${context} request.`;
   return `Samsara ${context} failed (HTTP ${status}).`;

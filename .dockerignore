@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/uploads
+data/qbo-refresh.json
+.env
+.env.local
+*.md
+!README.md

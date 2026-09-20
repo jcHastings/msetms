@@ -6,10 +6,17 @@ import {
   getOrbcommUsername,
   isOrbcommConfigured,
 } from "../env";
+import {
+  ORBCOMM_CREDS_OR_CSV_MESSAGE,
+  orbcommAssetFromUnknown,
+  type OrbcommAssetInput,
+} from "../fleet-import-shared";
+import { classifyOrbcommReeferMode } from "../fleet-map-shared";
+import { formatMdYDisplay } from "../format";
 import { listLoads, listTrailers, listTrucks } from "../queries";
 import type { ReeferReading, ReeferStatus } from "../types";
 
-const CACHE_TTL_MS = 45_000;
+const CACHE_TTL_MS = 5 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 export type ReeferSnapshot = {
@@ -22,12 +29,16 @@ export type ReeferSnapshot = {
   returnAirF: number | null;
   supplyAirF: number | null;
   doorOpen: boolean | null;
+  powerOn: boolean | null;
+  operatingMode: string;
   alarm: string;
   latitude: number | null;
   longitude: number | null;
   address: string;
   source: "demo" | "orbcomm";
   recordedAt: string;
+  speedMph?: number | null;
+  headingDeg?: number | null;
 };
 
 export type TrailerLocation = {
@@ -53,15 +64,22 @@ export type OrbcommAssetReading = {
   assetId?: string;
   trailerId?: string;
   name?: string;
+  vin?: string;
+  plate?: string;
+  type?: string;
   temperatureF?: number | null;
   setpointF?: number | null;
   returnAirF?: number | null;
   supplyAirF?: number | null;
+  powerOn?: boolean | null;
+  operatingMode?: string;
   alarm?: string;
   recordedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
   address?: string;
+  speedMph?: number | null;
+  headingDeg?: number | null;
 };
 
 export type MappedTruck = {
@@ -87,6 +105,7 @@ export type MappedTrailer = {
 
 type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult };
 let cache: CacheEntry | null = null;
+let inflight: Promise<ReeferSnapshotResult> | null = null;
 
 class OrbcommHttpError extends Error {
   status: number;
@@ -99,6 +118,23 @@ class OrbcommHttpError extends Error {
 
 export function resetOrbcommCacheForTests(): void {
   cache = null;
+  inflight = null;
+}
+
+export function latestReeferForTrailer(trailer: {
+  unit_number: string;
+  orbcomm_asset_id: string;
+}): ReeferReading | null {
+  const keys = [trailer.orbcomm_asset_id, trailer.unit_number].map(normalizeKey).filter(Boolean);
+  if (keys.length === 0) return null;
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM reefer_readings
+       WHERE trailer_id != ''
+       ORDER BY recorded_at DESC, id DESC`,
+    )
+    .all() as ReeferReading[];
+  return rows.find((row) => keys.includes(normalizeKey(row.trailer_id))) ?? null;
 }
 
 export function listLatestReeferReadings(source?: "demo" | "orbcomm"): ReeferReading[] {
@@ -189,9 +225,24 @@ export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?:
 export async function getReeferSnapshots(): Promise<ReeferSnapshotResult> {
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
-  const result = await loadReeferSnapshots();
-  cache = { expiresAt: now + CACHE_TTL_MS, result };
-  return result;
+  if (cache) {
+    void refreshReeferSnapshotCache();
+    return cache.result;
+  }
+  return refreshReeferSnapshotCache();
+}
+
+async function refreshReeferSnapshotCache(): Promise<ReeferSnapshotResult> {
+  if (inflight) return inflight;
+  inflight = loadReeferSnapshots()
+    .then((result) => {
+      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result };
+      return result;
+    })
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
@@ -200,36 +251,43 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
 
   try {
     const token = await generateOrbcommToken();
-    const liveAssets = await tryFetchAssetStatus(token);
-    if (liveAssets.length > 0) {
-      return {
-        mode: "orbcomm",
-        credentialsSet: true,
-        fetchedAt: new Date().toISOString(),
-        readings: mapOrbcommReadingsToLoads({
-          loads: mappingLoads(),
-          trucks: mappingTrucks(),
-          trailers: mappingTrailers(),
-          assets: liveAssets,
-        }),
-      };
+    const live = await tryFetchAssetStatus(token);
+    if (live.assets.length > 0) {
+      const trailers = mappingTrailers();
+      const readings = snapshotsFromLiveAssets({
+        loads: mappingLoads(),
+        trucks: mappingTrucks(),
+        trailers,
+        assets: live.assets,
+      });
+      if (readings.length > 0) {
+        persistLiveReeferReadings(readings, trailers);
+        return {
+          mode: "orbcomm",
+          credentialsSet: true,
+          fetchedAt: new Date().toISOString(),
+          readings,
+        };
+      }
     }
 
-    const imported = listLatestReeferReadings("orbcomm").map(toSnapshot);
+    const stored = listStoredOrbcommSnapshots();
     return {
       mode: "orbcomm",
       credentialsSet: true,
       fetchedAt: new Date().toISOString(),
-      note: imported.length
-        ? "ORBCOMM sign-in succeeded. Showing the last imported Reefer Status Report."
-        : "ORBCOMM sign-in succeeded. Import a Reefer Status Report export to load trailer temps, or ask ORBCOMM to enable B2B asset snapshot access.",
-      readings: imported,
+      note: lastLiveFailNote(stored),
+      readings: stored,
     };
   } catch (error) {
+    const stored = listStoredOrbcommSnapshots();
     return {
-      ...demo,
+      mode: "orbcomm",
       credentialsSet: true,
+      fetchedAt: new Date().toISOString(),
       error: publicOrbcommError(error),
+      note: lastLiveFailNote(stored),
+      readings: stored,
     };
   }
 }
@@ -274,11 +332,14 @@ export function snapshotToReading(snapshot: ReeferSnapshot): ReeferReading {
     supply_air_f: snapshot.supplyAirF,
     door_open: snapshot.doorOpen == null ? null : snapshot.doorOpen ? 1 : 0,
     alarm: snapshot.alarm,
+    operating_mode: snapshot.operatingMode ?? "",
     latitude: snapshot.latitude,
     longitude: snapshot.longitude,
     address: snapshot.address,
     source: snapshot.source,
     recorded_at: snapshot.recordedAt,
+    speed_mph: snapshot.speedMph ?? null,
+    heading_deg: snapshot.headingDeg ?? null,
   };
 }
 
@@ -293,12 +354,16 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
     returnAirF: row.return_air_f,
     supplyAirF: row.supply_air_f,
     doorOpen: row.door_open == null ? null : row.door_open === 1,
+    powerOn: powerOnFromOperatingMode(row.operating_mode),
+    operatingMode: row.operating_mode ?? "",
     alarm: row.alarm,
     latitude: row.latitude ?? null,
     longitude: row.longitude ?? null,
     address: row.address ?? "",
     source: row.source === "orbcomm" ? "orbcomm" : "demo",
     recordedAt: row.recorded_at,
+    speedMph: row.speed_mph ?? null,
+    headingDeg: row.heading_deg ?? null,
   };
 }
 
@@ -329,12 +394,28 @@ function mappingTrailers(): MappedTrailer[] {
   }));
 }
 
+function accessTokenFromOrbcommBody(body: Record<string, unknown>): string | undefined {
+  const data =
+    body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? (body.data as Record<string, unknown>)
+      : null;
+  return (
+    asString(data?.accessToken) ||
+    asString(data?.access_token) ||
+    asString(body.accessToken) ||
+    asString(body.access_token) ||
+    asString(body.token) ||
+    asString(body.Token)
+  );
+}
+
 async function generateOrbcommToken(): Promise<string> {
-  const username = getOrbcommUsername();
+  const userName = getOrbcommUsername();
   const password = getOrbcommPassword();
-  if (!username || !password) throw new Error("ORBCOMM credentials are not set.");
+  if (!userName || !password) throw new Error("Orbcomm credentials are not set.");
 
   const url = new URL("/SynB2BGatewayService/api/generateToken", getOrbcommApiBase());
+  const orgKey = getOrbcommAccountId();
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -342,9 +423,9 @@ async function generateOrbcommToken(): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      username,
+      userName,
       password,
-      accountId: getOrbcommAccountId(),
+      ...(orgKey ? { orgKey } : {}),
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -353,52 +434,326 @@ async function generateOrbcommToken(): Promise<string> {
   if (!response.ok) throw new OrbcommHttpError(response.status);
 
   const body = (await response.json()) as Record<string, unknown>;
-  const token =
-    asString(body.token) ||
-    asString(body.accessToken) ||
-    asString(body.access_token) ||
-    asString(body.Token);
+  const token = accessTokenFromOrbcommBody(body);
   if (!token) {
-    throw new Error("ORBCOMM token response did not include an access token.");
+    throw new Error("Orbcomm token response did not include an access token.");
   }
   return token;
 }
 
-async function tryFetchAssetStatus(token: string): Promise<OrbcommAssetReading[]> {
-  const paths = [
-    "/SynB2BGatewayService/api/assetStatus",
-    "/SynB2BGatewayService/api/assets/status",
-    "/SynB2BGatewayService/api/GetAssetLatestPositions",
-  ];
-  for (const pathname of paths) {
-    try {
-      const url = new URL(pathname, getOrbcommApiBase());
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
-      if (!response.ok) continue;
-      const body = await response.json();
-      const parsed = normalizeOrbcommPayload(body);
-      if (parsed.length) return parsed;
-    } catch {
-      // Unknown partner paths are expected; fall through to import/demo.
+export async function listOrbcommFleetAssets(): Promise<
+  { ok: true; assets: OrbcommAssetInput[] } | { ok: false; error: string }
+> {
+  if (!isOrbcommConfigured()) {
+    return { ok: false, error: ORBCOMM_CREDS_OR_CSV_MESSAGE };
+  }
+  try {
+    const token = await generateOrbcommToken();
+    const readings = (await tryFetchAssetStatus(token)).assets;
+    const assets = readings
+      .map((reading) =>
+        orbcommAssetFromUnknown({
+          assetId: reading.assetId,
+          trailerId: reading.trailerId,
+          name: reading.name,
+          vin: reading.vin,
+          plate: reading.plate,
+          type: reading.type,
+        }),
+      )
+      .filter((asset) => asset.assetId || asset.unitNumber);
+    if (assets.length === 0) {
+      return {
+        ok: false,
+        error:
+          "Orbcomm API did not return a trailer list. Upload a CSV/export from Orbcomm (do not scrape the portal).",
+      };
+    }
+    return { ok: true, assets };
+  } catch (error) {
+    return { ok: false, error: publicOrbcommImportError(error) };
+  }
+}
+
+function liveAssetNameLists(): string[][] {
+  const units: string[] = [];
+  const ids: string[] = [];
+  const seenUnits = new Set<string>();
+  const seenIds = new Set<string>();
+  for (const trailer of listTrailers().filter((item) => item.active !== 0)) {
+    const unit = String(trailer.unit_number ?? "").trim();
+    const assetId = String(trailer.orbcomm_asset_id ?? "").trim();
+    if (unit && !seenUnits.has(normalizeKey(unit))) {
+      seenUnits.add(normalizeKey(unit));
+      units.push(unit);
+    }
+    if (assetId && !seenIds.has(normalizeKey(assetId))) {
+      seenIds.add(normalizeKey(assetId));
+      ids.push(assetId);
     }
   }
-  return [];
+  const combined: string[] = [];
+  const seen = new Set<string>();
+  for (const name of [...units, ...ids]) {
+    const key = normalizeKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    combined.push(name);
+  }
+  return [combined, ids, units].filter((list) => list.length > 0);
+}
+
+async function postAssetStatus(token: string, assetNames: string[]): Promise<OrbcommAssetReading[]> {
+  const url = new URL("/SynB2BGatewayService/api/getAssetStatus", getOrbcommApiBase());
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: token,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      assetNames,
+      assetGroupNames: [],
+      watermark: null,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new OrbcommHttpError(response.status);
+  const body = (await response.json()) as Record<string, unknown>;
+  const code = typeof body.code === "number" ? body.code : Number(body.code);
+  if (code === 1008 || code === 1007) return [];
+  if (code && code !== 1000 && code !== 200) return [];
+  return normalizeOrbcommPayload(body);
+}
+
+async function tryFetchAssetStatus(token: string): Promise<{ assets: OrbcommAssetReading[] }> {
+  const attempts = liveAssetNameLists();
+  if (attempts.length === 0) return { assets: [] };
+  let lastError: unknown = null;
+  for (const assetNames of attempts) {
+    try {
+      const parsed = await postAssetStatus(token, assetNames);
+      if (parsed.length) return { assets: parsed };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return { assets: [] };
 }
 
 export function normalizeOrbcommPayload(body: unknown): OrbcommAssetReading[] {
-  if (!body) return [];
-  if (Array.isArray(body)) return body.map(normalizeOrbcommRow).filter(hasIdentity);
-  if (typeof body !== "object") return [];
-  const record = body as Record<string, unknown>;
-  const rows = record.data ?? record.assets ?? record.rows ?? record.result ?? record.Results;
-  return Array.isArray(rows) ? rows.map(normalizeOrbcommRow).filter(hasIdentity) : [];
+  return collectAssetRows(body).map(normalizeOrbcommRow).filter(hasIdentity);
+}
+
+function looksLikeAssetRow(value: unknown): boolean {
+  const rec = asRecord(value);
+  if (!rec) return false;
+  return Boolean(
+    rec.assetName ||
+      rec.asset_name ||
+      rec.assetId ||
+      rec.asset_id ||
+      rec.AssetId ||
+      rec.trailerId ||
+      rec.trailer_id ||
+      rec.TrailerId ||
+      rec.reeferStatus ||
+      rec.ReeferStatus ||
+      rec.positionStatus ||
+      rec.PositionStatus ||
+      rec.assetStatus ||
+      rec.AssetStatus,
+  );
+}
+
+function collectAssetRows(value: unknown, depth = 0): unknown[] {
+  if (!value || depth > 6) return [];
+  if (Array.isArray(value)) {
+    if (value.some(looksLikeAssetRow)) return value.filter((item) => item && typeof item === "object");
+    for (const item of value) {
+      const nested = collectAssetRows(item, depth + 1);
+      if (nested.length) return nested;
+    }
+    return [];
+  }
+  const record = asRecord(value);
+  if (!record) return [];
+  const preferred = [
+    "data",
+    "assets",
+    "rows",
+    "result",
+    "Results",
+    "assetStatus",
+    "AssetStatus",
+    "assetList",
+    "items",
+    "records",
+  ];
+  for (const key of preferred) {
+    if (!(key in record)) continue;
+    const nested = collectAssetRows(record[key], depth + 1);
+    if (nested.length) return nested;
+  }
+  for (const [key, nestedValue] of Object.entries(record)) {
+    if (preferred.includes(key)) continue;
+    if (!nestedValue || typeof nestedValue !== "object") continue;
+    const nested = collectAssetRows(nestedValue, depth + 1);
+    if (nested.length) return nested;
+  }
+  return looksLikeAssetRow(record) ? [record] : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function flattenLiveAsset(row: Record<string, unknown>): Record<string, unknown> {
+  const assetStatus = asRecord(row.assetStatus) ?? asRecord(row.AssetStatus);
+  const positionStatus = asRecord(row.positionStatus) ?? asRecord(row.PositionStatus);
+  const reeferStatus = asRecord(row.reeferStatus) ?? asRecord(row.ReeferStatus);
+  const gps = asRecord(row.gps) ?? asRecord(row.GPS) ?? asRecord(row.position) ?? asRecord(row.Position);
+  return {
+    ...row,
+    ...(assetStatus ?? {}),
+    ...(positionStatus ?? {}),
+    ...(reeferStatus ?? {}),
+    ...(gps ?? {}),
+  };
+}
+
+function newestMessageTime(row: Record<string, unknown>, flat: Record<string, unknown>): string | undefined {
+  const blobs = [
+    row,
+    flat,
+    asRecord(row.assetStatus),
+    asRecord(row.AssetStatus),
+    asRecord(row.positionStatus),
+    asRecord(row.PositionStatus),
+    asRecord(row.reeferStatus),
+    asRecord(row.ReeferStatus),
+    asRecord(row.gps),
+    asRecord(row.GPS),
+    asRecord(row.position),
+    asRecord(flat.gps),
+    asRecord(flat.GPS),
+  ].filter((item): item is Record<string, unknown> => Boolean(item));
+  const keys = [
+    "lastReportTime",
+    "LastReportTime",
+    "last_report_time",
+    "recordedAt",
+    "recorded_at",
+    "eventTime",
+    "EventTime",
+    "event_time",
+    "eventDateTime",
+    "gpsTime",
+    "GpsTime",
+    "gps_time",
+    "positionTime",
+    "messageTime",
+    "lastMessageTime",
+    "deviceTime",
+    "reportTime",
+    "timestamp",
+    "time",
+  ];
+  let newestMs = Number.NEGATIVE_INFINITY;
+  let newestText = "";
+  for (const blob of blobs) {
+    for (const key of keys) {
+      const text = asString(blob[key]);
+      if (!text) continue;
+      const ms = Date.parse(text);
+      if (!Number.isNaN(ms)) {
+        if (ms > newestMs) {
+          newestMs = ms;
+          newestText = new Date(ms).toISOString();
+        }
+        continue;
+      }
+      if (!newestText) newestText = text;
+    }
+  }
+  return newestText || undefined;
+}
+
+function celsiusToF(value: number): number {
+  return Math.round((value * (9 / 5) + 32) * 10) / 10;
+}
+
+function liveTempF(item: Record<string, unknown>, keys: string[]): number | null {
+  const value = firstNumber(item, keys);
+  if (value == null) return null;
+  return celsiusToF(value);
+}
+
+function parseReeferOperatingMode(item: Record<string, unknown>): string {
+  const parts = [
+    firstStringLoose(item, ["reeferState", "reefer_state", "Reefer State"]),
+    firstStringLoose(item, [
+      "operationMode",
+      "operatingMode",
+      "operating_mode",
+      "opMode",
+      "Operating Mode",
+      "Operation Mode",
+    ]),
+    firstStringLoose(item, [
+      "reeferPowerDesc",
+      "reeferPower1Desc",
+      "reeferPower",
+      "Reefer Power",
+      "power",
+      "Power",
+    ]),
+  ].filter(Boolean);
+  return parts.join(" ").trim();
+}
+
+function powerOnFromOperatingMode(raw: string | null | undefined): boolean | null {
+  const status = classifyOrbcommReeferMode(raw);
+  if (status === "running") return true;
+  if (status === "off" || status === "shutdown") return false;
+  return null;
+}
+
+function parseReeferPower(item: Record<string, unknown>): boolean | null {
+  const fromMode = powerOnFromOperatingMode(parseReeferOperatingMode(item));
+  if (fromMode != null) return fromMode;
+  const controller = item.controllerOn ?? item.controller_on;
+  if (controller === true || controller === 1 || controller === "1" || controller === "true") return true;
+  if (controller === false || controller === 0 || controller === "0" || controller === "false") return false;
+  return null;
+}
+
+function liveAlarms(item: Record<string, unknown>): string {
+  const raw = item.activeAlarms ?? item.alarms ?? item.alarm ?? item.Alarm;
+  const parts: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (typeof entry === "string") parts.push(entry);
+      else if (entry && typeof entry === "object") {
+        const rec = entry as Record<string, unknown>;
+        const label = asString(rec.description) || asString(rec.name) || asString(rec.code) || asString(rec.alarm);
+        if (label) parts.push(label);
+      }
+    }
+  } else if (typeof raw === "string") {
+    parts.push(raw);
+  }
+  for (const key of ["shutdown", "tempAlert", "temp_alert", "temperatureAlert"]) {
+    const extra = asString(item[key]);
+    if (extra) parts.push(extra);
+  }
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part && !/^(passed|fta alarm disable|n\/a|none|ok)$/i.test(part))
+    .join("; ");
 }
 
 function hasIdentity(row: OrbcommAssetReading): boolean {
@@ -407,36 +762,51 @@ function hasIdentity(row: OrbcommAssetReading): boolean {
 
 function normalizeOrbcommRow(row: unknown): OrbcommAssetReading {
   if (!row || typeof row !== "object") return {};
-  const item = row as Record<string, unknown>;
+  const item = flattenLiveAsset(row as Record<string, unknown>);
+  const liveReturn = liveTempF(item, ["returnTemp", "return_temp", "ReturnTemp"]);
+  const liveSetpoint = liveTempF(item, ["setpointTemp", "setpoint_temp", "SetpointTemp"]);
+  const city = firstString(item, ["city", "City", "nearestCity"]);
+  const state = firstString(item, ["state", "State", "region"]);
+  const address =
+    firstString(item, ["address", "Address", "location", "Location", "formattedAddress"]) ||
+    [city, state].filter(Boolean).join(", ");
   return {
-    assetId: firstString(item, ["assetId", "asset_id", "AssetId", "id", "ID", "unitId"]),
-    trailerId: firstString(item, ["trailerId", "trailer_id", "TrailerId", "trailerNumber", "name"]),
-    name: firstString(item, ["name", "Name", "trailerNumber", "trailer_id"]),
-    temperatureF: firstTempF(item, [
-      "temperatureF",
-      "temperature_f",
-      "tempF",
-      "ambientF",
-      "returnAirF",
-      "ReturnAir",
-      "temperature",
+    assetId: firstString(item, ["assetId", "asset_id", "AssetId", "id", "ID", "unitId", "assetName", "asset_name"]),
+    trailerId: firstString(item, [
+      "trailerId",
+      "trailer_id",
+      "TrailerId",
+      "trailerNumber",
+      "assetName",
+      "name",
     ]),
-    setpointF: firstTempF(item, ["setpointF", "setpoint_f", "setPointF", "Setpoint", "setpoint"]),
-    returnAirF: firstTempF(item, ["returnAirF", "return_air_f", "ReturnAir"]),
+    name: firstString(item, ["name", "Name", "assetName", "trailerNumber", "trailer_id"]),
+    vin: firstString(item, ["vin", "VIN", "Vin", "vehicleVin"]),
+    plate: firstString(item, ["plate", "Plate", "licensePlate", "license_plate"]),
+    type: firstString(item, ["type", "Type", "equipmentType", "equipment"]),
+    temperatureF:
+      liveReturn ??
+      firstTempF(item, [
+        "temperatureF",
+        "temperature_f",
+        "tempF",
+        "ambientF",
+        "returnAirF",
+        "ReturnAir",
+        "temperature",
+      ]),
+    setpointF: liveSetpoint ?? firstTempF(item, ["setpointF", "setpoint_f", "setPointF", "Setpoint", "setpoint"]),
+    returnAirF: liveReturn ?? firstTempF(item, ["returnAirF", "return_air_f", "ReturnAir"]),
     supplyAirF: firstTempF(item, ["supplyAirF", "supply_air_f", "SupplyAir"]),
-    alarm: firstString(item, ["alarm", "Alarm", "alarms"]) ?? "",
-    recordedAt:
-      firstString(item, [
-        "recordedAt",
-        "recorded_at",
-        "lastReportTime",
-        "LastReportTime",
-        "timestamp",
-        "time",
-      ]) ?? undefined,
+    powerOn: parseReeferPower(item),
+    operatingMode: parseReeferOperatingMode(item),
+    alarm: liveAlarms(item) || firstString(item, ["alarm", "Alarm", "alarms"]) || "",
+    recordedAt: newestMessageTime(row as Record<string, unknown>, item),
     latitude: firstNumber(item, ["latitude", "Latitude", "lat", "Lat", "LAT"]),
     longitude: firstNumber(item, ["longitude", "Longitude", "lng", "lon", "Lon", "LNG"]),
-    address: firstString(item, ["address", "Address", "location", "Location", "formattedAddress"]) ?? "",
+    address: address ?? "",
+    speedMph: parseOrbcommSpeedMph(item),
+    headingDeg: parseOrbcommHeadingDeg(item),
   };
 }
 
@@ -474,15 +844,69 @@ export function mapOrbcommReadingsToLoads(input: {
       returnAirF: asset.returnAirF ?? null,
       supplyAirF: asset.supplyAirF ?? null,
       doorOpen: null,
+      powerOn: asset.powerOn ?? null,
+      operatingMode: asset.operatingMode ?? "",
       alarm: asset.alarm ?? "",
       latitude: asset.latitude ?? null,
       longitude: asset.longitude ?? null,
       address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
+      speedMph: asset.speedMph ?? null,
+      headingDeg: asset.headingDeg ?? null,
     });
   }
   return readings;
+}
+
+export function snapshotsFromLiveAssets(input: {
+  loads: MappedLoad[];
+  trucks: MappedTruck[];
+  assets: OrbcommAssetReading[];
+  trailers?: MappedTrailer[];
+}): ReeferSnapshot[] {
+  const assigned = mapOrbcommReadingsToLoads(input);
+  const used = new Set(assigned.map((row) => normalizeKey(row.trailerId)));
+  const extras: ReeferSnapshot[] = [];
+  for (const asset of input.assets) {
+    const trailerId = asset.trailerId || asset.name || asset.assetId || "";
+    if (!trailerId || used.has(normalizeKey(trailerId))) continue;
+    const temperatureF = asset.temperatureF ?? asset.returnAirF ?? asset.supplyAirF ?? null;
+    const hasLocation = asset.latitude != null && asset.longitude != null;
+    if (
+      temperatureF == null &&
+      asset.setpointF == null &&
+      !hasLocation &&
+      !asset.address &&
+      !asset.alarm &&
+      asset.powerOn == null &&
+      !asset.operatingMode
+    ) {
+      continue;
+    }
+    extras.push({
+      loadId: null,
+      truckId: null,
+      tractorId: "",
+      trailerId,
+      setpointF: asset.setpointF ?? null,
+      temperatureF,
+      returnAirF: asset.returnAirF ?? null,
+      supplyAirF: asset.supplyAirF ?? null,
+      doorOpen: null,
+      powerOn: asset.powerOn ?? null,
+      operatingMode: asset.operatingMode ?? "",
+      alarm: asset.alarm ?? "",
+      latitude: asset.latitude ?? null,
+      longitude: asset.longitude ?? null,
+      address: asset.address ?? "",
+      source: "orbcomm",
+      recordedAt: asset.recordedAt || new Date().toISOString(),
+      speedMph: asset.speedMph ?? null,
+      headingDeg: asset.headingDeg ?? null,
+    });
+  }
+  return [...assigned, ...extras];
 }
 
 function resolveTruckForLoad(load: MappedLoad, trucks: MappedTruck[]): MappedTruck | undefined {
@@ -551,7 +975,7 @@ function splitCsvLine(line: string): string[] {
 }
 
 export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
-  const readings = mapOrbcommReadingsToLoads({
+  const readings = snapshotsFromLiveAssets({
     loads: mappingLoads(),
     trucks: mappingTrucks(),
     trailers: mappingTrailers(),
@@ -568,23 +992,91 @@ export function importOrbcommReadings(assets: OrbcommAssetReading[]): number {
       supply_air_f: reading.supplyAirF,
       door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
       alarm: reading.alarm,
+      operating_mode: reading.operatingMode ?? "",
       latitude: reading.latitude,
       longitude: reading.longitude,
       address: reading.address,
       source: "orbcomm",
       recorded_at: reading.recordedAt,
+      speed_mph: reading.speedMph ?? null,
+      heading_deg: reading.headingDeg ?? null,
     });
   }
   cache = null;
   return readings.length;
 }
 
+function listStoredOrbcommSnapshots(): ReeferSnapshot[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM reefer_readings
+       WHERE source = 'orbcomm' AND trailer_id != ''
+       ORDER BY recorded_at DESC, id DESC`,
+    )
+    .all() as ReeferReading[];
+  const seen = new Set<string>();
+  const snapshots: ReeferSnapshot[] = [];
+  for (const row of rows) {
+    const key = normalizeKey(row.trailer_id);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    snapshots.push(toSnapshot(row));
+  }
+  return snapshots;
+}
+
+function lastLiveFailNote(readings: ReeferSnapshot[]): string {
+  const newest = readings
+    .map((row) => Date.parse(row.recordedAt))
+    .filter((ms) => !Number.isNaN(ms));
+  if (!newest.length) return "Live Orbcomm did not update.";
+  return `Last message ${formatMdYDisplay(new Date(Math.max(...newest)).toISOString())} — live Orbcomm did not update.`;
+}
+
+function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedTrailer[]): void {
+  const exists = getDb().prepare(
+    `SELECT id FROM reefer_readings
+     WHERE source = 'orbcomm' AND recorded_at = ? AND trailer_id = ?
+     LIMIT 1`,
+  );
+  for (const reading of readings) {
+    if (reading.source !== "orbcomm") continue;
+    const trailer = trailers.find(
+      (item) =>
+        normalizeKey(item.unit_number) === normalizeKey(reading.trailerId) ||
+        normalizeKey(item.orbcomm_asset_id) === normalizeKey(reading.trailerId),
+    );
+    const trailerId = trailer?.unit_number || reading.trailerId;
+    if (!trailerId || !reading.recordedAt) continue;
+    if (exists.get(reading.recordedAt, trailerId)) continue;
+    insertReeferReading({
+      load_id: reading.loadId,
+      truck_id: reading.truckId,
+      trailer_id: trailerId,
+      setpoint_f: reading.setpointF,
+      temperature_f: reading.temperatureF,
+      return_air_f: reading.returnAirF,
+      supply_air_f: reading.supplyAirF,
+      door_open: reading.doorOpen == null ? null : reading.doorOpen ? 1 : 0,
+      alarm: reading.alarm,
+      operating_mode: reading.operatingMode ?? "",
+      latitude: reading.latitude,
+      longitude: reading.longitude,
+      address: reading.address,
+      source: "orbcomm",
+      recorded_at: reading.recordedAt,
+      speed_mph: reading.speedMph ?? null,
+      heading_deg: reading.headingDeg ?? null,
+    });
+  }
+}
+
 export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
   getDb()
     .prepare(
         `INSERT INTO reefer_readings (
-        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, latitude, longitude, address, source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, supply_air_f, door_open, alarm, operating_mode, latitude, longitude, address, source, recorded_at, speed_mph, heading_deg
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.load_id,
@@ -596,12 +1088,48 @@ export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
       input.supply_air_f ?? null,
       input.door_open,
       input.alarm,
+      input.operating_mode ?? "",
       input.latitude ?? null,
       input.longitude ?? null,
       input.address ?? "",
       input.source,
       input.recorded_at,
+      input.speed_mph ?? null,
+      input.heading_deg ?? null,
     );
+}
+
+export function parseOrbcommSpeedMph(item: Record<string, unknown>): number | null {
+  const mph = firstNumber(item, ["speedMph", "speed_mph", "SpeedMph", "speedMPH"]);
+  if (mph != null) return mph;
+  const kph = firstNumber(item, ["speedKph", "speed_kph", "speedKmh", "speedKmH"]);
+  if (kph != null) return kph * 0.621371;
+  const knots = firstNumber(item, ["speedKnots", "speed_knots"]);
+  if (knots != null) return knots * 1.15078;
+  const speed = firstNumber(item, ["speed", "Speed", "velocity", "gpsSpeed", "groundSpeed", "GroundSpeed"]);
+  if (speed == null) return null;
+  const unit = firstString(item, ["speedUnit", "speed_unit", "SpeedUnit", "speedUom"]) ?? "";
+  if (/km/i.test(unit)) return speed * 0.621371;
+  if (/knot/i.test(unit)) return speed * 1.15078;
+  if (/m\/s|mps/i.test(unit)) return speed * 2.23694;
+  return speed;
+}
+
+export function parseOrbcommHeadingDeg(item: Record<string, unknown>): number | null {
+  const heading = firstNumber(item, [
+    "heading",
+    "Heading",
+    "headingDeg",
+    "heading_deg",
+    "course",
+    "Course",
+    "bearing",
+    "direction",
+    "Direction",
+  ]);
+  if (heading == null || !Number.isFinite(heading)) return null;
+  const wrapped = ((heading % 360) + 360) % 360;
+  return wrapped;
 }
 
 export function normalizeKey(value: string): string {
@@ -612,6 +1140,19 @@ function firstString(item: Record<string, unknown>, keys: string[]): string | un
   for (const key of keys) {
     const value = asString(item[key]);
     if (value) return value;
+  }
+  return undefined;
+}
+
+function firstStringLoose(item: Record<string, unknown>, keys: string[]): string | undefined {
+  const exact = firstString(item, keys);
+  if (exact) return exact;
+  const wanted = new Set(keys.map(normalizeKey).filter(Boolean));
+  if (wanted.size === 0) return undefined;
+  for (const [key, value] of Object.entries(item)) {
+    if (!wanted.has(normalizeKey(key))) continue;
+    const text = asString(value);
+    if (text) return text;
   }
   return undefined;
 }
@@ -650,15 +1191,28 @@ function asNumber(value: unknown): number | null {
 
 function orbcommStatusMessage(status: number): string {
   if (status === 401 || status === 403) {
-    return `ORBCOMM rejected the credentials (HTTP ${status}). Check ORBCOMM_USERNAME / ORBCOMM_PASSWORD and restart. Showing demo temps.`;
+    return `Orbcomm rejected the credentials (HTTP ${status}).`;
   }
-  return `ORBCOMM request failed (HTTP ${status}). Showing demo temps.`;
+  return `Orbcomm request failed (HTTP ${status}).`;
 }
 
 function publicOrbcommError(error: unknown): string {
   if (error instanceof OrbcommHttpError) return error.message;
   if (error instanceof Error && /abort|timeout/i.test(error.message)) {
-    return "ORBCOMM request timed out. Showing demo temps.";
+    return "Orbcomm request timed out.";
   }
-  return "ORBCOMM request failed. Showing demo temps.";
+  return "Orbcomm request failed.";
+}
+
+function publicOrbcommImportError(error: unknown): string {
+  if (error instanceof OrbcommHttpError) {
+    if (error.status === 401 || error.status === 403) {
+      return `Orbcomm rejected the credentials (HTTP ${error.status}).`;
+    }
+    return `Orbcomm request failed (HTTP ${error.status}).`;
+  }
+  if (error instanceof Error && /abort|timeout/i.test(error.message)) {
+    return "Orbcomm request timed out.";
+  }
+  return "Orbcomm request failed.";
 }
