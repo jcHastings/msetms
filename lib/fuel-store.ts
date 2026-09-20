@@ -468,16 +468,41 @@ function rollupRows(
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function driverRollupKey(row: FuelTransactionView) {
+  return row.driver_id ? { id: row.driver_id, name: row.driver_name || "Driver" } : null;
+}
+
+function truckRollupKey(row: FuelTransactionView) {
+  return row.truck_id ? { id: row.truck_id, name: row.truck_unit || row.unit_number || "Truck" } : null;
+}
+
+function rollupRowsForWeek(
+  weekStartYmd: string,
+  rows: FuelTransactionView[],
+  keyOf: (row: FuelTransactionView) => { id: number; name: string } | null,
+): FuelRollup[] {
+  const range = localWeekRange(weekStartYmd);
+  const weekRows = rows.filter((row) => fuelRowInWeek(row.occurred_at, range.startYmd));
+  const through = new Date(range.end.getTime() - 1);
+  return rollupRows(weekRows, through, keyOf, through);
+}
+
 export function listFuelRollups(now = new Date()): FuelRollup[] {
-  return rollupRows(listFuelTransactions(), now, (row) =>
-    row.driver_id ? { id: row.driver_id, name: row.driver_name || "Driver" } : null,
-  );
+  return rollupRows(listFuelTransactions(), now, driverRollupKey);
 }
 
 export function listTruckFuelRollups(now = new Date()): FuelRollup[] {
-  return rollupRows(listFuelTransactions(), now, (row) =>
-    row.truck_id ? { id: row.truck_id, name: row.truck_unit || row.unit_number || "Truck" } : null,
-  );
+  return rollupRows(listFuelTransactions(), now, truckRollupKey);
+}
+
+/** Per-driver totals for the selected Mon–Sun week only. */
+export function listFuelRollupsForWeek(weekStartYmd: string): FuelRollup[] {
+  return rollupRowsForWeek(weekStartYmd, listFuelTransactions(), driverRollupKey);
+}
+
+/** Per-truck totals for the selected Mon–Sun week only. */
+export function listTruckFuelRollupsForWeek(weekStartYmd: string): FuelRollup[] {
+  return rollupRowsForWeek(weekStartYmd, listFuelTransactions(), truckRollupKey);
 }
 
 export function getDriverFuelRollup(driverId: number, now = new Date()): FuelRollup {
@@ -536,23 +561,12 @@ function parseWeekReport(row: FuelWeekReportRow): FuelWeekReport {
 function upsertFuelWeekReport(weekStartYmd: string, rows: FuelTransactionView[]): FuelWeekReport {
   const range = localWeekRange(weekStartYmd);
   const weekRows = rows.filter((row) => fuelRowInWeek(row.occurred_at, range.startYmd));
-  const through = new Date(range.end.getTime() - 1);
   const report: FuelWeekReport = {
     weekStartYmd: range.startYmd,
     weekEndYmd: range.endYmd,
     stats: fuelWeekPaidStatsForWeek(rows, range.startYmd),
-    driverRollups: rollupRows(
-      weekRows,
-      through,
-      (row) => (row.driver_id ? { id: row.driver_id, name: row.driver_name || "Driver" } : null),
-      through,
-    ),
-    truckRollups: rollupRows(
-      weekRows,
-      through,
-      (row) => (row.truck_id ? { id: row.truck_id, name: row.truck_unit || row.unit_number || "Truck" } : null),
-      through,
-    ),
+    driverRollups: rollupRowsForWeek(range.startYmd, rows, driverRollupKey),
+    truckRollups: rollupRowsForWeek(range.startYmd, rows, truckRollupKey),
     txCount: weekRows.length,
     savedAt: nowIso(),
   };
@@ -648,8 +662,8 @@ export function loadFuelWeekView(weekParam?: string, now = new Date()) {
     spent: useLive
       ? fuelWeekSpentTotalsForWeek(listFuelTransactions(), weekStartYmd)
       : fuelWeekSpentTotalsForWeek(weekRows, weekStartYmd),
-    driverRollups: useLive ? listFuelRollups(anchor) : (snapshot?.driverRollups ?? []),
-    truckRollups: useLive ? listTruckFuelRollups(anchor) : (snapshot?.truckRollups ?? []),
+    driverRollups: useLive ? listFuelRollupsForWeek(weekStartYmd) : (snapshot?.driverRollups ?? []),
+    truckRollups: useLive ? listTruckFuelRollupsForWeek(weekStartYmd) : (snapshot?.truckRollups ?? []),
     weeks: listFuelWeekOptions(now),
     mpgNow: anchor,
   };

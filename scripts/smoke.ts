@@ -12082,6 +12082,16 @@ DISPATCH CONFIRMATION
   assert.match(fuelRollupUi + fuelLabels, /DEF/);
   assert.match(fuelRollupUi + fuelLabels, /Scale/);
   assert.match(fuelRollupUi, /FUEL_BUCKETS/);
+  assert.match(fuelRollupUi, /data-fuel-rollup-period="week"/);
+  assert.match(fuelRollupUi, /row\.weekGallons/);
+  assert.match(fuelRollupUi, /row\.weekAmount/);
+  assert.match(fuelRollupUi, /row\.week\[bucket\]/);
+  assert.doesNotMatch(fuelRollupUi, /period: "week" \| "month"|bucketCell\(row, bucket\.value, "month"\)/);
+  assert.doesNotMatch(fuelRollupUi, /wk \{|Week \{formatGallons/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /listFuelRollupsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /listTruckFuelRollupsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /weekView\.driverRollups/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/fuel/page.tsx"), "utf8"), /weekView\.truckRollups/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/fuel/import/route.ts")), true);
@@ -12690,6 +12700,74 @@ DISPATCH CONFIRMATION
   assert.ok(truckRollups.some((row) => row.name === "28" && row.month.truck_diesel.gallons === 88.1));
   assert.equal(queries.getDriver(howellId)?.name, "Christopher Howell");
   assert.equal(queries.getDriver(whaleyId)?.name, "Kelvin Whaley");
+
+  const weekScopedImport = fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
+      "08/25/2026,10:00,Christopher Howell,32,ULTRA LOW SULFUR DIESEL,80,3.50,280.00,WEEK-A-HOWELL-1",
+      "08/26/2026,11:00,Steve Eller,26,CAT SCALES,1,0,12.00,WEEK-A-ELLER-1",
+      "08/18/2026,10:00,Christopher Howell,32,ULTRA LOW SULFUR DIESEL,20,3.50,70.00,WEEK-B-HOWELL-1",
+      "08/19/2026,12:00,Kelvin Whaley,28,ULTRA LOW SULFUR DIESEL,40,3.50,140.00,WEEK-B-WHALEY-1",
+      "08/20/2026,09:00,Christopher Howell,32,REEFER ULTRA LOW SULFUR,8,3.40,27.20,WEEK-B-HOWELL-2",
+    ].join("\n"),
+    "week-scoped-rollups.csv",
+  );
+  assert.equal(weekScopedImport.created, 5);
+  const weekA = fuelStore.loadFuelWeekView("2026-08-24", wedNy);
+  const weekB = fuelStore.loadFuelWeekView("2026-08-17", wedNy);
+  const howellWeekA = weekA.driverRollups.find((row) => row.id === howellId);
+  const howellWeekB = weekB.driverRollups.find((row) => row.id === howellId);
+  assert.ok(howellWeekA, "Howell has selected-week activity on 08/24");
+  assert.ok(howellWeekB, "Howell has selected-week activity on 08/17");
+  assert.equal(howellWeekA.weekGallons, 80);
+  assert.equal(howellWeekA.weekAmount, 280);
+  assert.equal(howellWeekA.week.truck_diesel.gallons, 80);
+  assert.equal(howellWeekA.week.reefer_diesel.gallons, 0);
+  assert.equal(howellWeekB.weekGallons, 28);
+  assert.equal(howellWeekB.weekAmount, 97.2);
+  assert.equal(howellWeekB.week.truck_diesel.gallons, 20);
+  assert.equal(howellWeekB.week.reefer_diesel.gallons, 8);
+  assert.ok(
+    howellWeekA.weekGallons !== howellWeekB.weekGallons,
+    "switching weeks must recompute per-driver totals",
+  );
+  assert.equal(
+    weekA.driverRollups.some((row) => row.id === whaleyId),
+    false,
+    "Whaley has no 08/24 rows — omit stale all-time",
+  );
+  const whaleyWeekB = weekB.driverRollups.find((row) => row.id === whaleyId);
+  assert.ok(whaleyWeekB);
+  assert.equal(whaleyWeekB.weekGallons, 40);
+  assert.equal(whaleyWeekB.week.truck_diesel.gallons, 40);
+  assert.equal(
+    weekB.driverRollups.some((row) => row.id === ellerId),
+    false,
+    "Eller has no 08/17 rows — omit stale all-time",
+  );
+  const ellerWeekA = weekA.driverRollups.find((row) => row.id === ellerId);
+  assert.ok(ellerWeekA);
+  assert.equal(ellerWeekA.weekGallons, 1);
+  assert.equal(ellerWeekA.weekAmount, 12);
+  assert.equal(ellerWeekA.week.scale.amount, 12);
+  const truckWeekA = weekA.truckRollups.find((row) => row.name === "32");
+  const truckWeekB = weekB.truckRollups.find((row) => row.name === "32");
+  assert.ok(truckWeekA);
+  assert.ok(truckWeekB);
+  assert.equal(truckWeekA.weekGallons, 80);
+  assert.equal(truckWeekB.weekGallons, 28);
+  assert.equal(
+    weekA.truckRollups.some((row) => row.name === "28"),
+    false,
+    "unit 28 has no 08/24 rows",
+  );
+  assert.equal(weekB.truckRollups.find((row) => row.name === "28")?.weekGallons, 40);
+  const currentWeekStart = localWeekRange(new Date()).startYmd;
+  const liveHowellWeek = fuelStore.listFuelRollupsForWeek(currentWeekStart);
+  const liveHowell = liveHowellWeek.find((row) => row.id === howellId);
+  assert.ok(liveHowell);
+  assert.equal(liveHowell.week.truck_diesel.gallons, 102.34);
+  assert.ok(liveHowell.weekGallons !== howellWeekA.weekGallons);
 
   const { StandardFonts } = await import("pdf-lib");
   const efsPdf = await PDFDocument.create();
