@@ -17155,6 +17155,7 @@ DISPATCH CONFIRMATION
   assert.equal(measuredOffice.rows.filter((row) => row.category === "truck_diesel").length, 5);
   assert.equal(measuredOffice.rows.filter((row) => row.category === "reefer_diesel").length, 2);
   assert.equal(measuredOffice.rows.filter((row) => row.category === "def").length, 1);
+  assert.equal(measuredOffice.rows.filter((row) => row.category === "scale").length, 0);
   assert.equal(measuredOffice.rows.filter((row) => row.category === "money_code").length, 2);
   assert.equal(measuredOffice.rows.find((row) => row.amount === 505.62)?.driverName, "Christopher Howell");
   assert.equal(measuredOffice.rows.find((row) => row.amount === 505.62)?.unitNumber, "32");
@@ -17245,8 +17246,59 @@ DISPATCH CONFIRMATION
   assert.equal(extractNProductDriverName("ULTRA LOW SULFUR DIESEL"), "");
   assert.equal(extractNProductDriverName("ULTRA LOW SULFUR DIESEL Christoph Howell"), "Christoph Howell");
   assert.equal(extractNProductDriverName("MONEY CODE"), "");
+  assert.equal(extractNProductDriverName("SCALES"), "");
   assert.equal(stitchFleetOneNName("Christoph", "er Howell"), "Christopher Howell");
   assert.equal(stitchFleetOneNName("NGerman".replace(/^N/, ""), "Avilla"), "German Avilla");
+
+  const fleetOneScaleExtract = fs.readFileSync(
+    path.join(process.cwd(), "scripts/fixtures/fleetone-20260918.txt"),
+    "utf8",
+  );
+  const scaleReport = parseFleetOneFuelText(fleetOneScaleExtract);
+  const scaleRows = scaleReport.rows.filter((row) => row.category === "scale");
+  const scaleTotal = scaleRows.reduce((total, row) => total + (row.amount ?? 0), 0);
+  assert.equal(scaleRows.length, 3);
+  assert.ok(Math.abs(scaleTotal - 35.75) < 0.021);
+  assert.deepEqual(
+    scaleRows.map((row) => row.amount).sort((a, b) => (a ?? 0) - (b ?? 0)),
+    [5.25, 15.25, 15.25],
+  );
+  assert.ok(scaleRows.every((row) => row.amount !== 35.75));
+  assert.ok(scaleRows.every((row) => row.gallons === 0));
+  assert.equal(scaleRows[0]?.driverName, "Chris Howell");
+  assert.equal(scaleRows[0]?.unitNumber, "32");
+  assert.ok(scaleReport.rows.some((row) => row.category === "truck_diesel" && row.amount === 653.87));
+  assert.ok(scaleReport.rows.some((row) => row.category === "def" && row.amount === 58.89));
+  assert.ok(scaleReport.rows.some((row) => row.category === "reefer_diesel" && row.amount === 47.15));
+  assert.ok(scaleReport.rows.some((row) => row.category === "money_code" && row.amount === 205));
+  const scaleWeekSpent = fuelWeekSpentTotalsForWeek(
+    scaleReport.rows.map((row) => ({
+      occurred_at: row.occurredAt,
+      category: row.category,
+      amount: row.amount,
+    })),
+    "2026-09-14",
+  );
+  assert.equal(scaleWeekSpent.scale, 35.75);
+  assert.equal(scaleWeekSpent.fuel, 1924.04);
+  assert.equal(scaleWeekSpent.reefer, 77.92);
+  assert.equal(scaleWeekSpent.def, 76.42);
+  const splitScale = parseFleetOneFuelText(
+    [
+      "Transaction Activity Report",
+      "Report Date: 09/18/2026",
+      "09/18 N Scale SCALES 32 D 84 158098949",
+      "CAT SCALES LOVES C DODGE CITY KS 1.000 0.0000 0.00 0.00 15.25 0.00 0.00 15.25",
+      "NChris",
+      "Howell",
+    ].join("\n"),
+  );
+  assert.equal(splitScale.rows.length, 1);
+  assert.equal(splitScale.rows[0]?.category, "scale");
+  assert.equal(splitScale.rows[0]?.amount, 15.25);
+  assert.equal(splitScale.rows[0]?.gallons, 0);
+  assert.equal(splitScale.rows[0]?.unitNumber, "32");
+  assert.equal(splitScale.rows[0]?.driverName, "Chris Howell");
   const unit36Match = matchFuelDriver(
     { driverName: "", driverIdRaw: "", unitNumber: "36", prompt: "" },
     queries.listDrivers(),

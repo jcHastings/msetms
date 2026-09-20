@@ -14,11 +14,14 @@ export type FleetOneParsedRow = {
   invoice: string;
 };
 
-const ACTIVITY_KIND = /\bN\s+(Diesel|Reefer|DEF|Money\s*Code)\b/i;
+const N_ACTIVITY_KIND = "Diesel|Reefer|DEF|Scale|Money\\s*Code";
+const ACTIVITY_KIND = new RegExp(`\\bN\\s+(${N_ACTIVITY_KIND})\\b`, "i");
+const N_PRODUCT_HEAD = /^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+N\s+(Diesel|Reefer|DEF|Scale)\s+(.+)$/i;
+const UNIT_PROMPT_RE = /\b(\d{1,3})\s+D[\s\-]*(\d{1,4})\b/i;
 const COMPANY_JUNK =
   /m\s*&\s*s\s*loads|228\s*e\s*route\s*59|nanuet|dispatch@msloads|funded total|report total|grand total|customer\s*(number|#)|page\s*\d+\s*of\s*\d+|voice number|funded activity|date\s+db\s+category/i;
 
-const PRODUCT_RE = /\b(diesel|reefer|def|ulsd)\b/i;
+const PRODUCT_RE = /\b(diesel|reefer|def|ulsd|scales?)\b/i;
 const MONEY_CODE_RE = /\bmoney\s*codes?\b/i;
 const SUMMARY_AMOUNTS = new Set([3262.28, 2670.36, 340.25]);
 
@@ -26,7 +29,7 @@ export function looksLikeFleetOneReport(text: string, sourceFile = ""): boolean 
   if (/fleetone|transactionactivityreport/i.test(sourceFile)) return true;
   if (/nname\s*:/i.test(text)) return false;
   const blob = `${text}\n${sourceFile}`;
-  if (/\bN\s+(Diesel|Reefer|DEF|Money\s*Code)\b/i.test(text) && /\d{1,2}\/\d{1,2}/.test(text)) return true;
+  if (ACTIVITY_KIND.test(text) && /\d{1,2}\/\d{1,2}/.test(text)) return true;
   if (/funded\s*(fuel|activity)/i.test(blob) || /fleet\s*one/i.test(blob) || MONEY_CODE_RE.test(blob)) return true;
   if (/transaction\s*activity\s*report/i.test(blob) && /m\s*&\s*s\s*loads|nanuet|3770001903818|dispatch@msloads/i.test(blob)) {
     return true;
@@ -48,6 +51,7 @@ export function isFleetOneJunkLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return true;
   if (ACTIVITY_KIND.test(trimmed)) return false;
+  if (/^scale\b/i.test(trimmed) && !/\d{1,2}\/\d{1,2}/.test(trimmed)) return true;
   if (COMPANY_JUNK.test(trimmed)) return true;
   if (/^transaction activity report$/i.test(trimmed)) return true;
   if (/^funded fuel\b/i.test(trimmed)) return true;
@@ -114,12 +118,23 @@ export function parseFleetOneFuelText(text: string): {
       const amounts = parseFleetOneAmountLine(line);
       if (amounts) {
         open.hasAmounts = true;
-        open.gallons = amounts.gallons;
-        open.pricePerGallon = amounts.pricePerGallon;
+        open.gallons = open.category === "scale" ? 0 : amounts.gallons;
+        open.pricePerGallon = open.category === "scale" ? null : amounts.pricePerGallon;
         open.amount = amounts.amount;
         open.location = amounts.location || open.location;
         if (amounts.driverName) open.driverName = stitchFleetOneNName(open.driverName, amounts.driverName);
         continue;
+      }
+      if (open.category === "scale") {
+        const scaleAmount = scaleTotalFromText(line);
+        if (scaleAmount != null) {
+          open.hasAmounts = true;
+          open.gallons = 0;
+          open.pricePerGallon = null;
+          open.amount = scaleAmount;
+          open.location = locationFromFuelText(line) || open.location;
+          continue;
+        }
       }
       if (/^\d{1,3}$/.test(line)) continue;
     }
@@ -160,6 +175,7 @@ function normalizeFleetOneText(text: string): string {
   return text
     .replace(/\r\n/g, "\n")
     .replace(/\u00a0/g, " ")
+    .replace(/\u00ad/g, "")
     .replace(/Funded\s*Fuel/gi, "Funded Fuel")
     .replace(/Money\s*Codes?/gi, "Money Code")
     .replace(/Transaction\s*Activity\s*Report/gi, "Transaction Activity Report")
@@ -170,15 +186,15 @@ function normalizeFleetOneText(text: string): string {
     .replace(/([A-Za-z])(\d)/g, "$1 $2")
     .replace(/(\d)([A-Za-z])/g, "$1 $2")
     .replace(/(\.\d{2,4})(\d+\.\d+)/g, "$1 $2")
-    .replace(/([A-Z]{2})(Diesel|Reefer|DEF|ULSD)/gi, "$1 $2")
-    .replace(/\b(Diesel|Reefer|DEF|ULSD)(?=\d)/gi, "$1 ")
+    .replace(/([A-Z]{2})(Diesel|Reefer|DEF|ULSD|Scale)/gi, "$1 $2")
+    .replace(/\b(Diesel|Reefer|DEF|ULSD|Scale)(?=\d)/gi, "$1 ")
     .replace(/(\d{1,2}\/\d{1,2}\/\d{2,4})/g, "\n$1 ")
     .replace(/(?<!\d\/)(\d{1,2}\/\d{1,2})(?!\s*\/)\s+N\s+/gi, "\n$1 N ")
     .replace(/(?<!\bN )\s+(Money Code\b)/gi, "\n$1")
     .replace(/\s+(Funded Fuel\b)/gi, "\nFunded Fuel")
     .replace(/\s+(Funded Total\b)/gi, "\nFunded Total")
     .replace(/\s+(Report Total\b)/gi, "\nReport Total")
-    .replace(new RegExp(`([A-Za-z]{3,})(${US_STATES.join("|")})(?=\\s+(Diesel|Reefer|DEF|ULSD)\\b)`, "gi"), "$1 $2")
+    .replace(new RegExp(`([A-Za-z]{3,})(${US_STATES.join("|")})(?=\\s+(Diesel|Reefer|DEF|ULSD|Scale)\\b)`, "gi"), "$1 $2")
     .replace(/[^\S\n]+/g, " ")
     .replace(/ ?\n ?/g, "\n");
 }
@@ -211,12 +227,30 @@ function stopFromParsedRow(row: FleetOneParsedRow): FleetOneStopBlock {
     pricePerGallon: row.pricePerGallon,
     amount: row.amount,
     cardLast4: row.cardLast4,
-    hasAmounts: row.gallons != null && row.amount != null,
+    hasAmounts: row.category === "scale" ? row.amount != null : row.gallons != null && row.amount != null,
   };
 }
 
 function finalizeFleetOneStop(open: FleetOneStopBlock | null): FleetOneParsedRow | null {
-  if (!open || !open.hasAmounts || open.amount == null || open.gallons == null) return null;
+  if (!open || open.amount == null) return null;
+  if (open.category === "scale") {
+    if (open.amount <= 0 || SUMMARY_AMOUNTS.has(open.amount)) return null;
+    if (isFleetOneJunkAmount(0, open.amount, open.unitNumber, open.location)) return null;
+    return {
+      row: open.row,
+      occurredAt: open.occurredAt,
+      driverName: open.driverName,
+      unitNumber: open.unitNumber,
+      location: open.location,
+      gallons: 0,
+      pricePerGallon: null,
+      amount: open.amount,
+      cardLast4: open.cardLast4,
+      category: "scale",
+      invoice: open.invoice,
+    };
+  }
+  if (!open.hasAmounts || open.gallons == null) return null;
   if (open.gallons <= 0 || open.gallons > 400) return null;
   if (SUMMARY_AMOUNTS.has(open.amount) || open.gallons === 45.082) return null;
   if (isFleetOneJunkAmount(open.gallons, open.amount, open.unitNumber, open.location)) return null;
@@ -238,14 +272,14 @@ function finalizeFleetOneStop(open: FleetOneStopBlock | null): FleetOneParsedRow
 function parseNActivityStart(line: string, row: number, reportYear: number): FleetOneStopBlock | null {
   const sameLine = parseFleetOneNProductLine(line, row, reportYear);
   if (sameLine) return stopFromParsedRow(sameLine);
-  const head = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+N\s+(Diesel|Reefer|DEF)\s+(.+)$/i);
+  const head = line.match(N_PRODUCT_HEAD);
   if (!head) return null;
   const occurred = parseWhen(head[1], reportYear);
   if (!occurred) return null;
   const category = classifyProduct(head[2]);
   if (!category) return null;
   const rest = head[3];
-  const unitPrompt = rest.match(/\b(\d{1,3})\s+D\s*(\d{1,4})\b/i);
+  const unitPrompt = rest.match(UNIT_PROMPT_RE);
   if (!unitPrompt || unitPrompt.index == null) return null;
   const unit = unitPrompt[1];
   if (unit === "228" || Number(unit) < 1 || Number(unit) > 199) return null;
@@ -262,11 +296,11 @@ function parseNActivityStart(line: string, row: number, reportYear: number): Fle
     invoice,
     location,
     driverName: amounts?.driverName || beforeUnit,
-    gallons: amounts?.gallons ?? null,
-    pricePerGallon: amounts?.pricePerGallon ?? null,
+    gallons: category === "scale" ? 0 : amounts?.gallons ?? null,
+    pricePerGallon: category === "scale" ? null : amounts?.pricePerGallon ?? null,
     amount: amounts?.amount ?? null,
     cardLast4: "",
-    hasAmounts: Boolean(amounts),
+    hasAmounts: category === "scale" ? amounts?.amount != null : Boolean(amounts),
   };
 }
 
@@ -354,20 +388,45 @@ function locationFromFuelText(text: string): string {
 }
 
 function parseFleetOneNProductLine(line: string, row: number, reportYear: number): FleetOneParsedRow | null {
-  const head = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+N\s+(Diesel|Reefer|DEF)\s+(.+)$/i);
+  const head = line.match(N_PRODUCT_HEAD);
   if (!head) return null;
   const occurred = parseWhen(head[1], reportYear);
   if (!occurred) return null;
   const category = classifyProduct(head[2]);
   if (!category) return null;
   const rest = head[3];
-  const unitPrompt = rest.match(/\b(\d{1,3})\s+D\s*(\d{2,4})\b/i);
+  const unitPrompt = rest.match(UNIT_PROMPT_RE);
   if (!unitPrompt || unitPrompt.index == null) return null;
   const unit = unitPrompt[1];
   if (unit === "228" || Number(unit) < 1 || Number(unit) > 199) return null;
   const afterPrompt = rest.slice(unitPrompt.index + unitPrompt[0].length);
   const invoice = afterPrompt.match(/\b(\d{6,})\b/)?.[1] ?? "";
   const nums = [...afterPrompt.matchAll(/-?\d[\d,]*\.\d{2,4}/g)];
+  if (category === "scale") {
+    const twoDec = [...nums].reverse().find((item) => /\.\d{2}$/.test(item[0]));
+    const amount = twoDec ? parseNum(twoDec[0]) : null;
+    if (amount == null || amount <= 0 || SUMMARY_AMOUNTS.has(amount)) return null;
+    const afterAmountSplit = takeTrailingNName(
+      afterPrompt
+        .slice((twoDec?.index ?? 0) + (twoDec?.[0].length ?? 0))
+        .replace(/[^\sA-Za-z0-9#]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+    return {
+      row,
+      occurredAt: occurred.toISOString(),
+      driverName: afterAmountSplit.name || extractNProductDriverName(rest.slice(0, unitPrompt.index)),
+      unitNumber: unit,
+      location: locationFromFuelText(afterPrompt) || afterAmountSplit.text,
+      gallons: 0,
+      pricePerGallon: null,
+      amount,
+      cardLast4: "",
+      category: "scale",
+      invoice,
+    };
+  }
   if (nums.length < 2) return null;
   const gallonsTok = nums.find((item) => /\.\d{3}$/.test(item[0])) ?? nums[0];
   const priceTok = nums.find((item) => /\.\d{4}$/.test(item[0])) ?? nums[1];
@@ -414,7 +473,7 @@ function parseFleetOneNProductLine(line: string, row: number, reportYear: number
 
 function parseFleetOneFuelLine(line: string, row: number, reportYear: number): FleetOneParsedRow | null {
   const structured = line.match(
-    /(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{3,6})?\s+([A-Za-z][A-Za-z .'-]+?)\s+(\d{1,3})\s+(.+?)\s+([A-Z]{2})\s+\b(diesel|reefer|def|ulsd)\b\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2})/i,
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{3,6})?\s+([A-Za-z][A-Za-z .'-]+?)\s+(\d{1,3})\s+(.+?)\s+([A-Z]{2})\s+\b(diesel|reefer|def|ulsd|scales?)\b\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2,4})\s+([\d,]*\.\d{2})/i,
   );
   if (structured) {
     const occurred = parseWhen(structured[1], reportYear);
@@ -424,7 +483,11 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
     const gallons = parseNum(structured[8]);
     const pricePerGallon = parseNum(structured[9]);
     const amount = parseNum(structured[10]);
-    if (gallons == null || amount == null || gallons > 400 || gallons <= 0) return null;
+    if (category === "scale") {
+      if (amount == null || amount <= 0) return null;
+    } else if (gallons == null || amount == null || gallons > 400 || gallons <= 0) {
+      return null;
+    }
     const words = structured[5].trim().split(/\s+/);
     const last = words[words.length - 1] ?? "";
     const prev = words[words.length - 2] ?? "";
@@ -440,8 +503,8 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
       driverName: structured[3].trim(),
       unitNumber: structured[4],
       location,
-      gallons,
-      pricePerGallon,
+      gallons: category === "scale" ? 0 : gallons,
+      pricePerGallon: category === "scale" ? null : pricePerGallon,
       amount,
       cardLast4: last4(structured[2] ?? ""),
       category,
@@ -454,19 +517,23 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
   const occurred = parseWhen(dateMatch[1], reportYear);
   if (!occurred) return null;
 
-  const productMatch = line.match(/\b(diesel|reefer|def|ulsd)\b/i);
+  const productMatch = line.match(/\b(diesel|reefer|def|ulsd|scales?)\b/i);
   if (!productMatch) return null;
   const category = classifyProduct(productMatch[1]);
   if (!category) return null;
 
   const afterProduct = line.slice((productMatch.index ?? 0) + productMatch[0].length);
   const money = [...afterProduct.matchAll(/-?\d[\d,]*\.\d{2,4}/g)].map((item) => item[0]);
-  if (money.length < 3) return null;
+  if (category === "scale") {
+    if (money.length < 1) return null;
+  } else if (money.length < 3) {
+    return null;
+  }
   const gallons = parseNum(money[0]);
-  const pricePerGallon = parseNum(money[1]);
+  const pricePerGallon = money.length >= 2 ? parseNum(money[1]) : null;
   const amount = parseNum(money[money.length - 1]);
-  if (gallons == null || amount == null) return null;
-  if (gallons > 400 || gallons <= 0) return null;
+  if (amount == null) return null;
+  if (category !== "scale" && (gallons == null || gallons > 400 || gallons <= 0)) return null;
 
   const beforeProduct = line.slice(0, productMatch.index ?? 0);
   const location = fleetOneLocation(beforeProduct) || fleetOneLocation(line) || stationWords(beforeProduct);
@@ -479,8 +546,8 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
     driverName: fleetOneDriver(beforeProduct),
     unitNumber: fleetOneUnit(beforeProduct),
     location,
-    gallons,
-    pricePerGallon,
+    gallons: category === "scale" ? 0 : gallons,
+    pricePerGallon: category === "scale" ? null : pricePerGallon,
     amount,
     cardLast4: last4(fleetOneCard(beforeProduct, line)),
     category,
@@ -545,10 +612,19 @@ function isFleetOneJunkAmount(
   return false;
 }
 
+function scaleTotalFromText(text: string): number | null {
+  const twoDec = [...text.matchAll(/-?\d[\d,]*\.\d{2}/g)]
+    .map((item) => parseNum(item[0]))
+    .filter((value): value is number => value != null && value > 0 && !SUMMARY_AMOUNTS.has(value));
+  const amount = twoDec.at(-1);
+  return amount ?? null;
+}
+
 function classifyProduct(raw: string): string {
   const key = raw.toLowerCase();
   if (/\bdef\b/.test(key)) return "def";
   if (/reefer/.test(key)) return "reefer_diesel";
+  if (/scale/.test(key)) return "scale";
   if (/diesel|ulsd/.test(key)) return "truck_diesel";
   return "";
 }
@@ -568,7 +644,7 @@ function fleetOneLocation(text: string): string {
   const cleaned = text
     .replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, " ")
     .replace(/\b\d{4,}\b/g, " ")
-    .replace(/\b(diesel|reefer|def|ulsd|funded|fuel)\b/gi, " ")
+    .replace(/\b(diesel|reefer|def|ulsd|scales?|funded|fuel)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
   const stateMatch = cleaned.match(/\b([A-Z]{2})\b/);
@@ -611,7 +687,7 @@ function isFleetOneNNameLine(line: string): boolean {
 function takeTrailingNName(text: string): { text: string; name: string } {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return { text: "", name: "" };
-  const glued = cleaned.match(/^(.*?)(?:\s+)N(?!\s+(?:Diesel|Reefer|DEF|Money\s*Code)\b)([A-Z][A-Za-z'.-]*)(?:\s+(.*))?$/i);
+  const glued = cleaned.match(/^(.*?)(?:\s+)N(?!\s+(?:Diesel|Reefer|DEF|Scale|Money\s*Code)\b)([A-Z][A-Za-z'.-]*)(?:\s+(.*))?$/i);
   if (glued) {
     const name = stitchFleetOneNName(glued[2] ?? "", glued[3] ?? "");
     return { text: (glued[1] ?? "").trim(), name };
@@ -634,7 +710,7 @@ export function parseFleetOneNNameFragment(line: string): string | null {
     return N_PRODUCT_NAME_JUNK.test(name) ? null : name;
   }
   const spaced = cleaned.match(/^N\s+([A-Z][A-Za-z'.-].*)$/);
-  if (spaced && !/^(Diesel|Reefer|DEF|Money)\b/i.test(spaced[1])) {
+  if (spaced && !/^(Diesel|Reefer|DEF|Scale|Money)\b/i.test(spaced[1])) {
     return spaced[1].trim();
   }
   if (/^[a-z]{1,6}(?:\s+[A-Z][A-Za-z'.-]+)*$/.test(cleaned)) return cleaned;
@@ -707,9 +783,13 @@ export function extractNProductDriverName(beforeUnit: string): string {
   const titled = cleaned.match(
     /^([A-Z][a-z]+(?:[.'-][A-Za-z]+)?(?:\s+[A-Z][a-z]+(?:[.'-][A-Za-z]+)?){0,2})$/,
   );
-  if (titled) return titled[1];
+  if (titled && !N_PRODUCT_NAME_JUNK.test(titled[1])) return titled[1];
   const capped = cleaned.match(/^([A-Z]{2,}(?:\s+[A-Z]{2,}){0,2})$/);
-  if (capped && !/(DIESEL|REEFER|DEF|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA|MONEY|CODE|ULTRA|SULFUR)/.test(capped[1])) {
+  if (
+    capped &&
+    !N_PRODUCT_NAME_JUNK.test(capped[1]) &&
+    !/(DIESEL|REEFER|DEF|SUNOCO|LOVES|PILOT|TRAVEL|PLAZA|MONEY|CODE|ULTRA|SULFUR|SCALES?|CAT)/.test(capped[1])
+  ) {
     return titleCaseCapsName(capped[1]);
   }
   const tokens = cleaned.split(" ").filter(Boolean);
