@@ -50,6 +50,8 @@ Duplicate (cheap): same subject, same product, same NY day, same normalized stat
 
 `high` if the ratio is **2.5×** or the gap is under 2 hours or 3+ duplicate swipes. Cap **8** flags, high then score.
 
+Weekly fuel closeout (Samsara odometer miles + these flags + green lights) is `docs/fuel-closeout.md`.
+
 ## Last-yes
 
 Flags only. Dispatch decides. Mike must not send SMS/email from an audit.

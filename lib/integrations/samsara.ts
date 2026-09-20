@@ -579,6 +579,35 @@ export function extractSamsaraOdometerMiles(vehicle: Record<string, unknown>): {
   return { miles: meters / METERS_PER_MILE, recordedAt };
 }
 
+/** Time series from the same stats/history types already used for live odometer. */
+export function extractSamsaraOdometerSeries(vehicle: Record<string, unknown>): Array<{
+  miles: number;
+  recordedAt: string;
+}> {
+  const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+  const out: Array<{ miles: number; recordedAt: string }> = [];
+  const seen = new Set<string>();
+  for (const key of ["obdOdometerMeters", "gpsOdometerMeters"] as const) {
+    const raw = vehicle[key] ?? nested[key];
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+    const found: Array<{ miles: number; recordedAt: string }> = [];
+    for (const row of rows) {
+      const point = extractSamsaraOdometerMiles({ [key]: row });
+      if (point.miles == null) continue;
+      const stamp = point.recordedAt || "";
+      const dedup = `${stamp}:${Math.round(point.miles * 10)}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+      found.push({ miles: point.miles, recordedAt: stamp });
+    }
+    if (found.length) {
+      out.push(...found);
+      break;
+    }
+  }
+  return out.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+}
+
 export function mapVehicleLocations(input: {
   vehicles: Array<Record<string, unknown>>;
   trucks: Array<{ id: number; unit_number: string; samsara_vehicle_id: string; vin?: string; plate?: string }>;
@@ -953,6 +982,73 @@ async function fetchVehicleGpsHistory(
     points.push(...parseHistoryGpsPoints(row as Record<string, unknown>));
   }
   return points.slice(0, 400);
+}
+
+const odometerHistoryFetchedAt = new Map<string, number>();
+
+async function fetchVehicleOdometerHistory(
+  vehicleId: string,
+  startTime: string,
+  endTime: string,
+): Promise<Array<{ miles: number; recordedAt: string }>> {
+  const token = getSamsaraApiToken();
+  if (!token) return [];
+  const url = new URL("/fleet/vehicles/stats/history", SAMSARA_BASE);
+  url.searchParams.set("vehicleIds", vehicleId);
+  url.searchParams.set("types", "obdOdometerMeters,gpsOdometerMeters");
+  url.searchParams.set("startTime", startTime);
+  url.searchParams.set("endTime", endTime);
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) return [];
+  const body = (await response.json()) as { data?: unknown };
+  const rows = Array.isArray(body.data) ? body.data : body.data ? [body.data] : [];
+  const points: Array<{ miles: number; recordedAt: string }> = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    points.push(...extractSamsaraOdometerSeries(row as Record<string, unknown>));
+  }
+  return points.slice(0, 400);
+}
+
+/** Fill week-boundary Samsara odometer using the existing stats/history connector. */
+export async function hydrateSamsaraOdometerWindow(input: {
+  fromIso: string;
+  toIso: string;
+  trucks?: Array<{ id: number; samsara_vehicle_id: string }>;
+}): Promise<{ fetched: number; error?: string }> {
+  await loadRuntimeEnv();
+  if (!isSamsaraTokenSet()) return { fetched: 0 };
+  const trucks = (input.trucks ?? listTrucks()).filter((truck) => String(truck.samsara_vehicle_id ?? "").trim());
+  let fetched = 0;
+  for (const truck of trucks.slice(0, 40)) {
+    const vehicleId = String(truck.samsara_vehicle_id).trim();
+    const cacheKey = `${truck.id}:${input.fromIso}:${input.toIso}`;
+    const last = odometerHistoryFetchedAt.get(cacheKey) ?? 0;
+    if (Date.now() - last < 60_000) continue;
+    try {
+      const points = await fetchVehicleOdometerHistory(vehicleId, input.fromIso, input.toIso);
+      odometerHistoryFetchedAt.set(cacheKey, Date.now());
+      for (const point of points) {
+        if (!point.recordedAt) continue;
+        saveTruckOdometer(truck.id, {
+          miles: point.miles,
+          recordedAt: point.recordedAt,
+          source: "samsara",
+        });
+        fetched += 1;
+      }
+    } catch {
+      // Fail soft: closeout keeps persisted readings.
+    }
+  }
+  return { fetched };
 }
 
 async function fetchVehicleStats(): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {
