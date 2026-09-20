@@ -6,6 +6,9 @@ export type LoginAuditKind = "office" | "driver";
 export type LoginAuditOutcome = "success" | "failure";
 export type LoginAuditStep = "password" | "email_code" | "pin";
 
+export const OFFICE_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+export const OFFICE_LOGIN_MAX_FAILURES = 5;
+
 export type LoginAuditRow = {
   id: number;
   kind: LoginAuditKind;
@@ -27,6 +30,15 @@ export type LoginAuditFilters = {
   to?: string;
   limit?: number;
 };
+
+export class OfficeLoginRateLimitError extends Error {
+  readonly status = 429;
+
+  constructor(message = "Too many sign-in attempts. Try again later.") {
+    super(message);
+    this.name = "OfficeLoginRateLimitError";
+  }
+}
 
 const SECRET_DUMP = /(password|passwd|secret|token|otp|pin|credential|api[_-]?key)\s*[:=]/i;
 
@@ -175,4 +187,38 @@ export function listLoginAuditNames(): string[] {
 export function publicLoginFailureDetail(error: unknown): string {
   const message = error instanceof Error ? error.message : "Sign-in failed.";
   return sanitizeAuditText(message);
+}
+
+function officePasswordFailureCount(userId: number | null, ip: string): number {
+  const since = new Date(Date.now() - OFFICE_LOGIN_WINDOW_MS).toISOString();
+  const safeIp = sanitizeIp(ip);
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM login_audit
+       WHERE kind = 'office'
+         AND outcome = 'failure'
+         AND step = 'password'
+         AND created_at >= ?
+         AND (
+           (? IS NOT NULL AND user_id = ?)
+           OR (? != '' AND ip_address = ?)
+         )`,
+    )
+    .get(since, userId, userId, safeIp, safeIp) as { count: number };
+  return row.count;
+}
+
+export function isOfficePasswordRateLimited(userId: number | null, ip: string): boolean {
+  return officePasswordFailureCount(userId, ip) >= OFFICE_LOGIN_MAX_FAILURES;
+}
+
+export function assertOfficePasswordLoginNotRateLimited(userId: number | null, ip: string): void {
+  if (isOfficePasswordRateLimited(userId, ip)) {
+    throw new OfficeLoginRateLimitError();
+  }
+}
+
+export function isOfficeLoginRateLimitError(error: unknown): error is OfficeLoginRateLimitError {
+  return error instanceof OfficeLoginRateLimitError;
 }

@@ -649,7 +649,7 @@ export type ActionResult =
       maskedPhone?: string;
       recoveryCodes?: string[];
     }
-  | { ok: false; error: string; duplicate?: boolean; existingId?: number };
+  | { ok: false; error: string; status?: number; duplicate?: boolean; existingId?: number };
 
 export function labelForLoadStatus(status: string): string {
   switch (status) {

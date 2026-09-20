@@ -339,6 +339,8 @@ async function main() {
   assert.match(invoicesHub, /AccountingHub/);
   const attachmentRoute = fs.readFileSync(path.join(process.cwd(), "app/api/attachments/[id]/route.ts"), "utf8");
   assert.match(attachmentRoute, /regenerateMissingAttachment/);
+  assert.match(attachmentRoute, /driverAssignedToLoad/);
+  assert.match(attachmentRoute, /new Response\("Forbidden", \{ status: 403 \}\)/);
   assert.match(attachmentRoute, /This file is no longer on this computer/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/regenerate-attachment.ts"), "utf8"), /buildTmsInvoice/);
   const invoiceExportRoute = fs.readFileSync(path.join(process.cwd(), "app/api/loads/[id]/invoice/route.ts"), "utf8");
@@ -1469,6 +1471,7 @@ async function main() {
   assert.match(nextConfigSource, /Referrer-Policy/);
   assert.match(nextConfigSource, /Permissions-Policy/);
   assert.match(nextConfigSource, /Strict-Transport-Security/);
+  assert.doesNotMatch(nextConfigSource, /'unsafe-eval'/);
   assert.match(nextConfigSource, /frame-src 'self'/);
   assert.match(nextConfigSource, /frame-ancestors 'self'/);
   assert.doesNotMatch(nextConfigSource, /frame-ancestors 'none'/);
@@ -14777,12 +14780,31 @@ DISPATCH CONFIRMATION
   assert.ok(listed.some((row) => row.ip_address === "203.0.113.44" && row.outcome === "failure"));
   const byIp = loginAudit.listLoginAudit({ outcome: "success" }).find((row) => row.ip_address === "198.51.100.10");
   assert.ok(byIp);
+  assert.equal(loginAudit.OFFICE_LOGIN_MAX_FAILURES, 5);
+  assert.equal(loginAudit.OFFICE_LOGIN_WINDOW_MS, 15 * 60 * 1000);
+  assert.equal(loginAudit.isOfficePasswordRateLimited(noMailId, "203.0.113.44"), false);
+  for (let index = 0; index < loginAudit.OFFICE_LOGIN_MAX_FAILURES - 1; index += 1) {
+    loginAudit.recordLoginAttempt({
+      kind: "office",
+      outcome: "failure",
+      step: "password",
+      userId: noMailId,
+      ipAddress: "203.0.113.44",
+      detail: "Dispatcher or password is not recognized.",
+    });
+  }
+  assert.equal(loginAudit.isOfficePasswordRateLimited(noMailId, "203.0.113.44"), true);
+  assert.throws(
+    () => loginAudit.assertOfficePasswordLoginNotRateLimited(noMailId, "203.0.113.44"),
+    /Too many sign-in attempts/i,
+  );
   const { dispatcherLoginAction } = await import("../lib/dispatcher-actions");
   const badLogin = new FormData();
   badLogin.set("dispatcher_id", String(noMailId));
   badLogin.set("password", "Wrong1$zz");
   const badResult = await dispatcherLoginAction(null, badLogin);
   assert.equal(badResult.ok, false);
+  if (!badResult.ok) assert.equal(badResult.status, 429);
   const badNameLogin = new FormData();
   badNameLogin.set("dispatcher_name", "No Email Desk");
   badNameLogin.set("password", "Wrong1$zz");

@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordLoadAudit, withRequestAuditActor } from "./audit";
-import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
+import {
+  assertOfficePasswordLoginNotRateLimited,
+  isOfficeLoginRateLimitError,
+  publicLoginFailureDetail,
+  recordLoginAttemptFromRequest,
+  requestClientIp,
+} from "./login-audit";
 import {
   fromInputDateTime,
   fromOfficeDateTime,
@@ -43,6 +49,7 @@ import {
   verifyEmailOtp,
 } from "./dispatcher-email-otp";
 import { isUsableEmail } from "./mail-shared";
+import { findActiveDispatcherByEmail, findActiveDispatcherByName } from "./dispatcher-password";
 import {
   assignLoadDispatcher,
   cloneLoad,
@@ -122,6 +129,7 @@ export async function dispatcherLoginAction(
   const resend = String(formData.get("resend") ?? "") === "1";
   const remember = isRememberDeviceRequested(formData);
   const dispatcherId = parseOptionalInt(formData.get("dispatcher_id"));
+  let officeLoginUserId: number | null = dispatcherId;
   try {
     if (emailCode || resend) {
       const pendingId = await getPendingTwoFactorDispatcherId();
@@ -143,6 +151,12 @@ export async function dispatcherLoginAction(
     const email = String(formData.get("email") ?? "").trim();
     const dispatcherName = String(formData.get("dispatcher_name") ?? "").trim();
     if (!password) throw new Error("Enter your password.");
+    officeLoginUserId = email
+      ? findActiveDispatcherByEmail(email)?.id ?? null
+      : dispatcherName
+        ? findActiveDispatcherByName(dispatcherName)?.id ?? null
+        : dispatcherId;
+    assertOfficePasswordLoginNotRateLimited(officeLoginUserId, await requestClientIp());
     const dispatcher = email
       ? authenticateDispatcherByEmail(email, password)
       : dispatcherName
@@ -171,12 +185,15 @@ export async function dispatcherLoginAction(
     return await sendSignInCode(dispatcher.id, false, remember);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    if (isOfficeLoginRateLimitError(error)) {
+      return { ok: false, error: error.message, status: error.status };
+    }
     const pendingId = emailCode || resend ? await getPendingTwoFactorDispatcherId() : null;
     await recordLoginAttemptFromRequest({
       kind: "office",
       outcome: "failure",
       step: emailCode || resend ? "email_code" : "password",
-      userId: pendingId ?? dispatcherId,
+      userId: pendingId ?? officeLoginUserId,
       detail: publicLoginFailureDetail(error),
     });
     return fail(error);
