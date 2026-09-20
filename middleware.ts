@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-const OFFICE_SESSION_COOKIE = "tms_dispatcher_id";
+import {
+  DISPATCHER_PENDING_COOKIE,
+  DISPATCHER_SESSION_COOKIE,
+  parseDispatcherSessionValue,
+} from "./lib/dispatcher-session-token";
 
 export function middleware(request: NextRequest): NextResponse {
-  const hasDispatcherCookie = Boolean(request.cookies.get(OFFICE_SESSION_COOKIE)?.value);
-  if (hasDispatcherCookie) {
+  const rawSessionCookie = request.cookies.get(DISPATCHER_SESSION_COOKIE)?.value;
+  if (parseDispatcherSessionValue(rawSessionCookie)) {
     return NextResponse.next();
   }
 
@@ -13,7 +16,12 @@ export function middleware(request: NextRequest): NextResponse {
   loginUrl.pathname = "/login";
   const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
   loginUrl.searchParams.set("next", requestedPath || "/");
-  return NextResponse.redirect(loginUrl);
+  const response = NextResponse.redirect(loginUrl);
+  if (rawSessionCookie) {
+    response.cookies.delete(DISPATCHER_SESSION_COOKIE);
+    response.cookies.delete(DISPATCHER_PENDING_COOKIE);
+  }
+  return response;
 }
 
 export const config = {

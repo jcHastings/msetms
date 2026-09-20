@@ -34,7 +34,15 @@ import {
   toPublicDispatcher,
   type PublicDispatcher,
 } from "./settings-shared";
+import {
+  DISPATCHER_PENDING_COOKIE,
+  DISPATCHER_SESSION_COOKIE,
+  DISPATCHER_SESSION_MS,
+  parseDispatcherSessionValue,
+} from "./dispatcher-session-token";
 import { createSignedSessionToken, readSignedSessionToken } from "./session-token";
+
+export { DISPATCHER_SESSION_MS } from "./dispatcher-session-token";
 
 export {
   canAccessAccounting,
@@ -61,9 +69,8 @@ export {
   roleLabel,
 };
 
-const SESSION_COOKIE = "tms_dispatcher_id";
-const PENDING_COOKIE = "tms_2fa_pending";
-export const DISPATCHER_SESSION_MS = 12 * 60 * 60 * 1000;
+const SESSION_COOKIE = DISPATCHER_SESSION_COOKIE;
+const PENDING_COOKIE = DISPATCHER_PENDING_COOKIE;
 const PENDING_MS = 10 * 60 * 1000;
 type SignedSessionPayload = { id: number; issuedAt: number };
 
@@ -266,12 +273,5 @@ export function isTwoFactorRequired(): boolean {
 }
 
 export function parseSessionValue(raw: string | undefined): { id: number; issuedAt: number } | null {
-  const payload = readSignedSessionToken<SignedSessionPayload>(raw);
-  if (!payload) return null;
-  const id = Number.parseInt(String(payload.id ?? ""), 10);
-  const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);
-  if (!id) return null;
-  if (!Number.isFinite(issuedAt)) return null;
-  if (Date.now() - issuedAt > DISPATCHER_SESSION_MS) return null;
-  return { id, issuedAt };
+  return parseDispatcherSessionValue(raw);
 }
