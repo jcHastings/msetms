@@ -12043,8 +12043,12 @@ DISPATCH CONFIRMATION
   assert.match(fuelWeekUi, /label="Money code"/);
   assert.match(fuelPage, /loadFuelWeekView/);
   assert.match(fuelPage, /weekView\.spent/);
+  assert.match(fuelPage, /weekView\.driverRollups/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /listFuelRollupsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /listTruckFuelRollupsForWeek/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel-store.ts"), "utf8"), /listFuelRollupsForWeek\(weekStartYmd/);
   assert.match(fuelPage, /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8"), /week\?:/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Lowest paid/);
@@ -12082,6 +12086,10 @@ DISPATCH CONFIRMATION
   assert.match(fuelRollupUi + fuelLabels, /DEF/);
   assert.match(fuelRollupUi + fuelLabels, /Scale/);
   assert.match(fuelRollupUi, /FUEL_BUCKETS/);
+  assert.match(fuelRollupUi, /data-fuel-rollup-period="week"/);
+  assert.match(fuelRollupUi, /row\.week\[bucket\]/);
+  assert.doesNotMatch(fuelRollupUi, /bucketCell\(row, bucket\.value, "month"\)/);
+  assert.doesNotMatch(fuelRollupUi, /wk \{bucketCell/);
   assert.match(fuelImportUi, /\/api\/fuel\/template/);
   assert.match(fuelImportUi, /\/api\/fuel\/export/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/api/fuel/import/route.ts")), true);
@@ -12216,6 +12224,89 @@ DISPATCH CONFIRMATION
   assert.equal(priorWeekSpent.scale, 12);
   assert.equal(priorWeekSpent.def, 9);
   assert.equal(priorWeekSpent.money, 30);
+  const weekScopeTruck = queries.createTruck({
+    unit_number: "WS1",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const weekScopeOtherTruck = queries.createTruck({
+    unit_number: "WS2",
+    type: "dry_van",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const weekScopeDriver = queries.createDriver({
+    name: "Nora Weekscope",
+    phone: "555-0914",
+    license: "NY-CDL-WEEKSCOPE",
+    truck_id: weekScopeTruck,
+    status: "available",
+  });
+  const priorOnlyDriver = queries.createDriver({
+    name: "Owen Priorweek",
+    phone: "555-0915",
+    license: "NY-CDL-PRIORWEEK",
+    truck_id: weekScopeOtherTruck,
+    status: "available",
+  });
+  const weekScopeImport = fuelStore.importFuelFromCsv(
+    [
+      "Date,Time,Driver Name,Unit,Category,Gallons,Price,Total,Invoice",
+      "08/20/2026,10:00,Nora Weekscope,WS1,Diesel,50,3.00,150.00,WEEK-SCOPE-A-DSL",
+      "08/20/2026,10:10,Nora Weekscope,WS1,Reefer,10,3.00,30.00,WEEK-SCOPE-A-RFR",
+      "08/20/2026,10:20,Nora Weekscope,WS1,DEF,2,3.00,6.00,WEEK-SCOPE-A-DEF",
+      "08/20/2026,10:30,Nora Weekscope,WS1,Scale,0,0,12.00,WEEK-SCOPE-A-SCL",
+      "08/20/2026,11:00,Owen Priorweek,WS2,Diesel,40,3.00,120.00,WEEK-SCOPE-A-OWEN",
+      "08/25/2026,10:00,Nora Weekscope,WS1,Diesel,80,3.00,240.00,WEEK-SCOPE-B-DSL",
+      "08/25/2026,10:10,Nora Weekscope,WS1,Reefer,5,3.00,15.00,WEEK-SCOPE-B-RFR",
+      "08/25/2026,10:20,Nora Weekscope,WS1,DEF,1,3.00,3.00,WEEK-SCOPE-B-DEF",
+      "08/25/2026,10:30,Nora Weekscope,WS1,Scale,0,0,18.50,WEEK-SCOPE-B-SCL",
+    ].join("\n"),
+    "week-scope.csv",
+  );
+  assert.ok((weekScopeImport.created ?? 0) >= 8);
+  const weekA = fuelStore.loadFuelWeekView("2026-08-17", wedNy);
+  const weekB = fuelStore.loadFuelWeekView("2026-08-24", wedNy);
+  const emptyWeek = fuelStore.loadFuelWeekView("2026-08-03", wedNy);
+  const noraA = weekA.driverRollups.find((row) => row.id === weekScopeDriver);
+  const noraB = weekB.driverRollups.find((row) => row.id === weekScopeDriver);
+  const owenA = weekA.driverRollups.find((row) => row.id === priorOnlyDriver);
+  const owenB = weekB.driverRollups.find((row) => row.id === priorOnlyDriver);
+  assert.ok(noraA);
+  assert.ok(noraB);
+  assert.ok(owenA);
+  assert.equal(owenB, undefined, "prior-week driver must drop off the selected week");
+  assert.equal(noraA.week.truck_diesel.gallons, 50);
+  assert.equal(noraA.week.reefer_diesel.gallons, 10);
+  assert.equal(noraA.week.def.gallons, 2);
+  assert.equal(noraA.week.scale.amount, 12);
+  assert.equal(noraA.weekGallons, 62);
+  assert.equal(noraA.weekAmount, 198);
+  assert.equal(noraB.week.truck_diesel.gallons, 80);
+  assert.equal(noraB.week.reefer_diesel.gallons, 5);
+  assert.equal(noraB.week.def.gallons, 1);
+  assert.equal(noraB.week.scale.amount, 18.5);
+  assert.equal(noraB.weekGallons, 86);
+  assert.equal(noraB.weekAmount, 276.5);
+  assert.equal(owenA.week.truck_diesel.gallons, 40);
+  assert.equal(owenA.weekGallons, 40);
+  assert.ok(!emptyWeek.driverRollups.some((row) => row.id === weekScopeDriver || row.id === priorOnlyDriver));
+  const truckA = weekA.truckRollups.find((row) => row.id === weekScopeTruck);
+  const truckB = weekB.truckRollups.find((row) => row.id === weekScopeTruck);
+  const otherTruckB = weekB.truckRollups.find((row) => row.id === weekScopeOtherTruck);
+  assert.ok(truckA);
+  assert.ok(truckB);
+  assert.equal(otherTruckB, undefined, "truck with no selected-week fuel must not keep all-time totals");
+  assert.equal(truckA.week.truck_diesel.gallons, 50);
+  assert.equal(truckA.weekAmount, 198);
+  assert.equal(truckB.week.truck_diesel.gallons, 80);
+  assert.equal(truckB.weekAmount, 276.5);
+  const noraAll = fuelStore.listFuelRollups(wedNy).find((row) => row.id === weekScopeDriver);
+  assert.ok(noraAll);
+  assert.equal(noraAll.month.truck_diesel.gallons, 130);
+  assert.equal(noraAll.monthGallons, 148);
+  assert.ok(noraAll.monthGallons > noraB.weekGallons);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");

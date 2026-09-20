@@ -2,8 +2,8 @@ import Link from "next/link";
 import { formatFuelMoney, formatGallons } from "@/lib/format";
 import { FUEL_BUCKETS, type FuelBucket, type FuelRollup } from "@/lib/fuel";
 
-function bucketCell(row: FuelRollup, bucket: FuelBucket, period: "week" | "month"): string {
-  const cell = row[period][bucket];
+function bucketCell(row: FuelRollup, bucket: FuelBucket): string {
+  const cell = row.week[bucket];
   if (bucket === "scale") return formatFuelMoney(cell.amount);
   return `${formatGallons(cell.gallons)} · ${formatFuelMoney(cell.amount)}`;
 }
@@ -18,7 +18,7 @@ export function FuelRollupTable({
   hrefFor: (row: FuelRollup) => string;
 }) {
   return (
-    <section className="card mb-6 overflow-hidden">
+    <section className="card mb-6 overflow-hidden" data-fuel-rollup="" data-fuel-rollup-period="week">
       <header className="border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
       </header>
@@ -47,10 +47,7 @@ export function FuelRollupTable({
                     </div>
                   </td>
                   {FUEL_BUCKETS.map((bucket) => (
-                    <td key={bucket.value}>
-                      <div>{bucketCell(row, bucket.value, "month")}</div>
-                      <div className="text-xs text-slate-500">wk {bucketCell(row, bucket.value, "week")}</div>
-                    </td>
+                    <td key={bucket.value}>{bucketCell(row, bucket.value)}</td>
                   ))}
                 </tr>
               ))}
