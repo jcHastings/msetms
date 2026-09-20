@@ -1,14 +1,20 @@
 import { ControlCenterView } from "@/components/control-center-view";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Control");
 import { PageHeader } from "@/components/page-header";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { buildControlCenter } from "@/lib/control-center";
 import { mapsBrowserKey } from "@/lib/load-map";
 
 export const dynamic = "force-dynamic";
 
 export default async function ControlCenterPage() {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) {
+    redirect("/login");
+  }
   const model = await buildControlCenter();
   return (
     <>

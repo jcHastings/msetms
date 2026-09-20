@@ -13877,8 +13877,25 @@ DISPATCH CONFIRMATION
   assert.throws(() => session.authenticateDispatcherByName("Nobody", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcherByEmail("nobody@msloads.com", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
-  assert.ok(session.parseSessionValue(`${msTest.id}.${Date.now()}`));
-  assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now() - session.DISPATCHER_SESSION_MS - 1}`), null);
+  const sessionToken = await import("../lib/session-token");
+  assert.ok(
+    session.parseSessionValue(
+      sessionToken.createSignedSessionToken({
+        id: msTest.id,
+        issuedAt: Date.now(),
+      }),
+    ),
+  );
+  assert.equal(
+    session.parseSessionValue(
+      sessionToken.createSignedSessionToken({
+        id: msTest.id,
+        issuedAt: Date.now() - session.DISPATCHER_SESSION_MS - 1,
+      }),
+    ),
+    null,
+  );
+  assert.equal(session.parseSessionValue(`${msTest.id}.${Date.now()}`), null);
 
   const accounting = await import("../lib/accounting");
   assert.ok(accounting.listBills().some((bill) => /Lumper/i.test(bill.vendor)));

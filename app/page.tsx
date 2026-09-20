@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Workbench", { absolute: true });
@@ -7,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { LoadOverlay } from "@/components/load-overlay";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { listWorkbenchInbox } from "@/lib/desk";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,10 @@ export default async function WorkbenchPage({
   searchParams: Promise<{ kind?: string; q?: string; open?: string }>;
 }) {
   const params = await searchParams;
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) {
+    redirect("/login");
+  }
   const openId = parseOpenLoadId(params.open);
   const current = { kind: params.kind, q: params.q };
   const inbox = listWorkbenchInbox({ kind: params.kind, q: params.q });

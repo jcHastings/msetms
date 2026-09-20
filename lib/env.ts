@@ -332,8 +332,21 @@ export function getGoogleMapsApiKey(): string | undefined {
   return readSecret("GOOGLE_MAPS_API_KEY") ?? readSecret("GOOGLE_PLACES_API_KEY");
 }
 
+export function getGoogleMapsBrowserKey(): string | undefined {
+  return readSecret("GOOGLE_MAPS_BROWSER_KEY");
+}
+
 export function isGooglePlacesConfigured(): boolean {
   return Boolean(getGoogleMapsApiKey());
+}
+
+export function getSessionSecret(): string | undefined {
+  const secret = readSecret("SESSION_SECRET");
+  if (secret) return secret;
+  if ((readSecret("NODE_ENV") ?? process.env.NODE_ENV) !== "production") {
+    return "dev-session-secret-change-me";
+  }
+  return undefined;
 }
 
 export function getTwilioAccountSid(): string | undefined {

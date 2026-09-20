@@ -1,6 +1,6 @@
 import { listLoadLog } from "./audit";
 import { getDb } from "./db";
-import { getGoogleMapsApiKey } from "./env";
+import { getGoogleMapsBrowserKey } from "./env";
 import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
 import { getTrailerLocationForLoad, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getLocationForLoad } from "./integrations/samsara";
@@ -26,7 +26,7 @@ import { geocodeAddress } from "./places";
 import { listStops } from "./stops";
 
 export function mapsBrowserKey(): string {
-  return getGoogleMapsApiKey() ?? "";
+  return getGoogleMapsBrowserKey() ?? "";
 }
 
 function validPoint(lat: number | null | undefined, lng: number | null | undefined): boolean {

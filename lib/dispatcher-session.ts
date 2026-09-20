@@ -34,6 +34,7 @@ import {
   toPublicDispatcher,
   type PublicDispatcher,
 } from "./settings-shared";
+import { createSignedSessionToken, readSignedSessionToken } from "./session-token";
 
 export {
   canAccessAccounting,
@@ -64,6 +65,7 @@ const SESSION_COOKIE = "tms_dispatcher_id";
 const PENDING_COOKIE = "tms_2fa_pending";
 export const DISPATCHER_SESSION_MS = 12 * 60 * 60 * 1000;
 const PENDING_MS = 10 * 60 * 1000;
+type SignedSessionPayload = { id: number; issuedAt: number };
 
 export type Dispatcher = PublicDispatcher;
 
@@ -181,12 +183,20 @@ export async function requireLoadEditor(): Promise<Dispatcher> {
 
 export async function setDispatcherSession(dispatcherId: number): Promise<void> {
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, `${dispatcherId}.${Date.now()}`, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: DISPATCHER_SESSION_MS / 1000,
-  });
+  jar.set(
+    SESSION_COOKIE,
+    createSignedSessionToken({
+      id: dispatcherId,
+      issuedAt: Date.now(),
+    }),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      maxAge: DISPATCHER_SESSION_MS / 1000,
+    },
+  );
   jar.delete(PENDING_COOKIE);
 }
 
@@ -210,6 +220,7 @@ export async function writeTrustedDeviceCookie(value: string): Promise<void> {
   jar.set(DEVICE_COOKIE, value, {
     httpOnly: true,
     sameSite: "lax",
+    secure: true,
     path: "/",
     maxAge: DEVICE_TTL_MS / 1000,
   });
@@ -217,19 +228,32 @@ export async function writeTrustedDeviceCookie(value: string): Promise<void> {
 
 export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {
   const jar = await cookies();
-  jar.set(PENDING_COOKIE, String(dispatcherId), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: PENDING_MS / 1000,
-  });
+  jar.set(
+    PENDING_COOKIE,
+    createSignedSessionToken({
+      id: dispatcherId,
+      issuedAt: Date.now(),
+    }),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      maxAge: PENDING_MS / 1000,
+    },
+  );
   jar.delete(SESSION_COOKIE);
 }
 
 export async function getPendingTwoFactorDispatcherId(): Promise<number | null> {
   const jar = await cookies();
-  const id = Number.parseInt(jar.get(PENDING_COOKIE)?.value ?? "", 10);
-  return id || null;
+  const payload = readSignedSessionToken<SignedSessionPayload>(jar.get(PENDING_COOKIE)?.value);
+  if (!payload) return null;
+  const id = Number.parseInt(String(payload.id ?? ""), 10);
+  const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);
+  if (!id || !Number.isFinite(issuedAt)) return null;
+  if (Date.now() - issuedAt > PENDING_MS) return null;
+  return id;
 }
 
 export async function clearPendingTwoFactor(): Promise<void> {
@@ -242,12 +266,11 @@ export function isTwoFactorRequired(): boolean {
 }
 
 export function parseSessionValue(raw: string | undefined): { id: number; issuedAt: number } | null {
-  if (!raw) return null;
-  const [idPart, tsPart] = raw.split(".");
-  const id = Number.parseInt(idPart, 10);
+  const payload = readSignedSessionToken<SignedSessionPayload>(raw);
+  if (!payload) return null;
+  const id = Number.parseInt(String(payload.id ?? ""), 10);
+  const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);
   if (!id) return null;
-  if (!tsPart) return { id, issuedAt: Date.now() };
-  const issuedAt = Number.parseInt(tsPart, 10);
   if (!Number.isFinite(issuedAt)) return null;
   if (Date.now() - issuedAt > DISPATCHER_SESSION_MS) return null;
   return { id, issuedAt };

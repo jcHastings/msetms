@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Dispatch board");
@@ -64,8 +65,11 @@ export default async function BoardPage({
   const openTab = params.tab;
   const current = { status, date };
   const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) {
+    redirect("/login");
+  }
   const loads = sortMasterFamilies(
-    listLoads(listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher?.id })).filter(
+    listLoads(listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher.id })).filter(
       (load) => status === "accounting" || loadShowsOnDispatchBoard(load.status),
     ),
   );

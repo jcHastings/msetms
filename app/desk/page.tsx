@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Desk");
@@ -51,10 +52,13 @@ export default async function DashboardPage({
   searchParams: Promise<{ kind?: string; q?: string; open?: string }>;
 }) {
   const params = await searchParams;
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) {
+    redirect("/login");
+  }
   const openId = parseOpenLoadId(params.open);
   const current = { kind: params.kind, q: params.q };
-  const dispatcher = await getSignedInDispatcher();
-  const showReports = dispatcher ? canViewReports(dispatcher.role) : false;
+  const showReports = canViewReports(dispatcher.role);
   const stats = getDashboardStats();
   const unassigned = listAttentionLoads().filter((load) => loadTouchesToday(load));
   const moving = listMovingLoads().filter((load) => loadTouchesToday(load));
