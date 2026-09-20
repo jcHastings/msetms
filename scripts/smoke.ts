@@ -2474,6 +2474,9 @@ async function main() {
   assert.match(mikeSrc, /Never say no trucks ranked closest/);
   assert.match(mikeSrc, /tmsStats/);
   assert.match(mikeSrc, /answerMikeTmsQuestion/);
+  assert.match(mikeSrc, /answerMikeFuelAuditQuestion/);
+  assert.match(mikeSrc, /fuelAudit/);
+  assert.match(mikeSrc, /Never email or text a driver about fuel/);
   assert.match(mikeSrc, /answerMikeReeferFromOrbcomm/);
   assert.match(mikeSrc, /loadStopSummaries/);
   assert.match(mikeSrc, /await geocode\(asked\)/);
@@ -11998,6 +12001,8 @@ DISPATCH CONFIRMATION
   const driverEditPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/drivers/[id]/page.tsx"), "utf8");
   assert.match(fuelPage, /FuelCsvImport/);
   assert.match(fuelPage, /FuelWeekSpendCards/);
+  assert.match(fuelPage, /FuelAuditStrip/);
+  assert.match(fuelPage, /FuelCloseoutStrip/);
   assert.match(fuelPage, /FuelWeekStrip/);
   assert.match(fuelPage, /FuelMpgTable/);
   assert.match(fuelPage, /FuelTransactionLists/);
@@ -12044,6 +12049,24 @@ DISPATCH CONFIRMATION
   assert.match(fuelWeekUi, /label="Scale"/);
   assert.match(fuelWeekUi, /label="DEF"/);
   assert.match(fuelWeekUi, /label="Money code"/);
+  const fuelAuditUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-audit-strip.tsx"), "utf8");
+  assert.match(fuelAuditUi, /data-fuel-audit/);
+  assert.match(fuelAuditUi, /data-fuel-audit-flag/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-audit.md"), "utf8"), /FUEL_AUDIT_THRESHOLDS/);
+  const fuelCloseoutUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-closeout-strip.tsx"), "utf8");
+  assert.match(fuelCloseoutUi, /data-fuel-closeout/);
+  assert.match(fuelCloseoutUi, /data-fuel-closeout-fleet/);
+  assert.match(fuelCloseoutUi, /Weekly fuel closeout/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /FUEL_CLOSEOUT_THRESHOLDS/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /Samsara odometer/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"),
+    /Ascend miles|Ascend odometer|pull miles from Ascend/i,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/miles-source.ts"), "utf8"), /MilesSource/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/miles-source.ts"), "utf8"), /samsara/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/api/fuel/closeout/route.ts"), "utf8"), /dispatcherTextResponse/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /fuel_closeout_reports/);
   assert.match(fuelPage, /loadFuelWeekView/);
   assert.match(fuelPage, /weekView\.spent/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /fuelWeekSpentTotalsForWeek/);
@@ -12229,6 +12252,418 @@ DISPATCH CONFIRMATION
   assert.equal(priorWeekSpent.scale, 12);
   assert.equal(priorWeekSpent.def, 9);
   assert.equal(priorWeekSpent.money, 30);
+  const {
+    fuelAuditProduct,
+    fuelAuditSubject,
+    fuelAuditWindowForWeek,
+    median,
+    resolveFuelAuditWindow,
+    scoreFuelAudit,
+  } = await import("../lib/fuel-audit");
+  const auditNow = new Date("2026-08-26T15:00:00.000Z");
+  const auditWeek = resolveFuelAuditWindow("week", auditNow);
+  assert.equal(auditWeek.startYmd, "2026-08-24");
+  assert.equal(auditWeek.endYmd, "2026-08-30");
+  assert.equal(fuelAuditWindowForWeek("2026-08-24").fromIso, auditWeek.fromIso);
+  assert.equal(resolveFuelAuditWindow("last_7", auditNow).days, 7);
+  assert.equal(resolveFuelAuditWindow("last_14", auditNow).days, 14);
+  assert.equal(resolveFuelAuditWindow("last_30", auditNow).days, 30);
+  assert.equal(median([2, 2, 2, 6]), 2);
+  assert.equal(fuelAuditProduct("truck_diesel"), "diesel");
+  assert.equal(fuelAuditProduct("def"), "def");
+  assert.equal(fuelAuditProduct("reefer_diesel"), "reefer");
+  assert.equal(fuelAuditProduct("money_code"), null);
+  assert.equal(fuelAuditProduct("scale"), null);
+  const auditTx = (row: {
+    id: number;
+    occurred_at: string;
+    driver_id?: number | null;
+    location?: string;
+    gallons?: number | null;
+    amount?: number | null;
+    category?: string;
+    unit_number?: string;
+    driver_name_raw?: string;
+    driver_name?: string | null;
+    truck_unit?: string | null;
+  }) => ({
+    id: row.id,
+    occurred_at: row.occurred_at,
+    driver_id: row.driver_id ?? null,
+    location: row.location ?? "Pilot",
+    gallons: row.gallons ?? 100,
+    amount: row.amount ?? 350,
+    category: row.category ?? "truck_diesel",
+    unit_number: row.unit_number ?? "",
+    driver_name_raw: row.driver_name_raw ?? "",
+    driver_name: row.driver_name ?? null,
+    truck_unit: row.truck_unit ?? null,
+  });
+  const peerFills = [1, 2, 3].flatMap((driverId) => [
+    auditTx({
+      id: driverId * 10,
+      occurred_at: "2026-08-25T14:00:00.000Z",
+      driver_id: driverId,
+      driver_name: `Peer ${driverId}`,
+      truck_unit: `1${driverId}`,
+    }),
+    auditTx({
+      id: driverId * 10 + 1,
+      occurred_at: "2026-08-26T14:00:00.000Z",
+      driver_id: driverId,
+      driver_name: `Peer ${driverId}`,
+      truck_unit: `1${driverId}`,
+    }),
+  ]);
+  const heavyFills = [0, 1, 2, 3, 4, 5].map((slot) =>
+    auditTx({
+      id: 100 + slot,
+      occurred_at: `2026-08-2${4 + (slot % 3)}T1${slot}:00:00.000Z`,
+      driver_id: 9,
+      driver_name: "Audit Heavy",
+      truck_unit: "77",
+    }),
+  );
+  const oftenReport = scoreFuelAudit([...peerFills, ...heavyFills], auditWeek);
+  assert.ok(oftenReport.flags.some((flag) => flag.kind === "too_often" && flag.driverName === "Audit Heavy"));
+  const oftenFlag = oftenReport.flags.find((flag) => flag.reason === "fill_count" && flag.driverName === "Audit Heavy");
+  assert.ok(oftenFlag);
+  assert.match(oftenFlag.metric, /6 fills/);
+  assert.ok(oftenFlag.txs.some((tx) => tx.id === 100));
+  const shortGapReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 201,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 11,
+        driver_name: "Gap Diesel",
+        truck_unit: "40",
+      }),
+      auditTx({
+        id: 202,
+        occurred_at: "2026-08-25T14:00:00.000Z",
+        driver_id: 11,
+        driver_name: "Gap Diesel",
+        truck_unit: "40",
+      }),
+      auditTx({
+        id: 203,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 12,
+        driver_name: "Gap Def",
+        truck_unit: "41",
+        category: "def",
+        gallons: 10,
+        amount: 40,
+      }),
+      auditTx({
+        id: 204,
+        occurred_at: "2026-08-25T14:00:00.000Z",
+        driver_id: 12,
+        driver_name: "Gap Def",
+        truck_unit: "41",
+        category: "def",
+        gallons: 10,
+        amount: 40,
+      }),
+    ],
+    auditWeek,
+  );
+  assert.ok(shortGapReport.flags.some((flag) => flag.reason === "short_gap" && flag.driverName === "Gap Diesel"));
+  assert.equal(
+    shortGapReport.flags.some((flag) => flag.reason === "short_gap" && flag.driverName === "Gap Def"),
+    false,
+  );
+  const tooMuchReport = scoreFuelAudit(
+    [
+      ...peerFills,
+      auditTx({
+        id: 301,
+        occurred_at: "2026-08-25T15:00:00.000Z",
+        driver_id: 13,
+        driver_name: "Big Fill",
+        truck_unit: "50",
+        gallons: 200,
+        amount: 700,
+      }),
+    ],
+    auditWeek,
+  );
+  const tooMuch = tooMuchReport.flags.find((flag) => flag.kind === "too_much" && flag.driverName === "Big Fill");
+  assert.ok(tooMuch);
+  assert.match(tooMuch.why, /fleet median/);
+  assert.ok(tooMuch.txs.some((tx) => tx.id === 301));
+  const ownBaselineReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 310,
+        occurred_at: "2026-08-10T14:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+      }),
+      auditTx({
+        id: 311,
+        occurred_at: "2026-08-12T14:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+      }),
+      auditTx({
+        id: 312,
+        occurred_at: "2026-08-25T15:00:00.000Z",
+        driver_id: 14,
+        driver_name: "Own Base",
+        truck_unit: "51",
+        gallons: 160,
+        amount: 560,
+      }),
+      ...peerFills,
+    ],
+    auditWeek,
+  );
+  const ownFlag = ownBaselineReport.flags.find((flag) => flag.kind === "too_much" && flag.driverName === "Own Base");
+  assert.ok(ownFlag);
+  assert.match(ownFlag.why, /own median/);
+  const dupReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 401,
+        occurred_at: "2026-08-25T13:00:00.000Z",
+        driver_id: 15,
+        driver_name: "Dup Swipe",
+        truck_unit: "60",
+        location: "Pilot 123 Memphis TN",
+        gallons: 100.2,
+      }),
+      auditTx({
+        id: 402,
+        occurred_at: "2026-08-25T16:00:00.000Z",
+        driver_id: 15,
+        driver_name: "Dup Swipe",
+        truck_unit: "60",
+        location: "PILOT 123 MEMPHIS TN",
+        gallons: 100,
+      }),
+    ],
+    auditWeek,
+  );
+  const dupFlag = dupReport.flags.find((flag) => flag.kind === "duplicate" && flag.driverName === "Dup Swipe");
+  assert.ok(dupFlag);
+  assert.deepEqual(
+    dupFlag.txs.map((tx) => tx.id),
+    [401, 402],
+  );
+  const unitOnly = [0, 1, 2, 3, 4, 5].map((slot) =>
+    auditTx({
+      id: 500 + slot,
+      occurred_at: `2026-08-2${4 + (slot % 3)}T0${slot}:00:00.000Z`,
+      unit_number: "101",
+      gallons: 90,
+    }),
+  );
+  const unitReport = scoreFuelAudit([...peerFills, ...unitOnly], auditWeek);
+  const unitFlag = unitReport.flags.find((flag) => flag.kind === "too_often" && flag.unit === "101");
+  assert.ok(unitFlag);
+  assert.equal(unitFlag.driverName, "Unassigned");
+  assert.equal(fuelAuditSubject(unitOnly[0]!).key, "u:101");
+  const ignoredReport = scoreFuelAudit(
+    [
+      auditTx({
+        id: 601,
+        occurred_at: "2026-08-25T10:00:00.000Z",
+        driver_id: 16,
+        driver_name: "Money Only",
+        category: "money_code",
+        gallons: null,
+        amount: 500,
+      }),
+      auditTx({
+        id: 602,
+        occurred_at: "2026-08-25T12:00:00.000Z",
+        driver_id: 16,
+        driver_name: "Money Only",
+        category: "scale",
+        gallons: null,
+        amount: 18,
+      }),
+    ],
+    auditWeek,
+  );
+  assert.equal(ignoredReport.scoredCount, 0);
+  assert.equal(ignoredReport.flags.length, 0);
+  const {
+    buildFuelCloseout,
+    computeMpg,
+    FUEL_CLOSEOUT_THRESHOLDS,
+  } = await import("../lib/fuel-closeout");
+  const { createFixtureMilesSource, closedFuelWeekStart, priorFuelWeekStart } = await import("../lib/miles-source");
+  const { renderFuelCloseoutMarkdown, renderFuelCloseoutHtml } = await import("../lib/fuel-closeout-export");
+  assert.equal(computeMpg(1000, 100), 10);
+  assert.equal(computeMpg(1000, 0), null);
+  assert.equal(computeMpg(0, 100), 0);
+  assert.equal(computeMpg(null, 100), null);
+  assert.equal(FUEL_CLOSEOUT_THRESHOLDS.fillBandHighVsMedian, 1.75);
+  assert.equal(closedFuelWeekStart(auditNow), "2026-08-17");
+  assert.equal(priorFuelWeekStart("2026-08-24"), "2026-08-17");
+  const closeoutTx = (
+    row: {
+      id: number;
+      occurred_at: string;
+      driver_id?: number | null;
+      driver_name?: string | null;
+      truck_unit?: string | null;
+      gallons?: number | null;
+      amount?: number | null;
+      category?: string;
+      driver_name_raw?: string;
+    },
+  ) =>
+    auditTx({
+      id: row.id,
+      occurred_at: row.occurred_at,
+      driver_id: row.driver_id ?? null,
+      driver_name: row.driver_name ?? null,
+      truck_unit: row.truck_unit ?? "",
+      gallons: row.gallons ?? 100,
+      amount: row.amount ?? 350,
+      category: row.category ?? "truck_diesel",
+      driver_name_raw: row.driver_name_raw ?? "",
+    });
+  const closeoutRows = [
+    closeoutTx({ id: 801, occurred_at: "2026-08-25T14:00:00.000Z", driver_id: 21, driver_name: "Low Mpg", truck_unit: "21", gallons: 100, amount: 400 }),
+    closeoutTx({ id: 802, occurred_at: "2026-08-26T14:00:00.000Z", driver_id: 21, driver_name: "Low Mpg", truck_unit: "21", gallons: 100, amount: 400 }),
+    closeoutTx({ id: 811, occurred_at: "2026-08-25T14:00:00.000Z", driver_id: 22, driver_name: "Mid Mpg", truck_unit: "22", gallons: 100, amount: 350 }),
+    closeoutTx({ id: 812, occurred_at: "2026-08-26T14:00:00.000Z", driver_id: 22, driver_name: "Mid Mpg", truck_unit: "22", gallons: 100, amount: 350 }),
+    closeoutTx({ id: 821, occurred_at: "2026-08-25T14:00:00.000Z", driver_id: 23, driver_name: "High Mpg", truck_unit: "23", gallons: 100, amount: 300 }),
+    closeoutTx({ id: 822, occurred_at: "2026-08-26T14:00:00.000Z", driver_id: 23, driver_name: "High Mpg", truck_unit: "23", gallons: 100, amount: 300 }),
+    closeoutTx({ id: 831, occurred_at: "2026-08-25T15:00:00.000Z", driver_id: 24, driver_name: "Idle Ish", truck_unit: "24", gallons: 200, amount: 700 }),
+    closeoutTx({ id: 841, occurred_at: "2026-08-25T16:00:00.000Z", driver_id: 25, driver_name: "Fuel Only", truck_unit: "25", gallons: 80, amount: 240 }),
+    closeoutTx({
+      id: 851,
+      occurred_at: "2026-08-25T17:00:00.000Z",
+      driver_name_raw: "",
+      gallons: null,
+      amount: 55,
+      category: "money_code",
+    }),
+    closeoutTx({
+      id: 852,
+      occurred_at: "2026-08-25T18:00:00.000Z",
+      driver_id: 22,
+      driver_name: "Mid Mpg",
+      truck_unit: "22",
+      gallons: 8,
+      amount: 32,
+      category: "def",
+    }),
+    closeoutTx({
+      id: 853,
+      occurred_at: "2026-08-25T19:00:00.000Z",
+      driver_id: 22,
+      driver_name: "Mid Mpg",
+      truck_unit: "22",
+      gallons: null,
+      amount: 14,
+      category: "scale",
+    }),
+    closeoutTx({
+      id: 854,
+      occurred_at: "2026-08-25T20:00:00.000Z",
+      driver_id: 22,
+      driver_name: "Mid Mpg",
+      truck_unit: "22",
+      gallons: 40,
+      amount: 140,
+      category: "reefer_diesel",
+    }),
+  ];
+  const closeoutMiles = createFixtureMilesSource([
+    { subjectKey: "d:21", driverId: 21, driverName: "Low Mpg", unit: "21", truckId: 21, miles: 800, source: "samsara", note: "fixture" },
+    { subjectKey: "d:22", driverId: 22, driverName: "Mid Mpg", unit: "22", truckId: 22, miles: 2000, source: "samsara", note: "fixture" },
+    { subjectKey: "d:23", driverId: 23, driverName: "High Mpg", unit: "23", truckId: 23, miles: 2400, source: "samsara", note: "fixture" },
+    { subjectKey: "d:24", driverId: 24, driverName: "Idle Ish", unit: "24", truckId: 24, miles: 80, source: "samsara", note: "fixture" },
+    { subjectKey: "d:26", driverId: 26, driverName: "Miles Only", unit: "26", truckId: 26, miles: 500, source: "samsara", note: "fixture" },
+  ]);
+  const priorCloseoutMiles = createFixtureMilesSource([
+    { subjectKey: "d:21", driverId: 21, driverName: "Low Mpg", unit: "21", truckId: 21, miles: 400, source: "samsara", note: "fixture" },
+    { subjectKey: "d:22", driverId: 22, driverName: "Mid Mpg", unit: "22", truckId: 22, miles: 400, source: "samsara", note: "fixture" },
+    { subjectKey: "d:23", driverId: 23, driverName: "High Mpg", unit: "23", truckId: 23, miles: 400, source: "samsara", note: "fixture" },
+  ]);
+  const priorCloseoutRows = [
+    closeoutTx({ id: 901, occurred_at: "2026-08-18T14:00:00.000Z", driver_id: 21, driver_name: "Low Mpg", truck_unit: "21", gallons: 100, amount: 300 }),
+    closeoutTx({ id: 911, occurred_at: "2026-08-18T14:00:00.000Z", driver_id: 22, driver_name: "Mid Mpg", truck_unit: "22", gallons: 100, amount: 300 }),
+    closeoutTx({ id: 921, occurred_at: "2026-08-18T14:00:00.000Z", driver_id: 23, driver_name: "High Mpg", truck_unit: "23", gallons: 100, amount: 300 }),
+  ];
+  const closeoutReport = buildFuelCloseout({
+    weekStartYmd: "2026-08-24",
+    now: new Date("2026-09-01T15:00:00.000Z"),
+    rows: closeoutRows,
+    miles: closeoutMiles.milesForWindow({
+      fromIso: auditWeek.fromIso,
+      toIso: auditWeek.toIso,
+      startYmd: "2026-08-24",
+      endYmd: "2026-08-30",
+    }),
+    milesSource: closeoutMiles.status(),
+    prior: {
+      rows: priorCloseoutRows,
+      miles: priorCloseoutMiles.milesForWindow({
+        fromIso: "2026-08-17T04:00:00.000Z",
+        toIso: "2026-08-24T04:00:00.000Z",
+        startYmd: "2026-08-17",
+        endYmd: "2026-08-23",
+      }),
+    },
+  });
+  assert.equal(closeoutReport.week.closed, true);
+  assert.equal(closeoutReport.milesSource.id, "samsara");
+  assert.equal(Math.round(closeoutReport.fleet.miles), 5780);
+  assert.equal(closeoutReport.fleet.dieselGallons, 880);
+  assert.ok(closeoutReport.fleet.mpg != null && Math.abs(closeoutReport.fleet.mpg - 5780 / 880) < 0.001);
+  assert.equal(closeoutReport.fleet.spend.fuel, 3040);
+  assert.equal(closeoutReport.fleet.spend.reefer, 140);
+  assert.equal(closeoutReport.fleet.spend.def, 32);
+  assert.equal(closeoutReport.fleet.spend.scale, 14);
+  assert.equal(closeoutReport.fleet.spend.money, 55);
+  assert.equal(closeoutReport.fleet.unassignedAmount, 55);
+  const lowRow = closeoutReport.drivers.find((row) => row.driverName === "Low Mpg");
+  const midRow = closeoutReport.drivers.find((row) => row.driverName === "Mid Mpg");
+  const highRow = closeoutReport.drivers.find((row) => row.driverName === "High Mpg");
+  const idleRow = closeoutReport.drivers.find((row) => row.driverName === "Idle Ish");
+  const fuelOnlyRow = closeoutReport.drivers.find((row) => row.driverName === "Fuel Only");
+  const milesOnlyRow = closeoutReport.drivers.find((row) => row.driverName === "Miles Only");
+  assert.equal(lowRow?.mpg, 4);
+  assert.equal(midRow?.mpg, 10);
+  assert.equal(highRow?.mpg, 12);
+  assert.equal(lowRow?.fillCount, 2);
+  assert.equal(lowRow?.avgGallonsPerFill, 100);
+  assert.equal(midRow?.defAmount, 32);
+  assert.equal(midRow?.scaleAmount, 14);
+  assert.equal(midRow?.reeferAmount, 140);
+  assert.equal(closeoutReport.fleet.worst3[0]?.driverName, "Idle Ish");
+  assert.equal(closeoutReport.fleet.best3[0]?.driverName, "High Mpg");
+  assert.equal(highRow?.greenLight, true);
+  assert.equal(midRow?.greenLight, true);
+  assert.equal(lowRow?.greenLight, false);
+  assert.equal(idleRow?.idleIsh, true);
+  assert.equal(fuelOnlyRow?.fuelNoMiles, true);
+  assert.equal(milesOnlyRow?.milesNoFuel, true);
+  assert.ok(closeoutReport.fleet.mpgVsPrior != null && closeoutReport.fleet.mpgVsPrior > 0);
+  const closeoutMd = renderFuelCloseoutMarkdown(closeoutReport);
+  const closeoutHtml = renderFuelCloseoutHtml(closeoutReport);
+  assert.match(closeoutMd, /Weekly fuel closeout/);
+  assert.match(closeoutMd, /Samsara odometer/);
+  assert.match(closeoutMd, /Draft for JC only/);
+  assert.match(closeoutMd, /Nothing emailed or texted to drivers/);
+  assert.match(closeoutHtml, /data-closeout-driver/);
+  assert.match(closeoutHtml, /Samsara odometer/);
+  const { fileFuelCloseout, getFiledFuelCloseout } = await import("../lib/fuel-closeout-store");
+  const filed = fileFuelCloseout(closeoutReport);
+  assert.match(filed.markdown, /High Mpg/);
+  const reread = getFiledFuelCloseout("2026-08-24");
+  assert.ok(reread);
+  assert.equal(reread.report.fleet.unassignedAmount, 55);
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
@@ -16535,6 +16970,66 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(String(liveDriverAsk), /I don't have information/i);
   assert.match(String(liveMilesAsk), /TMS miles/i);
   assert.doesNotMatch(String(liveMilesAsk), /I don't have information/i);
+  const {
+    answerMikeFuelAuditQuestion,
+    formatMikeFuelAuditReply,
+    parseMikeFuelAuditQuestion,
+  } = await import("../lib/mike-fuel-audit");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit")?.windowKind, "week");
+  assert.equal(parseMikeFuelAuditQuestion("who's fueling too much")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("any weird fuel this week")?.kind, "fuel_audit");
+  assert.equal(parseMikeFuelAuditQuestion("weird fuel last 14 days")?.windowKind, "last_14");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit last 7 days")?.windowKind, "last_7");
+  assert.equal(parseMikeFuelAuditQuestion("fuel audit last 30")?.windowKind, "last_30");
+  assert.equal(parseMikeFuelAuditQuestion("import fuel"), null);
+  assert.equal(parseMikeFuelAuditQuestion("Who is our top customer on 2026?"), null);
+  const auditAskRows = [
+    ...peerFills,
+    ...heavyFills,
+    auditTx({
+      id: 301,
+      occurred_at: "2026-08-25T15:00:00.000Z",
+      driver_id: 13,
+      driver_name: "Big Fill",
+      truck_unit: "50",
+      gallons: 200,
+      amount: 700,
+    }),
+  ];
+  const liveAuditAsk = answerMikeFuelAuditQuestion("fuel audit", auditNow, auditAskRows);
+  assert.match(String(liveAuditAsk), /Fuel audit/);
+  assert.match(String(liveAuditAsk), /Soft flags only/);
+  assert.match(String(liveAuditAsk), /Audit Heavy/);
+  assert.match(String(liveAuditAsk), /unit 77/);
+  assert.match(String(liveAuditAsk), /#100/);
+  assert.doesNotMatch(String(liveAuditAsk), /I don't have information/i);
+  const tooMuchAsk = answerMikeFuelAuditQuestion("who's fueling too much", auditNow, auditAskRows);
+  assert.match(String(tooMuchAsk), /Big Fill/);
+  assert.match(String(tooMuchAsk), /too much|200g/i);
+  const formattedAudit = formatMikeFuelAuditReply(oftenReport);
+  assert.match(formattedAudit, /Nothing sent to drivers/);
+  assert.match(formattedAudit, /Audit Heavy/);
+  assert.equal(answerMikeFuelAuditQuestion("import fuel csv"), null);
+  const {
+    parseMikeFuelCloseoutQuestion,
+    formatMikeFuelCloseoutReply,
+    closeoutWeekStartFromQuestion,
+  } = await import("../lib/mike-fuel-closeout");
+  assert.equal(parseMikeFuelCloseoutQuestion("weekly fuel closeout")?.kind, "fuel_closeout");
+  assert.equal(parseMikeFuelCloseoutQuestion("weekly fuel closeout")?.week, "closed");
+  assert.equal(parseMikeFuelCloseoutQuestion("end-of-week fuel")?.kind, "fuel_closeout");
+  assert.equal(parseMikeFuelCloseoutQuestion("fuel closeout this week")?.week, "current");
+  assert.equal(parseMikeFuelCloseoutQuestion("fuel audit"), null);
+  assert.equal(parseMikeFuelCloseoutQuestion("Who is our top customer on 2026?"), null);
+  assert.equal(closeoutWeekStartFromQuestion({ kind: "fuel_closeout", week: "closed" }, auditNow), "2026-08-17");
+  assert.equal(closeoutWeekStartFromQuestion({ kind: "fuel_closeout", week: "current" }, auditNow), "2026-08-24");
+  const closeoutAskReply = formatMikeFuelCloseoutReply(closeoutReport);
+  assert.match(closeoutAskReply, /Weekly fuel closeout/);
+  assert.match(closeoutAskReply, /Samsara odometer/);
+  assert.match(closeoutAskReply, /Draft for JC only/);
+  assert.match(closeoutAskReply, /High Mpg/);
+  assert.doesNotMatch(closeoutAskReply, /I don't have information/i);
   assert.equal(parseMikeReeferQuestion("What's the Reefer temperature on trailer MS1519"), "MS1519");
   assert.equal(sameTrailerUnit("MS1519", "1519"), true);
   assert.equal(sameTrailerUnit("MS1519", "MS-1519"), true);
@@ -16630,7 +17125,17 @@ DISPATCH CONFIRMATION
   }).miles;
   assert.ok(odometerMiles != null && Math.abs(odometerMiles - 100) < 0.01);
   assert.equal(samsara.extractSamsaraOdometerMiles({ gps: { latitude: 35.4, longitude: -97.5 } }).miles, null);
+  const odometerSeries = samsara.extractSamsaraOdometerSeries({
+    obdOdometerMeters: [
+      { time: "2026-08-24T04:00:00.000Z", value: 160934.4 },
+      { time: "2026-08-31T04:00:00.000Z", value: 321868.8 },
+    ],
+  });
+  assert.equal(odometerSeries.length, 2);
+  assert.ok(odometerSeries[0] && Math.abs(odometerSeries[0].miles - 100) < 0.01);
+  assert.ok(odometerSeries[1] && Math.abs(odometerSeries[1].miles - 200) < 0.01);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /hydrateSamsaraOdometerWindow/);
 
   const { compactTrailerShareState, formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");

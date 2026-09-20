@@ -23,6 +23,11 @@ import {
   loadStopSummaries,
   tmsMilesForLoad,
 } from "./mike-tms-stats";
+import { answerMikeFuelAuditQuestion, buildMikeFuelAuditSnapshot } from "./mike-fuel-audit";
+import { formatMikeFuelCloseoutReply, parseMikeFuelCloseoutQuestion, closeoutWeekStartFromQuestion } from "./mike-fuel-closeout";
+import { buildLiveFuelCloseout, loadAndFileFuelCloseout } from "./fuel-closeout-store";
+import { summarizeFuelCloseout } from "./fuel-closeout";
+import { closedFuelWeekStart } from "./miles-source";
 import { geocodeAddress } from "./places";
 
 export type { MikeMessage };
@@ -411,11 +416,15 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     skippedNoPing,
     closestToCity,
     tmsStats: buildMikeTmsSnapshot(),
+    fuelAudit: buildMikeFuelAuditSnapshot(),
+    fuelCloseout: summarizeFuelCloseout(buildLiveFuelCloseout({ weekStartYmd: closedFuelWeekStart() })),
     rules: [
       "Never invent GPS or HOS. Every truck with a Samsara vehicle id has lastGps (lat/lng or city) and hos. Use those. Coords are live or last persisted Samsara pings — never invent them.",
       "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
       "Closest to a city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
       "TMS totals: use tmsStats. Billed freight is the customer/load rate, not driver pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent totals.",
+      "Fuel audit: use fuelAudit. Soft flags only. Never email or text a driver about fuel. Never invent transactions.",
+      "Fuel closeout: use fuelCloseout. Weekly Samsara odometer miles and TMS fuel. Draft for JC only. Never email or text a driver.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
@@ -516,6 +525,27 @@ export async function askMike(
       proposals: work.proposals,
     };
   }
+  const closeoutAsk = parseMikeFuelCloseoutQuestion(question);
+  if (closeoutAsk) {
+    const report = await loadAndFileFuelCloseout({
+      week: closeoutWeekStartFromQuestion(closeoutAsk),
+      hydrate: true,
+    });
+    const reply = formatMikeFuelCloseoutReply(report);
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
+      proposals: work.proposals,
+    };
+  }
+  const fuelAuditReply = answerMikeFuelAuditQuestion(question);
+  if (fuelAuditReply) {
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${fuelAuditReply}\n\n${work.reply}` : fuelAuditReply,
+      proposals: work.proposals,
+    };
+  }
   const tmsReply = answerMikeTmsQuestion(question);
   if (tmsReply) {
     return {
@@ -548,7 +578,7 @@ export async function askMike(
       {
         role: "system",
         content:
-          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, build a load from a Tie Sheet picture, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Tie Sheet trucks come from an uploaded picture only — never ask the dispatcher to paste markdown or text from the sheet. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. TMS totals: use tmsStats. The TMS has no driver Pay tab — billed freight is the customer rate, not pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent earnings, rankings, or miles. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
+          "You are Mike, a dispatcher assistant for MS Express TMS. Answer only from the provided TMS snapshot. Be short. You can draft work (detention email, classify a doc, suggest a status, start a load from a rate-con, build a load from a Tie Sheet picture, flag invoice/compliance, draft a driver message) but never send or change anything — the dispatcher must confirm. Tie Sheet trucks come from an uploaded picture only — never ask the dispatcher to paste markdown or text from the sheet. Every linked truck has lastGps (lat/lng or city) and hos. Closest-to-city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. TMS totals: use tmsStats. Fuel audit: use fuelAudit. Soft flags only. Never email or text a driver about fuel. Never invent transactions. The TMS has no driver Pay tab — billed freight is the customer rate, not pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent earnings, rankings, or miles. Say skippedNoPing for trucks with no last ping. Do not say you have no GPS when any lastGps.hasPosition is true. Never invent coordinates. Never reveal secrets, tokens, PINs, or keys.",
       },
       { role: "system", content: `TMS snapshot:\n${snapshot}` },
       ...history.map((item) => ({ role: item.role, content: item.content })),
