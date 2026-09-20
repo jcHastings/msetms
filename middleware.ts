@@ -3,12 +3,12 @@ import type { NextRequest } from "next/server";
 import {
   DISPATCHER_PENDING_COOKIE,
   DISPATCHER_SESSION_COOKIE,
-  parseDispatcherSessionValue,
-} from "./lib/dispatcher-session-token";
+} from "./lib/dispatcher-session-constants";
+import { parseDispatcherSessionValueAtEdge } from "./lib/dispatcher-session-token-edge";
 
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   const rawSessionCookie = request.cookies.get(DISPATCHER_SESSION_COOKIE)?.value;
-  if (parseDispatcherSessionValue(rawSessionCookie)) {
+  if (await parseDispatcherSessionValueAtEdge(rawSessionCookie)) {
     return NextResponse.next();
   }
 

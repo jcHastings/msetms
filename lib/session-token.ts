@@ -1,7 +1,6 @@
-import crypto from "node:crypto";
+import crypto from "crypto";
 import { getSessionSecret } from "./env";
-
-const SESSION_TOKEN_VERSION = "v1";
+import { parseSignedSessionPayload, parseSignedSessionToken, SESSION_TOKEN_VERSION } from "./session-token-core";
 
 function sign(unsigned: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(unsigned).digest("base64url");
@@ -26,21 +25,13 @@ export function createSignedSessionToken(payload: Record<string, unknown>): stri
 }
 
 export function readSignedSessionToken<T>(raw: string | undefined): T | null {
-  if (!raw) return null;
-  const parts = raw.split(".");
-  if (parts.length !== 3) return null;
-  const [version, payloadPart, signature] = parts;
-  if (version !== SESSION_TOKEN_VERSION || !payloadPart || !signature) return null;
+  const parts = parseSignedSessionToken(raw);
+  if (!parts) return null;
 
   const secret = getSessionSecret();
   if (!secret) return null;
 
-  const expectedSignature = sign(`${version}.${payloadPart}`, secret);
-  if (!safeEqual(signature, expectedSignature)) return null;
-
-  try {
-    return JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as T;
-  } catch {
-    return null;
-  }
+  const expectedSignature = sign(parts.unsigned, secret);
+  if (!safeEqual(parts.signature, expectedSignature)) return null;
+  return parseSignedSessionPayload<T>(parts.payloadPart);
 }

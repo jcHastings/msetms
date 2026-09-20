@@ -1,8 +1,11 @@
 import { readSignedSessionToken } from "./session-token";
+import {
+  DISPATCHER_PENDING_COOKIE,
+  DISPATCHER_SESSION_COOKIE,
+  DISPATCHER_SESSION_MS,
+} from "./dispatcher-session-constants";
 
-export const DISPATCHER_SESSION_COOKIE = "tms_dispatcher_id";
-export const DISPATCHER_PENDING_COOKIE = "tms_2fa_pending";
-export const DISPATCHER_SESSION_MS = 12 * 60 * 60 * 1000;
+export { DISPATCHER_PENDING_COOKIE, DISPATCHER_SESSION_COOKIE, DISPATCHER_SESSION_MS };
 
 type SignedSessionPayload = { id: number; issuedAt: number };
 
