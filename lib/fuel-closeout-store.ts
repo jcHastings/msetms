@@ -1,0 +1,174 @@
+import { getDb } from "./db";
+import { buildFuelCloseout, type FuelCloseoutReport, type FuelCloseoutTx } from "./fuel-closeout";
+import { renderFuelCloseoutHtml, renderFuelCloseoutMarkdown } from "./fuel-closeout-export";
+import { listFuelTransactions } from "./fuel-store";
+import { isCurrentFuelWeek, localWeekRange, parseFuelWeekStart } from "./fuel";
+import { getSamsaraFleet, hydrateSamsaraOdometerWindow } from "./integrations/samsara";
+import {
+  closedFuelWeekStart,
+  milesFromSamsaraOdometer,
+  milesWindowForWeek,
+  persistedSamsaraMilesSource,
+  priorFuelWeekStart,
+  samsaraMilesSourceStatus,
+  type MilesReading,
+} from "./miles-source";
+
+export type FiledFuelCloseout = {
+  weekStartYmd: string;
+  weekEndYmd: string;
+  closed: boolean;
+  markdown: string;
+  html: string;
+  report: FuelCloseoutReport;
+  filedAt: string;
+};
+
+type FiledRow = {
+  week_start_ymd: string;
+  week_end_ymd: string;
+  closed: number;
+  markdown: string;
+  html: string;
+  report_json: string;
+  filed_at: string;
+};
+
+function asTx(row: FuelCloseoutTx): FuelCloseoutTx {
+  return row;
+}
+
+export function buildLiveFuelCloseout(input?: {
+  weekStartYmd?: string;
+  now?: Date;
+  rows?: FuelCloseoutTx[];
+  miles?: MilesReading[];
+  prior?: { rows: FuelCloseoutTx[]; miles: MilesReading[] };
+}): FuelCloseoutReport {
+  const now = input?.now ?? new Date();
+  const weekStartYmd = parseFuelWeekStart(input?.weekStartYmd, now);
+  const rows = input?.rows ?? listFuelTransactions().map(asTx);
+  const miles = input?.miles ?? milesFromSamsaraOdometer(milesWindowForWeek(weekStartYmd));
+  const priorStart = priorFuelWeekStart(weekStartYmd);
+  const prior =
+    input?.prior ??
+    {
+      rows,
+      miles: milesFromSamsaraOdometer(milesWindowForWeek(priorStart)),
+    };
+  return buildFuelCloseout({
+    weekStartYmd,
+    now,
+    rows,
+    miles,
+    prior,
+    milesSource: persistedSamsaraMilesSource().status(),
+  });
+}
+
+export function fileFuelCloseout(report: FuelCloseoutReport): FiledFuelCloseout {
+  const markdown = renderFuelCloseoutMarkdown(report);
+  const html = renderFuelCloseoutHtml(report);
+  const filedAt = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO fuel_closeout_reports (
+         week_start_ymd, week_end_ymd, closed, markdown, html, report_json, filed_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(week_start_ymd) DO UPDATE SET
+         week_end_ymd = excluded.week_end_ymd,
+         closed = excluded.closed,
+         markdown = excluded.markdown,
+         html = excluded.html,
+         report_json = excluded.report_json,
+         filed_at = excluded.filed_at`,
+    )
+    .run(
+      report.week.startYmd,
+      report.week.endYmd,
+      report.week.closed ? 1 : 0,
+      markdown,
+      html,
+      JSON.stringify(report),
+      filedAt,
+    );
+  return {
+    weekStartYmd: report.week.startYmd,
+    weekEndYmd: report.week.endYmd,
+    closed: report.week.closed,
+    markdown,
+    html,
+    report,
+    filedAt,
+  };
+}
+
+export function getFiledFuelCloseout(weekStartYmd: string): FiledFuelCloseout | null {
+  const row = getDb()
+    .prepare("SELECT * FROM fuel_closeout_reports WHERE week_start_ymd = ?")
+    .get(weekStartYmd) as FiledRow | undefined;
+  if (!row) return null;
+  return {
+    weekStartYmd: row.week_start_ymd,
+    weekEndYmd: row.week_end_ymd,
+    closed: Boolean(row.closed),
+    markdown: row.markdown,
+    html: row.html,
+    report: JSON.parse(row.report_json) as FuelCloseoutReport,
+    filedAt: row.filed_at,
+  };
+}
+
+export function listFiledFuelCloseouts(): FiledFuelCloseout[] {
+  return (
+    getDb()
+      .prepare("SELECT * FROM fuel_closeout_reports ORDER BY week_start_ymd DESC")
+      .all() as FiledRow[]
+  ).map((row) => ({
+    weekStartYmd: row.week_start_ymd,
+    weekEndYmd: row.week_end_ymd,
+    closed: Boolean(row.closed),
+    markdown: row.markdown,
+    html: row.html,
+    report: JSON.parse(row.report_json) as FuelCloseoutReport,
+    filedAt: row.filed_at,
+  }));
+}
+
+export async function loadAndFileFuelCloseout(input?: {
+  week?: string;
+  now?: Date;
+  hydrate?: boolean;
+  defaultClosedWeek?: boolean;
+}): Promise<FuelCloseoutReport> {
+  const now = input?.now ?? new Date();
+  const weekStartYmd = input?.week
+    ? parseFuelWeekStart(input.week, now)
+    : input?.defaultClosedWeek
+      ? closedFuelWeekStart(now)
+      : localWeekRange(now).startYmd;
+  if (input?.hydrate !== false) {
+    try {
+      await getSamsaraFleet();
+      const window = milesWindowForWeek(weekStartYmd);
+      await hydrateSamsaraOdometerWindow({
+        fromIso: window.fromIso,
+        toIso: isCurrentFuelWeek(weekStartYmd, now) ? now.toISOString() : window.toIso,
+      });
+      const prior = milesWindowForWeek(priorFuelWeekStart(weekStartYmd));
+      await hydrateSamsaraOdometerWindow({ fromIso: prior.fromIso, toIso: prior.toIso });
+    } catch {
+      // Persist whatever we already have. Status stays honest.
+    }
+  }
+  const report = buildLiveFuelCloseout({ weekStartYmd, now });
+  fileFuelCloseout(report);
+  return report;
+}
+
+export function closeoutExportHref(weekStartYmd: string, format: "md" | "html"): string {
+  const query = new URLSearchParams({ week: weekStartYmd, format });
+  return `/api/fuel/closeout?${query.toString()}`;
+}
+
+export { samsaraMilesSourceStatus, closedFuelWeekStart };
