@@ -24,6 +24,10 @@ import {
   tmsMilesForLoad,
 } from "./mike-tms-stats";
 import { answerMikeFuelAuditQuestion, buildMikeFuelAuditSnapshot } from "./mike-fuel-audit";
+import { formatMikeFuelCloseoutReply, parseMikeFuelCloseoutQuestion, closeoutWeekStartFromQuestion } from "./mike-fuel-closeout";
+import { buildLiveFuelCloseout, loadAndFileFuelCloseout } from "./fuel-closeout-store";
+import { summarizeFuelCloseout } from "./fuel-closeout";
+import { closedFuelWeekStart } from "./miles-source";
 import { geocodeAddress } from "./places";
 
 export type { MikeMessage };
@@ -413,12 +417,14 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
     closestToCity,
     tmsStats: buildMikeTmsSnapshot(),
     fuelAudit: buildMikeFuelAuditSnapshot(),
+    fuelCloseout: summarizeFuelCloseout(buildLiveFuelCloseout({ weekStartYmd: closedFuelWeekStart() })),
     rules: [
       "Never invent GPS or HOS. Every truck with a Samsara vehicle id has lastGps (lat/lng or city) and hos. Use those. Coords are live or last persisted Samsara pings — never invent them.",
       "Who is empty: use emptyDrivers. Going empty soon: use goingEmptySoon.",
       "Closest to a city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
       "TMS totals: use tmsStats. Billed freight is the customer/load rate, not driver pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent totals.",
       "Fuel audit: use fuelAudit. Soft flags only. Never email or text a driver about fuel. Never invent transactions.",
+      "Fuel closeout: use fuelCloseout. Weekly Samsara odometer miles and TMS fuel. Draft for JC only. Never email or text a driver.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
@@ -516,6 +522,19 @@ export async function askMike(
     return {
       configured: isOpenAiConfigured(),
       reply: work.reply ? `${reeferReply}\n\n${work.reply}` : reeferReply,
+      proposals: work.proposals,
+    };
+  }
+  const closeoutAsk = parseMikeFuelCloseoutQuestion(question);
+  if (closeoutAsk) {
+    const report = await loadAndFileFuelCloseout({
+      week: closeoutWeekStartFromQuestion(closeoutAsk),
+      hydrate: true,
+    });
+    const reply = formatMikeFuelCloseoutReply(report);
+    return {
+      configured: isOpenAiConfigured(),
+      reply: work.reply ? `${reply}\n\n${work.reply}` : reply,
       proposals: work.proposals,
     };
   }
