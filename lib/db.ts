@@ -658,6 +658,15 @@ export function migrate(db: Database): void {
       tx_count INTEGER NOT NULL DEFAULT 0,
       saved_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS fuel_closeout_reports (
+      week_start_ymd TEXT PRIMARY KEY,
+      week_end_ymd TEXT NOT NULL,
+      closed INTEGER NOT NULL DEFAULT 0,
+      markdown TEXT NOT NULL,
+      html TEXT NOT NULL,
+      report_json TEXT NOT NULL,
+      filed_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS login_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,
@@ -900,6 +909,15 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_truck_odometer_truck_time
       ON truck_odometer_readings(truck_id, recorded_at);
+    CREATE TABLE IF NOT EXISTS fuel_closeout_reports (
+      week_start_ymd TEXT PRIMARY KEY,
+      week_end_ymd TEXT NOT NULL,
+      closed INTEGER NOT NULL DEFAULT 0,
+      markdown TEXT NOT NULL,
+      html TEXT NOT NULL,
+      report_json TEXT NOT NULL,
+      filed_at TEXT NOT NULL
+    );
   `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS truck_gps_readings (
