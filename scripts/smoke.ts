@@ -12307,6 +12307,9 @@ DISPATCH CONFIRMATION
   assert.equal(noraAll.month.truck_diesel.gallons, 130);
   assert.equal(noraAll.monthGallons, 148);
   assert.ok(noraAll.monthGallons > noraB.weekGallons);
+  for (const row of fuelStore.listFuelTransactions()) {
+    if (row.source_file === "week-scope.csv") fuelStore.deleteFuelTransaction(row.id);
+  }
   const { fuelPageHref } = await import("../components/fuel-transaction-lists");
   assert.equal(fuelPageHref({ week: "2026-08-17" }), "/fuel?week=2026-08-17");
   assert.equal(fuelPageHref({ week: "2026-08-17", driverId: 4 }), "/fuel?driver=4&week=2026-08-17");
