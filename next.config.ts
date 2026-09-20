@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com",
+  // Keep 'unsafe-inline' for Next/React bootstrap + Maps loader; drop eval entirely.
+  "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
