@@ -1,14 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AccessDenied } from "@/components/access-denied";
 import { LoadSheetImport } from "@/components/load-sheet-import";
 import { PageHeader } from "@/components/page-header";
-import { canEditLoads, getPageAccess } from "@/lib/dispatcher-session";
+import { canEditLoads, getPageAccess, getSignedInDispatcher } from "@/lib/dispatcher-session";
 
 export const dynamic = "force-dynamic";
 
 export default async function ImportLoadsPage() {
-  const dispatcher = await getPageAccess(canEditLoads);
-  if (!dispatcher) {
+  const signedInDispatcher = await getSignedInDispatcher();
+  if (!signedInDispatcher) redirect("/login");
+
+  const allowedDispatcher = await getPageAccess(canEditLoads);
+  if (!allowedDispatcher) {
     return <AccessDenied message="Load import is for Administrator and Standard." />;
   }
   return (

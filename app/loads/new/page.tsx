@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("New load");
@@ -15,11 +16,13 @@ import { EQUIPMENT_REQUIRED } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function NewLoadPage() {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) redirect("/login");
+
   const customers = listCustomers();
   const trucks = listTrucks();
   const drivers = listDrivers();
-  const dispatcher = await getSignedInDispatcher();
-  const role = dispatcher?.role ?? "dispatcher";
+  const role = dispatcher.role;
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
 

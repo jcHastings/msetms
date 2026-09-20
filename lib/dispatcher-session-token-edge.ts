@@ -1,7 +1,8 @@
 import { DISPATCHER_SESSION_MS } from "./dispatcher-session-constants";
+import { DISPATCHER_SESSION_TYP } from "./dispatcher-session-types";
 import { readSignedSessionTokenAtEdge } from "./session-token-edge";
 
-type SignedSessionPayload = { id: number; issuedAt: number };
+type SignedSessionPayload = { id: number; issuedAt: number; typ: string };
 
 export async function parseDispatcherSessionValueAtEdge(
   raw: string | undefined,
@@ -9,6 +10,7 @@ export async function parseDispatcherSessionValueAtEdge(
 ): Promise<{ id: number; issuedAt: number } | null> {
   const payload = await readSignedSessionTokenAtEdge<SignedSessionPayload>(raw);
   if (!payload) return null;
+  if (payload.typ !== DISPATCHER_SESSION_TYP) return null;
 
   const id = Number.parseInt(String(payload.id ?? ""), 10);
   const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);

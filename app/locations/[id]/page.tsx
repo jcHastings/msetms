@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { LocationForm } from "@/components/location-form";
 import { PageHeader } from "@/components/page-header";
 import { deleteLocationFormAction, updateLocationAction } from "@/lib/actions";
@@ -15,11 +15,13 @@ export default async function EditLocationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) redirect("/login");
+
   const location = getLocation(Number.parseInt((await params).id, 10));
   if (!location) notFound();
   const boundAction = updateLocationAction.bind(null, location.id);
-  const dispatcher = await getSignedInDispatcher();
-  const canDelete = dispatcher ? canDeleteLocations(dispatcher.role) : false;
+  const canDelete = canDeleteLocations(dispatcher.role);
 
   return (
     <>

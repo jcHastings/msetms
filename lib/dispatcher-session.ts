@@ -36,8 +36,10 @@ import {
 } from "./settings-shared";
 import {
   DISPATCHER_PENDING_COOKIE,
+  DISPATCHER_PENDING_TYP,
   DISPATCHER_SESSION_COOKIE,
   DISPATCHER_SESSION_MS,
+  DISPATCHER_SESSION_TYP,
   parseDispatcherSessionValue,
 } from "./dispatcher-session-token";
 import { createSignedSessionToken, readSignedSessionToken } from "./session-token";
@@ -72,7 +74,7 @@ export {
 const SESSION_COOKIE = DISPATCHER_SESSION_COOKIE;
 const PENDING_COOKIE = DISPATCHER_PENDING_COOKIE;
 const PENDING_MS = 10 * 60 * 1000;
-type SignedSessionPayload = { id: number; issuedAt: number };
+type SignedSessionPayload = { id: number; issuedAt: number; typ: string };
 
 export type Dispatcher = PublicDispatcher;
 
@@ -133,13 +135,29 @@ async function sessionCookieValue(): Promise<string | undefined | "no-request"> 
   }
 }
 
+async function clearSessionCookiesBestEffort(): Promise<void> {
+  try {
+    const jar = await cookies();
+    jar.delete(SESSION_COOKIE);
+    jar.delete(PENDING_COOKIE);
+  } catch {
+    // Server Components can read cookies but not mutate them.
+  }
+}
+
 export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
   const raw = await sessionCookieValue();
   if (raw === "no-request" || !raw) return null;
   const parsed = parseSessionValue(raw);
-  if (!parsed) return null;
+  if (!parsed) {
+    await clearSessionCookiesBestEffort();
+    return null;
+  }
   const dispatcher = getDispatcher(parsed.id);
-  if (!dispatcher?.active) return null;
+  if (!dispatcher?.active) {
+    await clearSessionCookiesBestEffort();
+    return null;
+  }
   return dispatcher;
 }
 
@@ -169,7 +187,10 @@ export async function getPageAccess(allowed: (role: string) => boolean): Promise
 }
 
 export function unauthorizedResponse(message = "Unauthorized"): Response {
-  return new Response(message, { status: 401 });
+  const headers = new Headers();
+  headers.append("set-cookie", `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+  headers.append("set-cookie", `${PENDING_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+  return new Response(message, { status: 401, headers });
 }
 
 export async function requireSettingsEditor(): Promise<Dispatcher> {
@@ -195,6 +216,7 @@ export async function setDispatcherSession(dispatcherId: number): Promise<void> 
     createSignedSessionToken({
       id: dispatcherId,
       issuedAt: Date.now(),
+      typ: DISPATCHER_SESSION_TYP,
     }),
     {
       httpOnly: true,
@@ -240,6 +262,7 @@ export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {
     createSignedSessionToken({
       id: dispatcherId,
       issuedAt: Date.now(),
+      typ: DISPATCHER_PENDING_TYP,
     }),
     {
       httpOnly: true,
@@ -254,8 +277,18 @@ export async function setPendingTwoFactor(dispatcherId: number): Promise<void> {
 
 export async function getPendingTwoFactorDispatcherId(): Promise<number | null> {
   const jar = await cookies();
-  const payload = readSignedSessionToken<SignedSessionPayload>(jar.get(PENDING_COOKIE)?.value);
-  if (!payload) return null;
+  const raw = jar.get(PENDING_COOKIE)?.value;
+  const payload = readSignedSessionToken<SignedSessionPayload>(raw);
+  if (!payload || payload.typ !== DISPATCHER_PENDING_TYP) {
+    if (raw) {
+      try {
+        jar.delete(PENDING_COOKIE);
+      } catch {
+        // Ignore in read-only cookie contexts.
+      }
+    }
+    return null;
+  }
   const id = Number.parseInt(String(payload.id ?? ""), 10);
   const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);
   if (!id || !Number.isFinite(issuedAt)) return null;

@@ -1,12 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LocationForm } from "@/components/location-form";
 import { PageHeader } from "@/components/page-header";
 import { createLocationAction } from "@/lib/actions";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { isGooglePlacesConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-export default function NewLocationPage() {
+export default async function NewLocationPage() {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) redirect("/login");
   return (
     <>
       <PageHeader

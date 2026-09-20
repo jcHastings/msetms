@@ -4,19 +4,44 @@ import { createSignedSessionToken, readSignedSessionToken } from "./session-toke
 import type { DriverWithTruck } from "./types";
 
 const COOKIE = "tms_driver_id";
+const DRIVER_SESSION_TYP = "driver_web";
 const DRIVER_SESSION_MS = 60 * 60 * 24 * 30 * 1000;
-type DriverSessionPayload = { id: number; issuedAt: number };
+type DriverSessionPayload = { id: number; issuedAt: number; typ: string };
+
+async function clearDriverSessionBestEffort(): Promise<void> {
+  try {
+    const jar = await cookies();
+    jar.delete(COOKIE);
+  } catch {
+    // Server Components can read cookies but not mutate them.
+  }
+}
 
 export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
   const jar = await cookies();
   const raw = jar.get(COOKIE)?.value;
+  if (!raw) return null;
   const payload = readSignedSessionToken<DriverSessionPayload>(raw);
-  if (!payload) return null;
+  if (!payload || payload.typ !== DRIVER_SESSION_TYP) {
+    await clearDriverSessionBestEffort();
+    return null;
+  }
   const id = Number.parseInt(String(payload.id ?? ""), 10);
   const issuedAt = Number.parseInt(String(payload.issuedAt ?? ""), 10);
-  if (!id || !Number.isFinite(issuedAt)) return null;
-  if (Date.now() - issuedAt > DRIVER_SESSION_MS) return null;
-  return getDriver(id);
+  if (!id || !Number.isFinite(issuedAt)) {
+    await clearDriverSessionBestEffort();
+    return null;
+  }
+  if (Date.now() - issuedAt > DRIVER_SESSION_MS) {
+    await clearDriverSessionBestEffort();
+    return null;
+  }
+  const driver = getDriver(id);
+  if (!driver) {
+    await clearDriverSessionBestEffort();
+    return null;
+  }
+  return driver;
 }
 
 export async function setDriverSession(driverId: number): Promise<void> {
@@ -26,6 +51,7 @@ export async function setDriverSession(driverId: number): Promise<void> {
     createSignedSessionToken({
       id: driverId,
       issuedAt: Date.now(),
+      typ: DRIVER_SESSION_TYP,
     }),
     {
       httpOnly: true,

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Locations");
@@ -13,9 +14,10 @@ import { labelForLocationRole } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function LocationsPage() {
-  const locations = listLocations();
   const dispatcher = await getSignedInDispatcher();
-  const role = dispatcher?.role ?? "";
+  if (!dispatcher) redirect("/login");
+  const role = dispatcher.role;
+  const locations = listLocations();
   const canImport = canImportLocations(role);
   const canExport = canExportCsv(role);
 

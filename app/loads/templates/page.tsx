@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { createFromTemplateAction } from "@/lib/dispatcher-actions";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listTemplates } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
 
-export default function TemplatesPage() {
+export default async function TemplatesPage() {
+  const dispatcher = await getSignedInDispatcher();
+  if (!dispatcher) redirect("/login");
   const templates = listTemplates();
   return (
     <>
