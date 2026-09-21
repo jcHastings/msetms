@@ -48,12 +48,6 @@ export function formatWeight(value: number | null | undefined): string {
   return `${value.toLocaleString("en-US")} lbs`;
 }
 
-export function todayInputDate(): string {
-  const date = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 export function parseOptionalInt(value: FormDataEntryValue | null): number | null {
   if (value == null || String(value).trim() === "") return null;
   const parsed = Number.parseInt(String(value), 10);

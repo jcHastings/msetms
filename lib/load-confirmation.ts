@@ -180,7 +180,6 @@ export function renderConfirmationPdf(model: ConfirmationModel): Promise<Buffer>
 function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): void {
   const left = 36;
   const width = 540;
-  const right = left + width;
   let y = 36;
 
   const [brand, ...rest] = model.company.company_name.split(" ");
@@ -258,7 +257,6 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   doc.font("Helvetica").fontSize(8).fillColor("#6b7280");
   doc.text("Page 1 of 1", left, 760, { width, align: "center" });
   doc.rect(left, 28, width, 720).strokeColor("#d1d5db").lineWidth(0.4).stroke();
-  void right;
 }
 
 function drawInfoGrid(
