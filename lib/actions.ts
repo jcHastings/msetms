@@ -233,7 +233,6 @@ export async function createTruckAction(
     });
     refresh();
     redirect("/fleet");
-    return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
@@ -297,7 +296,6 @@ export async function createDriverAction(
     });
     refresh();
     redirect("/fleet");
-    return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);
@@ -467,7 +465,7 @@ export async function parseRateConAction(
     if (file.size > 15 * 1024 * 1024) {
       throw new Error("File is over 15 MB.");
     }
-    const { fileToBuffer, saveInboxFile, writeInboxParse } = await import("./files");
+    const { fileToBuffer, saveInboxFile } = await import("./files");
     const { extractDocumentText, parseRateConText } = await import("./rate-con");
     const { listCustomers } = await import("./queries");
     const buffer = await fileToBuffer(file);
@@ -477,7 +475,6 @@ export async function parseRateConAction(
       throw new Error("No text came out of that file. Try a text PDF, or type the load by hand.");
     }
     const parsed = parseRateConText(text, listCustomers());
-    writeInboxParse(inboxId, parsed);
     refresh();
     return { ok: true, inboxId, parsed };
   } catch (error) {
@@ -566,7 +563,6 @@ export async function createTrailerAction(
     });
     refresh();
     redirect("/fleet");
-    return { ok: true, id };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);

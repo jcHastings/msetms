@@ -7,7 +7,7 @@ import {
   isOrbcommConfigured,
 } from "../env";
 import { listLoads, listTrailers, listTrucks } from "../queries";
-import type { ReeferReading, ReeferStatus } from "../types";
+import type { ReeferReading } from "../types";
 
 const CACHE_TTL_MS = 45_000;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -15,7 +15,6 @@ const FETCH_TIMEOUT_MS = 15_000;
 export type ReeferSnapshot = {
   loadId: number | null;
   truckId: number | null;
-  tractorId: string;
   trailerId: string;
   setpointF: number | null;
   temperatureF: number | null;
@@ -160,32 +159,6 @@ export function snapshotToTrailerLocation(snapshot: ReeferSnapshot): TrailerLoca
   };
 }
 
-export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?: number | null): ReeferStatus | null {
-  if (!reading && fallbackSetpoint == null) return null;
-  if (!reading) {
-    return {
-      trailerId: "",
-      temperatureF: null,
-      setpointF: fallbackSetpoint ?? null,
-      returnAirF: null,
-      supplyAirF: null,
-      alarm: "",
-      recordedAt: "",
-      source: "demo",
-    };
-  }
-  return {
-    trailerId: reading.trailer_id,
-    temperatureF: reading.temperature_f,
-    setpointF: reading.setpoint_f ?? fallbackSetpoint ?? null,
-    returnAirF: reading.return_air_f,
-    supplyAirF: reading.supply_air_f,
-    alarm: reading.alarm,
-    recordedAt: reading.recorded_at,
-    source: reading.source === "orbcomm" ? "orbcomm" : "demo",
-  };
-}
-
 export async function getReeferSnapshots(): Promise<ReeferSnapshotResult> {
   const now = Date.now();
   if (cache && cache.expiresAt > now) return cache.result;
@@ -286,7 +259,6 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
   return {
     loadId: row.load_id,
     truckId: row.truck_id,
-    tractorId: row.truck_id ? String(row.truck_id) : "",
     trailerId: row.trailer_id,
     setpointF: row.setpoint_f,
     temperatureF: row.temperature_f,
@@ -467,7 +439,6 @@ export function mapOrbcommReadingsToLoads(input: {
     readings.push({
       loadId: load.id,
       truckId: truck?.id ?? null,
-      tractorId: truck?.unit_number ?? "",
       trailerId: asset.trailerId || asset.name || asset.assetId || load.trailer_number || truck?.trailer_number || "",
       setpointF,
       temperatureF,
@@ -627,9 +598,6 @@ function firstNumber(item: Record<string, unknown>, keys: string[]): number | nu
 function firstTempF(item: Record<string, unknown>, keys: string[]): number | null {
   const value = firstNumber(item, keys);
   if (value == null) return null;
-  if (Math.abs(value) < 60 && keys.some((key) => /celsius|tempc/i.test(key))) {
-    return Math.round((value * (9 / 5) + 32) * 10) / 10;
-  }
   return Math.round(value * 10) / 10;
 }
 

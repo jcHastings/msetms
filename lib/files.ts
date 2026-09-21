@@ -22,20 +22,9 @@ export function saveInboxFile(file: File, buffer: Buffer): { inboxId: string; st
 export function getInboxFile(inboxId: string): { storedPath: string; originalName: string } | null {
   const dir = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", "inbox", inboxId);
   if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) return null;
-  const files = fs.readdirSync(/*turbopackIgnore: true*/ dir).filter((name) => name !== "parsed.json");
+  const files = fs.readdirSync(/*turbopackIgnore: true*/ dir);
   if (files.length === 0) return null;
   return { storedPath: path.join(/*turbopackIgnore: true*/ dir, files[0]), originalName: files[0] };
-}
-
-export function writeInboxParse(inboxId: string, payload: unknown): void {
-  const dir = uploadsDir("inbox", inboxId);
-  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, "parsed.json"), JSON.stringify(payload, null, 2));
-}
-
-export function readInboxParse<T>(inboxId: string): T | null {
-  const file = path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "uploads", "inbox", inboxId, "parsed.json");
-  if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return null;
-  return JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as T;
 }
 
 export function attachInboxToLoad(

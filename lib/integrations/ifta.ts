@@ -40,10 +40,6 @@ class IftaHttpError extends Error {
   }
 }
 
-export function resetIftaForTests(): void {
-  // Reserved for request-level cache if added later.
-}
-
 export function metersToMiles(meters: number): number {
   return Math.round((meters / METERS_PER_MILE) * 10) / 10;
 }
@@ -306,11 +302,7 @@ async function fetchLiveIfta(input: {
     return await fetchIftaDetailJob(input);
   } catch (error) {
     if (isAuthError(error)) throw error;
-    const monthly = await fetchIftaVehicleMonths(input);
-    if (monthly.rows.length > 0 || monthly.completed) {
-      return monthly;
-    }
-    throw error;
+    return await fetchIftaVehicleMonths(input);
   }
 }
 
@@ -373,7 +365,7 @@ async function fetchIftaDetailJob(input: {
 async function fetchIftaVehicleMonths(input: {
   vehicleId: string;
   window: { start: string; end: string };
-}): Promise<{ rows: IftaJurisdictionRow[]; vehicleId: string; note: string; completed: boolean }> {
+}): Promise<{ rows: IftaJurisdictionRow[]; vehicleId: string; note: string }> {
   const months = monthsInRange(input.window.start, input.window.end);
   const combined = new Map<string, number>();
   const labels: string[] = [];
@@ -409,7 +401,6 @@ async function fetchIftaVehicleMonths(input: {
   return {
     rows,
     vehicleId: input.vehicleId,
-    completed: true,
     note: `Samsara IFTA vehicle report for ${labels.join(", ")} (monthly jurisdiction miles for this truck, not a trip-only split). Token needs Read IFTA (US); trip-window CSV jobs also need Write IFTA (US).`,
   };
 }
