@@ -228,7 +228,7 @@ export function isMaterialReeferReading(load: LoadView, reading: ReeferReading |
 export function isOutOfToleranceException(item: Pick<InboxException, "kind" | "severity">): boolean {
   if (item.severity === "CRITICAL") return true;
   if (item.kind === "detention" || item.kind === "reefer" || item.kind === "missing_contact") return true;
-  if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return true;
+  if (item.kind === "late" && item.severity === "HIGH") return true;
   return false;
 }
 

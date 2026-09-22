@@ -33,7 +33,7 @@ import {
   persistedTruckLocation,
   saveTrailerGps,
 } from "./queries";
-import { isClosedStatus, type LoadView, type Trailer, type Truck } from "./types";
+import { isClosedStatus, type LoadView, type Trailer, type Truck, type TruckWithDriver } from "./types";
 
 function currentOpenLoad(loads: LoadView[], match: (load: LoadView) => boolean): LoadView | undefined {
   return loads
@@ -51,7 +51,7 @@ function trailerHref(trailer: Trailer, loads: LoadView[]): string {
   return load ? `/loads/${load.id}` : `/fleet/trailers/${trailer.id}`;
 }
 
-function activeTrucks(): Truck[] {
+function activeTrucks(): TruckWithDriver[] {
   return listTrucks().filter((truck) => truck.active !== 0);
 }
 

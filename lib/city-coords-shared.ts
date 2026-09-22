@@ -227,7 +227,7 @@ export function findExactCityCenter(
 
 export function findCityCenter(
   asked: string,
-  locations: Array<{ name: string; city: string; state: string; lat: number | null; lng: number | null }> = [],
+  locations: Array<{ name?: string; city: string; state: string; lat: number | null; lng: number | null }> = [],
 ): { label: string; lat: number; lng: number } | null {
   const key = normalizeCityKey(asked);
   if (!key) return null;
@@ -241,11 +241,12 @@ export function findCityCenter(
   const saved = locations.find((location) => {
     if (location.lat == null || location.lng == null) return false;
     const city = `${location.city} ${location.state}`.trim();
-    const name = location.name;
-    return cityKeysEquivalent(key, city) || cityKeysEquivalent(key, name);
+    const name = location.name ?? "";
+    return cityKeysEquivalent(key, city) || (Boolean(name) && cityKeysEquivalent(key, name));
   });
   if (saved && saved.lat != null && saved.lng != null) {
-    return { label: `${saved.name}, ${saved.city} ${saved.state}`.trim(), lat: saved.lat, lng: saved.lng };
+    const label = [saved.name, `${saved.city} ${saved.state}`.trim()].filter(Boolean).join(", ");
+    return { label, lat: saved.lat, lng: saved.lng };
   }
   return null;
 }

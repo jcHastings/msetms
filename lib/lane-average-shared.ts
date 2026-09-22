@@ -107,7 +107,7 @@ export function laneEndsWithinRadius(
   );
 }
 
-export function laneAvgShouldShow(compare: LaneAvgCompare | null | undefined): boolean {
+export function laneAvgShouldShow(compare: LaneAvgCompare | null | undefined): compare is LaneAvgCompare {
   return Boolean(
     compare?.key &&
       compare.sampleSize >= LANE_AVG_MIN_SAMPLES &&
