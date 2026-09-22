@@ -361,10 +361,6 @@ export async function pullPrepassTollTransactions(): Promise<TollImportResult> {
   const { pullPrepassTransactions } = await import("./prepass-client");
   const pulled = await pullPrepassTransactions();
   if (!pulled.ok) return pulled;
-  // Discriminate on `rows` so TollImportResult (`ok: boolean`) cannot leak through.
-  if (!("rows" in pulled)) {
-    return { ok: false, message: pulled.message ?? "PrePass pull returned no row set." };
-  }
   const rows = pulled.rows;
   if (!rows.length) {
     return {
