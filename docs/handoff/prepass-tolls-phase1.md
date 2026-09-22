@@ -38,12 +38,12 @@ Categories persisted and rolled up:
 
 ## Env
 
-`PREPASS_CLIENT_ID` and `PREPASS_CLIENT_SECRET` are documented in `.env.example`. `PREPASS_ACCOUNT_NUMBER` is required for REST pull. `PREPASS_API_KEY` is an optional legacy fallback and does not authorize the REST pull.
+`PREPASS_CLIENT_ID` and `PREPASS_CLIENT_SECRET` are documented in `.env.example`. `PREPASS_ACCOUNT_NUMBER` is required for REST pull and is read from env (same pattern as the OAuth pair). JC locked the office account as `370972` / M & S LOADS LLC PP. `PREPASS_API_KEY` is an optional legacy fallback and does not authorize the REST pull.
 
 - Missing OAuth pair: API pull no-ops with a clear banner. CSV/XLSX still works.
-- OAuth present but `PREPASS_ACCOUNT_NUMBER` missing: API pull no-ops with a clear banner. Do not invent an account number.
-- OAuth + account number: Pull PrePass API requests a client-credentials token and imports posted tolls for the last 14 days.
-- Never log client secret, access token, or account number.
+- OAuth present but `PREPASS_ACCOUNT_NUMBER` missing: API pull no-ops with a clear banner.
+- OAuth + account number: Pull PrePass API requests a client-credentials token and imports posted tolls for the last 14 days for account `370972`.
+- Never log client secret or access token.
 
 ## Locked REST contract
 

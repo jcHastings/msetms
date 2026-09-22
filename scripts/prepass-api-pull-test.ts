@@ -20,7 +20,7 @@ function clearPrepassEnv(): void {
 function setReadyEnv(): void {
   process.env.PREPASS_CLIENT_ID = "test-client-id";
   process.env.PREPASS_CLIENT_SECRET = "test-client-secret-value";
-  process.env.PREPASS_ACCOUNT_NUMBER = "445566";
+  process.env.PREPASS_ACCOUNT_NUMBER = "370972";
 }
 
 const SAMPLE_TX = {
@@ -73,6 +73,8 @@ async function main() {
   }
 
   setReadyEnv();
+  const { getPrepassAccountNumber } = await import("../lib/env");
+  assert.equal(getPrepassAccountNumber(), "370972");
   const ready = prepass.describePrepassPullStatus();
   assert.equal(ready.ready, true);
   assert.equal(ready.tone, "ready");
@@ -126,7 +128,7 @@ async function main() {
       assert.match(url, /tolltransaction\/v1\/transactions/);
       assert.match(url, /startPostDate=2026-09-09/);
       assert.match(url, /endPostDate=2026-09-23/);
-      assert.match(url, /accountNumbers=445566/);
+      assert.match(url, /accountNumbers=370972/);
       const headers = init?.headers as Record<string, string>;
       assert.equal(headers.Authorization, "Bearer test-access-token");
       return jsonResponse(200, {
