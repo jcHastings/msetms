@@ -1,54 +1,38 @@
 import { formatDateTime } from "@/lib/format";
-import type { ReeferReading, ReeferStatus } from "@/lib/types";
-
-function asStatus(reading: ReeferReading | ReeferStatus | null): ReeferStatus | null {
-  if (!reading) return null;
-  if ("temperatureF" in reading) return reading;
-  return {
-    trailerId: reading.trailer_id,
-    temperatureF: reading.temperature_f,
-    setpointF: reading.setpoint_f,
-    returnAirF: reading.return_air_f,
-    supplyAirF: reading.supply_air_f,
-    alarm: reading.alarm,
-    recordedAt: reading.recorded_at,
-    source: reading.source,
-  };
-}
+import type { ReeferReading } from "@/lib/types";
 
 export function ReeferBadge({
   setpoint,
   reading,
 }: {
   setpoint: number | null;
-  reading: ReeferReading | ReeferStatus | null;
+  reading: ReeferReading | null;
 }) {
-  const status = asStatus(reading);
-  const shownSet = setpoint ?? status?.setpointF ?? null;
-  if (shownSet == null && !status) return <span className="text-slate-400">—</span>;
-  const temp = status?.temperatureF;
-  const source = status?.source === "demo" ? "demo" : status?.source === "orbcomm" ? "orbcomm" : "";
+  const shownSet = setpoint ?? reading?.setpoint_f ?? null;
+  if (shownSet == null && !reading) return <span className="text-slate-400">—</span>;
+  const temp = reading?.temperature_f;
+  const source = reading?.source === "demo" ? "demo" : reading?.source === "orbcomm" ? "orbcomm" : "";
   return (
     <div className="text-sm">
       <div className="font-semibold tabular-nums">
         {temp != null ? `${temp}°F` : "—"}
         {shownSet != null ? <span className="font-normal text-slate-500"> / set {shownSet}°F</span> : null}
       </div>
-      {status?.trailerId ? <div className="text-xs text-slate-500">{status.trailerId}</div> : null}
-      {status?.returnAirF != null || status?.supplyAirF != null ? (
+      {reading?.trailer_id ? <div className="text-xs text-slate-500">{reading.trailer_id}</div> : null}
+      {reading?.return_air_f != null || reading?.supply_air_f != null ? (
         <div className="text-[11px] text-slate-500">
-          {status.returnAirF != null ? `ret ${status.returnAirF}°F` : ""}
-          {status.returnAirF != null && status.supplyAirF != null ? " · " : ""}
-          {status.supplyAirF != null ? `sup ${status.supplyAirF}°F` : ""}
+          {reading.return_air_f != null ? `ret ${reading.return_air_f}°F` : ""}
+          {reading.return_air_f != null && reading.supply_air_f != null ? " · " : ""}
+          {reading.supply_air_f != null ? `sup ${reading.supply_air_f}°F` : ""}
         </div>
       ) : null}
       {source ? (
         <div className="text-[11px] uppercase tracking-wide text-slate-400">{source} data</div>
       ) : null}
-      {status?.recordedAt ? (
-        <div className="text-[11px] text-slate-400">{formatDateTime(status.recordedAt)}</div>
+      {reading?.recorded_at ? (
+        <div className="text-[11px] text-slate-400">{formatDateTime(reading.recorded_at)}</div>
       ) : null}
-      {status?.alarm ? <div className="text-xs text-rose-700">{status.alarm}</div> : null}
+      {reading?.alarm ? <div className="text-xs text-rose-700">{reading.alarm}</div> : null}
     </div>
   );
 }

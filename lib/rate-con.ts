@@ -1,5 +1,5 @@
 import { extractText } from "unpdf";
-import { fromInputDateTime, toInputDateTime } from "./format";
+import { toInputDateTime } from "./format";
 import type { Customer } from "./types";
 
 export type ParsedRateCon = {
@@ -19,7 +19,6 @@ export type ParsedRateCon = {
   special_instructions: string;
   appointment_notes: string;
   reefer_setpoint_f: number | null;
-  load_number_hint: string;
   raw_text: string;
 };
 
@@ -75,7 +74,6 @@ export function parseRateConText(rawText: string, customers: Customer[] = []): P
     special_instructions: special,
     appointment_notes: appointment,
     reefer_setpoint_f: parseTemp(text),
-    load_number_hint: labeled(text, ["load #", "load#", "load number"]) ?? "",
     raw_text: text,
   };
 }
@@ -167,22 +165,4 @@ function parseTemp(text: string): number | null {
 
 function clean(value: string): string {
   return value.replace(/\s+/g, " ").replace(/[|]+/g, "").trim();
-}
-
-export function parsedToInputDefaults(parsed: ParsedRateCon) {
-  return {
-    ...parsed,
-    pickup_start: parsed.pickup_start || toInputDateTime(new Date().toISOString()),
-    pickup_end: parsed.pickup_end || parsed.pickup_start,
-    delivery_start: parsed.delivery_start || parsed.pickup_end,
-    delivery_end: parsed.delivery_end || parsed.delivery_start,
-  };
-}
-
-export function isoFromParsedInput(value: string): string {
-  if (!value) return new Date().toISOString();
-  if (value.includes("T") && !value.endsWith("Z") && value.length <= 16) {
-    return fromInputDateTime(value);
-  }
-  return value.includes("T") ? new Date(value).toISOString() : fromInputDateTime(value);
 }
