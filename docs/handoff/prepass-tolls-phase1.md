@@ -31,9 +31,9 @@ Categories persisted and rolled up:
 
 - Matching priority is:
   1. `transponder_id` to `trucks.prepass_transponder_id`
-  2. fallback by unit number
-  3. if a truck resolves, assigned driver follows `drivers.truck_id`
-- Unknown transponders remain unassigned until manual assign.
+  2. if a truck resolves, assigned driver follows `drivers.truck_id`
+- Unknown or unmapped transponders remain unassigned until manual assign.
+- A fully populated transponder map is **not** a readiness gate for this tip; `prepass_transponder_id` may be empty and toll import/UI still run.
 
 ## Env
 
@@ -41,6 +41,7 @@ Categories persisted and rolled up:
 
 - Missing key: API pull no-ops with a clear message.
 - Manual import still works without key.
+- CoS can inject `PREPASS_API_KEY` later; do not request the key in chat.
 
 ## API docs blocker
 

@@ -4,7 +4,6 @@ import {
   groupTollTxByList,
   isCurrentTollWeek,
   listTollWeekOptions,
-  normalizeTollUnit,
   normalizeTransponder,
   parseTollPeriod,
   parseTollReport,
@@ -90,7 +89,7 @@ function storeTollImportSource(sourceFile: string, text: string): void {
 }
 
 function matchTollRow(
-  row: Pick<ParsedTollCsvRow, "transponderId" | "unitNumber" | "driverName">,
+  row: Pick<ParsedTollCsvRow, "transponderId" | "unitNumber">,
   drivers: ReturnType<typeof listDrivers>,
   trucks: ReturnType<typeof listTrucks>,
 ): { driverId: number | null; truckId: number | null; unitNumber: string; transponderId: string } {
@@ -98,19 +97,12 @@ function matchTollRow(
   const byTransponder = transponder
     ? trucks.find((truck) => normalizeTransponder(truck.prepass_transponder_id) === transponder)
     : undefined;
-  const byUnit = byTransponder
-    ? byTransponder
-    : trucks.find((truck) => normalizeTollUnit(truck.unit_number) === normalizeTollUnit(row.unitNumber));
-  const fromTruck = byUnit ? drivers.find((driver) => driver.truck_id === byUnit.id) : undefined;
-  const fromName = row.driverName
-    ? drivers.find((driver) => driver.name.trim().toLowerCase() === row.driverName.trim().toLowerCase())
-    : undefined;
-  const driver = fromTruck ?? fromName;
+  const fromTruck = byTransponder ? drivers.find((driver) => driver.truck_id === byTransponder.id) : undefined;
   return {
-    driverId: driver?.id ?? null,
-    truckId: byUnit?.id ?? driver?.truck_id ?? null,
-    unitNumber: byUnit?.unit_number ?? row.unitNumber.trim(),
-    transponderId: transponder || (byUnit ? normalizeTransponder(byUnit.prepass_transponder_id) : ""),
+    driverId: fromTruck?.id ?? null,
+    truckId: byTransponder?.id ?? null,
+    unitNumber: byTransponder?.unit_number ?? row.unitNumber.trim(),
+    transponderId: transponder || (byTransponder ? normalizeTransponder(byTransponder.prepass_transponder_id) : ""),
   };
 }
 
@@ -145,7 +137,6 @@ export function rematchTollTransactionDrivers(options?: { unmatchedOnly?: boolea
         {
           transponderId: row.transponder_id,
           unitNumber: row.unit_number,
-          driverName: row.driver_name_raw,
         },
         drivers,
         trucks,
