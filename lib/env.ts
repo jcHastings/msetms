@@ -336,6 +336,10 @@ export function getGoogleMapsBrowserKey(): string | undefined {
   return readSecret("GOOGLE_MAPS_BROWSER_KEY");
 }
 
+export function getPrepassApiKey(): string | undefined {
+  return readSecret("PREPASS_API_KEY");
+}
+
 export function isGooglePlacesConfigured(): boolean {
   return Boolean(getGoogleMapsApiKey());
 }

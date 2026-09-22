@@ -47,6 +47,7 @@ const NAV: NavEntry[] = [
       { href: "/fleet/samsara", label: "Samsara", short: "Samsara", icon: "samsara" },
       { href: "/fleet/orbcomm", label: "Orbcomm", short: "Orbcomm", icon: "orbcomm" },
       { href: "/fuel", label: "Fuel", short: "Fuel", icon: "fuel" },
+      { href: "/tolls", label: "Tolls", short: "Tolls", icon: "fuel" },
       { href: "/ifta", label: "IFTA", short: "IFTA", icon: "ifta" },
       { href: "/compliance", label: "Compliance", short: "Compliance", icon: "compliance" },
       { href: "/safety", label: "Safety", short: "Safety", icon: "safety" },

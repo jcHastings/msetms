@@ -327,6 +327,7 @@ export type Truck = {
   samsara_vehicle_id: string;
   samsara_trailer_id: string;
   orbcomm_asset_id: string;
+  prepass_transponder_id: string;
   trailer_number: string;
   registration_issued: string;
   registration_expires: string;

@@ -667,6 +667,32 @@ export function migrate(db: Database): void {
       report_json TEXT NOT NULL,
       filed_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS toll_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      occurred_at TEXT NOT NULL,
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+      plaza TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      amount REAL,
+      source_file TEXT NOT NULL DEFAULT '',
+      source_kind TEXT NOT NULL DEFAULT 'manual_import',
+      provider TEXT NOT NULL DEFAULT 'prepass',
+      category TEXT NOT NULL DEFAULT 'toll',
+      transponder_id TEXT NOT NULL DEFAULT '',
+      unit_number TEXT NOT NULL DEFAULT '',
+      driver_name_raw TEXT NOT NULL DEFAULT '',
+      invoice_number TEXT NOT NULL DEFAULT '',
+      reference_number TEXT NOT NULL DEFAULT '',
+      raw_json TEXT NOT NULL DEFAULT '',
+      dedup_key TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_toll_driver ON toll_transactions(driver_id, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_toll_occurred ON toll_transactions(occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_toll_transponder ON toll_transactions(transponder_id);
+    CREATE INDEX IF NOT EXISTS idx_toll_category ON toll_transactions(category, occurred_at);
     CREATE TABLE IF NOT EXISTS login_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,
@@ -866,9 +892,15 @@ export function migrate(db: Database): void {
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
+  ensureColumn(db, "trucks", "prepass_transponder_id", "TEXT NOT NULL DEFAULT ''");
   migrateFuelReceiptsForDriverOrphans(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS fuel_import_sources (
+      source_file TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS toll_import_sources (
       source_file TEXT PRIMARY KEY,
       text TEXT NOT NULL,
       created_at TEXT NOT NULL
