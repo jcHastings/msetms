@@ -71,6 +71,10 @@ function request(url: string, init: RequestInit = {}): Request {
   return new Request(url, init);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function read(res: Response): Promise<{ status: number; json: unknown; headers: Headers }> {
   const text = await res.text();
   let json: unknown = null;
@@ -149,6 +153,9 @@ async function main() {
   const progressRoute = await import("../app/api/driver/v1/loads/[id]/progress/route");
   const checkRoute = await import("../app/api/driver/v1/loads/[id]/stops/[stopId]/check/route");
   const attachRoute = await import("../app/api/driver/v1/loads/[id]/attachments/route");
+  const assistRoute = await import("../app/api/driver/v1/assist/route");
+  const assistDocRoute = await import("../app/api/driver/v1/assist/docs/[fleetDocumentId]/route");
+  const { formatDateTime } = await import("../lib/format");
 
   const customerId = queries.createCustomer({
     name: "Driver API Shipper",
@@ -185,7 +192,7 @@ async function main() {
     truck_id: null,
     status: "available",
   });
-  const limiter = queries.createDriver({
+  queries.createDriver({
     name: "Limit Test",
     phone: "555-0199",
     email: "limit.test@msloads.test",
@@ -194,6 +201,137 @@ async function main() {
     password: DRIVER_PASSWORD,
     truck_id: null,
     status: "available",
+  });
+  const assistDriverA = queries.createDriver({
+    name: "Assist Driver A",
+    phone: "555-0601",
+    email: "assist.a@msloads.test",
+    license: "TN-CDL-AA",
+    pin: "6601",
+    password: DRIVER_PASSWORD,
+    truck_id: null,
+    status: "available",
+  });
+  const assistDriverB = queries.createDriver({
+    name: "Assist Driver B",
+    phone: "555-0602",
+    email: "assist.b@msloads.test",
+    license: "TN-CDL-AB",
+    pin: "6602",
+    password: DRIVER_PASSWORD,
+    truck_id: null,
+    status: "available",
+  });
+  const assistTruckA = queries.createTruck({
+    unit_number: "8601",
+    type: "sleeper",
+    capacity_lbs: 50000,
+    status: "available",
+  });
+  const assistTruckB = queries.createTruck({
+    unit_number: "8602",
+    type: "sleeper",
+    capacity_lbs: 50000,
+    status: "available",
+  });
+  const assistTrailerA = queries.createTrailer({
+    unit_number: "MSA8601",
+    type: "reefer",
+  });
+  const assistTrailerB = queries.createTrailer({
+    unit_number: "MSA8602",
+    type: "reefer",
+  });
+  queries.assignDriverToTruck(assistTruckA, assistDriverA);
+  queries.assignDriverToTruck(assistTruckB, assistDriverB);
+
+  const blankHoursLocationId = queries.createLocation({
+    name: "No Hours Pickup",
+    street: "100 Empty Hours Rd",
+    city: "Jackson",
+    state: "MS",
+    zip: "39201",
+    phone: "555-0800",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+  });
+  const normalHoursLocationId = queries.createLocation({
+    name: "Open Hours Delivery",
+    street: "200 Working Dock Ave",
+    city: "Birmingham",
+    state: "AL",
+    zip: "35203",
+    phone: "555-0801",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "Mon-Fri 07:00-17:00",
+    scheduling_notes: "",
+  });
+  const assistPickupHeader = "2026-11-01T08:00:00.000Z";
+  const assistPickupWindowStart = "2026-11-01T14:30:00.000Z";
+  const assistLoadA = queries.createLoad({
+    ...loadInput(customerId, {
+      load_number: "MSE-API-AI-1",
+      driver_id: assistDriverA,
+      status: "dispatched",
+      origin: "Jackson, MS",
+      destination: "Birmingham, AL",
+    }),
+    truck_id: assistTruckA,
+    trailer_id: assistTrailerA,
+    trailer_number: "MSA8601",
+    shipper_location_id: blankHoursLocationId,
+    consignee_location_id: normalHoursLocationId,
+    pickup_start: assistPickupHeader,
+    pickup_end: "2026-11-01T10:00:00.000Z",
+    delivery_start: "2026-11-02T09:00:00.000Z",
+    delivery_end: "2026-11-02T12:00:00.000Z",
+  });
+  const assistLoadB = queries.createLoad({
+    ...loadInput(customerId, {
+      load_number: "MSE-API-AI-2",
+      driver_id: assistDriverB,
+      status: "dispatched",
+      origin: "Memphis, TN",
+      destination: "Atlanta, GA",
+    }),
+    truck_id: assistTruckB,
+    trailer_id: assistTrailerB,
+    trailer_number: "MSA8602",
+  });
+  const { ensureDefaultStops } = await import("../lib/stops");
+  const assistStops = ensureDefaultStops(assistLoadA);
+  const assistPickupStop = assistStops.find((stop) => stop.kind === "pickup");
+  assert.ok(assistPickupStop, "assist pickup stop");
+  const assistDb = (await import("../lib/db")).getDb();
+  assistDb
+    .prepare("UPDATE load_stops SET window_start = ?, schedule_type = 'appointment', confirmation = ? WHERE id = ?")
+    .run(assistPickupWindowStart, "APPT-4451", assistPickupStop!.id);
+  assistDb
+    .prepare("UPDATE loads SET truck_id = ?, trailer_id = ? WHERE id = ?")
+    .run(assistTruckB, assistTrailerB, assistLoadB);
+
+  const { addFleetDocument } = await import("../lib/files");
+  const fixtureBytes = fs.readFileSync(FIXTURE);
+  const assistDocA = addFleetDocument({
+    ownerType: "truck",
+    ownerId: assistTruckA,
+    kind: "registration",
+    originalName: "assist-a-registration.png",
+    buffer: fixtureBytes,
+    mimeType: "image/png",
+  });
+  const assistDocB = addFleetDocument({
+    ownerType: "truck",
+    ownerId: assistTruckB,
+    kind: "registration",
+    originalName: "assist-b-registration.png",
+    buffer: fixtureBytes,
+    mimeType: "image/png",
   });
 
   const { hasDriverPassword } = await import("../lib/driver-password");
@@ -391,6 +529,82 @@ async function main() {
   const me = await read(await meRoute.GET(request(`${BASE}/me`, { headers: auth })));
   assert.equal(me.status, 200);
   assert.deepEqual(me.json, session.driver);
+
+  const assistLogin = await read(
+    await loginRoute.POST(
+      request(`${BASE}/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: loginPayload("assist.a@msloads.test"),
+      }),
+    ),
+  );
+  assert.equal(assistLogin.status, 200);
+  const assistToken = (assistLogin.json as { token: string }).token;
+  const assistAuth = { Authorization: `Bearer ${assistToken}`, "content-type": "application/json" };
+
+  const assistHours = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "What are pickup hours?" }),
+      }),
+    ),
+  );
+  assert.equal(assistHours.status, 200);
+  const assistHoursBody = assistHours.json as { answer: string; unknown: boolean; documents: unknown[] };
+  assert.equal(assistHoursBody.answer, "Not in TMS.");
+  assert.equal(assistHoursBody.unknown, true);
+  assert.deepEqual(assistHoursBody.documents, []);
+
+  const assistAppointment = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "What is the pickup appointment time?" }),
+      }),
+    ),
+  );
+  assert.equal(assistAppointment.status, 200);
+  const assistAppointmentBody = assistAppointment.json as { answer: string; unknown: boolean };
+  assert.equal(assistAppointmentBody.unknown, false);
+  const expectedWindow = formatDateTime(assistPickupWindowStart);
+  const headerWindow = formatDateTime(assistPickupHeader);
+  assert.match(assistAppointmentBody.answer, new RegExp(escapeRegExp(expectedWindow)));
+  assert.doesNotMatch(assistAppointmentBody.answer, new RegExp(escapeRegExp(headerWindow)));
+  assert.match(assistAppointmentBody.answer, /APPT-4451/);
+
+  const assistJunk = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "Should I stop for dinner in Birmingham?" }),
+      }),
+    ),
+  );
+  assert.equal(assistJunk.status, 200);
+  const assistJunkBody = assistJunk.json as { answer: string; unknown: boolean };
+  assert.equal(assistJunkBody.unknown, true);
+  assert.match(assistJunkBody.answer, /assigned load and assigned equipment documents/i);
+
+  const ownAssistDoc = await assistDocRoute.GET(
+    request(`${BASE}/assist/docs/${assistDocA.id}`, { headers: { Authorization: `Bearer ${assistToken}` } }),
+    { params: Promise.resolve({ fleetDocumentId: String(assistDocA.id) }) },
+  );
+  assert.equal(ownAssistDoc.status, 200);
+  assert.equal(ownAssistDoc.headers.get("content-type"), "image/png");
+  assert.ok((await ownAssistDoc.arrayBuffer()).byteLength > 0);
+
+  const forbiddenAssistDoc = await read(
+    await assistDocRoute.GET(
+      request(`${BASE}/assist/docs/${assistDocB.id}`, { headers: { Authorization: `Bearer ${assistToken}` } }),
+      { params: Promise.resolve({ fleetDocumentId: String(assistDocB.id) }) },
+    ),
+  );
+  assert.equal(forbiddenAssistDoc.status, 403);
 
   const unauth = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`)));
   assert.equal(unauth.status, 401);

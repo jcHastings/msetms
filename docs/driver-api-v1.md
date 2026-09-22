@@ -99,6 +99,34 @@ There is no `/auth/refresh` in v1. When the token expires or is revoked, the API
 
 Returns the driver object from login.
 
+### `POST /assist`
+
+Driver-only helper for load and equipment questions. Not Office deploy.
+
+Auth accepts either:
+
+- `Authorization: Bearer drv_...`
+- Signed-in `/driver` web cookie session
+
+Body: `{ "question": "..." }`
+
+Response: `{ "answer": string, "unknown": boolean, "documents": AssistDocument[] }`
+
+Rules:
+
+- Answers are grounded only in the signed-in driver's assigned load and assigned truck/trailer docs (plus optional driver-owned docs).
+- If no active load is assigned, response is `"Nothing is assigned to you right now."` with `unknown: true`.
+- Missing source fields return `"Not in TMS."`
+- Unrecognized questions are refused (`unknown: true`) and do not call Mike/OpenAI.
+
+### `GET /assist/docs/{fleetDocumentId}`
+
+Driver-only document bytes endpoint for Assist sources.
+
+- Returns file bytes only when the `fleet_documents` row belongs to the requesting driver's assigned truck/trailer.
+- Optional allowlist: the driver's own `owner_type=driver` files.
+- Never use Office `/api/fleet-docs/[id]` for driver access.
+
 ### `GET /loads?scope=active|recent`
 
 `LoadSummary[]`. `active` is assigned and not closed. `recent` is delivered/completed. `scope=delivered` is accepted as an alias of `recent`.
