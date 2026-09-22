@@ -1522,12 +1522,11 @@ export async function pullPrepassTollsAction(
     await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
     const result = await pullPrepassTollTransactions();
     if (!result.ok) return { ok: false, error: result.error ?? "PrePass pull failed." };
-    if ((result.created ?? 0) > 0) refresh();
+    if ((result.created ?? 0) > 0 || (result.unmatched ?? 0) > 0) refresh();
+    const summary = `Imported ${result.created ?? 0} new, ${result.unmatched ?? 0} unmatched, ${result.skipped ?? 0} already on file.`;
     return {
       ok: true,
-      message:
-        result.message ||
-        `Pulled ${result.created ?? 0} rows, skipped ${result.skipped ?? 0}, unmatched ${result.unmatched ?? 0}.`,
+      message: result.message ? `${result.message} ${summary}` : summary,
     };
   } catch (error) {
     return fail(error);

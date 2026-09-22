@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { importTollsCsvAction, pullPrepassTollsAction } from "@/lib/actions";
+import type { PrepassPullStatus } from "@/lib/prepass-client";
 import type { TollImportResult } from "@/lib/tolls";
 
 function tollImportOkMessage(state: TollImportResult): string {
@@ -17,7 +18,7 @@ function tollImportOkMessage(state: TollImportResult): string {
   return `Created ${created}, already on file ${skipped}, unmatched ${unmatched}${errors}`;
 }
 
-export function TollCsvImport() {
+export function TollCsvImport({ pullStatus }: { pullStatus: PrepassPullStatus }) {
   const [state, formAction, pending] = useActionState(importTollsCsvAction, null as TollImportResult | null);
   const [pullState, pullAction, pulling] = useActionState(pullPrepassTollsAction, null);
   const errors = state?.errors ?? [];
@@ -26,6 +27,16 @@ export function TollCsvImport() {
       <div>
         <h2 className="text-base font-semibold text-slate-900">PrePass toll import</h2>
       </div>
+      <p
+        data-prepass-pull-status={pullStatus.tone}
+        className={
+          pullStatus.tone === "ready"
+            ? "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+            : "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+        }
+      >
+        {pullStatus.message}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <a href="/api/tolls/template" className="btn btn-secondary">
           Download template

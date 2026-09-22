@@ -7,6 +7,7 @@ import { TollTransactionLists, TollUnassignedLists, tollPageHref } from "@/compo
 import { TollFleetCards, TollWeekStrip } from "@/components/toll-week-strip";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
+import { describePrepassPullStatus } from "@/lib/prepass-client";
 import { loadTollPeriodView } from "@/lib/tolls-store";
 import { parseTollPeriod, parseTollTxList } from "@/lib/tolls";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
@@ -87,7 +88,7 @@ export default async function TollsPage({
         periodEndYmd={view.periodEndYmd}
         query={{ driverId: selectedDriverId, truckId: selectedTruckId, tx: txList }}
       />
-      <TollCsvImport />
+      <TollCsvImport pullStatus={describePrepassPullStatus()} />
       <TollRollupTable
         title={period === "month" ? "Per-driver totals (month)" : "Per-driver totals (week)"}
         rows={view.driverRollups}
