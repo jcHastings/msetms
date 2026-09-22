@@ -37,12 +37,12 @@ Categories persisted and rolled up:
 
 ## Env
 
-`PREPASS_API_KEY` is documented in `.env.example`.
+`PREPASS_CLIENT_ID` and `PREPASS_CLIENT_SECRET` are documented in `.env.example`. `PREPASS_API_KEY` is an optional legacy fallback.
 
-- Missing key: API pull no-ops with a clear message.
-- Manual import still works without key.
-- CoS can inject `PREPASS_API_KEY` later; do not request the key in chat.
+- Missing OAuth pair (and no legacy key): API pull no-ops with a clear message.
+- Manual import still works without credentials.
+- CoS can inject OAuth client id/secret later; do not request secrets in chat.
 
 ## API docs blocker
 
-PrePass public API response shape/endpoint contract is not finalized in-repo, so Phase 1 keeps API pull as a thin no-op stub behind `PREPASS_API_KEY`. CSV/XLSX import is the production path in this phase.
+PrePass public API response shape/endpoint contract is not finalized in-repo, so Phase 1 keeps API pull as a thin no-op stub behind OAuth client id/secret (or legacy `PREPASS_API_KEY`). Do not invent a token-exchange against an unknown contract. CSV/XLSX import is the production path in this phase.

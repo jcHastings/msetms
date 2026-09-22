@@ -361,7 +361,12 @@ export async function pullPrepassTollTransactions(): Promise<TollImportResult> {
   const { pullPrepassTransactions } = await import("./prepass-client");
   const pulled = await pullPrepassTransactions();
   if (!pulled.ok) return pulled;
-  if (!pulled.rows.length) {
+  // Discriminate on `rows` so TollImportResult (`ok: boolean`) cannot leak through.
+  if (!("rows" in pulled)) {
+    return { ok: false, message: pulled.message ?? "PrePass pull returned no row set." };
+  }
+  const rows = pulled.rows;
+  if (!rows.length) {
     return {
       ok: true,
       created: 0,
@@ -374,7 +379,7 @@ export async function pullPrepassTollTransactions(): Promise<TollImportResult> {
   const { renderUtf8Csv } = await import("./csv");
   const text = renderUtf8Csv(
     ["Date", "Time", "Transponder ID", "Unit", "Driver Name", "Plaza", "State", "Category", "Amount", "Invoice", "Reference"],
-    pulled.rows.map((row) => [
+    rows.map((row) => [
       row.date,
       row.time ?? "",
       row.transponder_id,
