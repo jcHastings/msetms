@@ -228,7 +228,7 @@ async function requestPrepassAccessToken(
   if (!response.ok) {
     throw new Error(tokenFailureMessage(response.status, payload));
   }
-  const token = firstString(asRecord(payload), ["access_token", "accessToken", "token"]);
+  const token = firstString(asRecord(payload) ?? {}, ["access_token", "accessToken", "token"]);
   if (!token) {
     throw new Error("PrePass token response did not include an access token. CSV/XLSX import still works.");
   }
