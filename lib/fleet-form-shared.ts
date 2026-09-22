@@ -34,6 +34,7 @@ export type TruckFormValues = {
   capacity_lbs: number;
   status: string;
   samsara_vehicle_id: string;
+  prepass_transponder_id: string;
   vin: string;
   plate: string;
   plate_state: string;
@@ -134,6 +135,7 @@ export function truckFormValues(truck: Record<string, unknown>): TruckFormValues
     capacity_lbs: num(truck.capacity_lbs) || 45000,
     status: text(truck.status) || "available",
     samsara_vehicle_id: text(truck.samsara_vehicle_id),
+    prepass_transponder_id: text(truck.prepass_transponder_id),
     vin: text(truck.vin),
     plate: text(truck.plate),
     plate_state: text(truck.plate_state).toUpperCase(),

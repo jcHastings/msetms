@@ -1,0 +1,76 @@
+"use client";
+
+import { useActionState } from "react";
+import { FormBanner } from "@/components/form-banner";
+import { importTollsCsvAction, pullPrepassTollsAction } from "@/lib/actions";
+import type { TollImportResult } from "@/lib/tolls";
+
+function tollImportOkMessage(state: TollImportResult): string {
+  const created = state.created ?? 0;
+  const skipped = state.skipped ?? 0;
+  const unmatched = state.unmatched ?? 0;
+  const errorCount = state.errors?.length ?? 0;
+  const errors = errorCount ? ` · ${errorCount} row ${errorCount === 1 ? "error" : "errors"}` : ".";
+  if (skipped > 0 && created === 0 && unmatched === 0) {
+    return `Already on file: ${skipped} ${skipped === 1 ? "line" : "lines"}. Nothing new to add.`;
+  }
+  return `Created ${created}, already on file ${skipped}, unmatched ${unmatched}${errors}`;
+}
+
+export function TollCsvImport() {
+  const [state, formAction, pending] = useActionState(importTollsCsvAction, null as TollImportResult | null);
+  const [pullState, pullAction, pulling] = useActionState(pullPrepassTollsAction, null);
+  const errors = state?.errors ?? [];
+  return (
+    <section className="card mb-6 space-y-4 p-6" data-toll-import="">
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">PrePass toll import</h2>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <a href="/api/tolls/template" className="btn btn-secondary">
+          Download template
+        </a>
+        <a href="/api/tolls/export" className="btn btn-secondary">
+          Download all tolls
+        </a>
+        <form action={pullAction}>
+          <button className="btn btn-secondary" type="submit" disabled={pulling}>
+            {pulling ? "Pulling…" : "Pull PrePass API"}
+          </button>
+        </form>
+      </div>
+      <form action={formAction} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+        <div className="field">
+          <label htmlFor="toll-csv">Tolls file</label>
+          <input
+            id="toll-csv"
+            name="csv"
+            type="file"
+            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          />
+        </div>
+        <button className="btn btn-primary" type="submit" disabled={pending}>
+          {pending ? "Importing…" : "Upload"}
+        </button>
+      </form>
+      {state?.ok ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {state.message ? `${tollImportOkMessage(state)} ${state.message}` : tollImportOkMessage(state)}
+        </div>
+      ) : null}
+      {state && !state.ok && state.error ? (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{state.error}</div>
+      ) : null}
+      <FormBanner result={pullState} />
+      {errors.length > 0 ? (
+        <ul className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {errors.map((item) => (
+            <li key={`${item.row}-${item.error}`}>
+              Row {item.row}: {item.error}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}

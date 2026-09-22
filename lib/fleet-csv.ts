@@ -45,6 +45,7 @@ export const TRUCK_CSV_HEADERS = [
   "DOT Inspected",
   "DOT Exp",
   "Samsara Vehicle ID",
+  "PrePass Transponder ID",
   "Notes",
 ] as const;
 
@@ -111,6 +112,7 @@ export function renderTrucksCsv(trucks: TruckWithDriver[]): string {
       truck.dot_inspected_on,
       truck.dot_expires,
       truck.samsara_vehicle_id,
+      truck.prepass_transponder_id,
       truck.notes,
     ]),
   );

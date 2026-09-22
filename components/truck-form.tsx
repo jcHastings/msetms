@@ -115,6 +115,15 @@ export function TruckForm({ truck, drivers = [], submitLabel }: Props) {
           placeholder="Samsara vehicle id — not the API token"
         />
       </div>
+      <div className="field">
+        <label htmlFor="prepass_transponder_id">PrePass transponder ID</label>
+        <input
+          id="prepass_transponder_id"
+          name="prepass_transponder_id"
+          defaultValue={truck?.prepass_transponder_id}
+          placeholder="Used to auto-match PrePass toll rows"
+        />
+      </div>
       <h2 className="text-sm font-semibold">Registration</h2>
       <div className="field">
         <label htmlFor="registration_issued">Date issued</label>

@@ -86,10 +86,13 @@ import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
+import type { TollImportResult } from "./tolls";
+import { importTollsFromUpload } from "./toll-import";
 import {
   assignFuelTransaction,
   deleteFuelTransaction,
 } from "./fuel-store";
+import { assignTollTransaction, pullPrepassTollTransactions } from "./tolls-store";
 import {
   requireCapability,
   requireLoadAssigner,
@@ -312,6 +315,7 @@ export async function createTruckAction(
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      prepass_transponder_id: String(formData.get("prepass_transponder_id") ?? "").trim(),
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
@@ -355,6 +359,7 @@ export async function updateTruckAction(
       capacity_lbs: capacity,
       status: parseTruckStatus(formData.get("status")),
       samsara_vehicle_id: String(formData.get("samsara_vehicle_id") ?? "").trim(),
+      prepass_transponder_id: String(formData.get("prepass_transponder_id") ?? "").trim(),
       samsara_trailer_id: String(formData.get("samsara_trailer_id") ?? "").trim(),
       orbcomm_asset_id: String(formData.get("orbcomm_asset_id") ?? "").trim(),
       trailer_number: String(formData.get("trailer_number") ?? "").trim(),
@@ -1491,6 +1496,44 @@ export async function importFuelCsvAction(
   }
 }
 
+export async function importTollsCsvAction(
+  _prev: TollImportResult | null,
+  formData: FormData,
+): Promise<TollImportResult> {
+  try {
+    await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
+    const file = formData.get("csv") ?? formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { ok: false, error: "Choose a CSV or Excel file." };
+    }
+    const result = await importTollsFromUpload(file);
+    if (result.ok) refresh();
+    return result;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
+}
+
+export async function pullPrepassTollsAction(
+  _prev: ActionResult | null,
+  _formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
+    const result = await pullPrepassTollTransactions();
+    if (!result.ok) return { ok: false, error: result.error ?? "PrePass pull failed." };
+    if ((result.created ?? 0) > 0) refresh();
+    return {
+      ok: true,
+      message:
+        result.message ||
+        `Pulled ${result.created ?? 0} rows, skipped ${result.skipped ?? 0}, unmatched ${result.unmatched ?? 0}.`,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function linkFuelReceiptAction(formData: FormData): Promise<ActionResult> {
   try {
     await requireCapability(canUploadFuel, "Fuel upload is for Administrator and Standard.");
@@ -1519,6 +1562,26 @@ export async function assignFuelDriverAction(
     if (!id) return { ok: false, error: "Fuel row is missing." };
     if (!driverId && !loadId) return { ok: false, error: "Pick a driver or a load." };
     assignFuelTransaction(id, { driverId, loadId });
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function assignTollDriverAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("toll_id"));
+    const driverId = parseOptionalInt(formData.get("driver_id"));
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!id) return { ok: false, error: "Toll row is missing." };
+    if (!driverId && !loadId) return { ok: false, error: "Pick a driver or a load." };
+    assignTollTransaction(id, { driverId, loadId });
     refresh();
     return { ok: true };
   } catch (error) {
