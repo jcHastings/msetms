@@ -4,6 +4,7 @@ import { getSignedInDriver } from "@/lib/driver-session";
 import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
 import { listLoadsForDriver } from "@/lib/queries";
 import { DriverDestinations } from "@/components/driver-destinations";
+import { DriverAssistSheet } from "@/components/driver-assist-sheet";
 import { pickDriverDestinationLoad } from "@/lib/driver-destinations-shared";
 import { driverTrailerPageHref } from "@/lib/driver-trailer";
 import { isActiveLoadStatus } from "@/lib/types";
@@ -32,11 +33,14 @@ export default async function DriverHomePage() {
             {hos ? ` · ${formatDurationMs(hos.driveRemainingMs)} drive left` : ""}
           </p>
         </div>
-        <form action={driverLogoutAction}>
-          <button className="btn btn-secondary" type="submit">
-            Sign out
-          </button>
-        </form>
+        <div className="flex flex-col items-end gap-2">
+          <DriverAssistSheet />
+          <form action={driverLogoutAction}>
+            <button className="btn btn-secondary" type="submit">
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       {(() => {

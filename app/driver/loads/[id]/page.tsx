@@ -19,6 +19,7 @@ import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/lib/reefer-shared";
 import { DriverDocClassify } from "@/components/driver-doc-classify";
+import { DriverAssistSheet } from "@/components/driver-assist-sheet";
 import { driverFacingStopPo } from "@/lib/load-confirmation";
 import { isCustomerRateDocument } from "@/lib/load-documents-shared";
 import { isClosedStatus } from "@/lib/types";
@@ -63,8 +64,11 @@ export default async function DriverLoadPage({
         ← My dispatch
       </Link>
       <div className="mt-3 flex items-center justify-between gap-2">
-        <h1 className="font-mono text-2xl font-semibold text-white">{load.load_number}</h1>
-        <LoadStatusBadge status={load.status} />
+        <div className="flex items-center gap-2">
+          <h1 className="font-mono text-2xl font-semibold text-white">{load.load_number}</h1>
+          <LoadStatusBadge status={load.status} />
+        </div>
+        <DriverAssistSheet className="min-h-10 px-3 text-sm" />
       </div>
       {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
       {yourLeg ? (
