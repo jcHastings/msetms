@@ -51,17 +51,16 @@ Public catalog: `https://developer.prepass.com/developer/apis`
 
 1. Token API (`get-api-token-v1`)
    - `POST https://api.prepass.com/auth/v1/token`
-   - Headers: `client_id`, `client_secret`
-   - Body: `grant_type=client_credentials` plus the same client id/secret (`application/x-www-form-urlencoded`)
-   - Optional scope: `prepass.api.tolls` (`PREPASS_OAUTH_SCOPE`)
-   - Response: `access_token`, `token_type`, `expires_in`
+   - Required headers (portal): `client_id`, `client_secret`
+   - Grant type is not documented. Header-only first; if that fails, retry once with `grant_type=client_credentials` form body. No other grant types.
+   - Response: `token_type`, `expires_in`, `ext_expires_in`, `access_token`
 2. Toll Transaction API (`prepass-public-tolls-transactions-api-v1`)
    - `GET https://api.prepass.com/tolltransaction/v1/transactions`
-   - Query: `startPostDate`, `endPostDate` (required, `yyyy-mm-dd`, max 31 days; end date is exclusive midnight)
-   - Query: `accountNumbers` (required unless cost centers; this tip uses env account number only)
-   - Query: `pageNumber`, `pageSize` (default page size 10000)
+   - Query: `startPostDate`, `endPostDate` (required, `yyyy-mm-dd`, max 31 days, start not older than 2 years; dates begin midnight; one day uses next day as end)
+   - Query: `accountNumbers=370972` (JC: M & S LOADS LLC PP). Do not send `costCenters` with it.
+   - Query: `pageNumber` (default 1), `pageSize` (default/max 10000)
    - Header: `Authorization: Bearer <access_token>`
-   - Mapped fields: `tollId` (invoice/dedupe), `deviceNumber` (transponder), `vehicleNumber` (unit), `exitDateTimeUtc`/`exitDateTime`/`postDateTime`, `exitPlazaName`, `tollAgencyState`, `tollCharge`, `tollCategory`
+   - Mapped fields: `deviceNumber` (transponder; `ppDeviceId` fallback), `vehicleNumber` (unit), `Number(tollCharge)` (amount), `exitPlazaName` else `entryPlazaName`, `postDateTime` then entry/exit/invoice DateTime, invoice/reference if present, `classifyTollCategory`
 
 Default pull window is the last 14 posted days (`startPostDate = today-13`, `endPostDate = tomorrow`).
 

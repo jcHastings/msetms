@@ -96,8 +96,18 @@ async function main() {
   assert.equal(mapped?.state, "OH");
   assert.equal(mapped?.amount, 8.25);
   assert.equal(mapped?.category, "toll");
-  assert.equal(mapped?.invoice_number, "596569591");
-  assert.equal(mapped?.date, "2024-11-29");
+  assert.equal(mapped?.invoice_number, "");
+  assert.equal(mapped?.reference_number, "596569591");
+  assert.equal(mapped?.date, "2024-12-01");
+
+  const entryPlaza = prepass.mapPrepassTransaction({
+    ...SAMPLE_TX,
+    exitPlazaName: "",
+    entryPlazaName: "Strongsville-Cleveland",
+    tollCharge: "8.25",
+  });
+  assert.equal(entryPlaza?.plaza, "Strongsville-Cleveland");
+  assert.equal(entryPlaza?.amount, 8.25);
 
   const bypass = prepass.mapPrepassTransaction({
     ...SAMPLE_TX,
@@ -109,26 +119,31 @@ async function main() {
   assert.equal(bypass?.category, "scale_bypass");
   assert.equal(bypass?.amount, 5);
 
-  const calls: string[] = [];
+  const calls: Array<{ url: string; body: string }> = [];
   const pulled = await prepass.pullPrepassTransactions({
     now,
     fetch: async (input, init) => {
       const url = String(input);
-      calls.push(`${init?.method ?? "GET"} ${url}`);
+      const body = String(init?.body ?? "");
+      calls.push({ url, body });
       if (url.includes("/auth/v1/token")) {
         const headers = init?.headers as Record<string, string>;
         assert.equal(headers.client_id, "test-client-id");
         assert.equal(headers.client_secret, "test-client-secret-value");
-        const body = String(init?.body ?? "");
-        assert.match(body, /grant_type=client_credentials/);
-        assert.match(body, /client_id=test-client-id/);
+        assert.doesNotMatch(body, /grant_type=/);
         assert.doesNotMatch(url, /test-client-secret-value/);
-        return jsonResponse(200, { token_type: "Bearer", expires_in: 3599, access_token: "test-access-token" });
+        return jsonResponse(200, {
+          token_type: "Bearer",
+          expires_in: 3599,
+          ext_expires_in: 3599,
+          access_token: "test-access-token",
+        });
       }
       assert.match(url, /tolltransaction\/v1\/transactions/);
       assert.match(url, /startPostDate=2026-09-09/);
       assert.match(url, /endPostDate=2026-09-23/);
       assert.match(url, /accountNumbers=370972/);
+      assert.doesNotMatch(url, /costCenters=/);
       const headers = init?.headers as Record<string, string>;
       assert.equal(headers.Authorization, "Bearer test-access-token");
       return jsonResponse(200, {
@@ -137,7 +152,7 @@ async function main() {
         pageInfo: { pageNumber: 1, pageSize: 10000, totalRecords: 2, totalPages: 1 },
         transactions: [
           SAMPLE_TX,
-          { ...SAMPLE_TX, tollId: 596738021, deviceNumber: "UNKNOWN-999", vehicleNumber: "", tollCharge: 9 },
+          { ...SAMPLE_TX, tollId: 596738021, deviceNumber: "UNKNOWN-999", vehicleNumber: "", tollCharge: "9" },
         ],
       });
     },
@@ -149,6 +164,33 @@ async function main() {
     assert.doesNotMatch(pulled.message, /test-client-secret-value|test-access-token/);
   }
   assert.equal(calls.length, 2);
+
+  let tokenAttempts = 0;
+  const retried = await prepass.pullPrepassTransactions({
+    now,
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("/auth/v1/token")) {
+        tokenAttempts += 1;
+        const body = String(init?.body ?? "");
+        if (tokenAttempts === 1) {
+          assert.doesNotMatch(body, /grant_type=/);
+          return jsonResponse(401, { error: "Unauthorized" });
+        }
+        assert.match(body, /grant_type=client_credentials/);
+        assert.doesNotMatch(body, /password=|authorization_code|refresh_token/);
+        return jsonResponse(200, { token_type: "Bearer", expires_in: 3599, access_token: "retry-token" });
+      }
+      return jsonResponse(200, {
+        statusCode: 200,
+        statusMessage: "OK",
+        pageInfo: { pageNumber: 1, pageSize: 10000, totalRecords: 0, totalPages: 1 },
+        transactions: [],
+      });
+    },
+  });
+  assert.equal(tokenAttempts, 2);
+  assert.equal(retried.ok, true);
 
   const { getDb, closeDb } = await import("../lib/db");
   const queries = await import("../lib/queries");
@@ -183,7 +225,7 @@ async function main() {
   const stored = tolls.importTollsFromText(text, "prepass-api-test.csv", { sourceKind: "api_pull", provider: "prepass" });
   assert.equal(stored.created, 1, "mapped transponder should assign");
   assert.equal(stored.unmatched, 1, "unknown transponder stays unmatched");
-  const matched = tolls.listTollTransactions().find((row) => row.invoice_number === "596569591");
+  const matched = tolls.listTollTransactions().find((row) => row.reference_number === "596569591");
   assert.equal(matched?.driver_id, driver.id);
   assert.equal(matched?.truck_id, truck.id);
 

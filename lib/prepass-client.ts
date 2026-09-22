@@ -99,9 +99,13 @@ export function defaultPostDateWindow(now = new Date()): PrepassPostDateWindow {
 
 export function postDateWindowEndingOn(now: Date, days: number): PrepassPostDateWindow {
   const span = Math.min(PREPASS_MAX_WINDOW_DAYS, Math.max(1, Math.floor(days)));
-  const end = utcYmd(addUtcDays(utcDateOnly(now), 1));
-  const start = utcYmd(addUtcDays(utcDateOnly(now), 1 - span));
-  return { startPostDate: start, endPostDate: end, days: span };
+  const today = utcDateOnly(now);
+  const end = addUtcDays(today, 1);
+  let start = addUtcDays(end, -span);
+  const oldest = addUtcDays(today, -730);
+  if (start.getTime() < oldest.getTime()) start = oldest;
+  if (start.getTime() >= end.getTime()) start = addUtcDays(end, -1);
+  return { startPostDate: utcYmd(start), endPostDate: utcYmd(end), days: span };
 }
 
 export function normalizePrepassCategory(raw: string): TollCategory {
@@ -111,36 +115,35 @@ export function normalizePrepassCategory(raw: string): TollCategory {
 export function mapPrepassTransaction(raw: unknown): PrepassApiRow | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
-  const amount = parseFuelNumber(firstString(item, ["tollCharge", "amount", "charge", "total"]));
+  const amount = parseTollCharge(item.tollCharge);
   if (amount == null || !Number.isFinite(amount)) return null;
   const when = firstString(item, [
-    "exitDateTimeUtc",
-    "exitDateTime",
-    "entryDateTimeUtc",
-    "entryDateTime",
     "postDateTime",
+    "entryDateTime",
+    "entryDateTimeUtc",
+    "exitDateTime",
+    "exitDateTimeUtc",
     "invoiceDateTime",
+    "invoiceDateTimeUtc",
   ]);
   const occurred = parseWhen(when);
   if (!occurred) return null;
-  const transponder = firstString(item, ["deviceNumber", "ppDeviceId", "transponderId", "transponder"]);
-  const plaza = firstString(item, ["exitPlazaName", "entryPlazaName", "tollAgencyName", "plaza"]);
-  const state = firstString(item, ["tollAgencyState", "plateState", "state"]);
+  const transponder = firstString(item, ["deviceNumber", "ppDeviceId"]);
+  const plaza = firstString(item, ["exitPlazaName", "entryPlazaName", "exitPlazaCode", "entryPlazaCode"]);
   const category = classifyTollCategory(
-    [firstString(item, ["tollCategory", "category"]), plaza, firstString(item, ["tollAgencyName"])].filter(Boolean).join(" "),
+    [firstString(item, ["tollCategory"]), plaza].filter(Boolean).join(" "),
   );
-  const invoice = firstString(item, ["tollId", "invoiceNumber", "invoice"]);
   return {
     date: occurred.date,
     time: occurred.time,
     transponder_id: transponder,
-    unit_number: firstString(item, ["vehicleNumber", "unitNumber", "unit"]),
+    unit_number: firstString(item, ["vehicleNumber"]),
     plaza,
-    state,
+    state: firstString(item, ["tollAgencyState"]),
     amount,
     category,
-    invoice_number: invoice,
-    reference_number: firstString(item, ["ppDeviceId", "deviceNumber", "reference"]),
+    invoice_number: firstString(item, ["invoice", "invoiceNumber", "invoiceNo"]),
+    reference_number: firstString(item, ["reference", "referenceNumber", "tollId"]),
   };
 }
 
@@ -205,34 +208,51 @@ async function requestPrepassAccessToken(
   clientId: string,
   clientSecret: string,
 ): Promise<string> {
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
+  const headerOnly = await postPrepassToken(doFetch, clientId, clientSecret, false);
+  const headerToken = accessTokenFromPayload(headerOnly.payload);
+  if (headerOnly.response.ok && headerToken) return headerToken;
+  const formBody = await postPrepassToken(doFetch, clientId, clientSecret, true);
+  const formToken = accessTokenFromPayload(formBody.payload);
+  if (formBody.response.ok && formToken) return formToken;
+  throw new Error(tokenFailureMessage(formBody.response.status || headerOnly.response.status, formBody.payload ?? headerOnly.payload));
+}
+
+async function postPrepassToken(
+  doFetch: FetchLike,
+  clientId: string,
+  clientSecret: string,
+  useClientCredentialsBody: boolean,
+): Promise<{ response: Response; payload: unknown }> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
     client_id: clientId,
     client_secret: clientSecret,
-  });
-  const scope = getPrepassOAuthScope();
-  if (scope) body.set("scope", scope);
+  };
+  let body: string | undefined;
+  if (useClientCredentialsBody) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    const params = new URLSearchParams({ grant_type: "client_credentials" });
+    const scope = getPrepassOAuthScope();
+    if (scope) params.set("scope", scope);
+    body = params.toString();
+  }
   const response = await doFetch(getPrepassTokenUrl(), {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-      client_id: clientId,
-      client_secret: clientSecret,
-    },
-    body: body.toString(),
+    headers,
+    body,
     cache: "no-store",
     signal: AbortSignal.timeout(PREPASS_FETCH_TIMEOUT_MS),
   });
-  const payload = await readJson(response);
-  if (!response.ok) {
-    throw new Error(tokenFailureMessage(response.status, payload));
-  }
-  const token = firstString(asRecord(payload) ?? {}, ["access_token", "accessToken", "token"]);
-  if (!token) {
-    throw new Error("PrePass token response did not include an access token. CSV/XLSX import still works.");
-  }
-  return token;
+  return { response, payload: await readJson(response) };
+}
+
+function accessTokenFromPayload(payload: unknown): string {
+  return firstString(asRecord(payload) ?? {}, ["access_token"]);
+}
+
+function parseTollCharge(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return parseFuelNumber(String(value ?? ""));
 }
 
 async function fetchAllPrepassTransactions(

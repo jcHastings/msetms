@@ -370,7 +370,7 @@ export function getPrepassTransactionsPath(): string {
 }
 
 export function getPrepassOAuthScope(): string | undefined {
-  return readSecret("PREPASS_OAUTH_SCOPE") ?? "prepass.api.tolls";
+  return readSecret("PREPASS_OAUTH_SCOPE");
 }
 
 export function isPrepassConfigured(): boolean {
