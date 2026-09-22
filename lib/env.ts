@@ -336,8 +336,24 @@ export function getGoogleMapsBrowserKey(): string | undefined {
   return readSecret("GOOGLE_MAPS_BROWSER_KEY");
 }
 
+export function getPrepassClientId(): string | undefined {
+  return readSecret("PREPASS_CLIENT_ID");
+}
+
+export function getPrepassClientSecret(): string | undefined {
+  return readSecret("PREPASS_CLIENT_SECRET");
+}
+
+export function isPrepassOAuthReady(): boolean {
+  return Boolean(getPrepassClientId() && getPrepassClientSecret());
+}
+
 export function getPrepassApiKey(): string | undefined {
   return readSecret("PREPASS_API_KEY");
+}
+
+export function isPrepassConfigured(): boolean {
+  return isPrepassOAuthReady() || Boolean(getPrepassApiKey());
 }
 
 export function isGooglePlacesConfigured(): boolean {

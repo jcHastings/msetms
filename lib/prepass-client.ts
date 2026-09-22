@@ -1,5 +1,5 @@
-import { getPrepassApiKey } from "./env";
-import { classifyTollCategory, type TollCategory, type TollImportResult } from "./tolls";
+import { getPrepassApiKey, isPrepassOAuthReady } from "./env";
+import { classifyTollCategory, type TollCategory } from "./tolls";
 
 export type PrepassApiRow = {
   date: string;
@@ -15,24 +15,39 @@ export type PrepassApiRow = {
   reference_number?: string;
 };
 
-export async function pullPrepassTransactions(): Promise<
-  { ok: true; rows: PrepassApiRow[]; message: string } | TollImportResult
-> {
-  const key = getPrepassApiKey();
-  if (!key) {
+export type PrepassPullSuccess = {
+  ok: true;
+  rows: PrepassApiRow[];
+  message: string;
+};
+
+export type PrepassPullFailure = {
+  ok: false;
+  message: string;
+  error?: string;
+};
+
+export type PrepassPullResult = PrepassPullSuccess | PrepassPullFailure;
+
+export async function pullPrepassTransactions(): Promise<PrepassPullResult> {
+  const oauthReady = isPrepassOAuthReady();
+  const legacyKey = getPrepassApiKey();
+  if (!oauthReady && !legacyKey) {
     return {
       ok: true,
       rows: [],
-      message: "PREPASS_API_KEY is missing. API pull skipped; manual CSV/XLSX import still works.",
+      message:
+        "PREPASS_CLIENT_ID and PREPASS_CLIENT_SECRET are missing. API pull skipped; manual CSV/XLSX import still works.",
     };
   }
-  // Phase 1 keeps API pull as a thin stub until public endpoint payloads are validated.
+  // Thin stub only — do not invent an OAuth token exchange against an unknown PrePass contract.
   // Returning an empty set avoids fake traffic while still surfacing operator guidance.
   return {
     ok: true,
     rows: [],
-    message:
-      "PREPASS_API_KEY is set, but PrePass public API payload mapping is not finalized yet. API pull is a no-op in this phase; use manual CSV/XLSX import.",
+    message: oauthReady
+      ? "PrePass OAuth client credentials are present, but PrePass public API payload mapping is not finalized yet. API pull is a no-op in this phase; use manual CSV/XLSX import."
+      : "Legacy PREPASS_API_KEY is present, but PrePass public API payload mapping is not finalized yet. API pull is a no-op in this phase; use manual CSV/XLSX import.",
   };
 }
 

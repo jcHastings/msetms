@@ -35,7 +35,7 @@ export function listFiltersForBoardStatus(
 ): LoadListFilters {
   const raw = String(status ?? "").trim();
   if (!raw || isLoadListTab(raw)) {
-    return filtersForLoadListTab(raw ? raw : "active", extras);
+    return filtersForLoadListTab(isLoadListTab(raw) ? raw : "active", extras);
   }
   return { status: raw, date: extras.date || undefined };
 }
