@@ -352,8 +352,33 @@ export function getPrepassApiKey(): string | undefined {
   return readSecret("PREPASS_API_KEY");
 }
 
+export function getPrepassAccountNumber(): string | undefined {
+  return readSecret("PREPASS_ACCOUNT_NUMBER");
+}
+
+export function getPrepassTokenUrl(): string {
+  return readSecret("PREPASS_TOKEN_URL") ?? "https://api.prepass.com/auth/v1/token";
+}
+
+export function getPrepassApiBase(): string {
+  return (readSecret("PREPASS_API_BASE") ?? "https://api.prepass.com").replace(/\/$/, "");
+}
+
+export function getPrepassTransactionsPath(): string {
+  const raw = readSecret("PREPASS_TRANSACTIONS_PATH") ?? "/tolltransaction/v1/transactions";
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+export function getPrepassOAuthScope(): string | undefined {
+  return readSecret("PREPASS_OAUTH_SCOPE") ?? "prepass.api.tolls";
+}
+
 export function isPrepassConfigured(): boolean {
   return isPrepassOAuthReady() || Boolean(getPrepassApiKey());
+}
+
+export function isPrepassPullReady(): boolean {
+  return isPrepassOAuthReady() && Boolean(getPrepassAccountNumber());
 }
 
 export function isGooglePlacesConfigured(): boolean {
