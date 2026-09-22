@@ -36,11 +36,7 @@ const LOAD_SELECT = `
     customers.name AS customer_name,
     trucks.unit_number AS truck_unit,
     trucks.type AS truck_type,
-    trucks.samsara_vehicle_id AS truck_samsara_id,
-    trucks.samsara_trailer_id AS truck_samsara_trailer_id,
-    trucks.orbcomm_asset_id AS truck_orbcomm_asset_id,
     trailers.unit_number AS trailer_unit,
-    trailers.orbcomm_asset_id AS trailer_orbcomm_asset_id,
     drivers.name AS driver_name,
     drivers.phone AS driver_phone,
     drivers.driver_type AS driver_type
@@ -231,7 +227,6 @@ export function createTruck(input: {
   capacity_lbs: number;
   status: TruckStatus;
   samsara_vehicle_id?: string;
-  samsara_trailer_id?: string;
   orbcomm_asset_id?: string;
   trailer_number?: string;
   registration_issued?: string;
@@ -243,9 +238,9 @@ export function createTruck(input: {
   try {
     const result = getDb()
       .prepare(
-        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number,
+        `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, orbcomm_asset_id, trailer_number,
             registration_issued, registration_expires, dot_inspected_on, dot_expires, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.unit_number,
@@ -253,7 +248,6 @@ export function createTruck(input: {
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
-        input.samsara_trailer_id ?? "",
         input.orbcomm_asset_id ?? "",
         input.trailer_number ?? "",
         input.registration_issued ?? "",
@@ -280,7 +274,6 @@ export function updateTruck(
     capacity_lbs: number;
     status: TruckStatus;
     samsara_vehicle_id?: string;
-    samsara_trailer_id?: string;
     orbcomm_asset_id?: string;
     trailer_number?: string;
     registration_issued?: string;
@@ -295,7 +288,7 @@ export function updateTruck(
       .prepare(
         `UPDATE trucks
          SET unit_number = ?, type = ?, capacity_lbs = ?, status = ?,
-             samsara_vehicle_id = ?, samsara_trailer_id = ?, orbcomm_asset_id = ?, trailer_number = ?,
+             samsara_vehicle_id = ?, orbcomm_asset_id = ?, trailer_number = ?,
              registration_issued = ?, registration_expires = ?, dot_inspected_on = ?, dot_expires = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -305,7 +298,6 @@ export function updateTruck(
         input.capacity_lbs,
         input.status,
         input.samsara_vehicle_id ?? "",
-        input.samsara_trailer_id ?? "",
         input.orbcomm_asset_id ?? "",
         input.trailer_number ?? "",
         input.registration_issued ?? "",

@@ -29,8 +29,8 @@ export function seedDatabase(db: Database.Database): void {
      VALUES (?, ?, ?, ?, ?)`,
   );
   const insertTruck = db.prepare(
-    `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, orbcomm_asset_id, trailer_number, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, orbcomm_asset_id, trailer_number, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertDriver = db.prepare(
     `INSERT INTO drivers (name, phone, license, pin, samsara_driver_id, truck_id, status, created_at, updated_at)
@@ -124,14 +124,14 @@ export function seedDatabase(db: Database.Database): void {
       created,
     );
 
-    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", "", created, created).lastInsertRowid);
-    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
-    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
-    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", "", created, created).lastInsertRowid);
-    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", "", created, created).lastInsertRowid);
-    insertTruck.run("301", "box", 26000, "available", "", "", "", "", created, created);
+    const t101 = Number(insertTruck.run("101", "dry_van", 45000, "available", "", "", "", created, created).lastInsertRowid);
+    const t102 = Number(insertTruck.run("102", "dry_van", 45000, "in_use", "", "", "", created, created).lastInsertRowid);
+    const t108 = Number(insertTruck.run("108", "reefer", 44000, "available", "samsara-veh-108", "orbcomm-tr-8801", "TR-8801", created, created).lastInsertRowid);
+    const t112 = Number(insertTruck.run("112", "reefer", 44000, "in_use", "samsara-veh-112", "orbcomm-tr-7742", "TR-7742", created, created).lastInsertRowid);
+    const t118 = Number(insertTruck.run("118", "dry_van", 45000, "in_use", "", "", "", created, created).lastInsertRowid);
+    const t205 = Number(insertTruck.run("205", "flatbed", 48000, "in_use", "", "", "", created, created).lastInsertRowid);
+    const t210 = Number(insertTruck.run("210", "flatbed", 48000, "maintenance", "", "", "", created, created).lastInsertRowid);
+    insertTruck.run("301", "box", 26000, "available", "", "", "", created, created);
 
     const insertTrailer = db.prepare(
       `INSERT INTO trailers (
