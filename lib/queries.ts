@@ -746,16 +746,31 @@ export function assignLoad(
   })();
 }
 
+type StoredIftaReport = Omit<IftaReport, "rows"> & { error?: string };
+
 export function getIftaReport(loadId: number): IftaReport | null {
-  const report = getDb()
+  const stored = getDb()
     .prepare("SELECT * FROM ifta_reports WHERE load_id = ?")
-    .get(loadId) as Omit<IftaReport, "rows"> | undefined;
-  if (!report) return null;
+    .get(loadId) as StoredIftaReport | undefined;
+  if (!stored) return null;
   const rows = getDb()
     .prepare(
       "SELECT jurisdiction, name, miles FROM ifta_jurisdictions WHERE report_id = ? ORDER BY miles DESC, jurisdiction",
     )
-    .all(report.id) as IftaJurisdictionRow[];
+    .all(stored.id) as IftaJurisdictionRow[];
+  // SELECT * still returns the legacy error column. Leave it in SQLite; keep it off IftaReport.
+  const report: Omit<IftaReport, "rows"> = {
+    id: stored.id,
+    load_id: stored.load_id,
+    source: stored.source,
+    vehicle_id: stored.vehicle_id,
+    generated_at: stored.generated_at,
+    window_start: stored.window_start,
+    window_end: stored.window_end,
+    total_miles: stored.total_miles,
+    note: stored.note,
+    attachment_id: stored.attachment_id,
+  };
   return { ...report, rows };
 }
 
@@ -768,7 +783,6 @@ export function saveIftaReport(input: {
   windowEnd: string;
   totalMiles: number;
   note: string;
-  error?: string;
   attachmentId: number | null;
   rows: IftaJurisdictionRow[];
 }): IftaReport {
@@ -780,8 +794,8 @@ export function saveIftaReport(input: {
       .prepare(
         `INSERT INTO ifta_reports (
           load_id, source, vehicle_id, generated_at, window_start, window_end,
-          total_miles, note, error, attachment_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          total_miles, note, attachment_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.loadId,
@@ -792,7 +806,6 @@ export function saveIftaReport(input: {
         input.windowEnd,
         input.totalMiles,
         input.note,
-        input.error ?? "",
         input.attachmentId,
       );
     const reportId = Number(result.lastInsertRowid);

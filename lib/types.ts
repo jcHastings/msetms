@@ -304,7 +304,6 @@ export type IftaReport = {
   window_end: string;
   total_miles: number;
   note: string;
-  error: string;
   attachment_id: number | null;
   rows: IftaJurisdictionRow[];
 };
