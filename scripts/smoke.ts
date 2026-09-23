@@ -14406,11 +14406,13 @@ DISPATCH CONFIRMATION
   assert.throws(() => session.authenticateDispatcherByEmail("nobody@msloads.com", "Office1$ab"), /not recognized/);
   assert.throws(() => session.authenticateDispatcher(msTest.id, "4020"), /not recognized/);
   const sessionToken = await import("../lib/session-token");
+  const { DISPATCHER_SESSION_TYP } = await import("../lib/dispatcher-session-types");
   assert.ok(
     session.parseSessionValue(
       sessionToken.createSignedSessionToken({
         id: msTest.id,
         issuedAt: Date.now(),
+        typ: DISPATCHER_SESSION_TYP,
       }),
     ),
   );
@@ -14419,6 +14421,7 @@ DISPATCH CONFIRMATION
       sessionToken.createSignedSessionToken({
         id: msTest.id,
         issuedAt: Date.now() - session.DISPATCHER_SESSION_MS - 1,
+        typ: DISPATCHER_SESSION_TYP,
       }),
     ),
     null,
