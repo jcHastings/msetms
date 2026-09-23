@@ -2312,6 +2312,12 @@ html:has([data-load-embed]) body {
   font-variant-numeric: tabular-nums;
 }
 
+[data-orbcomm-status-table] td[data-orbcomm-mode] {
+  min-width: 6.25rem;
+  white-space: nowrap;
+  text-align: left;
+}
+
 [data-orbcomm-status-table] .orbcomm-location-cell,
 [data-orbcomm-status-table] td[data-orbcomm-location] {
   min-width: 12rem;
@@ -2412,6 +2418,10 @@ html:has([data-load-embed]) body {
 
 .orbcomm-status-card-meta > div {
   min-width: 0;
+}
+
+.orbcomm-status-card-meta > .orbcomm-status-card-span {
+  grid-column: 1 / -1;
 }
 
 .orbcomm-status-card-meta dt {

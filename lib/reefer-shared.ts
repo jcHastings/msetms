@@ -19,10 +19,19 @@ export function parseReeferModeFromText(text: string): ReeferMode | null {
   if (!text.trim()) return null;
   if (/never\s+start(?:\s+and)?\s*[/\-\s]*stop/i.test(text)) return "continuous";
   if (/\bcontinuous\b/i.test(text)) return "continuous";
-  if (/start(?:\s+and)?\s*[/\-\s]*stop/i.test(text) || /start[\s\-/]*stop/i.test(text) || /cycle\s*sentry/i.test(text)) {
+  if (
+    /start(?:\s+and)?\s*[/\-\s]*stop/i.test(text) ||
+    /start[\s\-/]*stop/i.test(text) ||
+    /cycle[\s-]*sentry/i.test(text)
+  ) {
     return "start_stop";
   }
   return null;
+}
+
+/** Continuous or Start/Stop when the stored Orbcomm operating-mode text says so. Power-only text stays blank. */
+export function labelOrbcommCycleMode(raw: string | null | undefined): string {
+  return labelForReeferMode(parseReeferModeFromText(String(raw ?? "")));
 }
 
 export function parseReeferSetpointFromText(text: string): number | null {
