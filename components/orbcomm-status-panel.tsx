@@ -15,6 +15,11 @@ function messageTime(iso: string | undefined): string {
   return shown === "—" ? "" : shown;
 }
 
+function modeText(mode: string | undefined): string {
+  const raw = String(mode ?? "").trim();
+  return raw || "—";
+}
+
 export function statusPlace(location: string | undefined): string {
   return shortPlaceLabel(location ?? "") || location || "—";
 }
@@ -57,14 +62,18 @@ function OrbcommStatusCards({ rows }: { rows: FleetStatusRow[] }) {
               </dd>
             </div>
             <div>
-              <dt>Power</dt>
-              <dd>{row.power}</dd>
-            </div>
-            <div>
               <dt>Setpoint °F</dt>
               <dd>{row.setpointF == null ? "—" : `${row.setpointF}`}</dd>
             </div>
             <div>
+              <dt>Power</dt>
+              <dd>{row.power}</dd>
+            </div>
+            <div>
+              <dt>Mode</dt>
+              <dd data-orbcomm-mode="">{modeText(row.mode)}</dd>
+            </div>
+            <div className="orbcomm-status-card-span">
               <dt>Message</dt>
               <dd data-orbcomm-message="">{messageTime(row.messageAt)}</dd>
             </div>
@@ -86,6 +95,7 @@ function OrbcommStatusTable({ rows }: { rows: FleetStatusRow[] }) {
           <tr>
             <th>Trailer</th>
             <th>Power</th>
+            <th>Mode</th>
             <th>Setpoint °F</th>
             <th>Temp °F</th>
             <th>Alarm</th>
@@ -103,6 +113,7 @@ function OrbcommStatusTable({ rows }: { rows: FleetStatusRow[] }) {
                 </Link>
               </td>
               <td>{row.power}</td>
+              <td data-orbcomm-mode="">{modeText(row.mode)}</td>
               <td>{row.setpointF == null ? "—" : `${row.setpointF}`}</td>
               <td className="orbcomm-temp-cell" data-orbcomm-temp="">
                 {row.temperatureF == null ? "—" : `${row.temperatureF}`}

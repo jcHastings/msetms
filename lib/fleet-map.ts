@@ -33,6 +33,7 @@ import {
   persistedTruckLocation,
   saveTrailerGps,
 } from "./queries";
+import { labelOrbcommCycleMode } from "./reefer-shared";
 import { isClosedStatus, type LoadView, type Trailer, type Truck, type TruckWithDriver } from "./types";
 
 function currentOpenLoad(loads: LoadView[], match: (load: LoadView) => boolean): LoadView | undefined {
@@ -118,6 +119,15 @@ function powerLabel(status: OrbcommReeferPinStatus): string {
   if (status === "off") return "Off";
   if (status === "shutdown") return "Shutdown";
   return "—";
+}
+
+function operatingModeText(snapshot: ReturnType<typeof snapshotForTrailer>): string {
+  if (!snapshot) return "";
+  if ("operatingMode" in snapshot && String(snapshot.operatingMode ?? "").trim()) {
+    return String(snapshot.operatingMode);
+  }
+  if ("operating_mode" in snapshot) return String(snapshot.operating_mode ?? "");
+  return "";
 }
 
 function snapshotSpeedMph(snapshot: ReturnType<typeof snapshotForTrailer>): number | null {
@@ -370,6 +380,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   const statusRows: FleetStatusRow[] = trailers.map((trailer) => {
     const snapshot = snapshotForTrailer(trailer, snapshots.readings);
     const power = powerLabel(reeferStatusFromAny(snapshot));
+    const mode = labelOrbcommCycleMode(operatingModeText(snapshot));
     const temperatureF =
       snapshot && "temperatureF" in snapshot
         ? snapshot.temperatureF
@@ -401,6 +412,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
       trailerId: trailer.id,
       href: trailerHref(trailer, loads),
       power,
+      mode,
       setpointF: setpointF ?? null,
       temperatureF: temperatureF ?? null,
       alarm,

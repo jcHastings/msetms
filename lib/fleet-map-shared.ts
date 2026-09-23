@@ -91,6 +91,8 @@ export type FleetStatusRow = {
   trailerId: number;
   href: string;
   power: string;
+  /** Continuous or Start/Stop from operating-mode text. Blank when Orbcomm did not send a cycle mode. */
+  mode: string;
   setpointF: number | null;
   temperatureF: number | null;
   alarm: string;

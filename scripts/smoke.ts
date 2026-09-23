@@ -2265,6 +2265,8 @@ async function main() {
   assert.match(orbcommPanelUi, /data-orbcomm-phone-cards/);
   assert.match(orbcommPanelUi, /data-orbcomm-location/);
   assert.match(orbcommPanelUi, /data-orbcomm-temp/);
+  assert.match(orbcommPanelUi, /data-orbcomm-mode/);
+  assert.match(orbcommPanelUi, /<th>Power<\/th>\s*<th>Mode<\/th>/);
   assert.match(orbcommPanelUi, /statusPlace\(row\.location\)/);
   assert.match(orbcommPanelUi, /useState\(true\)/);
   assert.match(orbcommPanelUi, /max-width: 47\.99rem/);
@@ -2274,6 +2276,10 @@ async function main() {
   assert.ok(
     orbcommCardMarkup.indexOf("data-orbcomm-location") < orbcommCardMarkup.indexOf("data-orbcomm-temp"),
     "phone card must show LOCATION before TEMP",
+  );
+  assert.ok(
+    orbcommCardMarkup.indexOf(">Power<") < orbcommCardMarkup.indexOf(">Mode<"),
+    "phone card must show Mode beside Power",
   );
   assert.match(orbcommCss, /orbcomm-status-scroll/);
   assert.match(orbcommCss, /orbcomm-status-cards/);
@@ -5227,14 +5233,26 @@ Continuous reefer. Two load locks.
   assert.match(printed.consignee.street, /600 E 39th/i);
   assert.equal(printed.consignee.city, "Hastings");
 
-  const { parseReeferModeFromText, parseReeferSetpointFromText, resolveReeferSpec } = await import(
-    "../lib/reefer-shared"
-  );
+  const { parseReeferModeFromText, parseReeferSetpointFromText, resolveReeferSpec, labelOrbcommCycleMode } =
+    await import("../lib/reefer-shared");
   assert.equal(
     parseReeferModeFromText("Temperature controlled loads must always run on continuous mode. Never start and stop."),
     "continuous",
   );
   assert.equal(parseReeferModeFromText("Run start and stop overnight"), "start_stop");
+  assert.equal(labelOrbcommCycleMode("Continuous"), "Continuous");
+  assert.equal(labelOrbcommCycleMode("Running Continuous"), "Continuous");
+  assert.equal(labelOrbcommCycleMode("Start/Stop"), "Start/Stop");
+  assert.equal(labelOrbcommCycleMode("Start-Stop"), "Start/Stop");
+  assert.equal(labelOrbcommCycleMode("start and stop"), "Start/Stop");
+  assert.equal(labelOrbcommCycleMode("Cycle Sentry"), "Start/Stop");
+  assert.equal(labelOrbcommCycleMode("Cycle-Sentry"), "Start/Stop");
+  assert.equal(labelOrbcommCycleMode("Power On"), "");
+  assert.equal(labelOrbcommCycleMode("Running"), "");
+  assert.equal(labelOrbcommCycleMode("Shutdown"), "");
+  assert.equal(labelOrbcommCycleMode("Off"), "");
+  assert.equal(labelOrbcommCycleMode("defrost"), "");
+  assert.equal(labelOrbcommCycleMode(""), "");
   assert.equal(parseReeferSetpointFromText("Reefer Setpoint: 0 F"), 0);
   assert.equal(parseReeferSetpointFromText("Maintain 34°F."), 34);
   assert.equal(resolveReeferSpec({ reefer_setpoint_f: -10, reefer_mode: "", special_instructions: "" }).mode, "continuous");
@@ -7132,6 +7150,36 @@ DISPATCH CONFIRMATION
   });
   assert.equal(shutdownPayload[0]?.powerOn, false);
   assert.equal(classifyOrbcommReeferMode(shutdownPayload[0]?.operatingMode), "shutdown");
+  const { labelOrbcommCycleMode: cycleModeLabel } = await import("../lib/reefer-shared");
+  const cyclePayload = orbcomm.normalizeOrbcommPayload({
+    data: {
+      assets: [
+        {
+          assetName: "CY1",
+          reeferStatus: { reeferPowerDesc: "Power On", operationMode: "Continuous" },
+        },
+      ],
+    },
+  });
+  assert.equal(cyclePayload[0]?.powerOn, true);
+  assert.match(cyclePayload[0]?.operatingMode ?? "", /Continuous/);
+  assert.match(cyclePayload[0]?.operatingMode ?? "", /Power On/);
+  assert.equal(cycleModeLabel(cyclePayload[0]?.operatingMode), "Continuous");
+  const startStopPayload = orbcomm.normalizeOrbcommPayload({
+    data: {
+      assets: [{ assetName: "CY2", reeferStatus: { reeferPowerDesc: "Power On", operatingMode: "Cycle Sentry" } }],
+    },
+  });
+  assert.equal(startStopPayload[0]?.powerOn, true);
+  assert.equal(cycleModeLabel(startStopPayload[0]?.operatingMode), "Start/Stop");
+  const powerOnlyPayload = orbcomm.normalizeOrbcommPayload({
+    data: {
+      assets: [{ assetName: "PO1", reeferStatus: { reeferPowerDesc: "Power On" } }],
+    },
+  });
+  assert.equal(powerOnlyPayload[0]?.powerOn, true);
+  assert.equal(powerOnlyPayload[0]?.operatingMode, "Power On");
+  assert.equal(cycleModeLabel(powerOnlyPayload[0]?.operatingMode), "");
 
   const trailerLocation = await orbcomm.getTrailerLocationForLoad(reeferLoad.id);
   assert.ok(trailerLocation, "demo ORBCOMM snapshot should include trailer location");
@@ -14179,7 +14227,49 @@ DISPATCH CONFIRMATION
       coloredOrbcommMap.statusRows?.find((item) => item.trailer === row.unit)?.power,
       row.status === "running" ? "On" : row.status === "off" ? "Off" : "Shutdown",
     );
+    assert.equal(
+      coloredOrbcommMap.statusRows?.find((item) => item.trailer === row.unit)?.mode,
+      "",
+      `${row.unit} power text is not a cycle mode`,
+    );
   }
+  for (const row of [
+    { unit: "FM-CONT", mode: "Continuous", label: "Continuous" },
+    { unit: "FM-SS", mode: "Start/Stop", label: "Start/Stop" },
+    { unit: "FM-CS", mode: "Cycle Sentry", label: "Start/Stop" },
+  ]) {
+    queries.createTrailer({ unit_number: row.unit, type: "reefer" });
+    orbcomm.insertReeferReading({
+      load_id: null,
+      truck_id: null,
+      trailer_id: row.unit,
+      setpoint_f: 34,
+      temperature_f: 34,
+      return_air_f: 34,
+      supply_air_f: null,
+      door_open: 0,
+      alarm: "",
+      operating_mode: row.mode,
+      latitude: 40.6,
+      longitude: -98.4,
+      address: "Hastings, NE",
+      source: "orbcomm",
+      recorded_at: "2026-08-25T12:10:00Z",
+    });
+  }
+  const cycleModeMap = await fleetMap.buildOrbcommFleetMap();
+  for (const row of [
+    { unit: "FM-CONT", label: "Continuous" },
+    { unit: "FM-SS", label: "Start/Stop" },
+    { unit: "FM-CS", label: "Start/Stop" },
+  ]) {
+    const status = cycleModeMap.statusRows?.find((item) => item.trailer === row.unit);
+    assert.equal(status?.power, "On", `${row.unit} stays On`);
+    assert.equal(status?.mode, row.label, `${row.unit} cycle mode`);
+  }
+  assert.equal(cycleModeMap.statusRows?.find((item) => item.trailer === "FM-RUN")?.power, "On");
+  assert.equal(cycleModeMap.statusRows?.find((item) => item.trailer === "FM-OFF")?.power, "Off");
+  assert.equal(cycleModeMap.statusRows?.find((item) => item.trailer === "FM-SD")?.power, "Shutdown");
   queries.assignLoad(mapLoadId, fleetMapTruckId, mapDriverId, fleetReeferId);
   const assignedOrbcommMap = await fleetMap.buildOrbcommFleetMap();
   assert.equal(assignedOrbcommMap.pins.find((pin) => pin.label === "FM-R1")?.href, `/loads/${mapLoadId}`);
