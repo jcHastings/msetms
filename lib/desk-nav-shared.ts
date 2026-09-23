@@ -1,6 +1,6 @@
 /** Client-safe sidebar active-state rules. No db, env, or secrets. */
 
-const EXACT_NAV_HREFS = new Set(["/", "/control", "/accounting", "/fleet", "/reports"]);
+const EXACT_NAV_HREFS = new Set(["/", "/control", "/accounting", "/fleet", "/reports", "/money"]);
 const SKIP_PREFETCH_HREFS = new Set(["/claims", "/accounting/quickbooks"]);
 
 /** Heavy or integration pages: skip Link prefetch so a failed preload cannot strand client nav. */

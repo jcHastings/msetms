@@ -359,6 +359,11 @@ export function canUploadFuel(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+/** Office Money desk. View only. No pay, post, or driver text. */
+export function canViewMoney(role: string): boolean {
+  return isAdminRole(role) || isAccountingRole(role) || isStandardRole(role) || role === "read_only";
+}
+
 export function canViewIfta(role: string): boolean {
   return canAccessAccounting(role);
 }
@@ -403,6 +408,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/fleet" || href.startsWith("/fleet/") || href === "/compliance" || href.startsWith("/compliance/") || href === "/safety") {
     return canEditFleet(role);
   }
+  if (href === "/money") return canViewMoney(role);
   if (href === "/fuel") return canUploadFuel(role);
   if (href === "/tolls") return canUploadFuel(role);
   if (href === "/ifta") return canUploadFuel(role) || canViewIfta(role);

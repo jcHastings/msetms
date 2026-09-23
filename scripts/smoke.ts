@@ -18,6 +18,9 @@ async function main() {
   assert.match(navSource, /label: "Locations"/);
   assert.match(navSource, /href: "\/search"/);
   assert.match(navSource, /label: "Search"/);
+  assert.match(navSource, /href: "\/money"/);
+  assert.match(navSource, /label: "Money"/);
+  assert.doesNotMatch(navSource, /AI CFO/);
   assert.match(navSource, /label: "Workbench"/);
   assert.match(navSource, /href: "\/desk"/);
   assert.doesNotMatch(navSource, /label: "Dashboard"/);
