@@ -3399,3 +3399,258 @@ html:has([data-load-embed]) body {
     background: #c5d0dc;
   }
 }
+
+/* Money desk. Light office surface, same radius scale as the rest of the TMS.
+   White text sits on #0f6ec8 (AA), not the lighter brand blue. */
+.money-desk {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: #252525;
+}
+
+.money-skip {
+  position: absolute;
+  left: 0.5rem;
+  top: 0;
+  z-index: 3;
+  transform: translateY(-150%);
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+  background: #0f6ec8;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.money-skip:focus {
+  transform: none;
+}
+
+.money-desk .btn-primary {
+  background: #0f6ec8;
+  color: #ffffff;
+  min-height: 2rem;
+}
+
+.money-desk .btn-primary:hover {
+  background: #0b62b5;
+  color: #ffffff;
+}
+
+.money-desk .btn-secondary {
+  min-height: 2rem;
+  color: #252525;
+  background: #ffffff;
+}
+
+.money-desk .field label {
+  color: #3d4a57;
+}
+
+.money-desk .field select,
+.money-desk .field input {
+  min-height: 2rem;
+  background: #ffffff;
+  color: #252525;
+}
+
+.money-desk :focus-visible {
+  outline: 2px solid #0b62b5;
+  outline-offset: 2px;
+}
+
+.money-jumps,
+.money-spans,
+.money-ask-prompts,
+.money-toolbar,
+.money-period-form,
+.money-inactive,
+.money-ask-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.money-jumps a,
+.money-span,
+.money-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.2rem 0.55rem;
+  color: #0b62b5;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.money-span {
+  border: 1px solid #c5d0dc;
+  background: #ffffff;
+  border-radius: var(--r-xs);
+}
+
+.money-span-on {
+  background: #0f6ec8;
+  border-color: #0f6ec8;
+  color: #ffffff;
+}
+
+.money-section-head h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #07325a;
+}
+
+.money-section-head p,
+.money-note,
+.money-empty {
+  margin-top: 0.25rem;
+  color: #3d4a57;
+  font-size: 0.8125rem;
+  max-width: 70ch;
+}
+
+.money-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.6rem 0;
+  padding: 0.6rem 0;
+  border-top: 1px solid #d3d9e0;
+  border-bottom: 1px solid #d3d9e0;
+}
+
+.money-stats dt {
+  color: #3d4a57;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.money-stats dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #252525;
+}
+
+.money-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.money-table {
+  min-width: 44rem;
+  width: 100%;
+}
+
+.money-table th,
+.money-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.money-table tbody th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8125rem;
+  color: #252525;
+}
+
+.money-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.money-neg {
+  color: #8f1414;
+}
+
+.money-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: #3d4a57;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.money-check {
+  width: 1.5rem;
+  height: 1.5rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  accent-color: #0f6ec8;
+}
+
+.money-inactive label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  color: #252525;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.money-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  margin-left: 0.35rem;
+  padding: 0 0.45rem;
+  border: 1px solid #8a6a2f;
+  background: #fff8eb;
+  color: #3d2e12;
+  font-size: 0.75rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.money-banner {
+  margin: 0.4rem 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #8a6a2f;
+  background: #fff8eb;
+  color: #3d2e12;
+  font-size: 0.875rem;
+}
+
+.money-ask-field {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+.money-answer {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #d3d9e0;
+  background: #ffffff;
+  border-radius: var(--r-xs);
+}
+
+.money-answer-q {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.money-desk tr[data-cash-status="gap"] th,
+.money-desk tr[data-cash-status="gap"] td {
+  background: #f4f6f8;
+}
+
+@media (max-width: 47.99rem) {
+  .money-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .money-section-head h2 {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .money-skip {
+    transition: none;
+  }
+}

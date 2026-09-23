@@ -21,6 +21,7 @@ const NAV: NavEntry[] = [
   { kind: "link", item: { href: "/", label: "Workbench", short: "Workbench", icon: "home" } },
   { kind: "link", item: { href: "/control", label: "Control Center", short: "Control", icon: "places" } },
   { kind: "link", item: { href: "/search", label: "Search", short: "Search", icon: "search" } },
+  { kind: "link", item: { href: "/money", label: "Money", short: "Money", icon: "money" } },
   {
     title: "Dispatch",
     kind: "section",
@@ -198,6 +199,13 @@ function iconPath(name: string) {
       return <path d="M4 11.5 12 5l8 6.5V20H4z" />;
     case "board":
       return <path d="M5 6h14M5 12h14M5 18h9" />;
+    case "money":
+      return (
+        <>
+          <path d="M6 7h12v10H6z" />
+          <path d="M9 11h6M9 14h4" />
+        </>
+      );
     case "search":
       return (
         <>
