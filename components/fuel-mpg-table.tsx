@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { fuelPageHref } from "@/components/fuel-transaction-lists";
+import { FuelTablePager } from "@/components/fuel-table-pager";
+import { paginateDirectory } from "@/lib/directory-page";
 import { formatGallons, formatMdYDisplay } from "@/lib/format";
+import { FUEL_TABLE_PAGE_SIZE } from "@/lib/fuel-desk";
 import type { FuelPageView, FuelTxListKind } from "@/lib/fuel";
-import type { DriverMpgBoard, DriverMpgPeriod } from "@/lib/fuel-mpg";
+import type { DriverMpgBoard } from "@/lib/fuel-mpg";
 
 function formatMiles(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -21,6 +24,8 @@ export function FuelMpgTable({
   txList,
   view,
   week,
+  page = 1,
+  hrefForPage,
 }: {
   board: DriverMpgBoard;
   selectedDriverId: number | null;
@@ -28,8 +33,11 @@ export function FuelMpgTable({
   txList?: FuelTxListKind;
   view?: FuelPageView;
   week?: string | null;
+  page?: number;
+  hrefForPage?: (page: number) => string;
 }) {
   const range = `${formatMdYDisplay(board.startYmd)} – ${formatMdYDisplay(board.endYmd)}`;
+  const paged = paginateDirectory(board.rows, page, FUEL_TABLE_PAGE_SIZE);
   return (
     <section className="card mb-6 overflow-hidden" data-fuel-mpg="">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
@@ -39,13 +47,13 @@ export function FuelMpgTable({
         </div>
         <div className="flex gap-3 text-sm">
           <Link
-            href={fuelPageHref({ view, tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId, week })}
+            href={fuelPageHref({ panel: "mpg", view, tx: txList, mpg: "week", driverId: selectedDriverId, truckId: selectedTruckId, week })}
             className={board.period === "week" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This week
           </Link>
           <Link
-            href={fuelPageHref({ view, tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId, week })}
+            href={fuelPageHref({ panel: "mpg", view, tx: txList, mpg: "month", driverId: selectedDriverId, truckId: selectedTruckId, week })}
             className={board.period === "month" ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
           >
             This month
@@ -67,7 +75,7 @@ export function FuelMpgTable({
               </tr>
             </thead>
             <tbody>
-              {board.rows.map((row) => (
+              {paged.rows.map((row) => (
                 <tr key={row.driverId}>
                   <td>
                     <Link href={fuelPageHref({ view, tx: txList, mpg: board.period, driverId: row.driverId, week })} className="font-semibold hover:underline">
@@ -84,6 +92,15 @@ export function FuelMpgTable({
           </table>
         </div>
       )}
+      {hrefForPage ? (
+        <FuelTablePager
+          page={paged.page}
+          pageCount={paged.pageCount}
+          total={paged.total}
+          hrefForPage={hrefForPage}
+          label="Drivers MPG"
+        />
+      ) : null}
     </section>
   );
 }

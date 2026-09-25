@@ -113,6 +113,11 @@ function NavItemLink({ item, pathname }: { item: NavItem; pathname: string }) {
       className={`desk-nav-link flex items-center gap-2 whitespace-nowrap px-2 py-1.5 ${
         active ? "desk-nav-link-active" : ""
       }`}
+      onClick={() => {
+        if (item.href !== "/fuel") return;
+        performance.clearMarks("fuel-nav-click");
+        performance.mark("fuel-nav-click");
+      }}
     >
       <NavIcon name={item.icon} />
       <span className="text-xs font-semibold leading-tight">{item.short}</span>
