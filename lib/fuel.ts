@@ -57,6 +57,9 @@ export type FuelTransaction = {
   gallons: number | null;
   price_per_gallon: number | null;
   amount: number | null;
+  gross_amount: number | null;
+  discount_amount: number | null;
+  fees_amount: number | null;
   card_last4: string;
   source_file: string;
   category: string;
@@ -86,6 +89,9 @@ export type ParsedFuelCsvRow = {
   gallons: number | null;
   pricePerGallon: number | null;
   amount: number | null;
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
   cardLast4: string;
   category: string;
   invoice: string;
@@ -143,8 +149,11 @@ const HEADER_ALIASES: Record<string, string[]> = {
   invoice: ["invoice", "invoice number", "invoice no", "inv"],
   location: ["location", "city", "location city", "city state", "loc", "site", "location name"],
   gallons: ["gallons", "gal", "qty", "quantity", "volume"],
-  price: ["price", "ppg", "price per gallon", "unit price", "pump price"],
-  total: ["total", "amount", "amt", "cost", "net total"],
+  price: ["price", "ppg", "price per gallon", "unit price", "pump price", "gross ppg"],
+  total: ["total", "amount", "amt", "cost", "net total", "total amt", "total amount", "paid"],
+  gross: ["gross", "gross amount", "gross amt"],
+  discount: ["discount", "disc", "discount amount", "disc amt", "disc amount"],
+  fees: ["fees", "fee", "fees amount"],
   card: ["card number", "card", "card no", "card last4", "last 4"],
   category: ["category", "product", "fuel type", "item", "item type"],
   description: ["description", "desc", "item description"],
@@ -244,6 +253,9 @@ function toFuelCsvResult(parsed: ReturnType<typeof parseFleetOneFuelText>): Fuel
       gallons: row.gallons,
       pricePerGallon: row.pricePerGallon,
       amount: row.amount,
+      grossAmount: row.grossAmount,
+      discountAmount: row.discountAmount,
+      feesAmount: row.feesAmount,
       cardLast4: row.cardLast4,
       category: row.category,
       invoice: row.invoice,
@@ -302,6 +314,9 @@ export function parseFuelCsv(text: string): FuelCsvParseResult {
     const gallons = parseFuelNumber(get("gallons"));
     const pricePerGallon = parseFuelNumber(get("price"));
     const amountRaw = parseFuelNumber(get("total"));
+    const grossAmount = headerMap.gross == null ? null : parseFuelNumber(get("gross"));
+    const discountAmount = headerMap.discount == null ? null : parseFuelNumber(get("discount"));
+    const feesAmount = headerMap.fees == null ? null : parseFuelNumber(get("fees"));
     const cardLast4 = cardLast4From(get("card"));
     const categoryRaw = [get("category"), get("description")].filter(Boolean).join(" ");
     const category = classifyFuelCategory(categoryRaw);
@@ -335,6 +350,9 @@ export function parseFuelCsv(text: string): FuelCsvParseResult {
       gallons: gallonsValue,
       pricePerGallon,
       amount,
+      grossAmount,
+      discountAmount,
+      feesAmount,
       cardLast4,
       category,
       invoice,
@@ -528,6 +546,9 @@ function parseEfsDetailLine(
     gallons,
     pricePerGallon,
     amount,
+    grossAmount: null,
+    discountAmount: null,
+    feesAmount: null,
     cardLast4,
     category,
     invoice,
@@ -768,11 +789,73 @@ export function parseFuelTxList(value: string | undefined): FuelTxListKind {
   return "truck_diesel";
 }
 
-export type FuelPageView = "tx" | "trucks" | "drivers";
+export type FuelPageView = "tx" | "trucks" | "drivers" | "discounts";
 
 export function parseFuelPageView(value: string | undefined): FuelPageView {
-  if (value === "trucks" || value === "drivers") return value;
+  if (value === "trucks" || value === "drivers" || value === "discounts") return value;
   return "tx";
+}
+
+/** Sum only rows that actually carried a discount. Null means the import had none. */
+export function sumKnownFuelDiscounts(
+  rows: Array<{ discount_amount?: number | null }>,
+): number | null {
+  return sumKnownNumbers(rows.map((row) => row.discount_amount));
+}
+
+export type FuelDiscountDriverTotal = {
+  key: string;
+  driverName: string;
+  discount: number | null;
+  paid: number | null;
+};
+
+export function fuelDiscountDriverTotals(
+  rows: Array<{
+    driver_id?: number | null;
+    driver_name?: string | null;
+    driver_name_raw?: string | null;
+    discount_amount?: number | null;
+    amount?: number | null;
+  }>,
+): FuelDiscountDriverTotal[] {
+  const groups = new Map<
+    string,
+    { key: string; driverName: string; discounts: Array<number | null>; paidAmounts: Array<number | null> }
+  >();
+  for (const row of rows) {
+    const named = (row.driver_name || row.driver_name_raw || "").trim();
+    const key = row.driver_id ? `id:${row.driver_id}` : named ? `name:${named.toLowerCase()}` : "unassigned";
+    const driverName = named || "Unassigned";
+    const group = groups.get(key) ?? {
+      key,
+      driverName,
+      discounts: [],
+      paidAmounts: [],
+    };
+    group.discounts.push(row.discount_amount ?? null);
+    group.paidAmounts.push(row.amount ?? null);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      key: group.key,
+      driverName: group.driverName,
+      discount: sumKnownNumbers(group.discounts),
+      paid: sumKnownNumbers(group.paidAmounts),
+    }))
+    .sort((a, b) => {
+      const aDisc = a.discount ?? Number.NEGATIVE_INFINITY;
+      const bDisc = b.discount ?? Number.NEGATIVE_INFINITY;
+      if (bDisc !== aDisc) return bDisc - aDisc;
+      return a.driverName.localeCompare(b.driverName);
+    });
+}
+
+function sumKnownNumbers(values: Array<number | null | undefined>): number | null {
+  const known = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (known.length === 0) return null;
+  return Number(known.reduce((sum, value) => sum + value, 0).toFixed(2));
 }
 
 export function groupFuelTxByList<T extends { category: string }>(rows: T[]): Record<FuelTxListKind, T[]> {

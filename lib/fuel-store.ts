@@ -317,9 +317,10 @@ export function importFuelFromText(
   const insert = db.prepare(
     `INSERT INTO fuel_transactions (
       occurred_at, driver_id, truck_id, load_id, location, gallons, price_per_gallon, amount,
+      gross_amount, discount_amount, fees_amount,
       card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
       prompt_data, dedup_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let created = 0;
   let skipped = parsed.skipped;
@@ -341,6 +342,9 @@ export function importFuelFromText(
         row.gallons,
         row.pricePerGallon,
         row.amount,
+        row.grossAmount,
+        row.discountAmount,
+        row.feesAmount,
         row.cardLast4,
         sourceFile,
         row.category,

@@ -617,6 +617,9 @@ export function migrate(db: Database): void {
       gallons REAL,
       price_per_gallon REAL,
       amount REAL,
+      gross_amount REAL,
+      discount_amount REAL,
+      fees_amount REAL,
       card_last4 TEXT NOT NULL DEFAULT '',
       source_file TEXT NOT NULL DEFAULT '',
       category TEXT NOT NULL DEFAULT '',
@@ -892,6 +895,9 @@ export function migrate(db: Database): void {
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
+  ensureColumn(db, "fuel_transactions", "gross_amount", "REAL");
+  ensureColumn(db, "fuel_transactions", "discount_amount", "REAL");
+  ensureColumn(db, "fuel_transactions", "fees_amount", "REAL");
   ensureColumn(db, "trucks", "prepass_transponder_id", "TEXT NOT NULL DEFAULT ''");
   migrateFuelReceiptsForDriverOrphans(db);
   db.exec(`

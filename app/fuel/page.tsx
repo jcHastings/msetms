@@ -11,6 +11,7 @@ import { FuelAuditStrip } from "@/components/fuel-audit-strip";
 import { FuelCloseoutStrip } from "@/components/fuel-closeout-strip";
 import { FuelWeekSpendCards, FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
+import { FuelDiscountsPanel } from "@/components/fuel-discounts";
 import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs, fuelPageHref } from "@/components/fuel-transaction-lists";
 import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { fuelAuditWindowForWeek, scoreFuelAudit } from "@/lib/fuel-audit";
@@ -142,6 +143,12 @@ export default async function FuelPage({
           title="Per-truck totals"
           rows={weekView.truckRollups}
           hrefFor={(row) => fuelPageHref({ truckId: row.id, mpg: mpgPeriod, view, tx: txList, week })}
+        />
+      ) : view === "discounts" ? (
+        <FuelDiscountsPanel
+          rows={transactions}
+          weekStartYmd={weekView.weekStartYmd}
+          weekEndYmd={weekView.weekEndYmd}
         />
       ) : (
         <>
