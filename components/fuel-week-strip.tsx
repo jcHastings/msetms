@@ -1,4 +1,5 @@
 import { formatFuelMoney, formatMdYDisplay } from "@/lib/format";
+import type { FuelDeskPanel } from "@/lib/fuel-desk";
 import type {
   FuelPageView,
   FuelTxListKind,
@@ -81,6 +82,7 @@ export function FuelWeekStrip({
     mpg?: "week" | "month";
     driverId?: number | null;
     truckId?: number | null;
+    panel?: FuelDeskPanel;
   };
 }) {
   const range = `${formatMdYDisplay(stats.weekStartYmd)} – ${formatMdYDisplay(stats.weekEndYmd)}`;
@@ -97,6 +99,7 @@ export function FuelWeekStrip({
           <p className="mt-1 text-xs text-slate-500">{range}</p>
         </div>
         <form action="/fuel" method="get" className="flex flex-wrap items-end gap-2" data-fuel-week-picker="">
+          {hiddenIf("panel", query?.panel && query.panel !== "spend" ? query.panel : null)}
           {hiddenIf("view", query?.view && query.view !== "tx" ? query.view : null)}
           {hiddenIf("tx", query?.tx && query.tx !== "truck_diesel" ? query.tx : null)}
           {hiddenIf("mpg", query?.mpg === "month" ? "month" : null)}

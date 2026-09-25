@@ -1,6 +1,9 @@
 import { fuelPageHref } from "@/components/fuel-transaction-lists";
+import { FuelTablePager } from "@/components/fuel-table-pager";
 import { closeoutExportHref } from "@/lib/fuel-closeout-store";
+import { paginateDirectory } from "@/lib/directory-page";
 import type { FuelCloseoutReport } from "@/lib/fuel-closeout";
+import { FUEL_TABLE_PAGE_SIZE } from "@/lib/fuel-desk";
 import { formatFuelMoney, formatGallons, formatMdYDisplay } from "@/lib/format";
 import Link from "next/link";
 
@@ -9,8 +12,17 @@ function n(value: number | null | undefined, digits = 1): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
+export function FuelCloseoutStrip({
+  report,
+  page = 1,
+  hrefForPage,
+}: {
+  report: FuelCloseoutReport;
+  page?: number;
+  hrefForPage?: (page: number) => string;
+}) {
   const week = report.week.startYmd;
+  const drivers = paginateDirectory(report.drivers, page, FUEL_TABLE_PAGE_SIZE);
   return (
     <section className="card mb-6 overflow-hidden" data-fuel-closeout="">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 px-5 py-3">
@@ -124,7 +136,7 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
               </tr>
             </thead>
             <tbody>
-              {report.drivers.map((row) => {
+              {drivers.rows.map((row) => {
                 const href = row.driverId ? fuelPageHref({ driverId: row.driverId, week }) : null;
                 const tone = row.flags.some((flag) => flag.severity === "high")
                   ? "red"
@@ -173,6 +185,15 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
           </table>
         </div>
       )}
+      {hrefForPage ? (
+        <FuelTablePager
+          page={drivers.page}
+          pageCount={drivers.pageCount}
+          total={drivers.total}
+          hrefForPage={hrefForPage}
+          label="Closeout drivers"
+        />
+      ) : null}
     </section>
   );
 }

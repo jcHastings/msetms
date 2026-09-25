@@ -639,6 +639,53 @@ export function listFuelWeekOptions(now = new Date()): FuelWeekOption[] {
   return options;
 }
 
+/** Week choices from transaction dates. Does not rewrite every saved week report. */
+export function listFuelWeekChoices(now = new Date()): FuelWeekOption[] {
+  const current = localWeekRange(now);
+  const seen = new Set<string>();
+  const options: FuelWeekOption[] = [];
+  const add = (startYmd: string, endYmd: string) => {
+    if (seen.has(startYmd)) return;
+    seen.add(startYmd);
+    options.push({ startYmd, endYmd, current: startYmd === current.startYmd });
+  };
+  add(current.startYmd, current.endYmd);
+  const stamps = getDb().prepare("SELECT occurred_at FROM fuel_transactions").all() as Array<{ occurred_at: string }>;
+  for (const startYmd of weekStartsFromFuelRows(stamps).sort((a, b) => b.localeCompare(a))) {
+    const range = localWeekRange(startYmd);
+    add(range.startYmd, range.endYmd);
+  }
+  for (const report of listFuelWeekReports()) {
+    add(report.weekStartYmd, report.weekEndYmd);
+  }
+  return options;
+}
+
+/** Week spend, paid stats, and the week picker. Skips rollups, closeout, and full-history sync. */
+export function loadFuelWeekSpend(weekParam?: string, now = new Date()) {
+  const weekStartYmd = parseFuelWeekStart(weekParam, now);
+  const range = localWeekRange(weekStartYmd);
+  const current = isCurrentFuelWeek(weekStartYmd, now);
+  const fromIso = range.start.toISOString();
+  const toIso = range.end.toISOString();
+  const weekRows = listFuelTransactions({ fromIso, toIso });
+  const snapshot = !current && weekRows.length === 0 ? getFuelWeekReport(weekStartYmd) : null;
+  const useLive = current || weekRows.length > 0;
+  return {
+    weekStartYmd,
+    weekEndYmd: range.endYmd,
+    fromIso,
+    toIso,
+    current,
+    stats: useLive
+      ? fuelWeekPaidStatsForWeek(weekRows, weekStartYmd)
+      : (snapshot?.stats ?? fuelWeekPaidStatsForWeek([], weekStartYmd)),
+    spent: fuelWeekSpentTotalsForWeek(weekRows, weekStartYmd),
+    weeks: listFuelWeekChoices(now),
+    mpgNow: fuelWeekAnchorDate(weekStartYmd, now),
+  };
+}
+
 export function loadFuelWeekView(weekParam?: string, now = new Date()) {
   syncFuelWeekReports(now);
   const weekStartYmd = parseFuelWeekStart(weekParam, now);

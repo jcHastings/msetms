@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { FuelAssignForm } from "@/components/fuel-assign-form";
 import { FuelDeleteButton } from "@/components/fuel-delete-button";
+import { FuelTablePager } from "@/components/fuel-table-pager";
+import { FUEL_TABLE_PAGE_SIZE, type FuelDeskPanel } from "@/lib/fuel-desk";
+import { paginateDirectory } from "@/lib/directory-page";
 import { formatDateTime, formatFuelMoney, formatGallons } from "@/lib/format";
 import {
   FUEL_TX_LISTS,
@@ -26,17 +29,25 @@ function FuelRowsTable({
   loads,
   empty,
   week,
+  page = 1,
+  hrefForPage,
+  pagerLabel,
 }: {
   rows: FuelTransactionView[];
   drivers: Option[];
   loads: Option[];
   empty: string;
   week?: string | null;
+  page?: number;
+  hrefForPage?: (page: number) => string;
+  pagerLabel?: string;
 }) {
   if (rows.length === 0) {
     return <p className="p-5 text-sm text-slate-600">{empty}</p>;
   }
+  const paged = paginateDirectory(rows, page, FUEL_TABLE_PAGE_SIZE);
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="table-grid">
         <thead>
@@ -56,7 +67,7 @@ function FuelRowsTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {paged.rows.map((row) => (
             <tr key={row.id}>
               <td>{formatDateTime(row.occurred_at)}</td>
               <td>
@@ -103,6 +114,16 @@ function FuelRowsTable({
         </tbody>
       </table>
     </div>
+    {hrefForPage ? (
+      <FuelTablePager
+        page={paged.page}
+        pageCount={paged.pageCount}
+        total={paged.total}
+        hrefForPage={hrefForPage}
+        label={pagerLabel ?? "Fuel rows"}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -113,16 +134,23 @@ export type FuelPageQuery = {
   driverId?: number | null;
   truckId?: number | null;
   week?: string | null;
+  panel?: FuelDeskPanel;
+  page?: number;
 };
 
 export function fuelPageHref(input: FuelPageQuery): string {
   const query = new URLSearchParams();
+  if (input.panel && input.panel !== "spend") query.set("panel", input.panel);
+  else if (input.panel === "spend" && (input.driverId || input.truckId || (input.view && input.view !== "tx"))) {
+    query.set("panel", "spend");
+  }
   if (input.view && input.view !== "tx") query.set("view", input.view);
   if (input.tx && input.tx !== "truck_diesel") query.set("tx", input.tx);
   if (input.mpg === "month") query.set("mpg", "month");
   if (input.driverId) query.set("driver", String(input.driverId));
   if (input.truckId) query.set("truck", String(input.truckId));
   if (input.week && !isCurrentFuelWeek(input.week)) query.set("week", input.week);
+  if (input.page && input.page > 1) query.set("page", String(input.page));
   const text = query.toString();
   return text ? `/fuel?${text}` : "/fuel";
 }
@@ -134,6 +162,7 @@ export function FuelViewTabs({
   selectedTruckId,
   txList,
   week,
+  panel = "tx",
 }: {
   view: FuelPageView;
   mpgPeriod: "week" | "month";
@@ -141,6 +170,7 @@ export function FuelViewTabs({
   selectedTruckId: number | null;
   txList?: FuelTxListKind;
   week?: string | null;
+  panel?: FuelDeskPanel;
 }) {
   const items: Array<{ value: FuelPageView; label: string }> = [
     { value: "trucks", label: "Per-truck totals" },
@@ -152,6 +182,7 @@ export function FuelViewTabs({
         <Link
           key={item.value}
           href={fuelPageHref({
+            panel,
             view: item.value,
             tx: item.value === "tx" ? txList : undefined,
             mpg: mpgPeriod,
@@ -173,11 +204,15 @@ export function FuelUnassignedLists({
   drivers,
   loads,
   week,
+  page = 1,
+  hrefForPage,
 }: {
   rows: FuelTransactionView[];
   drivers: Option[];
   loads: Option[];
   week?: string | null;
+  page?: number;
+  hrefForPage?: (page: number) => string;
 }) {
   const groups = groupFuelTxByList(rows);
   const visible = FUEL_TX_LISTS.filter((item) => groups[item.value].length > 0);
@@ -199,6 +234,9 @@ export function FuelUnassignedLists({
             loads={loads}
             empty={`No ${item.label.toLowerCase()} rows.`}
             week={week}
+            page={page}
+            hrefForPage={hrefForPage}
+            pagerLabel={`Unassigned ${item.label}`}
           />
         </div>
       ))}
@@ -217,6 +255,9 @@ export function FuelTransactionLists({
   drivers,
   loads,
   week,
+  page = 1,
+  hrefForPage,
+  panel = "tx",
 }: {
   rows: FuelTransactionView[];
   active: FuelTxListKind;
@@ -228,6 +269,9 @@ export function FuelTransactionLists({
   drivers: Option[];
   loads: Option[];
   week?: string | null;
+  page?: number;
+  hrefForPage?: (page: number) => string;
+  panel?: FuelDeskPanel;
 }) {
   const groups = groupFuelTxByList(rows);
   const tabs = FUEL_TX_LISTS.filter((item) => item.value !== "def" || groups.def.length > 0 || active === "def");
@@ -238,7 +282,7 @@ export function FuelTransactionLists({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         {showAllLink ? (
-          <Link href={fuelPageHref({ mpg: mpgPeriod, week })} className="text-sm font-medium text-navy hover:underline">
+          <Link href={fuelPageHref({ panel, mpg: mpgPeriod, week })} className="text-sm font-medium text-navy hover:underline">
             All fuel
           </Link>
         ) : null}
@@ -246,6 +290,7 @@ export function FuelTransactionLists({
       <nav className="flex flex-wrap gap-3 border-b border-slate-200 px-5 py-2 text-sm" data-fuel-tx-tabs="">
         {tabs.map((item) => {
           const href = fuelPageHref({
+            panel,
             tx: item.value,
             mpg: mpgPeriod,
             driverId: selectedDriverId,
@@ -270,6 +315,9 @@ export function FuelTransactionLists({
         loads={loads}
         empty={`No ${label.toLowerCase()} rows.`}
         week={week}
+        page={page}
+        hrefForPage={hrefForPage}
+        pagerLabel={label}
       />
     </section>
   );
