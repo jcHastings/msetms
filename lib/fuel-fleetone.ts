@@ -9,10 +9,47 @@ export type FleetOneParsedRow = {
   gallons: number | null;
   pricePerGallon: number | null;
   amount: number | null;
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
   cardLast4: string;
   category: string;
   invoice: string;
 };
+
+type FleetOneDetailMoney = {
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
+};
+
+const NO_FLEETONE_MONEY: FleetOneDetailMoney = {
+  grossAmount: null,
+  discountAmount: null,
+  feesAmount: null,
+};
+
+/**
+ * FleetOne detail tail after QTY: sales tax, fed tax, gross, disc, fees, total.
+ * Only the full six-field tail is stored. A shorter line has no discount to invent.
+ */
+export function fleetOneDetailMoney(text: string): FleetOneDetailMoney {
+  const nums = [...text.matchAll(/-?\d[\d,]*\.\d{2,4}/g)];
+  const gallonsTok =
+    nums.find((item) => /\.\d{3}$/.test(item[0]) && (parseNum(item[0]) ?? 999) <= 400) ??
+    nums.find((item) => /\.\d{3}$/.test(item[0]));
+  if (!gallonsTok || gallonsTok.index == null) return { ...NO_FLEETONE_MONEY };
+  const start = gallonsTok.index + gallonsTok[0].length;
+  const twoDec = nums.filter((item) => /\.\d{2}$/.test(item[0]) && (item.index ?? 0) >= start);
+  if (twoDec.length !== 6) return { ...NO_FLEETONE_MONEY };
+  const values = twoDec.map((item) => parseNum(item[0]));
+  if (values.some((value) => value == null)) return { ...NO_FLEETONE_MONEY };
+  return {
+    grossAmount: values[2] ?? null,
+    discountAmount: values[3] ?? null,
+    feesAmount: values[4] ?? null,
+  };
+}
 
 const N_ACTIVITY_KIND = "Diesel|Reefer|DEF|Scale|Money\\s*Code";
 const ACTIVITY_KIND = new RegExp(`\\bN\\s+(${N_ACTIVITY_KIND})\\b`, "i");
@@ -121,6 +158,9 @@ export function parseFleetOneFuelText(text: string): {
         open.gallons = open.category === "scale" ? 0 : amounts.gallons;
         open.pricePerGallon = open.category === "scale" ? null : amounts.pricePerGallon;
         open.amount = amounts.amount;
+        open.grossAmount = amounts.grossAmount;
+        open.discountAmount = amounts.discountAmount;
+        open.feesAmount = amounts.feesAmount;
         open.location = amounts.location || open.location;
         if (amounts.driverName) open.driverName = stitchFleetOneNName(open.driverName, amounts.driverName);
         continue;
@@ -128,10 +168,14 @@ export function parseFleetOneFuelText(text: string): {
       if (open.category === "scale") {
         const scaleAmount = scaleTotalFromText(line);
         if (scaleAmount != null) {
+          const money = fleetOneDetailMoney(line);
           open.hasAmounts = true;
           open.gallons = 0;
           open.pricePerGallon = null;
           open.amount = scaleAmount;
+          open.grossAmount = money.grossAmount;
+          open.discountAmount = money.discountAmount;
+          open.feesAmount = money.feesAmount;
           open.location = locationFromFuelText(line) || open.location;
           continue;
         }
@@ -210,6 +254,9 @@ type FleetOneStopBlock = {
   gallons: number | null;
   pricePerGallon: number | null;
   amount: number | null;
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
   cardLast4: string;
   hasAmounts: boolean;
 };
@@ -226,6 +273,9 @@ function stopFromParsedRow(row: FleetOneParsedRow): FleetOneStopBlock {
     gallons: row.gallons,
     pricePerGallon: row.pricePerGallon,
     amount: row.amount,
+    grossAmount: row.grossAmount,
+    discountAmount: row.discountAmount,
+    feesAmount: row.feesAmount,
     cardLast4: row.cardLast4,
     hasAmounts: row.category === "scale" ? row.amount != null : row.gallons != null && row.amount != null,
   };
@@ -245,6 +295,9 @@ function finalizeFleetOneStop(open: FleetOneStopBlock | null): FleetOneParsedRow
       gallons: 0,
       pricePerGallon: null,
       amount: open.amount,
+      grossAmount: open.grossAmount,
+      discountAmount: open.discountAmount,
+      feesAmount: open.feesAmount,
       cardLast4: open.cardLast4,
       category: "scale",
       invoice: open.invoice,
@@ -263,6 +316,9 @@ function finalizeFleetOneStop(open: FleetOneStopBlock | null): FleetOneParsedRow
     gallons: open.gallons,
     pricePerGallon: open.pricePerGallon,
     amount: open.amount,
+    grossAmount: open.grossAmount,
+    discountAmount: open.discountAmount,
+    feesAmount: open.feesAmount,
     cardLast4: open.cardLast4,
     category: open.category,
     invoice: open.invoice,
@@ -299,6 +355,9 @@ function parseNActivityStart(line: string, row: number, reportYear: number): Fle
     gallons: category === "scale" ? 0 : amounts?.gallons ?? null,
     pricePerGallon: category === "scale" ? null : amounts?.pricePerGallon ?? null,
     amount: amounts?.amount ?? null,
+    grossAmount: amounts?.grossAmount ?? null,
+    discountAmount: amounts?.discountAmount ?? null,
+    feesAmount: amounts?.feesAmount ?? null,
     cardLast4: "",
     hasAmounts: category === "scale" ? amounts?.amount != null : Boolean(amounts),
   };
@@ -321,6 +380,9 @@ function parseFleetOneAmountLine(line: string): {
   gallons: number;
   pricePerGallon: number | null;
   amount: number;
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
   location: string;
   driverName: string;
 } | null {
@@ -333,6 +395,9 @@ function parseFleetOneAmounts(text: string): {
   gallons: number;
   pricePerGallon: number | null;
   amount: number;
+  grossAmount: number | null;
+  discountAmount: number | null;
+  feesAmount: number | null;
   location: string;
   driverName: string;
 } | null {
@@ -365,10 +430,14 @@ function parseFleetOneAmounts(text: string): {
       .replace(/\s+/g, " ")
       .trim(),
   );
+  const money = fleetOneDetailMoney(text);
   return {
     gallons,
     pricePerGallon,
     amount,
+    grossAmount: money.grossAmount,
+    discountAmount: money.discountAmount,
+    feesAmount: money.feesAmount,
     location: locationFromFuelText(beforeGal) || afterAmountSplit.text,
     driverName: afterAmountSplit.name,
   };
@@ -422,6 +491,7 @@ function parseFleetOneNProductLine(line: string, row: number, reportYear: number
       gallons: 0,
       pricePerGallon: null,
       amount,
+      ...fleetOneDetailMoney(afterPrompt),
       cardLast4: "",
       category: "scale",
       invoice,
@@ -465,6 +535,7 @@ function parseFleetOneNProductLine(line: string, row: number, reportYear: number
     gallons,
     pricePerGallon,
     amount,
+    ...fleetOneDetailMoney(afterPrompt),
     cardLast4: "",
     category,
     invoice,
@@ -506,6 +577,7 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
       gallons: category === "scale" ? 0 : gallons,
       pricePerGallon: category === "scale" ? null : pricePerGallon,
       amount,
+      ...fleetOneDetailMoney(line),
       cardLast4: last4(structured[2] ?? ""),
       category,
       invoice: "",
@@ -549,6 +621,7 @@ function parseFleetOneFuelLine(line: string, row: number, reportYear: number): F
     gallons: category === "scale" ? 0 : gallons,
     pricePerGallon: category === "scale" ? null : pricePerGallon,
     amount,
+    ...fleetOneDetailMoney(line),
     cardLast4: last4(fleetOneCard(beforeProduct, line)),
     category,
     invoice: fleetOneInvoice(line),
@@ -580,6 +653,7 @@ function parseFleetOneMoneyCode(
     gallons: 0,
     pricePerGallon: null,
     amount,
+    ...NO_FLEETONE_MONEY,
     cardLast4: "",
     category: "money_code",
     invoice: "",

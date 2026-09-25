@@ -145,9 +145,10 @@ export function FuelViewTabs({
   const items: Array<{ value: FuelPageView; label: string }> = [
     { value: "trucks", label: "Per-truck totals" },
     { value: "tx", label: "Transactions" },
+    { value: "discounts", label: "Discounts" },
   ];
   return (
-    <nav className="mb-4 flex flex-wrap gap-4 text-sm" data-fuel-view-tabs="">
+    <nav className="mb-4 flex flex-wrap gap-4 text-sm" aria-label="Fuel views" data-fuel-view-tabs="">
       {items.map((item) => (
         <Link
           key={item.value}
@@ -159,6 +160,7 @@ export function FuelViewTabs({
             truckId: selectedTruckId,
             week,
           })}
+          aria-current={view === item.value ? "page" : undefined}
           className={view === item.value ? "font-semibold text-navy" : "text-slate-500 hover:underline"}
         >
           {item.label}

@@ -12009,7 +12009,15 @@ DISPATCH CONFIRMATION
   assert.match(fuelPage, /FuelViewTabs/);
   const fuelListsUi = fs.readFileSync(path.join(process.cwd(), "components/fuel-transaction-lists.tsx"), "utf8");
   assert.match(fuelListsUi, /data-fuel-view-tabs/);
+  assert.match(fuelListsUi, /Discounts/);
   assert.match(fuelListsUi, /data-fuel-tx-tabs/);
+  assert.match(fuelPage, /FuelDiscountsPanel/);
+  assert.match(fuelPage, /view === "discounts"/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-discounts.tsx"), "utf8"), /data-fuel-discounts/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-discounts.tsx"), "utf8"), /data-fuel-discount-week/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-discounts.tsx"), "utf8"), /data-fuel-discount-drivers/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /discount_amount/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/fuel.ts"), "utf8"), /sumKnownFuelDiscounts/);
   assert.doesNotMatch(fuelListsUi, /<th>Source<\/th>/);
   assert.doesNotMatch(fuelListsUi, /row\.source_file/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "app/fuel/diesel")), false);
@@ -12146,6 +12154,8 @@ DISPATCH CONFIRMATION
     fuelWeekPaidStats,
     fuelWeekPaidStatsForWeek,
     fuelWeekSpentTotalsForWeek,
+    sumKnownFuelDiscounts,
+    fuelDiscountDriverTotals,
     isTruckDieselCategory,
     fuelTxListKind,
     parseEfsFuelText,
@@ -14321,6 +14331,7 @@ DISPATCH CONFIRMATION
       sessionToken.createSignedSessionToken({
         id: msTest.id,
         issuedAt: Date.now(),
+        typ: "office",
       }),
     ),
   );
@@ -17905,6 +17916,104 @@ DISPATCH CONFIRMATION
   assert.equal(scaleWeekSpent.fuel, 1924.04);
   assert.equal(scaleWeekSpent.reefer, 77.92);
   assert.equal(scaleWeekSpent.def, 76.42);
+  const unit28Diesel = scaleReport.rows.find(
+    (row) => row.category === "truck_diesel" && row.unitNumber === "28" && row.amount === 653.87,
+  );
+  assert.ok(unit28Diesel);
+  assert.equal(unit28Diesel.pricePerGallon?.toFixed(4), "6.5190");
+  assert.equal(unit28Diesel.gallons?.toFixed(3), "105.310");
+  assert.equal(unit28Diesel.grossAmount, 686.54);
+  assert.equal(unit28Diesel.discountAmount, 32.67);
+  assert.equal(unit28Diesel.feesAmount, 0);
+  assert.equal(unit28Diesel.amount, 653.87);
+  assert.equal(new Date(unit28Diesel.occurredAt).getFullYear(), 2026);
+  assert.equal(new Date(unit28Diesel.occurredAt).getMonth(), 8);
+  assert.equal(new Date(unit28Diesel.occurredAt).getDate(), 18);
+  assert.match(unit28Diesel.location, /FAUCETT/i);
+  const dieselDiscount = sumKnownFuelDiscounts(
+    scaleReport.rows
+      .filter((row) => row.category === "truck_diesel")
+      .map((row) => ({ discount_amount: row.discountAmount })),
+  );
+  assert.equal(dieselDiscount, 101.34);
+  assert.equal(
+    sumKnownFuelDiscounts([
+      { discount_amount: 32.67 },
+      { discount_amount: null },
+      { discount_amount: 0 },
+    ]),
+    32.67,
+  );
+  assert.equal(sumKnownFuelDiscounts([{ discount_amount: null }, { discount_amount: null }]), null);
+  const shortOffice = parseFuelReport(
+    fs.readFileSync(path.join(process.cwd(), "scripts/fixtures/fleetone-office-unpdf.txt"), "utf8"),
+    "FleetOne_TransactionActivityReport.pdf.pdf",
+  );
+  const lovesFull = shortOffice.rows.find((row) => row.amount === 505.62);
+  assert.equal(lovesFull?.grossAmount, 501.62);
+  assert.equal(lovesFull?.discountAmount, 0);
+  assert.equal(lovesFull?.feesAmount, 4);
+  assert.equal(lovesFull?.amount, 505.62);
+  const lovesShort = shortOffice.rows.find((row) => row.amount === 650.1);
+  assert.equal(lovesShort?.discountAmount, null);
+  assert.equal(lovesShort?.grossAmount, null);
+  assert.equal(lovesShort?.feesAmount, null);
+  const discountCsv = parseFuelCsv(
+    [
+      "Date,Unit,Driver,Location,Gallons,PPG,Gross,Discount,Fees,Total,Category",
+      "09/18/2026,28,Kelvin Whaley,PILOT FAUCETT MO,105.310,6.5190,686.54,32.67,0.00,653.87,Diesel",
+      "09/18/2026,41,Jose Torres,FJ JACKSON GA,60.260,6.3990,,,,378.37,Diesel",
+    ].join("\n"),
+  );
+  assert.equal(discountCsv.rows[0]?.amount, 653.87);
+  assert.equal(discountCsv.rows[0]?.pricePerGallon, 6.519);
+  assert.equal(discountCsv.rows[0]?.grossAmount, 686.54);
+  assert.equal(discountCsv.rows[0]?.discountAmount, 32.67);
+  assert.equal(discountCsv.rows[0]?.feesAmount, 0);
+  assert.equal(discountCsv.rows[1]?.amount, 378.37);
+  assert.equal(discountCsv.rows[1]?.discountAmount, null);
+  assert.equal(discountCsv.rows[1]?.grossAmount, null);
+  assert.equal(discountCsv.rows[1]?.feesAmount, null);
+  const plainCsv = parseFuelCsv(
+    ["Date,Unit,Gallons,PPG,Total,Category", "09/18/2026,28,105.310,6.5190,653.87,Diesel"].join("\n"),
+  );
+  assert.equal(plainCsv.rows[0]?.amount, 653.87);
+  assert.equal(plainCsv.rows[0]?.pricePerGallon, 6.519);
+  assert.equal(plainCsv.rows[0]?.discountAmount, null);
+  assert.equal(plainCsv.rows[0]?.grossAmount, null);
+  assert.equal(plainCsv.rows[0]?.feesAmount, null);
+  const aliasCsv = parseFuelCsv(
+    ["Date,Unit,Gal,PPG,gross,disc,fees,Total,Category", "09/18/2026,28,105.310,6.5190,686.54,32.67,0,653.87,Diesel"].join(
+      "\n",
+    ),
+  );
+  assert.equal(aliasCsv.rows[0]?.amount, 653.87);
+  assert.equal(aliasCsv.rows[0]?.grossAmount, 686.54);
+  assert.equal(aliasCsv.rows[0]?.discountAmount, 32.67);
+  assert.equal(aliasCsv.rows[0]?.feesAmount, 0);
+  const driverTotals = fuelDiscountDriverTotals([
+    {
+      driver_id: 1,
+      driver_name: "Kelvin Whaley",
+      discount_amount: 32.67,
+      amount: 653.87,
+    },
+    {
+      driver_id: 1,
+      driver_name: "Kelvin Whaley",
+      discount_amount: null,
+      amount: 58.89,
+    },
+    {
+      driver_name_raw: "Jose Torres",
+      discount_amount: 7.21,
+      amount: 378.37,
+    },
+  ]);
+  assert.equal(driverTotals[0]?.driverName, "Kelvin Whaley");
+  assert.equal(driverTotals[0]?.discount, 32.67);
+  assert.equal(driverTotals[0]?.paid, 712.76);
+  assert.equal(driverTotals[1]?.discount, 7.21);
   const splitScale = parseFleetOneFuelText(
     [
       "Transaction Activity Report",
