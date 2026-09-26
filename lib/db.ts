@@ -1091,6 +1091,25 @@ export function migrate(db: Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_driver_api_rate_hits ON driver_api_rate_hits(kind, ip_address, created_at);
+    CREATE TABLE IF NOT EXISTS samsara_webhook_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      event_time TEXT NOT NULL DEFAULT '',
+      vehicle_id TEXT NOT NULL DEFAULT '',
+      route_external_id TEXT NOT NULL DEFAULT '',
+      load_id INTEGER,
+      truck_id INTEGER,
+      stop_id INTEGER,
+      outcome TEXT NOT NULL,
+      inbox INTEGER NOT NULL DEFAULT 0,
+      severity TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_samsara_webhook_inbox ON samsara_webhook_events(inbox, load_id);
+    CREATE INDEX IF NOT EXISTS idx_samsara_webhook_type ON samsara_webhook_events(event_type, id);
   `);
 
   migrateDriverApiIdempotencyKey(db);

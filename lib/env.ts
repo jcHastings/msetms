@@ -272,6 +272,20 @@ export function isSamsaraTokenSet(): boolean {
   return Boolean(getSamsaraApiToken());
 }
 
+/** Base64 secret from Samsara Settings, Webhooks. Never log it. */
+export function getSamsaraWebhookSecret(): string | undefined {
+  return readSecret("SAMSARA_WEBHOOK_SECRET");
+}
+
+/**
+ * Full https URL Samsara should POST, for example
+ * https://office-host/api/integrations/samsara/webhook
+ * Leave unset until that URL is ready. This does not change the office tunnel.
+ */
+export function getSamsaraWebhookPublicUrl(): string | undefined {
+  return readSecret("SAMSARA_WEBHOOK_PUBLIC_URL");
+}
+
 export function getOrbcommUsername(): string | undefined {
   return readSecret("ORBCOMM_USERNAME");
 }
