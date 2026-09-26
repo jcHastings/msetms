@@ -60,7 +60,9 @@ async function main(): Promise<void> {
   assert.match(client, /expand=route|expand", "route"/);
   assert.match(client, /POST", "\/fleet\/routes"/);
   assert.match(client, /PATCH", `\/fleet\/routes\//);
-  assert.match(client, /POST", "\/addresses"/);
+  assert.match(client, /\/addresses\/\$\{samsaraExternalPath\(String\(locationId\)\)\}/);
+  assert.doesNotMatch(client, /POST", "\/addresses"/);
+  assert.doesNotMatch(client, /samsaraAddressBody/);
 
   const bare = shared.samsaraStopBody(
     {
@@ -71,6 +73,7 @@ async function main(): Promise<void> {
       formattedAddress: "1 Main St, Bayonne, NJ 07002",
       latitude: 40.66,
       longitude: -74.11,
+      samsaraAddressId: "",
       arrival: "",
       departure: "",
     },
@@ -94,6 +97,7 @@ async function main(): Promise<void> {
       formattedAddress: "Hastings, NE",
       latitude: null,
       longitude: null,
+      samsaraAddressId: "",
       arrival: "2026-09-27T12:00:00.000Z",
       departure: "",
     },
@@ -101,19 +105,27 @@ async function main(): Promise<void> {
     0,
   );
   assert.equal(noCoords, null);
+  assert.equal(shared.samsaraExternalPath("4"), "msetms:4");
 
-  const address = shared.samsaraAddressBody({
-    externalValue: "stop-1",
-    name: "Nebraska Cold",
-    kind: "pickup",
-    locationId: 4,
-    formattedAddress: "4100 Industrial Rd, Hastings, NE 68901",
-    latitude: 40.586,
-    longitude: -98.388,
-    arrival: "",
-    departure: "",
-  });
-  assert.equal((address?.externalIds as { msetms: string }).msetms, "loc-4");
+  const reused = shared.samsaraStopBody(
+    {
+      externalValue: "stop-1",
+      name: "Nebraska Cold",
+      kind: "pickup",
+      locationId: 4,
+      formattedAddress: "4100 Industrial Rd, Hastings, NE 68901",
+      latitude: 40.586,
+      longitude: -98.388,
+      samsaraAddressId: "addr-stored",
+      arrival: "",
+      departure: "",
+    },
+    "addr-stored",
+    0,
+  );
+  assert.equal(reused?.addressId, "addr-stored");
+  assert.equal(reused?.singleUseLocation, undefined);
+  assert.equal(reused?.externalIds.msetms, "stop-1");
 
   const progress = shared.parseRouteProgress({
     id: "route-42",
@@ -205,6 +217,24 @@ async function main(): Promise<void> {
     longitude: -74.114,
   });
 
+  function located(name: string, latitude: number | null, longitude: number | null) {
+    return queries.createLocation({
+      name,
+      street: "4100 Industrial Rd",
+      city: "Hastings",
+      state: "NE",
+      zip: "68901",
+      phone: "",
+      notes: "",
+      role: "shipper",
+      scheduling_type: "appointment",
+      hours: "",
+      scheduling_notes: "",
+      latitude,
+      longitude,
+    });
+  }
+
   const pickupStart = "2026-09-27T12:00:00.000Z";
   const pickupEnd = "2026-09-27T14:00:00.000Z";
   const deliveryStart = "2026-09-28T15:00:00.000Z";
@@ -293,21 +323,21 @@ async function main(): Promise<void> {
     window_end: deliveryEnd,
   });
 
-  const createdAddresses = new Set<string>();
+  queries.rememberLocationSamsaraAddressId(pickupId, "addr-pick");
+  queries.rememberLocationSamsaraAddressId(pickupId, "addr-other");
+  assert.equal(queries.getLocation(pickupId)?.samsara_address_id, "addr-pick");
+
   const seen: Call[] = [];
   const synced = await routes.syncSamsaraRouteForLoad(loadId, {
     token: "test-route-token",
     fetchImpl: mockFetch(seen, (call) => {
       assert.equal(call.auth, "Bearer test-route-token");
       if (call.method === "GET" && call.url.includes("/addresses/")) {
-        const key = call.url.includes("loc-" + pickupId) ? `loc-${pickupId}` : `loc-${dropId}`;
-        if (createdAddresses.has(key)) return { status: 200, json: { data: { id: key === `loc-${pickupId}` ? "addr-pick" : "addr-drop" } } };
-        return { status: 404, json: {} };
+        assert.equal(call.url, `https://api.samsara.com/addresses/msetms:${dropId}`);
+        return { status: 200, json: { data: { id: "addr-drop" } } };
       }
       if (call.method === "POST" && call.url.endsWith("/addresses")) {
-        const external = (call.body?.externalIds as { msetms?: string } | undefined)?.msetms ?? "";
-        createdAddresses.add(external);
-        return { status: 200, json: { data: { id: external === `loc-${pickupId}` ? "addr-pick" : "addr-drop" } } };
+        return { status: 500, json: { message: "routing must not create addresses" } };
       }
       if (call.method === "GET" && call.url.includes("/fleet/routes/msetms:")) return { status: 404, json: {} };
       if (call.method === "POST" && call.url.endsWith("/fleet/routes")) {
@@ -335,17 +365,17 @@ async function main(): Promise<void> {
   assert.equal(routeStops[0]?.scheduledDepartureTime, pickupEnd);
   assert.equal(routeStops[0]?.scheduledArrivalTime, pickupStart);
   assert.equal(routeStops[1]?.scheduledArrivalTime, deliveryStart);
-  assert.equal(callsOf(seen).postAddresses().length, 2);
+  assert.equal(seen.filter((call) => call.url.includes("/addresses/")).length, 1);
+  assert.equal(callsOf(seen).postAddresses().length, 0);
   assert.equal(callsOf(seen).patchRoutes().length, 0);
+  assert.equal(queries.getLocation(dropId)?.samsara_address_id, "addr-drop");
+  assert.equal(queries.getLocation(pickupId)?.samsara_address_id, "addr-pick");
 
   const seenUpdate: Call[] = [];
   const updated = await routes.syncSamsaraRouteForLoad(loadId, {
     token: "test-route-token",
     fetchImpl: mockFetch(seenUpdate, (call) => {
-      if (call.method === "GET" && call.url.includes("/addresses/")) {
-        const id = call.url.includes(String(pickupId)) ? "addr-pick" : "addr-drop";
-        return { status: 200, json: { data: { id } } };
-      }
+      if (call.url.includes("/addresses")) return { status: 500, json: { message: "stored ids skip lookup" } };
       if (call.method === "PATCH" && call.url.includes("/fleet/routes/route-42")) {
         return { status: 200, json: { data: { id: "route-42" } } };
       }
@@ -355,7 +385,7 @@ async function main(): Promise<void> {
   assert.equal(updated.mirrored, true);
   assert.equal(callsOf(seenUpdate).patchRoutes().length, 1);
   assert.equal(callsOf(seenUpdate).postRoutes().length, 0);
-  assert.equal(callsOf(seenUpdate).postAddresses().length, 0);
+  assert.equal(seenUpdate.filter((call) => call.url.includes("/addresses")).length, 0);
   assert.equal(queries.getLoad(loadId)?.truck_id, truckId);
 
   const deniedId = queries.createLoad(loadInput({ load_number: "SO-ROUTE-DENY", truck_id: truckId, driver_id: driverId }));
@@ -378,9 +408,10 @@ async function main(): Promise<void> {
     window_start: deliveryStart,
     window_end: deliveryEnd,
   });
+  const deniedSeen: Call[] = [];
   const denied = await routes.syncSamsaraRouteForLoad(deniedId, {
     token: "test-route-token",
-    fetchImpl: mockFetch([], (call) => {
+    fetchImpl: mockFetch(deniedSeen, (call) => {
       if (call.url.includes("/addresses")) return { status: 200, json: { data: { id: "addr-ok" } } };
       if (call.method === "GET" && call.url.includes("/fleet/routes/")) return { status: 404, json: {} };
       return { status: 403, json: { message: "forbidden" } };
@@ -391,24 +422,27 @@ async function main(): Promise<void> {
   assert.match(denied.message, /Read Routes \+ Write Routes/);
   assert.equal(queries.getLoad(deniedId)?.status, "assigned");
   assert.equal(queries.getLoad(deniedId)?.samsara_route_id, "");
+  assert.equal(deniedSeen.filter((call) => call.url.includes("/addresses")).length, 0);
 
+  const fallPick = located("Fall Pickup", 40.586, -98.388);
+  const fallDrop = located("Fall Drop", 40.668, -74.114);
   const fallbackId = queries.createLoad(loadInput({ load_number: "SO-ROUTE-FALL", truck_id: truckId, driver_id: driverId }));
   queries.assignLoad(fallbackId, truckId, driverId);
   stops.addStop(fallbackId, {
     kind: "pickup",
-    name: "Nebraska Cold",
+    name: "Fall Pickup",
     city: "Hastings",
     state: "NE",
-    location_id: pickupId,
+    location_id: fallPick,
     window_start: pickupStart,
     window_end: pickupEnd,
   });
   stops.addStop(fallbackId, {
     kind: "delivery",
-    name: "Bayonne Dock",
+    name: "Fall Drop",
     city: "Bayonne",
     state: "NJ",
-    location_id: dropId,
+    location_id: fallDrop,
     window_start: deliveryStart,
     window_end: deliveryEnd,
   });
@@ -429,6 +463,86 @@ async function main(): Promise<void> {
   assert.equal((fallbackStops[0]?.singleUseLocation as { latitude: number }).latitude, 40.586);
   assert.equal(fallbackStops[0]?.addressId, undefined);
   assert.equal(callsOf(fallbackSeen).postAddresses().length, 0);
+  assert.equal(queries.getLocation(fallPick)?.samsara_address_id ?? null, null);
+
+  const missPick = located("Miss Pickup", 41.25, -96);
+  const missDrop = located("Miss Drop", 40.73, -74.17);
+  const missId = queries.createLoad(loadInput({ load_number: "SO-ROUTE-MISSADDR", truck_id: truckId, driver_id: driverId }));
+  queries.assignLoad(missId, truckId, driverId);
+  stops.addStop(missId, {
+    kind: "pickup",
+    name: "Miss Pickup",
+    city: "Hastings",
+    state: "NE",
+    location_id: missPick,
+    window_start: pickupStart,
+    window_end: pickupEnd,
+  });
+  stops.addStop(missId, {
+    kind: "delivery",
+    name: "Miss Drop",
+    city: "Bayonne",
+    state: "NJ",
+    location_id: missDrop,
+    window_start: deliveryStart,
+    window_end: deliveryEnd,
+  });
+  const missSeen: Call[] = [];
+  const missed = await routes.syncSamsaraRouteForLoad(missId, {
+    token: "test-route-token",
+    fetchImpl: mockFetch(missSeen, (call) => {
+      if (call.method === "GET" && call.url.includes("/addresses/")) {
+        assert.match(call.url, new RegExp(`/addresses/msetms:(${missPick}|${missDrop})$`));
+        return { status: 404, json: {} };
+      }
+      if (call.method === "GET" && call.url.includes("/fleet/routes/msetms:")) return { status: 404, json: {} };
+      if (call.method === "POST" && call.url.endsWith("/fleet/routes")) {
+        return { status: 200, json: { data: { id: "route-miss" } } };
+      }
+      return { status: 500, json: {} };
+    }),
+  });
+  assert.equal(missed.mirrored, true);
+  const missStops = (callsOf(missSeen).postRoutes()[0]?.body?.stops ?? []) as Array<Record<string, unknown>>;
+  assert.equal((missStops[0]?.singleUseLocation as { latitude: number }).latitude, 41.25);
+  assert.equal(missStops[0]?.addressId, undefined);
+  assert.equal(callsOf(missSeen).postAddresses().length, 0);
+  assert.equal(queries.getLocation(missPick)?.samsara_address_id ?? null, null);
+
+  const barePick = located("Bare Pickup", null, null);
+  const bareDrop = located("Bare Drop", null, null);
+  const bareId = queries.createLoad(loadInput({ load_number: "SO-ROUTE-BARELOC", truck_id: truckId, driver_id: driverId }));
+  queries.assignLoad(bareId, truckId, driverId);
+  stops.addStop(bareId, {
+    kind: "pickup",
+    name: "Bare Pickup",
+    city: "Hastings",
+    state: "NE",
+    location_id: barePick,
+    window_start: pickupStart,
+    window_end: pickupEnd,
+  });
+  stops.addStop(bareId, {
+    kind: "delivery",
+    name: "Bare Drop",
+    city: "Bayonne",
+    state: "NJ",
+    location_id: bareDrop,
+  });
+  const bareSeen: Call[] = [];
+  const bareLoc = await routes.syncSamsaraRouteForLoad(bareId, {
+    token: "test-route-token",
+    fetchImpl: mockFetch(bareSeen, (call) => {
+      if (call.url.includes("/addresses")) return { status: 404, json: {} };
+      return { status: 500, json: { message: "should not create a route" } };
+    }),
+  });
+  assert.equal(bareLoc.mirrored, false);
+  assert.equal(bareLoc.message, shared.SAMSARA_ROUTE_MESSAGES.incomplete);
+  assert.equal(callsOf(bareSeen).postRoutes().length, 0);
+  assert.equal(callsOf(bareSeen).postAddresses().length, 0);
+  assert.equal(queries.getLocation(barePick)?.samsara_address_id ?? null, null);
+  assert.equal(queries.getLoad(bareId)?.status, "assigned");
 
   const boom = await routes.syncSamsaraRouteForLoad(loadId, {
     token: "test-route-token",
