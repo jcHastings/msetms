@@ -18,7 +18,7 @@ import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { buildLiveFuelCloseout, fileFuelCloseout } from "@/lib/fuel-closeout-store";
 import { listFuelTransactions, loadFuelWeekView, rematchUnmatchedFuelTransactions } from "@/lib/fuel-store";
-import { getSamsaraFleet } from "@/lib/integrations/samsara";
+import { getSamsaraFleet, hydrateSamsaraEngineHourWindow } from "@/lib/integrations/samsara";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +69,17 @@ export default async function FuelPage({
   );
   const unmatched = listFuelTransactions({ unmatchedOnly: true, ...weekFilter });
   await getSamsaraFleet();
-  const closeout = fileFuelCloseout(buildLiveFuelCloseout({ weekStartYmd: week, now: weekView.mpgNow })).report;
+  const engineHoursPull = await hydrateSamsaraEngineHourWindow({
+    fromIso: weekView.fromIso,
+    toIso: weekView.current ? new Date().toISOString() : weekView.toIso,
+  });
+  const closeout = fileFuelCloseout(
+    buildLiveFuelCloseout({
+      weekStartYmd: week,
+      now: weekView.mpgNow,
+      engineHoursError: engineHoursPull.error,
+    }),
+  ).report;
   const mpgBoard = listDriverMpg(mpgPeriod, weekView.mpgNow);
   const filterLabel = selectedDriver
     ? `Transactions — ${selectedDriver.name}`
@@ -96,7 +106,12 @@ export default async function FuelPage({
           </>
         }
       />
-      <FuelWeekSpendCards spent={weekView.spent} current={weekView.current} />
+      <FuelWeekSpendCards
+        spent={weekView.spent}
+        current={weekView.current}
+        idleHours={closeout.fleet.idleHours}
+        engineHours={closeout.fleet.engineHours}
+      />
       <FuelAuditStrip report={scoreFuelAudit(listFuelTransactions(), fuelAuditWindowForWeek(week))} />
       <FuelCloseoutStrip report={closeout} />
       <FuelWeekStrip

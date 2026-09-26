@@ -7,6 +7,11 @@ import type {
   FuelWeekSpentTotals,
 } from "@/lib/fuel";
 
+function formatHours(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return `${value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h`;
+}
+
 function formatPpg(value: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
   return value.toLocaleString("en-US", {
@@ -29,9 +34,13 @@ function WeekStat({ label, value }: { label: string; value: string }) {
 export function FuelWeekSpendCards({
   spent,
   current,
+  idleHours = null,
+  engineHours = null,
 }: {
   spent: FuelWeekSpentTotals;
   current: boolean;
+  idleHours?: number | null;
+  engineHours?: number | null;
 }) {
   return (
     <section className="card mb-6 overflow-hidden" data-fuel-week-spend="">
@@ -53,6 +62,14 @@ export function FuelWeekSpendCards({
         </div>
         <div data-fuel-spend="money">
           <WeekStat label="Money code" value={formatFuelMoney(spent.money)} />
+        </div>
+      </div>
+      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-2" data-fuel-engine-hours="">
+        <div data-fuel-engine-hours="idle">
+          <WeekStat label="Idle hours" value={formatHours(idleHours)} />
+        </div>
+        <div data-fuel-engine-hours="engine">
+          <WeekStat label="Engine on" value={formatHours(engineHours)} />
         </div>
       </div>
     </section>

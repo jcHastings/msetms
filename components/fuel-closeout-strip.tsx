@@ -9,6 +9,17 @@ function n(value: number | null | undefined, digits = 1): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+function hours(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${n(value, 1)} h`;
+}
+
+function engineTitle(stat: "obdEngineSeconds" | "syntheticEngineSeconds" | null): string | undefined {
+  if (stat === "obdEngineSeconds") return "OBD seconds";
+  if (stat === "syntheticEngineSeconds") return "Synthetic seconds";
+  return undefined;
+}
+
 export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
   const week = report.week.startYmd;
   return (
@@ -32,6 +43,9 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
       </header>
       <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{report.note}</p>
       <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">{report.milesSource.note}</p>
+      <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500" data-fuel-engine-hours-note="">
+        {report.engineHoursSource.note}
+      </p>
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-5" data-fuel-closeout-fleet="">
         <div>
           <div className="text-xs font-semibold uppercase text-slate-500">Miles</div>
@@ -76,6 +90,16 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
           <div className="mt-1 text-lg font-semibold tabular-nums">{formatFuelMoney(report.fleet.spend.money)}</div>
         </div>
       </div>
+      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-2" data-fuel-engine-hours="">
+        <div data-fuel-engine-hours="idle">
+          <div className="text-xs font-semibold uppercase text-slate-500">Idle hours</div>
+          <div className="mt-1 text-lg font-semibold tabular-nums">{hours(report.fleet.idleHours)}</div>
+        </div>
+        <div data-fuel-engine-hours="engine">
+          <div className="text-xs font-semibold uppercase text-slate-500">Engine on</div>
+          <div className="mt-1 text-lg font-semibold tabular-nums">{hours(report.fleet.engineHours)}</div>
+        </div>
+      </div>
       <div className="grid gap-4 border-t border-slate-100 px-5 py-3 md:grid-cols-2">
         <div data-fuel-closeout-worst="">
           <div className="text-xs font-semibold uppercase text-slate-500">Worst 3 MPG</div>
@@ -115,6 +139,8 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
                 <th>Driver</th>
                 <th>Unit</th>
                 <th>Miles</th>
+                <th>Idle</th>
+                <th>Engine on</th>
                 <th>Diesel</th>
                 <th>MPG</th>
                 <th>Fills</th>
@@ -146,6 +172,10 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
                     </td>
                     <td>{row.unit || "—"}</td>
                     <td className="tabular-nums">{n(row.miles, 0)}</td>
+                    <td className="tabular-nums">{hours(row.idleHours)}</td>
+                    <td className="tabular-nums" title={engineTitle(row.engineStat)}>
+                      {hours(row.engineHours)}
+                    </td>
                     <td className="tabular-nums">{row.dieselGallons > 0 ? formatGallons(row.dieselGallons) : "—"}</td>
                     <td className="tabular-nums font-semibold">{n(row.mpg)}</td>
                     <td className="tabular-nums">{row.fillCount || "—"}</td>
