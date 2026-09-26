@@ -75,6 +75,7 @@ import {
   type TruckStatus,
 } from "./types";
 import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
+import { recordOfficeDrop } from "./trailer-custody";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import {
   parseDrugTestResult,
@@ -1153,6 +1154,29 @@ export async function updateTrailerAction(
     return { ok: true, id: id ?? undefined };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function dropTrailerCustodyAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const trailerId = parseOptionalInt(formData.get("trailer_id"));
+    if (trailerId == null) throw new Error("Trailer not found.");
+    const result = recordOfficeDrop({
+      trailerId,
+      leftWhere: String(formData.get("left_where") ?? ""),
+      leftName: String(formData.get("left_name") ?? ""),
+      loadNumber: String(formData.get("load_number") ?? ""),
+      note: String(formData.get("note") ?? ""),
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    refresh();
+    return { ok: true, id: trailerId, message: "Dropped." };
+  } catch (error) {
     return fail(error);
   }
 }

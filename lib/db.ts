@@ -1037,6 +1037,29 @@ export function migrate(db: Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_trailer_share_token ON trailer_share_links(token);
     CREATE INDEX IF NOT EXISTS idx_trailer_share_trailer ON trailer_share_links(trailer_id, id DESC);
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trailer_custody_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trailer_id INTEGER NOT NULL REFERENCES trailers(id) ON DELETE CASCADE,
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      from_at TEXT NOT NULL,
+      to_at TEXT,
+      left_where TEXT NOT NULL DEFAULT '' CHECK (
+        left_where IN ('', 'shipper', 'receiver', 'yard', 'plant', 'other')
+      ),
+      left_name TEXT,
+      load_number TEXT,
+      note TEXT,
+      source TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_trailer
+      ON trailer_custody_events(trailer_id, from_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_driver
+      ON trailer_custody_events(driver_id, from_at);
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_open
+      ON trailer_custody_events(trailer_id) WHERE to_at IS NULL;
+  `);
   ensureColumn(db, "trailer_share_links", "snapshot_latitude", "REAL");
   ensureColumn(db, "trailer_share_links", "snapshot_longitude", "REAL");
   ensureColumn(db, "trailer_share_links", "snapshot_address", "TEXT NOT NULL DEFAULT ''");

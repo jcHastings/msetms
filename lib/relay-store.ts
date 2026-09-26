@@ -1,5 +1,6 @@
 import { driverName, recordLoadAudit, trailerUnit, truckUnit } from "./audit";
 import { getDb } from "./db";
+import { applyLoadCustody } from "./trailer-custody";
 import {
   assertRelayCompletionTime,
   currentAssignmentFromRelays,
@@ -52,9 +53,13 @@ function loadOriginDest(loadId: number): {
   truck_id: number | null;
   trailer_id: number | null;
   rate: number | null;
+  load_number: string;
+  status: string;
 } {
   const row = getDb()
-    .prepare("SELECT origin, destination, driver_id, truck_id, trailer_id, rate FROM loads WHERE id = ?")
+    .prepare(
+      "SELECT origin, destination, driver_id, truck_id, trailer_id, rate, load_number, status FROM loads WHERE id = ?",
+    )
     .get(loadId) as
     | {
         origin: string;
@@ -63,6 +68,8 @@ function loadOriginDest(loadId: number): {
         truck_id: number | null;
         trailer_id: number | null;
         rate: number | null;
+        load_number: string;
+        status: string;
       }
     | undefined;
   if (!row) throw new Error("Load not found.");
@@ -114,6 +121,22 @@ export function applyCurrentLoadAssignment(
   getDb()
     .prepare("UPDATE loads SET driver_id = ?, truck_id = ?, trailer_id = ?, updated_at = ? WHERE id = ?")
     .run(next.driver_id, next.truck_id, next.trailer_id, timestamp, loadId);
+  applyLoadCustody({
+    loadId,
+    loadNumber: load.load_number,
+    previous: {
+      trailerId: load.trailer_id,
+      driverId: load.driver_id,
+      truckId: load.truck_id,
+      status: load.status,
+    },
+    next: {
+      trailerId: next.trailer_id,
+      driverId: next.driver_id,
+      truckId: next.truck_id,
+      status: load.status,
+    },
+  });
   recordLoadAudit({
     loadId,
     action: "assign",
