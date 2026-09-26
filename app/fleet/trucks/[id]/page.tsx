@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
+import { OpenDvirDefectsCard } from "@/components/open-dvir-defects";
 import { PageHeader } from "@/components/page-header";
 import { TruckForm } from "@/components/truck-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/integrations/samsara";
 import { toOfficeDateTime } from "@/lib/format";
 import { getSamsaraStillPanel, loadsForSamsaraStill } from "@/lib/integrations/samsara-still";
+import { getOpenDvirDefectsForTruck } from "@/lib/integrations/samsara-defects";
 import { getTruck, listDrivers } from "@/lib/queries";
 import { samsaraVehicleIdForTruck } from "@/lib/samsara-still-shared";
 import { complianceWindows } from "@/lib/settings";
@@ -37,6 +39,7 @@ export default async function EditTruckPage({
   const location = await getLocationForTruck(truck.id);
   const hos = await getHosForTruck(truck.id);
   const samsaraDriver = await getSamsaraDriverForTruck(truck.id);
+  const dvir = await getOpenDvirDefectsForTruck(truck);
 
   return (
     <>
@@ -90,6 +93,7 @@ export default async function EditTruckPage({
           </div>
         </div>
       </div>
+      <OpenDvirDefectsCard card={dvir} />
       <UnitComplianceCard
         registrationIssued={truck.registration_issued}
         registrationExpires={truck.registration_expires}
