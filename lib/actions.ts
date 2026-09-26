@@ -521,6 +521,10 @@ export async function createLoadAction(
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
       const { refreshLoadRouteQuiet } = await import("./routing");
       await refreshLoadRouteQuiet(id);
+      if (input.truck_id || input.driver_id) {
+        const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+        await mirrorSamsaraRouteQuiet(id);
+      }
       refresh();
       redirect(`/loads/${id}`);
     } catch (error) {
@@ -578,6 +582,10 @@ export async function updateLoadAction(
         const { refreshLoadRouteQuiet } = await import("./routing");
         await refreshLoadRouteQuiet(id);
       }
+      if (input.truck_id || input.driver_id) {
+        const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+        await mirrorSamsaraRouteQuiet(id);
+      }
       refresh();
       // Existing-load Save must stay on this load/tab. Close is what leaves.
       return { ok: true, id };
@@ -613,6 +621,8 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
       applyWorkflowOnDriverAssign(loadId);
       const { refreshEmptyMilesAround } = await import("./empty-miles");
       await refreshEmptyMilesAround(loadId, previousDriverId);
+      const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+      await mirrorSamsaraRouteQuiet(loadId);
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {

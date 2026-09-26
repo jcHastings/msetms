@@ -141,6 +141,11 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
     bol_json: row.bol_json || "",
+    samsara_route_id: row.samsara_route_id || "",
+    samsara_route_status: row.samsara_route_status || "",
+    samsara_route_eta: row.samsara_route_eta || "",
+    samsara_route_note: row.samsara_route_note || "",
+    samsara_route_synced_at: row.samsara_route_synced_at || "",
     parent_load_id: row.parent_load_id ?? null,
     master_suffix: row.master_suffix || "",
     is_master: row.is_master ? 1 : 0,
@@ -1961,6 +1966,51 @@ export function assignLoad(
     { field: "oo_percent", oldValue: load.oo_percent, newValue: ooPercent },
     { field: "oo_pay", oldValue: load.oo_pay, newValue: ooPay },
   ]);
+}
+
+export function saveSamsaraRouteMirror(
+  loadId: number,
+  patch: {
+    routeId?: string;
+    status?: string;
+    eta?: string;
+    note?: string;
+    syncedAt?: string;
+  },
+): void {
+  const current = getDb()
+    .prepare(
+      `SELECT samsara_route_id, samsara_route_status, samsara_route_eta, samsara_route_note, samsara_route_synced_at
+       FROM loads WHERE id = ?`,
+    )
+    .get(loadId) as
+    | {
+        samsara_route_id: string | null;
+        samsara_route_status: string | null;
+        samsara_route_eta: string | null;
+        samsara_route_note: string | null;
+        samsara_route_synced_at: string | null;
+      }
+    | undefined;
+  if (!current) return;
+  getDb()
+    .prepare(
+      `UPDATE loads SET
+        samsara_route_id = ?,
+        samsara_route_status = ?,
+        samsara_route_eta = ?,
+        samsara_route_note = ?,
+        samsara_route_synced_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      patch.routeId !== undefined ? patch.routeId : (current.samsara_route_id ?? ""),
+      patch.status !== undefined ? patch.status : (current.samsara_route_status ?? ""),
+      patch.eta !== undefined ? patch.eta : (current.samsara_route_eta ?? ""),
+      patch.note !== undefined ? patch.note : (current.samsara_route_note ?? ""),
+      patch.syncedAt !== undefined ? patch.syncedAt : (current.samsara_route_synced_at ?? ""),
+      loadId,
+    );
 }
 
 export function getIftaReport(loadId: number): IftaReport | null {
