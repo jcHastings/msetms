@@ -1,5 +1,12 @@
 import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
-import { getDriver, getLoad, getLocation, findLoadIdByNumber, saveSamsaraRouteMirror } from "../queries";
+import {
+  getDriver,
+  getLoad,
+  getLocation,
+  findLoadIdByNumber,
+  rememberLocationSamsaraAddressId,
+  saveSamsaraRouteMirror,
+} from "../queries";
 import { getDb } from "../db";
 import { listStops } from "../stops";
 import type { LoadStop } from "../stops-shared";
@@ -17,7 +24,6 @@ import {
   readFeedEntries,
   readSamsaraId,
   rfc3339,
-  samsaraAddressBody,
   samsaraExternalPath,
   samsaraRouteBody,
   samsaraRouteCard,
@@ -295,6 +301,7 @@ function draftFromStop(load: LoadView, stop: LoadStop, index: number): SamsaraRo
     formattedAddress: formatted,
     latitude: finiteCoord(location?.latitude),
     longitude: finiteCoord(location?.longitude),
+    samsaraAddressId: String(location?.samsara_address_id ?? "").trim(),
     arrival: rfc3339(stop.window_start),
     departure: rfc3339(stop.window_end),
   };
@@ -310,57 +317,38 @@ async function resolveStopBodies(
   fetchImpl: FetchImpl,
 ): Promise<{ stops: SamsaraRouteStopBody[] } | { message: string }> {
   const cache = new Map<number, string>();
-  let addressAuthFailed = false;
   const stops: SamsaraRouteStopBody[] = [];
   for (let index = 0; index < drafts.length; index += 1) {
     const draft = drafts[index];
-    let addressId = "";
-    if (draft.locationId && !addressAuthFailed) {
-      const resolved = await resolveAddressId(token, draft, fetchImpl, cache);
-      if (resolved === "auth") addressAuthFailed = true;
-      else addressId = resolved;
-    }
+    const addressId = await resolveAddressId(token, draft, fetchImpl, cache);
     const body = samsaraStopBody(draft, addressId || null, index);
-    if (!body) {
-      return {
-        message: addressAuthFailed ? SAMSARA_ROUTE_MESSAGES.scopes : SAMSARA_ROUTE_MESSAGES.incomplete,
-      };
-    }
+    if (!body) return { message: SAMSARA_ROUTE_MESSAGES.incomplete };
     stops.push(body);
   }
   return { stops };
 }
 
+/** Prefer a stored Samsara address id, else GET /addresses/msetms:{locationId}. Never creates an address. */
 async function resolveAddressId(
   token: string,
   draft: SamsaraRouteStopDraft,
   fetchImpl: FetchImpl,
   cache: Map<number, string>,
-): Promise<string | "auth"> {
+): Promise<string> {
+  const stored = draft.samsaraAddressId.trim();
+  if (stored) return stored;
   const locationId = draft.locationId;
   if (!locationId) return "";
   const cached = cache.get(locationId);
   if (cached) return cached;
-  const externalValue = `loc-${locationId}`;
-  const path = `/addresses/${samsaraExternalPath(externalValue)}`;
+  const path = `/addresses/${samsaraExternalPath(String(locationId))}`;
   const existing = await samsaraRequest(token, "GET", path, undefined, fetchImpl);
-  if (existing.status === 401 || existing.status === 403) return "auth";
-  const existingId = existing.status >= 200 && existing.status < 300 ? readSamsaraId(existing.json) : "";
-  if (existingId) {
-    cache.set(locationId, existingId);
-    return existingId;
-  }
-  const payload = samsaraAddressBody(draft);
-  if (!payload) return "";
-  const created = await samsaraRequest(token, "POST", "/addresses", payload, fetchImpl);
-  if (created.status === 401 || created.status === 403) return "auth";
-  let createdId = created.status >= 200 && created.status < 300 ? readSamsaraId(created.json) : "";
-  if (!createdId && (created.status === 400 || created.status === 409)) {
-    const again = await samsaraRequest(token, "GET", path, undefined, fetchImpl);
-    createdId = again.status >= 200 && again.status < 300 ? readSamsaraId(again.json) : "";
-  }
-  if (createdId) cache.set(locationId, createdId);
-  return createdId;
+  if (existing.status < 200 || existing.status >= 300) return "";
+  const existingId = readSamsaraId(existing.json);
+  if (!existingId) return "";
+  cache.set(locationId, existingId);
+  rememberLocationSamsaraAddressId(locationId, existingId);
+  return existingId;
 }
 
 async function upsertRoute(

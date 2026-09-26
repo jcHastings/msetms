@@ -27,6 +27,8 @@ export type SamsaraRouteStopDraft = {
   formattedAddress: string;
   latitude: number | null;
   longitude: number | null;
+  /** Samsara address id already stored on the TMS location. Empty when the Addresses tip has not synced it. */
+  samsaraAddressId: string;
   arrival: string;
   departure: string;
 };
@@ -78,6 +80,7 @@ export function hasStopCoords(draft: Pick<SamsaraRouteStopDraft, "latitude" | "l
 }
 
 export function draftCanLocate(draft: SamsaraRouteStopDraft): boolean {
+  if (draft.samsaraAddressId.trim()) return true;
   if (draft.locationId) return true;
   return hasStopCoords(draft);
 }
@@ -91,30 +94,6 @@ export function formatStopAddress(parts: {
   const cityLine = [String(parts.city ?? "").trim(), String(parts.state ?? "").trim()].filter(Boolean).join(", ");
   const cityZip = [cityLine, String(parts.zip ?? "").trim()].filter(Boolean).join(" ");
   return [String(parts.street ?? "").trim(), cityZip].filter(Boolean).join(", ");
-}
-
-/** Address book body. External id is loc-{id} so the next load reuses the same addressId. */
-export function samsaraAddressBody(draft: SamsaraRouteStopDraft): Record<string, unknown> | null {
-  if (!draft.locationId) return null;
-  const formatted = draft.formattedAddress.trim();
-  const coords = hasStopCoords(draft);
-  if (!formatted && !coords) return null;
-  const body: Record<string, unknown> = {
-    name: draft.name.trim() || `Location ${draft.locationId}`,
-    externalIds: { [SAMSARA_ROUTE_EXTERNAL_KEY]: `loc-${draft.locationId}` },
-  };
-  if (formatted) body.formattedAddress = formatted.slice(0, 255);
-  if (coords) {
-    body.geofence = {
-      circle: {
-        latitude: draft.latitude,
-        longitude: draft.longitude,
-        // Samsara's default circle. Not a shop geofence.
-        radiusMeters: 300,
-      },
-    };
-  }
-  return body;
 }
 
 export function samsaraStopBody(

@@ -178,6 +178,7 @@ export type Location = {
   latitude: number | null;
   longitude: number | null;
   google_place_id: string;
+  samsara_address_id: string;
   created_at: string;
   updated_at: string;
 };

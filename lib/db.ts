@@ -889,6 +889,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "samsara_address_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");

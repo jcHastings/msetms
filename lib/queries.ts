@@ -1954,6 +1954,19 @@ export function assignLoad(
   ]);
 }
 
+/** Cache an address id Samsara already has. Does not create an address. Leaves a non-empty id alone. */
+export function rememberLocationSamsaraAddressId(locationId: number, addressId: string): void {
+  const id = addressId.trim();
+  if (!locationId || !id) return;
+  getDb()
+    .prepare(
+      `UPDATE locations
+       SET samsara_address_id = ?, updated_at = ?
+       WHERE id = ? AND TRIM(samsara_address_id) = ''`,
+    )
+    .run(id, now(), locationId);
+}
+
 export function saveSamsaraRouteMirror(
   loadId: number,
   patch: {
