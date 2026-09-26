@@ -20847,6 +20847,275 @@ parked for next week
     assert.equal(fineExtract.laneMiles, 1200, "import draft gets printed miles for $/mi");
   }
 
+  const dvirShared = await import("../lib/samsara-dvir-shared");
+  const dvirApi = await import("../lib/integrations/samsara-defects");
+  const dvirPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8");
+  const dvirCard = fs.readFileSync(path.join(process.cwd(), "components/open-dvir-defects.tsx"), "utf8");
+  const dvirFetchSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-defects.ts"), "utf8");
+  assert.match(dvirPage, /getOpenDvirDefectsForTruck/);
+  assert.match(dvirPage, /OpenDvirDefectsCard/);
+  assert.match(dvirCard, /data-open-dvir-defects/);
+  assert.match(dvirCard, /data-samsara-defect-id/);
+  assert.match(dvirCard, /DVIR_ADVISORY/);
+  assert.equal(dvirShared.DVIR_ADVISORY, "Advisory. Does not put the unit out of service.");
+  assert.match(dvirFetchSrc, /\/defects\/stream/);
+  assert.match(dvirFetchSrc, /isResolved/);
+  assert.doesNotMatch(`${dvirFetchSrc}\n${dvirCard}\n${dvirPage.match(/OpenDvirDefectsCard[\s\S]*UnitComplianceCard/)?.[0] ?? ""}`, /updateTruck|out_of_service/);
+  assert.equal(dvirShared.SAMSARA_DVIR_SCOPE, "Read Defects");
+
+  const parsedDefects = dvirShared.parseOpenDvirDefects([
+    {
+      id: "9700544",
+      dvirId: "292371177",
+      isResolved: false,
+      comment: "Engine failure.",
+      createdAtTime: "2020-01-27T07:06:25Z",
+      updatedAtTime: "2020-01-27T08:06:25Z",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "494125" },
+    },
+    {
+      id: "9700545",
+      dvirId: "292371178",
+      isResolved: false,
+      comment: "Marker lamp.",
+      createdAtTime: "2024-06-01T15:00:00Z",
+      defectSafetyStatus: "safe",
+      vehicle: { id: "494125" },
+    },
+    {
+      id: "111",
+      isResolved: false,
+      comment: "Other truck.",
+      createdAtTime: "2024-06-02T15:00:00Z",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "999" },
+    },
+    {
+      id: "222",
+      isResolved: true,
+      comment: "Already fixed.",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "494125" },
+    },
+    { id: "333", isResolved: "false", comment: "String false is not open.", vehicle: { id: "494125" } },
+    { id: "", isResolved: false, vehicle: { id: "494125" } },
+    { id: "444", isResolved: false, trailer: { id: "494125" }, comment: "Trailer only." },
+    { comment: "No id", isResolved: false, vehicle: { id: "494125" } },
+  ]);
+  assert.deepEqual(
+    parsedDefects.map((row) => row.id),
+    ["9700544", "9700545", "111"],
+  );
+  const unitDefects = dvirShared.openDvirDefectsForVehicle(parsedDefects, "494125");
+  assert.deepEqual(
+    unitDefects.map((row) => row.id),
+    ["9700544", "9700545"],
+    "unsafe open defect stays ahead of a later safe one on the same vehicle",
+  );
+  assert.equal(dvirShared.openDvirDefectsForVehicle(parsedDefects, " 494125 ").length, 2);
+  assert.equal(dvirShared.openDvirDefectsForVehicle(parsedDefects, "49412").length, 0);
+  const unsafeLine = dvirShared.openDvirDefectLine(unitDefects[0]);
+  assert.equal(unsafeLine.id, "9700544");
+  assert.equal(unsafeLine.safety, "Unsafe");
+  assert.equal(unsafeLine.status, "Open");
+  assert.match(unsafeLine.time, /Created 01\/27\/20/);
+  assert.match(unsafeLine.time, /2:06/);
+  assert.equal(unsafeLine.dvirId, "292371177");
+  assert.equal(unsafeLine.comment, "Engine failure.");
+  assert.equal(dvirShared.dvirSafetyLabel(""), "No safety class");
+  const noTime = dvirShared.openDvirTimeLabel({
+    id: "1",
+    dvirId: "",
+    vehicleId: "1",
+    createdAtTime: "",
+    updatedAtTime: "",
+    safetyStatus: "",
+    comment: "",
+  });
+  assert.equal(noTime, "Time not on defect");
+  assert.doesNotMatch(noTime, /—/);
+
+  const dvirTruckId = queries.createTruck({
+    unit_number: "DVIR1",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "494125",
+  });
+  const unmappedTruckId = queries.createTruck({
+    unit_number: "DVIR2",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "",
+  });
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const unmappedCard = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "" },
+    { token: "test-not-a-real-token", fetchImpl: (async () => {
+      throw new Error("unmapped truck must not call Samsara");
+    }) as typeof fetch },
+  );
+  assert.equal(unmappedCard.ok, false);
+  if (!unmappedCard.ok) {
+    assert.equal(unmappedCard.reason, "vehicle_unmapped");
+    assert.match(unmappedCard.message, /No Samsara ID on this truck/);
+  }
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const missingToken = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    { token: null, fetchImpl: (async () => {
+      throw new Error("missing token must not call Samsara");
+    }) as typeof fetch },
+  );
+  assert.equal(missingToken.ok, false);
+  if (!missingToken.ok) {
+    assert.equal(missingToken.reason, "token_missing");
+    assert.match(missingToken.message, /Read Defects/);
+  }
+
+  const streamPages: unknown[][] = [
+    [
+      {
+        id: "9700544",
+        dvirId: "292371177",
+        isResolved: false,
+        comment: "Engine failure.",
+        createdAtTime: "2020-01-27T07:06:25Z",
+        defectSafetyStatus: "unsafe",
+        vehicle: { id: "494125" },
+      },
+      {
+        id: "222",
+        isResolved: true,
+        defectSafetyStatus: "unsafe",
+        vehicle: { id: "494125" },
+      },
+    ],
+    [
+      {
+        id: "9700999",
+        dvirId: "8",
+        isResolved: false,
+        comment: "Wiper.",
+        createdAtTime: "2024-02-02T12:00:00Z",
+        defectSafetyStatus: "safe",
+        vehicle: { id: "other-vehicle" },
+      },
+    ],
+  ];
+  const dvirUrls: string[] = [];
+  dvirApi.resetOpenDvirCacheForTests();
+  const originalDvirFetch = globalThis.fetch;
+  const dvirFetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    dvirUrls.push(url);
+    const pageIndex = dvirUrls.length - 1;
+    const rows = streamPages[pageIndex] ?? [];
+    const hasNextPage = pageIndex === 0;
+    return new Response(
+      JSON.stringify({
+        data: rows,
+        pagination: { endCursor: hasNextPage ? "cursor-2" : "", hasNextPage },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+  try {
+    const openCard = await dvirApi.getOpenDvirDefectsForTruck(
+      { samsara_vehicle_id: "494125" },
+      { token: "test-not-a-real-token", now: new Date("2026-09-26T12:00:00.000Z"), fetchImpl: dvirFetch },
+    );
+    assert.equal(openCard.ok, true);
+    if (openCard.ok) {
+      assert.deepEqual(
+        openCard.defects.map((row) => row.id),
+        ["9700544"],
+      );
+      assert.equal(openCard.defects[0]?.safetyStatus, "unsafe");
+      assert.equal(openCard.truncated, false);
+      assert.equal(openCard.historySince, "2020-01-01T00:00:00.000Z");
+    }
+    assert.equal(dvirUrls.length, 2, "follow the stream cursor");
+    const firstUrl = new URL(dvirUrls[0]);
+    assert.equal(firstUrl.pathname, "/defects/stream");
+    assert.equal(firstUrl.searchParams.get("isResolved"), "false");
+    assert.equal(firstUrl.searchParams.get("startTime"), "2020-01-01T00:00:00.000Z");
+    assert.equal(firstUrl.searchParams.get("endTime"), "2026-09-26T12:00:00.000Z");
+    assert.equal(firstUrl.searchParams.get("limit"), "200");
+    assert.equal(new URL(dvirUrls[1]).searchParams.get("after"), "cursor-2");
+    assert.equal(queries.getTruck(dvirTruckId)?.status, "available", "unsafe DVIR must not auto-OOS the unit");
+    assert.equal(queries.getTruck(unmappedTruckId)?.status, "available");
+  } finally {
+    globalThis.fetch = originalDvirFetch;
+    dvirApi.resetOpenDvirCacheForTests();
+  }
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const forbidden = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => new Response("forbidden", { status: 403 })) as typeof fetch,
+    },
+  );
+  assert.equal(forbidden.ok, false);
+  if (!forbidden.ok) {
+    assert.equal(forbidden.reason, "scopes_insufficient");
+    assert.match(forbidden.message, /Read Defects/);
+  }
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const rejected = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => new Response("nope", { status: 401 })) as typeof fetch,
+    },
+  );
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.reason, "token_rejected");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  let timedFetches = 0;
+  const truncated = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => {
+        timedFetches += 1;
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: `page-${timedFetches}`,
+                isResolved: false,
+                createdAtTime: "2024-01-01T00:00:00Z",
+                defectSafetyStatus: "safe",
+                vehicle: { id: "494125" },
+              },
+            ],
+            pagination: { endCursor: `c-${timedFetches}`, hasNextPage: true },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    },
+  );
+  assert.equal(timedFetches, dvirShared.DVIR_STREAM_MAX_PAGES);
+  assert.equal(truncated.ok, true);
+  if (truncated.ok) {
+    assert.equal(truncated.truncated, true);
+    assert.equal(truncated.defects.length, dvirShared.DVIR_STREAM_MAX_PAGES);
+  }
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+  dvirApi.resetOpenDvirCacheForTests();
+
   closeDb();
   const reopened = getDb();
   const persisted = reopened
