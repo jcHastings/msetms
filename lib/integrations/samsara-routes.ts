@@ -441,7 +441,7 @@ async function readAuditFeed(
         });
       }
       if (sameLoad) {
-        const prev = matched;
+        const prev = matched as SamsaraRouteProgress | null;
         matched = {
           routeId: progress.routeId || prev?.routeId || "",
           status: progress.status || prev?.status || "",
