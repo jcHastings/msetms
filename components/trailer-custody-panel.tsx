@@ -1,11 +1,7 @@
 import { TrailerDropForm } from "@/components/trailer-drop-form";
 import { formatDateTime } from "@/lib/format";
-import {
-  labelForCustodyLeftWhere,
-  labelForCustodySource,
-  listTrailerCustody,
-  type TrailerCustodyEvent,
-} from "@/lib/trailer-custody";
+import { listTrailerCustody, type TrailerCustodyEvent } from "@/lib/trailer-custody";
+import { labelForCustodyLeftWhere, labelForCustodySource } from "@/lib/trailer-custody-shared";
 
 function show(value: string | null | undefined): string {
   const trimmed = String(value ?? "").trim();
