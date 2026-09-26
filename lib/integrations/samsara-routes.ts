@@ -441,10 +441,11 @@ async function readAuditFeed(
         });
       }
       if (sameLoad) {
+        const prev = matched;
         matched = {
-          routeId: progress.routeId || matched?.routeId || "",
-          status: progress.status || matched?.status || "",
-          eta: progress.eta || matched?.eta || "",
+          routeId: progress.routeId || prev?.routeId || "",
+          status: progress.status || prev?.status || "",
+          eta: progress.eta || prev?.eta || "",
         };
       }
     }
