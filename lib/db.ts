@@ -941,6 +941,18 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_truck_odometer_truck_time
       ON truck_odometer_readings(truck_id, recorded_at);
+    CREATE TABLE IF NOT EXISTS truck_engine_hour_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      truck_id INTEGER NOT NULL REFERENCES trucks(id) ON DELETE CASCADE,
+      recorded_at TEXT NOT NULL,
+      hours REAL NOT NULL,
+      kind TEXT NOT NULL,
+      stat TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'samsara',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_truck_engine_hour_truck_time
+      ON truck_engine_hour_readings(truck_id, stat, recorded_at);
     CREATE TABLE IF NOT EXISTS fuel_closeout_reports (
       week_start_ymd TEXT PRIMARY KEY,
       week_end_ymd TEXT NOT NULL,

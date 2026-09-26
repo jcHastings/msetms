@@ -33,6 +33,16 @@ function n(value: number | null | undefined, digits = 1): string {
   return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+function hoursLabel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "blank";
+  return `${n(value)} h`;
+}
+
+function moneyLabel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "blank";
+  return formatFuelMoney(value);
+}
+
 export function formatMikeFuelCloseoutReply(report: FuelCloseoutReport): string {
   const spend = report.fleet.spend;
   const lines = [
@@ -41,7 +51,23 @@ export function formatMikeFuelCloseoutReply(report: FuelCloseoutReport): string 
     `Fleet ${n(report.fleet.miles, 0)} mi · ${formatGallons(report.fleet.dieselGallons)} · ${formatFuelMoney(report.fleet.dieselAmount)} · ${n(report.fleet.mpg)} MPG` +
       (report.fleet.mpgVsPrior == null ? "" : ` · vs prior week ${n(report.fleet.mpgVsPrior)}`),
     `Spend Fuel ${formatFuelMoney(spend.fuel)} · Reefer ${formatFuelMoney(spend.reefer)} · Scale ${formatFuelMoney(spend.scale)} · DEF ${formatFuelMoney(spend.def)} · Money ${formatFuelMoney(spend.money)}. Unassigned ${formatFuelMoney(report.fleet.unassignedAmount)}.`,
+    `Fleet idle ${hoursLabel(report.fleet.idleHours)}. Engine on ${hoursLabel(report.fleet.engineHours)}. ${report.engineHoursSource.note}`,
+    `Idle fuel estimate ${moneyLabel(report.fleet.idleFuelCost)}. Rough. 1.0 gal/hr x ${report.idlePriceCite}. Not the fuel bill.`,
   ];
+  const hourRows = report.drivers.filter((row) => row.idleHours != null || row.engineHours != null);
+  if (hourRows.length) {
+    lines.push(
+      `Hours: ${hourRows
+        .map((row) => `${row.driverName} idle ${hoursLabel(row.idleHours)}, engine on ${hoursLabel(row.engineHours)}`)
+        .join("; ")}`,
+    );
+  }
+  const costRows = report.drivers.filter((row) => row.idleFuelCost != null);
+  if (costRows.length) {
+    lines.push(
+      `Idle est: ${costRows.map((row) => `${row.driverName} ${formatFuelMoney(row.idleFuelCost)}`).join("; ")}`,
+    );
+  }
   if (report.fleet.worst3.length) {
     lines.push(
       `Worst MPG: ${report.fleet.worst3.map((row) => `${row.driverName} ${n(row.mpg)}`).join("; ")}`,

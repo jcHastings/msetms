@@ -2,8 +2,15 @@ import { getDb } from "./db";
 import { buildFuelCloseout, type FuelCloseoutReport, type FuelCloseoutTx } from "./fuel-closeout";
 import { renderFuelCloseoutHtml, renderFuelCloseoutMarkdown } from "./fuel-closeout-export";
 import { listFuelTransactions } from "./fuel-store";
+import { engineHoursFromReadings, samsaraEngineHoursSourceStatus, type EngineHourSubject } from "./engine-hours";
+import { weekIdleFuelQuotes, type FuelFillPrice, type IdleFuelQuote } from "./idle-fuel-cost";
 import { isCurrentFuelWeek, localWeekRange, parseFuelWeekStart } from "./fuel";
-import { getSamsaraFleet, hydrateSamsaraOdometerWindow } from "./integrations/samsara";
+import {
+  getSamsaraFleet,
+  hydrateSamsaraEngineHourWindow,
+  hydrateSamsaraOdometerWindow,
+  isSamsaraConfigured,
+} from "./integrations/samsara";
 import {
   closedFuelWeekStart,
   milesFromSamsaraOdometer,
@@ -13,6 +20,7 @@ import {
   samsaraMilesSourceStatus,
   type MilesReading,
 } from "./miles-source";
+import { listTruckEngineHourReadings } from "./queries";
 
 export type FiledFuelCloseout = {
   weekStartYmd: string;
@@ -38,17 +46,47 @@ function asTx(row: FuelCloseoutTx): FuelCloseoutTx {
   return row;
 }
 
+function asFillPrice(row: FuelCloseoutTx): FuelFillPrice {
+  const priced = row as FuelCloseoutTx & { price_per_gallon?: number | null };
+  return {
+    occurred_at: row.occurred_at,
+    driver_id: row.driver_id,
+    truck_id: row.truck_id ?? null,
+    category: row.category,
+    gallons: row.gallons,
+    amount: row.amount,
+    price_per_gallon: priced.price_per_gallon ?? null,
+  };
+}
+
 export function buildLiveFuelCloseout(input?: {
   weekStartYmd?: string;
   now?: Date;
   rows?: FuelCloseoutTx[];
   miles?: MilesReading[];
+  hours?: EngineHourSubject[];
+  engineHoursError?: string;
+  idleFuel?: IdleFuelQuote[];
   prior?: { rows: FuelCloseoutTx[]; miles: MilesReading[] };
 }): FuelCloseoutReport {
   const now = input?.now ?? new Date();
   const weekStartYmd = parseFuelWeekStart(input?.weekStartYmd, now);
   const rows = input?.rows ?? listFuelTransactions().map(asTx);
-  const miles = input?.miles ?? milesFromSamsaraOdometer(milesWindowForWeek(weekStartYmd));
+  const window = milesWindowForWeek(weekStartYmd);
+  const miles = input?.miles ?? milesFromSamsaraOdometer(window);
+  const hours = input?.hours ?? engineHoursFromReadings(window);
+  const idleFuel =
+    input?.idleFuel ??
+    weekIdleFuelQuotes(
+      hours.map((row) => ({
+        subjectKey: row.subjectKey,
+        driverId: row.driverId,
+        unit: row.unit,
+        truckId: row.truckId,
+      })),
+      rows.map(asFillPrice),
+      window,
+    );
   const priorStart = priorFuelWeekStart(weekStartYmd);
   const prior =
     input?.prior ??
@@ -61,8 +99,15 @@ export function buildLiveFuelCloseout(input?: {
     now,
     rows,
     miles,
+    hours,
+    idleFuel,
     prior,
     milesSource: persistedSamsaraMilesSource().status(),
+    engineHoursSource: samsaraEngineHoursSourceStatus({
+      tokenSet: isSamsaraConfigured(),
+      readingCount: listTruckEngineHourReadings().length,
+      error: input?.engineHoursError,
+    }),
   });
 }
 
@@ -147,21 +192,25 @@ export async function loadAndFileFuelCloseout(input?: {
     : input?.defaultClosedWeek
       ? closedFuelWeekStart(now)
       : localWeekRange(now).startYmd;
+  let engineHoursError: string | undefined;
   if (input?.hydrate !== false) {
     try {
       await getSamsaraFleet();
       const window = milesWindowForWeek(weekStartYmd);
+      const toIso = isCurrentFuelWeek(weekStartYmd, now) ? now.toISOString() : window.toIso;
       await hydrateSamsaraOdometerWindow({
         fromIso: window.fromIso,
-        toIso: isCurrentFuelWeek(weekStartYmd, now) ? now.toISOString() : window.toIso,
+        toIso,
       });
       const prior = milesWindowForWeek(priorFuelWeekStart(weekStartYmd));
       await hydrateSamsaraOdometerWindow({ fromIso: prior.fromIso, toIso: prior.toIso });
+      const hoursPull = await hydrateSamsaraEngineHourWindow({ fromIso: window.fromIso, toIso });
+      if (hoursPull.error) engineHoursError = hoursPull.error;
     } catch {
       // Persist whatever we already have. Status stays honest.
     }
   }
-  const report = buildLiveFuelCloseout({ weekStartYmd, now });
+  const report = buildLiveFuelCloseout({ weekStartYmd, now, engineHoursError });
   fileFuelCloseout(report);
   return report;
 }
