@@ -21536,6 +21536,372 @@ parked for next week
   }
   assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
   dvirApi.resetOpenDvirCacheForTests();
+  const webhookSecret = "rGoy+beNph0qGBLj6Aqoydj6SGA=";
+  const { createHmac } = await import("node:crypto");
+  const signSamsara = (timestamp: string, body: string) => {
+    const key = Buffer.from(webhookSecret, "base64");
+    return `v1=${createHmac("sha256", key).update(`v1:${timestamp}:${body}`, "utf8").digest("hex")}`;
+  };
+  const webhooks = await import("../lib/integrations/samsara-webhook");
+  assert.equal(webhooks.samsaraWebhookSignature(webhookSecret, "1587597109", "{\"a\":1}"), signSamsara("1587597109", "{\"a\":1}"));
+  assert.equal(webhooks.canonicalSamsaraWebhookEventType("RouteStopETAUpdated"), "RouteStopEtaUpdated");
+  assert.deepEqual(
+    [...webhooks.SAMSARA_WEBHOOK_EVENT_TYPES],
+    ["RouteStopArrival", "RouteStopDeparture", "RouteStopEtaUpdated", "GeofenceEntry", "GeofenceExit", "DvirSubmitted"],
+  );
+  assert.deepEqual(
+    [...webhooks.SAMSARA_WEBHOOK_SCOPES],
+    ["Webhooks Read", "Webhooks Write", "Read Routes", "Read Defects"],
+  );
+  const webhookSource = fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-webhook.ts"), "utf8");
+  assert.doesNotMatch(webhookSource, /detention_started_at|reefer_readings/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /Webhooks Read/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /Webhooks Write/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /Read Routes/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /Read Defects/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /SAMSARA_WEBHOOK_SECRET/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /SAMSARA_WEBHOOK_PUBLIC_URL/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8"), /does not change the office tunnel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /SAMSARA_WEBHOOK_SECRET/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /SAMSARA_WEBHOOK_PUBLIC_URL/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), ".env.example"), "utf8"), /Do not change the office tunnel/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /Samsara DVIR/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8"), /Tractor only/);
+  const safetyPage = fs.readFileSync(path.join(process.cwd(), "app/safety/page.tsx"), "utf8");
+  assert.doesNotMatch(safetyPage, /—|–/);
+
+  const hookNow = Date.now();
+  const arrivalIso = new Date(hookNow - 20 * 60 * 1000).toISOString();
+  const geofenceIso = new Date(hookNow - 10 * 60 * 1000).toISOString();
+  const departureIso = new Date(hookNow - 5 * 60 * 1000).toISOString();
+  const pickupStart = new Date(hookNow - 30 * 60 * 1000).toISOString();
+  const hookPickupEnd = new Date(hookNow + 6 * 60 * 60 * 1000).toISOString();
+  const hookDeliveryEnd = new Date(hookNow + 8 * 60 * 60 * 1000).toISOString();
+  const stopDeliveryEnd = new Date(hookNow - 2 * 60 * 60 * 1000).toISOString();
+  const etaIso = new Date(hookNow + 60 * 60 * 1000).toISOString();
+  const customerRow = getDb().prepare("SELECT id FROM customers LIMIT 1").get() as { id: number };
+  const truckInserted = getDb()
+    .prepare(
+      `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, samsara_trailer_id, created_at, updated_at)
+       VALUES ('WH-901', 'sleeper', 44000, 'available', 'veh-tractor-901', 'trl-samsara-901', ?, ?)`,
+    )
+    .run(arrivalIso, arrivalIso);
+  const hookTruckId = Number(truckInserted.lastInsertRowid);
+  const hookLoad = getDb()
+    .prepare(
+      `INSERT INTO loads (
+        load_number, customer_id, origin, destination, pickup_start, pickup_end, delivery_start, delivery_end,
+        status, truck_id, created_at, updated_at
+      ) VALUES ('MSE-WH-901', ?, 'Omaha, NE', 'Dallas, TX', ?, ?, ?, ?, 'assigned', ?, ?, ?)`,
+    )
+    .run(customerRow.id, pickupStart, hookPickupEnd, pickupStart, hookDeliveryEnd, hookTruckId, arrivalIso, arrivalIso);
+  const hookLoadId = Number(hookLoad.lastInsertRowid);
+  getDb()
+    .prepare(
+      `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_start, window_end)
+       VALUES (?, 1, 'pickup', 'Omaha dock', 'Omaha', 'NE', ?, ?)`,
+    )
+    .run(hookLoadId, pickupStart, hookPickupEnd);
+  getDb()
+    .prepare(
+      `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_start, window_end)
+       VALUES (?, 2, 'delivery', 'Dallas cooler', 'Dallas', 'TX', ?, ?)`,
+    )
+    .run(hookLoadId, stopDeliveryEnd, stopDeliveryEnd);
+  const reeferBefore = (
+    getDb().prepare("SELECT COUNT(*) AS count FROM reefer_readings WHERE load_id = ?").get(hookLoadId) as { count: number }
+  ).count;
+
+  const postHook = async (body: Record<string, unknown>, signature?: string, secret?: string | null) => {
+    const raw = JSON.stringify(body);
+    const timestamp = "1710000000";
+    return webhooks.ingestSamsaraWebhook({
+      rawBody: raw,
+      timestamp,
+      signature: signature ?? signSamsara(timestamp, raw),
+      secret: secret === undefined ? webhookSecret : secret,
+    });
+  };
+
+  const bad = await postHook(
+    { eventId: "evt-bad-sig", eventType: "RouteStopArrival", eventTime: arrivalIso, data: { vehicle: { id: "veh-tractor-901" } } },
+    "v1=deadbeef",
+  );
+  assert.equal(bad.accepted, false);
+  assert.equal(bad.reason, "bad_signature");
+  assert.equal(
+    getDb().prepare("SELECT id FROM samsara_webhook_events WHERE event_id = 'evt-bad-sig'").get(),
+    undefined,
+  );
+  const noSecret = await postHook(
+    { eventId: "evt-no-secret", eventType: "GeofenceEntry", eventTime: arrivalIso, data: {} },
+    undefined,
+    "",
+  );
+  assert.equal(noSecret.reason, "secret_missing");
+  assert.equal(noSecret.accepted, false);
+
+  const arrival = await postHook({
+    eventId: "evt-arr-1",
+    eventType: "RouteStopArrival",
+    eventTime: arrivalIso,
+    data: {
+      vehicle: { id: "veh-tractor-901", name: "WH-901" },
+      route: { externalIds: { tms: "MSE-WH-901" } },
+      routeStopDetails: { sequence: 1, actualArrivalTime: arrivalIso },
+    },
+  });
+  assert.equal(arrival.accepted, true);
+  assert.equal(arrival.loadId, hookLoadId);
+  assert.equal(arrival.truckId, hookTruckId);
+  const hookPickupStop = getDb()
+    .prepare("SELECT arrived_at, departed_at FROM load_stops WHERE load_id = ? AND sequence = 1")
+    .get(hookLoadId) as { arrived_at: string; departed_at: string };
+  assert.equal(hookPickupStop.arrived_at, arrivalIso);
+  assert.equal(hookPickupStop.departed_at, "");
+  assert.equal(
+    (getDb().prepare("SELECT status FROM loads WHERE id = ?").get(hookLoadId) as { status: string }).status,
+    "at_pickup",
+  );
+  const duplicate = await postHook({
+    eventId: "evt-arr-1",
+    eventType: "RouteStopArrival",
+    eventTime: arrivalIso,
+    data: { vehicle: { id: "veh-tractor-901" }, route: { externalIds: { tms: "MSE-WH-901" } } },
+  });
+  assert.equal(duplicate.reason, "duplicate");
+  assert.equal(
+    (getDb().prepare("SELECT COUNT(*) AS count FROM samsara_webhook_events WHERE event_id = 'evt-arr-1'").get() as { count: number }).count,
+    1,
+  );
+
+  const geofence = await postHook({
+    eventId: "evt-geo-1",
+    eventType: "GeofenceEntry",
+    eventTime: geofenceIso,
+    data: { vehicle: { id: "veh-tractor-901" }, route: { externalIds: { tms: "MSE-WH-901" } }, address: { name: "Yard" } },
+  });
+  assert.equal(geofence.reason, "enriched");
+  assert.equal(geofence.accepted, true);
+  const deliveryArrived = (
+    getDb().prepare("SELECT arrived_at FROM load_stops WHERE load_id = ? AND sequence = 2").get(hookLoadId) as { arrived_at: string }
+  ).arrived_at;
+  assert.equal(deliveryArrived, "");
+  const geoInbox = (await import("../lib/exceptions")).listExceptionInbox().items.filter(
+    (item) => item.loadId === hookLoadId && item.kind === "samsara" && item.detail.includes("evt-geo-1"),
+  );
+  assert.equal(geoInbox.length, 0, "geofence near an existing arrival is a flag, not a second clock");
+
+  const departure = await postHook({
+    eventId: "evt-dep-1",
+    eventType: "RouteStopDeparture",
+    eventTime: departureIso,
+    data: {
+      vehicle: { id: "veh-tractor-901" },
+      route: { externalIds: { tms: "MSE-WH-901" } },
+      routeStopDetails: { sequence: 1, actualDepartureTime: departureIso },
+    },
+  });
+  assert.equal(departure.accepted, true);
+  const pickupAfter = getDb()
+    .prepare("SELECT arrived_at, departed_at FROM load_stops WHERE load_id = ? AND sequence = 1")
+    .get(hookLoadId) as { arrived_at: string; departed_at: string };
+  assert.equal(pickupAfter.arrived_at, arrivalIso);
+  assert.equal(pickupAfter.departed_at, departureIso);
+  assert.equal(
+    (getDb().prepare("SELECT status FROM loads WHERE id = ?").get(hookLoadId) as { status: string }).status,
+    "in_transit",
+  );
+
+  const eta = await postHook({
+    eventId: "evt-eta-1",
+    eventType: "RouteStopETAUpdated",
+    eventTime: etaIso,
+    data: {
+      vehicle: { id: "veh-tractor-901" },
+      route: { name: "MSE-WH-901", externalIds: { load: "MSE-WH-901" } },
+      routeStopDetails: { sequence: 2 },
+      eta: etaIso,
+    },
+  });
+  assert.equal(eta.reason, "flagged");
+  assert.equal(
+    (getDb().prepare("SELECT arrived_at FROM load_stops WHERE load_id = ? AND sequence = 2").get(hookLoadId) as { arrived_at: string }).arrived_at,
+    "",
+  );
+
+  const dvir = await postHook({
+    eventId: "evt-dvir-1",
+    eventType: "DvirSubmitted",
+    eventTime: departureIso,
+    data: {
+      vehicle: { id: "veh-tractor-901" },
+      dvir: {
+        safetyStatus: "unsafe",
+        vehicleDefects: [{ defectType: "Brakes", comment: "soft pedal" }],
+        trailerDefects: [{ defectType: "Door", comment: "seal torn" }],
+      },
+    },
+  });
+  assert.equal(dvir.reason, "flagged");
+  assert.equal(dvir.loadId, hookLoadId);
+  assert.match(dvir.message, /Brakes/);
+  assert.doesNotMatch(dvir.message, /Door|seal torn/);
+
+  const cleanDvir = await postHook({
+    eventId: "evt-dvir-clean",
+    eventType: "DvirSubmitted",
+    eventTime: departureIso,
+    data: { vehicle: { id: "veh-tractor-901" }, dvir: { safetyStatus: "safe" } },
+  });
+  assert.equal(cleanDvir.reason, "noted");
+
+  const trailer = await postHook({
+    eventId: "evt-trailer-1",
+    eventType: "GeofenceEntry",
+    eventTime: geofenceIso,
+    data: {
+      vehicle: { id: "trl-samsara-901", assetType: "trailer" },
+      route: { externalIds: { tms: "MSE-WH-901" } },
+    },
+  });
+  assert.equal(trailer.reason, "ignored_trailer");
+  assert.equal(trailer.accepted, false);
+
+  const unmapped = await postHook({
+    eventId: "evt-none",
+    eventType: "GeofenceExit",
+    eventTime: geofenceIso,
+    data: { vehicle: { id: "veh-missing-901" } },
+  });
+  assert.equal(unmapped.reason, "unmapped");
+  assert.equal(unmapped.accepted, false);
+
+  const ping = await postHook({ eventId: "evt-ping", eventType: "Ping", event: { text: "Ping" } });
+  assert.equal(ping.reason, "ping");
+  assert.equal(ping.accepted, true);
+
+  const hookInbox = (await import("../lib/exceptions")).listExceptionInbox();
+  const samsaraItems = hookInbox.items.filter((item) => item.loadId === hookLoadId && item.kind === "samsara");
+  assert.ok(samsaraItems.some((item) => item.detail.includes("evt-arr-1") && item.title === "Samsara stop arrival"));
+  assert.ok(samsaraItems.some((item) => item.detail.includes("evt-eta-1") && item.severity === "HIGH"));
+  assert.ok(samsaraItems.some((item) => item.id.includes("evt-dvir-1") && item.title === "DVIR defects"));
+  assert.equal(samsaraItems.some((item) => item.detail.includes("evt-dvir-clean")), false);
+  assert.equal(samsaraItems.some((item) => item.detail.includes("evt-trailer-1")), false);
+  assert.equal(hookInbox.items.filter((item) => item.loadId === hookLoadId && item.kind === "detention").length, 0);
+  assert.equal(
+    (getDb().prepare("SELECT COUNT(*) AS count FROM reefer_readings WHERE load_id = ?").get(hookLoadId) as { count: number }).count,
+    reeferBefore,
+  );
+  const dvirFlags = webhooks.listSamsaraDvirFlags();
+  assert.ok(dvirFlags.some((flag) => flag.eventId === "evt-dvir-1" && flag.loadNumber === "MSE-WH-901" && flag.unitNumber === "WH-901"));
+  assert.equal(dvirFlags.some((flag) => flag.eventId === "evt-dvir-clean"), false);
+
+  const { POST: samsaraWebhookPost } = await import("../app/api/integrations/samsara/webhook/route");
+  const previousWebhookSecret = process.env.SAMSARA_WEBHOOK_SECRET;
+  process.env.SAMSARA_WEBHOOK_SECRET = webhookSecret;
+  const routeBody = JSON.stringify({
+    eventId: "evt-route-1",
+    eventType: "GeofenceExit",
+    eventTime: geofenceIso,
+    data: { vehicle: { id: "veh-missing-902" } },
+  });
+  const routeResponse = await samsaraWebhookPost(
+    new Request("http://localhost/api/integrations/samsara/webhook", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-samsara-timestamp": "1710000001",
+        "x-samsara-signature": signSamsara("1710000001", routeBody),
+      },
+      body: routeBody,
+    }),
+  );
+  assert.equal(routeResponse.status, 200);
+  const routeJson = (await routeResponse.json()) as { reason: string; accepted: boolean };
+  assert.equal(routeJson.reason, "unmapped");
+  const badRoute = await samsaraWebhookPost(
+    new Request("http://localhost/api/integrations/samsara/webhook", {
+      method: "POST",
+      headers: {
+        "x-samsara-timestamp": "1710000001",
+        "x-samsara-signature": "v1=not-the-signature",
+      },
+      body: routeBody,
+    }),
+  );
+  assert.equal(badRoute.status, 200);
+  assert.equal(((await badRoute.json()) as { reason: string }).reason, "bad_signature");
+  if (previousWebhookSecret == null) delete process.env.SAMSARA_WEBHOOK_SECRET;
+  else process.env.SAMSARA_WEBHOOK_SECRET = previousWebhookSecret;
+
+  let registerCalls = 0;
+  const hookCreated = await webhooks.registerSamsaraEventSubscription({
+    token: "tok_smoke_not_a_real_secret",
+    publicUrl: "https://office.example/api/integrations/samsara/webhook",
+    fetchImpl: async (input, init) => {
+      registerCalls += 1;
+      const url = String(input);
+      assert.equal(new URL(url).hostname, "api.samsara.com");
+      assert.match(url, /\/webhooks$/);
+      assert.doesNotMatch(url, /tok_smoke_not_a_real_secret/);
+      const headers = init?.headers as Record<string, string>;
+      assert.equal(headers.Authorization, "Bearer tok_smoke_not_a_real_secret");
+      if (init?.method === "GET") return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      const posted = JSON.parse(String(init?.body)) as { url: string; eventTypes: string[] };
+      assert.equal(posted.url, "https://office.example/api/integrations/samsara/webhook");
+      assert.ok(posted.eventTypes.includes("DvirSubmitted"));
+      assert.ok(posted.eventTypes.includes("RouteStopEtaUpdated"));
+      assert.equal(posted.eventTypes.includes("RouteStopETAUpdated"), false);
+      return new Response(JSON.stringify({ data: { id: "wh_1", secretKey: "c2VjcmV0" } }), { status: 200 });
+    },
+  });
+  assert.equal(hookCreated.ok, true);
+  assert.equal(hookCreated.reason, "created");
+  assert.equal(hookCreated.webhookId, "wh_1");
+  assert.equal(hookCreated.secretKey, "c2VjcmV0");
+  assert.equal(registerCalls, 2);
+  const already = await webhooks.registerSamsaraEventSubscription({
+    token: "tok_smoke_not_a_real_secret",
+    publicUrl: "https://office.example/api/integrations/samsara/webhook",
+    fetchImpl: async (_input, init) => {
+      assert.equal(init?.method, "GET");
+      return new Response(
+        JSON.stringify({ data: [{ id: "wh_old", url: "https://office.example/api/integrations/samsara/webhook" }] }),
+        { status: 200 },
+      );
+    },
+  });
+  assert.equal(already.reason, "already");
+  assert.equal(already.secretKey, "");
+  const missingScope = await webhooks.registerSamsaraEventSubscription({
+    token: "tok_smoke_not_a_real_secret",
+    publicUrl: "https://office.example/api/integrations/samsara/webhook",
+    fetchImpl: async () => new Response(JSON.stringify({ message: "Invalid token." }), { status: 403 }),
+  });
+  assert.equal(missingScope.ok, false);
+  assert.equal(missingScope.reason, "scopes");
+  assert.match(missingScope.message, /Webhooks Read and Webhooks Write/);
+  assert.doesNotMatch(missingScope.message, /tok_smoke_not_a_real_secret/);
+  let tokenFetch = 0;
+  const webhookMissingToken = await webhooks.registerSamsaraEventSubscription({
+    token: "",
+    publicUrl: "https://office.example/api/integrations/samsara/webhook",
+    fetchImpl: async () => {
+      tokenFetch += 1;
+      return new Response("no", { status: 500 });
+    },
+  });
+  assert.equal(webhookMissingToken.reason, "token_missing");
+  assert.equal(tokenFetch, 0);
+  const missingUrl = await webhooks.registerSamsaraEventSubscription({
+    token: "tok_smoke_not_a_real_secret",
+    publicUrl: "http://office.example/api/integrations/samsara/webhook",
+    fetchImpl: async () => {
+      throw new Error("should not call");
+    },
+  });
+  assert.equal(missingUrl.reason, "public_url_missing");
 
   closeDb();
   const reopened = getDb();

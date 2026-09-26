@@ -133,7 +133,7 @@ Both integrations are required. They do not share data:
 
 | Source | Used for | Never used for | Env (gitignored `.env` only) |
 | --- | --- | --- | --- |
-| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles, camera stills on a load | Reefer temps, trailer location, live video | `SAMSARA_API_TOKEN` |
+| **Samsara** | Tractor GPS, driver Hours of Service / remaining drive time, IFTA jurisdiction miles, camera stills on a load, Event Subscriptions into Exception Inbox | Reefer temps, trailer location, live video, trailer geofence | `SAMSARA_API_TOKEN`, `SAMSARA_WEBHOOK_SECRET`, `SAMSARA_WEBHOOK_PUBLIC_URL` |
 | **ORBCOMM** | Trailer location (if the report has it), reefer temp / setpoint / return-supply air / alarms | Driver HOS | `ORBCOMM_USERNAME`, `ORBCOMM_PASSWORD`, optional `ORBCOMM_ACCOUNT_ID` / `ORBCOMM_API_BASE` |
 | **QuickBooks Online** | Invoice the customer for a delivered load (rate + lumper) | Owner-operator settlement / bills / relays | `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, optional `QBO_SANDBOX=true` |
 | **Google Maps** | Places autocomplete, Directions miles, and the per-load map (Maps JavaScript API) | Scraping maps.google.com; a fleet map of every truck | Server key: `GOOGLE_MAPS_API_KEY` (or `GOOGLE_PLACES_API_KEY`) for Places/Geocoding/Directions. Browser key: `GOOGLE_MAPS_BROWSER_KEY` for map rendering. Restrict browser key by HTTP referrer. |
@@ -164,6 +164,38 @@ In-transit and delivered loads can **Refresh IFTA from Samsara** when the assign
 No token: labeled **demo** by-state miles from the load’s origin and destination, plus a CSV on the load documents so the UI can be tested.
 
 Token set and IFTA returns 401/403 or another API error: the load page shows the error. The app does **not** invent live Samsara miles.
+
+### Samsara webhooks (Exception Inbox)
+
+Tractor Event Subscriptions land on `POST /api/integrations/samsara/webhook`. The load stays the source of record. Trailer and reefer events are ignored so they do not double-fire against Orbcomm.
+
+Event types:
+
+- `RouteStopArrival`
+- `RouteStopDeparture`
+- `RouteStopEtaUpdated` (inbound `RouteStopETAUpdated` is accepted)
+- `GeofenceEntry`
+- `GeofenceExit`
+- `DvirSubmitted`
+
+A blank stop arrival or departure is stamped from the event time. If tractor GPS already filled that time, the webhook is a flag only. It does not start a second detention clock. An ETA past the window, or a tractor DVIR with defects, shows on Exception Inbox with the Samsara event id, time, and load or truck when the route `externalId` or vehicle id matches. Clean DVIRs are stored and stay out of the inbox. Unmapped events are stored and do not invent a load.
+
+Signature: `X-Samsara-Timestamp` plus `X-Samsara-Signature` (`v1=` HMAC-SHA256 of `v1:timestamp:rawBody`, key is the base64-decoded secret). A bad signature or a missing secret returns 200 and does not apply the event.
+
+Token scopes:
+
+- **Webhooks Read**
+- **Webhooks Write**
+- **Read Routes** (existing)
+- **Read Defects** (existing)
+
+Env, gitignored, never logged:
+
+- `SAMSARA_API_TOKEN` (same token as GPS)
+- `SAMSARA_WEBHOOK_SECRET` (base64 secret from Samsara Settings, Webhooks)
+- `SAMSARA_WEBHOOK_PUBLIC_URL` full https URL, for example `https://<office-host>/api/integrations/samsara/webhook`
+
+Leave the public URL unset until the office host is ready. This tip does not change the office tunnel. Missing token, missing Webhooks scope (401/403), or an unmapped tractor is a soft fail. DVIR defect text comes from the webhook payload. No extra Defects API call.
 
 No token: Integrations can still show a labeled demo sample. Live truck/board/load GPS is not invented. 401/403 on GPS/HOS: error on Integrations / the board, empty live positions (never demo coordinates). The app does not crash.
 
