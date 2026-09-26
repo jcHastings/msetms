@@ -2,6 +2,9 @@
 
 Draft tip only. Base is live Orbcomm Mode `99b88c971430f2074a62fcb008dab19093ba37ee` (PR 92). Not stacked on Money Desk, Fuel, or Nightly Audit. No merge. No Office Update.
 
+Draft PR: https://github.com/jcHastings/msetms/pull/98
+Branch: `cursor/samsara-safety-events-6a86`
+
 ## What
 
 Dispatchers see Samsara harsh / safety events for the assigned vehicle:
