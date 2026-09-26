@@ -21364,7 +21364,7 @@ parked for next week
     status: "available",
     samsara_vehicle_id: "494125",
   });
-  const unmappedTruckId = queries.createTruck({
+  const dvirUnmappedTruckId = queries.createTruck({
     unit_number: "DVIR2",
     type: "sleeper",
     capacity_lbs: 45000,
@@ -21470,7 +21470,7 @@ parked for next week
     assert.equal(firstUrl.searchParams.get("limit"), "200");
     assert.equal(new URL(dvirUrls[1]).searchParams.get("after"), "cursor-2");
     assert.equal(queries.getTruck(dvirTruckId)?.status, "available", "unsafe DVIR must not auto-OOS the unit");
-    assert.equal(queries.getTruck(unmappedTruckId)?.status, "available");
+    assert.equal(queries.getTruck(dvirUnmappedTruckId)?.status, "available");
   } finally {
     globalThis.fetch = originalDvirFetch;
     dvirApi.resetOpenDvirCacheForTests();
