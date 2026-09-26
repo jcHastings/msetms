@@ -32,6 +32,43 @@ Status on the report:
 
 Units map to the assigned TMS driver. A unit with miles and no eligible driver still appears.
 
+## Idle and engine-on hours
+
+Week idle hours and engine-on hours use the same `SAMSARA_API_TOKEN`, `trucks.samsara_vehicle_id`, and America/New_York Monday-Sunday window as week miles.
+
+Live fill calls `GET /fleet/vehicles/stats/history` with types `idlingDurationMilliseconds,obdEngineSeconds,syntheticEngineSeconds`. Points are stored on `truck_engine_hour_readings`. The week figure is a start-to-end delta of that cumulative counter. One point is not a week total. A lifetime reading is never copied into the week cell. Hours are not estimated from gallons or miles.
+
+Engine-on hours, per truck:
+
+1. `obdEngineSeconds` wins when that truck has any OBD point at or before the week end.
+2. `syntheticEngineSeconds` is the fallback only when OBD points are absent.
+3. If OBD points exist but do not form a valid pair, engine-on hours stay blank. Synthetic seconds are not substituted.
+
+Idle hours use `idlingDurationMilliseconds` only.
+
+A delta must be zero or positive and no longer than the window (plus one hour for the clock change). Anything else stays blank.
+
+Soft-fail:
+
+- No `SAMSARA_API_TOKEN`: blank, unless stored readings from an earlier pull already exist.
+- HTTP 401, or HTTP 403 (Read Vehicle Statistics not granted): blank. Nothing is guessed.
+- Truck with no `samsara_vehicle_id`: that unit stays blank.
+- A history row for a different vehicle id is ignored.
+
+Fuel shows fleet idle hours and engine-on hours beside week spend. The closeout and Drivers MPG week table show the same hours per driver. Mike's weekly fuel closeout line includes the fleet hours. A blank cell is missing data, not zero. Fleet totals add only trucks that have a reading.
+
+## Idle fuel estimate
+
+Rough dollars: idle hours x 1.0 gal/hr x the price MS Express paid. Not the fuel bill.
+
+Price is truck diesel only, from FleetOne/TMS `fuel_transactions` in that window (day, Monday-Sunday week, or month). Prefer amount divided by gallons. If those are missing, use the average stored price per gallon. Reefer fills are not used. A driver with no usable fills stays blank. There is no default $/gal and no fleet-price fallback.
+
+The Fuel page shows today, this week, and this month for the selected week, per driver and as a fleet total. The cite reads like "avg paid FleetOne this week". Fleet dollars add only drivers who have both idle hours and a paid price. Blank is not zero.
+
+The same week estimate sits on week spend, the closeout, Drivers MPG (week only), and Mike's closeout line.
+
+Soft-fail matches idle hours: no token, Read Vehicle Statistics, unmapped truck, or no paid price. The dollar stays blank.
+
 ## Fuel
 
 TMS `fuel_transactions` in the week. Truck diesel gallons and $ feed MPG, fill count, and avg gallons/fill.

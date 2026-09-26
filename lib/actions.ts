@@ -75,6 +75,7 @@ import {
   type TruckStatus,
 } from "./types";
 import { parseTrailerType, parseTruckType } from "./fleet-form-shared";
+import { recordOfficeDrop } from "./trailer-custody";
 import { defaultSearchCriteria, isSearchColumnKey, parseSavedFilters, type SearchColumnKey } from "./search";
 import {
   parseDrugTestResult,
@@ -87,6 +88,7 @@ import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
 import type { TollImportResult } from "./tolls";
+import { syncLocationToSamsara } from "./integrations/samsara-addresses";
 import { importTollsFromUpload } from "./toll-import";
 import {
   assignFuelTransaction,
@@ -520,6 +522,10 @@ export async function createLoadAction(
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
       const { refreshLoadRouteQuiet } = await import("./routing");
       await refreshLoadRouteQuiet(id);
+      if (input.truck_id || input.driver_id) {
+        const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+        await mirrorSamsaraRouteQuiet(id);
+      }
       refresh();
       redirect(`/loads/${id}`);
     } catch (error) {
@@ -577,6 +583,10 @@ export async function updateLoadAction(
         const { refreshLoadRouteQuiet } = await import("./routing");
         await refreshLoadRouteQuiet(id);
       }
+      if (input.truck_id || input.driver_id) {
+        const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+        await mirrorSamsaraRouteQuiet(id);
+      }
       refresh();
       // Existing-load Save must stay on this load/tab. Close is what leaves.
       return { ok: true, id };
@@ -612,6 +622,8 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
       applyWorkflowOnDriverAssign(loadId);
       const { refreshEmptyMilesAround } = await import("./empty-miles");
       await refreshEmptyMilesAround(loadId, previousDriverId);
+      const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+      await mirrorSamsaraRouteQuiet(loadId);
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -1146,6 +1158,29 @@ export async function updateTrailerAction(
   }
 }
 
+export async function dropTrailerCustodyAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
+    const trailerId = parseOptionalInt(formData.get("trailer_id"));
+    if (trailerId == null) throw new Error("Trailer not found.");
+    const result = recordOfficeDrop({
+      trailerId,
+      leftWhere: String(formData.get("left_where") ?? ""),
+      leftName: String(formData.get("left_name") ?? ""),
+      loadNumber: String(formData.get("load_number") ?? ""),
+      note: String(formData.get("note") ?? ""),
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+    refresh();
+    return { ok: true, id: trailerId, message: "Dropped." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function deleteTruckAction(
   _prev: ActionResult | null,
   formData: FormData,
@@ -1404,6 +1439,7 @@ export async function saveRateConLocationAction(
       notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
       scheduling_type: parseSchedulingType(formData.get("scheduling_type") || "appointment"),
     });
+    await syncLocationToSamsara(id);
     refresh();
     const location = getLocation(id);
     if (!location) throw new Error("Location was not saved.");
@@ -1432,6 +1468,7 @@ export async function createLocationAction(
       }
     }
     const id = createLocation(input);
+    await syncLocationToSamsara(id);
     refresh();
     redirect(`/locations/${id}`);
   } catch (error) {
@@ -1448,8 +1485,29 @@ export async function updateLocationAction(
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
     updateLocation(id, parseLocationInput(formData));
+    const synced = await syncLocationToSamsara(id);
     refresh();
-    return { ok: true, id };
+    const message = synced.ok
+      ? `Saved. Samsara address ${synced.addressId}.`
+      : `Saved. ${synced.message}`;
+    return { ok: true, id, message };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function syncLocationToSamsaraAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
+    const id = Number.parseInt(String(formData.get("location_id") ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Location not found." };
+    const synced = await syncLocationToSamsara(id);
+    refresh();
+    if (synced.ok) return { ok: true, id, message: `Synced. Samsara address ${synced.addressId}.` };
+    return { ok: false, error: synced.message };
   } catch (error) {
     return fail(error);
   }

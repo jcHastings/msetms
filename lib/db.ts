@@ -889,6 +889,8 @@ export function migrate(db: Database): void {
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "samsara_address_id", "TEXT");
+  ensureColumn(db, "locations", "samsara_address_error", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
@@ -911,7 +913,19 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "parent_load_id", "INTEGER");
   ensureColumn(db, "loads", "master_suffix", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "is_master", "INTEGER NOT NULL DEFAULT 0");
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_loads_parent ON loads(parent_load_id);`);
+  ensureColumn(db, "loads", "samsara_route_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_eta", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_note", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_synced_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS samsara_route_feed (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      cursor TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_loads_parent ON loads(parent_load_id);
+  `);
   ensureColumn(db, "drivers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trucks", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trailers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
@@ -941,6 +955,18 @@ export function migrate(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_truck_odometer_truck_time
       ON truck_odometer_readings(truck_id, recorded_at);
+    CREATE TABLE IF NOT EXISTS truck_engine_hour_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      truck_id INTEGER NOT NULL REFERENCES trucks(id) ON DELETE CASCADE,
+      recorded_at TEXT NOT NULL,
+      hours REAL NOT NULL,
+      kind TEXT NOT NULL,
+      stat TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'samsara',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_truck_engine_hour_truck_time
+      ON truck_engine_hour_readings(truck_id, stat, recorded_at);
     CREATE TABLE IF NOT EXISTS fuel_closeout_reports (
       week_start_ymd TEXT PRIMARY KEY,
       week_end_ymd TEXT NOT NULL,
@@ -1022,6 +1048,29 @@ export function migrate(db: Database): void {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_trailer_share_token ON trailer_share_links(token);
     CREATE INDEX IF NOT EXISTS idx_trailer_share_trailer ON trailer_share_links(trailer_id, id DESC);
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trailer_custody_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trailer_id INTEGER NOT NULL REFERENCES trailers(id) ON DELETE CASCADE,
+      driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+      truck_id INTEGER REFERENCES trucks(id) ON DELETE SET NULL,
+      from_at TEXT NOT NULL,
+      to_at TEXT,
+      left_where TEXT NOT NULL DEFAULT '' CHECK (
+        left_where IN ('', 'shipper', 'receiver', 'yard', 'plant', 'other')
+      ),
+      left_name TEXT,
+      load_number TEXT,
+      note TEXT,
+      source TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_trailer
+      ON trailer_custody_events(trailer_id, from_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_driver
+      ON trailer_custody_events(driver_id, from_at);
+    CREATE INDEX IF NOT EXISTS idx_trailer_custody_open
+      ON trailer_custody_events(trailer_id) WHERE to_at IS NULL;
   `);
   ensureColumn(db, "trailer_share_links", "snapshot_latitude", "REAL");
   ensureColumn(db, "trailer_share_links", "snapshot_longitude", "REAL");

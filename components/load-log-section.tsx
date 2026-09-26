@@ -1,9 +1,16 @@
 import { logCheckCallFormAction } from "@/lib/dispatcher-actions";
-import { listLoadTimeline } from "@/lib/load-timeline";
+import { listLoadTimeline, withSamsaraSafetyEvents } from "@/lib/load-timeline";
+import type { SamsaraSafetyResult } from "@/lib/samsara-safety-shared";
 import { formatDateTime, toInputDateTime } from "@/lib/format";
 
-export function LoadLogSection({ loadId }: { loadId: number }) {
-  const rows = listLoadTimeline(loadId);
+export function LoadLogSection({
+  loadId,
+  safety,
+}: {
+  loadId: number;
+  safety?: SamsaraSafetyResult | null;
+}) {
+  const rows = withSamsaraSafetyEvents(listLoadTimeline(loadId), safety?.events ?? []);
   return (
     <div className="space-y-3">
       <section id="load-check-call" className="card p-3">
@@ -33,6 +40,20 @@ export function LoadLogSection({ loadId }: { loadId: number }) {
         <header className="border-b border-slate-100 px-3 py-1.5">
           <h2 className="text-[12.5px] font-semibold">Load Timeline</h2>
         </header>
+        {safety?.message ? (
+          <p className="border-b border-amber-100 bg-amber-50 px-3 py-1.5 text-[12.5px] text-amber-950" data-samsara-safety-notice="">
+            {safety.message}
+          </p>
+        ) : safety?.reason === "empty" ? (
+          <p className="border-b border-slate-100 px-3 py-1.5 text-[12.5px] text-slate-500" data-samsara-safety-empty="">
+            No safety events in the load window.
+          </p>
+        ) : null}
+        {safety?.truncated ? (
+          <p className="border-b border-slate-100 px-3 py-1.5 text-[12.5px] text-slate-500" data-samsara-safety-truncated="">
+            Samsara has more safety events in this window.
+          </p>
+        ) : null}
         {rows.length === 0 ? (
           <p className="px-3 py-3 text-[12.5px] text-slate-500">No dispatcher, status, document, or geofence events yet.</p>
         ) : (

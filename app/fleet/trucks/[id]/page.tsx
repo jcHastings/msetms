@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
+import { OpenDvirDefectsCard } from "@/components/open-dvir-defects";
 import { PageHeader } from "@/components/page-header";
+import { SamsaraSafetyPanel } from "@/components/samsara-safety-panel";
 import { TruckForm } from "@/components/truck-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { truckComplianceAlerts } from "@/lib/compliance";
@@ -18,8 +20,10 @@ import {
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
+import { listTruckSamsaraSafety } from "@/lib/integrations/samsara-safety";
 import { toOfficeDateTime } from "@/lib/format";
 import { getSamsaraStillPanel, loadsForSamsaraStill } from "@/lib/integrations/samsara-still";
+import { getOpenDvirDefectsForTruck } from "@/lib/integrations/samsara-defects";
 import { getTruck, listDrivers } from "@/lib/queries";
 import { samsaraVehicleIdForTruck } from "@/lib/samsara-still-shared";
 import { complianceWindows } from "@/lib/settings";
@@ -33,10 +37,14 @@ export default async function EditTruckPage({
 }) {
   const truck = getTruck(Number.parseInt((await params).id, 10));
   if (!truck) notFound();
-  const fleet = await getSamsaraFleet();
-  const location = await getLocationForTruck(truck.id);
-  const hos = await getHosForTruck(truck.id);
-  const samsaraDriver = await getSamsaraDriverForTruck(truck.id);
+  const [fleet, location, hos, samsaraDriver, dvir, safety] = await Promise.all([
+    getSamsaraFleet(),
+    getLocationForTruck(truck.id),
+    getHosForTruck(truck.id),
+    getSamsaraDriverForTruck(truck.id),
+    getOpenDvirDefectsForTruck(truck),
+    listTruckSamsaraSafety(truck.samsara_vehicle_id),
+  ]);
 
   return (
     <>
@@ -90,6 +98,8 @@ export default async function EditTruckPage({
           </div>
         </div>
       </div>
+      <OpenDvirDefectsCard card={dvir} />
+      <SamsaraSafetyPanel result={safety} />
       <UnitComplianceCard
         registrationIssued={truck.registration_issued}
         registrationExpires={truck.registration_expires}

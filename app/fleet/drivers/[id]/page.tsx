@@ -28,9 +28,14 @@ export default async function EditDriverPage({
       <PageHeader
         title={driver.name}
         actions={
-          <Link href="/fleet/drivers" className="btn btn-secondary">
-            Back to drivers
-          </Link>
+          <>
+            <Link href={`/fleet/trailers/custody?driver_id=${driver.id}`} className="btn btn-secondary">
+              Trailers held
+            </Link>
+            <Link href="/fleet/drivers" className="btn btn-secondary">
+              Back to drivers
+            </Link>
+          </>
         }
       />
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />

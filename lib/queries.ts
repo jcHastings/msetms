@@ -25,6 +25,7 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import { applyLoadCustody } from "./trailer-custody";
 import {
   assertUniqueDriverEmail,
   DRIVER_PASSWORD_NOT_RECOGNIZED,
@@ -141,6 +142,11 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
     bol_json: row.bol_json || "",
+    samsara_route_id: row.samsara_route_id || "",
+    samsara_route_status: row.samsara_route_status || "",
+    samsara_route_eta: row.samsara_route_eta || "",
+    samsara_route_note: row.samsara_route_note || "",
+    samsara_route_synced_at: row.samsara_route_synced_at || "",
     parent_load_id: row.parent_load_id ?? null,
     master_suffix: row.master_suffix || "",
     is_master: row.is_master ? 1 : 0,
@@ -996,6 +1002,20 @@ export function listTruckGpsReadings(truckId: number): Array<{
   }>;
 }
 
+export function saveLocationSamsaraAddress(
+  id: number,
+  input: { samsaraAddressId: string | null; error: string },
+): void {
+  const existing = getLocation(id);
+  if (!existing) return;
+  const nextId = input.samsaraAddressId?.trim()
+    ? input.samsaraAddressId.trim()
+    : existing.samsara_address_id?.trim() || null;
+  getDb()
+    .prepare("UPDATE locations SET samsara_address_id = ?, samsara_address_error = ? WHERE id = ?")
+    .run(nextId, input.error.slice(0, 500), id);
+}
+
 export function saveLocationCoords(id: number, latitude: number, longitude: number): void {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   getDb()
@@ -1052,6 +1072,71 @@ export function listTruckOdometerReadings(truckId?: number): TruckOdometerReadin
        ORDER BY recorded_at ASC, id ASC`,
     )
     .all() as TruckOdometerReading[];
+}
+
+/** Cumulative Samsara counters. obdEngineSeconds wins over syntheticEngineSeconds when both exist. */
+export const TRUCK_ENGINE_HOUR_STATS = [
+  "idlingDurationMilliseconds",
+  "obdEngineSeconds",
+  "syntheticEngineSeconds",
+] as const;
+
+export type TruckEngineHourStat = (typeof TRUCK_ENGINE_HOUR_STATS)[number];
+
+export type TruckEngineHourReading = {
+  id: number;
+  truck_id: number;
+  recorded_at: string;
+  hours: number;
+  kind: "idle" | "engine";
+  stat: string;
+  source: string;
+};
+
+function engineHourKind(stat: TruckEngineHourStat): "idle" | "engine" {
+  return stat === "idlingDurationMilliseconds" ? "idle" : "engine";
+}
+
+export function saveTruckEngineHour(
+  id: number,
+  input: { hours: number; recordedAt: string; stat: TruckEngineHourStat; source: "samsara" },
+): void {
+  if (!getTruck(id)) return;
+  if (input.source !== "samsara") return;
+  if (!TRUCK_ENGINE_HOUR_STATS.includes(input.stat)) return;
+  if (!Number.isFinite(input.hours) || input.hours < 0) return;
+  const recordedAt = input.recordedAt.trim();
+  if (!recordedAt) return;
+  const last = getDb()
+    .prepare(
+      `SELECT hours, recorded_at, stat FROM truck_engine_hour_readings
+       WHERE truck_id = ? AND stat = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    )
+    .get(id, input.stat) as { hours: number; recorded_at: string; stat: string } | undefined;
+  if (last && last.recorded_at === recordedAt && Math.abs(last.hours - input.hours) < 1e-6) return;
+  getDb()
+    .prepare(
+      `INSERT INTO truck_engine_hour_readings (truck_id, recorded_at, hours, kind, stat, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, recordedAt, input.hours, engineHourKind(input.stat), input.stat, input.source, now());
+}
+
+export function listTruckEngineHourReadings(truckId?: number): TruckEngineHourReading[] {
+  if (truckId != null) {
+    return getDb()
+      .prepare(
+        `SELECT id, truck_id, recorded_at, hours, kind, stat, source FROM truck_engine_hour_readings
+         WHERE truck_id = ? ORDER BY recorded_at ASC, id ASC`,
+      )
+      .all(truckId) as TruckEngineHourReading[];
+  }
+  return getDb()
+    .prepare(
+      `SELECT id, truck_id, recorded_at, hours, kind, stat, source FROM truck_engine_hour_readings
+       ORDER BY recorded_at ASC, id ASC`,
+    )
+    .all() as TruckEngineHourReading[];
 }
 
 export function persistedTruckLocation(truck: {
@@ -1762,6 +1847,17 @@ export function createLoad(input: LoadInput): number {
     const id = Number(result.lastInsertRowid);
     persistLoadPageFields(id, input, null);
     syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    applyLoadCustody({
+      loadId: id,
+      loadNumber,
+      previous: null,
+      next: {
+        trailerId: input.trailer_id ?? null,
+        driverId: input.driver_id,
+        truckId: input.truck_id,
+        status: input.status,
+      },
+    });
     return id;
   });
   const id = insert();
@@ -1829,6 +1925,22 @@ export function updateLoad(id: number, input: LoadInput): void {
     );
     persistLoadPageFields(id, input, existing);
     syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    applyLoadCustody({
+      loadId: id,
+      loadNumber: existing.load_number,
+      previous: {
+        trailerId: existing.trailer_id,
+        driverId: existing.driver_id,
+        truckId: existing.truck_id,
+        status: existing.status,
+      },
+      next: {
+        trailerId: input.trailer_id ?? null,
+        driverId: input.driver_id,
+        truckId: input.truck_id,
+        status: input.status,
+      },
+    });
   })();
   recordLoadChanges(id, input.status === "cancelled" ? "cancel" : "update", [
     { field: "customer", oldValue: existing.customer_name, newValue: customerName(input.customer_id) },
@@ -1934,6 +2046,22 @@ export function assignLoad(
       db.prepare("UPDATE drivers SET last_trailer_id = ? WHERE id = ?").run(resolvedTrailerId, driverId);
     }
     markAssetsOnDuty(truckId, driverId);
+    applyLoadCustody({
+      loadId,
+      loadNumber: load.load_number,
+      previous: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status: load.status,
+      },
+      next: {
+        trailerId: resolvedTrailerId ?? null,
+        driverId,
+        truckId,
+        status: nextStatus,
+      },
+    });
   })();
   recordLoadChanges(loadId, "assign", [
     { field: "driver", oldValue: driverName(load.driver_id), newValue: driver.name },
@@ -1947,6 +2075,64 @@ export function assignLoad(
     { field: "oo_percent", oldValue: load.oo_percent, newValue: ooPercent },
     { field: "oo_pay", oldValue: load.oo_pay, newValue: ooPay },
   ]);
+}
+
+/** Cache an address id Samsara already has. Does not create an address. Leaves a non-empty id alone. Null (Addresses, not synced yet) counts as empty. */
+export function rememberLocationSamsaraAddressId(locationId: number, addressId: string): void {
+  const id = addressId.trim();
+  if (!locationId || !id) return;
+  getDb()
+    .prepare(
+      `UPDATE locations
+       SET samsara_address_id = ?, updated_at = ?
+       WHERE id = ? AND (samsara_address_id IS NULL OR TRIM(samsara_address_id) = '')`,
+    )
+    .run(id, now(), locationId);
+}
+
+export function saveSamsaraRouteMirror(
+  loadId: number,
+  patch: {
+    routeId?: string;
+    status?: string;
+    eta?: string;
+    note?: string;
+    syncedAt?: string;
+  },
+): void {
+  const current = getDb()
+    .prepare(
+      `SELECT samsara_route_id, samsara_route_status, samsara_route_eta, samsara_route_note, samsara_route_synced_at
+       FROM loads WHERE id = ?`,
+    )
+    .get(loadId) as
+    | {
+        samsara_route_id: string | null;
+        samsara_route_status: string | null;
+        samsara_route_eta: string | null;
+        samsara_route_note: string | null;
+        samsara_route_synced_at: string | null;
+      }
+    | undefined;
+  if (!current) return;
+  getDb()
+    .prepare(
+      `UPDATE loads SET
+        samsara_route_id = ?,
+        samsara_route_status = ?,
+        samsara_route_eta = ?,
+        samsara_route_note = ?,
+        samsara_route_synced_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      patch.routeId !== undefined ? patch.routeId : (current.samsara_route_id ?? ""),
+      patch.status !== undefined ? patch.status : (current.samsara_route_status ?? ""),
+      patch.eta !== undefined ? patch.eta : (current.samsara_route_eta ?? ""),
+      patch.note !== undefined ? patch.note : (current.samsara_route_note ?? ""),
+      patch.syncedAt !== undefined ? patch.syncedAt : (current.samsara_route_synced_at ?? ""),
+      loadId,
+    );
 }
 
 export function getIftaReport(loadId: number): IftaReport | null {
@@ -2080,6 +2266,22 @@ export function updateLoadStatus(loadId: number, status: string): void {
     if (status === "cancelled" || status === "completed" || status === "delivered") {
       releaseAssetsIfNeeded(load);
     }
+    applyLoadCustody({
+      loadId,
+      loadNumber: load.load_number,
+      previous: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status: load.status,
+      },
+      next: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status,
+      },
+    });
   })();
   const action = status === "cancelled" ? "cancel" : "status";
   recordLoadChanges(loadId, action, [
@@ -2197,6 +2399,22 @@ export function updateDriverProgress(loadId: number, driverId: number, progress:
     ).run(progress, nextStatus, now(), loadId);
     if (nextStatus === "delivered") {
       releaseAssetsIfNeeded({ ...load, status: nextStatus });
+      applyLoadCustody({
+        loadId,
+        loadNumber: load.load_number,
+        previous: {
+          trailerId: load.trailer_id,
+          driverId: load.driver_id,
+          truckId: load.truck_id,
+          status: load.status,
+        },
+        next: {
+          trailerId: load.trailer_id,
+          driverId: load.driver_id,
+          truckId: load.truck_id,
+          status: nextStatus,
+        },
+      });
     } else {
       markAssetsOnDuty(load.truck_id, load.driver_id);
     }

@@ -178,6 +178,9 @@ export type Location = {
   latitude: number | null;
   longitude: number | null;
   google_place_id: string;
+  /** Samsara address id when this location has been mirrored. Null until a sync lands. */
+  samsara_address_id: string | null;
+  samsara_address_error: string;
   created_at: string;
   updated_at: string;
 };
@@ -531,6 +534,11 @@ export type Load = {
   empty_polyline: string;
   tms_invoice_number: string;
   tms_invoice_at: string;
+  samsara_route_id: string;
+  samsara_route_status: string;
+  samsara_route_eta: string;
+  samsara_route_note: string;
+  samsara_route_synced_at: string;
   non_revenue: number;
   bol_json: string;
   created_at: string;

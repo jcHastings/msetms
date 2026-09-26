@@ -12105,8 +12105,29 @@ DISPATCH CONFIRMATION
   assert.match(fuelCloseoutUi, /data-fuel-closeout/);
   assert.match(fuelCloseoutUi, /data-fuel-closeout-fleet/);
   assert.match(fuelCloseoutUi, /Weekly fuel closeout/);
+  assert.match(fuelCloseoutUi, /data-fuel-engine-hours/);
+  assert.match(fuelCloseoutUi, /Idle hours/);
+  assert.match(fuelCloseoutUi, /Engine on/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Idle hours/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /Idle est\./);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-week-strip.tsx"), "utf8"), /1\.0 gal\/hr/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /Engine on/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/fuel-mpg-table.tsx"), "utf8"), /Idle est\./);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/idle-fuel-estimate.tsx"), "utf8"), /data-idle-fuel-estimate/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/idle-fuel-estimate.tsx"), "utf8"), /data-idle-fuel-assumption/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/idle-fuel-estimate.tsx"), "utf8"), /board\.note/);
+  assert.match(fuelPage, /IdleFuelEstimate/);
+  assert.match(fuelPage, /idleFuelHydrateRange/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /FUEL_CLOSEOUT_THRESHOLDS/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /Samsara odometer/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /obdEngineSeconds` wins/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /idlingDurationMilliseconds/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /Read Vehicle Statistics/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /1\.0 gal\/hr/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /avg paid FleetOne/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"), /Not the fuel bill/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/idle-fuel-cost.ts"), "utf8"), /amount_per_gallon/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/idle-fuel-cost.ts"), "utf8"), /1\.0 gal\/hr/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "docs/fuel-closeout.md"), "utf8"),
     /Ascend miles|Ascend odometer|pull miles from Ascend/i,
@@ -12654,6 +12675,37 @@ DISPATCH CONFIRMATION
       endYmd: "2026-08-30",
     }),
     milesSource: closeoutMiles.status(),
+    hours: [
+      {
+        subjectKey: "d:21",
+        driverId: 21,
+        driverName: "Low Mpg",
+        unit: "21",
+        truckId: 21,
+        idleHours: 6.5,
+        engineHours: 40,
+        engineStat: "obdEngineSeconds",
+      },
+      {
+        subjectKey: "d:24",
+        driverId: 24,
+        driverName: "Idle Ish",
+        unit: "24",
+        truckId: 24,
+        idleHours: 18,
+        engineHours: 22,
+        engineStat: "syntheticEngineSeconds",
+      },
+    ],
+    engineHoursSource: {
+      label: "Samsara idle / engine hours",
+      status: "live",
+      note: "Engine-on hours use obdEngineSeconds when that truck has them, otherwise syntheticEngineSeconds.",
+    },
+    idleFuel: [
+      { subjectKey: "d:21", driverId: 21, unit: "21", ppg: 4 },
+      { subjectKey: "d:24", driverId: 24, unit: "24", ppg: 3.5 },
+    ],
     prior: {
       rows: priorCloseoutRows,
       miles: priorCloseoutMiles.milesForWindow({
@@ -12697,11 +12749,35 @@ DISPATCH CONFIRMATION
   assert.equal(idleRow?.idleIsh, true);
   assert.equal(fuelOnlyRow?.fuelNoMiles, true);
   assert.equal(milesOnlyRow?.milesNoFuel, true);
+  assert.equal(lowRow?.idleHours, 6.5);
+  assert.equal(lowRow?.engineHours, 40);
+  assert.equal(lowRow?.engineStat, "obdEngineSeconds");
+  assert.equal(idleRow?.engineStat, "syntheticEngineSeconds");
+  assert.equal(fuelOnlyRow?.idleHours, null);
+  assert.equal(fuelOnlyRow?.engineHours, null);
+  assert.equal(closeoutReport.fleet.idleHours, 24.5);
+  assert.equal(closeoutReport.fleet.engineHours, 62);
+  assert.equal(lowRow?.idlePpg, 4);
+  assert.equal(lowRow?.idleFuelCost, 26);
+  assert.equal(idleRow?.idleFuelCost, 63);
+  assert.equal(fuelOnlyRow?.idleFuelCost, null);
+  assert.equal(midRow?.idleFuelCost, null);
+  assert.equal(closeoutReport.fleet.idleFuelCost, 89);
+  assert.match(closeoutReport.idleFuelNote, /1\.0 gal\/hr/);
+  assert.match(closeoutReport.idlePriceCite, /avg paid FleetOne/);
   assert.ok(closeoutReport.fleet.mpgVsPrior != null && closeoutReport.fleet.mpgVsPrior > 0);
   const closeoutMd = renderFuelCloseoutMarkdown(closeoutReport);
   const closeoutHtml = renderFuelCloseoutHtml(closeoutReport);
   assert.match(closeoutMd, /Weekly fuel closeout/);
   assert.match(closeoutMd, /Samsara odometer/);
+  assert.match(closeoutMd, /Idle hours/);
+  assert.match(closeoutMd, /Idle fuel estimate/);
+  assert.match(closeoutMd, /1\.0 gal\/hr/);
+  assert.match(closeoutMd, /Not the fuel bill/);
+  assert.match(closeoutMd, /obdEngineSeconds/);
+  assert.match(closeoutHtml, /Idle hours/);
+  assert.match(closeoutHtml, /Idle est/);
+  assert.match(closeoutHtml, /Engine on/);
   assert.match(closeoutMd, /Draft for JC only/);
   assert.match(closeoutMd, /Nothing emailed or texted to drivers/);
   assert.match(closeoutHtml, /data-closeout-driver/);
@@ -12922,6 +12998,8 @@ DISPATCH CONFIRMATION
   assert.equal(deniseMpg.gallons, 100);
   assert.equal(deniseMpg.miles, null);
   assert.equal(deniseMpg.mpg, null);
+  assert.equal(deniseMpg.idleHours, null);
+  assert.equal(deniseMpg.engineHours, null);
   const { encodePolyline } = await import("../lib/routing");
   const mpgPoly = encodePolyline(
     Array.from({ length: 24 }, (_, index) => ({ lat: 40.5 + index * 0.02, lng: -98.4 + index * 0.04 })),
@@ -13032,10 +13110,120 @@ DISPATCH CONFIRMATION
     recordedAt: mpgNow.toISOString(),
     source: "samsara",
   });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 100,
+    recordedAt: startOfLocalWeek(mpgNow).toISOString(),
+    stat: "idlingDurationMilliseconds",
+    source: "samsara",
+  });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 100.4,
+    recordedAt: mpgNow.toISOString(),
+    stat: "idlingDurationMilliseconds",
+    source: "samsara",
+  });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 1000,
+    recordedAt: startOfLocalWeek(mpgNow).toISOString(),
+    stat: "syntheticEngineSeconds",
+    source: "samsara",
+  });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 1200,
+    recordedAt: mpgNow.toISOString(),
+    stat: "syntheticEngineSeconds",
+    source: "samsara",
+  });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 500,
+    recordedAt: startOfLocalWeek(mpgNow).toISOString(),
+    stat: "obdEngineSeconds",
+    source: "samsara",
+  });
+  queries.saveTruckEngineHour(deniseTruck.id, {
+    hours: 500.4,
+    recordedAt: mpgNow.toISOString(),
+    stat: "obdEngineSeconds",
+    source: "samsara",
+  });
   const deniseMpgLive = listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "Denise Ortega");
   assert.ok(deniseMpgLive);
   assert.equal(deniseMpgLive.miles, 600);
   assert.equal(deniseMpgLive.mpg, 6);
+  assert.equal(deniseMpgLive.idleHours, 0.4);
+  assert.equal(deniseMpgLive.engineHours, 0.4);
+  assert.equal(listDriverMpg("month", mpgNow).rows.find((row) => row.driverName === "Denise Ortega")?.idleHours, null);
+  assert.equal(listDriverMpg("month", mpgNow).rows.find((row) => row.driverName === "Denise Ortega")?.idleFuelCost, null);
+  assert.equal(listDriverMpg("month", mpgNow).rows.find((row) => row.driverName === "Denise Ortega")?.engineHours, null);
+  const {
+    estimateIdleFuelCost,
+    paidFleetOnePpg,
+    fillsForDriverPrice,
+    buildIdleFuelCostBoard,
+  } = await import("../lib/idle-fuel-cost");
+  assert.equal(estimateIdleFuelCost(10, 4), 40);
+  assert.equal(estimateIdleFuelCost(10, null), null);
+  assert.equal(estimateIdleFuelCost(null, 4), null);
+  assert.equal(estimateIdleFuelCost(0, 4), 0);
+  assert.equal(estimateIdleFuelCost(0, null), null);
+  assert.equal(paidFleetOnePpg([{ occurred_at: "2026-08-26T15:00:00.000Z", category: "reefer", gallons: 100, amount: 500, price_per_gallon: 5 }]).ppg, null);
+  assert.equal(
+    paidFleetOnePpg([
+      { occurred_at: "2026-08-26T15:00:00.000Z", category: "truck_diesel", gallons: null, amount: null, price_per_gallon: 3.5 },
+      { occurred_at: "2026-08-26T16:00:00.000Z", category: "truck_diesel", gallons: null, amount: null, price_per_gallon: 4.5 },
+    ]).ppg,
+    4,
+  );
+  const idleCostAnchor = new Date("2026-08-26T16:00:00.000Z");
+  const idleCostDrivers = [
+    { id: 1, name: "Priced Idle", truck_id: 1, truck_unit: "1", active: 1, termination_date: null },
+    { id: 2, name: "No Price", truck_id: 2, truck_unit: "2", active: 1, termination_date: null },
+    { id: 3, name: "No Idle", truck_id: 3, truck_unit: "3", active: 1, termination_date: null },
+  ];
+  const idleCostTrucks = [
+    { id: 1, unit_number: "1", assigned_driver_id: 1 },
+    { id: 2, unit_number: "2", assigned_driver_id: 2 },
+    { id: 3, unit_number: "3", assigned_driver_id: 3 },
+  ];
+  const idleCostReadings = [
+    { id: 1, truck_id: 1, recorded_at: "2026-08-24T03:00:00.000Z", hours: 0, kind: "idle" as const, stat: "idlingDurationMilliseconds", source: "samsara" },
+    { id: 2, truck_id: 1, recorded_at: "2026-08-30T12:00:00.000Z", hours: 10, kind: "idle" as const, stat: "idlingDurationMilliseconds", source: "samsara" },
+    { id: 3, truck_id: 2, recorded_at: "2026-08-24T03:00:00.000Z", hours: 20, kind: "idle" as const, stat: "idlingDurationMilliseconds", source: "samsara" },
+    { id: 4, truck_id: 2, recorded_at: "2026-08-30T12:00:00.000Z", hours: 25, kind: "idle" as const, stat: "idlingDurationMilliseconds", source: "samsara" },
+  ];
+  const idleCostFills = [
+    { occurred_at: "2026-08-26T15:00:00.000Z", driver_id: 1, truck_id: 1, category: "truck_diesel", gallons: 200, amount: 800, price_per_gallon: 9 },
+    { occurred_at: "2026-08-26T15:00:00.000Z", driver_id: 1, truck_id: 1, category: "reefer", gallons: 100, amount: 1000, price_per_gallon: 10 },
+    { occurred_at: "2026-07-15T15:00:00.000Z", driver_id: 1, truck_id: 1, category: "truck_diesel", gallons: 50, amount: 500, price_per_gallon: 10 },
+    { occurred_at: "2026-08-26T15:00:00.000Z", driver_id: 9, truck_id: 2, category: "truck_diesel", gallons: 10, amount: 100, price_per_gallon: 10 },
+    { occurred_at: "2026-08-26T15:00:00.000Z", driver_id: 3, truck_id: 3, category: "truck_diesel", gallons: 40, amount: 160, price_per_gallon: 4 },
+  ];
+  assert.equal(paidFleetOnePpg(idleCostFills.filter((row) => row.driver_id === 1 && row.occurred_at >= "2026-08-24T04:00:00.000Z")).ppg, 4);
+  assert.equal(fillsForDriverPrice(idleCostFills, 2, 2, "2026-08-24T04:00:00.000Z", "2026-08-31T04:00:00.000Z").length, 0);
+  const idleCostBoard = buildIdleFuelCostBoard(idleCostAnchor, {
+    now: idleCostAnchor,
+    fills: idleCostFills,
+    readings: idleCostReadings,
+    trucks: idleCostTrucks,
+    drivers: idleCostDrivers,
+  });
+  const idleCostWeek = idleCostBoard.windows.find((window) => window.period === "week");
+  const idleCostPriced = idleCostBoard.drivers.find((row) => row.driverName === "Priced Idle");
+  const idleCostBlankPrice = idleCostBoard.drivers.find((row) => row.driverName === "No Price");
+  assert.equal(idleCostBoard.drivers.some((row) => row.driverName === "No Idle"), false);
+  assert.equal(idleCostPriced?.week.idleHours, 10);
+  assert.equal(idleCostPriced?.week.ppg, 4);
+  assert.equal(idleCostPriced?.week.cost, 40);
+  assert.equal(idleCostPriced?.day.idleHours, null);
+  assert.equal(idleCostPriced?.day.cost, null);
+  assert.equal(idleCostBlankPrice?.week.idleHours, 5);
+  assert.equal(idleCostBlankPrice?.week.ppg, null);
+  assert.equal(idleCostBlankPrice?.week.cost, null);
+  assert.equal(idleCostWeek?.fleetIdleHours, 15);
+  assert.equal(idleCostWeek?.fleetCost, 40);
+  assert.match(idleCostWeek?.priceCite ?? "", /avg paid FleetOne this week/);
+  assert.match(idleCostBoard.note, /1\.0 gal\/hr/);
+  assert.match(idleCostBoard.note, /Not the fuel bill/);
   assert.equal(listDriverMpg("week", mpgNow).rows[0]?.driverName, "Denise Ortega");
   fuelStore.importFuelFromCsv(
     [
@@ -17122,6 +17310,14 @@ DISPATCH CONFIRMATION
   assert.match(closeoutAskReply, /Samsara odometer/);
   assert.match(closeoutAskReply, /Draft for JC only/);
   assert.match(closeoutAskReply, /High Mpg/);
+  assert.match(closeoutAskReply, /Fleet idle 24\.5 h/);
+  assert.match(closeoutAskReply, /Engine on 62\.0 h/);
+  assert.match(closeoutAskReply, /Low Mpg idle 6\.5 h/);
+  assert.match(closeoutAskReply, /Idle fuel estimate \$89\.00/);
+  assert.match(closeoutAskReply, /1\.0 gal\/hr/);
+  assert.match(closeoutAskReply, /Not the fuel bill/);
+  assert.match(closeoutAskReply, /Low Mpg \$26\.00/);
+  assert.match(closeoutAskReply, /Idle Ish \$63\.00/);
   assert.doesNotMatch(closeoutAskReply, /I don't have information/i);
   assert.equal(parseMikeReeferQuestion("What's the Reefer temperature on trailer MS1519"), "MS1519");
   assert.equal(sameTrailerUnit("MS1519", "1519"), true);
@@ -17229,6 +17425,231 @@ DISPATCH CONFIRMATION
   assert.ok(odometerSeries[1] && Math.abs(odometerSeries[1].miles - 200) < 0.01);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /obdOdometerMeters/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /hydrateSamsaraOdometerWindow/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /hydrateSamsaraEngineHourWindow/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara.ts"), "utf8"), /ENGINE_HOUR_HISTORY_TYPES/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "lib/engine-hours.ts"), "utf8"),
+    /idlingDurationMilliseconds,obdEngineSeconds,syntheticEngineSeconds/,
+  );
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/engine-hours.ts"), "utf8"), /obdEngineSeconds wins/);
+
+  const {
+    ENGINE_HOUR_HISTORY_TYPES,
+    cumulativeDeltaHours,
+    engineHoursDelta,
+    extractSamsaraEngineHourPoints,
+    samsaraEngineHoursSourceStatus,
+  } = await import("../lib/engine-hours");
+  const { TRUCK_ENGINE_HOUR_STATS } = await import("../lib/queries");
+  assert.equal(ENGINE_HOUR_HISTORY_TYPES, TRUCK_ENGINE_HOUR_STATS.join(","));
+  const hourStart = "2026-08-24T04:00:00.000Z";
+  const hourEnd = "2026-08-31T04:00:00.000Z";
+  const obdAndSynthetic = [
+    { id: 1, recorded_at: hourStart, hours: 10, stat: "idlingDurationMilliseconds" },
+    { id: 2, recorded_at: hourEnd, hours: 14.5, stat: "idlingDurationMilliseconds" },
+    { id: 3, recorded_at: hourStart, hours: 100, stat: "obdEngineSeconds" },
+    { id: 4, recorded_at: hourEnd, hours: 148, stat: "obdEngineSeconds" },
+    { id: 5, recorded_at: hourStart, hours: 1000, stat: "syntheticEngineSeconds" },
+    { id: 6, recorded_at: hourEnd, hours: 1200, stat: "syntheticEngineSeconds" },
+  ];
+  assert.equal(cumulativeDeltaHours(obdAndSynthetic, hourStart, hourEnd, "idlingDurationMilliseconds"), 4.5);
+  assert.deepEqual(engineHoursDelta(obdAndSynthetic, hourStart, hourEnd), { hours: 48, stat: "obdEngineSeconds" });
+  assert.deepEqual(
+    engineHoursDelta(
+      [
+        { id: 1, recorded_at: hourStart, hours: 10, stat: "syntheticEngineSeconds" },
+        { id: 2, recorded_at: hourEnd, hours: 20, stat: "syntheticEngineSeconds" },
+      ],
+      hourStart,
+      hourEnd,
+    ),
+    { hours: 10, stat: "syntheticEngineSeconds" },
+  );
+  assert.deepEqual(
+    engineHoursDelta(
+      [
+        { id: 1, recorded_at: hourStart, hours: 50, stat: "obdEngineSeconds" },
+        { id: 2, recorded_at: hourStart, hours: 10, stat: "syntheticEngineSeconds" },
+        { id: 3, recorded_at: hourEnd, hours: 30, stat: "syntheticEngineSeconds" },
+      ],
+      hourStart,
+      hourEnd,
+    ),
+    { hours: null, stat: "obdEngineSeconds" },
+  );
+  assert.equal(
+    cumulativeDeltaHours(
+      [
+        { id: 1, recorded_at: hourStart, hours: 8, stat: "idlingDurationMilliseconds" },
+        { id: 2, recorded_at: hourEnd, hours: 8, stat: "idlingDurationMilliseconds" },
+      ],
+      hourStart,
+      hourEnd,
+      "idlingDurationMilliseconds",
+    ),
+    0,
+  );
+  assert.equal(
+    cumulativeDeltaHours(
+      [
+        { id: 1, recorded_at: hourStart, hours: 40, stat: "obdEngineSeconds" },
+        { id: 2, recorded_at: hourEnd, hours: 10, stat: "obdEngineSeconds" },
+      ],
+      hourStart,
+      hourEnd,
+      "obdEngineSeconds",
+    ),
+    null,
+  );
+  assert.equal(
+    cumulativeDeltaHours(
+      [
+        { id: 1, recorded_at: hourStart, hours: 0, stat: "obdEngineSeconds" },
+        { id: 2, recorded_at: hourEnd, hours: 200, stat: "obdEngineSeconds" },
+      ],
+      hourStart,
+      hourEnd,
+      "obdEngineSeconds",
+    ),
+    null,
+  );
+  assert.equal(cumulativeDeltaHours([{ id: 1, recorded_at: hourEnd, hours: 12, stat: "obdEngineSeconds" }], hourStart, hourEnd, "obdEngineSeconds"), null);
+  assert.equal(extractSamsaraEngineHourPoints({ obdEngineSeconds: { value: 3600 } }).length, 0);
+  const engineHourPoints = extractSamsaraEngineHourPoints({
+    id: "veh-idle-981",
+    idlingDurationMilliseconds: [
+      { time: hourStart, value: 36_000_000 },
+      { time: hourEnd, value: 52_200_000 },
+    ],
+    obdEngineSeconds: [
+      { time: hourStart, value: 360_000 },
+      { time: hourEnd, value: 532_800 },
+    ],
+    syntheticEngineSeconds: { time: hourEnd, value: 9_000_000 },
+  });
+  assert.equal(engineHourPoints.length, 5);
+  assert.ok(engineHourPoints.some((point) => point.stat === "idlingDurationMilliseconds" && Math.abs(point.hours - 10) < 0.001));
+  assert.ok(engineHourPoints.some((point) => point.stat === "obdEngineSeconds" && Math.abs(point.hours - 148) < 0.001));
+  assert.equal(samsaraEngineHoursSourceStatus({ tokenSet: false, readingCount: 0 }).status, "unavailable");
+  assert.match(samsaraEngineHoursSourceStatus({ tokenSet: false, readingCount: 0 }).note, /stay blank/);
+  assert.equal(
+    samsaraEngineHoursSourceStatus({ tokenSet: true, readingCount: 0, error: "Read Vehicle Statistics" }).status,
+    "unavailable",
+  );
+  assert.match(
+    samsaraEngineHoursSourceStatus({ tokenSet: true, readingCount: 0, error: "Read Vehicle Statistics" }).note,
+    /Read Vehicle Statistics/,
+  );
+
+  const idleTruckId = queries.createTruck({
+    unit_number: "981",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "veh-idle-981",
+  });
+  const unmappedTruckId = queries.createTruck({
+    unit_number: "982",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "",
+  });
+  const previousIdleToken = process.env.SAMSARA_API_TOKEN;
+  process.env.SAMSARA_API_TOKEN = "test-not-a-real-token";
+  samsara.resetSamsaraCacheForTests();
+  let idleHistoryCalls = 0;
+  let idleHistoryMode: "deny" | "ok" = "deny";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/fleet/vehicles/stats/history") && url.includes("idlingDurationMilliseconds")) {
+      idleHistoryCalls += 1;
+      if (url.includes("veh-wrong")) {
+        return new Response(JSON.stringify({ data: [{ id: "someone-else", obdEngineSeconds: [{ time: hourEnd, value: 7200 }] }] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (idleHistoryMode === "deny") {
+        return new Response("forbidden", { status: 403 });
+      }
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "veh-idle-981",
+              idlingDurationMilliseconds: [
+                { time: hourStart, value: 36_000_000 },
+                { time: hourEnd, value: 52_200_000 },
+              ],
+              obdEngineSeconds: [
+                { time: hourStart, value: 360_000 },
+                { time: hourEnd, value: 532_800 },
+              ],
+              syntheticEngineSeconds: [
+                { time: hourStart, value: 3_600_000 },
+                { time: hourEnd, value: 7_200_000 },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const blocked = await samsara.hydrateSamsaraEngineHourWindow({
+      fromIso: hourStart,
+      toIso: hourEnd,
+      trucks: [{ id: idleTruckId, samsara_vehicle_id: "veh-idle-981" }],
+    });
+    assert.equal(blocked.reason, "scope");
+    assert.equal(blocked.error, "Read Vehicle Statistics");
+    assert.equal(blocked.fetched, 0);
+    assert.equal(queries.listTruckEngineHourReadings(idleTruckId).length, 0);
+    assert.equal(idleHistoryCalls, 1);
+
+    const unmapped = await samsara.hydrateSamsaraEngineHourWindow({
+      fromIso: hourStart,
+      toIso: hourEnd,
+      trucks: [{ id: unmappedTruckId, samsara_vehicle_id: "" }],
+    });
+    assert.equal(unmapped.skipped, 1);
+    assert.equal(unmapped.fetched, 0);
+    assert.equal(idleHistoryCalls, 1);
+    assert.equal(queries.listTruckEngineHourReadings(unmappedTruckId).length, 0);
+
+    const wrongVehicle = await samsara.hydrateSamsaraEngineHourWindow({
+      fromIso: hourStart,
+      toIso: hourEnd,
+      trucks: [{ id: idleTruckId, samsara_vehicle_id: "veh-wrong" }],
+    });
+    assert.equal(wrongVehicle.fetched, 0);
+    assert.equal(queries.listTruckEngineHourReadings(idleTruckId).length, 0);
+
+    samsara.resetSamsaraCacheForTests();
+    idleHistoryMode = "ok";
+    const filled = await samsara.hydrateSamsaraEngineHourWindow({
+      fromIso: hourStart,
+      toIso: hourEnd,
+      trucks: [{ id: idleTruckId, samsara_vehicle_id: "veh-idle-981" }],
+    });
+    assert.equal(filled.reason, undefined);
+    assert.ok(filled.fetched >= 6);
+    const stored = queries.listTruckEngineHourReadings(idleTruckId);
+    assert.ok(stored.some((row) => row.stat === "obdEngineSeconds"));
+    assert.ok(stored.some((row) => row.stat === "syntheticEngineSeconds"));
+    const weekHours = engineHoursDelta(stored, hourStart, hourEnd);
+    assert.equal(weekHours.stat, "obdEngineSeconds");
+    assert.equal(weekHours.hours, 48);
+    assert.equal(cumulativeDeltaHours(stored, hourStart, hourEnd, "idlingDurationMilliseconds"), 4.5);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousIdleToken == null) delete process.env.SAMSARA_API_TOKEN;
+    else process.env.SAMSARA_API_TOKEN = previousIdleToken;
+    samsara.resetSamsaraCacheForTests();
+  }
 
   const { compactTrailerShareState, formatBoardDateTime, formatCompactShareExpiry, formatDate, formatDateTime, formatStopWindow, gpsMotionLabel, loadTouchesToday, shortPlaceLabel } = await import("../lib/format");
   assert.equal(formatDate("2026-08-25"), "08/25/26");
@@ -20846,6 +21267,275 @@ parked for next week
     assert.ok("laneAverage" in fineExtract);
     assert.equal(fineExtract.laneMiles, 1200, "import draft gets printed miles for $/mi");
   }
+
+  const dvirShared = await import("../lib/samsara-dvir-shared");
+  const dvirApi = await import("../lib/integrations/samsara-defects");
+  const dvirPage = fs.readFileSync(path.join(process.cwd(), "app/fleet/trucks/[id]/page.tsx"), "utf8");
+  const dvirCard = fs.readFileSync(path.join(process.cwd(), "components/open-dvir-defects.tsx"), "utf8");
+  const dvirFetchSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/samsara-defects.ts"), "utf8");
+  assert.match(dvirPage, /getOpenDvirDefectsForTruck/);
+  assert.match(dvirPage, /OpenDvirDefectsCard/);
+  assert.match(dvirCard, /data-open-dvir-defects/);
+  assert.match(dvirCard, /data-samsara-defect-id/);
+  assert.match(dvirCard, /DVIR_ADVISORY/);
+  assert.equal(dvirShared.DVIR_ADVISORY, "Advisory. Does not put the unit out of service.");
+  assert.match(dvirFetchSrc, /\/defects\/stream/);
+  assert.match(dvirFetchSrc, /isResolved/);
+  assert.doesNotMatch(`${dvirFetchSrc}\n${dvirCard}\n${dvirPage.match(/OpenDvirDefectsCard[\s\S]*UnitComplianceCard/)?.[0] ?? ""}`, /updateTruck|out_of_service/);
+  assert.equal(dvirShared.SAMSARA_DVIR_SCOPE, "Read Defects");
+
+  const parsedDefects = dvirShared.parseOpenDvirDefects([
+    {
+      id: "9700544",
+      dvirId: "292371177",
+      isResolved: false,
+      comment: "Engine failure.",
+      createdAtTime: "2020-01-27T07:06:25Z",
+      updatedAtTime: "2020-01-27T08:06:25Z",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "494125" },
+    },
+    {
+      id: "9700545",
+      dvirId: "292371178",
+      isResolved: false,
+      comment: "Marker lamp.",
+      createdAtTime: "2024-06-01T15:00:00Z",
+      defectSafetyStatus: "safe",
+      vehicle: { id: "494125" },
+    },
+    {
+      id: "111",
+      isResolved: false,
+      comment: "Other truck.",
+      createdAtTime: "2024-06-02T15:00:00Z",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "999" },
+    },
+    {
+      id: "222",
+      isResolved: true,
+      comment: "Already fixed.",
+      defectSafetyStatus: "unsafe",
+      vehicle: { id: "494125" },
+    },
+    { id: "333", isResolved: "false", comment: "String false is not open.", vehicle: { id: "494125" } },
+    { id: "", isResolved: false, vehicle: { id: "494125" } },
+    { id: "444", isResolved: false, trailer: { id: "494125" }, comment: "Trailer only." },
+    { comment: "No id", isResolved: false, vehicle: { id: "494125" } },
+  ]);
+  assert.deepEqual(
+    parsedDefects.map((row) => row.id),
+    ["9700544", "9700545", "111"],
+  );
+  const unitDefects = dvirShared.openDvirDefectsForVehicle(parsedDefects, "494125");
+  assert.deepEqual(
+    unitDefects.map((row) => row.id),
+    ["9700544", "9700545"],
+    "unsafe open defect stays ahead of a later safe one on the same vehicle",
+  );
+  assert.equal(dvirShared.openDvirDefectsForVehicle(parsedDefects, " 494125 ").length, 2);
+  assert.equal(dvirShared.openDvirDefectsForVehicle(parsedDefects, "49412").length, 0);
+  const unsafeLine = dvirShared.openDvirDefectLine(unitDefects[0]);
+  assert.equal(unsafeLine.id, "9700544");
+  assert.equal(unsafeLine.safety, "Unsafe");
+  assert.equal(unsafeLine.status, "Open");
+  assert.match(unsafeLine.time, /Created 01\/27\/20/);
+  assert.match(unsafeLine.time, /2:06/);
+  assert.equal(unsafeLine.dvirId, "292371177");
+  assert.equal(unsafeLine.comment, "Engine failure.");
+  assert.equal(dvirShared.dvirSafetyLabel(""), "No safety class");
+  const noTime = dvirShared.openDvirTimeLabel({
+    id: "1",
+    dvirId: "",
+    vehicleId: "1",
+    createdAtTime: "",
+    updatedAtTime: "",
+    safetyStatus: "",
+    comment: "",
+  });
+  assert.equal(noTime, "Time not on defect");
+  assert.doesNotMatch(noTime, /—/);
+
+  const dvirTruckId = queries.createTruck({
+    unit_number: "DVIR1",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "494125",
+  });
+  const dvirUnmappedTruckId = queries.createTruck({
+    unit_number: "DVIR2",
+    type: "sleeper",
+    capacity_lbs: 45000,
+    status: "available",
+    samsara_vehicle_id: "",
+  });
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const unmappedCard = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "" },
+    { token: "test-not-a-real-token", fetchImpl: (async () => {
+      throw new Error("unmapped truck must not call Samsara");
+    }) as typeof fetch },
+  );
+  assert.equal(unmappedCard.ok, false);
+  if (!unmappedCard.ok) {
+    assert.equal(unmappedCard.reason, "vehicle_unmapped");
+    assert.match(unmappedCard.message, /No Samsara ID on this truck/);
+  }
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const missingToken = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    { token: null, fetchImpl: (async () => {
+      throw new Error("missing token must not call Samsara");
+    }) as typeof fetch },
+  );
+  assert.equal(missingToken.ok, false);
+  if (!missingToken.ok) {
+    assert.equal(missingToken.reason, "token_missing");
+    assert.match(missingToken.message, /Read Defects/);
+  }
+
+  const streamPages: unknown[][] = [
+    [
+      {
+        id: "9700544",
+        dvirId: "292371177",
+        isResolved: false,
+        comment: "Engine failure.",
+        createdAtTime: "2020-01-27T07:06:25Z",
+        defectSafetyStatus: "unsafe",
+        vehicle: { id: "494125" },
+      },
+      {
+        id: "222",
+        isResolved: true,
+        defectSafetyStatus: "unsafe",
+        vehicle: { id: "494125" },
+      },
+    ],
+    [
+      {
+        id: "9700999",
+        dvirId: "8",
+        isResolved: false,
+        comment: "Wiper.",
+        createdAtTime: "2024-02-02T12:00:00Z",
+        defectSafetyStatus: "safe",
+        vehicle: { id: "other-vehicle" },
+      },
+    ],
+  ];
+  const dvirUrls: string[] = [];
+  dvirApi.resetOpenDvirCacheForTests();
+  const originalDvirFetch = globalThis.fetch;
+  const dvirFetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    dvirUrls.push(url);
+    const pageIndex = dvirUrls.length - 1;
+    const rows = streamPages[pageIndex] ?? [];
+    const hasNextPage = pageIndex === 0;
+    return new Response(
+      JSON.stringify({
+        data: rows,
+        pagination: { endCursor: hasNextPage ? "cursor-2" : "", hasNextPage },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+  try {
+    const openCard = await dvirApi.getOpenDvirDefectsForTruck(
+      { samsara_vehicle_id: "494125" },
+      { token: "test-not-a-real-token", now: new Date("2026-09-26T12:00:00.000Z"), fetchImpl: dvirFetch },
+    );
+    assert.equal(openCard.ok, true);
+    if (openCard.ok) {
+      assert.deepEqual(
+        openCard.defects.map((row) => row.id),
+        ["9700544"],
+      );
+      assert.equal(openCard.defects[0]?.safetyStatus, "unsafe");
+      assert.equal(openCard.truncated, false);
+      assert.equal(openCard.historySince, "2020-01-01T00:00:00.000Z");
+    }
+    assert.equal(dvirUrls.length, 2, "follow the stream cursor");
+    const firstUrl = new URL(dvirUrls[0]);
+    assert.equal(firstUrl.pathname, "/defects/stream");
+    assert.equal(firstUrl.searchParams.get("isResolved"), "false");
+    assert.equal(firstUrl.searchParams.get("startTime"), "2020-01-01T00:00:00.000Z");
+    assert.equal(firstUrl.searchParams.get("endTime"), "2026-09-26T12:00:00.000Z");
+    assert.equal(firstUrl.searchParams.get("limit"), "200");
+    assert.equal(new URL(dvirUrls[1]).searchParams.get("after"), "cursor-2");
+    assert.equal(queries.getTruck(dvirTruckId)?.status, "available", "unsafe DVIR must not auto-OOS the unit");
+    assert.equal(queries.getTruck(dvirUnmappedTruckId)?.status, "available");
+  } finally {
+    globalThis.fetch = originalDvirFetch;
+    dvirApi.resetOpenDvirCacheForTests();
+  }
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const forbidden = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => new Response("forbidden", { status: 403 })) as typeof fetch,
+    },
+  );
+  assert.equal(forbidden.ok, false);
+  if (!forbidden.ok) {
+    assert.equal(forbidden.reason, "scopes_insufficient");
+    assert.match(forbidden.message, /Read Defects/);
+  }
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  const rejected = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => new Response("nope", { status: 401 })) as typeof fetch,
+    },
+  );
+  assert.equal(rejected.ok, false);
+  if (!rejected.ok) assert.equal(rejected.reason, "token_rejected");
+
+  dvirApi.resetOpenDvirCacheForTests();
+  let timedFetches = 0;
+  const truncated = await dvirApi.getOpenDvirDefectsForTruck(
+    { samsara_vehicle_id: "494125" },
+    {
+      token: "test-not-a-real-token",
+      fetchImpl: (async () => {
+        timedFetches += 1;
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: `page-${timedFetches}`,
+                isResolved: false,
+                createdAtTime: "2024-01-01T00:00:00Z",
+                defectSafetyStatus: "safe",
+                vehicle: { id: "494125" },
+              },
+            ],
+            pagination: { endCursor: `c-${timedFetches}`, hasNextPage: true },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    },
+  );
+  assert.equal(timedFetches, dvirShared.DVIR_STREAM_MAX_PAGES);
+  assert.equal(truncated.ok, true);
+  if (truncated.ok) {
+    assert.equal(truncated.truncated, true);
+    assert.equal(truncated.defects.length, dvirShared.DVIR_STREAM_MAX_PAGES);
+  }
+  assert.equal(queries.getTruck(dvirTruckId)?.status, "available");
+  dvirApi.resetOpenDvirCacheForTests();
 
   closeDb();
   const reopened = getDb();

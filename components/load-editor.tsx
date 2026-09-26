@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
 import { AttachmentsPanel } from "@/components/attachments-panel";
-import { HosBadge, LocationBadge, TrailerLocationBadge } from "@/components/fleet-badges";
+import { HosBadge, LocationBadge, SamsaraRouteBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { IftaPanel } from "@/components/ifta-panel";
 import { LoadExtraDetails } from "@/components/load-extra-details";
 import { LoadAuditSection } from "@/components/load-audit-section";
@@ -39,6 +39,7 @@ import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integra
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { buildTmsInvoice } from "@/lib/invoice";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
+import { refreshSamsaraRouteProgress } from "@/lib/integrations/samsara-routes";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listLoadChatMessages } from "@/lib/load-chat";
 import { latestLoadShareLink, loadSharePath } from "@/lib/load-share";
@@ -413,9 +414,16 @@ async function LoadLogLiveCards({ load, role }: { load: LoadView; role: string }
   const ifta = getIftaPanel(load);
   const tractorLocation = await getLocationForLoad(load.id);
   const driverHos = await getHosForLoad(load.id);
+  const samsaraRoute = await refreshSamsaraRouteProgress(load.id);
   return (
     <>
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Samsara route</div>
+          <div className="mt-1">
+            <SamsaraRouteBadge card={samsaraRoute} />
+          </div>
+        </div>
         <div className="card p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tractor (Samsara)</div>
           <div className="mt-1">
