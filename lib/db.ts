@@ -889,6 +889,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "samsara_address_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
@@ -911,7 +912,19 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "parent_load_id", "INTEGER");
   ensureColumn(db, "loads", "master_suffix", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "is_master", "INTEGER NOT NULL DEFAULT 0");
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_loads_parent ON loads(parent_load_id);`);
+  ensureColumn(db, "loads", "samsara_route_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_status", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_eta", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_note", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "samsara_route_synced_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS samsara_route_feed (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      cursor TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_loads_parent ON loads(parent_load_id);
+  `);
   ensureColumn(db, "drivers", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trucks", "division", "TEXT NOT NULL DEFAULT 'MSE'");
   ensureColumn(db, "trailers", "division", "TEXT NOT NULL DEFAULT 'MSE'");

@@ -9,6 +9,7 @@ import {
   type VehicleLocation,
 } from "@/lib/integrations/samsara";
 import { loadMapPinIconUrl } from "@/lib/load-map-shared";
+import type { SamsaraRouteCard } from "@/lib/samsara-routes-shared";
 
 function coordsLabel(lat: number | null | undefined, lng: number | null | undefined): string {
   if (lat == null || lng == null) return "";
@@ -89,6 +90,24 @@ export function HosBadge({
   return (
     <div className="leading-tight text-xs tabular-nums" title={title}>
       {drive !== "—" ? drive : formatDutyStatus(hos.dutyStatus) || "HOS"}
+    </div>
+  );
+}
+
+export function SamsaraRouteBadge({ card }: { card: SamsaraRouteCard }) {
+  return (
+    <div className="text-xs leading-tight" data-samsara-route="" data-samsara-route-soft={card.soft ? "1" : "0"}>
+      <div className={card.soft ? "text-slate-600" : "font-medium text-slate-900"}>{card.statusLine}</div>
+      {card.etaLine ? (
+        <div className="text-slate-700" data-samsara-route-eta="">
+          {card.etaLine}
+        </div>
+      ) : null}
+      {card.routeLine ? (
+        <div className="text-slate-500" data-samsara-route-id="">
+          {card.routeLine}
+        </div>
+      ) : null}
     </div>
   );
 }

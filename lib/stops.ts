@@ -86,8 +86,8 @@ export function listStopAppointmentTargets(loadId: number): Array<{
   }));
 }
 
-export function listStops(loadId: number): LoadStop[] {
-  applyGeofenceArrivals(loadId);
+export function listStops(loadId: number, options?: { geofence?: boolean }): LoadStop[] {
+  if (options?.geofence !== false) applyGeofenceArrivals(loadId);
   const locations = listLocations();
   return (
     getDb()
