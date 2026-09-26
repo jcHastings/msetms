@@ -90,7 +90,10 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
           <div className="mt-1 text-lg font-semibold tabular-nums">{formatFuelMoney(report.fleet.spend.money)}</div>
         </div>
       </div>
-      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-2" data-fuel-engine-hours="">
+      <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500" data-idle-fuel-note="">
+        {report.idleFuelNote} {report.idlePriceCite}.
+      </p>
+      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-3" data-fuel-engine-hours="">
         <div data-fuel-engine-hours="idle">
           <div className="text-xs font-semibold uppercase text-slate-500">Idle hours</div>
           <div className="mt-1 text-lg font-semibold tabular-nums">{hours(report.fleet.idleHours)}</div>
@@ -98,6 +101,10 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
         <div data-fuel-engine-hours="engine">
           <div className="text-xs font-semibold uppercase text-slate-500">Engine on</div>
           <div className="mt-1 text-lg font-semibold tabular-nums">{hours(report.fleet.engineHours)}</div>
+        </div>
+        <div data-fuel-engine-hours="idle-est">
+          <div className="text-xs font-semibold uppercase text-slate-500">Idle est.</div>
+          <div className="mt-1 text-lg font-semibold tabular-nums">{formatFuelMoney(report.fleet.idleFuelCost)}</div>
         </div>
       </div>
       <div className="grid gap-4 border-t border-slate-100 px-5 py-3 md:grid-cols-2">
@@ -141,6 +148,7 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
                 <th>Miles</th>
                 <th>Idle</th>
                 <th>Engine on</th>
+                <th>Idle est.</th>
                 <th>Diesel</th>
                 <th>MPG</th>
                 <th>Fills</th>
@@ -176,6 +184,7 @@ export function FuelCloseoutStrip({ report }: { report: FuelCloseoutReport }) {
                     <td className="tabular-nums" title={engineTitle(row.engineStat)}>
                       {hours(row.engineHours)}
                     </td>
+                    <td className="tabular-nums">{formatFuelMoney(row.idleFuelCost)}</td>
                     <td className="tabular-nums">{row.dieselGallons > 0 ? formatGallons(row.dieselGallons) : "—"}</td>
                     <td className="tabular-nums font-semibold">{n(row.mpg)}</td>
                     <td className="tabular-nums">{row.fillCount || "—"}</td>

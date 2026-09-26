@@ -36,11 +36,13 @@ export function FuelWeekSpendCards({
   current,
   idleHours = null,
   engineHours = null,
+  idleFuelCost = null,
 }: {
   spent: FuelWeekSpentTotals;
   current: boolean;
   idleHours?: number | null;
   engineHours?: number | null;
+  idleFuelCost?: number | null;
 }) {
   return (
     <section className="card mb-6 overflow-hidden" data-fuel-week-spend="">
@@ -64,14 +66,20 @@ export function FuelWeekSpendCards({
           <WeekStat label="Money code" value={formatFuelMoney(spent.money)} />
         </div>
       </div>
-      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-2" data-fuel-engine-hours="">
+      <div className="grid gap-4 border-t border-slate-100 px-5 py-3 sm:grid-cols-3" data-fuel-engine-hours="">
         <div data-fuel-engine-hours="idle">
           <WeekStat label="Idle hours" value={formatHours(idleHours)} />
         </div>
         <div data-fuel-engine-hours="engine">
           <WeekStat label="Engine on" value={formatHours(engineHours)} />
         </div>
+        <div data-fuel-engine-hours="idle-est">
+          <WeekStat label="Idle est." value={formatFuelMoney(idleFuelCost)} />
+        </div>
       </div>
+      <p className="border-t border-slate-100 px-5 py-2 text-xs text-slate-500" data-idle-fuel-assumption="">
+        Rough. 1.0 gal/hr x avg paid FleetOne. Not the fuel bill.
+      </p>
     </section>
   );
 }

@@ -23,6 +23,13 @@ import {
   type EngineHoursSourceStatus,
 } from "./engine-hours";
 import {
+  IDLE_FUEL_ESTIMATE_NOTE,
+  estimateIdleFuelCost,
+  idleFuelPriceCite,
+  quoteIdleFuelForSubject,
+  type IdleFuelQuote,
+} from "./idle-fuel-cost";
+import {
   computeMpg,
   MILES_SOURCE_ID,
   milesWindowForWeek,
@@ -73,6 +80,8 @@ export type FuelCloseoutDriverRow = {
   idleHours: number | null;
   engineHours: number | null;
   engineStat: EngineHourSubject["engineStat"];
+  idlePpg: number | null;
+  idleFuelCost: number | null;
   mpg: number | null;
   mpgVsPrior: number | null;
   fillCount: number;
@@ -111,6 +120,7 @@ export type FuelCloseoutReport = {
     miles: number;
     idleHours: number | null;
     engineHours: number | null;
+    idleFuelCost: number | null;
     dieselGallons: number;
     dieselAmount: number;
     mpg: number | null;
@@ -127,6 +137,8 @@ export type FuelCloseoutReport = {
     fillCount: number;
   };
   note: string;
+  idleFuelNote: string;
+  idlePriceCite: string;
 };
 
 function emptyLines(): FuelCloseoutLineItems {
@@ -268,6 +280,7 @@ export function buildFuelCloseout(input: {
   milesSource: MilesSourceStatus;
   hours?: EngineHourSubject[];
   engineHoursSource?: EngineHoursSourceStatus;
+  idleFuel?: IdleFuelQuote[];
   prior?: { rows: FuelCloseoutTx[]; miles: MilesReading[] };
   thresholds?: FuelCloseoutThresholds;
 }): FuelCloseoutReport {
@@ -336,6 +349,9 @@ export function buildFuelCloseout(input: {
       const miles = reading?.miles ?? null;
       const idleHours = hours?.idleHours ?? null;
       const engineHours = hours?.engineHours ?? null;
+      const idleQuote = quoteIdleFuelForSubject(bucket.subject, input.idleFuel ?? []);
+      const idlePpg = idleQuote?.ppg ?? null;
+      const idleFuelCost = estimateIdleFuelCost(idleHours, idlePpg);
       if (idleHours != null) {
         fleetIdle += idleHours;
         fleetIdleKnown += 1;
@@ -365,6 +381,8 @@ export function buildFuelCloseout(input: {
         idleHours,
         engineHours,
         engineStat: hours?.engineStat ?? null,
+        idlePpg,
+        idleFuelCost,
         mpg,
         mpgVsPrior: mpg != null && priorMpg != null ? mpg - priorMpg : null,
         fillCount,
@@ -388,6 +406,13 @@ export function buildFuelCloseout(input: {
       return left.driverName.localeCompare(right.driverName);
     });
 
+  let fleetIdleCost = 0;
+  let fleetIdleCostKnown = 0;
+  for (const row of drivers) {
+    if (row.idleFuelCost == null) continue;
+    fleetIdleCost += row.idleFuelCost;
+    fleetIdleCostKnown += 1;
+  }
   const fleetMpg = computeMpg(fleetMiles > 0 ? fleetMiles : null, fleetGallons);
   const mpgMedian = median(mpgRows.map((row) => row.mpg).filter((value): value is number => value != null));
   const milesMedian = median(
@@ -457,6 +482,7 @@ export function buildFuelCloseout(input: {
       miles: fleetMiles,
       idleHours: fleetIdleKnown > 0 ? Math.round(fleetIdle * 10) / 10 : null,
       engineHours: fleetEngineKnown > 0 ? Math.round(fleetEngine * 10) / 10 : null,
+      idleFuelCost: fleetIdleCostKnown > 0 ? Math.round(fleetIdleCost * 100) / 100 : null,
       dieselGallons: fleetGallons,
       dieselAmount: fleetDieselAmount,
       mpg: fleetMpg,
@@ -493,6 +519,11 @@ export function buildFuelCloseout(input: {
       fillCount: fleetFills,
     },
     note: "Draft for JC only. Soft flags. Nothing emailed or texted to drivers.",
+    idleFuelNote: IDLE_FUEL_ESTIMATE_NOTE,
+    idlePriceCite: idleFuelPriceCite(
+      "week",
+      now.getTime() >= range.start.getTime() && now.getTime() < range.end.getTime(),
+    ),
   };
 }
 

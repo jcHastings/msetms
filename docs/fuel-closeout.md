@@ -57,6 +57,18 @@ Soft-fail:
 
 Fuel shows fleet idle hours and engine-on hours beside week spend. The closeout and Drivers MPG week table show the same hours per driver. Mike's weekly fuel closeout line includes the fleet hours. A blank cell is missing data, not zero. Fleet totals add only trucks that have a reading.
 
+## Idle fuel estimate
+
+Rough dollars: idle hours x 1.0 gal/hr x the price MS Express paid. Not the fuel bill.
+
+Price is truck diesel only, from FleetOne/TMS `fuel_transactions` in that window (day, Monday-Sunday week, or month). Prefer amount divided by gallons. If those are missing, use the average stored price per gallon. Reefer fills are not used. A driver with no usable fills stays blank. There is no default $/gal and no fleet-price fallback.
+
+The Fuel page shows today, this week, and this month for the selected week, per driver and as a fleet total. The cite reads like "avg paid FleetOne this week". Fleet dollars add only drivers who have both idle hours and a paid price. Blank is not zero.
+
+The same week estimate sits on week spend, the closeout, Drivers MPG (week only), and Mike's closeout line.
+
+Soft-fail matches idle hours: no token, Read Vehicle Statistics, unmapped truck, or no paid price. The dollar stays blank.
+
 ## Fuel
 
 TMS `fuel_transactions` in the week. Truck diesel gallons and $ feed MPG, fill count, and avg gallons/fill.

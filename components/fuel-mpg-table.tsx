@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { fuelPageHref } from "@/components/fuel-transaction-lists";
-import { formatGallons, formatMdYDisplay } from "@/lib/format";
+import { formatFuelMoney, formatGallons, formatMdYDisplay } from "@/lib/format";
 import type { FuelPageView, FuelTxListKind } from "@/lib/fuel";
 import type { DriverMpgBoard } from "@/lib/fuel-mpg";
 
@@ -69,6 +69,7 @@ export function FuelMpgTable({
                 <th>Miles</th>
                 {board.period === "week" ? <th>Idle</th> : null}
                 {board.period === "week" ? <th>Engine on</th> : null}
+                {board.period === "week" ? <th>Idle est.</th> : null}
                 <th>Gallons</th>
                 <th>MPG</th>
               </tr>
@@ -85,6 +86,11 @@ export function FuelMpgTable({
                   <td className="tabular-nums">{formatMiles(row.miles)}</td>
                   {board.period === "week" ? <td className="tabular-nums">{formatHours(row.idleHours)}</td> : null}
                   {board.period === "week" ? <td className="tabular-nums">{formatHours(row.engineHours)}</td> : null}
+                  {board.period === "week" ? (
+                    <td className="tabular-nums" title="Rough. 1.0 gal/hr x avg paid FleetOne. Not the fuel bill.">
+                      {formatFuelMoney(row.idleFuelCost)}
+                    </td>
+                  ) : null}
                   <td className="tabular-nums">{row.gallons > 0 ? formatGallons(row.gallons) : "—"}</td>
                   <td className="tabular-nums font-semibold">{formatMpg(row.mpg)}</td>
                 </tr>
