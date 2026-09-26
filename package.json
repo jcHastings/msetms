@@ -11,7 +11,7 @@
     "start": "node scripts/start-standalone.mjs",
     "start:next": "node scripts/run-next.mjs start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "tsx scripts/smoke.ts && tsx scripts/driver-api-v1-test.ts",
+    "test": "tsx scripts/smoke.ts && tsx scripts/driver-api-v1-test.ts && tsx scripts/trailer-custody-test.ts",
     "test:driver-api": "tsx scripts/driver-api-v1-test.ts",
     "ensure-apple-dev-driver": "tsx scripts/ensure-apple-dev-driver.ts",
     "sample-rate-con": "tsx scripts/generate-sample-rate-con.ts",
