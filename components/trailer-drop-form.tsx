@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { FormBanner } from "@/components/form-banner";
 import { dropTrailerCustodyAction } from "@/lib/actions";
-import { CUSTODY_LEFT_WHERE } from "@/lib/trailer-custody";
+import { CUSTODY_LEFT_WHERE } from "@/lib/trailer-custody-shared";
 import type { ActionResult } from "@/lib/types";
 
 export function TrailerDropForm({ trailerId }: { trailerId: number }) {

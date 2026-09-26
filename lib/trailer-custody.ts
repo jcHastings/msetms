@@ -1,14 +1,15 @@
 import { getDb } from "./db";
+import {
+  CUSTODY_LEFT_WHERE,
+  type CustodyLeftWhere,
+} from "./trailer-custody-shared";
 
-export const CUSTODY_LEFT_WHERE = [
-  { value: "shipper", label: "Shipper" },
-  { value: "receiver", label: "Receiver" },
-  { value: "yard", label: "Yard" },
-  { value: "plant", label: "Plant" },
-  { value: "other", label: "Other" },
-] as const;
-
-export type CustodyLeftWhere = (typeof CUSTODY_LEFT_WHERE)[number]["value"];
+export {
+  CUSTODY_LEFT_WHERE,
+  labelForCustodyLeftWhere,
+  labelForCustodySource,
+  type CustodyLeftWhere,
+} from "./trailer-custody-shared";
 
 const LEFT_WHERE_VALUES = new Set<string>(CUSTODY_LEFT_WHERE.map((item) => item.value));
 const DROP_STATUSES = new Set(["delivered", "completed", "cancelled"]);
@@ -68,25 +69,6 @@ const EVENT_SELECT = `SELECT trailer_custody_events.*,
   JOIN trailers ON trailers.id = trailer_custody_events.trailer_id
   LEFT JOIN drivers ON drivers.id = trailer_custody_events.driver_id
   LEFT JOIN trucks ON trucks.id = trailer_custody_events.truck_id`;
-
-export function labelForCustodyLeftWhere(value: string): string {
-  return CUSTODY_LEFT_WHERE.find((item) => item.value === value)?.label ?? "";
-}
-
-export function labelForCustodySource(value: string): string {
-  switch (value) {
-    case "load_assign":
-      return "Assigned";
-    case "load_drop":
-      return "Dropped";
-    case "office_drop":
-      return "Office";
-    case "driver_drop":
-      return "Driver";
-    default:
-      return "";
-  }
-}
 
 export function listTrailerCustody(trailerId: number): TrailerCustodyEvent[] {
   if (!Number.isInteger(trailerId) || trailerId <= 0) return [];

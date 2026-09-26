@@ -3,11 +3,8 @@ import { PageHeader } from "@/components/page-header";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { formatDateTime } from "@/lib/format";
 import { listDrivers } from "@/lib/queries";
-import {
-  labelForCustodyLeftWhere,
-  queryDriverCustody,
-  type TrailerCustodyEvent,
-} from "@/lib/trailer-custody";
+import { queryDriverCustody, type TrailerCustodyEvent } from "@/lib/trailer-custody";
+import { labelForCustodyLeftWhere } from "@/lib/trailer-custody-shared";
 
 export const dynamic = "force-dynamic";
 export const metadata = deskMetadata("Trailers held");
@@ -58,7 +55,6 @@ export default async function DriverTrailerCustodyPage({
     <>
       <PageHeader
         title="Trailers held"
-        subtitle="Trailers a driver had in a date range. TMS custody only."
         actions={
           <Link href="/fleet/trailers" className="btn btn-secondary">
             Back to trailers
