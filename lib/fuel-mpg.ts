@@ -1,12 +1,15 @@
 import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
 import { addYmdDays, isTruckDieselCategory, startOfLocalMonth, startOfLocalWeek } from "./fuel";
 import { listFuelTransactions } from "./fuel-store";
+import { engineHoursForDriverWindow } from "./engine-hours";
 import {
   isDriverLoginEligible,
   listDrivers,
   listLoads,
+  listTruckEngineHourReadings,
   listTruckOdometerReadings,
   listTrucks,
+  type TruckEngineHourReading,
   type TruckOdometerReading,
 } from "./queries";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
@@ -21,6 +24,8 @@ export type DriverMpgRow = {
   gallons: number;
   miles: number | null;
   mpg: number | null;
+  idleHours: number | null;
+  engineHours: number | null;
 };
 
 export type DriverMpgBoard = {
@@ -124,6 +129,7 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
     list.push(reading);
     odometerByTruck.set(reading.truck_id, list);
   }
+  const engineHourReadings: TruckEngineHourReading[] = period === "week" ? listTruckEngineHourReadings() : [];
 
   const rows = listDrivers()
     .filter((driver) => isDriverLoginEligible(driver))
@@ -148,6 +154,10 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
       const googleMiles = googleMilesForDriverInRange(loads, driver.id, truck?.id, startIso, endIso);
       const miles = odometerMiles ?? googleMiles;
       const mpg = miles != null && miles > 0 && gallons > 0 ? miles / gallons : null;
+      const hours =
+        period === "week"
+          ? engineHoursForDriverWindow(engineHourReadings, truck?.id, startIso, endIso)
+          : { idleHours: null, engineHours: null };
       return {
         driverId: driver.id,
         driverName: driver.name,
@@ -155,6 +165,8 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
         gallons,
         miles,
         mpg,
+        idleHours: hours.idleHours,
+        engineHours: hours.engineHours,
       };
     })
     .sort((a, b) => {

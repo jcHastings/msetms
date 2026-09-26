@@ -18,6 +18,11 @@ import {
 } from "./fuel";
 import { formatMdYDisplay } from "./format";
 import {
+  engineHoursForSubject,
+  type EngineHourSubject,
+  type EngineHoursSourceStatus,
+} from "./engine-hours";
+import {
   computeMpg,
   MILES_SOURCE_ID,
   milesWindowForWeek,
@@ -65,6 +70,9 @@ export type FuelCloseoutDriverRow = {
   unit: string;
   miles: number | null;
   milesSource: typeof MILES_SOURCE_ID | "missing";
+  idleHours: number | null;
+  engineHours: number | null;
+  engineStat: EngineHourSubject["engineStat"];
   mpg: number | null;
   mpgVsPrior: number | null;
   fillCount: number;
@@ -95,11 +103,14 @@ export type FuelCloseoutReport = {
     closed: boolean;
   };
   milesSource: MilesSourceStatus;
+  engineHoursSource: EngineHoursSourceStatus;
   drivers: FuelCloseoutDriverRow[];
   flags: FuelAuditFlag[];
   greenLights: Array<{ driverName: string; unit: string; mpg: number; fillCount: number }>;
   fleet: {
     miles: number;
+    idleHours: number | null;
+    engineHours: number | null;
     dieselGallons: number;
     dieselAmount: number;
     mpg: number | null;
@@ -243,12 +254,20 @@ function mergeSubject(
   return left;
 }
 
+const BLANK_ENGINE_HOURS_SOURCE: EngineHoursSourceStatus = {
+  label: "Samsara idle / engine hours",
+  status: "unavailable",
+  note: "No Samsara idle or engine-hour readings were passed in. Hours stay blank.",
+};
+
 export function buildFuelCloseout(input: {
   weekStartYmd: string;
   now?: Date;
   rows: FuelCloseoutTx[];
   miles: MilesReading[];
   milesSource: MilesSourceStatus;
+  hours?: EngineHourSubject[];
+  engineHoursSource?: EngineHoursSourceStatus;
   prior?: { rows: FuelCloseoutTx[]; miles: MilesReading[] };
   thresholds?: FuelCloseoutThresholds;
 }): FuelCloseoutReport {
@@ -301,6 +320,10 @@ export function buildFuelCloseout(input: {
     : new Map<string, number>();
 
   let fleetMiles = 0;
+  let fleetIdle = 0;
+  let fleetIdleKnown = 0;
+  let fleetEngine = 0;
+  let fleetEngineKnown = 0;
   let fleetGallons = 0;
   let fleetDieselAmount = 0;
   let fleetFills = 0;
@@ -309,7 +332,18 @@ export function buildFuelCloseout(input: {
   const drivers: FuelCloseoutDriverRow[] = [...buckets.values()]
     .map((bucket) => {
       const reading = readingForSubject(bucket.subject, input.miles);
+      const hours = engineHoursForSubject(bucket.subject, input.hours ?? []);
       const miles = reading?.miles ?? null;
+      const idleHours = hours?.idleHours ?? null;
+      const engineHours = hours?.engineHours ?? null;
+      if (idleHours != null) {
+        fleetIdle += idleHours;
+        fleetIdleKnown += 1;
+      }
+      if (engineHours != null) {
+        fleetEngine += engineHours;
+        fleetEngineKnown += 1;
+      }
       const mpg = computeMpg(miles, bucket.lines.dieselGallons);
       const priorMpg = priorMpgBySubject.get(bucket.subject.key) ?? null;
       const flags = flagsBySubject.get(bucket.subject.key) ?? [];
@@ -328,6 +362,9 @@ export function buildFuelCloseout(input: {
         unit: bucket.subject.unit,
         miles,
         milesSource: reading?.source === MILES_SOURCE_ID && miles != null ? MILES_SOURCE_ID : "missing",
+        idleHours,
+        engineHours,
+        engineStat: hours?.engineStat ?? null,
         mpg,
         mpgVsPrior: mpg != null && priorMpg != null ? mpg - priorMpg : null,
         fillCount,
@@ -405,6 +442,7 @@ export function buildFuelCloseout(input: {
       closed,
     },
     milesSource: input.milesSource,
+    engineHoursSource: input.engineHoursSource ?? BLANK_ENGINE_HOURS_SOURCE,
     drivers,
     flags: audit.flags,
     greenLights: drivers
@@ -417,6 +455,8 @@ export function buildFuelCloseout(input: {
       })),
     fleet: {
       miles: fleetMiles,
+      idleHours: fleetIdleKnown > 0 ? Math.round(fleetIdle * 10) / 10 : null,
+      engineHours: fleetEngineKnown > 0 ? Math.round(fleetEngine * 10) / 10 : null,
       dieselGallons: fleetGallons,
       dieselAmount: fleetDieselAmount,
       mpg: fleetMpg,

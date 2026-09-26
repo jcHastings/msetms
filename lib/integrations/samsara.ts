@@ -23,13 +23,16 @@ import {
   persistedTruckLocation,
   recordTruckGpsReading,
   saveTruckGps,
+  saveTruckEngineHour,
   saveTruckOdometer,
 } from "../queries";
+import { ENGINE_HOUR_HISTORY_TYPES, extractSamsaraEngineHourPoints } from "../engine-hours";
 
 export { SAMSARA_ID_MISSING_MESSAGE };
 
 const SAMSARA_BASE = "https://api.samsara.com";
 const CACHE_TTL_MS = 45_000;
+const engineHourHistoryFetchedAt = new Map<string, number>();
 const MAX_PAGES = 20;
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -103,6 +106,7 @@ export function resetSamsaraCache(): void {
 
 export function resetSamsaraCacheForTests(): void {
   resetSamsaraCache();
+  engineHourHistoryFetchedAt.clear();
 }
 
 export function parseSamsaraVehicles(items: Array<Record<string, unknown>>): SamsaraVehicleInput[] {
@@ -1049,6 +1053,131 @@ export async function hydrateSamsaraOdometerWindow(input: {
     }
   }
   return { fetched };
+}
+
+export type EngineHoursHydrateResult = {
+  fetched: number;
+  skipped: number;
+  reason?: "token" | "scope" | "request";
+  error?: string;
+};
+
+type EngineHourHistoryPull = {
+  points: Array<{ hours: number; recordedAt: string; stat: "idlingDurationMilliseconds" | "obdEngineSeconds" | "syntheticEngineSeconds" }>;
+  reason?: "token" | "scope" | "request";
+  error?: string;
+};
+
+function historyVehicleId(vehicle: Record<string, unknown>): string {
+  const nested = (vehicle.vehicle ?? {}) as Record<string, unknown>;
+  return String(vehicle.id ?? nested.id ?? "");
+}
+
+async function fetchVehicleEngineHourHistory(
+  vehicleId: string,
+  startTime: string,
+  endTime: string,
+): Promise<EngineHourHistoryPull> {
+  const token = getSamsaraApiToken();
+  if (!token) return { points: [], reason: "token" };
+  const points: EngineHourHistoryPull["points"] = [];
+  let after: string | undefined;
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL("/fleet/vehicles/stats/history", SAMSARA_BASE);
+    url.searchParams.set("vehicleIds", vehicleId);
+    url.searchParams.set("types", ENGINE_HOUR_HISTORY_TYPES);
+    url.searchParams.set("startTime", startTime);
+    url.searchParams.set("endTime", endTime);
+    if (after) url.searchParams.set("after", after);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch {
+      if (page === 0) return { points: [], reason: "request", error: "Samsara request failed." };
+      break;
+    }
+    if (response.status === 401) {
+      return { points: [], reason: "token", error: "Samsara rejected the API token." };
+    }
+    if (response.status === 403) {
+      return { points: [], reason: "scope", error: "Read Vehicle Statistics" };
+    }
+    if (!response.ok) {
+      if (page === 0) {
+        return { points: [], reason: "request", error: `Samsara request failed (HTTP ${response.status}).` };
+      }
+      break;
+    }
+    const body = (await response.json()) as {
+      data?: unknown;
+      pagination?: { endCursor?: string; hasNextPage?: boolean };
+    };
+    const rows = Array.isArray(body.data) ? body.data : body.data ? [body.data] : [];
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const record = row as Record<string, unknown>;
+      const returnedId = historyVehicleId(record);
+      if (returnedId && canonicalFleetKey(returnedId) !== canonicalFleetKey(vehicleId)) continue;
+      points.push(...extractSamsaraEngineHourPoints(record));
+    }
+    if (!body.pagination?.hasNextPage || !body.pagination.endCursor) break;
+    after = body.pagination.endCursor;
+  }
+  return { points: points.slice(0, 400) };
+}
+
+/**
+ * Fill week idle and engine-hour counters from GET /fleet/vehicles/stats/history.
+ * Soft-fail: missing token, missing Read Vehicle Statistics, or an unmapped truck stores nothing.
+ */
+export async function hydrateSamsaraEngineHourWindow(input: {
+  fromIso: string;
+  toIso: string;
+  trucks?: Array<{ id: number; samsara_vehicle_id: string }>;
+}): Promise<EngineHoursHydrateResult> {
+  await loadRuntimeEnv();
+  if (!isSamsaraTokenSet()) return { fetched: 0, skipped: 0, reason: "token" };
+  const trucks = input.trucks ?? listTrucks();
+  let fetched = 0;
+  let skipped = 0;
+  for (const truck of trucks.slice(0, 40)) {
+    const vehicleId = String(truck.samsara_vehicle_id ?? "").trim();
+    if (!vehicleId) {
+      skipped += 1;
+      continue;
+    }
+    const cacheKey = `${truck.id}:${input.fromIso}:${input.toIso}`;
+    const last = engineHourHistoryFetchedAt.get(cacheKey) ?? 0;
+    if (Date.now() - last < 60_000) continue;
+    try {
+      const result = await fetchVehicleEngineHourHistory(vehicleId, input.fromIso, input.toIso);
+      if (result.reason === "token" || result.reason === "scope") {
+        return { fetched, skipped, reason: result.reason, error: result.error };
+      }
+      if (result.reason) continue;
+      engineHourHistoryFetchedAt.set(cacheKey, Date.now());
+      for (const point of result.points) {
+        if (!point.recordedAt) continue;
+        saveTruckEngineHour(truck.id, {
+          hours: point.hours,
+          recordedAt: point.recordedAt,
+          stat: point.stat,
+          source: "samsara",
+        });
+        fetched += 1;
+      }
+    } catch {
+      // Fail soft: week hours stay blank for this truck.
+    }
+  }
+  return { fetched, skipped };
 }
 
 async function fetchVehicleStats(): Promise<{ items: Array<Record<string, unknown>>; error?: string }> {

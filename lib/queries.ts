@@ -1054,6 +1054,71 @@ export function listTruckOdometerReadings(truckId?: number): TruckOdometerReadin
     .all() as TruckOdometerReading[];
 }
 
+/** Cumulative Samsara counters. obdEngineSeconds wins over syntheticEngineSeconds when both exist. */
+export const TRUCK_ENGINE_HOUR_STATS = [
+  "idlingDurationMilliseconds",
+  "obdEngineSeconds",
+  "syntheticEngineSeconds",
+] as const;
+
+export type TruckEngineHourStat = (typeof TRUCK_ENGINE_HOUR_STATS)[number];
+
+export type TruckEngineHourReading = {
+  id: number;
+  truck_id: number;
+  recorded_at: string;
+  hours: number;
+  kind: "idle" | "engine";
+  stat: string;
+  source: string;
+};
+
+function engineHourKind(stat: TruckEngineHourStat): "idle" | "engine" {
+  return stat === "idlingDurationMilliseconds" ? "idle" : "engine";
+}
+
+export function saveTruckEngineHour(
+  id: number,
+  input: { hours: number; recordedAt: string; stat: TruckEngineHourStat; source: "samsara" },
+): void {
+  if (!getTruck(id)) return;
+  if (input.source !== "samsara") return;
+  if (!TRUCK_ENGINE_HOUR_STATS.includes(input.stat)) return;
+  if (!Number.isFinite(input.hours) || input.hours < 0) return;
+  const recordedAt = input.recordedAt.trim();
+  if (!recordedAt) return;
+  const last = getDb()
+    .prepare(
+      `SELECT hours, recorded_at, stat FROM truck_engine_hour_readings
+       WHERE truck_id = ? AND stat = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    )
+    .get(id, input.stat) as { hours: number; recorded_at: string; stat: string } | undefined;
+  if (last && last.recorded_at === recordedAt && Math.abs(last.hours - input.hours) < 1e-6) return;
+  getDb()
+    .prepare(
+      `INSERT INTO truck_engine_hour_readings (truck_id, recorded_at, hours, kind, stat, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, recordedAt, input.hours, engineHourKind(input.stat), input.stat, input.source, now());
+}
+
+export function listTruckEngineHourReadings(truckId?: number): TruckEngineHourReading[] {
+  if (truckId != null) {
+    return getDb()
+      .prepare(
+        `SELECT id, truck_id, recorded_at, hours, kind, stat, source FROM truck_engine_hour_readings
+         WHERE truck_id = ? ORDER BY recorded_at ASC, id ASC`,
+      )
+      .all(truckId) as TruckEngineHourReading[];
+  }
+  return getDb()
+    .prepare(
+      `SELECT id, truck_id, recorded_at, hours, kind, stat, source FROM truck_engine_hour_readings
+       ORDER BY recorded_at ASC, id ASC`,
+    )
+    .all() as TruckEngineHourReading[];
+}
+
 export function persistedTruckLocation(truck: {
   id: number;
   unit_number: string;

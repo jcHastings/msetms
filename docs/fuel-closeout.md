@@ -32,6 +32,31 @@ Status on the report:
 
 Units map to the assigned TMS driver. A unit with miles and no eligible driver still appears.
 
+## Idle and engine-on hours
+
+Week idle hours and engine-on hours use the same `SAMSARA_API_TOKEN`, `trucks.samsara_vehicle_id`, and America/New_York Monday-Sunday window as week miles.
+
+Live fill calls `GET /fleet/vehicles/stats/history` with types `idlingDurationMilliseconds,obdEngineSeconds,syntheticEngineSeconds`. Points are stored on `truck_engine_hour_readings`. The week figure is a start-to-end delta of that cumulative counter. One point is not a week total. A lifetime reading is never copied into the week cell. Hours are not estimated from gallons or miles.
+
+Engine-on hours, per truck:
+
+1. `obdEngineSeconds` wins when that truck has any OBD point at or before the week end.
+2. `syntheticEngineSeconds` is the fallback only when OBD points are absent.
+3. If OBD points exist but do not form a valid pair, engine-on hours stay blank. Synthetic seconds are not substituted.
+
+Idle hours use `idlingDurationMilliseconds` only.
+
+A delta must be zero or positive and no longer than the window (plus one hour for the clock change). Anything else stays blank.
+
+Soft-fail:
+
+- No `SAMSARA_API_TOKEN`: blank, unless stored readings from an earlier pull already exist.
+- HTTP 401, or HTTP 403 (Read Vehicle Statistics not granted): blank. Nothing is guessed.
+- Truck with no `samsara_vehicle_id`: that unit stays blank.
+- A history row for a different vehicle id is ignored.
+
+Fuel shows fleet idle hours and engine-on hours beside week spend. The closeout and Drivers MPG week table show the same hours per driver. Mike's weekly fuel closeout line includes the fleet hours. A blank cell is missing data, not zero. Fleet totals add only trucks that have a reading.
+
 ## Fuel
 
 TMS `fuel_transactions` in the week. Truck diesel gallons and $ feed MPG, fill count, and avg gallons/fill.
