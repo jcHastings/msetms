@@ -321,7 +321,7 @@ async function resolveStopBodies(
   for (let index = 0; index < drafts.length; index += 1) {
     const draft = drafts[index];
     const addressId = await resolveAddressId(token, draft, fetchImpl, cache);
-    const body = samsaraStopBody(draft, addressId || null, index);
+    const body = samsaraStopBody(draft, addressId || null, index, drafts.length);
     if (!body) return { message: SAMSARA_ROUTE_MESSAGES.incomplete };
     stops.push(body);
   }
