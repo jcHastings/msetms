@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { LocationForm } from "@/components/location-form";
 import { PageHeader } from "@/components/page-header";
+import { SamsaraAddressSync } from "@/components/samsara-address-sync";
 import { deleteLocationFormAction, updateLocationAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { isGooglePlacesConfigured } from "@/lib/env";
@@ -38,6 +39,11 @@ export default async function EditLocationPage({
         action={boundAction}
         submitLabel="Save location"
         placesEnabled={isGooglePlacesConfigured()}
+      />
+      <SamsaraAddressSync
+        locationId={location.id}
+        addressId={location.samsara_address_id}
+        error={location.samsara_address_error}
       />
       {canDelete ? (
         <form action={deleteLocationFormAction} className="mt-4">
