@@ -9,6 +9,7 @@ import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
 import { listStops } from "./stops";
+import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
 
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
@@ -24,6 +25,7 @@ export const EXCEPTION_KINDS = [
   "invoice_send",
   "compliance",
   "unassigned",
+  "samsara",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -74,6 +76,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   invoice_send: 6,
   compliance: 7,
   unassigned: 8,
+  samsara: 9,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -286,6 +289,7 @@ export function groupInboxExceptions(items: InboxException[]): InboxExceptionGro
 }
 
 export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {
+  if (item.kind === "samsara") return "Samsara";
   if (item.kind === "detention") return "Detention";
   if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
   if (item.severity === "CRITICAL") return "Critical";
@@ -486,6 +490,12 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const rateCons = loadIdsWithRateCon();
   const quietHours = getCompanySettings().alert_gps_quiet_hours || 2;
   const items: InboxException[] = [];
+  const samsaraByLoad = new Map<number, ReturnType<typeof listSamsaraInboxFlags>>();
+  for (const flag of listSamsaraInboxFlags()) {
+    const list = samsaraByLoad.get(flag.loadId) ?? [];
+    list.push(flag);
+    samsaraByLoad.set(flag.loadId, list);
+  }
 
   for (const load of active) {
     const reading = readings.get(load.id) ?? null;
@@ -496,6 +506,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     items.push(...unassignedExceptions(load, now));
     items.push(...detentionExceptions(load, now));
     items.push(...missingContactExceptions(load, rateCons.has(load.id)));
+    items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
   }
 
   for (const load of delivered) {
@@ -564,7 +575,15 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Detention";
     case "missing_contact":
       return "Rate-con phone";
+    case "samsara":
+      return "Samsara";
   }
+}
+
+function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSamsaraInboxFlags>): InboxException[] {
+  return flags.map((flag) =>
+    withLoad(load, "samsara", flag.severity, flag.title, flag.detail, false, flag.eventId),
+  );
 }
 
 function detentionExceptions(load: LoadView, now: Date): InboxException[] {

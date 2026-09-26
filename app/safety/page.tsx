@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
+import { listSamsaraDvirFlags } from "@/lib/integrations/samsara-webhook";
+import { formatDateTime } from "@/lib/format";
 import { listDrivers } from "@/lib/queries";
 import { buildSafetyBoard } from "@/lib/safety";
 import { formatSafetyDatePair } from "@/lib/safety-shared";
@@ -14,6 +16,14 @@ import { complianceWindows, getCompanySettings } from "@/lib/settings";
 import { labelForDriverKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+function samsaraDvirWhen(iso: string): string {
+  const raw = iso.trim();
+  if (!raw) return "Time missing";
+  const label = formatDateTime(raw);
+  if (!label || label === "\u2014" || label === "\u2013") return raw;
+  return label;
+}
 
 export default async function SafetyPage() {
   const dispatcher = await getPageAccess(canEditFleet);
@@ -37,6 +47,7 @@ export default async function SafetyPage() {
   const expired = ranked.filter((row) => row.rank === "expired").length;
   const dueSoon = ranked.filter((row) => row.rank === "due_soon").length;
   const hosIssues = board.rows.filter((row) => row.rank === "hos_violation").length;
+  const dvirFlags = listSamsaraDvirFlags();
 
   return (
     <>
@@ -67,6 +78,37 @@ export default async function SafetyPage() {
           {SAMSARA_TOKEN_MISSING_MESSAGE}
         </p>
       ) : null}
+      <section className="card mb-4 p-5" data-samsara-dvir="">
+        <h2 className="text-sm font-semibold">Samsara DVIR</h2>
+        <p className="mt-1 text-sm text-slate-600">Tractor only. Trailer DVIR stays off this list.</p>
+        {dvirFlags.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-500">No tractor DVIR defects.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {dvirFlags.map((flag) => (
+              <li key={flag.eventId} className="text-sm text-slate-800" data-samsara-dvir-event={flag.eventId}>
+                <div className="font-medium">
+                  {flag.unitNumber ? `Truck ${flag.unitNumber}. ` : ""}
+                  {flag.title}
+                </div>
+                <div className="text-slate-600">
+                  {samsaraDvirWhen(flag.eventTime)}. Event {flag.eventId}.
+                  {flag.loadId && flag.loadNumber ? (
+                    <>
+                      {" "}
+                      <Link href={`/loads/${flag.loadId}`} className="font-medium text-slate-800 underline">
+                        Open {flag.loadNumber}
+                      </Link>
+                    </>
+                  ) : (
+                    " No load link."
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       {board.insurance ? (
         <section className="card mb-4 p-5">
           <h2 className="text-sm font-semibold">Company insurance</h2>
