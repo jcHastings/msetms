@@ -9,6 +9,7 @@ import { FuelMpgTable } from "@/components/fuel-mpg-table";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
 import { FuelAuditStrip } from "@/components/fuel-audit-strip";
 import { FuelCloseoutStrip } from "@/components/fuel-closeout-strip";
+import { IdleFuelEstimate } from "@/components/idle-fuel-estimate";
 import { FuelWeekSpendCards, FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs, fuelPageHref } from "@/components/fuel-transaction-lists";
@@ -17,6 +18,7 @@ import { fuelAuditWindowForWeek, scoreFuelAudit } from "@/lib/fuel-audit";
 import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { buildLiveFuelCloseout, fileFuelCloseout } from "@/lib/fuel-closeout-store";
+import { buildIdleFuelCostBoard, idleFuelHydrateRange } from "@/lib/idle-fuel-cost";
 import { listFuelTransactions, loadFuelWeekView, rematchUnmatchedFuelTransactions } from "@/lib/fuel-store";
 import { getSamsaraFleet, hydrateSamsaraEngineHourWindow } from "@/lib/integrations/samsara";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
@@ -69,9 +71,10 @@ export default async function FuelPage({
   );
   const unmatched = listFuelTransactions({ unmatchedOnly: true, ...weekFilter });
   await getSamsaraFleet();
+  const hourWindow = idleFuelHydrateRange(weekView.mpgNow);
   const engineHoursPull = await hydrateSamsaraEngineHourWindow({
-    fromIso: weekView.fromIso,
-    toIso: weekView.current ? new Date().toISOString() : weekView.toIso,
+    fromIso: hourWindow.fromIso,
+    toIso: hourWindow.toIso,
   });
   const closeout = fileFuelCloseout(
     buildLiveFuelCloseout({
@@ -81,6 +84,7 @@ export default async function FuelPage({
     }),
   ).report;
   const mpgBoard = listDriverMpg(mpgPeriod, weekView.mpgNow);
+  const idleBoard = buildIdleFuelCostBoard(weekView.mpgNow);
   const filterLabel = selectedDriver
     ? `Transactions — ${selectedDriver.name}`
     : selectedTruck
@@ -111,7 +115,9 @@ export default async function FuelPage({
         current={weekView.current}
         idleHours={closeout.fleet.idleHours}
         engineHours={closeout.fleet.engineHours}
+        idleFuelCost={closeout.fleet.idleFuelCost}
       />
+      <IdleFuelEstimate board={idleBoard} />
       <FuelAuditStrip report={scoreFuelAudit(listFuelTransactions(), fuelAuditWindowForWeek(week))} />
       <FuelCloseoutStrip report={closeout} />
       <FuelWeekStrip

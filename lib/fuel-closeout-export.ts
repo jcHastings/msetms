@@ -67,6 +67,7 @@ export function renderFuelCloseoutMarkdown(report: FuelCloseoutReport): string {
     `- Miles: ${miles(report.fleet.miles)}`,
     `- Idle hours: ${hours(report.fleet.idleHours)}`,
     `- Engine on: ${hours(report.fleet.engineHours)}`,
+    `- Idle fuel estimate: ${money(report.fleet.idleFuelCost)} (${report.idlePriceCite}). Rough. 1.0 gal/hr. Not the fuel bill.`,
     `- Truck diesel: ${gal(report.fleet.dieselGallons)} / ${money(report.fleet.dieselAmount)}`,
     `- Fleet MPG: ${mpg(report.fleet.mpg)}`,
     `- vs prior week MPG: ${report.fleet.mpgVsPrior == null ? "-" : `${n(report.fleet.mpgVsPrior, 1)} (prior ${mpg(report.fleet.priorMpg)})`}`,
@@ -127,8 +128,8 @@ export function renderFuelCloseoutMarkdown(report: FuelCloseoutReport): string {
     ``,
     `## Per driver`,
     ``,
-    `| Driver | Unit | Miles | Idle | Engine on | Diesel g | Diesel $ | MPG | Fills | Avg g/fill | Reefer $ | DEF $ | Scale $ | Money $ | Flags | Green |`,
-    `| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |`,
+    `| Driver | Unit | Miles | Idle | Engine on | Idle est | Diesel g | Diesel $ | MPG | Fills | Avg g/fill | Reefer $ | DEF $ | Scale $ | Money $ | Flags | Green |`,
+    `| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |`,
     ...report.drivers.map((row) =>
       [
         row.driverName,
@@ -136,6 +137,7 @@ export function renderFuelCloseoutMarkdown(report: FuelCloseoutReport): string {
         miles(row.miles),
         hours(row.idleHours),
         hours(row.engineHours),
+        money(row.idleFuelCost),
         n(row.dieselGallons, 1),
         money(row.dieselAmount),
         mpg(row.mpg),
@@ -173,6 +175,7 @@ export function renderFuelCloseoutHtml(report: FuelCloseoutReport): string {
   <td>${escapeHtml(miles(row.miles))}</td>
   <td>${escapeHtml(hours(row.idleHours))}</td>
   <td>${escapeHtml(hours(row.engineHours))}</td>
+  <td>${escapeHtml(money(row.idleFuelCost))}</td>
   <td>${escapeHtml(n(row.dieselGallons, 1))}</td>
   <td>${escapeHtml(money(row.dieselAmount))}</td>
   <td>${escapeHtml(mpg(row.mpg))}</td>
@@ -216,10 +219,12 @@ export function renderFuelCloseoutHtml(report: FuelCloseoutReport): string {
   <p class="note">${escapeHtml(report.note)}</p>
   <p>Miles source: ${escapeHtml(report.milesSource.label)} (${escapeHtml(report.milesSource.status)}). ${escapeHtml(report.milesSource.note)}</p>
   <p>${escapeHtml(report.engineHoursSource.label)} (${escapeHtml(report.engineHoursSource.status)}). ${escapeHtml(report.engineHoursSource.note)}</p>
+  <p>${escapeHtml(report.idleFuelNote)} ${escapeHtml(report.idlePriceCite)}.</p>
   <div class="cards">
     <div class="card"><div class="label">Miles</div><div class="value">${escapeHtml(miles(report.fleet.miles))}</div></div>
     <div class="card"><div class="label">Idle hours</div><div class="value">${escapeHtml(hours(report.fleet.idleHours))}</div></div>
     <div class="card"><div class="label">Engine on</div><div class="value">${escapeHtml(hours(report.fleet.engineHours))}</div></div>
+    <div class="card"><div class="label">Idle est.</div><div class="value">${escapeHtml(money(report.fleet.idleFuelCost))}</div></div>
     <div class="card"><div class="label">Diesel</div><div class="value">${escapeHtml(gal(report.fleet.dieselGallons))}</div></div>
     <div class="card"><div class="label">Diesel $</div><div class="value">${escapeHtml(money(report.fleet.dieselAmount))}</div></div>
     <div class="card"><div class="label">Fleet MPG</div><div class="value">${escapeHtml(mpg(report.fleet.mpg))}</div></div>
@@ -252,7 +257,7 @@ export function renderFuelCloseoutHtml(report: FuelCloseoutReport): string {
   <table>
     <thead>
       <tr>
-        <th>Driver</th><th>Unit</th><th>Miles</th><th>Idle</th><th>Engine on</th><th>Diesel g</th><th>Diesel $</th><th>MPG</th>
+        <th>Driver</th><th>Unit</th><th>Miles</th><th>Idle</th><th>Engine on</th><th>Idle est.</th><th>Diesel g</th><th>Diesel $</th><th>MPG</th>
         <th>Fills</th><th>Avg g/fill</th><th>Reefer $</th><th>DEF $</th><th>Scale $</th><th>Money $</th><th>Flags</th><th>Green</th>
       </tr>
     </thead>

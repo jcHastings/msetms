@@ -2,6 +2,7 @@ import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
 import { addYmdDays, isTruckDieselCategory, startOfLocalMonth, startOfLocalWeek } from "./fuel";
 import { listFuelTransactions } from "./fuel-store";
 import { engineHoursForDriverWindow } from "./engine-hours";
+import { estimateIdleFuelCost, fillsForDriverPrice, paidFleetOnePpg } from "./idle-fuel-cost";
 import {
   isDriverLoginEligible,
   listDrivers,
@@ -26,6 +27,7 @@ export type DriverMpgRow = {
   mpg: number | null;
   idleHours: number | null;
   engineHours: number | null;
+  idleFuelCost: number | null;
 };
 
 export type DriverMpgBoard = {
@@ -158,6 +160,10 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
         period === "week"
           ? engineHoursForDriverWindow(engineHourReadings, truck?.id, startIso, endIso)
           : { idleHours: null, engineHours: null };
+      const ppg =
+        period === "week"
+          ? paidFleetOnePpg(fillsForDriverPrice(fuel, driver.id, truck?.id ?? null, startIso, endIso)).ppg
+          : null;
       return {
         driverId: driver.id,
         driverName: driver.name,
@@ -167,6 +173,7 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
         mpg,
         idleHours: hours.idleHours,
         engineHours: hours.engineHours,
+        idleFuelCost: estimateIdleFuelCost(hours.idleHours, ppg),
       };
     })
     .sort((a, b) => {

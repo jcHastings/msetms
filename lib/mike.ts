@@ -424,7 +424,7 @@ async function buildOpsSnapshot(question = ""): Promise<string> {
       "Closest to a city: use closestToCity.ranked — name the unit, miles, and last city. If closestToCity.found is false, say that city could not be placed. Never say no trucks ranked closest. Never invent trucks. Say skippedNoPing for trucks with no last ping. Do not say there is no GPS when any lastGps.hasPosition is true.",
       "TMS totals: use tmsStats. Billed freight is the customer/load rate, not driver pay. Miles are TMS loaded + empty miles, not Samsara IFTA. Never invent totals.",
       "Fuel audit: use fuelAudit. Soft flags only. Never email or text a driver about fuel. Never invent transactions.",
-      "Fuel closeout: use fuelCloseout. Weekly Samsara odometer miles, idle hours, and engine-on hours, plus TMS fuel. Hours stay blank when Samsara does not send a week pair. Draft for JC only. Never email or text a driver.",
+      "Fuel closeout: use fuelCloseout. Weekly Samsara odometer miles, idle hours, and engine-on hours, plus TMS fuel. Hours stay blank when Samsara does not send a week pair. Idle fuel estimate is rough: idle hours times 1.0 gal/hr times avg paid FleetOne. Blank when idle hours or a paid price is missing. Never invent a price per gallon. Draft for JC only. Never email or text a driver.",
       "Never mention API keys, tokens, PINs, or passwords.",
     ],
   });
