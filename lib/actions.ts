@@ -87,6 +87,7 @@ import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
 import type { TollImportResult } from "./tolls";
+import { syncLocationToSamsara } from "./integrations/samsara-addresses";
 import { importTollsFromUpload } from "./toll-import";
 import {
   assignFuelTransaction,
@@ -1404,6 +1405,7 @@ export async function saveRateConLocationAction(
       notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
       scheduling_type: parseSchedulingType(formData.get("scheduling_type") || "appointment"),
     });
+    await syncLocationToSamsara(id);
     refresh();
     const location = getLocation(id);
     if (!location) throw new Error("Location was not saved.");
@@ -1432,6 +1434,7 @@ export async function createLocationAction(
       }
     }
     const id = createLocation(input);
+    await syncLocationToSamsara(id);
     refresh();
     redirect(`/locations/${id}`);
   } catch (error) {
@@ -1448,8 +1451,29 @@ export async function updateLocationAction(
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
     updateLocation(id, parseLocationInput(formData));
+    const synced = await syncLocationToSamsara(id);
     refresh();
-    return { ok: true, id };
+    const message = synced.ok
+      ? `Saved. Samsara address ${synced.addressId}.`
+      : `Saved. ${synced.message}`;
+    return { ok: true, id, message };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function syncLocationToSamsaraAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
+    const id = Number.parseInt(String(formData.get("location_id") ?? ""), 10);
+    if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Location not found." };
+    const synced = await syncLocationToSamsara(id);
+    refresh();
+    if (synced.ok) return { ok: true, id, message: `Synced. Samsara address ${synced.addressId}.` };
+    return { ok: false, error: synced.message };
   } catch (error) {
     return fail(error);
   }

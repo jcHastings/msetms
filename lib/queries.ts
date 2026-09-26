@@ -996,6 +996,20 @@ export function listTruckGpsReadings(truckId: number): Array<{
   }>;
 }
 
+export function saveLocationSamsaraAddress(
+  id: number,
+  input: { samsaraAddressId: string | null; error: string },
+): void {
+  const existing = getLocation(id);
+  if (!existing) return;
+  const nextId = input.samsaraAddressId?.trim()
+    ? input.samsaraAddressId.trim()
+    : existing.samsara_address_id?.trim() || null;
+  getDb()
+    .prepare("UPDATE locations SET samsara_address_id = ?, samsara_address_error = ? WHERE id = ?")
+    .run(nextId, input.error.slice(0, 500), id);
+}
+
 export function saveLocationCoords(id: number, latitude: number, longitude: number): void {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   getDb()
