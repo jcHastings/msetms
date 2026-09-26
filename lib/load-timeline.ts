@@ -2,6 +2,7 @@ import { listLoadAudit, type AuditActorKind } from "./audit";
 import { getDb } from "./db";
 import { isMaterialReeferReading } from "./exceptions";
 import { getLoad } from "./queries";
+import type { SamsaraSafetyEvent } from "./samsara-safety-shared";
 import type { ReeferReading } from "./types";
 
 export type LoadTimelineSource = "dispatcher" | "driver" | "system" | "samsara" | "orbcomm";
@@ -138,6 +139,26 @@ export function listLoadTimeline(loadId: number): LoadTimelineEvent[] {
     }
   }
 
+  return sortTimeline(events);
+}
+
+/** Live Samsara safety rows on the load timeline. Does not write and does not invent rows. */
+export function withSamsaraSafetyEvents(
+  rows: LoadTimelineEvent[],
+  events: SamsaraSafetyEvent[],
+): LoadTimelineEvent[] {
+  const extra: LoadTimelineEvent[] = events.map((event) => ({
+    id: `samsara-safety-${event.id}`,
+    at: event.at,
+    source: "samsara",
+    actor: "Samsara",
+    title: event.title,
+    detail: event.detail,
+  }));
+  return sortTimeline([...rows, ...extra]);
+}
+
+function sortTimeline(events: LoadTimelineEvent[]): LoadTimelineEvent[] {
   return events.sort((a, b) => {
     const time = new Date(b.at).getTime() - new Date(a.at).getTime();
     if (time !== 0) return time;

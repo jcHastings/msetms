@@ -1,13 +1,15 @@
 import { LoadLogSection } from "@/components/load-log-section";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { formatDateTime } from "@/lib/format";
+import { listLoadSamsaraSafety } from "@/lib/integrations/samsara-safety";
 import { buildLoadMapPoints, listLoadTrackingEvents, mapsBrowserKey } from "@/lib/load-map";
 
 export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
-  const [points, events, apiKey] = await Promise.all([
+  const [points, events, apiKey, safety] = await Promise.all([
     buildLoadMapPoints(loadId),
     listLoadTrackingEvents(loadId),
     Promise.resolve(mapsBrowserKey()),
+    listLoadSamsaraSafety(loadId),
   ]);
   return (
     <section id="load-map" data-load-tab="log" className="card p-3">
@@ -49,7 +51,7 @@ export async function LoadTrackingPanel({ loadId }: { loadId: number }) {
             </ol>
           )}
           <div className="mt-4">
-            <LoadLogSection loadId={loadId} />
+            <LoadLogSection loadId={loadId} safety={safety} />
           </div>
         </div>
       </div>
