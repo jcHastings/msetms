@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse } from "dotenv";
 import { MAIL_FROM_DEFAULT } from "./mail-shared";
+import { samsaraAddressTagIds } from "./samsara-address-shared";
 
 function existsInDir(dir: string, name: string): boolean {
   return fs.existsSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, name));
@@ -284,6 +285,15 @@ export function getSamsaraWebhookSecret(): string | undefined {
  */
 export function getSamsaraWebhookPublicUrl(): string | undefined {
   return readSecret("SAMSARA_WEBHOOK_PUBLIC_URL");
+}
+
+/**
+ * Tag ids for POST/PATCH /addresses. Comma-separated `SAMSARA_ADDRESS_TAG_IDS`.
+ * Not a secret. Unset uses the MSE address tag so a tag-scoped token can create.
+ * An untagged create returns HTTP 404 Not Found even when Write Addresses is on.
+ */
+export function getSamsaraAddressTagIds(): string[] {
+  return samsaraAddressTagIds(readSecret("SAMSARA_ADDRESS_TAG_IDS"));
 }
 
 export function getOrbcommUsername(): string | undefined {

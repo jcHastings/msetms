@@ -100,6 +100,7 @@ export function samsaraStopBody(
   draft: SamsaraRouteStopDraft,
   addressId: string | null,
   index: number,
+  stopCount?: number,
 ): SamsaraRouteStopBody | null {
   const name = draft.name.trim() || (draft.kind === "delivery" ? "Delivery" : "Pickup");
   const base: SamsaraRouteStopBody = {
@@ -120,13 +121,25 @@ export function samsaraStopBody(
   } else {
     return null;
   }
-  applyStopTimes(base, draft, index);
+  const isLast = typeof stopCount === "number" && index >= 0 && index === stopCount - 1;
+  applyStopTimes(base, draft, index, isLast);
   return base;
 }
 
-function applyStopTimes(body: SamsaraRouteStopBody, draft: SamsaraRouteStopDraft, index: number): void {
+function applyStopTimes(
+  body: SamsaraRouteStopBody,
+  draft: SamsaraRouteStopDraft,
+  index: number,
+  isLast: boolean,
+): void {
   const arrival = rfc3339(draft.arrival);
   const departure = rfc3339(draft.departure);
+  if (isLast) {
+    // Default routeCompletionCondition is arriveLastStop. Departure on the last stop is HTTP 400.
+    const arrive = arrival || departure;
+    if (arrive) body.scheduledArrivalTime = arrive;
+    return;
+  }
   if (index === 0) {
     const depart = departure || arrival;
     if (depart) body.scheduledDepartureTime = depart;

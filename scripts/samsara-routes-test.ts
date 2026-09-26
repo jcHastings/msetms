@@ -88,6 +88,33 @@ async function main(): Promise<void> {
   assert.equal(bare?.scheduledDepartureTime, undefined);
   assert.equal(bare?.externalIds.msetms, "stop-x");
 
+  const arrival = "2026-09-28T15:00:00.000Z";
+  const departure = "2026-09-28T17:00:00.000Z";
+  const timedStop = {
+    externalValue: "stop-last",
+    name: "Last Dock",
+    kind: "delivery" as const,
+    locationId: null,
+    formattedAddress: "9 Pier St, Bayonne, NJ 07002",
+    latitude: 40.67,
+    longitude: -74.12,
+    samsaraAddressId: "",
+    arrival,
+    departure,
+  };
+  const lastStop = shared.samsaraStopBody(timedStop, null, 1, 2);
+  assert.equal(lastStop?.scheduledArrivalTime, arrival);
+  assert.equal(lastStop?.scheduledDepartureTime, undefined);
+  const onlyStop = shared.samsaraStopBody({ ...timedStop, kind: "pickup", externalValue: "stop-only" }, null, 0, 1);
+  assert.equal(onlyStop?.scheduledArrivalTime, arrival);
+  assert.equal(onlyStop?.scheduledDepartureTime, undefined);
+  const middleStop = shared.samsaraStopBody({ ...timedStop, externalValue: "stop-mid" }, null, 1, 3);
+  assert.equal(middleStop?.scheduledArrivalTime, arrival);
+  assert.equal(middleStop?.scheduledDepartureTime, departure);
+  const firstStop = shared.samsaraStopBody({ ...timedStop, kind: "pickup", externalValue: "stop-first" }, null, 0, 2);
+  assert.equal(firstStop?.scheduledArrivalTime, arrival);
+  assert.equal(firstStop?.scheduledDepartureTime, departure);
+
   const noCoords = shared.samsaraStopBody(
     {
       externalValue: "stop-y",
@@ -365,6 +392,7 @@ async function main(): Promise<void> {
   assert.equal(routeStops[0]?.scheduledDepartureTime, pickupEnd);
   assert.equal(routeStops[0]?.scheduledArrivalTime, pickupStart);
   assert.equal(routeStops[1]?.scheduledArrivalTime, deliveryStart);
+  assert.equal(routeStops[1]?.scheduledDepartureTime, undefined);
   assert.equal(seen.filter((call) => call.url.includes("/addresses/")).length, 1);
   assert.equal(callsOf(seen).postAddresses().length, 0);
   assert.equal(callsOf(seen).patchRoutes().length, 0);

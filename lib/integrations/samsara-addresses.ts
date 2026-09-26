@@ -1,9 +1,10 @@
-import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
+import { getSamsaraAddressTagIds, getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
 import { getLocation, saveLocationSamsaraAddress } from "../queries";
 import {
   addressIdFromBody,
   buildSamsaraAddressPayload,
   externalIdFromAddressBody,
+  isGenericAddressNotFound,
   locationExternalId,
   samsaraAddressFailure,
   samsaraAddressLookupPath,
@@ -60,9 +61,15 @@ function finishWrite(
   result: SamsaraHttpResult,
   reused: boolean,
   fallbackId: string,
+  method: "POST" | "PATCH",
 ): SamsaraAddressSyncResult {
   if (result.status === 401 || result.status === 403) {
     const failure = samsaraAddressFailure("scopes_insufficient", result.status);
+    remember(locationId, null, failure.message);
+    return failure;
+  }
+  if (method === "POST" && isGenericAddressNotFound(result.status, result.body, result.text)) {
+    const failure = samsaraAddressFailure("tag_scope");
     remember(locationId, null, failure.message);
     return failure;
   }
@@ -104,7 +111,7 @@ export async function syncLocationToSamsara(locationId: number): Promise<Samsara
     if (!location) {
       return { ...samsaraAddressFailure("request_failed"), message: "Location not found." };
     }
-    const payload = buildSamsaraAddressPayload(location);
+    const payload = buildSamsaraAddressPayload(location, getSamsaraAddressTagIds());
     if (!payload.ok) {
       const failure = samsaraAddressFailure(payload.reason);
       remember(location.id, null, failure.message);
@@ -132,7 +139,7 @@ export async function syncLocationToSamsara(locationId: number): Promise<Samsara
         return failure;
       }
       const patched = await samsaraJson("PATCH", `/addresses/${encodeURIComponent(foundId)}`, payload.body);
-      return finishWrite(location.id, patched, true, foundId);
+      return finishWrite(location.id, patched, true, foundId, "PATCH");
     }
     if (existing.status !== 404) {
       const failure = samsaraAddressFailure("request_failed");
@@ -144,9 +151,9 @@ export async function syncLocationToSamsara(locationId: number): Promise<Samsara
     if (externalIdAlreadyUsed(created)) {
       const patched = await samsaraJson("PATCH", lookupPath, payload.body);
       const foundId = addressIdFromBody(patched.body);
-      return finishWrite(location.id, patched, true, foundId);
+      return finishWrite(location.id, patched, true, foundId, "PATCH");
     }
-    return finishWrite(location.id, created, false, "");
+    return finishWrite(location.id, created, false, "", "POST");
   } catch (error) {
     const failure = samsaraAddressTransportFailure(error);
     if (getLocation(locationId)) remember(locationId, null, failure.message);

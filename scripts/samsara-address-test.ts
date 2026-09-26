@@ -8,6 +8,7 @@ process.env.TMS_DB_PATH = path.join(tmp, "tms.db");
 process.env.TMS_DATA_DIR = tmp;
 process.env.TMS_SKIP_SEED = "1";
 delete process.env.SAMSARA_API_TOKEN;
+delete process.env.SAMSARA_ADDRESS_TAG_IDS;
 
 type FetchCall = {
   method: string;
@@ -139,8 +140,28 @@ async function main() {
     assert.equal(built.body.geofence.circle.radiusMeters, 250);
     assert.equal(built.body.externalIds.msetms, String(costco));
     assert.equal(built.body.notes, "Dock 12. Appt required.");
+    assert.deepEqual(built.body.tagIds, [shared.SAMSARA_ADDRESS_TAG_ID_DEFAULT]);
+    assert.equal(shared.SAMSARA_ADDRESS_TAG_ID_DEFAULT, "4456991");
     assert.doesNotMatch(JSON.stringify(built.body), /4412/);
   }
+  process.env.SAMSARA_ADDRESS_TAG_IDS = "111, 222,111";
+  const tagged = shared.buildSamsaraAddressPayload(queries.getLocation(costco)!);
+  assert.equal(tagged.ok, true);
+  if (tagged.ok) assert.deepEqual(tagged.body.tagIds, ["111", "222"]);
+  const { getSamsaraAddressTagIds } = await import("../lib/env");
+  assert.deepEqual(getSamsaraAddressTagIds(), ["111", "222"]);
+  delete process.env.SAMSARA_ADDRESS_TAG_IDS;
+  assert.deepEqual(getSamsaraAddressTagIds(), ["4456991"]);
+  assert.deepEqual(shared.samsaraAddressTagIds(undefined), ["4456991"]);
+  assert.deepEqual(shared.samsaraAddressTagIds("  "), ["4456991"]);
+  assert.equal(shared.isGenericAddressNotFound(404, { message: "Not Found", requestId: "req" }, ""), true);
+  assert.equal(shared.isGenericAddressNotFound(404, { message: "Not Found" }, '{"message":"Not Found"}'), true);
+  assert.equal(shared.isGenericAddressNotFound(404, null, "Not Found"), true);
+  assert.equal(shared.isGenericAddressNotFound(404, { message: "feature is not enabled" }, ""), false);
+  assert.equal(shared.isGenericAddressNotFound(400, { message: "Not Found" }, ""), false);
+  assert.doesNotMatch(shared.SAMSARA_ADDRESS_MESSAGES.tag_scope, /feature/i);
+  assert.match(shared.SAMSARA_ADDRESS_MESSAGES.tag_scope, /tagIds/);
+  assert.match(shared.SAMSARA_ADDRESS_MESSAGES.tag_scope, /still saved/);
   const repeatBody = shared.buildSamsaraAddressPayload(queries.getLocation(repeat)!);
   assert.equal(repeatBody.ok, true);
   if (repeatBody.ok && built.ok) {
@@ -235,7 +256,9 @@ async function main() {
     assert.equal(sent.geofence.circle.longitude, pin.longitude);
     assert.equal(sent.geofence.circle.radiusMeters, shared.SAMSARA_ADDRESS_RADIUS_METERS);
     assert.equal(sent.externalIds.msetms, String(costco));
+    assert.deepEqual((call.body as { tagIds?: string[] }).tagIds, ["4456991"]);
     assert.doesNotMatch(JSON.stringify(sent), /4412/);
+    assert.equal(JSON.stringify(sent).includes("test-not-a-real-token"), false);
     return new Response(
       JSON.stringify({
         data: {
@@ -278,6 +301,7 @@ async function main() {
     assert.equal(sent.longitude, -87.629799);
     assert.equal(sent.externalIds.msetms, String(westside));
     assert.equal(sent.notes, "FCFS. Gate on the west side.");
+    assert.deepEqual((call.body as { tagIds?: string[] }).tagIds, ["4456991"]);
     assert.doesNotMatch(JSON.stringify(sent), /do not send this private note/);
     return new Response(
       JSON.stringify({ data: { id: "addr-west", externalIds: { msetms: String(westside) } } }),
@@ -352,6 +376,44 @@ async function main() {
   assert.equal(calls.length, 1);
   assert.equal(queries.getLocation(westside)?.samsara_address_id, "addr-west");
 
+  const tagMiss = queries.createLocation({
+    name: "Tag scope dock",
+    street: "9 Tag St",
+    city: "Dallas",
+    state: "TX",
+    zip: "75201",
+    phone: "",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 32.7767,
+    longitude: -96.797,
+  });
+  calls = installFetch((call) => {
+    if (call.method === "GET") return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
+    assert.equal(call.method, "POST");
+    assert.deepEqual((call.body as { tagIds?: string[] }).tagIds, ["4456991"]);
+    return new Response(JSON.stringify({ message: "Not Found", requestId: "req-tag" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  const tagScoped = await syncMod.syncLocationToSamsara(tagMiss);
+  assert.equal(tagScoped.ok, false);
+  if (!tagScoped.ok) {
+    assert.equal(tagScoped.reason, "tag_scope");
+    assert.equal(tagScoped.setupBlocker, false);
+    assert.match(tagScoped.message, /tag-scoped/i);
+    assert.match(tagScoped.message, /tagIds/);
+    assert.doesNotMatch(tagScoped.message, /feature/i);
+  }
+  assert.equal(queries.getLocation(tagMiss)?.samsara_address_id ?? null, null);
+  assert.match(queries.getLocation(tagMiss)?.samsara_address_error ?? "", /tagIds/);
+  assert.equal(queries.getLocation(tagMiss)?.name, "Tag scope dock");
+  assert.equal(calls.filter((call) => call.method === "POST").length, 1);
+
   calls = installFetch(() => {
     const error = new Error("The operation was aborted");
     error.name = "AbortError";
@@ -368,6 +430,7 @@ async function main() {
   assert.equal(queries.getLocation(costco)?.latitude, pin.latitude);
 
   delete process.env.SAMSARA_API_TOKEN;
+  delete process.env.SAMSARA_ADDRESS_TAG_IDS;
   console.log("samsara address sync ok");
 }
 
