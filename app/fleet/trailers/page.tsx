@@ -52,6 +52,9 @@ export default async function TrailersPage({
         title="Trailers"
         actions={
           <>
+            <Link href="/fleet/trailers/custody" className="btn btn-secondary">
+              Who had a trailer
+            </Link>
             <a href="/api/fleet/trailers/export" className="btn btn-secondary">
               Download CSV
             </a>

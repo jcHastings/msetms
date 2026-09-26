@@ -25,6 +25,7 @@ import {
   truckUnit,
 } from "./audit";
 import { getDb } from "./db";
+import { applyLoadCustody } from "./trailer-custody";
 import {
   assertUniqueDriverEmail,
   DRIVER_PASSWORD_NOT_RECOGNIZED,
@@ -1762,6 +1763,17 @@ export function createLoad(input: LoadInput): number {
     const id = Number(result.lastInsertRowid);
     persistLoadPageFields(id, input, null);
     syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    applyLoadCustody({
+      loadId: id,
+      loadNumber,
+      previous: null,
+      next: {
+        trailerId: input.trailer_id ?? null,
+        driverId: input.driver_id,
+        truckId: input.truck_id,
+        status: input.status,
+      },
+    });
     return id;
   });
   const id = insert();
@@ -1829,6 +1841,22 @@ export function updateLoad(id: number, input: LoadInput): void {
     );
     persistLoadPageFields(id, input, existing);
     syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
+    applyLoadCustody({
+      loadId: id,
+      loadNumber: existing.load_number,
+      previous: {
+        trailerId: existing.trailer_id,
+        driverId: existing.driver_id,
+        truckId: existing.truck_id,
+        status: existing.status,
+      },
+      next: {
+        trailerId: input.trailer_id ?? null,
+        driverId: input.driver_id,
+        truckId: input.truck_id,
+        status: input.status,
+      },
+    });
   })();
   recordLoadChanges(id, input.status === "cancelled" ? "cancel" : "update", [
     { field: "customer", oldValue: existing.customer_name, newValue: customerName(input.customer_id) },
@@ -1934,6 +1962,22 @@ export function assignLoad(
       db.prepare("UPDATE drivers SET last_trailer_id = ? WHERE id = ?").run(resolvedTrailerId, driverId);
     }
     markAssetsOnDuty(truckId, driverId);
+    applyLoadCustody({
+      loadId,
+      loadNumber: load.load_number,
+      previous: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status: load.status,
+      },
+      next: {
+        trailerId: resolvedTrailerId ?? null,
+        driverId,
+        truckId,
+        status: nextStatus,
+      },
+    });
   })();
   recordLoadChanges(loadId, "assign", [
     { field: "driver", oldValue: driverName(load.driver_id), newValue: driver.name },
@@ -2080,6 +2124,22 @@ export function updateLoadStatus(loadId: number, status: string): void {
     if (status === "cancelled" || status === "completed" || status === "delivered") {
       releaseAssetsIfNeeded(load);
     }
+    applyLoadCustody({
+      loadId,
+      loadNumber: load.load_number,
+      previous: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status: load.status,
+      },
+      next: {
+        trailerId: load.trailer_id,
+        driverId: load.driver_id,
+        truckId: load.truck_id,
+        status,
+      },
+    });
   })();
   const action = status === "cancelled" ? "cancel" : "status";
   recordLoadChanges(loadId, action, [
@@ -2197,6 +2257,22 @@ export function updateDriverProgress(loadId: number, driverId: number, progress:
     ).run(progress, nextStatus, now(), loadId);
     if (nextStatus === "delivered") {
       releaseAssetsIfNeeded({ ...load, status: nextStatus });
+      applyLoadCustody({
+        loadId,
+        loadNumber: load.load_number,
+        previous: {
+          trailerId: load.trailer_id,
+          driverId: load.driver_id,
+          truckId: load.truck_id,
+          status: load.status,
+        },
+        next: {
+          trailerId: load.trailer_id,
+          driverId: load.driver_id,
+          truckId: load.truck_id,
+          status: nextStatus,
+        },
+      });
     } else {
       markAssetsOnDuty(load.truck_id, load.driver_id);
     }

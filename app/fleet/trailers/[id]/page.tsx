@@ -7,6 +7,7 @@ import { UnitComplianceCard } from "@/components/unit-compliance-card";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
 import { trailerFormValues, truckOption } from "@/lib/fleet-form-shared";
+import { TrailerCustodyPanel } from "@/components/trailer-custody-panel";
 import { TrailerShareLinkPanel } from "@/components/trailer-share-link";
 import { getTrailer, listTrucks } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
@@ -49,6 +50,7 @@ export default async function EditTrailerPage({
           />
         </div>
       ) : null}
+      <TrailerCustodyPanel trailerId={trailer.id} />
       <TrailerForm
         trailer={trailerFormValues(trailer)}
         trucks={listTrucks().map(truckOption)}
