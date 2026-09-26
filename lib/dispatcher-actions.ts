@@ -406,6 +406,11 @@ export async function updateRelayAssignmentAction(formData: FormData): Promise<A
       const id = parseOptionalInt(formData.get("relay_id"));
       if (!id) throw new Error("Relay is missing.");
       updateRelayAssignment(id, parseAssignmentPatch(formData));
+      const relay = getRelay(id);
+      if (relay) {
+        const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");
+        await mirrorSamsaraRouteQuiet(relay.load_id);
+      }
       refresh();
       return { ok: true, id };
     } catch (error) {
