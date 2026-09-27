@@ -333,6 +333,53 @@ async function main() {
     buffer: fixtureBytes,
     mimeType: "image/png",
   });
+  const assistHomeTruck = queries.createTruck({
+    unit_number: "8699",
+    type: "sleeper",
+    capacity_lbs: 50000,
+    status: "available",
+  });
+  const assistHomeDoc = addFleetDocument({
+    ownerType: "truck",
+    ownerId: assistHomeTruck,
+    kind: "registration",
+    originalName: "home-truck-registration.png",
+    buffer: fixtureBytes,
+    mimeType: "image/png",
+  });
+  assistDb.prepare("UPDATE drivers SET truck_id = ? WHERE id = ?").run(assistHomeTruck, assistDriverA);
+  const assistTrailerIns = addFleetDocument({
+    ownerType: "trailer",
+    ownerId: assistTrailerA,
+    kind: "insurance",
+    originalName: "trailer-insurance.pdf",
+    buffer: fixtureBytes,
+    mimeType: "application/pdf",
+  });
+  const assistOtherDoc = addFleetDocument({
+    ownerType: "truck",
+    ownerId: assistTruckA,
+    kind: "other",
+    originalName: "scale-note.txt",
+    buffer: Buffer.from("scale note"),
+    mimeType: "text/plain",
+  });
+  const assistCdlA = addFleetDocument({
+    ownerType: "driver",
+    ownerId: assistDriverA,
+    kind: "cdl",
+    originalName: "cdl-a.png",
+    buffer: fixtureBytes,
+    mimeType: "image/png",
+  });
+  const assistCdlB = addFleetDocument({
+    ownerType: "driver",
+    ownerId: assistDriverB,
+    kind: "cdl",
+    originalName: "cdl-b.png",
+    buffer: fixtureBytes,
+    mimeType: "image/png",
+  });
 
   const { hasDriverPassword } = await import("../lib/driver-password");
   const fleetSaveId = queries.createDriver({
@@ -605,6 +652,150 @@ async function main() {
     ),
   );
   assert.equal(forbiddenAssistDoc.status, 403);
+
+  const otherDriverCdl = await read(
+    await assistDocRoute.GET(
+      request(`${BASE}/assist/docs/${assistCdlB.id}`, { headers: { Authorization: `Bearer ${assistToken}` } }),
+      { params: Promise.resolve({ fleetDocumentId: String(assistCdlB.id) }) },
+    ),
+  );
+  assert.equal(otherDriverCdl.status, 403);
+
+  const homeTruckDoc = await read(
+    await assistDocRoute.GET(
+      request(`${BASE}/assist/docs/${assistHomeDoc.id}`, { headers: { Authorization: `Bearer ${assistToken}` } }),
+      { params: Promise.resolve({ fleetDocumentId: String(assistHomeDoc.id) }) },
+    ),
+  );
+  assert.equal(homeTruckDoc.status, 403, "home truck is not the load truck");
+
+  const missingAssistDoc = await read(
+    await assistDocRoute.GET(
+      request(`${BASE}/assist/docs/999999`, { headers: { Authorization: `Bearer ${assistToken}` } }),
+      { params: Promise.resolve({ fleetDocumentId: "999999" }) },
+    ),
+  );
+  assert.equal(missingAssistDoc.status, 404);
+
+  const myTruckDocs = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "My truck docs" }),
+      }),
+    ),
+  );
+  assert.equal(myTruckDocs.status, 200);
+  const myTruckDocsBody = myTruckDocs.json as {
+    answer: string;
+    unknown: boolean;
+    documents: Array<{ id: number; kind: string; owner_type: string; href: string; original_name: string }>;
+  };
+  assert.equal(myTruckDocsBody.unknown, false);
+  assert.equal(myTruckDocsBody.answer, "Cab docs on file.");
+  assert.deepEqual(
+    myTruckDocsBody.documents.map((doc) => doc.id),
+    [assistDocA.id, assistTrailerIns.id, assistCdlA.id],
+  );
+  assert.deepEqual(
+    myTruckDocsBody.documents.map((doc) => doc.kind),
+    ["registration", "insurance", "cdl"],
+  );
+  for (const doc of myTruckDocsBody.documents) {
+    assert.match(doc.href, new RegExp(`^/api/driver/v1/assist/docs/${doc.id}$`));
+    assert.doesNotMatch(doc.href, /fleet-docs/);
+  }
+  assert.equal(
+    myTruckDocsBody.documents.some((doc) => doc.id === assistOtherDoc.id || doc.id === assistDocB.id || doc.id === assistHomeDoc.id),
+    false,
+  );
+
+  const namedInsurance = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "insurance" }),
+      }),
+    ),
+  );
+  const namedInsuranceBody = namedInsurance.json as { documents: Array<{ id: number }> };
+  assert.deepEqual(
+    namedInsuranceBody.documents.map((doc) => doc.id),
+    [assistTrailerIns.id],
+  );
+
+  const namedOther = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "other document" }),
+      }),
+    ),
+  );
+  const namedOtherBody = namedOther.json as { documents: Array<{ id: number }> };
+  assert.deepEqual(
+    namedOtherBody.documents.map((doc) => doc.id),
+    [assistOtherDoc.id],
+  );
+
+  const missingDot = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "DOT inspection" }),
+      }),
+    ),
+  );
+  const missingDotBody = missingDot.json as { answer: string; unknown: boolean; documents: unknown[] };
+  assert.equal(missingDot.status, 200);
+  assert.equal(missingDotBody.unknown, true);
+  assert.equal(missingDotBody.answer, "No DOT file on file for your assigned truck/trailer.");
+  assert.deepEqual(missingDotBody.documents, []);
+
+  const missingMed = await read(
+    await assistRoute.POST(
+      request(`${BASE}/assist`, {
+        method: "POST",
+        headers: assistAuth,
+        body: JSON.stringify({ question: "med card" }),
+      }),
+    ),
+  );
+  const missingMedBody = missingMed.json as { answer: string; unknown: boolean; documents: unknown[] };
+  assert.equal(missingMedBody.unknown, true);
+  assert.equal(missingMedBody.answer, "No med card file on file for you.");
+  assert.deepEqual(missingMedBody.documents, []);
+
+  const assistSources = [
+    "lib/driver-assist.ts",
+    "lib/driver-assist-shared.ts",
+    "components/driver-assist-sheet.tsx",
+    "app/api/driver/v1/assist/route.ts",
+    "app/api/driver/v1/assist/docs/[fleetDocumentId]/route.ts",
+  ].map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"));
+  for (const source of assistSources) {
+    assert.doesNotMatch(source, /openai|OPENAI|askMike|MikeChat/i);
+    assert.doesNotMatch(source, /\/api\/fleet-docs/);
+  }
+  const assistShared = assistSources[1];
+  const assistSheet = assistSources[2];
+  assert.match(
+    assistShared,
+    /Appointment time[\s\S]*Shipper hours[\s\S]*Pickup address[\s\S]*My truck docs/,
+  );
+  assert.match(assistSheet, /DRIVER_ASSIST_CHIPS/);
+  assert.match(assistSheet, /data-assist-chip/);
+  assert.match(assistSheet, /target="_blank"/);
+  assert.match(assistSheet, /rel="noopener"/);
+  assert.match(assistSheet, /Cab docs/);
+  const driverHome = fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8");
+  const homeLabels = [...driverHome.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(homeLabels, ["Dispatch", "Upload", "Confirmation", "Fuel", "Trailer"]);
+  assert.doesNotMatch(driverHome, /label: "Binder"|label: "Cab docs"|label: "My truck docs"/);
 
   const unauth = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`)));
   assert.equal(unauth.status, 401);
