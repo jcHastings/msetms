@@ -9,7 +9,6 @@ import { relayForDriver } from "./relay-store";
 import { ensureDefaultStops, type LoadStop } from "./stops";
 import {
   isActiveLoadStatus,
-  labelForFleetDocKind,
   type DriverWithTruck,
   type FleetDocument,
   type LoadView,
@@ -254,18 +253,111 @@ function notesAnswer(load: LoadView, question: string): DriverAssistResponse {
   return { answer: lines.join("\n"), unknown: false, documents: [] };
 }
 
-function docsAnswer(docs: DriverAssistDocumentRef[]): DriverAssistResponse {
-  if (!docs.length) {
-    return { answer: DRIVER_ASSIST_NOT_IN_TMS, unknown: true, documents: [] };
+const CAB_DOC_KINDS = ["registration", "dot_inspection", "insurance"] as const;
+const DRIVER_CAB_DOC_KINDS = ["cdl", "med_card"] as const;
+
+const CAB_KIND_RANK: Record<string, number> = {
+  registration: 0,
+  dot_inspection: 1,
+  insurance: 2,
+  cdl: 3,
+  med_card: 4,
+  other: 5,
+};
+
+const CAB_OWNER_RANK: Record<string, number> = {
+  truck: 0,
+  trailer: 1,
+  driver: 2,
+};
+
+function cabKindPhrase(kind: FleetDocument["kind"]): string {
+  switch (kind) {
+    case "registration":
+      return "registration";
+    case "dot_inspection":
+      return "DOT";
+    case "insurance":
+      return "insurance";
+    case "cdl":
+      return "CDL";
+    case "med_card":
+      return "med card";
+    default:
+      return "other";
   }
-  const lines = docs.map((doc) => {
-    const owner = doc.owner_type === "truck" ? "Truck" : doc.owner_type === "trailer" ? "Trailer" : "Driver";
-    return `- ${owner} ${labelForFleetDocKind(doc.kind)}: ${doc.original_name}`;
+}
+
+function namedDocKinds(question: string): FleetDocument["kind"][] {
+  const kinds: FleetDocument["kind"][] = [];
+  if (/\breg(?:istration)?\b/i.test(question)) kinds.push("registration");
+  if (/\b(?:dot(?:\s*inspection)?|inspection)\b/i.test(question)) kinds.push("dot_inspection");
+  if (/\binsurance\b/i.test(question)) kinds.push("insurance");
+  if (/\b(?:cdl|licen[sc]e)\b/i.test(question)) kinds.push("cdl");
+  if (/\bmed(?:ical)?\s*cards?\b/i.test(question)) kinds.push("med_card");
+  if (/\bother\b/i.test(question)) kinds.push("other");
+  return kinds;
+}
+
+function sortCabDocs(docs: DriverAssistDocumentRef[]): DriverAssistDocumentRef[] {
+  return [...docs].sort((a, b) => {
+    const kindDelta = (CAB_KIND_RANK[a.kind] ?? 9) - (CAB_KIND_RANK[b.kind] ?? 9);
+    if (kindDelta) return kindDelta;
+    return (CAB_OWNER_RANK[a.owner_type] ?? 9) - (CAB_OWNER_RANK[b.owner_type] ?? 9);
   });
+}
+
+function missingCabDocSentence(kinds: FleetDocument["kind"][]): string {
+  const phrases = kinds.map(cabKindPhrase);
+  const list =
+    phrases.length <= 1
+      ? (phrases[0] ?? "registration")
+      : phrases.length === 2
+        ? `${phrases[0]} or ${phrases[1]}`
+        : `${phrases.slice(0, -1).join(", ")}, or ${phrases[phrases.length - 1]}`;
+  const driverOnly = kinds.length > 0 && kinds.every((kind) => kind === "cdl" || kind === "med_card");
+  if (driverOnly) return `No ${list} file on file for you.`;
+  return `No ${list} file on file for your assigned truck/trailer.`;
+}
+
+/**
+ * Default "My truck docs" keeps cab kinds on the assigned truck and trailer,
+ * then this driver's CDL and med card. Other kinds stay out until the question names them.
+ */
+function selectCabDocs(
+  question: string,
+  docs: DriverAssistDocumentRef[],
+): { selected: DriverAssistDocumentRef[]; missingKinds: FleetDocument["kind"][] } {
+  const named = namedDocKinds(question);
+  if (named.length) {
+    const selected = sortCabDocs(docs.filter((doc) => named.includes(doc.kind)));
+    const missingKinds = named.filter((kind) => !selected.some((doc) => doc.kind === kind));
+    return { selected, missingKinds };
+  }
+  const cab = docs.filter(
+    (doc) =>
+      (doc.owner_type === "truck" || doc.owner_type === "trailer") &&
+      (CAB_DOC_KINDS as readonly string[]).includes(doc.kind),
+  );
+  const personal = docs.filter(
+    (doc) => doc.owner_type === "driver" && (DRIVER_CAB_DOC_KINDS as readonly string[]).includes(doc.kind),
+  );
+  const selected = sortCabDocs([...cab, ...personal]);
   return {
-    answer: `Assigned equipment documents:\n${lines.join("\n")}`,
+    selected,
+    missingKinds: selected.length ? [] : ["registration", "dot_inspection", "insurance"],
+  };
+}
+
+function docsAnswer(question: string, docs: DriverAssistDocumentRef[]): DriverAssistResponse {
+  const { selected, missingKinds } = selectCabDocs(question, docs);
+  if (!selected.length) {
+    return { answer: missingCabDocSentence(missingKinds), unknown: true, documents: [] };
+  }
+  return {
+    answer: "Cab docs on file.",
     unknown: false,
-    documents: docs,
+    documents: selected,
   };
 }
 
@@ -283,7 +375,7 @@ function answerQuestion(
     return { answer: DRIVER_ASSIST_REFUSAL, unknown: true, documents: [] };
   }
   if (intent === "docs") {
-    return docsAnswer(docs);
+    return docsAnswer(question, docs);
   }
   if (intent === "appointment") {
     const pickup = appointmentLine("pickup", load, pickupStop);

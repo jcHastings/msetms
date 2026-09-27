@@ -118,6 +118,11 @@ Rules:
 - If no active load is assigned, response is `"Nothing is assigned to you right now."` with `unknown: true`.
 - Missing source fields return `"Not in TMS."`
 - Unrecognized questions are refused (`unknown: true`) and do not call Mike/OpenAI.
+- Web Assist chips send fixed questions (no LLM): Appointment time, Shipper hours, Pickup address, My truck docs.
+- `My truck docs` returns cab kinds `registration`, `dot_inspection`, and `insurance` on the assigned truck and trailer, then this driver's `cdl` and `med_card`. Other kinds stay out of that list until the question names them.
+- A missing named kind returns `unknown: true` and `No [kind] file on file for your assigned truck/trailer.` (CDL / med card: `for you`).
+- Equipment ids come from the assigned load (or that driver's relay leg). Home truck is not the load truck.
+- Offline cache of those files is out of scope here.
 
 ### `GET /assist/docs/{fleetDocumentId}`
 
@@ -126,6 +131,7 @@ Driver-only document bytes endpoint for Assist sources.
 - Returns file bytes only when the `fleet_documents` row belongs to the requesting driver's assigned truck/trailer.
 - Optional allowlist: the driver's own `owner_type=driver` files.
 - Never use Office `/api/fleet-docs/[id]` for driver access.
+- `Content-Disposition: inline` so a new tab can show the PDF or image.
 
 ### `GET /loads?scope=active|recent`
 
