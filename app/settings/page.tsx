@@ -3,27 +3,23 @@ import { OrbcommImportForm } from "@/components/orbcomm-import-form";
 import { PageHeader } from "@/components/page-header";
 import { getCompanyProfile } from "@/lib/company";
 import { formatDateTime } from "@/lib/format";
-import { isOrbcommConfigured, isQuickbooksConfigured } from "@/lib/env";
 import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
-import { formatDurationMs, getSamsaraFleet, isSamsaraConfigured } from "@/lib/integrations/samsara";
+import { formatDurationMs, getSamsaraFleet } from "@/lib/integrations/samsara";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const samsaraTokenSet = isSamsaraConfigured();
-  const orbcommSet = isOrbcommConfigured();
-  const qboSet = isQuickbooksConfigured();
   const fleet = await getSamsaraFleet();
   const reefers = await getReeferSnapshots();
   const qbo = await getQuickbooksStatus();
 
-  const samsaraStatus = !samsaraTokenSet
+  const samsaraStatus = !fleet.tokenSet
     ? "Demo"
     : fleet.error
       ? "API error — showing demo"
       : "Connected";
-  const orbcommStatus = !orbcommSet
+  const orbcommStatus = !reefers.credentialsSet
     ? "Demo"
     : reefers.error
       ? "API error — showing demo"
@@ -51,7 +47,7 @@ export default async function SettingsPage() {
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
             <dt className="text-slate-500">Token</dt>
-            <dd className="font-semibold">{samsaraTokenSet ? "Set (hidden)" : "Not set"}</dd>
+            <dd className="font-semibold">{fleet.tokenSet ? "Set (hidden)" : "Not set"}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Status</dt>
@@ -97,11 +93,11 @@ export default async function SettingsPage() {
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <div>
             <dt className="text-slate-500">Username</dt>
-            <dd className="font-semibold">{orbcommSet ? "Set (hidden)" : "Not set"}</dd>
+            <dd className="font-semibold">{reefers.credentialsSet ? "Set (hidden)" : "Not set"}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Password</dt>
-            <dd className="font-semibold">{orbcommSet ? "Set (hidden)" : "Not set"}</dd>
+            <dd className="font-semibold">{reefers.credentialsSet ? "Set (hidden)" : "Not set"}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Status</dt>
@@ -198,7 +194,7 @@ export default async function SettingsPage() {
             {qbo.error}
           </p>
         ) : null}
-        {!qboSet ? (
+        {!qbo.configured ? (
           <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             No credentials — delivered loads show a labeled demo invoice you can record locally.
           </p>
