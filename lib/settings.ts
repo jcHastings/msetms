@@ -624,17 +624,40 @@ export function updateDocumentDefaults(input: DocumentDefaults): void {
     );
 }
 
-export const DEFAULT_COMPANY_LOGO_FILE = "ms-express-logo.png";
+export const DEFAULT_COMPANY_LOGO_FILE = "ms-express-logo-transparent.png";
+const DEFAULT_COMPANY_LOGO_NAMES = [DEFAULT_COMPANY_LOGO_FILE, "ms-express-logo.png"] as const;
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+export function defaultCompanyLogoCandidates(): string[] {
+  const roots = [
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "public"),
+    /*turbopackIgnore: true*/ process.cwd(),
+  ];
+  return roots.flatMap((root) => DEFAULT_COMPANY_LOGO_NAMES.map((name) => path.join(root, name)));
+}
 
 export function defaultCompanyLogoPath(): string | null {
-  const candidates = [
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", DEFAULT_COMPANY_LOGO_FILE),
-    path.join(/*turbopackIgnore: true*/ process.cwd(), DEFAULT_COMPANY_LOGO_FILE),
-  ];
-  for (const file of candidates) {
+  for (const file of defaultCompanyLogoCandidates()) {
     if (fs.existsSync(/*turbopackIgnore: true*/ file)) return file;
   }
   return null;
+}
+
+/** PNG bytes for the shipped mark. Tries each candidate so a missing first path still serves the pack asset. */
+export function readDefaultCompanyLogo(candidates: string[] = defaultCompanyLogoCandidates()): Buffer {
+  const seen = new Set<string>();
+  for (const file of candidates) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    try {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ file)) continue;
+      const buf = fs.readFileSync(/*turbopackIgnore: true*/ file);
+      if (buf.length >= 8 && buf.subarray(0, 4).equals(PNG_MAGIC)) return buf;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Default MS Express logo is not in the office pack.");
 }
 
 export function hasCustomCompanyLogo(settings: CompanySettings = getCompanySettings()): boolean {

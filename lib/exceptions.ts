@@ -8,7 +8,7 @@ import { resolveInvoiceCustomerEmail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
-import { listStops } from "./stops";
+import { listStopAppointmentTargets, listStops } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
 import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
 
@@ -41,6 +41,9 @@ export type InboxException = {
   title: string;
   detail: string;
   demo: boolean;
+  driverName?: string;
+  pickupAt?: string;
+  deliveryAt?: string;
 };
 
 export type ExceptionInbox = {
@@ -57,7 +60,41 @@ export type InboxExceptionGroup = {
   destination: string;
   severity: ExceptionSeverity;
   items: InboxException[];
+  driverName: string;
+  pickupAt: string;
+  deliveryAt: string;
 };
+
+export function workbenchCardSchedule(
+  load: { driver_name: string | null; pickup_start: string; delivery_start: string },
+  stops: Array<{ kind: string; window_start: string }> = [],
+): { driverName: string; pickupAt: string; deliveryAt: string } {
+  const pickup = stops.find((stop) => stop.kind === "pickup");
+  const delivery = stops.find((stop) => stop.kind === "delivery");
+  return {
+    driverName: (load.driver_name ?? "").trim(),
+    pickupAt: pickup?.window_start.trim() || load.pickup_start || "",
+    deliveryAt: delivery?.window_start.trim() || load.delivery_start || "",
+  };
+}
+
+function attachWorkbenchSchedule(items: InboxException[], loads: LoadView[]): void {
+  const byId = new Map(loads.map((load) => [load.id, load]));
+  const cache = new Map<number, { driverName: string; pickupAt: string; deliveryAt: string }>();
+  for (const item of items) {
+    let schedule = cache.get(item.loadId);
+    if (!schedule) {
+      const load = byId.get(item.loadId);
+      schedule = load
+        ? workbenchCardSchedule(load, listStopAppointmentTargets(load.id))
+        : { driverName: "", pickupAt: "", deliveryAt: "" };
+      cache.set(item.loadId, schedule);
+    }
+    item.driverName = schedule.driverName;
+    item.pickupAt = schedule.pickupAt;
+    item.deliveryAt = schedule.deliveryAt;
+  }
+}
 
 const SEVERITY_RANK: Record<ExceptionSeverity, number> = {
   CRITICAL: 0,
@@ -268,6 +305,9 @@ export function groupInboxExceptions(items: InboxException[]): InboxExceptionGro
         destination: item.destination,
         severity: item.severity,
         items: [item],
+        driverName: item.driverName ?? "",
+        pickupAt: item.pickupAt ?? "",
+        deliveryAt: item.deliveryAt ?? "",
       });
       continue;
     }
@@ -538,6 +578,8 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
       );
     }
   }
+
+  attachWorkbenchSchedule(items, [...active, ...delivered]);
 
   items.sort((a, b) => {
     const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];

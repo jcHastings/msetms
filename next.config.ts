@@ -44,6 +44,8 @@ const nextConfig: NextConfig = {
       "./node_modules/pdfkit/js/**/*",
       "./node_modules/pdfkit/package.json",
     ],
+    // Standalone file tracing does not follow cwd/public reads. Keep the default mark in the pack.
+    "/api/company/logo": ["./public/ms-express-logo-transparent.png", "./public/ms-express-logo.png"],
   },
   experimental: {
     serverActions: {

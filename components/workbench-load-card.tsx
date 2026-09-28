@@ -11,7 +11,14 @@ import {
 } from "@/lib/load-map-shared";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
+import { formatDateTime } from "@/lib/format";
 import { listStopAppointmentTargets } from "@/lib/stops";
+
+function workbenchWhen(iso: string): string {
+  const shown = formatDateTime(iso);
+  if (!String(iso ?? "").trim() || shown === "\u2014") return "Not set";
+  return shown;
+}
 
 function lanePointsForCard(group: InboxExceptionGroup, modelPoints: LoadMapPoint[]): LoadMapPoint[] {
   const lane = modelPoints.filter((point) => point.kind === "pickup" || point.kind === "delivery" || point.kind === "truck");
@@ -165,6 +172,23 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             {group.origin}
             <span className="mx-1 text-slate-400">—</span>
             {group.destination}
+          </div>
+          <div
+            className="mt-1.5 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-xs leading-4"
+            data-workbench-card-meta=""
+          >
+            <span className="text-slate-500">Driver</span>
+            <span className="min-w-0 truncate font-medium text-slate-800" data-workbench-driver="">
+              {group.driverName.trim() || "Unassigned"}
+            </span>
+            <span className="text-slate-500">Pickup</span>
+            <span className="min-w-0 truncate text-slate-800" data-workbench-pickup="">
+              {workbenchWhen(group.pickupAt)}
+            </span>
+            <span className="text-slate-500">Delivery</span>
+            <span className="min-w-0 truncate text-slate-800" data-workbench-delivery="">
+              {workbenchWhen(group.deliveryAt)}
+            </span>
           </div>
         </div>
         <ul className="workbench-card-issues mt-2 space-y-1.5 border-t border-slate-100 px-3 pb-2.5 pt-2">
