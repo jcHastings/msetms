@@ -517,11 +517,24 @@ async function main() {
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/totp-setup-panel.tsx"), "utf8"), /from \"@\/lib\/db\"|from \"@\/lib\/settings\"/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/totp.ts"), "utf8"), /otpauth/);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo.png")), true, "default MS Express logo");
+  assert.equal(
+    fs.existsSync(path.join(process.cwd(), "public/ms-express-logo-transparent.png")),
+    true,
+    "preferred transparent MS Express logo",
+  );
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/ms-express-logo-on-dark.png")), true, "transparent on-dark logo");
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/next.svg")), false);
   assert.equal(fs.existsSync(path.join(process.cwd(), "public/vercel.svg")), false);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /MS Express TMS/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /ms-express-logo\.png/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /\/api\/company\/logo/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "middleware.ts"), "utf8"),
+    /ms-express-logo\(\?:-on-dark\|-transparent\)/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8"),
+    /ms-express-logo-transparent\.png/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-mark-chip/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /data-brand-wordmark/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/brand-mark.tsx"), "utf8"), /rounded-md bg-white/);
@@ -2721,7 +2734,32 @@ async function main() {
     "future unassigned load stays off the inbox",
   );
   assert.ok(inbox.fineCount >= 1, "some open loads should be fine");
-  const { groupInboxExceptions } = await import("../lib/exceptions");
+  const { groupInboxExceptions, workbenchCardSchedule } = await import("../lib/exceptions");
+  const { listStopAppointmentTargets } = await import("../lib/stops");
+  const cardLoads = queries.listLoads({ status: "all" });
+  const cardGroups = groupInboxExceptions(inbox.items);
+  assert.ok(cardGroups.length >= 1, "workbench card payload");
+  for (const group of cardGroups) {
+    const load = cardLoads.find((row) => row.id === group.loadId);
+    assert.ok(load, `card load ${group.loadNumber}`);
+    const expected = workbenchCardSchedule(load, listStopAppointmentTargets(load.id));
+    assert.equal(group.driverName, expected.driverName);
+    assert.equal(group.pickupAt, expected.pickupAt);
+    assert.equal(group.deliveryAt, expected.deliveryAt);
+    assert.equal(typeof group.driverName, "string");
+    assert.ok(group.pickupAt, `${group.loadNumber} pickup`);
+    assert.ok(group.deliveryAt, `${group.loadNumber} delivery`);
+  }
+  const unassignedSchedule = workbenchCardSchedule(
+    { driver_name: null, pickup_start: "2026-09-28T14:00:00.000Z", delivery_start: "2026-09-29T18:00:00.000Z" },
+    [
+      { kind: "pickup", window_start: "2026-09-28T15:30:00.000Z" },
+      { kind: "delivery", window_start: "" },
+    ],
+  );
+  assert.equal(unassignedSchedule.driverName, "");
+  assert.equal(unassignedSchedule.pickupAt, "2026-09-28T15:30:00.000Z");
+  assert.equal(unassignedSchedule.deliveryAt, "2026-09-29T18:00:00.000Z");
   const sameLoadIssues = inbox.items.filter((item) => item.loadId === inbox.items[0]?.loadId);
   if (sameLoadIssues.length > 1) {
     const groupedSame = groupInboxExceptions(sameLoadIssues);
@@ -2835,6 +2873,13 @@ async function main() {
   assert.match(workbenchCardUi, /data-workbench-lane-sketch/);
   assert.match(workbenchCardUi, /LoadCardFastActions/);
   assert.doesNotMatch(workbenchCardUi, /exceptionAction|Snooze 4h/);
+  assert.match(workbenchCardUi, /data-workbench-card-meta/);
+  assert.match(workbenchCardUi, /data-workbench-driver/);
+  assert.match(workbenchCardUi, /data-workbench-pickup/);
+  assert.match(workbenchCardUi, /data-workbench-delivery/);
+  assert.match(workbenchCardUi, /Unassigned/);
+  assert.match(workbenchCardUi, /Pickup/);
+  assert.match(workbenchCardUi, /Delivery/);
   assert.match(workbenchCardUi, /listStopAppointmentTargets/);
   assert.match(workbenchCardUi, /findCityCenter/);
   assert.match(workbenchCardUi, /compact/);
@@ -8202,7 +8247,8 @@ DISPATCH CONFIRMATION
   const { getCompanyProfile } = await import("../lib/company");
   const header = getCompanyProfile();
   assert.equal(header.company_name, "M&S Loads");
-  const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo } = await import("../lib/settings");
+  const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo, readDefaultCompanyLogo } =
+    await import("../lib/settings");
   assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /Continuous/);
   assert.match(getDocumentDefaults("load_confirmation").terms_text, /Two load locks are required/);
@@ -8220,8 +8266,21 @@ DISPATCH CONFIRMATION
   assert.match(getDocumentDefaults("customer_confirmation").terms_text, /billing@msloads.com/);
   assert.match(getDocumentDefaults("bol").terms_text, /Seal numbers/);
   assert.equal(hasCustomCompanyLogo(), false);
-  assert.ok(defaultCompanyLogoPath()?.endsWith("ms-express-logo.png"));
-  assert.equal(companyLogoPath(), defaultCompanyLogoPath());
+  const defaultLogoFile = defaultCompanyLogoPath();
+  assert.ok(defaultLogoFile?.endsWith("ms-express-logo-transparent.png"));
+  assert.equal(companyLogoPath(), defaultLogoFile);
+  const fallbackLogo = path.join(os.tmpdir(), `tms-logo-fallback-${Date.now()}.png`);
+  fs.copyFileSync(path.join(process.cwd(), "public/ms-express-logo-transparent.png"), fallbackLogo);
+  const fallbackBytes = readDefaultCompanyLogo([path.join(os.tmpdir(), "missing-ms-express-logo.png"), fallbackLogo]);
+  assert.equal(fallbackBytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  const { GET: getCompanyLogo } = await import("../app/api/company/logo/route");
+  const logoResponse = await getCompanyLogo();
+  assert.equal(logoResponse.status, 200);
+  assert.match(logoResponse.headers.get("content-type") ?? "", /^image\/png/);
+  const logoBody = Buffer.from(await logoResponse.arrayBuffer());
+  assert.equal(logoBody.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.ok(defaultLogoFile);
+  assert.ok(logoBody.equals(fs.readFileSync(defaultLogoFile)));
   assert.equal(header.dispatcher_name, "MS Test");
   const coleConfirm = confirmation.buildConfirmationForLoad(coleLoad.id);
   assert.equal(coleConfirm.packet, "customer");
