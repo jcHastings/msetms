@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,9 @@ const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
 
 async function main() {
+  if (!("AsyncLocalStorage" in globalThis)) {
+    Object.assign(globalThis, { AsyncLocalStorage });
+  }
   assert.equal(fs.existsSync(path.join(process.cwd(), "SHIPPED.md")), true, "SHIPPED.md checklist");
   const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
   assert.match(navSource, /Import loads/);
@@ -2880,6 +2884,183 @@ async function main() {
   assert.match(workbenchCardUi, /Unassigned/);
   assert.match(workbenchCardUi, /Pickup/);
   assert.match(workbenchCardUi, /Delivery/);
+  assert.match(workbenchCardUi, /WorkbenchStatusControl/);
+  assert.match(workbenchCardUi, /data-workbench-truck-place/);
+  assert.match(workbenchCardUi, /data-workbench-reefer/);
+  assert.match(workbenchCardUi, /canChangeStatus/);
+  const statusControlUi = fs.readFileSync(path.join(process.cwd(), "components/workbench-status-control.tsx"), "utf8");
+  assert.match(statusControlUi, /updateLoadStatusAction/);
+  assert.match(statusControlUi, /Change status for load/);
+  assert.match(statusControlUi, /aria-expanded/);
+  assert.match(statusControlUi, /stopPropagation/);
+  assert.match(statusControlUi, /data-workbench-status-error/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /assertLoadStatusTransition/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/workbench-telematics.ts"), "utf8"),
+    /getSamsaraFleet|getReeferSnapshots|getLocationForTruck|getLatestReeferForLoad/,
+  );
+  const telematics = await import("../lib/workbench-telematics");
+  assert.equal(telematics.workbenchCityState("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
+  assert.equal(telematics.workbenchCityState("Hastings, NE"), "Hastings, NE");
+  assert.equal(telematics.workbenchCityState("I-80"), "");
+  assert.equal(telematics.workbenchReeferTempLabel(34), "34°F");
+  assert.equal(telematics.workbenchReeferTempLabel(34.2), "34.2°F");
+  assert.equal(telematics.workbenchReeferTempLabel(null), "");
+  assert.equal(telematics.workbenchReeferTempLabel(Number.NaN), "");
+  const wbCustomer = queries.listCustomers()[0];
+  assert.ok(wbCustomer);
+  const wbTruckId = queries.createTruck({
+    unit_number: "WB-GPS",
+    type: "sleeper",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "wb-gps",
+  });
+  queries.saveTruckGps(wbTruckId, {
+    latitude: 40.586,
+    longitude: -98.388,
+    address: "400 N Burlington Ave, Hastings, NE 68901",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  const wbTrailerId = queries.createTrailer({
+    unit_number: "WB-REEFER",
+    type: "reefer",
+    orbcomm_asset_id: "orb-wb-reefer",
+  });
+  const wbBareTruckId = queries.createTruck({
+    unit_number: "WB-NOGPS",
+    type: "sleeper",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const wbBareTrailerId = queries.createTrailer({
+    unit_number: "WB-NOTEMP",
+    type: "reefer",
+  });
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, door_open, alarm, source, recorded_at
+      ) VALUES (NULL, ?, 'WB-REEFER', 36, 34, 34.4, 0, '', 'orbcomm', ?)`,
+    )
+    .run(wbTruckId, new Date().toISOString());
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (NULL, ?, 'WB-NOTEMP', 0, 0, 0, '', 'demo', ?)`,
+    )
+    .run(wbBareTruckId, new Date().toISOString());
+  const fedCard = telematics.workbenchTelematics({ truck_id: wbTruckId, trailer_id: wbTrailerId });
+  assert.equal(fedCard.truckPlace, "Hastings, NE");
+  assert.equal(fedCard.reeferTemp, "34°F");
+  const dryCard = telematics.workbenchTelematics({ truck_id: wbBareTruckId, trailer_id: wbBareTrailerId });
+  assert.equal(dryCard.truckPlace, telematics.WORKBENCH_TELEMATICS_EMPTY, "no Samsara GPS shows a dash");
+  assert.equal(dryCard.reeferTemp, telematics.WORKBENCH_TELEMATICS_EMPTY, "demo or missing reefer shows a dash, not 0°F");
+  const unassignedCard = telematics.workbenchTelematics({ truck_id: null, trailer_id: null });
+  assert.equal(unassignedCard.truckPlace, telematics.WORKBENCH_TELEMATICS_EMPTY);
+  assert.equal(unassignedCard.reeferTemp, telematics.WORKBENCH_TELEMATICS_EMPTY);
+  getDb()
+    .prepare(
+      `UPDATE trucks
+       SET gps_latitude = NULL, gps_longitude = NULL, gps_address = '', gps_recorded_at = '', gps_source = '', gps_speed_mph = NULL
+       WHERE id = ?`,
+    )
+    .run(wbTruckId);
+  getDb().prepare("DELETE FROM reefer_readings WHERE trailer_id IN ('WB-REEFER', 'WB-NOTEMP')").run();
+  const transitions = await import("../lib/load-status-transition");
+  const fromAssigned = transitions.nextLoadStatuses("assigned").map((item) => item.value);
+  assert.ok(fromAssigned.includes("dispatched"));
+  assert.equal(fromAssigned.includes("assigned"), false);
+  assert.throws(() => transitions.assertLoadStatusTransition("assigned", "teleported"), /Invalid status/);
+  assert.throws(() => transitions.assertLoadStatusTransition("assigned", "assigned"), /not allowed/);
+  const wbWhen = new Date().toISOString();
+  const wbStatusLoadId = queries.createLoad({
+    load_number: "WB-STATUS",
+    customer_id: wbCustomer.id,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const { RequestCookies } = await import("next/dist/server/web/spec-extension/cookies.js");
+  const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external.js");
+  const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external.js");
+  const { DISPATCHER_SESSION_COOKIE } = await import("../lib/dispatcher-session-constants");
+  const officeSessionTypes = await import("../lib/dispatcher-session-types");
+  const officeSessionToken = await import("../lib/session-token");
+  const officeSession = await import("../lib/dispatcher-session");
+  const officeUser = officeSession.listDispatchers().find((row) => row.name === "MS Test");
+  assert.ok(officeUser);
+  const officeCookie = officeSessionToken.createSignedSessionToken({
+    id: officeUser.id,
+    issuedAt: Date.now(),
+    typ: officeSessionTypes.DISPATCHER_SESSION_TYP,
+  });
+  async function runOfficeAction<T>(cookie: string | null, fn: () => Promise<T>): Promise<T> {
+    const headers = new Headers();
+    if (cookie) headers.set("cookie", `${DISPATCHER_SESSION_COOKIE}=${cookie}`);
+    const jar = new RequestCookies(headers);
+    const unit = {
+      type: "request" as const,
+      phase: "action" as const,
+      cookies: jar,
+      mutableCookies: jar,
+      userspaceMutableCookies: jar,
+    };
+    return workAsyncStorage.run({ route: "/" }, () => workUnitAsyncStorage.run(unit, fn));
+  }
+  const { updateLoadStatusAction } = await import("../lib/actions");
+  const auditLog = await import("../lib/audit");
+  const unauthForm = new FormData();
+  unauthForm.set("load_id", String(wbStatusLoadId));
+  unauthForm.set("status", "dispatched");
+  const unauth = await runOfficeAction(null, () => updateLoadStatusAction(unauthForm));
+  assert.equal(unauth.ok, false);
+  if (!unauth.ok) assert.match(unauth.error, /Sign in/);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "assigned");
+  const deniedForm = new FormData();
+  deniedForm.set("load_id", String(wbStatusLoadId));
+  deniedForm.set("status", "teleported");
+  const denied = await runOfficeAction(officeCookie, () => updateLoadStatusAction(deniedForm));
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.match(denied.error, /Invalid status/);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "assigned");
+  const allowedForm = new FormData();
+  allowedForm.set("load_id", String(wbStatusLoadId));
+  allowedForm.set("status", "dispatched");
+  const allowed = await runOfficeAction(officeCookie, () => updateLoadStatusAction(allowedForm));
+  assert.equal(allowed.ok, true);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "dispatched");
+  const statusHistory = auditLog.listLoadAudit(wbStatusLoadId);
+  assert.ok(
+    statusHistory.some(
+      (row) =>
+        row.action === "status" &&
+        row.field === "status" &&
+        row.old_value === "assigned" &&
+        row.new_value === "dispatched" &&
+        row.actor === "MS Test" &&
+        row.actor_kind === "dispatcher",
+    ),
+    "status change writes the same load audit row as the detail page, with the office user",
+  );
   assert.match(workbenchCardUi, /listStopAppointmentTargets/);
   assert.match(workbenchCardUi, /findCityCenter/);
   assert.match(workbenchCardUi, /compact/);

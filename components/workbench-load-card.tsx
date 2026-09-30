@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { ExceptionIssueLine } from "@/components/exception-issue-line";
+import { WorkbenchStatusControl } from "@/components/workbench-status-control";
 import { findCityCenter } from "@/lib/city-coords-shared";
 import {
   LOAD_MAP_MARKER_COLOR,
@@ -12,7 +13,11 @@ import {
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
 import { formatDateTime } from "@/lib/format";
+import { nextLoadStatuses } from "@/lib/load-status-transition";
+import { getLoad } from "@/lib/queries";
 import { listStopAppointmentTargets } from "@/lib/stops";
+import { labelForLoadStatus } from "@/lib/types";
+import { WORKBENCH_TELEMATICS_EMPTY, workbenchTelematics } from "@/lib/workbench-telematics";
 
 function workbenchWhen(iso: string): string {
   const shown = formatDateTime(iso);
@@ -113,13 +118,32 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   );
 }
 
-export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup }) {
+export async function WorkbenchLoadCard({
+  group,
+  canChangeStatus = false,
+}: {
+  group: InboxExceptionGroup;
+  canChangeStatus?: boolean;
+}) {
   const apiKey = mapsBrowserKey();
   const model = await buildStopsMapModel(group.loadId);
   const points = lanePointsForCard(group, model.points);
   const path = model.path.length >= 2 ? model.path : pathThroughStops(points);
   const stops = listStopAppointmentTargets(group.loadId);
   const framing = workbenchCardMapFraming(points);
+  let loadStatus = "";
+  let statusOptions: Array<{ value: string; label: string }> = [];
+  let telematics = { truckPlace: WORKBENCH_TELEMATICS_EMPTY, reeferTemp: WORKBENCH_TELEMATICS_EMPTY };
+  try {
+    const load = getLoad(group.loadId);
+    if (load) {
+      loadStatus = load.status;
+      telematics = workbenchTelematics(load);
+      if (canChangeStatus) statusOptions = nextLoadStatuses(load.status);
+    }
+  } catch {
+    telematics = { truckPlace: WORKBENCH_TELEMATICS_EMPTY, reeferTemp: WORKBENCH_TELEMATICS_EMPTY };
+  }
 
   return (
     <article
@@ -173,6 +197,23 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             <span className="mx-1 text-slate-400">—</span>
             {group.destination}
           </div>
+          {loadStatus ? (
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-xs text-slate-500">Status</span>
+              {canChangeStatus ? (
+                <WorkbenchStatusControl
+                  loadId={group.loadId}
+                  loadNumber={group.loadNumber}
+                  status={loadStatus}
+                  options={statusOptions}
+                />
+              ) : (
+                <span className="min-w-0 truncate text-xs font-medium text-slate-800" data-workbench-status-text="">
+                  {labelForLoadStatus(loadStatus)}
+                </span>
+              )}
+            </div>
+          ) : null}
           <div
             className="mt-1.5 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-xs leading-4"
             data-workbench-card-meta=""
@@ -188,6 +229,20 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
             <span className="text-slate-500">Delivery</span>
             <span className="min-w-0 truncate text-slate-800" data-workbench-delivery="">
               {workbenchWhen(group.deliveryAt)}
+            </span>
+            <span className="text-slate-500">Truck</span>
+            <span
+              className={`min-w-0 truncate ${telematics.truckPlace === WORKBENCH_TELEMATICS_EMPTY ? "text-slate-400" : "text-slate-800"}`}
+              data-workbench-truck-place=""
+            >
+              {telematics.truckPlace}
+            </span>
+            <span className="text-slate-500">Reefer</span>
+            <span
+              className={`min-w-0 truncate ${telematics.reeferTemp === WORKBENCH_TELEMATICS_EMPTY ? "text-slate-400" : "text-slate-800"}`}
+              data-workbench-reefer=""
+            >
+              {telematics.reeferTemp}
             </span>
           </div>
         </div>

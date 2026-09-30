@@ -82,7 +82,8 @@ import {
   parseDrugTestStatus,
   parseDrugTestType,
 } from "./drug-tests";
-import { complianceWindows, isKnownLoadStatus } from "./settings";
+import { assertLoadStatusTransition } from "./load-status-transition";
+import { complianceWindows } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
@@ -715,14 +716,11 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
       const loadId = parseOptionalInt(formData.get("load_id"));
       const status = String(formData.get("status") ?? "");
       if (!loadId) throw new Error("Load is missing.");
-      if (!isKnownLoadStatus(status)) {
-        throw new Error("Invalid status.");
-      }
       const existing = getLoad(loadId);
-      if (existing) {
-        const { assertCanEditLoadRecord } = await import("./accounting-desk");
-        assertCanEditLoadRecord(existing, actor.role);
-      }
+      if (!existing) throw new Error("Load not found.");
+      assertLoadStatusTransition(existing.status, status);
+      const { assertCanEditLoadRecord } = await import("./accounting-desk");
+      assertCanEditLoadRecord(existing, actor.role);
       updateLoadStatus(loadId, status);
       if (isBillableStatus(status)) {
         const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
