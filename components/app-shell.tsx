@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { InvoiceSendPromptHost } from "@/components/invoice-send-prompt";
 import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
 import { OfficeNotificationBell } from "@/components/office-notification-bell";
@@ -131,6 +132,7 @@ export function AppShell({
             </div>
           ) : null}
           {children}
+          <InvoiceSendPromptHost />
         </div>
       </div>
     </div>

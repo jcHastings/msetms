@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { offerInvoicePrompt } from "@/components/invoice-send-prompt";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import { labelForLoadStatus } from "@/lib/types";
@@ -101,6 +102,7 @@ export function WorkbenchStatusControl({
         setError(result.error);
         return;
       }
+      offerInvoicePrompt(result);
       router.refresh();
     } catch (caught) {
       if (isRedirectError(caught)) throw caught;

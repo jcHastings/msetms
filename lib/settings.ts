@@ -192,6 +192,22 @@ export function updateInvoiceEmailBody(text: string): string {
   return next;
 }
 
+export type InvoiceSendMode = "ask" | "auto";
+
+/** Missing or unknown values ask first, including installs created before this column existed. */
+export function getInvoiceSendMode(): InvoiceSendMode {
+  const row = getDb()
+    .prepare("SELECT invoice_send_mode FROM company_profile WHERE id = 1")
+    .get() as { invoice_send_mode?: string } | undefined;
+  return row?.invoice_send_mode === "auto" ? "auto" : "ask";
+}
+
+export function updateInvoiceSendMode(mode: string): InvoiceSendMode {
+  const next: InvoiceSendMode = mode === "auto" ? "auto" : "ask";
+  getDb().prepare("UPDATE company_profile SET invoice_send_mode = ? WHERE id = 1").run(next);
+  return next;
+}
+
 export function getCompanySettings(): CompanySettings {
   const row = getDb()
     .prepare(`SELECT ${SETTINGS_COLUMNS.join(", ")} FROM company_profile WHERE id = 1`)

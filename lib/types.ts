@@ -657,6 +657,7 @@ export type ActionResult =
       needsSmsCode?: boolean;
       maskedPhone?: string;
       recoveryCodes?: string[];
+      invoicePrompt?: { loadId: number; email: string };
     }
   | { ok: false; error: string; status?: number; duplicate?: boolean; existingId?: number };
 

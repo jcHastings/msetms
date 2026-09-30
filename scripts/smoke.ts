@@ -2870,7 +2870,13 @@ async function main() {
   assert.doesNotMatch(workbenchCardUi, /workbench-map-thumb/);
   const workbenchCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
   assert.match(workbenchCss, /min-height: 14\.5rem/);
-  assert.match(workbenchCss, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(
+    workbenchCss,
+    /\.workbench-card \{[\s\S]*grid-template-columns: minmax\(4\.75rem, 0\.55fr\) minmax\(0, 1\.45fr\)/,
+  );
+  assert.doesNotMatch(workbenchCardUi, /truncate|whitespace-nowrap/);
+  assert.match(workbenchCardUi, /data-workbench-load-number/);
+  assert.match(workbenchCardUi, /overflow-wrap: anywhere|workbench-identity/);
   assert.match(workbenchCss, /\.workbench-map-pane/);
   assert.doesNotMatch(workbenchCss, /\.workbench-map-thumb/);
   assert.match(workbenchCardUi, /mapsBrowserKey/);
@@ -3061,6 +3067,136 @@ async function main() {
     ),
     "status change writes the same load audit row as the detail page, with the office user",
   );
+  const invoiceSettings = await import("../lib/settings");
+  assert.equal(invoiceSettings.getInvoiceSendMode(), "ask", "invoice send defaults to ask");
+  const invoiceCustomerId = queries.createCustomer({
+    name: "Invoice Ask Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0177", email: "ask.ap@customer.example" }],
+  });
+  const invoiceAskFiles = await import("../lib/files");
+  const invoiceAskLoadId = queries.createLoad({
+    load_number: "WB-INVOICE",
+    customer_id: invoiceCustomerId,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "in_transit",
+    truck_id: null,
+    driver_id: null,
+  });
+  invoiceAskFiles.addAttachment({
+    loadId: invoiceAskLoadId,
+    kind: "pod",
+    originalName: "wb-invoice-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const askStatusForm = new FormData();
+  askStatusForm.set("load_id", String(invoiceAskLoadId));
+  askStatusForm.set("status", "delivered");
+  let askSent = false;
+  const askStatus = await runOfficeAction(officeCookie, () => updateLoadStatusAction(askStatusForm));
+  assert.equal(askStatus.ok, true);
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.status, "delivered");
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.tms_invoice_number ?? "", "");
+  if (askStatus.ok) assert.equal(askStatus.invoicePrompt?.email, "ask.ap@customer.example");
+  const askGate = await import("../lib/auto-invoice");
+  const askBlocked = await askGate.maybeAutoInvoiceLoad(invoiceAskLoadId, async () => {
+    askSent = true;
+  });
+  assert.equal(askBlocked.sent, false);
+  assert.equal(askBlocked.created, false);
+  assert.equal(askBlocked.skipped, "ask_first");
+  assert.equal(askSent, false);
+  const driverOps = await import("../lib/driver-ops");
+  const askDriver = queries.listDrivers()[0];
+  assert.ok(askDriver);
+  getDb().prepare("UPDATE loads SET driver_id = ?, status = ? WHERE id = ?").run(askDriver.id, "in_transit", invoiceAskLoadId);
+  await driverOps.performDriverProgress({
+    driver: askDriver,
+    loadId: invoiceAskLoadId,
+    progress: "delivered",
+  });
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.status, "delivered");
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.tms_invoice_number ?? "", "");
+  assert.equal(askSent, false, "driver progress does not send while invoice mode is ask");
+  let confirmSends = 0;
+  const invoiceConfirmed = await askGate.deliverAutoInvoice(invoiceAskLoadId, async () => {
+    confirmSends += 1;
+  });
+  assert.equal(invoiceConfirmed.sent, true);
+  assert.equal(confirmSends, 1);
+  const confirmedAgain = await askGate.deliverAutoInvoice(invoiceAskLoadId, async () => {
+    confirmSends += 1;
+  });
+  assert.equal(confirmedAgain.sent, false);
+  assert.equal(confirmedAgain.skipped, "already_sent");
+  assert.equal(confirmSends, 1);
+  invoiceSettings.updateInvoiceSendMode("auto");
+  const autoCustomerId = queries.createCustomer({
+    name: "Invoice Auto Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0178", email: "auto.ap@customer.example" }],
+  });
+  const invoiceAutoLoadId = queries.createLoad({
+    load_number: "WB-INVOICE-AUTO",
+    customer_id: autoCustomerId,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  invoiceAskFiles.addAttachment({
+    loadId: invoiceAutoLoadId,
+    kind: "pod",
+    originalName: "wb-auto-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  let autoModeSends = 0;
+  const autoDelivered = await askGate.maybeAutoInvoiceLoad(invoiceAutoLoadId, async () => {
+    autoModeSends += 1;
+  });
+  assert.equal(autoDelivered.sent, true);
+  assert.equal(autoModeSends, 1);
+  const autoAgain = await askGate.maybeAutoInvoiceLoad(invoiceAutoLoadId, async () => {
+    autoModeSends += 1;
+  });
+  assert.equal(autoAgain.sent, false);
+  assert.equal(autoAgain.skipped, "already_sent");
+  assert.equal(autoModeSends, 1);
+  invoiceSettings.updateInvoiceSendMode("ask");
   assert.match(workbenchCardUi, /listStopAppointmentTargets/);
   assert.match(workbenchCardUi, /findCityCenter/);
   assert.match(workbenchCardUi, /compact/);
@@ -7665,6 +7801,7 @@ DISPATCH CONFIRMATION
     uploadedBy: "driver",
   });
   let autoInvoiceTo = "";
+  invoiceSettings.updateInvoiceSendMode("auto");
   const autoFirst = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async (input) => {
     autoInvoiceTo = input.to;
   });

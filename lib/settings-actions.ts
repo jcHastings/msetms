@@ -33,6 +33,7 @@ import {
   updateUnitSettings,
   updateDocumentFont,
   updateInvoiceEmailBody,
+  updateInvoiceSendMode,
   updateWorkflowSettings,
   getWorkflowSettings,
   type DocumentType,
@@ -255,6 +256,7 @@ export async function saveInvoiceEmailAction(
   try {
     await requireSettingsEditor();
     updateInvoiceEmailBody(String(formData.get("invoice_email_body") ?? ""));
+    updateInvoiceSendMode(String(formData.get("invoice_send_mode") ?? ""));
     refresh();
     return { ok: true, message: "Invoice email saved." };
   } catch (error) {

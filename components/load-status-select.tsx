@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { offerInvoicePrompt } from "@/components/invoice-send-prompt";
 import { updateLoadStatusAction } from "@/lib/actions";
 import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import { LOAD_STATUSES, labelForLoadStatus, type LoadStatus } from "@/lib/types";
@@ -26,6 +27,7 @@ export function LoadStatusSelect({
     const result = await updateLoadStatusAction(formData);
     setPending(false);
     if (!result.ok) setError(result.error);
+    else offerInvoicePrompt(result);
   }
 
   return (
