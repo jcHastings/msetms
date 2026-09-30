@@ -2847,7 +2847,14 @@ async function main() {
   assert.match(compactUi, /exception-badge-stack/);
   assert.match(compactUi, /exception-reason/);
   assert.match(compactUi, /data-attention-reason/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /exception-reason \{[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"),
+    /exception-reason \{[\s\S]*overflow-wrap: anywhere;/,
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"),
+    /exception-reason \{[\s\S]*-webkit-line-clamp:/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
@@ -2869,10 +2876,10 @@ async function main() {
   assert.doesNotMatch(workbenchCardUi, /h-20 w-20/);
   assert.doesNotMatch(workbenchCardUi, /workbench-map-thumb/);
   const workbenchCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-  assert.match(workbenchCss, /min-height: 14\.5rem/);
+  assert.match(workbenchCss, /\.workbench-card \{[\s\S]*min-height: max\(14\.5rem, min-content\)/);
   assert.match(
     workbenchCss,
-    /\.workbench-card \{[\s\S]*grid-template-columns: minmax\(4\.75rem, 0\.55fr\) minmax\(0, 1\.45fr\)/,
+    /\.workbench-card \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/,
   );
   assert.doesNotMatch(workbenchCardUi, /truncate|whitespace-nowrap/);
   assert.match(workbenchCardUi, /data-workbench-load-number/);
