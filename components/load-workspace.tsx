@@ -20,6 +20,7 @@ import {
 } from "@/lib/dispatcher-actions";
 import { BackhaulFinderHost } from "@/components/backhaul-finder";
 import { EmailCustomerUpdateButton, LoadMailMenuItems } from "@/components/load-mail-panel";
+import { offerInvoicePrompt } from "@/components/invoice-send-prompt";
 import { updateLoadAction, updateLoadStatusAction } from "@/lib/actions";
 import { everydayFieldsFromForm } from "@/lib/load-autosave-shared";
 import { SMS_MISSING_KEYS } from "@/lib/sms-shared";
@@ -813,6 +814,7 @@ function StatusAction({
           window.alert(result.error);
           return;
         }
+        offerInvoicePrompt(result);
         if (status === "cancelled") {
           router.push(returnTo);
           return;

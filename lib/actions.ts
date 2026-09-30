@@ -82,7 +82,8 @@ import {
   parseDrugTestStatus,
   parseDrugTestType,
 } from "./drug-tests";
-import { complianceWindows, isKnownLoadStatus } from "./settings";
+import { assertLoadStatusTransition } from "./load-status-transition";
+import { complianceWindows } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
 import { assertNyBoroughState } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
@@ -715,24 +716,61 @@ export async function updateLoadStatusAction(formData: FormData): Promise<Action
       const loadId = parseOptionalInt(formData.get("load_id"));
       const status = String(formData.get("status") ?? "");
       if (!loadId) throw new Error("Load is missing.");
-      if (!isKnownLoadStatus(status)) {
-        throw new Error("Invalid status.");
-      }
       const existing = getLoad(loadId);
-      if (existing) {
-        const { assertCanEditLoadRecord } = await import("./accounting-desk");
-        assertCanEditLoadRecord(existing, actor.role);
-      }
+      if (!existing) throw new Error("Load not found.");
+      assertLoadStatusTransition(existing.status, status);
+      const { assertCanEditLoadRecord } = await import("./accounting-desk");
+      assertCanEditLoadRecord(existing, actor.role);
       updateLoadStatus(loadId, status);
+      let invoicePrompt: { loadId: number; email: string } | undefined;
       if (isBillableStatus(status)) {
-        const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
-        await maybeAutoInvoiceLoad(loadId);
+        const { getInvoiceSendMode } = await import("./settings");
+        const { invoicePromptForLoad, maybeAutoInvoiceLoad } = await import("./auto-invoice");
+        if (getInvoiceSendMode() === "auto") {
+          await maybeAutoInvoiceLoad(loadId);
+        } else {
+          const prompt = invoicePromptForLoad(loadId);
+          if (prompt) invoicePrompt = { loadId, email: prompt.email };
+        }
       }
       refresh();
       if (status === "cancelled") {
         redirect(safeReturnTo(formData.get("return_to"), "/board"));
       }
-      return { ok: true, id: loadId };
+      return { ok: true, id: loadId, invoicePrompt };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
+}
+
+export async function confirmDeliveredInvoiceAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const { deliverAutoInvoice } = await import("./auto-invoice");
+      const result = await deliverAutoInvoice(loadId);
+      if (result.sent) {
+        refresh();
+        return { ok: true, id: loadId, message: "Invoice sent." };
+      }
+      if (result.skipped === "already_sent") {
+        return { ok: true, id: loadId, message: "Invoice was already sent." };
+      }
+      const reason =
+        result.skipped === "no_pod"
+          ? "Add a POD before sending the invoice."
+          : result.skipped === "no_email"
+            ? "Add a customer email before sending the invoice."
+            : result.skipped === "not_delivered"
+              ? "This load is not ready to invoice."
+              : result.skipped === "missing"
+                ? "Load not found."
+                : result.skipped || "Invoice did not send.";
+      return fail(new Error(reason));
     } catch (error) {
       if (error && typeof error === "object" && "digest" in error) throw error;
       return fail(error);

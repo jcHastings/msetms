@@ -5,6 +5,7 @@ import { resolveInvoiceCustomerEmail, sendCustomerInvoiceMail } from "./load-mai
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getLoad } from "./queries";
+import { getInvoiceSendMode } from "./settings";
 import { isBillableStatus } from "./types";
 
 export type AutoInvoiceResult = {
@@ -29,7 +30,18 @@ export function loadNeedsInvoiceEmail(loadId: number): boolean {
   return lastSentMail(loadId, "customer_invoice") == null;
 }
 
-export async function maybeAutoInvoiceLoad(
+/** Same checks as a send: billable, POD, usable email, and no invoice email yet. */
+export function invoicePromptForLoad(loadId: number): { email: string } | null {
+  const load = getLoad(loadId);
+  if (!load || !isBillableStatus(load.status) || !loadHasPod(loadId)) return null;
+  if (lastSentMail(loadId, "customer_invoice")) return null;
+  const email = resolveInvoiceCustomerEmail(load);
+  if (!isUsableEmail(email)) return null;
+  return { email };
+}
+
+/** Create and email when eligible. Does not look at the ask/auto setting. */
+export async function deliverAutoInvoice(
   loadId: number,
   send: typeof sendMail = sendMail,
 ): Promise<AutoInvoiceResult> {
@@ -61,4 +73,14 @@ export async function maybeAutoInvoiceLoad(
 
   await sendCustomerInvoiceMail(loadId, send);
   return { created, sent: true, skipped: "" };
+}
+
+export async function maybeAutoInvoiceLoad(
+  loadId: number,
+  send: typeof sendMail = sendMail,
+): Promise<AutoInvoiceResult> {
+  if (getInvoiceSendMode() !== "auto") {
+    return { created: false, sent: false, skipped: "ask_first" };
+  }
+  return deliverAutoInvoice(loadId, send);
 }

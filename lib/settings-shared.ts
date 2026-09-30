@@ -64,7 +64,7 @@ export const SETTINGS_SECTIONS = [
       {
         href: "/settings/invoice-email",
         label: "Invoice email",
-        hint: "Body sent with customer invoices",
+        hint: "Ask before sending, or send automatically, and the invoice email body",
       },
     ],
   },

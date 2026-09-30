@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,9 @@ const dbPath = path.join(os.tmpdir(), `tms-smoke-${Date.now()}.db`);
 process.env.TMS_DB_PATH = dbPath;
 
 async function main() {
+  if (!("AsyncLocalStorage" in globalThis)) {
+    Object.assign(globalThis, { AsyncLocalStorage });
+  }
   assert.equal(fs.existsSync(path.join(process.cwd(), "SHIPPED.md")), true, "SHIPPED.md checklist");
   const navSource = fs.readFileSync(path.join(process.cwd(), "components/nav-links.tsx"), "utf8");
   assert.match(navSource, /Import loads/);
@@ -2843,7 +2847,14 @@ async function main() {
   assert.match(compactUi, /exception-badge-stack/);
   assert.match(compactUi, /exception-reason/);
   assert.match(compactUi, /data-attention-reason/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /exception-reason \{[\s\S]*-webkit-line-clamp: 2;/);
+  assert.match(
+    fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"),
+    /exception-reason \{[\s\S]*overflow-wrap: anywhere;/,
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"),
+    /exception-reason \{[\s\S]*-webkit-line-clamp:/,
+  );
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/status-badge.tsx"), "utf8"), /exception-badge-stack/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*overflow: auto;/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"), /workbench-card-issues \{[\s\S]*max-height: 7\.5rem;/);
@@ -2865,8 +2876,14 @@ async function main() {
   assert.doesNotMatch(workbenchCardUi, /h-20 w-20/);
   assert.doesNotMatch(workbenchCardUi, /workbench-map-thumb/);
   const workbenchCss = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-  assert.match(workbenchCss, /min-height: 14\.5rem/);
-  assert.match(workbenchCss, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(workbenchCss, /\.workbench-card \{[\s\S]*min-height: max\(14\.5rem, min-content\)/);
+  assert.match(
+    workbenchCss,
+    /\.workbench-card \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/,
+  );
+  assert.doesNotMatch(workbenchCardUi, /truncate|whitespace-nowrap/);
+  assert.match(workbenchCardUi, /data-workbench-load-number/);
+  assert.match(workbenchCardUi, /overflow-wrap: anywhere|workbench-identity/);
   assert.match(workbenchCss, /\.workbench-map-pane/);
   assert.doesNotMatch(workbenchCss, /\.workbench-map-thumb/);
   assert.match(workbenchCardUi, /mapsBrowserKey/);
@@ -2880,6 +2897,313 @@ async function main() {
   assert.match(workbenchCardUi, /Unassigned/);
   assert.match(workbenchCardUi, /Pickup/);
   assert.match(workbenchCardUi, /Delivery/);
+  assert.match(workbenchCardUi, /WorkbenchStatusControl/);
+  assert.match(workbenchCardUi, /data-workbench-truck-place/);
+  assert.match(workbenchCardUi, /data-workbench-reefer/);
+  assert.match(workbenchCardUi, /canChangeStatus/);
+  const statusControlUi = fs.readFileSync(path.join(process.cwd(), "components/workbench-status-control.tsx"), "utf8");
+  assert.match(statusControlUi, /updateLoadStatusAction/);
+  assert.match(statusControlUi, /Change status for load/);
+  assert.match(statusControlUi, /aria-expanded/);
+  assert.match(statusControlUi, /stopPropagation/);
+  assert.match(statusControlUi, /data-workbench-status-error/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /assertLoadStatusTransition/);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(process.cwd(), "lib/workbench-telematics.ts"), "utf8"),
+    /getSamsaraFleet|getReeferSnapshots|getLocationForTruck|getLatestReeferForLoad/,
+  );
+  const telematics = await import("../lib/workbench-telematics");
+  assert.equal(telematics.workbenchCityState("400 N Burlington Ave, Hastings, NE 68901"), "Hastings, NE");
+  assert.equal(telematics.workbenchCityState("Hastings, NE"), "Hastings, NE");
+  assert.equal(telematics.workbenchCityState("I-80"), "");
+  assert.equal(telematics.workbenchReeferTempLabel(34), "34°F");
+  assert.equal(telematics.workbenchReeferTempLabel(34.2), "34.2°F");
+  assert.equal(telematics.workbenchReeferTempLabel(null), "");
+  assert.equal(telematics.workbenchReeferTempLabel(Number.NaN), "");
+  const wbCustomer = queries.listCustomers()[0];
+  assert.ok(wbCustomer);
+  const wbTruckId = queries.createTruck({
+    unit_number: "WB-GPS",
+    type: "sleeper",
+    capacity_lbs: 44000,
+    status: "available",
+    samsara_vehicle_id: "wb-gps",
+  });
+  queries.saveTruckGps(wbTruckId, {
+    latitude: 40.586,
+    longitude: -98.388,
+    address: "400 N Burlington Ave, Hastings, NE 68901",
+    recordedAt: new Date().toISOString(),
+    source: "samsara",
+  });
+  const wbTrailerId = queries.createTrailer({
+    unit_number: "WB-REEFER",
+    type: "reefer",
+    orbcomm_asset_id: "orb-wb-reefer",
+  });
+  const wbBareTruckId = queries.createTruck({
+    unit_number: "WB-NOGPS",
+    type: "sleeper",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const wbBareTrailerId = queries.createTrailer({
+    unit_number: "WB-NOTEMP",
+    type: "reefer",
+  });
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, return_air_f, door_open, alarm, source, recorded_at
+      ) VALUES (NULL, ?, 'WB-REEFER', 36, 34, 34.4, 0, '', 'orbcomm', ?)`,
+    )
+    .run(wbTruckId, new Date().toISOString());
+  getDb()
+    .prepare(
+      `INSERT INTO reefer_readings (
+        load_id, truck_id, trailer_id, setpoint_f, temperature_f, door_open, alarm, source, recorded_at
+      ) VALUES (NULL, ?, 'WB-NOTEMP', 0, 0, 0, '', 'demo', ?)`,
+    )
+    .run(wbBareTruckId, new Date().toISOString());
+  const fedCard = telematics.workbenchTelematics({ truck_id: wbTruckId, trailer_id: wbTrailerId });
+  assert.equal(fedCard.truckPlace, "Hastings, NE");
+  assert.equal(fedCard.reeferTemp, "34°F");
+  const dryCard = telematics.workbenchTelematics({ truck_id: wbBareTruckId, trailer_id: wbBareTrailerId });
+  assert.equal(dryCard.truckPlace, telematics.WORKBENCH_TELEMATICS_EMPTY, "no Samsara GPS shows a dash");
+  assert.equal(dryCard.reeferTemp, telematics.WORKBENCH_TELEMATICS_EMPTY, "demo or missing reefer shows a dash, not 0°F");
+  const unassignedCard = telematics.workbenchTelematics({ truck_id: null, trailer_id: null });
+  assert.equal(unassignedCard.truckPlace, telematics.WORKBENCH_TELEMATICS_EMPTY);
+  assert.equal(unassignedCard.reeferTemp, telematics.WORKBENCH_TELEMATICS_EMPTY);
+  getDb()
+    .prepare(
+      `UPDATE trucks
+       SET gps_latitude = NULL, gps_longitude = NULL, gps_address = '', gps_recorded_at = '', gps_source = '', gps_speed_mph = NULL
+       WHERE id = ?`,
+    )
+    .run(wbTruckId);
+  getDb().prepare("DELETE FROM reefer_readings WHERE trailer_id IN ('WB-REEFER', 'WB-NOTEMP')").run();
+  const transitions = await import("../lib/load-status-transition");
+  const fromAssigned = transitions.nextLoadStatuses("assigned").map((item) => item.value);
+  assert.ok(fromAssigned.includes("dispatched"));
+  assert.equal(fromAssigned.includes("assigned"), false);
+  assert.throws(() => transitions.assertLoadStatusTransition("assigned", "teleported"), /Invalid status/);
+  assert.throws(() => transitions.assertLoadStatusTransition("assigned", "assigned"), /not allowed/);
+  const wbWhen = new Date().toISOString();
+  const wbStatusLoadId = queries.createLoad({
+    load_number: "WB-STATUS",
+    customer_id: wbCustomer.id,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1200,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: null,
+    driver_id: null,
+  });
+  const { RequestCookies } = await import("next/dist/server/web/spec-extension/cookies.js");
+  const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external.js");
+  const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external.js");
+  const { DISPATCHER_SESSION_COOKIE } = await import("../lib/dispatcher-session-constants");
+  const officeSessionTypes = await import("../lib/dispatcher-session-types");
+  const officeSessionToken = await import("../lib/session-token");
+  const officeSession = await import("../lib/dispatcher-session");
+  const officeUser = officeSession.listDispatchers().find((row) => row.name === "MS Test");
+  assert.ok(officeUser);
+  const officeCookie = officeSessionToken.createSignedSessionToken({
+    id: officeUser.id,
+    issuedAt: Date.now(),
+    typ: officeSessionTypes.DISPATCHER_SESSION_TYP,
+  });
+  async function runOfficeAction<T>(cookie: string | null, fn: () => Promise<T>): Promise<T> {
+    const headers = new Headers();
+    if (cookie) headers.set("cookie", `${DISPATCHER_SESSION_COOKIE}=${cookie}`);
+    const jar = new RequestCookies(headers);
+    const unit = {
+      type: "request" as const,
+      phase: "action" as const,
+      cookies: jar,
+      mutableCookies: jar,
+      userspaceMutableCookies: jar,
+    };
+    return workAsyncStorage.run({ route: "/" }, () => workUnitAsyncStorage.run(unit, fn));
+  }
+  const { updateLoadStatusAction } = await import("../lib/actions");
+  const auditLog = await import("../lib/audit");
+  const unauthForm = new FormData();
+  unauthForm.set("load_id", String(wbStatusLoadId));
+  unauthForm.set("status", "dispatched");
+  const unauth = await runOfficeAction(null, () => updateLoadStatusAction(unauthForm));
+  assert.equal(unauth.ok, false);
+  if (!unauth.ok) assert.match(unauth.error, /Sign in/);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "assigned");
+  const deniedForm = new FormData();
+  deniedForm.set("load_id", String(wbStatusLoadId));
+  deniedForm.set("status", "teleported");
+  const denied = await runOfficeAction(officeCookie, () => updateLoadStatusAction(deniedForm));
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.match(denied.error, /Invalid status/);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "assigned");
+  const allowedForm = new FormData();
+  allowedForm.set("load_id", String(wbStatusLoadId));
+  allowedForm.set("status", "dispatched");
+  const allowed = await runOfficeAction(officeCookie, () => updateLoadStatusAction(allowedForm));
+  assert.equal(allowed.ok, true);
+  assert.equal(queries.getLoad(wbStatusLoadId)?.status, "dispatched");
+  const statusHistory = auditLog.listLoadAudit(wbStatusLoadId);
+  assert.ok(
+    statusHistory.some(
+      (row) =>
+        row.action === "status" &&
+        row.field === "status" &&
+        row.old_value === "assigned" &&
+        row.new_value === "dispatched" &&
+        row.actor === "MS Test" &&
+        row.actor_kind === "dispatcher",
+    ),
+    "status change writes the same load audit row as the detail page, with the office user",
+  );
+  const invoiceSettings = await import("../lib/settings");
+  assert.equal(invoiceSettings.getInvoiceSendMode(), "ask", "invoice send defaults to ask");
+  const invoiceCustomerId = queries.createCustomer({
+    name: "Invoice Ask Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0177", email: "ask.ap@customer.example" }],
+  });
+  const invoiceAskFiles = await import("../lib/files");
+  const invoiceAskLoadId = queries.createLoad({
+    load_number: "WB-INVOICE",
+    customer_id: invoiceCustomerId,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "in_transit",
+    truck_id: null,
+    driver_id: null,
+  });
+  invoiceAskFiles.addAttachment({
+    loadId: invoiceAskLoadId,
+    kind: "pod",
+    originalName: "wb-invoice-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const askStatusForm = new FormData();
+  askStatusForm.set("load_id", String(invoiceAskLoadId));
+  askStatusForm.set("status", "delivered");
+  let askSent = false;
+  const askStatus = await runOfficeAction(officeCookie, () => updateLoadStatusAction(askStatusForm));
+  assert.equal(askStatus.ok, true);
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.status, "delivered");
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.tms_invoice_number ?? "", "");
+  if (askStatus.ok) assert.equal(askStatus.invoicePrompt?.email, "ask.ap@customer.example");
+  const askGate = await import("../lib/auto-invoice");
+  const askBlocked = await askGate.maybeAutoInvoiceLoad(invoiceAskLoadId, async () => {
+    askSent = true;
+  });
+  assert.equal(askBlocked.sent, false);
+  assert.equal(askBlocked.created, false);
+  assert.equal(askBlocked.skipped, "ask_first");
+  assert.equal(askSent, false);
+  const driverOps = await import("../lib/driver-ops");
+  const askDriver = queries.listDrivers()[0];
+  assert.ok(askDriver);
+  getDb().prepare("UPDATE loads SET driver_id = ?, status = ? WHERE id = ?").run(askDriver.id, "in_transit", invoiceAskLoadId);
+  await driverOps.performDriverProgress({
+    driver: askDriver,
+    loadId: invoiceAskLoadId,
+    progress: "delivered",
+  });
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.status, "delivered");
+  assert.equal(queries.getLoad(invoiceAskLoadId)?.tms_invoice_number ?? "", "");
+  assert.equal(askSent, false, "driver progress does not send while invoice mode is ask");
+  let confirmSends = 0;
+  const invoiceConfirmed = await askGate.deliverAutoInvoice(invoiceAskLoadId, async () => {
+    confirmSends += 1;
+  });
+  assert.equal(invoiceConfirmed.sent, true);
+  assert.equal(confirmSends, 1);
+  const confirmedAgain = await askGate.deliverAutoInvoice(invoiceAskLoadId, async () => {
+    confirmSends += 1;
+  });
+  assert.equal(confirmedAgain.sent, false);
+  assert.equal(confirmedAgain.skipped, "already_sent");
+  assert.equal(confirmSends, 1);
+  invoiceSettings.updateInvoiceSendMode("auto");
+  const autoCustomerId = queries.createCustomer({
+    name: "Invoice Auto Customer",
+    billing_notes: "",
+    contacts: [{ name: "AP", role: "ap", phone: "555-0178", email: "auto.ap@customer.example" }],
+  });
+  const invoiceAutoLoadId = queries.createLoad({
+    load_number: "WB-INVOICE-AUTO",
+    customer_id: autoCustomerId,
+    origin: "Hastings, NE",
+    destination: "Dallas, TX",
+    pickup_start: wbWhen,
+    pickup_end: wbWhen,
+    delivery_start: wbWhen,
+    delivery_end: wbWhen,
+    weight: 40000,
+    commodity: "Frozen",
+    rate: 1800,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "delivered",
+    truck_id: null,
+    driver_id: null,
+  });
+  invoiceAskFiles.addAttachment({
+    loadId: invoiceAutoLoadId,
+    kind: "pod",
+    originalName: "wb-auto-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4 pod"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  let autoModeSends = 0;
+  const autoDelivered = await askGate.maybeAutoInvoiceLoad(invoiceAutoLoadId, async () => {
+    autoModeSends += 1;
+  });
+  assert.equal(autoDelivered.sent, true);
+  assert.equal(autoModeSends, 1);
+  const autoAgain = await askGate.maybeAutoInvoiceLoad(invoiceAutoLoadId, async () => {
+    autoModeSends += 1;
+  });
+  assert.equal(autoAgain.sent, false);
+  assert.equal(autoAgain.skipped, "already_sent");
+  assert.equal(autoModeSends, 1);
+  invoiceSettings.updateInvoiceSendMode("ask");
   assert.match(workbenchCardUi, /listStopAppointmentTargets/);
   assert.match(workbenchCardUi, /findCityCenter/);
   assert.match(workbenchCardUi, /compact/);
@@ -7484,6 +7808,7 @@ DISPATCH CONFIRMATION
     uploadedBy: "driver",
   });
   let autoInvoiceTo = "";
+  invoiceSettings.updateInvoiceSendMode("auto");
   const autoFirst = await autoInvoice.maybeAutoInvoiceLoad(shareLoadId, async (input) => {
     autoInvoiceTo = input.to;
   });

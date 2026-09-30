@@ -13,11 +13,13 @@ export function ExceptionInboxCard({
   kind,
   q,
   variant = "inbox",
+  canChangeStatus = false,
 }: {
   inbox: ExceptionInbox;
   kind?: string;
   q?: string;
   variant?: "inbox" | "workbench";
+  canChangeStatus?: boolean;
 }) {
   const groups = groupInboxExceptions(inbox.items);
   const workbench = variant === "workbench";
@@ -71,7 +73,7 @@ export function ExceptionInboxCard({
             data-workbench-cards=""
           >
             {groups.map((group) => (
-              <WorkbenchLoadCard key={group.loadId} group={group} />
+              <WorkbenchLoadCard key={group.loadId} group={group} canChangeStatus={canChangeStatus} />
             ))}
           </div>
         )}

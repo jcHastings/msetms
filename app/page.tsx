@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { LoadOverlay } from "@/components/load-overlay";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { listWorkbenchInbox } from "@/lib/desk";
-import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { canEditLoads, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,13 @@ export default async function WorkbenchPage({
           </Link>
         }
       />
-      <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} variant="workbench" />
+      <ExceptionInboxCard
+        inbox={inbox}
+        kind={params.kind}
+        q={params.q}
+        variant="workbench"
+        canChangeStatus={canEditLoads(dispatcher.role)}
+      />
       {openId ? <LoadOverlay loadId={openId} returnTo={overlayReturnTo("/", current)} /> : null}
     </PageOverlayHost>
   );

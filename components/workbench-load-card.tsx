@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { ExceptionIssueLine } from "@/components/exception-issue-line";
+import { WorkbenchStatusControl } from "@/components/workbench-status-control";
 import { findCityCenter } from "@/lib/city-coords-shared";
 import {
   LOAD_MAP_MARKER_COLOR,
@@ -12,7 +13,11 @@ import {
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
 import { formatDateTime } from "@/lib/format";
+import { nextLoadStatuses } from "@/lib/load-status-transition";
+import { getLoad } from "@/lib/queries";
 import { listStopAppointmentTargets } from "@/lib/stops";
+import { labelForLoadStatus } from "@/lib/types";
+import { WORKBENCH_TELEMATICS_EMPTY, workbenchTelematics } from "@/lib/workbench-telematics";
 
 function workbenchWhen(iso: string): string {
   const shown = formatDateTime(iso);
@@ -113,13 +118,32 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   );
 }
 
-export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup }) {
+export async function WorkbenchLoadCard({
+  group,
+  canChangeStatus = false,
+}: {
+  group: InboxExceptionGroup;
+  canChangeStatus?: boolean;
+}) {
   const apiKey = mapsBrowserKey();
   const model = await buildStopsMapModel(group.loadId);
   const points = lanePointsForCard(group, model.points);
   const path = model.path.length >= 2 ? model.path : pathThroughStops(points);
   const stops = listStopAppointmentTargets(group.loadId);
   const framing = workbenchCardMapFraming(points);
+  let loadStatus = "";
+  let statusOptions: Array<{ value: string; label: string }> = [];
+  let telematics = { truckPlace: WORKBENCH_TELEMATICS_EMPTY, reeferTemp: WORKBENCH_TELEMATICS_EMPTY };
+  try {
+    const load = getLoad(group.loadId);
+    if (load) {
+      loadStatus = load.status;
+      telematics = workbenchTelematics(load);
+      if (canChangeStatus) statusOptions = nextLoadStatuses(load.status);
+    }
+  } catch {
+    telematics = { truckPlace: WORKBENCH_TELEMATICS_EMPTY, reeferTemp: WORKBENCH_TELEMATICS_EMPTY };
+  }
 
   return (
     <article
@@ -148,48 +172,83 @@ export async function WorkbenchLoadCard({ group }: { group: InboxExceptionGroup 
       </div>
       <div className="workbench-card-content">
         <div className="workbench-card-header px-3 pt-3">
-          <div className="flex items-start justify-between gap-2">
-            <Link
-              href={`/loads/${group.loadId}`}
-              className="desk-link block truncate whitespace-nowrap font-mono text-sm font-semibold tracking-tight"
-            >
-              {group.loadNumber}
+          <Link
+            href={`/loads/${group.loadId}`}
+            className="workbench-identity desk-link block font-mono text-sm font-semibold tracking-tight"
+            data-workbench-load-number=""
+          >
+            {group.loadNumber}
+          </Link>
+          <div className="mt-1 flex items-center gap-1.5" data-workbench-fast-actions="">
+            <LoadCardFastActions
+              loadId={group.loadId}
+              loadNumber={group.loadNumber}
+              customerName={group.customerName}
+              stops={stops}
+            />
+            <Link href={`/loads/${group.loadId}`} className="desk-link text-xs">
+              Open
             </Link>
-            <div className="flex shrink-0 items-center gap-1.5" data-workbench-fast-actions="">
-              <LoadCardFastActions
-                loadId={group.loadId}
-                loadNumber={group.loadNumber}
-                customerName={group.customerName}
-                stops={stops}
-              />
-              <Link href={`/loads/${group.loadId}`} className="desk-link text-xs">
-                Open
-              </Link>
-            </div>
           </div>
-          <div className="mt-0.5 truncate text-xs text-slate-700">{group.customerName}</div>
-          <div className="mt-0.5 truncate text-[11px] text-slate-500">
+          <div className="workbench-identity mt-0.5 text-xs text-slate-700" data-workbench-customer="">
+            {group.customerName}
+          </div>
+          <div className="workbench-identity mt-0.5 text-[11px] text-slate-500" data-workbench-lane="">
             {group.origin}
             <span className="mx-1 text-slate-400">—</span>
             {group.destination}
           </div>
-          <div
-            className="mt-1.5 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-xs leading-4"
-            data-workbench-card-meta=""
-          >
-            <span className="text-slate-500">Driver</span>
-            <span className="min-w-0 truncate font-medium text-slate-800" data-workbench-driver="">
-              {group.driverName.trim() || "Unassigned"}
-            </span>
-            <span className="text-slate-500">Pickup</span>
-            <span className="min-w-0 truncate text-slate-800" data-workbench-pickup="">
-              {workbenchWhen(group.pickupAt)}
-            </span>
-            <span className="text-slate-500">Delivery</span>
-            <span className="min-w-0 truncate text-slate-800" data-workbench-delivery="">
-              {workbenchWhen(group.deliveryAt)}
-            </span>
-          </div>
+          {loadStatus ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">Status</span>
+              {canChangeStatus ? (
+                <WorkbenchStatusControl
+                  loadId={group.loadId}
+                  loadNumber={group.loadNumber}
+                  status={loadStatus}
+                  options={statusOptions}
+                />
+              ) : (
+                <span className="workbench-identity text-xs font-medium text-slate-800" data-workbench-status-text="">
+                  {labelForLoadStatus(loadStatus)}
+                </span>
+              )}
+            </div>
+          ) : null}
+          <dl className="workbench-card-meta" data-workbench-card-meta="">
+            <div>
+              <dt>Driver</dt>
+              <dd className="font-medium" data-workbench-driver="">
+                {group.driverName.trim() || "Unassigned"}
+              </dd>
+            </div>
+            <div>
+              <dt>Pickup</dt>
+              <dd data-workbench-pickup="">{workbenchWhen(group.pickupAt)}</dd>
+            </div>
+            <div>
+              <dt>Delivery</dt>
+              <dd data-workbench-delivery="">{workbenchWhen(group.deliveryAt)}</dd>
+            </div>
+            <div>
+              <dt>Truck</dt>
+              <dd
+                className={telematics.truckPlace === WORKBENCH_TELEMATICS_EMPTY ? "text-slate-400" : undefined}
+                data-workbench-truck-place=""
+              >
+                {telematics.truckPlace}
+              </dd>
+            </div>
+            <div>
+              <dt>Reefer</dt>
+              <dd
+                className={telematics.reeferTemp === WORKBENCH_TELEMATICS_EMPTY ? "text-slate-400" : undefined}
+                data-workbench-reefer=""
+              >
+                {telematics.reeferTemp}
+              </dd>
+            </div>
+          </dl>
         </div>
         <ul className="workbench-card-issues mt-2 space-y-1.5 border-t border-slate-100 px-3 pb-2.5 pt-2">
           {group.items.length === 0 ? (

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useLoadEdit } from "@/components/load-edit-context";
+import { offerInvoicePrompt } from "@/components/invoice-send-prompt";
 import { updateLoadAction, updateLoadStatusAction, updateLoadTruckStatusAction } from "@/lib/actions";
 import { isAssignEdit, isFirstAssign } from "@/lib/first-assign";
 import { isLoadAutosaveField, isLoadCriticalField } from "@/lib/load-autosave-shared";
@@ -31,6 +32,7 @@ export function useLoadAssignPersist(loadId?: number) {
           window.alert(result.error);
           return false;
         }
+        if (result?.ok) offerInvoicePrompt(result);
       }
       if (fields.truck_status !== undefined) {
         const truckData = new FormData();
