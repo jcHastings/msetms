@@ -151,6 +151,59 @@ export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
   return orderLaneAnchors(points).map((point) => ({ lat: point.lat, lng: point.lng }));
 }
 
+/** Pickup, relay, and delivery pins. These are the points a lane fit must cover. */
+export function lanePinsForFit<T extends { kind: string }>(points: T[]): T[] {
+  return points.filter((point) => point.kind === "pickup" || point.kind === "relay" || point.kind === "delivery");
+}
+
+export function latLngBounds(points: Array<{ lat: number; lng: number }>): {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+} | null {
+  if (points.length === 0) return null;
+  let minLat = points[0].lat;
+  let maxLat = points[0].lat;
+  let minLng = points[0].lng;
+  let maxLng = points[0].lng;
+  for (const point of points) {
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+    minLng = Math.min(minLng, point.lng);
+    maxLng = Math.max(maxLng, point.lng);
+  }
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+/**
+ * Same pad/floor projection the workbench sketch uses.
+ * Extremes land on the padding inset so every coord stays inside the viewBox.
+ */
+export function laneSketchFrame(
+  coords: Array<{ lat: number; lng: number }>,
+  pad = 24,
+  floor = 0.25,
+): { x: (lng: number) => number; y: (lat: number) => number } {
+  const lats = coords.map((point) => point.lat);
+  const lngs = coords.map((point) => point.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const rawLat = maxLat - minLat;
+  const rawLng = maxLng - minLng;
+  const dLat = Math.max(rawLat, floor);
+  const dLng = Math.max(rawLng, floor);
+  const lat0 = minLat - (dLat - rawLat) / 2;
+  const lng0 = minLng - (dLng - rawLng) / 2;
+  const inner = 100 - pad * 2;
+  return {
+    x: (lng: number) => ((lng - lng0) / dLng) * inner + pad,
+    y: (lat: number) => (1 - (lat - lat0) / dLat) * inner + pad,
+  };
+}
+
 export const WORKBENCH_MAP_FIT_PADDING = 56;
 export const WORKBENCH_MAP_MIN_ZOOM = 2;
 export const WORKBENCH_MAP_MAX_ZOOM = 10;

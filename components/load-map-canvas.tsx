@@ -10,6 +10,7 @@ import {
 import {
   clampFitPadding,
   defaultLoadMapLabelOrigin,
+  lanePinsForFit,
   loadMapIconLayout,
   loadMapPinIconUrl,
   type LoadMapPathPoint,
@@ -236,6 +237,9 @@ export function LoadMapCanvas({
         map.addListener?.("zoom_changed", drawPins);
         if (boundsSource) {
           for (const point of boundsSource) bounds.extend(point);
+        }
+        for (const anchor of lanePinsForFit(points)) {
+          bounds.extend({ lat: anchor.lat, lng: anchor.lng });
         }
         const pinCount = points.length + route.length;
         if (appliedPadding != null && pinCount >= 1) {

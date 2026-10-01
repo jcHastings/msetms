@@ -6,6 +6,8 @@ import { WorkbenchStatusControl } from "@/components/workbench-status-control";
 import { findCityCenter } from "@/lib/city-coords-shared";
 import {
   LOAD_MAP_MARKER_COLOR,
+  lanePinsForFit,
+  laneSketchFrame,
   pathThroughStops,
   workbenchCardMapFraming,
   type LoadMapPoint,
@@ -72,42 +74,32 @@ export function WorkbenchLaneSketch({
   points: LoadMapPoint[];
   path: Array<{ lat: number; lng: number }>;
 }) {
-  const coords = path.length >= 2 ? path : points.filter((point) => point.kind !== "truck");
-  const laneLabel = points
-    .filter((point) => point.kind === "pickup" || point.kind === "relay" || point.kind === "delivery")
+  const lineCoords = path.length >= 2 ? path : points.filter((point) => point.kind !== "truck");
+  const relays = points.filter((point) => point.kind === "relay");
+  const lanePins = lanePinsForFit(points);
+  const fitCoords = relays.length > 0 ? [...lineCoords, ...lanePins] : lineCoords;
+  const laneLabel = lanePins
     .map((point) => point.label)
     .filter(Boolean)
     .join(". ");
-  if (coords.length === 0) {
+  if (fitCoords.length === 0) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] text-slate-500">
         No map
       </div>
     );
   }
-  const lats = coords.map((p) => p.lat);
-  const lngs = coords.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const rawLat = maxLat - minLat;
-  const rawLng = maxLng - minLng;
   const floor = 0.25;
-  const dLat = Math.max(rawLat, floor);
-  const dLng = Math.max(rawLng, floor);
-  const lat0 = minLat - (dLat - rawLat) / 2;
-  const lng0 = minLng - (dLng - rawLng) / 2;
   const pad = 24;
-  const inner = 100 - pad * 2;
-  const xOf = (lng: number) => ((lng - lng0) / dLng) * inner + pad;
-  const yOf = (lat: number) => (1 - (lat - lat0) / dLat) * inner + pad;
-  const line = coords.map((p) => `${xOf(p.lng).toFixed(1)},${yOf(p.lat).toFixed(1)}`).join(" ");
+  const frame = laneSketchFrame(fitCoords, pad, floor);
+  const xOf = frame.x;
+  const yOf = frame.y;
+  const line = lineCoords.map((p) => `${xOf(p.lng).toFixed(1)},${yOf(p.lat).toFixed(1)}`).join(" ");
   const pickup = points.find((p) => p.kind === "pickup") ?? points[0];
   const drop = [...points].reverse().find((p) => p.kind === "delivery") ?? points[points.length - 1];
   const truck = points.find((p) => p.kind === "truck");
-  const relays = points.filter((point) => point.kind === "relay");
   const shortLabel = (point?: LoadMapPoint) => (point?.label ?? "").split(",")[0]?.trim() ?? "";
+  const fitted = relays.length > 0;
   return (
     <div
       className="relative h-full w-full overflow-hidden bg-[#dce6ef]"
@@ -115,7 +107,12 @@ export function WorkbenchLaneSketch({
       role="img"
       aria-label={laneLabel || "Load route"}
     >
-      <svg viewBox="0 0 100 100" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <svg
+        viewBox="0 0 100 100"
+        className="h-full w-full"
+        preserveAspectRatio={fitted ? "xMidYMid meet" : "xMidYMid slice"}
+        aria-hidden="true"
+      >
         <rect width="100" height="100" fill="#dce6ef" />
         {Array.from({ length: 6 }, (_, i) => (
           <line key={`h${i}`} x1="0" y1={i * 16.6} x2="100" y2={i * 16.6} stroke="#c5d0db" strokeWidth="0.35" />
@@ -124,6 +121,36 @@ export function WorkbenchLaneSketch({
           <line key={`v${i}`} x1={i * 16.6} y1="0" x2={i * 16.6} y2="100" stroke="#c5d0db" strokeWidth="0.35" />
         ))}
         <polyline points={line} fill="none" stroke="#12315c" strokeWidth="2.2" strokeLinejoin="round" />
+        {fitted
+          ? lanePins
+              .filter((point) => point.kind === "pickup")
+              .map((point) => (
+                <circle
+                  key={point.id}
+                  cx={xOf(point.lng)}
+                  cy={yOf(point.lat)}
+                  r="3.4"
+                  fill={LOAD_MAP_MARKER_COLOR.pickup}
+                />
+              ))
+          : pickup ? (
+              <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.pickup} />
+            ) : null}
+        {fitted
+          ? lanePins
+              .filter((point) => point.kind === "delivery")
+              .map((point) => (
+                <circle
+                  key={point.id}
+                  cx={xOf(point.lng)}
+                  cy={yOf(point.lat)}
+                  r="3.4"
+                  fill={LOAD_MAP_MARKER_COLOR.delivery}
+                />
+              ))
+          : drop ? (
+              <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.delivery} />
+            ) : null}
         {relays.map((relay) => (
           <polygon
             key={relay.id}
@@ -134,30 +161,30 @@ export function WorkbenchLaneSketch({
             strokeWidth="0.8"
           />
         ))}
-        {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.pickup} /> : null}
-        {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.delivery} /> : null}
         {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="3" fill={LOAD_MAP_MARKER_COLOR.truck} /> : null}
-        {relays.map((relay) =>
-          relay.markerText ? (
-            <text
-              key={`${relay.id}-label`}
-              x={xOf(relay.lng)}
-              y={yOf(relay.lat) - 5.2}
-              textAnchor="middle"
-              fontSize="6.5"
-              fontWeight="700"
-              fill="#4c1d95"
-            >
-              {relay.markerText}
-            </text>
-          ) : null,
-        )}
-        {pickup && shortLabel(pickup) ? (
+        {fitted
+          ? lanePins.map((point) =>
+              point.markerText ? (
+                <text
+                  key={`${point.id}-label`}
+                  x={xOf(point.lng)}
+                  y={yOf(point.lat) - 5}
+                  textAnchor="middle"
+                  fontSize="7"
+                  fontWeight="700"
+                  fill="#0f172a"
+                >
+                  {point.markerText}
+                </text>
+              ) : null,
+            )
+          : null}
+        {!fitted && pickup && shortLabel(pickup) ? (
           <text x={xOf(pickup.lng)} y={yOf(pickup.lat) - 5} textAnchor="middle" fontSize="7" fill="#0f172a">
             {shortLabel(pickup)}
           </text>
         ) : null}
-        {drop && shortLabel(drop) ? (
+        {!fitted && drop && shortLabel(drop) ? (
           <text x={xOf(drop.lng)} y={yOf(drop.lat) - 5} textAnchor="middle" fontSize="7" fill="#0f172a">
             {shortLabel(drop)}
           </text>

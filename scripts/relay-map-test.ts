@@ -109,6 +109,36 @@ async function main() {
   assert.equal(geocoded[0]?.lat, 40.5);
   assert.equal(geocoded[0]?.lng, -95.5);
 
+  const fitLane = [
+    { kind: "pickup", lat: 32.7767, lng: -96.797 },
+    { kind: "pickup", lat: 29.7604, lng: -95.3698 },
+    { kind: "relay", lat: 35.4676, lng: -97.5164 },
+    { kind: "relay", lat: 39.0997, lng: -94.5786 },
+    { kind: "delivery", lat: 41.8781, lng: -87.6298 },
+    { kind: "delivery", lat: 39.7684, lng: -86.1581 },
+    { kind: "truck", lat: 40, lng: -90 },
+  ];
+  const anchors = mapShared.lanePinsForFit(fitLane);
+  assert.equal(anchors.length, 6, "fit list keeps every pickup, relay, and delivery");
+  assert.equal(anchors.some((point) => point.kind === "truck"), false);
+  const bounds = mapShared.latLngBounds(anchors);
+  assert.ok(bounds);
+  assert.equal(bounds.minLat, 29.7604, "southern pickup stays inside the fit");
+  assert.equal(bounds.maxLat, 41.8781, "northern delivery stays inside the fit");
+  assert.equal(bounds.minLng, -97.5164, "western relay expands the fit past the pickups");
+  assert.equal(bounds.maxLng, -86.1581, "eastern delivery stays inside the fit");
+  const frame = mapShared.laneSketchFrame(anchors, 24, 0.25);
+  const projected = anchors.map((point) => ({ x: frame.x(point.lng), y: frame.y(point.lat) }));
+  for (const point of projected) {
+    assert.ok(point.x >= 24 && point.x <= 76, `sketch x ${point.x} must sit in the padded viewBox`);
+    assert.ok(point.y >= 24 && point.y <= 76, `sketch y ${point.y} must sit in the padded viewBox`);
+  }
+  const relayWest = projected[2];
+  assert.ok(relayWest);
+  assert.equal(relayWest.x, Math.min(...projected.map((point) => point.x)));
+  assert.ok(projected[0].x > relayWest.x, "Dallas stays east of the Oklahoma City relay");
+  assert.ok(projected[4].x > projected[0].x, "Chicago stays east of Dallas");
+
   const diamond = mapShared.loadMapPinSvg({ kind: "relay", pinShape: "diamond", pinColor: "#5b21b6" });
   assert.match(diamond, /L20\.4 13\.2/);
   assert.doesNotMatch(diamond, /C6\.2/);
