@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=390, initial-scale=1" />
+  <title>Dispatch board 390 proof</title>
+  <style>
+    :root {
+      --sidebar: #07325a;
+      --sidebar-mid: #0a4173;
+      --text: #252525;
+      --text-muted: #5b6b7c;
+      --accent: #137cdd;
+      --link: #137cdd;
+      --border: #d3d9e0;
+      --r-xs: 2px;
+      --r-sm: 3px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #e8eef5; color: var(--text); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .desk-phone-bar { display: flex; align-items: center; gap: 0.75rem; min-height: 3rem; padding: 0.5rem 0.75rem; background: var(--sidebar); color: #e8eef6; }
+    .desk-phone-menu { min-height: 2.75rem; padding: 0.5rem 0.75rem; border: 0; border-radius: var(--r-xs); background: var(--accent); color: #fff; font-weight: 700; }
+    .page-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.85rem 0.4rem; }
+    .card { margin: 0 0.85rem 1rem; background: rgba(255,255,255,0.72); border: 1px solid rgba(255,255,255,0.95); border-radius: var(--r-sm); overflow: hidden; }
+    .px-3 { padding: 0.5rem 0.75rem 0; }
+    [data-load-list-chrome] .load-list-tabs {
+      display: flex; flex-wrap: nowrap; gap: 0.18rem; overflow-x: auto; padding: 0 0 0.15rem;
+    }
+    [data-load-list-chrome] .load-tab {
+      display: inline-flex; flex: 0 0 auto; align-items: center; padding: 0.12rem 0.38rem;
+      border: 1px solid var(--border); border-radius: var(--r-xs); background: #fff; color: var(--sidebar);
+      font-size: 11px; font-weight: 600; line-height: 1.15; white-space: nowrap;
+    }
+    [data-load-list-chrome] .load-tab-active { background: var(--sidebar); color: #fff; }
+    .load-tab-full { display: none; }
+    .load-list-search { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.45rem 0 0.15rem; }
+    .field label { display: block; font-size: 0.68rem; }
+    .field input { width: 100%; padding: 0.22rem 0.4rem; font-size: 12.5px; }
+    .board-scroll { overflow-x: hidden; max-width: 100%; }
+    .table-grid.table-grid-board { display: block; width: 100%; min-width: 0; max-width: 100%; border-collapse: collapse; }
+    .table-grid-board thead { display: none; }
+    .table-grid-board tbody { display: flex; flex-direction: column; gap: 0.55rem; width: 100%; padding: 0.45rem 0.5rem 0.7rem; }
+    .table-grid-board tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "load status" "pickup pickup" "end end";
+      align-items: start; gap: 0.4rem 0.65rem; width: 100%; max-width: 100%;
+      padding: 0.7rem 0.75rem 0.75rem; border: 1px solid var(--border); border-radius: var(--r-sm); background: #fff;
+    }
+    .table-grid-board tbody td { display: block; width: auto; max-width: 100%; min-width: 0; padding: 0; border: 0; overflow: visible; background: transparent; }
+    .table-grid-board .board-load-cell,
+    .table-grid-board .board-status-cell,
+    .table-grid-board .board-end-cell { position: static; left: auto; right: auto; width: auto; min-width: 0; max-width: none; box-shadow: none; background: transparent; }
+    .table-grid-board tbody .board-load-cell { grid-area: load; }
+    .table-grid-board tbody .board-status-cell { grid-area: status; justify-self: end; }
+    .table-grid-board tbody .board-pickup-cell { grid-area: pickup; }
+    .table-grid-board tbody .board-end-cell { grid-area: end; width: 100%; }
+    .table-grid-board tbody .board-delivery-cell,
+    .table-grid-board tbody .board-unit-cell,
+    .table-grid-board tbody .board-place-cell,
+    .table-grid-board tbody .board-hos-cell,
+    .table-grid-board tbody .board-reefer-cell,
+    .table-grid-board tbody .board-rate-cell { display: none; }
+    .table-grid-board tbody .board-pickup-cell::before {
+      content: "Pickup"; display: block; margin-bottom: 0.1rem; font-size: 0.62rem; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+    }
+    .desk-link { color: var(--link); font-weight: 600; font-family: ui-monospace, monospace; font-size: 12px; }
+    .status-pill {
+      display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: var(--r-xs);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: #d7e8f7; color: var(--sidebar);
+    }
+    .board-end-stack { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .board-end-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    select { width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.2rem 0.4rem; font-size: 12px; }
+    .btn-ghost { border: 1px solid var(--border); background: #fff; border-radius: 6px; padding: 0.25rem 0.55rem; font-size: 12px; }
+    #geometry { margin: 0 0.85rem 1.5rem; padding: 0.6rem 0.75rem; background: #fff; border: 1px solid var(--border); font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header class="desk-phone-bar"><button class="desk-phone-menu">Menu</button><strong>MS Express TMS</strong></header>
+  <div class="page-head"><h1 style="margin:0;font-size:1.25rem">Dispatch board</h1><a class="desk-link" href="#">New load</a></div>
+  <div class="card">
+    <div class="px-3">
+      <div data-load-list-chrome>
+        <div class="load-list-tabs" role="tablist">
+          <a class="load-tab load-tab-active" aria-label="Active Loads"><span class="load-tab-full">Active Loads</span><span class="load-tab-short">Active</span></a>
+          <a class="load-tab" aria-label="Planning Loads"><span class="load-tab-full">Planning Loads</span><span class="load-tab-short">Planning</span></a>
+          <a class="load-tab" aria-label="Ready for Accounting Loads"><span class="load-tab-full">Ready for Accounting Loads</span><span class="load-tab-short">Accounting</span></a>
+          <a class="load-tab" aria-label="Misc. Loads"><span class="load-tab-full">Misc. Loads</span><span class="load-tab-short">Misc.</span></a>
+          <a class="load-tab" aria-label="All Loads"><span class="load-tab-full">All Loads</span><span class="load-tab-short">All</span></a>
+          <a class="load-tab" aria-label="My Loads"><span class="load-tab-full">My Loads</span><span class="load-tab-short">Mine</span></a>
+          <a class="load-tab" aria-label="Master Loads"><span class="load-tab-full">Master Loads</span><span class="load-tab-short">Master</span></a>
+        </div>
+        <form class="load-list-search">
+          <div class="field"><label>Search loads on this tab</label><input value="" placeholder="Load #, customer, city, or reference" /></div>
+          <div class="field"><label>Pickup date</label><input type="date" /></div>
+        </form>
+      </div>
+    </div>
+    <div class="board-scroll" data-board-phone-stack>
+      <table class="table-grid table-grid-board" data-dispatch-board>
+        <thead>
+          <tr>
+            <th>Load</th><th>Status</th><th>Pickup</th><th>Delivery</th><th>Unit</th><th>Tractor</th><th>Trailer</th><th>HOS</th><th>Reefer</th><th>Rate</th><th>Move</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="board-load-cell"><a class="desk-link">MSE-1061</a><div>Hastings, NE</div><div>→ Harlan, IA</div></td>
+            <td class="board-status-cell" data-board-status><span class="status-pill">AT DEL</span></td>
+            <td class="board-when-cell board-pickup-cell"><div>Sep 6</div><div>08:00</div></td>
+            <td class="board-when-cell board-delivery-cell">hidden</td>
+            <td class="board-unit-cell">hidden</td>
+            <td class="board-place-cell">hidden</td>
+            <td class="board-hos-cell">hidden</td>
+            <td class="board-reefer-cell">hidden</td>
+            <td class="board-rate-cell">hidden</td>
+            <td class="board-end-cell" data-board-end>
+              <div class="board-end-stack">
+                <div class="board-move-cell"><select><option>At DEL</option></select></div>
+                <div class="board-edit-cell"><div class="board-end-actions"><a class="desk-link">Actions</a><button class="btn-ghost">Change unit</button><a class="desk-link">Edit</a></div></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="board-load-cell"><a class="desk-link">MSE-1063</a><div>Omaha, NE</div><div>→ Des Moines, IA</div></td>
+            <td class="board-status-cell" data-board-status><span class="status-pill">DISPATCHED</span></td>
+            <td class="board-when-cell board-pickup-cell"><div>Sep 7</div><div>09:30</div></td>
+            <td class="board-when-cell board-delivery-cell">hidden</td>
+            <td class="board-unit-cell">hidden</td>
+            <td class="board-place-cell">hidden</td>
+            <td class="board-hos-cell">hidden</td>
+            <td class="board-reefer-cell">hidden</td>
+            <td class="board-rate-cell">hidden</td>
+            <td class="board-end-cell" data-board-end>
+              <div class="board-end-stack">
+                <div class="board-move-cell"><select><option>Dispatched</option></select></div>
+                <div class="board-edit-cell"><div class="board-end-actions"><a class="desk-link">Actions</a><button class="btn-ghost">Change unit</button><a class="desk-link">Edit</a></div></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="board-load-cell"><a class="desk-link">MSE-1064</a><div>Lincoln, NE</div><div>→ Sioux City, IA</div></td>
+            <td class="board-status-cell" data-board-status><span class="status-pill">AVAILABLE</span></td>
+            <td class="board-when-cell board-pickup-cell"><div>Sep 8</div><div>06:00</div></td>
+            <td class="board-when-cell board-delivery-cell">hidden</td>
+            <td class="board-unit-cell">hidden</td>
+            <td class="board-place-cell">hidden</td>
+            <td class="board-hos-cell">hidden</td>
+            <td class="board-reefer-cell">hidden</td>
+            <td class="board-rate-cell">hidden</td>
+            <td class="board-end-cell" data-board-end>
+              <div class="board-end-stack">
+                <div class="board-move-cell"><select><option>Available</option></select></div>
+                <div class="board-edit-cell"><div class="board-end-actions"><a class="desk-link">Actions</a><button class="btn-ghost">Assign</button><a class="desk-link">Edit</a></div></div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <pre id="geometry">measuring…</pre>
+  <script>
+    function boxesIntersect(a, b) {
+      return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+    }
+    const rows = [...document.querySelectorAll("[data-dispatch-board] tbody tr")];
+    const results = rows.map((row, i) => {
+      const status = row.querySelector("[data-board-status]").getBoundingClientRect();
+      const end = row.querySelector("[data-board-end]").getBoundingClientRect();
+      return {
+        row: i + 1,
+        overlap: boxesIntersect(status, end),
+        status: { top: status.top, right: status.right, bottom: status.bottom, left: status.left },
+        move: { top: end.top, right: end.right, bottom: end.bottom, left: end.left },
+        gapPx: Math.round(end.top - status.bottom),
+      };
+    });
+    const pass = results.every((r) => !r.overlap && r.gapPx >= 0);
+    const report = { viewport: { width: window.innerWidth, height: window.innerHeight }, pass, results };
+    document.getElementById("geometry").textContent = JSON.stringify(report, null, 2);
+    document.documentElement.dataset.proof = pass ? "pass" : "fail";
+    window.__BOARD_PHONE_PROOF__ = report;
+  </script>
+</body>
+</html>
