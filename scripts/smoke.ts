@@ -1211,6 +1211,17 @@ async function main() {
   assert.match(mapCanvasSource, /loadGoogleMaps/);
   assert.match(`${mapCanvasSource}\n${mapsJsSource}`, /maps\.googleapis\.com\/maps\/api\/js/);
   assert.match(mapsJsSource, /libraries=places/);
+  const placesPreviewPage = fs.readFileSync(path.join(process.cwd(), "app/dev/places-preview/page.tsx"), "utf8");
+  assert.match(placesPreviewPage, /NODE_ENV !== "production"/);
+  assert.match(placesPreviewPage, /ENABLE_DEV_PREVIEWS/);
+  assert.match(placesPreviewPage, /TMS_PLACES_PREVIEW/);
+  assert.match(placesPreviewPage, /notFound\(\)/);
+  const placesPreviewUi = fs.readFileSync(path.join(process.cwd(), "components/places-preview.tsx"), "utf8");
+  assert.match(placesPreviewUi, /apiKey=""/);
+  assert.match(placesPreviewUi, /previewSuggestions=\{MOCKED\}/);
+  assert.match(placesPreviewUi, /does not call Google/);
+  assert.match(placesPreviewUi, /preventDefault\(\)/);
+  assert.doesNotMatch(placesPreviewUi, /loadGoogleMaps/);
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
   assert.match(mapCanvasSource, /point\.href/);

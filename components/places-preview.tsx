@@ -58,7 +58,11 @@ export function PlacesPreview() {
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-mocked-places="">
         Mocked Google suggestions. This page does not call Google.
       </p>
-      <form className="card space-y-3 p-5" data-add-relay-preview="">
+      <form
+        className="card space-y-3 p-5"
+        data-add-relay-preview=""
+        onSubmit={(event) => event.preventDefault()}
+      >
         <h1 className="text-sm font-semibold">Add Relay</h1>
         <div className="field">
           <label htmlFor="relay-handoff">Relay point</label>
@@ -83,7 +87,11 @@ export function PlacesPreview() {
           </p>
         </div>
       </form>
-      <form className="card space-y-3 p-5" data-add-location-preview="">
+      <form
+        className="card space-y-3 p-5"
+        data-add-location-preview=""
+        onSubmit={(event) => event.preventDefault()}
+      >
         <h1 className="text-sm font-semibold">New location</h1>
         <div className="field">
           <label htmlFor="name">Name</label>
