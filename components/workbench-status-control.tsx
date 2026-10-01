@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { offerInvoicePrompt } from "@/components/invoice-send-prompt";
@@ -9,6 +9,58 @@ import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import { labelForLoadStatus } from "@/lib/types";
 
 type StatusChoice = { value: string; label: string };
+
+type MenuBox = { top: number; left: number; width: number; maxHeight?: number };
+
+const MENU_GAP = 4;
+const VIEWPORT_PAD = 8;
+
+function sameMenuBox(prev: MenuBox | null, next: MenuBox): boolean {
+  return (
+    !!prev &&
+    prev.top === next.top &&
+    prev.left === next.left &&
+    prev.width === next.width &&
+    prev.maxHeight === next.maxHeight
+  );
+}
+
+/** Place the fixed menu under the badge, or above it, and clamp only when neither side fits. */
+function computeMenuBox(button: HTMLButtonElement, menu: HTMLUListElement | null): MenuBox {
+  const rect = button.getBoundingClientRect();
+  const width = Math.max(rect.width, 148);
+  let left = rect.left;
+  const maxLeft = window.innerWidth - VIEWPORT_PAD - width;
+  if (left > maxLeft) left = Math.max(VIEWPORT_PAD, maxLeft);
+
+  const borderY = menu ? menu.offsetHeight - menu.clientHeight : 0;
+  const natural = menu ? menu.scrollHeight + borderY : 0;
+  const spaceBelow = window.innerHeight - rect.bottom - MENU_GAP - VIEWPORT_PAD;
+  const spaceAbove = rect.top - MENU_GAP - VIEWPORT_PAD;
+  let top = rect.bottom + MENU_GAP;
+  let maxHeight: number | undefined;
+
+  if (natural > spaceBelow + 1) {
+    if (natural <= spaceAbove + 1) {
+      top = rect.top - MENU_GAP - natural;
+    } else if (spaceAbove > spaceBelow) {
+      maxHeight = Math.max(0, spaceAbove);
+      top = Math.max(VIEWPORT_PAD, rect.top - MENU_GAP - maxHeight);
+    } else {
+      maxHeight = Math.max(0, spaceBelow);
+      if (top + maxHeight > window.innerHeight - VIEWPORT_PAD) {
+        maxHeight = Math.max(0, window.innerHeight - VIEWPORT_PAD - top);
+      }
+    }
+  }
+
+  return {
+    top: Math.round(top),
+    left: Math.round(left),
+    width: Math.round(width),
+    maxHeight: maxHeight == null ? undefined : Math.round(maxHeight),
+  };
+}
 
 function isRedirectError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("digest" in error)) return false;
@@ -37,47 +89,61 @@ export function WorkbenchStatusControl({
   const [error, setError] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [menuBox, setMenuBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuBox, setMenuBox] = useState<MenuBox | null>(null);
+  const [anchorWidth, setAnchorWidth] = useState(148);
+  if (optimistic && status === optimistic) setOptimistic(null);
   const shown = optimistic ?? status;
   const moves = options.filter((item) => item.value !== shown);
   const label = `Change status for load ${loadNumber}`;
 
-  useEffect(() => {
-    if (optimistic && status === optimistic) setOptimistic(null);
-  }, [optimistic, status]);
+  const syncMenuBox = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const next = computeMenuBox(button, menuRef.current);
+    setMenuBox((prev) => (sameMenuBox(prev, next) ? prev : next));
+  }, []);
+
+  const assignMenu = useCallback((node: HTMLUListElement | null) => {
+    menuRef.current = node;
+    if (!node) return;
+    syncMenuBox();
+  }, [syncMenuBox]);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    setMenuBox(null);
+  }, []);
+
+  const openMenu = useCallback((index: number) => {
+    const width = Math.round(Math.max(buttonRef.current?.getBoundingClientRect().width ?? 0, 148));
+    setAnchorWidth(width);
+    setMenuBox(null);
+    setActiveIndex(index);
+    setOpen(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    function place() {
-      const button = buttonRef.current;
-      if (!button) return;
-      const rect = button.getBoundingClientRect();
-      setMenuBox({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 148) });
-    }
-    place();
     function onPointer(event: PointerEvent) {
       const target = event.target as Node | null;
       if (target && (rootRef.current?.contains(target) || menuRef.current?.contains(target))) return;
-      setOpen(false);
-    }
-    function onReflow() {
-      place();
+      closeMenu();
     }
     document.addEventListener("pointerdown", onPointer);
-    window.addEventListener("resize", onReflow);
-    window.addEventListener("scroll", onReflow, true);
+    window.addEventListener("resize", syncMenuBox);
+    window.addEventListener("scroll", syncMenuBox, true);
     return () => {
       document.removeEventListener("pointerdown", onPointer);
-      window.removeEventListener("resize", onReflow);
-      window.removeEventListener("scroll", onReflow, true);
+      window.removeEventListener("resize", syncMenuBox);
+      window.removeEventListener("scroll", syncMenuBox, true);
     };
-  }, [open]);
+  }, [open, syncMenuBox, closeMenu]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || menuBox?.maxHeight == null) return;
     const option = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     option?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, open]);
+  }, [activeIndex, open, menuBox?.maxHeight]);
 
   function stopCardOpen(event: { stopPropagation: () => void }) {
     event.stopPropagation();
@@ -89,7 +155,7 @@ export function WorkbenchStatusControl({
     pendingRef.current = true;
     setPending(true);
     setError(null);
-    setOpen(false);
+    closeMenu();
     setOptimistic(next);
     const formData = new FormData();
     formData.set("load_id", String(loadId));
@@ -123,14 +189,13 @@ export function WorkbenchStatusControl({
     if (!open) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        setActiveIndex(event.key === "ArrowUp" ? Math.max(moves.length - 1, 0) : 0);
-        setOpen(true);
+        openMenu(event.key === "ArrowUp" ? Math.max(moves.length - 1, 0) : 0);
       }
       return;
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      setOpen(false);
+      closeMenu();
       return;
     }
     if (event.key === "ArrowDown") {
@@ -149,20 +214,30 @@ export function WorkbenchStatusControl({
       if (next) void choose(next.value);
       return;
     }
-    if (event.key === "Tab") setOpen(false);
+    if (event.key === "Tab") closeMenu();
   }
 
   const menu =
-    open && menuBox
+    open
       ? createPortal(
           <ul
-            ref={menuRef}
+            ref={assignMenu}
             id={listId}
             role="listbox"
             aria-label={label}
             data-workbench-status-menu=""
+            data-clamp={menuBox?.maxHeight == null ? undefined : "true"}
             className="workbench-status-menu"
-            style={{ top: menuBox.top, left: menuBox.left, width: menuBox.width }}
+            style={
+              menuBox
+                ? {
+                    top: menuBox.top,
+                    left: menuBox.left,
+                    width: menuBox.width,
+                    maxHeight: menuBox.maxHeight,
+                  }
+                : { top: 0, left: 0, width: anchorWidth, visibility: "hidden" }
+            }
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
@@ -218,18 +293,29 @@ export function WorkbenchStatusControl({
         aria-controls={listId}
         aria-activedescendant={open && moves[activeIndex] ? `${listId}-${moves[activeIndex].value}` : undefined}
         aria-label={label}
+        title="Change status"
         aria-busy={pending}
         disabled={pending}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           if (pendingRef.current) return;
-          setOpen((value) => !value);
-          setActiveIndex(0);
+          if (open) closeMenu();
+          else openMenu(0);
         }}
         onKeyDown={onKeyDown}
       >
-        {labelForLoadStatus(shown)}
+        <span className="workbench-status-label">{labelForLoadStatus(shown)}</span>
+        <svg className="workbench-status-chevron" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <path
+            d="M2.25 4.5 6 8.25 9.75 4.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
       {error ? (
         <p className="mt-0.5 text-[11px] leading-4 text-rose-700" role="alert" data-workbench-status-error="">
