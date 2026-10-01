@@ -5,6 +5,7 @@ import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shar
 import { getTrailerLocationForLoad, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getLocationForLoad } from "./integrations/samsara";
 import {
+  pathThroughStops,
   stopAddressLine,
   stopsRoutePoints,
   type LoadMapPathPoint,
@@ -23,6 +24,8 @@ import {
   persistedTruckLocation,
 } from "./queries";
 import { geocodeAddress } from "./places";
+import { buildRelayMapPoints, type RelayCoordSource } from "./relay-map";
+import { listRelays } from "./relay-store";
 import { listStops } from "./stops";
 
 export function mapsBrowserKey(): string {
@@ -67,11 +70,29 @@ export function storedRoutePath(loadId: number): LoadMapPathPoint[] {
   return decodePolyline(encoded);
 }
 
+function locationCoordSources(): RelayCoordSource[] {
+  return getDb()
+    .prepare(
+      `SELECT name, city, state, latitude AS lat, longitude AS lng
+       FROM locations
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
+    )
+    .all() as RelayCoordSource[];
+}
+
 export async function buildStopsMapModel(loadId: number): Promise<{
   points: LoadMapPoint[];
   path: LoadMapPathPoint[];
 }> {
   const points = stopsRoutePoints(await buildLoadMapPoints(loadId));
+  const hasRelay = points.some((point) => point.kind === "relay");
+  const straight = pathThroughStops(points);
+  // A stored Google polyline is stop-to-stop and skips the handoff. Drawing it
+  // would leave the relay pin off the line. Straight segments match the card
+  // fallback and do not call Directions again on first paint.
+  if (hasRelay && straight.length >= 2) {
+    return { points, path: straight };
+  }
   const stored = storedRoutePath(loadId);
   const load = getLoad(loadId);
   const official =
@@ -88,6 +109,8 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
   if (!load) return [];
   const points: LoadMapPoint[] = [];
   const stops = listStops(loadId);
+  const relayRows = listRelays(loadId);
+  const relaySources: RelayCoordSource[] = relayRows.length ? locationCoordSources() : [];
 
   for (const stop of stops) {
     const linked = stop.location_id ? getLocation(stop.location_id) : null;
@@ -105,6 +128,15 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
       lng = geocoded?.longitude ?? null;
     }
     if (!validPoint(lat, lng)) continue;
+    if (relayRows.length) {
+      relaySources.push({
+        name: stop.name || linked?.name || "",
+        city: stop.city || linked?.city || "",
+        state: stop.state || linked?.state || "",
+        lat: lat as number,
+        lng: lng as number,
+      });
+    }
     const typeNumber = stopTypeNumber(stops, stop.id);
     const typeLabel = stopTypeLabel(stop.kind, typeNumber);
     points.push({
@@ -116,6 +148,20 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
       lng: lng as number,
       detail: stopAddressLine(stop) || undefined,
     });
+  }
+
+  if (relayRows.length) {
+    const relayPoints = await buildRelayMapPoints(
+      relayRows.map((relay) => ({
+        id: relay.id,
+        sequence: relay.sequence,
+        pickup: relay.pickup,
+        delivery: relay.delivery,
+      })),
+      relaySources,
+      geocodeAddress,
+    );
+    points.push(...relayPoints);
   }
 
   const truck = await truckGpsForLoad(loadId, load.truck_id);

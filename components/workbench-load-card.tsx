@@ -26,7 +26,10 @@ function workbenchWhen(iso: string): string {
 }
 
 function lanePointsForCard(group: InboxExceptionGroup, modelPoints: LoadMapPoint[]): LoadMapPoint[] {
-  const lane = modelPoints.filter((point) => point.kind === "pickup" || point.kind === "delivery" || point.kind === "truck");
+  const lane = modelPoints.filter(
+    (point) =>
+      point.kind === "pickup" || point.kind === "delivery" || point.kind === "relay" || point.kind === "truck",
+  );
   const hasPickup = lane.some((point) => point.kind === "pickup");
   const hasDelivery = lane.some((point) => point.kind === "delivery");
   if (hasPickup && hasDelivery) return lane;
@@ -58,8 +61,23 @@ function lanePointsForCard(group: InboxExceptionGroup, modelPoints: LoadMapPoint
   return [...lane, ...extra];
 }
 
-function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: Array<{ lat: number; lng: number }> }) {
+function diamondPoints(cx: number, cy: number, radius = 3.5): string {
+  return `${cx},${(cy - radius).toFixed(1)} ${(cx + radius).toFixed(1)},${cy} ${cx},${(cy + radius).toFixed(1)} ${(cx - radius).toFixed(1)},${cy}`;
+}
+
+export function WorkbenchLaneSketch({
+  points,
+  path,
+}: {
+  points: LoadMapPoint[];
+  path: Array<{ lat: number; lng: number }>;
+}) {
   const coords = path.length >= 2 ? path : points.filter((point) => point.kind !== "truck");
+  const laneLabel = points
+    .filter((point) => point.kind === "pickup" || point.kind === "relay" || point.kind === "delivery")
+    .map((point) => point.label)
+    .filter(Boolean)
+    .join(". ");
   if (coords.length === 0) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] text-slate-500">
@@ -88,9 +106,15 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
   const pickup = points.find((p) => p.kind === "pickup") ?? points[0];
   const drop = [...points].reverse().find((p) => p.kind === "delivery") ?? points[points.length - 1];
   const truck = points.find((p) => p.kind === "truck");
+  const relays = points.filter((point) => point.kind === "relay");
   const shortLabel = (point?: LoadMapPoint) => (point?.label ?? "").split(",")[0]?.trim() ?? "";
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#dce6ef]" data-workbench-lane-sketch="">
+    <div
+      className="relative h-full w-full overflow-hidden bg-[#dce6ef]"
+      data-workbench-lane-sketch=""
+      role="img"
+      aria-label={laneLabel || "Load route"}
+    >
       <svg viewBox="0 0 100 100" className="h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <rect width="100" height="100" fill="#dce6ef" />
         {Array.from({ length: 6 }, (_, i) => (
@@ -100,9 +124,34 @@ function WorkbenchLaneSketch({ points, path }: { points: LoadMapPoint[]; path: A
           <line key={`v${i}`} x1={i * 16.6} y1="0" x2={i * 16.6} y2="100" stroke="#c5d0db" strokeWidth="0.35" />
         ))}
         <polyline points={line} fill="none" stroke="#12315c" strokeWidth="2.2" strokeLinejoin="round" />
+        {relays.map((relay) => (
+          <polygon
+            key={relay.id}
+            data-relay-pin={relay.markerText || relay.label}
+            points={diamondPoints(xOf(relay.lng), yOf(relay.lat))}
+            fill={LOAD_MAP_MARKER_COLOR.relay}
+            stroke="#ffffff"
+            strokeWidth="0.8"
+          />
+        ))}
         {pickup ? <circle cx={xOf(pickup.lng)} cy={yOf(pickup.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.pickup} /> : null}
         {drop ? <circle cx={xOf(drop.lng)} cy={yOf(drop.lat)} r="3.4" fill={LOAD_MAP_MARKER_COLOR.delivery} /> : null}
         {truck ? <circle cx={xOf(truck.lng)} cy={yOf(truck.lat)} r="3" fill={LOAD_MAP_MARKER_COLOR.truck} /> : null}
+        {relays.map((relay) =>
+          relay.markerText ? (
+            <text
+              key={`${relay.id}-label`}
+              x={xOf(relay.lng)}
+              y={yOf(relay.lat) - 5.2}
+              textAnchor="middle"
+              fontSize="6.5"
+              fontWeight="700"
+              fill="#4c1d95"
+            >
+              {relay.markerText}
+            </text>
+          ) : null,
+        )}
         {pickup && shortLabel(pickup) ? (
           <text x={xOf(pickup.lng)} y={yOf(pickup.lat) - 5} textAnchor="middle" fontSize="7" fill="#0f172a">
             {shortLabel(pickup)}

@@ -1,11 +1,12 @@
 /** Client-safe load map types. No env, db, or API keys. */
 
-export type LoadMapPointKind = "pickup" | "delivery" | "truck" | "trailer" | "track";
+export type LoadMapPointKind = "pickup" | "delivery" | "relay" | "truck" | "trailer" | "track";
 
-/** Existing map pin fills. Samsara trucks keep navy. */
+/** Existing map pin fills. Samsara trucks keep navy. Relay is a violet diamond, not the green or red teardrop. */
 export const LOAD_MAP_MARKER_COLOR: Record<LoadMapPointKind, string> = {
   pickup: "#166534",
   delivery: "#be123c",
+  relay: "#5b21b6",
   truck: "#0b1f3a",
   trailer: "#d97706",
   track: "#64748b",
@@ -75,7 +76,7 @@ export type LoadMapPoint = {
   markerText?: string;
   labelClassName?: string;
   labelOrigin?: LoadMapLabelOrigin;
-  pinShape?: "circle" | "arrow";
+  pinShape?: "circle" | "arrow" | "diamond";
   headingDeg?: number | null;
 };
 
@@ -91,7 +92,30 @@ export type LoadTrackingEvent = {
 export type LoadMapPathPoint = { lat: number; lng: number };
 
 export function stopsRoutePoints(points: LoadMapPoint[]): LoadMapPoint[] {
-  return points.filter((point) => point.kind === "pickup" || point.kind === "delivery" || point.kind === "truck");
+  return points.filter(
+    (point) =>
+      point.kind === "pickup" || point.kind === "delivery" || point.kind === "relay" || point.kind === "truck",
+  );
+}
+
+/**
+ * Keep pickup/delivery order. Drop relay pins in before the first delivery
+ * (P1, P2, R1, R2, D1, D2). A delivery that already sits between pickups stays put.
+ */
+export function orderLaneAnchors<T extends { kind: string }>(points: T[]): T[] {
+  const stops = points.filter((point) => point.kind === "pickup" || point.kind === "delivery");
+  const relays = points.filter((point) => point.kind === "relay");
+  const ordered: T[] = [];
+  let inserted = false;
+  for (const stop of stops) {
+    if (!inserted && stop.kind === "delivery") {
+      ordered.push(...relays);
+      inserted = true;
+    }
+    ordered.push(stop);
+  }
+  if (!inserted) ordered.push(...relays);
+  return ordered;
 }
 
 export function loadMapPinFill(point: Pick<LoadMapPoint, "kind" | "pinColor">): string {
@@ -109,6 +133,9 @@ export function loadMapPinSvg(point: Pick<LoadMapPoint, "kind" | "pinColor" | "p
   if (point.pinShape === "circle") {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PARKED_SIZE}" height="${LOAD_MAP_PARKED_SIZE}" viewBox="0 0 10 10"><circle cx="${LOAD_MAP_PARKED_CX}" cy="${LOAD_MAP_PARKED_CY}" r="4" fill="${fill}" stroke="#ffffff" stroke-width="1"/></svg>`;
   }
+  if (point.pinShape === "diamond" || point.kind === "relay") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_WIDTH}" height="${LOAD_MAP_PIN_HEIGHT}" viewBox="0 0 ${LOAD_MAP_PIN_WIDTH} ${LOAD_MAP_PIN_HEIGHT}"><path d="M11 1.2 L20.4 13.2 L11 30.6 L1.6 13.2 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${LOAD_MAP_PIN_WIDTH}" height="${LOAD_MAP_PIN_HEIGHT}" viewBox="0 0 ${LOAD_MAP_PIN_WIDTH} ${LOAD_MAP_PIN_HEIGHT}"><path d="M11 1.4 C6.2 1.4 2.6 5.1 2.6 10 C2.6 17.4 11 30.6 11 30.6 C11 30.6 19.4 17.4 19.4 10 C19.4 5.1 15.8 1.4 11 1.4 Z" fill="${fill}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/><circle cx="${LOAD_MAP_PIN_HEAD_X}" cy="${LOAD_MAP_PIN_HEAD_Y}" r="3" fill="#ffffff" fill-opacity="0.35"/></svg>`;
 }
 
@@ -121,9 +148,7 @@ export function defaultLoadMapLabelOrigin(): LoadMapLabelOrigin {
 }
 
 export function pathThroughStops(points: LoadMapPoint[]): LoadMapPathPoint[] {
-  return points
-    .filter((point) => point.kind === "pickup" || point.kind === "delivery")
-    .map((point) => ({ lat: point.lat, lng: point.lng }));
+  return orderLaneAnchors(points).map((point) => ({ lat: point.lat, lng: point.lng }));
 }
 
 export const WORKBENCH_MAP_FIT_PADDING = 56;

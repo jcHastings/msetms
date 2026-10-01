@@ -279,6 +279,10 @@ export function LoadMapCanvas({
     );
   }
 
+  const relayLabels = points
+    .filter((point) => point.kind === "relay")
+    .map((point) => point.label)
+    .filter(Boolean);
   return (
     <div
       ref={host}
@@ -289,6 +293,9 @@ export function LoadMapCanvas({
       data-map-fit-padding={fitPadding != null ? String(fitPadding) : undefined}
       data-map-min-zoom={minZoom > 0 ? minZoom : undefined}
       data-map-max-zoom={maxZoom}
+      data-relay-labels={relayLabels.length ? relayLabels.join("|") : undefined}
+      role="region"
+      aria-label={relayLabels.length ? `Load map. ${relayLabels.join(". ")}` : "Load map"}
     />
   );
 }
