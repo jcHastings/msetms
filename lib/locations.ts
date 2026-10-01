@@ -26,6 +26,9 @@ export type LocationInput = {
   latitude?: number | null;
   longitude?: number | null;
   google_place_id?: string;
+  country?: string | null;
+  /** undefined on update keeps the stored timestamp. null clears it. */
+  verified_at?: string | null;
 };
 
 export function normalizeLocationPart(value: string): string {
@@ -95,7 +98,9 @@ export function formatStopRowAddress(
   });
 }
 
-export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip">;
+export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip"> & {
+  verified_at?: string | null;
+};
 
 export function locationSearchHaystack(location: LocationPickerRow): string {
   return [location.name, location.street, location.city, location.state, location.zip]

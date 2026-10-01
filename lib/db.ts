@@ -482,6 +482,10 @@ export function migrate(db: Database): void {
       oo_pay REAL,
       completed_at TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
+      relay_place_id TEXT,
+      relay_lat REAL,
+      relay_lng REAL,
+      relay_address TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -494,6 +498,10 @@ export function migrate(db: Database): void {
   ensureColumn(db, "load_relays", "from_leg_miles", "REAL");
   ensureColumn(db, "load_relays", "to_leg_miles", "REAL");
   ensureColumn(db, "load_relays", "completed_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_relays", "relay_place_id", "TEXT");
+  ensureColumn(db, "load_relays", "relay_lat", "REAL");
+  ensureColumn(db, "load_relays", "relay_lng", "REAL");
+  ensureColumn(db, "load_relays", "relay_address", "TEXT");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
   db.exec(`
 
@@ -890,6 +898,17 @@ export function migrate(db: Database): void {
   ensureColumn(db, "locations", "latitude", "REAL");
   ensureColumn(db, "locations", "longitude", "REAL");
   ensureColumn(db, "locations", "google_place_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "country", "TEXT");
+  ensureColumn(db, "locations", "verified_at", "TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS location_verify_cache (
+      location_id INTEGER NOT NULL,
+      query_key TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      looked_up_at TEXT NOT NULL,
+      PRIMARY KEY (location_id, query_key)
+    );
+  `);
   ensureColumn(db, "locations", "samsara_address_id", "TEXT");
   ensureColumn(db, "locations", "samsara_address_error", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");

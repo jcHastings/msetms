@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatLocationAddress, formatSchedulingSummary } from "@/lib/locations";
 import { listLocations } from "@/lib/queries";
-import { canExportCsv, canImportLocations } from "@/lib/settings-shared";
+import { LocationVerifyBadge } from "@/components/location-verify-badge";
+import { canEditLocations, canExportCsv, canImportLocations } from "@/lib/settings-shared";
 import { labelForLocationRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export default async function LocationsPage() {
   const locations = listLocations();
   const canImport = canImportLocations(role);
   const canExport = canExportCsv(role);
+  const canVerify = canEditLocations(role);
 
   return (
     <>
@@ -31,6 +33,11 @@ export default async function LocationsPage() {
               <a href="/api/locations/export" className="btn btn-secondary">
                 Download all locations
               </a>
+            ) : null}
+            {canVerify ? (
+              <Link href="/locations/verify" className="btn btn-secondary">
+                Verify locations
+              </Link>
             ) : null}
             <Link href="/locations/new" className="btn btn-primary">
               New location
@@ -63,7 +70,10 @@ export default async function LocationsPage() {
               {locations.map((location) => (
                 <tr key={location.id}>
                   <td>
-                    <div className="font-semibold">{location.name}</div>
+                    <div className="font-semibold">
+                      {location.name}
+                      <LocationVerifyBadge verifiedAt={location.verified_at} />
+                    </div>
                     {location.phone ? <div className="text-xs text-slate-500">{location.phone}</div> : null}
                   </td>
                   <td className="text-slate-600">{formatLocationAddress(location) || "—"}</td>

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
-import { PlaceSearch } from "@/components/place-search";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { US_STATES } from "@/lib/locations";
 import { applyNyBoroughState, nyBoroughStateError } from "@/lib/places-shared";
 import {
@@ -16,19 +16,21 @@ type Props = {
   location?: Location;
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
-  placesEnabled?: boolean;
+  mapsApiKey?: string;
 };
 
-export function LocationForm({ location, action, submitLabel, placesEnabled = false }: Props) {
+export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
   const [name, setName] = useState(location?.name ?? "");
   const [street, setStreet] = useState(location?.street ?? "");
   const [city, setCity] = useState(location?.city ?? "");
   const [region, setRegion] = useState(location?.state ?? "");
   const [zip, setZip] = useState(location?.zip ?? "");
+  const [country, setCountry] = useState(location?.country ?? "");
   const [latitude, setLatitude] = useState(location?.latitude != null ? String(location.latitude) : "");
   const [longitude, setLongitude] = useState(location?.longitude != null ? String(location.longitude) : "");
   const [placeId, setPlaceId] = useState(location?.google_place_id ?? "");
+  const [placePicked, setPlacePicked] = useState(false);
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
@@ -51,23 +53,34 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
         <FormBanner result={state} />
       )}
       <div className="grid gap-4 md:grid-cols-2">
-        <PlaceSearch
-          enabled={placesEnabled}
-          placeholder="Search a shipper or receiver address"
-          onPick={(place) => {
-            if (place.placeId) setPlaceId(place.placeId);
-            if (place.name) setName(place.name);
-            if (place.street) setStreet(place.street);
-            if (place.city) setCity(place.city);
-            if (place.city || place.state) setRegion(applyNyBoroughState(place.city || city, place.state || region));
-            if (place.zip) setZip(place.zip);
-            if (place.latitude != null) setLatitude(String(place.latitude));
-            if (place.longitude != null) setLongitude(String(place.longitude));
-          }}
-        />
         <div className="field md:col-span-2">
           <label htmlFor="name">Name</label>
-          <input id="name" name="name" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Warehouse or DC name" />
+          <PlacesAutocomplete
+            id="name"
+            name="name"
+            apiKey={mapsApiKey}
+            required
+            value={name}
+            placeholder="Type a business, like Tyson Foods"
+            onChange={setName}
+            onPlace={(place, query) => {
+              setPlacePicked(true);
+              if (place.placeId) setPlaceId(place.placeId);
+              const business = place.name.trim();
+              const typed = query.trim();
+              if (!name.trim() || name.trim().toLowerCase() === typed.toLowerCase()) setName(business || name);
+              if (place.street) setStreet(place.street);
+              if (place.city) setCity(place.city);
+              if (place.city || place.state) setRegion(applyNyBoroughState(place.city || city, place.state || region));
+              if (place.zip) setZip(place.zip);
+              if (place.country) setCountry(place.country);
+              if (place.latitude != null) setLatitude(String(place.latitude));
+              if (place.longitude != null) setLongitude(String(place.longitude));
+            }}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Pick a Google suggestion to fill the address. You can still edit every field. Without a map key, type the name and address yourself.
+          </p>
         </div>
         <div className="field md:col-span-2">
           <label htmlFor="street">Street</label>
@@ -97,9 +110,14 @@ export function LocationForm({ location, action, submitLabel, placesEnabled = fa
           <label htmlFor="zip">ZIP</label>
           <input id="zip" name="zip" value={zip} onChange={(event) => setZip(event.target.value)} />
         </div>
+        <div className="field">
+          <label htmlFor="country">Country</label>
+          <input id="country" name="country" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="US" />
+        </div>
         <input type="hidden" name="latitude" value={latitude} />
         <input type="hidden" name="longitude" value={longitude} />
         <input type="hidden" name="google_place_id" value={placeId} />
+        <input type="hidden" name="place_picked" value={placePicked ? "1" : ""} />
         <div className="field">
           <label htmlFor="phone">Phone</label>
           <input id="phone" name="phone" defaultValue={location?.phone} />

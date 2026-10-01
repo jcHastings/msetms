@@ -68,6 +68,7 @@ import { formatRelayLane } from "@/lib/relays";
 import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
+import { mapsBrowserKey } from "@/lib/load-map";
 import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
@@ -241,6 +242,8 @@ export async function LoadEditor({
           <LoadRelaysPanel
             loadId={load.id}
             relays={relays}
+            locations={locations}
+            mapsApiKey={mapsBrowserKey()}
             drivers={drivers.map((driver) => ({
               id: driver.id,
               name: driver.name,

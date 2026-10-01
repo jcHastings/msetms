@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { SamsaraAddressSync } from "@/components/samsara-address-sync";
 import { deleteLocationFormAction, updateLocationAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { isGooglePlacesConfigured } from "@/lib/env";
+import { getGoogleMapsBrowserKey } from "@/lib/env";
 import { getLocation } from "@/lib/queries";
 import { canDeleteLocations } from "@/lib/settings-shared";
 
@@ -38,7 +38,7 @@ export default async function EditLocationPage({
         location={location}
         action={boundAction}
         submitLabel="Save location"
-        placesEnabled={isGooglePlacesConfigured()}
+        mapsApiKey={getGoogleMapsBrowserKey() ?? ""}
       />
       <SamsaraAddressSync
         locationId={location.id}

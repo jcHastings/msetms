@@ -157,6 +157,8 @@ export async function buildLoadMapPoints(loadId: number): Promise<LoadMapPoint[]
         sequence: relay.sequence,
         pickup: relay.pickup,
         delivery: relay.delivery,
+        relay_lat: relay.relay_lat,
+        relay_lng: relay.relay_lng,
       })),
       relaySources,
       geocodeAddress,

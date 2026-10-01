@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getDataDir, getDb } from "./db";
-import { isGooglePlacesConfigured } from "./env";
+import { getGoogleMapsBrowserKey, isGooglePlacesConfigured } from "./env";
 import { sanitizeName } from "./files";
 import { printablePaperworkCopy } from "./paperwork-copy";
 import {
@@ -563,6 +563,7 @@ export function loadFormSettings(): {
   currency: string;
   targetMarginPercent: number;
   placesEnabled: boolean;
+  mapsBrowserKey: string;
   alertWindows: ComplianceWindows;
 } {
   const settings = getCompanySettings();
@@ -574,6 +575,7 @@ export function loadFormSettings(): {
     currency: settings.currency,
     targetMarginPercent: settings.default_gross_margin_percent,
     placesEnabled: isGooglePlacesConfigured(),
+    mapsBrowserKey: getGoogleMapsBrowserKey() ?? "",
     alertWindows: complianceWindows(),
   };
 }

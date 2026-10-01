@@ -250,8 +250,8 @@ export function createLocation(input: LocationInput): number {
     .prepare(
       `INSERT INTO locations (
         name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes,
-        call_before, latitude, longitude, google_place_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        call_before, latitude, longitude, google_place_id, country, verified_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -269,6 +269,8 @@ export function createLocation(input: LocationInput): number {
       input.latitude ?? null,
       input.longitude ?? null,
       input.google_place_id ?? "",
+      input.country ?? null,
+      input.verified_at ?? null,
       timestamp,
       timestamp,
     );
@@ -276,13 +278,18 @@ export function createLocation(input: LocationInput): number {
 }
 
 export function updateLocation(id: number, input: LocationInput): void {
-  if (!getLocation(id)) throw new Error("Location not found.");
+  const existing = getLocation(id);
+  if (!existing) throw new Error("Location not found.");
+  const placeId = input.google_place_id !== undefined ? input.google_place_id : existing.google_place_id;
+  const verifiedAt = input.verified_at !== undefined ? input.verified_at : existing.verified_at;
+  const country = input.country !== undefined ? input.country : existing.country;
   getDb()
     .prepare(
       `UPDATE locations
        SET name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?, notes = ?,
            role = ?, scheduling_type = ?, hours = ?, scheduling_notes = ?,
-           call_before = ?, latitude = ?, longitude = ?, google_place_id = ?, updated_at = ?
+           call_before = ?, latitude = ?, longitude = ?, google_place_id = ?,
+           country = ?, verified_at = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -300,7 +307,9 @@ export function updateLocation(id: number, input: LocationInput): void {
       input.call_before ? 1 : 0,
       input.latitude ?? null,
       input.longitude ?? null,
-      input.google_place_id ?? "",
+      placeId ?? "",
+      country ?? null,
+      verifiedAt ?? null,
       now(),
       id,
     );

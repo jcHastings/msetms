@@ -1,8 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { addRelayAction, deleteRelayAction } from "@/lib/dispatcher-actions";
-import { formatDateTime } from "@/lib/format";
+import { LocationPicker } from "@/components/location-picker";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import { addRelayAction, deleteRelayAction, updateRelayAction } from "@/lib/dispatcher-actions";
+import { formatDateTime, toOfficeDateTime } from "@/lib/format";
+import { formatLocationAddress, type LocationPickerRow } from "@/lib/locations";
+
+type RelayLocationOption = LocationPickerRow & {
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string | null;
+};
+import { relayPointLabel, type PlaceDetails } from "@/lib/places-shared";
 import { formatRelayHandoff, relayIsCompleted, type LoadRelayView } from "@/lib/relays";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
 import { isOwnerOperator } from "@/lib/types";
@@ -18,14 +28,19 @@ export function LoadRelaysPanel({
   loadId,
   relays,
   drivers,
+  locations = [],
+  mapsApiKey = "",
   primaryDriverId,
 }: {
   loadId: number;
   relays: LoadRelayView[];
   drivers: RelayDriverOption[];
+  locations?: RelayLocationOption[];
+  mapsApiKey?: string;
   primaryDriverId?: number | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<LoadRelayView | null>(null);
   const last = relays[relays.length - 1];
   const defaultFromId = last?.driver_id ?? primaryDriverId ?? null;
 
@@ -68,16 +83,21 @@ export function LoadRelaysPanel({
                     : " · waiting on completed date/time"}
                 </div>
               </div>
-              <form
-                action={async (formData) => {
-                  await deleteRelayAction(formData);
-                }}
-              >
-                <input type="hidden" name="relay_id" value={relay.id} />
-                <button className="btn btn-ghost text-rose-700" type="submit">
-                  Remove
+              <div className="flex gap-2">
+                <button type="button" className="btn btn-ghost" onClick={() => setEditing(relay)}>
+                  Edit
                 </button>
-              </form>
+                <form
+                  action={async (formData) => {
+                    await deleteRelayAction(formData);
+                  }}
+                >
+                  <input type="hidden" name="relay_id" value={relay.id} />
+                  <button className="btn btn-ghost text-rose-700" type="submit">
+                    Remove
+                  </button>
+                </form>
+              </div>
             </li>
           ))}
         </ol>
@@ -86,8 +106,20 @@ export function LoadRelaysPanel({
         <RelayDialog
           loadId={loadId}
           drivers={drivers}
+          locations={locations}
+          mapsApiKey={mapsApiKey}
           defaultFromId={defaultFromId}
           onClose={() => setOpen(false)}
+        />
+      ) : null}
+      {editing ? (
+        <RelayDialog
+          loadId={loadId}
+          drivers={drivers}
+          locations={locations}
+          mapsApiKey={mapsApiKey}
+          relay={editing}
+          onClose={() => setEditing(null)}
         />
       ) : null}
     </section>
@@ -107,23 +139,55 @@ function driverOptionLabel(driver: RelayDriverOption): string {
 function RelayDialog({
   loadId,
   drivers,
-  defaultFromId,
+  locations,
+  mapsApiKey,
+  defaultFromId = null,
+  relay,
   onClose,
 }: {
   loadId: number;
   drivers: RelayDriverOption[];
-  defaultFromId: number | null;
+  locations: RelayLocationOption[];
+  mapsApiKey: string;
+  defaultFromId?: number | null;
+  relay?: LoadRelayView;
   onClose: () => void;
 }) {
-  const [fromId, setFromId] = useState(defaultFromId ? String(defaultFromId) : "");
-  const [toId, setToId] = useState("");
+  const editing = Boolean(relay);
+  const [fromId, setFromId] = useState(relay?.from_driver_id ? String(relay.from_driver_id) : defaultFromId ? String(defaultFromId) : "");
+  const [toId, setToId] = useState(relay?.driver_id ? String(relay.driver_id) : "");
+  const [handoff, setHandoff] = useState(relay?.delivery || "");
+  const [placeId, setPlaceId] = useState(relay?.relay_place_id ?? "");
+  const [lat, setLat] = useState(relay?.relay_lat != null ? String(relay.relay_lat) : "");
+  const [lng, setLng] = useState(relay?.relay_lng != null ? String(relay.relay_lng) : "");
+  const [address, setAddress] = useState(relay?.relay_address ?? "");
+  const [placesReady, setPlacesReady] = useState(Boolean(mapsApiKey));
   const [error, setError] = useState<string | null>(null);
 
+  function rememberPlace(place: PlaceDetails) {
+    setHandoff(relayPointLabel(place) || place.formatted || handoff);
+    setPlaceId(place.placeId);
+    setLat(place.latitude != null ? String(place.latitude) : "");
+    setLng(place.longitude != null ? String(place.longitude) : "");
+    setAddress(place.formatted || [place.street, place.city, place.state, place.zip].filter(Boolean).join(", "));
+  }
+
+  function rememberSaved(locationId: string) {
+    const location = locations.find((row) => String(row.id) === locationId);
+    if (!location) return;
+    const cityState = [location.city, location.state].filter(Boolean).join(", ");
+    setHandoff([location.name, cityState].filter(Boolean).join(", "));
+    setPlaceId(String(location.google_place_id ?? ""));
+    setLat(location.latitude != null ? String(location.latitude) : "");
+    setLng(location.longitude != null ? String(location.longitude) : "");
+    setAddress(formatLocationAddress(location));
+  }
+
   return (
-    <div className="pay-item-dialog-backdrop" role="dialog" aria-label="Add relay">
+    <div className="pay-item-dialog-backdrop" role="dialog" aria-label={editing ? "Edit relay" : "Add relay"}>
       <form
         action={async (formData) => {
-          const result = await addRelayAction(formData);
+          const result = editing ? await updateRelayAction(formData) : await addRelayAction(formData);
           if (!result.ok) {
             setError(result.error);
             return;
@@ -132,8 +196,9 @@ function RelayDialog({
         }}
         className="pay-item-dialog card space-y-3 p-5"
       >
-        <h3 className="text-sm font-semibold">Add Relay</h3>
+        <h3 className="text-sm font-semibold">{editing ? "Edit Relay" : "Add Relay"}</h3>
         <input type="hidden" name="load_id" value={loadId} />
+        {relay ? <input type="hidden" name="relay_id" value={relay.id} /> : null}
         <div className="field">
           <label htmlFor="relay-driver-a">Driver 1 (first leg)</label>
           <select
@@ -169,12 +234,50 @@ function RelayDialog({
           </select>
         </div>
         <div className="field">
-          <label htmlFor="relay-handoff">Relay point</label>
-          <input id="relay-handoff" name="handoff" required placeholder="Handoff city" />
+          <label htmlFor={relay ? `relay-handoff-${relay.id}` : "relay-handoff"}>Relay point</label>
+          <PlacesAutocomplete
+            id={relay ? `relay-handoff-${relay.id}` : "relay-handoff"}
+            name="handoff"
+            apiKey={mapsApiKey}
+            required
+            value={handoff}
+            placeholder="Handoff city or business"
+            onAvailability={setPlacesReady}
+            onChange={(next) => {
+              setHandoff(next);
+              if (next !== handoff) {
+                setPlaceId("");
+                setLat("");
+                setLng("");
+                setAddress("");
+              }
+            }}
+            onPlace={rememberPlace}
+          />
+          <input type="hidden" name="relay_place_id" value={placeId} />
+          <input type="hidden" name="relay_lat" value={lat} />
+          <input type="hidden" name="relay_lng" value={lng} />
+          <input type="hidden" name="relay_address" value={address} />
+          {!placesReady ? (
+            <div className="mt-2">
+              <p className="text-xs text-slate-500">Google suggestions are off. Type the relay point, or pick a saved location.</p>
+              <LocationPicker
+                locations={locations}
+                placeholder="Saved locations"
+                emptyLabel="Keep the typed relay point"
+                onChange={rememberSaved}
+              />
+            </div>
+          ) : null}
         </div>
         <div className="field">
-          <label htmlFor="relay-completed-at">Relay completed</label>
-          <input id="relay-completed-at" name="completed_at" type="datetime-local" />
+          <label htmlFor={relay ? `relay-completed-${relay.id}` : "relay-completed-at"}>Relay completed</label>
+          <input
+            id={relay ? `relay-completed-${relay.id}` : "relay-completed-at"}
+            name="completed_at"
+            type="datetime-local"
+            defaultValue={relay?.completed_at ? toOfficeDateTime(relay.completed_at) : ""}
+          />
           <p className="mt-1 text-xs text-slate-500">
             Date and time the handoff happened. Required once Driver 2 has a truck and trailer on the load.
           </p>

@@ -11,6 +11,7 @@ import {
   type RelayAssignmentPatch,
   type RelayInput,
 } from "./relays";
+import { parseCoordPair } from "./places-shared";
 import { computeOwnerOperatorPay } from "./settlement";
 
 const RELAY_SELECT = `SELECT load_relays.*,
@@ -260,6 +261,42 @@ function resolveRelayDrivers(input: RelayInput, loadId: number): { fromDriverId:
   return { fromDriverId, driverId };
 }
 
+function resolveRelayPin(
+  input: RelayInput,
+  existing?: {
+    relay_place_id: string | null;
+    relay_lat: number | null;
+    relay_lng: number | null;
+    relay_address: string | null;
+  },
+): {
+  relay_place_id: string | null;
+  relay_lat: number | null;
+  relay_lng: number | null;
+  relay_address: string | null;
+} {
+  const untouched =
+    input.relay_place_id === undefined &&
+    input.relay_lat === undefined &&
+    input.relay_lng === undefined &&
+    input.relay_address === undefined;
+  if (untouched && existing) {
+    return {
+      relay_place_id: existing.relay_place_id,
+      relay_lat: existing.relay_lat,
+      relay_lng: existing.relay_lng,
+      relay_address: existing.relay_address,
+    };
+  }
+  const coords = parseCoordPair(input.relay_lat, input.relay_lng);
+  return {
+    relay_place_id: String(input.relay_place_id ?? "").trim() || null,
+    relay_lat: coords.lat,
+    relay_lng: coords.lng,
+    relay_address: String(input.relay_address ?? "").trim() || null,
+  };
+}
+
 function resolveRelayPlaces(loadId: number, input: RelayInput, existingPickup?: string): { pickup: string; delivery: string } {
   const load = loadOriginDest(loadId);
   const delivery = requiredPlace(input.delivery, "Relay point");
@@ -275,6 +312,7 @@ function resolveRelayPlaces(loadId: number, input: RelayInput, existingPickup?: 
 export function addRelay(loadId: number, input: RelayInput): number {
   const load = loadOriginDest(loadId);
   const { pickup, delivery } = resolveRelayPlaces(loadId, input);
+  const pin = resolveRelayPin(input);
   const { fromDriverId, driverId } = resolveRelayDrivers(input, loadId);
   const fromTruckId = optionalId(input.from_truck_id) ?? load.truck_id;
   const fromTrailerId = optionalId(input.from_trailer_id) ?? load.trailer_id;
@@ -294,8 +332,9 @@ export function addRelay(loadId: number, input: RelayInput): number {
     .prepare(
       `INSERT INTO load_relays (
         load_id, sequence, pickup, delivery, from_driver_id, from_truck_id, from_trailer_id,
-        driver_id, truck_id, trailer_id, completed_at, oo_percent, oo_pay, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        driver_id, truck_id, trailer_id, completed_at, oo_percent, oo_pay, notes,
+        relay_place_id, relay_lat, relay_lng, relay_address, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       loadId,
@@ -312,6 +351,10 @@ export function addRelay(loadId: number, input: RelayInput): number {
       settled.percent,
       settled.pay,
       (input.notes ?? "").trim(),
+      pin.relay_place_id,
+      pin.relay_lat,
+      pin.relay_lng,
+      pin.relay_address,
       timestamp,
       timestamp,
     );
@@ -348,6 +391,7 @@ export function updateRelay(id: number, input: RelayInput): void {
   const existing = getRelay(id);
   if (!existing) throw new Error("Relay is missing.");
   const { pickup, delivery } = resolveRelayPlaces(existing.load_id, input, existing.pickup);
+  const pin = resolveRelayPin(input, existing);
   const { fromDriverId, driverId } = resolveRelayDrivers(input, existing.load_id);
   const load = loadOriginDest(existing.load_id);
   const truckId = input.truck_id !== undefined ? optionalId(input.truck_id) : existing.truck_id;
@@ -364,7 +408,8 @@ export function updateRelay(id: number, input: RelayInput): void {
       `UPDATE load_relays
        SET pickup = ?, delivery = ?, from_driver_id = ?, from_truck_id = ?, from_trailer_id = ?,
            driver_id = ?, truck_id = ?, trailer_id = ?, completed_at = ?,
-           oo_percent = ?, oo_pay = ?, notes = ?, updated_at = ?
+           oo_percent = ?, oo_pay = ?, notes = ?,
+           relay_place_id = ?, relay_lat = ?, relay_lng = ?, relay_address = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -380,6 +425,10 @@ export function updateRelay(id: number, input: RelayInput): void {
       settled.percent,
       settled.pay,
       (input.notes ?? "").trim(),
+      pin.relay_place_id,
+      pin.relay_lat,
+      pin.relay_lng,
+      pin.relay_address,
       nowIso(),
       id,
     );

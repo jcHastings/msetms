@@ -16,6 +16,10 @@ export type LoadRelay = {
   to_leg_miles: number | null;
   completed_at: string;
   notes: string;
+  relay_place_id: string | null;
+  relay_lat: number | null;
+  relay_lng: number | null;
+  relay_address: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -46,6 +50,10 @@ export type RelayInput = {
   oo_percent?: number | null;
   oo_pay?: number | null;
   notes?: string;
+  relay_place_id?: string | null;
+  relay_lat?: number | null;
+  relay_lng?: number | null;
+  relay_address?: string | null;
 };
 
 export type RelayAssignment = {

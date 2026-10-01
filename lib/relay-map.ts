@@ -15,7 +15,22 @@ export type RelayHandoff = {
   sequence: number;
   pickup: string;
   delivery: string;
+  relay_lat?: number | null;
+  relay_lng?: number | null;
 };
+
+/** A pin saved from Places. Out-of-range values are ignored so the text fallback can run. */
+export function storedRelayCoord(relay: {
+  relay_lat?: number | null;
+  relay_lng?: number | null;
+}): { lat: number; lng: number } | null {
+  const lat = relay.relay_lat;
+  const lng = relay.relay_lng;
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
 
 export type RelayGeocode = (address: string) => Promise<{ latitude: number; longitude: number } | null>;
 
@@ -76,7 +91,7 @@ export async function buildRelayMapPoints(
     if (!relay) continue;
     const sequence = index + 1;
     const place = relayHandoffPlace(relay);
-    const coord = await resolveRelayLatLng(place, locations, geocode);
+    const coord = storedRelayCoord(relay) ?? (await resolveRelayLatLng(place, locations, geocode));
     if (!coord) continue;
     points.push({
       id: `relay-${relay.id}`,

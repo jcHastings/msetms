@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { LocationVerifyBadge } from "@/components/location-verify-badge";
 import {
   filterLocationsForPicker,
   formatLocationAddress,
@@ -201,7 +202,10 @@ export function LocationPicker({
         onKeyDown={onKeyDown}
       />
       {selected && !open ? (
-        <p className="mt-1 text-[11px] leading-snug text-slate-500">{formatLocationAddress(selected) || "Saved location"}</p>
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">
+          {formatLocationAddress(selected) || "Saved location"}
+          <LocationVerifyBadge verifiedAt={selected.verified_at} />
+        </p>
       ) : null}
       {open && menuRect && typeof document !== "undefined"
         ? createPortal(
@@ -244,7 +248,10 @@ export function LocationPicker({
                             onMouseEnter={() => setHighlight(optionIndex)}
                             onClick={() => pick(String(location.id))}
                           >
-                            <div className="font-semibold text-slate-900">{location.name}</div>
+                            <div className="font-semibold text-slate-900">
+                              {location.name}
+                              <LocationVerifyBadge verifiedAt={location.verified_at} />
+                            </div>
                             {address ? <div className="text-xs text-slate-500">{address}</div> : null}
                           </button>
                         </li>

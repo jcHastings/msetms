@@ -3,8 +3,10 @@
 import { useActionState, useEffect, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LocationPicker } from "@/components/location-picker";
+import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { saveRateConLocationAction } from "@/lib/actions";
 import { US_STATES } from "@/lib/locations";
+import { applyNyBoroughState } from "@/lib/places-shared";
 import {
   customerRefFromRateCon,
   formatParsedStop,
@@ -15,7 +17,7 @@ import {
 } from "@/lib/rate-con-shared";
 import type { Location } from "@/lib/types";
 
-export function useRateConLocationBook(parsed: ParsedRateCon, locations: Location[]) {
+export function useRateConLocationBook(parsed: ParsedRateCon, locations: Location[], mapsApiKey = "") {
   const [book, setBook] = useState(locations);
   const [shipperId, setShipperId] = useState(parsed.shipper_location_id ? String(parsed.shipper_location_id) : "");
   const [consigneeId, setConsigneeId] = useState(
@@ -53,6 +55,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
         book={book}
         shipperId={shipperId}
         consigneeId={consigneeId}
+        mapsApiKey={mapsApiKey}
         onSaved={remember}
         onPick={pickExisting}
       />
@@ -65,6 +68,7 @@ function RateConLocationReview({
   book,
   shipperId,
   consigneeId,
+  mapsApiKey,
   onSaved,
   onPick,
 }: {
@@ -72,6 +76,7 @@ function RateConLocationReview({
   book: Location[];
   shipperId: string;
   consigneeId: string;
+  mapsApiKey: string;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
@@ -90,6 +95,7 @@ function RateConLocationReview({
           book={book}
           selectedId={shipperId}
           matched={book.find((location) => String(location.id) === shipperId) ?? null}
+          mapsApiKey={mapsApiKey}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -102,6 +108,7 @@ function RateConLocationReview({
           book={book}
           selectedId={consigneeId}
           matched={book.find((location) => String(location.id) === consigneeId) ?? null}
+          mapsApiKey={mapsApiKey}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -159,6 +166,7 @@ function StopReviewCard({
   book,
   selectedId,
   matched,
+  mapsApiKey,
   onSaved,
   onPick,
 }: {
@@ -168,6 +176,7 @@ function StopReviewCard({
   book: Location[];
   selectedId: string;
   matched: Location | null;
+  mapsApiKey: string;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
@@ -208,7 +217,7 @@ function StopReviewCard({
           placeholder="Type any name or address"
         />
       </div>
-      {!matched ? <SaveNewLocationCard role={role} stop={stop} onSaved={onSaved} /> : null}
+      {!matched ? <SaveNewLocationCard role={role} stop={stop} mapsApiKey={mapsApiKey} onSaved={onSaved} /> : null}
     </section>
   );
 }
@@ -216,15 +225,27 @@ function StopReviewCard({
 function SaveNewLocationCard({
   role,
   stop,
+  mapsApiKey,
   onSaved,
 }: {
   role: "shipper" | "receiver";
   stop: ParsedStop;
+  mapsApiKey: string;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
 }) {
   const [state, formAction, pending] = useActionState(saveRateConLocationAction, null);
   const prefix = role === "shipper" ? "rate-con-pickup" : "rate-con-delivery";
   const savedId = state && state.ok ? state.location.id : null;
+  const [name, setName] = useState(stop.name);
+  const [street, setStreet] = useState(stop.street);
+  const [city, setCity] = useState(stop.city);
+  const [region, setRegion] = useState(stop.state);
+  const [zip, setZip] = useState(stop.zip);
+  const [country, setCountry] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [placeId, setPlaceId] = useState("");
+  const [placePicked, setPlacePicked] = useState(false);
 
   useEffect(() => {
     if (state && state.ok) onSaved(state.location, role);
@@ -266,19 +287,40 @@ function SaveNewLocationCard({
         </label>
         <div className="field md:col-span-2">
           <label htmlFor={`${prefix}-name`}>Name</label>
-          <input id={`${prefix}-name`} name="name" required defaultValue={stop.name} />
+          <PlacesAutocomplete
+            id={`${prefix}-name`}
+            name="name"
+            apiKey={mapsApiKey}
+            required
+            value={name}
+            placeholder="Type a business or address"
+            onChange={setName}
+            onPlace={(place, query) => {
+              setPlacePicked(true);
+              if (place.placeId) setPlaceId(place.placeId);
+              const business = place.name.trim();
+              if (!name.trim() || name.trim().toLowerCase() === query.trim().toLowerCase()) setName(business || name);
+              if (place.street) setStreet(place.street);
+              if (place.city) setCity(place.city);
+              if (place.city || place.state) setRegion(applyNyBoroughState(place.city || city, place.state || region));
+              if (place.zip) setZip(place.zip);
+              if (place.country) setCountry(place.country);
+              if (place.latitude != null) setLatitude(String(place.latitude));
+              if (place.longitude != null) setLongitude(String(place.longitude));
+            }}
+          />
         </div>
         <div className="field md:col-span-2">
           <label htmlFor={`${prefix}-street`}>Street</label>
-          <input id={`${prefix}-street`} name="street" defaultValue={stop.street} />
+          <input id={`${prefix}-street`} name="street" value={street} onChange={(event) => setStreet(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor={`${prefix}-city`}>City</label>
-          <input id={`${prefix}-city`} name="city" required defaultValue={stop.city} />
+          <input id={`${prefix}-city`} name="city" required value={city} onChange={(event) => setCity(event.target.value)} />
         </div>
         <div className="field">
           <label htmlFor={`${prefix}-state`}>State</label>
-          <select id={`${prefix}-state`} name="state" required defaultValue={stop.state}>
+          <select id={`${prefix}-state`} name="state" required value={region} onChange={(event) => setRegion(event.target.value)}>
             <option value="">Select state</option>
             {US_STATES.map((code) => (
               <option key={code} value={code}>
@@ -289,8 +331,13 @@ function SaveNewLocationCard({
         </div>
         <div className="field">
           <label htmlFor={`${prefix}-zip`}>ZIP</label>
-          <input id={`${prefix}-zip`} name="zip" defaultValue={stop.zip} />
+          <input id={`${prefix}-zip`} name="zip" value={zip} onChange={(event) => setZip(event.target.value)} />
         </div>
+        <input type="hidden" name="country" value={country} />
+        <input type="hidden" name="latitude" value={latitude} />
+        <input type="hidden" name="longitude" value={longitude} />
+        <input type="hidden" name="google_place_id" value={placeId} />
+        <input type="hidden" name="place_picked" value={placePicked ? "1" : ""} />
         <div className="field">
           <label htmlFor={`${prefix}-phone`}>Phone</label>
           <input id={`${prefix}-phone`} name="phone" defaultValue={stop.phone} />

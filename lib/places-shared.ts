@@ -44,10 +44,127 @@ export type PlaceDetails = {
   city: string;
   state: string;
   zip: string;
+  /** ISO country or short name from Google. Empty when the result has none. */
+  country: string;
   formatted: string;
   latitude: number | null;
   longitude: number | null;
 };
+
+export type AddressComponent = {
+  long_name?: string;
+  short_name?: string;
+  longText?: string;
+  shortText?: string;
+  types?: string[];
+};
+
+function componentName(component: AddressComponent, kind: "long" | "short"): string {
+  if (kind === "short") {
+    return String(component.short_name || component.shortText || component.long_name || component.longText || "").trim();
+  }
+  return String(component.long_name || component.longText || component.short_name || component.shortText || "").trim();
+}
+
+function componentTypes(component: AddressComponent): string[] {
+  return Array.isArray(component.types) ? component.types : [];
+}
+
+/** Street, city, state, ZIP, and country from a Google `address_components` list. */
+export function parseAddressComponents(components: AddressComponent[]): {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+} {
+  const list = Array.isArray(components) ? components : [];
+  const find = (...types: string[]) =>
+    list.find((item) => {
+      const itemTypes = componentTypes(item);
+      return types.every((type) => itemTypes.includes(type));
+    }) ??
+    list.find((item) => {
+      const itemTypes = componentTypes(item);
+      return types.some((type) => itemTypes.includes(type));
+    });
+  const short = (...types: string[]) => {
+    const hit = find(...types);
+    return hit ? componentName(hit, "short") : "";
+  };
+  const long = (...types: string[]) => {
+    const hit = find(...types);
+    return hit ? componentName(hit, "long") : "";
+  };
+  const streetNumber = short("street_number");
+  const route = long("route");
+  const city = long("locality") || long("postal_town") || long("sublocality") || long("administrative_area_level_3");
+  const rawState = short("administrative_area_level_1");
+  return {
+    street: [streetNumber, route].filter(Boolean).join(" "),
+    city,
+    state: applyNyBoroughState(city, rawState),
+    zip: short("postal_code"),
+    country: short("country") || long("country"),
+  };
+}
+
+/** Readable relay point, e.g. "Pilot Travel Center, Oklahoma City, OK". */
+export function relayPointLabel(place: { name?: string | null; city?: string | null; state?: string | null }): string {
+  const name = String(place.name ?? "").trim();
+  const cityState = [String(place.city ?? "").trim(), String(place.state ?? "").trim()].filter(Boolean).join(", ");
+  if (name && cityState) {
+    if (name.toLowerCase().endsWith(cityState.toLowerCase())) return name;
+    return `${name}, ${cityState}`;
+  }
+  return name || cityState;
+}
+
+export function parseCoordPair(
+  latRaw: unknown,
+  lngRaw: unknown,
+): { lat: number | null; lng: number | null } {
+  const latEmpty = latRaw == null || String(latRaw).trim() === "";
+  const lngEmpty = lngRaw == null || String(lngRaw).trim() === "";
+  if (latEmpty && lngEmpty) return { lat: null, lng: null };
+  const lat = typeof latRaw === "number" ? latRaw : Number(String(latRaw).trim());
+  const lng = typeof lngRaw === "number" ? lngRaw : Number(String(lngRaw).trim());
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error("Latitude and longitude must both be numbers.");
+  }
+  if (lat < -90 || lat > 90) throw new Error("Latitude must be between -90 and 90.");
+  if (lng < -180 || lng > 180) throw new Error("Longitude must be between -180 and 180.");
+  return { lat, lng };
+}
+
+export function locationIsVerified(row: { verified_at?: string | null }): boolean {
+  return Boolean(String(row.verified_at ?? "").trim());
+}
+
+const EARTH_MILES = 3958.7613;
+
+/** Great-circle distance in miles. Null when either pin is missing. */
+export function haversineMiles(
+  from: { lat: number | null; lng: number | null },
+  to: { lat: number | null; lng: number | null },
+): number | null {
+  if (from.lat == null || from.lng == null || to.lat == null || to.lng == null) return null;
+  if (![from.lat, from.lng, to.lat, to.lng].every((value) => Number.isFinite(value))) return null;
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_MILES * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+export function formatDistanceMiles(miles: number | null): string {
+  if (miles == null || !Number.isFinite(miles)) return "No saved pin to measure";
+  if (miles < 0.1) return "Under 0.1 mi";
+  return `${miles.toFixed(1)} mi`;
+}
 
 export function matchLocationForPlace(
   locations: Array<{ id: number; name: string; street: string; city: string; state: string; zip: string }>,

@@ -178,6 +178,9 @@ export type Location = {
   latitude: number | null;
   longitude: number | null;
   google_place_id: string;
+  country: string | null;
+  /** Set when a dispatcher accepts a Google place. Empty means not verified. */
+  verified_at: string | null;
   /** Samsara address id when this location has been mirrored. Null until a sync lands. */
   samsara_address_id: string | null;
   samsara_address_error: string;

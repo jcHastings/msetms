@@ -85,7 +85,7 @@ import {
 import { assertLoadStatusTransition } from "./load-status-transition";
 import { complianceWindows } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
-import { assertNyBoroughState } from "./places-shared";
+import { assertNyBoroughState, parseCoordPair } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
 import type { TollImportResult } from "./tolls";
@@ -1443,6 +1443,7 @@ function parseLocationInput(formData: FormData) {
   const city = requiredString(formData.get("city"), "City");
   const state = requiredString(formData.get("state"), "State").toUpperCase();
   assertNyBoroughState(city, state);
+  const coords = parseCoordPair(formData.get("latitude"), formData.get("longitude"));
   return {
     name: requiredString(formData.get("name"), "Location name"),
     street: String(formData.get("street") ?? "").trim(),
@@ -1456,10 +1457,33 @@ function parseLocationInput(formData: FormData) {
     hours: String(formData.get("hours") ?? "").trim(),
     scheduling_notes: String(formData.get("scheduling_notes") ?? "").trim(),
     call_before: String(formData.get("call_before") ?? "") === "1" ? 1 : 0,
-    latitude: parseOptionalFloat(formData.get("latitude")),
-    longitude: parseOptionalFloat(formData.get("longitude")),
+    latitude: coords.lat,
+    longitude: coords.lng,
     google_place_id: String(formData.get("google_place_id") ?? "").trim(),
+    country: String(formData.get("country") ?? "").trim() || null,
+    place_picked: String(formData.get("place_picked") ?? "") === "1",
   };
+}
+
+function withLocationVerification<T extends ReturnType<typeof parseLocationInput>>(
+  input: T,
+  existing: Location | null,
+): T & { verified_at: string | null | undefined } {
+  let verified_at: string | null | undefined;
+  if (input.place_picked && input.google_place_id) verified_at = new Date().toISOString();
+  else if (!input.google_place_id) verified_at = null;
+  else if (!existing) verified_at = null;
+  else {
+    const moved =
+      existing.street !== input.street ||
+      existing.city !== input.city ||
+      existing.state !== input.state ||
+      existing.zip !== input.zip ||
+      existing.latitude !== input.latitude ||
+      existing.longitude !== input.longitude;
+    verified_at = moved ? null : undefined;
+  }
+  return { ...input, verified_at };
 }
 
 export type SaveRateConLocationState =
@@ -1473,7 +1497,7 @@ export async function saveRateConLocationAction(
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
     const id = createLocation({
-      ...parseLocationInput(formData),
+      ...withLocationVerification(parseLocationInput(formData), null),
       notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
       scheduling_type: parseSchedulingType(formData.get("scheduling_type") || "appointment"),
     });
@@ -1493,7 +1517,7 @@ export async function createLocationAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
-    const input = parseLocationInput(formData);
+    const input = withLocationVerification(parseLocationInput(formData), null);
     if (String(formData.get("confirm_duplicate") ?? "") !== "1") {
       const existing = findDuplicateLocation(input);
       if (existing) {
@@ -1522,7 +1546,9 @@ export async function updateLocationAction(
 ): Promise<ActionResult> {
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
-    updateLocation(id, parseLocationInput(formData));
+    const existing = getLocation(id);
+    if (!existing) return { ok: false, error: "Location not found." };
+    updateLocation(id, withLocationVerification(parseLocationInput(formData), existing));
     const synced = await syncLocationToSamsara(id);
     refresh();
     const message = synced.ok

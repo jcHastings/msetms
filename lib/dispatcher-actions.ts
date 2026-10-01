@@ -18,7 +18,7 @@ import {
   parseOptionalInt,
   requiredString,
 } from "./format";
-import { assertNyBoroughState } from "./places-shared";
+import { assertNyBoroughState, parseCoordPair } from "./places-shared";
 import {
   authenticateDispatcher,
   authenticateDispatcherByEmail,
@@ -349,6 +349,22 @@ function parseRelayForm(formData: FormData) {
     oo_percent: parseOptionalFloat(formData.get("oo_percent")),
     oo_pay: parseOptionalFloat(formData.get("oo_pay")),
     notes: String(formData.get("notes") ?? "").trim(),
+    ...parseRelayPin(formData),
+  };
+}
+
+function parseRelayPin(formData: FormData): {
+  relay_place_id: string | null;
+  relay_lat: number | null;
+  relay_lng: number | null;
+  relay_address: string | null;
+} {
+  const coords = parseCoordPair(formData.get("relay_lat"), formData.get("relay_lng"));
+  return {
+    relay_place_id: String(formData.get("relay_place_id") ?? "").trim() || null,
+    relay_lat: coords.lat,
+    relay_lng: coords.lng,
+    relay_address: String(formData.get("relay_address") ?? "").trim() || null,
   };
 }
 

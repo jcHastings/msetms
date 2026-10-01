@@ -23,6 +23,7 @@ type LoadFormSettings = {
   currency: string;
   targetMarginPercent: number;
   placesEnabled: boolean;
+  mapsBrowserKey?: string;
   alertWindows: ComplianceWindows;
 };
 
@@ -169,7 +170,7 @@ function RateConImportedLoad({
   formSettings?: LoadFormSettings;
 }) {
   const [discarded, setDiscarded] = useState(false);
-  const book = useRateConLocationBook(parsed, locations);
+  const book = useRateConLocationBook(parsed, locations, formSettings?.mapsBrowserKey ?? "");
   if (discarded) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-rate-con-discarded="">

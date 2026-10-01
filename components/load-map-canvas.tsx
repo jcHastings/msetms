@@ -16,6 +16,7 @@ import {
   type LoadMapPathPoint,
   type LoadMapPoint,
 } from "@/lib/load-map-shared";
+import { loadGoogleMaps } from "@/lib/maps-js";
 
 type GoogleMap = {
   fitBounds: (
@@ -42,40 +43,10 @@ type GoogleMaps = {
   LatLngBounds: new () => { extend: (latLng: { lat: number; lng: number }) => void };
 };
 
-declare global {
-  interface Window {
-    google?: { maps: GoogleMaps };
-    gm_authFailure?: () => void;
-  }
-}
-
 const CLUSTER_ANCHOR = CLUSTER_PIN_SIZE / 2;
 
 function loadMapsScript(apiKey: string): Promise<GoogleMaps> {
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
-  const existing = document.querySelector<HTMLScriptElement>("script[data-ms-maps='js']");
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => {
-        if (window.google?.maps) resolve(window.google.maps);
-        else reject(new Error("Maps JavaScript API did not load."));
-      });
-      existing.addEventListener("error", () => reject(new Error("Maps JavaScript API did not load.")));
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.dataset.msMaps = "js";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      if (window.google?.maps) resolve(window.google.maps);
-      else reject(new Error("Maps JavaScript API did not load."));
-    };
-    script.onerror = () => reject(new Error("Maps JavaScript API did not load."));
-    document.head.appendChild(script);
-  });
+  return loadGoogleMaps(apiKey).then((maps) => maps as unknown as GoogleMaps);
 }
 
 export function LoadMapCanvas({

@@ -1207,7 +1207,10 @@ async function main() {
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /Load map/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "components/load-tracking-panel.tsx"), "utf8"), /This load only|Check calls and stored GPS/);
   const mapCanvasSource = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
-  assert.match(mapCanvasSource, /maps\.googleapis\.com\/maps\/api\/js/);
+  const mapsJsSource = fs.readFileSync(path.join(process.cwd(), "lib/maps-js.ts"), "utf8");
+  assert.match(mapCanvasSource, /loadGoogleMaps/);
+  assert.match(`${mapCanvasSource}\n${mapsJsSource}`, /maps\.googleapis\.com\/maps\/api\/js/);
+  assert.match(mapsJsSource, /libraries=places/);
   assert.doesNotMatch(mapCanvasSource, /maps\.google\.com\/maps\?/);
   assert.doesNotMatch(mapCanvasSource, /AIza[0-9A-Za-z_-]+/);
   assert.match(mapCanvasSource, /point\.href/);
@@ -3212,7 +3215,11 @@ async function main() {
   assert.doesNotMatch(workbenchCardUi, /md:grid-cols-\[minmax/);
   assert.doesNotMatch(workbenchCardUi, /maps\.google\.com\/maps\?/);
   const mapCanvasUi = fs.readFileSync(path.join(process.cwd(), "components/load-map-canvas.tsx"), "utf8");
-  assert.match(mapCanvasUi, /maps\.googleapis\.com\/maps\/api\/js/);
+  assert.match(mapCanvasUi, /loadGoogleMaps/);
+  assert.match(
+    `${mapCanvasUi}\n${fs.readFileSync(path.join(process.cwd(), "lib/maps-js.ts"), "utf8")}`,
+    /maps\.googleapis\.com\/maps\/api\/js/,
+  );
   assert.match(mapCanvasUi, /disableDefaultUi/);
   assert.match(mapCanvasUi, /disableDefaultUI: disableDefaultUi/);
   assert.match(mapCanvasUi, /zoomControl: !disableDefaultUi/);
