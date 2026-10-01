@@ -3163,12 +3163,15 @@ html:has([data-load-embed]) body {
 }
 
 .workbench-status-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
   border: 1px solid transparent;
   border-radius: var(--r-xs);
-  padding: 0.05rem 0.4rem;
+  padding: 0.05rem 0.28rem 0.05rem 0.4rem;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -3176,6 +3179,66 @@ html:has([data-load-embed]) body {
   text-align: left;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.workbench-status-label {
+  min-width: 0;
+}
+
+.workbench-status-chevron {
+  flex: 0 0 auto;
+  width: 0.72em;
+  height: 0.72em;
+  color: currentColor;
+}
+
+/* Rest borders are a darker tint of each badge and clear 3:1 on the card and the fill. */
+.workbench-status-control.status-tone-slate {
+  border-color: #6a7b8c;
+}
+
+.workbench-status-control.status-tone-navy {
+  border-color: #4a7394;
+}
+
+.workbench-status-control.status-tone-success {
+  border-color: #3a7214;
+}
+
+.workbench-status-control.status-tone-warning {
+  border-color: #c45e00;
+}
+
+.workbench-status-control.status-tone-warning .workbench-status-chevron {
+  color: #b45300;
+}
+
+.workbench-status-control.status-tone-danger {
+  border-color: #c44a4a;
+}
+
+.workbench-status-control:hover {
+  cursor: pointer;
+}
+
+.workbench-status-control.status-tone-slate:hover {
+  border-color: #07325a;
+}
+
+.workbench-status-control.status-tone-navy:hover {
+  border-color: #07325a;
+}
+
+.workbench-status-control.status-tone-success:hover {
+  border-color: #2f5e11;
+}
+
+.workbench-status-control.status-tone-warning:hover {
+  border-color: #8a3e00;
+}
+
+.workbench-status-control.status-tone-danger:hover {
+  border-color: #7f1212;
 }
 
 .workbench-status-control:focus-visible {
@@ -3191,15 +3254,35 @@ html:has([data-load-embed]) body {
 .workbench-status-menu {
   position: fixed;
   z-index: 80;
-  max-height: 14rem;
   margin: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 0.2rem;
   list-style: none;
   background: #fff;
   border: 1px solid var(--glass-border);
   border-radius: var(--r-sm);
   box-shadow: var(--glass-shadow);
+}
+
+.workbench-status-menu[data-clamp="true"] {
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-color: #334155 #e2e8f0;
+  scrollbar-width: auto;
+}
+
+.workbench-status-menu[data-clamp="true"]::-webkit-scrollbar {
+  width: 10px;
+}
+
+.workbench-status-menu[data-clamp="true"]::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+.workbench-status-menu[data-clamp="true"]::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
 }
 
 .workbench-status-option {

@@ -2906,10 +2906,19 @@ async function main() {
   assert.match(workbenchCardUi, /canChangeStatus/);
   const statusControlUi = fs.readFileSync(path.join(process.cwd(), "components/workbench-status-control.tsx"), "utf8");
   assert.match(statusControlUi, /updateLoadStatusAction/);
+  assert.match(statusControlUi, /offerInvoicePrompt/);
   assert.match(statusControlUi, /Change status for load/);
+  assert.match(statusControlUi, /title="Change status"/);
+  assert.match(statusControlUi, /workbench-status-chevron/);
+  assert.match(statusControlUi, /aria-hidden="true"/);
+  assert.match(statusControlUi, /computeMenuBox/);
   assert.match(statusControlUi, /aria-expanded/);
   assert.match(statusControlUi, /stopPropagation/);
   assert.match(statusControlUi, /data-workbench-status-error/);
+  assert.match(workbenchCss, /\.workbench-status-control:hover/);
+  assert.match(workbenchCss, /\.workbench-status-control:focus-visible \{[\s\S]*outline: 2px solid #12315c/);
+  assert.match(workbenchCss, /\.workbench-status-menu\[data-clamp="true"\]/);
+  assert.doesNotMatch(workbenchCss, /\.workbench-status-menu \{[\s\S]*max-height: 14rem/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/actions.ts"), "utf8"), /assertLoadStatusTransition/);
   assert.doesNotMatch(
     fs.readFileSync(path.join(process.cwd(), "lib/workbench-telematics.ts"), "utf8"),
