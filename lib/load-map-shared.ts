@@ -32,7 +32,7 @@ export const LOAD_MAP_PARKED_SIZE = 10;
 export const LOAD_MAP_PARKED_CX = 5;
 export const LOAD_MAP_PARKED_CY = 5;
 
-export function loadMapIconLayout(pinShape?: "circle" | "arrow"): {
+export function loadMapIconLayout(pinShape?: "circle" | "arrow" | "diamond"): {
   w: number;
   h: number;
   anchorX: number;
