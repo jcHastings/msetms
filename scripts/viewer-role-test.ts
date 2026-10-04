@@ -204,6 +204,8 @@ async function main(): Promise<void> {
   assert.match(read("components/load-status-select.tsx"), /View-only access/);
   assert.match(read("components/load-status-select.tsx"), /aria-disabled/);
   assert.match(read("app/settings/page.tsx"), /isViewerRole/);
+  assert.match(read("app/settings/layout.tsx"), /redirect\("\/settings\/security"\)/);
+  assert.match(read("components/settings-access.tsx"), /redirect\("\/settings\/security"\)/);
   assert.match(read("components/dispatcher-user-form.tsx"), /selectableDispatcherRoles/);
 
   const modules: Array<{ file: string; mod: ActionMod; source: string }> = [];

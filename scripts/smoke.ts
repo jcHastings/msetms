@@ -746,7 +746,7 @@ async function main() {
   assert.match(boardUi, /AssignDialog/);
   assert.match(boardUi, /assignItem=/);
   assert.match(boardUi, /triggerClassName="menu-item w-full text-left"/);
-  assert.match(boardUi, />\s*Edit\s*</);
+  assert.match(boardUi, /write \? "Edit" : "Open"/);
   assert.match(workspaceSource, /Log Check Call/);
   assert.match(workspaceSource, /View Load Log/);
   assert.match(workspaceSource, /Send Text Message/);

@@ -105,6 +105,7 @@ export default async function BoardPage({
             assignableTrailers={assignableTrailers}
             assignableDrivers={assignableDrivers}
             relayLabels={relayLabels}
+            write={write}
           />
         </Suspense>
       </div>
@@ -181,6 +182,7 @@ async function BoardLiveSection({
   assignableTrailers,
   assignableDrivers,
   relayLabels,
+  write,
 }: {
   loads: ReturnType<typeof listLoads>;
   current: { status: string; date: string };
@@ -188,6 +190,7 @@ async function BoardLiveSection({
   assignableTrailers: ReturnType<typeof listAssignableTrailers>;
   assignableDrivers: ReturnType<typeof listAssignableDrivers>;
   relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
+  write: boolean;
 }) {
   const failedDrivers = failedDrugTestDriverIds();
   const ooPercent = defaultOoPercent();
@@ -391,7 +394,7 @@ async function BoardLiveSection({
                               />
                             ) : null}
                             <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
-                              Edit
+                              {write ? "Edit" : "Open"}
                             </OverlayOpenLink>
                           </div>
                         </div>

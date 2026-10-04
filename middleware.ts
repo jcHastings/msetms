@@ -9,7 +9,9 @@ import { parseDispatcherSessionValueAtEdge } from "./lib/dispatcher-session-toke
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const rawSessionCookie = request.cookies.get(DISPATCHER_SESSION_COOKIE)?.value;
   if (await parseDispatcherSessionValueAtEdge(rawSessionCookie)) {
-    return NextResponse.next();
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-tms-pathname", request.nextUrl.pathname);
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const loginUrl = request.nextUrl.clone();
