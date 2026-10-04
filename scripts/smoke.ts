@@ -134,7 +134,7 @@ async function main() {
   assert.match(claimsPage, /data-claims-desk/);
   assert.match(claimsPage, /Claims \/ OS&D/);
   assert.doesNotMatch(claimsPage, /redirect\(/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "app/claims/layout.tsx"), "utf8"), /canWriteDesk/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "app/claims/layout.tsx"), "utf8"), /canViewClaims/);
   assert.match(navSource, /label: "Users"/);
   assert.match(navSource, /href: "\/audit"/);
   assert.match(navSource, /label: "Audit"/);

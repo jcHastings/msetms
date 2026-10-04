@@ -26,12 +26,19 @@ import {
   canSeeNavHref,
   canSendSms,
   canUploadFuel,
+  canViewAccounting,
   canViewAudit,
+  canViewClaims,
+  canViewFleet,
+  canViewFuel,
   canViewIfta,
   canViewLoadFinancials,
   canViewReports,
+  canWrite,
+  isViewerRole,
   roleLabel,
   toPublicDispatcher,
+  VIEW_ONLY_WRITE_MESSAGE,
   type PublicDispatcher,
 } from "./settings-shared";
 import {
@@ -64,11 +71,18 @@ export {
   canSeeNavHref,
   canSendSms,
   canUploadFuel,
+  canViewAccounting,
   canViewAudit,
+  canViewClaims,
+  canViewFleet,
+  canViewFuel,
   canViewIfta,
   canViewLoadFinancials,
   canViewReports,
+  canWrite,
+  isViewerRole,
   roleLabel,
+  VIEW_ONLY_WRITE_MESSAGE,
 };
 
 const SESSION_COOKIE = DISPATCHER_SESSION_COOKIE;
@@ -147,7 +161,11 @@ async function clearSessionCookiesBestEffort(): Promise<void> {
 
 export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
   const raw = await sessionCookieValue();
-  if (raw === "no-request" || !raw) return null;
+  if (raw === "no-request") {
+    const role = process.env.TMS_SCRIPT_ACTOR_ROLE?.trim();
+    return role ? scriptActor() : null;
+  }
+  if (!raw) return null;
   const parsed = parseSessionValue(raw);
   if (!parsed) {
     await clearSessionCookiesBestEffort();
@@ -161,11 +179,27 @@ export async function getSignedInDispatcher(): Promise<Dispatcher | null> {
   return dispatcher;
 }
 
+/** Scripts and tests have no request cookies. TMS_SCRIPT_ACTOR_ROLE lets a test act as viewer. */
+function scriptActor(): Dispatcher {
+  const role = process.env.TMS_SCRIPT_ACTOR_ROLE?.trim();
+  if (!role) return SCRIPT_ACTOR;
+  return { ...SCRIPT_ACTOR, role };
+}
+
 export async function requireSignedInDispatcher(): Promise<Dispatcher> {
   const raw = await sessionCookieValue();
-  if (raw === "no-request") return SCRIPT_ACTOR;
+  if (raw === "no-request") return scriptActor();
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) throw new Error("Sign in as a dispatcher to continue.");
+  return dispatcher;
+}
+
+/** Rejects viewer and legacy read-only before any business write. */
+export async function requireWriteRole(): Promise<Dispatcher> {
+  const dispatcher = await requireSignedInDispatcher();
+  if (!canWrite(dispatcher.role)) {
+    throw new Error(VIEW_ONLY_WRITE_MESSAGE);
+  }
   return dispatcher;
 }
 
@@ -173,7 +207,7 @@ export async function requireCapability(
   allowed: (role: string) => boolean,
   message = "You do not have access to this.",
 ): Promise<Dispatcher> {
-  const dispatcher = await requireSignedInDispatcher();
+  const dispatcher = await requireWriteRole();
   if (!allowed(dispatcher.role)) {
     throw new Error(message);
   }
@@ -184,6 +218,13 @@ export async function getPageAccess(allowed: (role: string) => boolean): Promise
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher || !allowed(dispatcher.role)) return null;
   return dispatcher;
+}
+
+export function viewOnlyWriteResponse(): Response {
+  return new Response(VIEW_ONLY_WRITE_MESSAGE, {
+    status: 403,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 export function unauthorizedResponse(message = "Unauthorized"): Response {

@@ -35,7 +35,7 @@ export function DispatcherChangePasswordForm({
           : "No phone is on this user, so a text code is not required."}{" "}
         {DISPATCHER_PASSWORD_HINT}
       </p>
-      <form action={action} className="space-y-4">
+      <form action={action} className="space-y-4" data-view-only-allow="">
         <FormBanner result={state} hideOk={Boolean(state?.ok && state.needsSmsCode)} />
         {forced ? <input type="hidden" name="continue" value="desk" /> : null}
         {hasPhone && !codeSent ? (

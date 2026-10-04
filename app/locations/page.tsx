@@ -39,9 +39,11 @@ export default async function LocationsPage() {
                 Verify locations
               </Link>
             ) : null}
-            <Link href="/locations/new" className="btn btn-primary">
-              New location
-            </Link>
+            {canVerify ? (
+              <Link href="/locations/new" className="btn btn-primary">
+                New location
+              </Link>
+            ) : null}
           </>
         }
       />

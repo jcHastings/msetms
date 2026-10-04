@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { getSignedInDispatcher, unauthorizedResponse, viewOnlyWriteResponse } from "@/lib/dispatcher-session";
 import { getAttachmentPath, listAttachments } from "@/lib/files";
 import { createTmsInvoice } from "@/lib/invoice";
 import { pdfResponseHeaders } from "@/lib/pdf-response";
 import { getLoad } from "@/lib/queries";
-import { canEditLoads } from "@/lib/settings-shared";
+import { canEditLoads, canViewLoadFinancials, canWrite } from "@/lib/settings-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,11 +18,18 @@ function invoicePdfResponse(buffer: Buffer, filename: string, attachmentId: numb
   });
 }
 
-async function requireInvoiceEditor() {
+async function requireInvoiceAccess(write: boolean) {
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) return unauthorizedResponse();
-  if (!canEditLoads(dispatcher.role)) {
+  if (write && !canWrite(dispatcher.role)) return viewOnlyWriteResponse();
+  if (write && !canEditLoads(dispatcher.role)) {
     return new Response("Creating invoices is for dispatch and accounting.", {
+      status: 403,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  if (!write && !canViewLoadFinancials(dispatcher.role)) {
+    return new Response("Load financials are hidden for this role.", {
       status: 403,
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
@@ -34,7 +41,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireInvoiceEditor();
+  const denied = await requireInvoiceAccess(false);
   if (denied) return denied;
   const loadId = Number.parseInt((await params).id, 10);
   const load = getLoad(loadId);
@@ -63,7 +70,7 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = await requireInvoiceEditor();
+  const denied = await requireInvoiceAccess(true);
   if (denied) return denied;
   const loadId = Number.parseInt((await params).id, 10);
   const load = getLoad(loadId);

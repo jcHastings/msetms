@@ -1,6 +1,6 @@
 "use server";
 
-import { requireCapability, requireSignedInDispatcher } from "./dispatcher-session";
+import { requireCapability, requireSignedInDispatcher, requireWriteRole } from "./dispatcher-session";
 import { askMike, readMikeHistory, writeMikeHistory } from "./mike";
 import type { MikeMessage, MikeProposal, MikeProposalKind } from "./mike-shared";
 import { applyMikeProposal } from "./mike-work";
@@ -82,7 +82,6 @@ export async function askMikeAction(
 }
 
 export async function confirmMikeProposalAction(formData: FormData): Promise<ActionResult> {
-  await requireSignedInDispatcher();
   const kind = String(formData.get("kind") ?? "") as MikeProposalKind;
   const payload: Record<string, string> = {};
   for (const [key, value] of formData.entries()) {
@@ -90,6 +89,7 @@ export async function confirmMikeProposalAction(formData: FormData): Promise<Act
     payload[key] = String(value);
   }
   try {
+    await requireWriteRole();
     if (kind === "driver_message") {
       await requireCapability(canSendSms, "Texting is for Administrator and Standard.");
       const { sendTwilioSms, twilioConfigured } = await import("./integrations/twilio");

@@ -12,7 +12,7 @@ export function OfficeNotificationBell({ items }: { items: OfficeNotification[] 
   const [open, setOpen] = useState(false);
   const unread = items.filter((item) => !item.read_at.trim()).length;
   return (
-    <div className="office-bell">
+    <div className="office-bell" data-view-only-allow="">
       <button
         type="button"
         className="office-bell-button"

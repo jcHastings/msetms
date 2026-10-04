@@ -48,6 +48,7 @@ import {
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { canWrite } from "@/lib/settings-shared";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
@@ -77,6 +78,7 @@ export default async function BoardPage({
   const assignableTrailers = listAssignableTrailers();
   const assignableDrivers = listAssignableDrivers();
   const relayLabels = extraRelayLabelsByLoad(loads);
+  const write = canWrite(dispatcher.role);
 
   return (
     <PageOverlayHost returnTo={overlayReturnTo("/board", current)} serverOpenId={openId}>
@@ -84,9 +86,11 @@ export default async function BoardPage({
       <PageHeader
         title="Dispatch board"
         actions={
-          <Link href="/loads/new" className="btn btn-primary">
-            New load
-          </Link>
+          write ? (
+            <Link href="/loads/new" className="btn btn-primary">
+              New load
+            </Link>
+          ) : null
         }
       />
       <div className="card overflow-hidden">
@@ -352,6 +356,7 @@ async function BoardLiveSection({
                             loadId={load.id}
                             status={load.status}
                             extraStatuses={customLoadStatuses()}
+                            readOnly={!write}
                           />
                         </div>
                         <div className="board-edit-cell">
@@ -362,7 +367,7 @@ async function BoardLiveSection({
                               customerName={load.customer_name}
                               stops={listStopAppointmentTargets(load.id)}
                               assignItem={
-                                !isClosedStatus(load.status) ? (
+                                write && !isClosedStatus(load.status) ? (
                                   <BoardAssignDialog
                                     load={load}
                                     trucks={assignableTrucks}
@@ -375,7 +380,7 @@ async function BoardLiveSection({
                                 ) : null
                               }
                             />
-                            {!isClosedStatus(load.status) ? (
+                            {write && !isClosedStatus(load.status) ? (
                               <BoardAssignDialog
                                 load={load}
                                 trucks={assignableTrucks}

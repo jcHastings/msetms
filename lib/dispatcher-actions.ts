@@ -1052,6 +1052,7 @@ export async function saveQboCustomerMapAction(formData: FormData): Promise<Acti
 export async function sendLoadMailAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canSendSms, "Email send is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const kind = String(formData.get("kind") ?? "");
@@ -1071,7 +1072,6 @@ export async function sendLoadMailAction(formData: FormData): Promise<ActionResu
         throw new Error("Pick Email driver load or Email customer update.");
       }
       if (!mailConfigured()) throw new Error(MAIL_MISSING);
-      await requireCapability(canSendSms, "Email send is for Administrator and Standard.");
       const { parseDriverMessageLocale } = await import("./load-summary");
       const locale = parseDriverMessageLocale(formData.get("locale"));
       const sent =
@@ -1102,6 +1102,7 @@ export async function sendLoadMailAction(formData: FormData): Promise<ActionResu
 export async function sendCustomerInvoiceMailAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);
@@ -1110,7 +1111,6 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
       const { MAIL_MISSING } = await import("./mail-shared");
       const { mailConfigured } = await import("./integrations/mail");
       if (!mailConfigured()) throw new Error(MAIL_MISSING);
-      await requireCapability(canEmailInvoice, "Invoice email is for dispatch and accounting.");
       const extraIds = formData
         .getAll("extra_id")
         .map((value) => parseOptionalInt(value))
@@ -1139,10 +1139,10 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
 export async function sendLoadSmsAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canSendSms, "SMS is for Administrator and Standard.");
       const { sendTwilioSms, twilioConfigured } = await import("./integrations/twilio");
       const { SMS_MISSING_KEYS } = await import("./sms-shared");
       if (!twilioConfigured()) throw new Error(SMS_MISSING_KEYS);
-      await requireCapability(canSendSms, "SMS is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);
@@ -1188,10 +1188,10 @@ export async function sendLoadSmsAction(formData: FormData): Promise<ActionResul
 export async function sendLoadWhatsAppAction(formData: FormData): Promise<ActionResult> {
   return withRequestAuditActor(async () => {
     try {
+      await requireCapability(canSendSms, "WhatsApp is for Administrator and Standard.");
       const { sendWhatsAppMessage, twilioWhatsAppConfigured } = await import("./integrations/whatsapp");
       const { WHATSAPP_MISSING } = await import("./whatsapp-shared");
       if (!twilioWhatsAppConfigured()) throw new Error(WHATSAPP_MISSING);
-      await requireCapability(canSendSms, "WhatsApp is for Administrator and Standard.");
       const loadId = parseOptionalInt(formData.get("load_id"));
       if (!loadId) throw new Error("Load is missing.");
       const load = getLoad(loadId);

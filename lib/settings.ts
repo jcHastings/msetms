@@ -755,7 +755,7 @@ export function updateTwoFactorPolicy(requireDispatcher2fa: boolean): CompanySet
 
 function parseDispatcherRole(role: string): string {
   if (!DISPATCHER_ROLES.some((item) => item.value === role)) {
-    throw new Error("Pick Administrator, Standard, or Accounting.");
+    throw new Error("Pick Administrator, Standard, Accounting, or Viewer.");
   }
   return role;
 }

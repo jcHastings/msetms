@@ -69,7 +69,7 @@ export function TotpSetupPanel({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={pending.qrDataUrl} alt="Authenticator QR code" className="h-48 w-48 rounded-lg border border-slate-200 bg-white" />
         <p className="break-all font-mono text-xs text-slate-700">{pending.secret}</p>
-        <form action={confirmAction} className="space-y-3">
+        <form action={confirmAction} className="space-y-3" data-view-only-allow="">
           <FormBanner result={confirmState} />
           <div className="field">
             <label htmlFor="totp">Confirm 6-digit code</label>
@@ -88,7 +88,7 @@ export function TotpSetupPanel({
           </button>
         </form>
         {!required ? (
-          <form action={cancelAction}>
+          <form action={cancelAction} data-view-only-allow="">
             <FormBanner result={cancelState} />
             <button className="btn btn-secondary" type="submit" disabled={cancelling}>
               {cancelling ? "Cancelling…" : "Cancel setup"}
@@ -103,7 +103,7 @@ export function TotpSetupPanel({
     <section className="card space-y-3 p-6">
       <h2 className="text-sm font-semibold">Set up 2-step</h2>
       <p className="text-sm text-slate-600">Optional until an admin requires it for all dispatchers.</p>
-      <form action={startAction}>
+      <form action={startAction} data-view-only-allow="">
         <FormBanner result={startState} />
         <button className="btn btn-primary" type="submit" disabled={starting}>
           {starting ? "Starting…" : "Set up 2-step"}

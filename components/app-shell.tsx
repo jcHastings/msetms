@@ -11,7 +11,8 @@ import { OfficeNotificationBell } from "@/components/office-notification-bell";
 import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
 import type { MikeMessage } from "@/lib/mike-shared";
-import { roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
+import { isViewerRole, roleLabel, type PublicDispatcher } from "@/lib/settings-shared";
+import { ViewOnlyGuard } from "@/components/view-only-guard";
 
 export function AppShell({
   children,
@@ -79,7 +80,7 @@ export function AppShell({
         <Link href="/" className="desk-phone-brand min-w-0 flex-1">
           <BrandMark variant="dark" size="sm" />
         </Link>
-        <form action={dispatcherLogoutAction}>
+        <form action={dispatcherLogoutAction} data-view-only-allow="">
           <button className="desk-phone-signout" type="submit">
             Sign out
           </button>
@@ -110,13 +111,19 @@ export function AppShell({
             {dispatcher.name}
           </div>
           <div>{roleLabel(dispatcher.role)}</div>
-          <form action={dispatcherLogoutAction} className="mt-2">
+          {isViewerRole(dispatcher.role) ? (
+            <a href="/settings/security" className="mt-2 block font-semibold text-slate-300 underline">
+              Your sign-in
+            </a>
+          ) : null}
+          <form action={dispatcherLogoutAction} className="mt-2" data-view-only-allow="">
             <button className="btn btn-ghost w-full justify-start px-2 text-xs text-slate-300" type="submit">
               Sign out
             </button>
           </form>
         </div>
       </aside>
+      <ViewOnlyGuard enabled={isViewerRole(dispatcher.role)} />
       <div className="desk-main desk-canvas min-w-0 flex-1">
         <div className="desk-main-inner mx-auto w-full max-w-[1400px] px-8 py-7">
           <div data-desk-chrome="">

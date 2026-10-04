@@ -9,7 +9,7 @@ import { FleetRowActions } from "@/components/fleet-row-actions";
 import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts, failedDrugTestAlertsByDriver } from "@/lib/compliance";
-import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { canDeleteFleet, canEditFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
 import { assignedFleetAssetIds, listDrivers, listDrugTests, listTrucks } from "@/lib/queries";
 import { fleetDivisionOf, formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
@@ -33,6 +33,7 @@ export default async function DriversPage({
   const fleet = await getSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
+  const canEdit = canEditFleet(dispatcher?.role ?? "");
   const assignedIds = assignedFleetAssetIds("driver");
 
   return (
@@ -47,13 +48,15 @@ export default async function DriversPage({
             <a href="/api/fleet/drivers/export" className="btn btn-secondary">
               Download CSV
             </a>
-            <Link href="/fleet/drivers/new" className="btn btn-primary">
-              Add driver
-            </Link>
+            {canEdit ? (
+              <Link href="/fleet/drivers/new" className="btn btn-primary">
+                Add driver
+              </Link>
+            ) : null}
           </>
         }
       />
-      <DriverImport />
+      {canEdit ? <DriverImport /> : null}
       <div className="card" data-fleet-drivers-directory="" data-directory-mounted={drivers.length} data-directory-total={directory.total}>
         <DirectorySearch action="/fleet/drivers" q={q} label="Search drivers" placeholder="Name, phone, license, or unit" />
         <p className="px-4 pb-2 text-xs text-slate-500">

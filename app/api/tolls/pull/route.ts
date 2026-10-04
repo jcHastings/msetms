@@ -11,9 +11,10 @@ export async function POST() {
     const result = await pullPrepassTollTransactions();
     return Response.json(result, { status: result.ok ? 200 : 409 });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Something went wrong.";
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Something went wrong." },
-      { status: 401 },
+      { ok: false, error: message },
+      { status: message.startsWith("View-only access") ? 403 : 401 },
     );
   }
 }

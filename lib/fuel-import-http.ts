@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { getSignedInDispatcher } from "./dispatcher-session";
-import { canUploadFuel } from "./settings-shared";
+import { canUploadFuel, canWrite, VIEW_ONLY_WRITE_MESSAGE } from "./settings-shared";
 
 export const FUEL_IMPORT_TOKEN_ENV = "TMS_FUEL_IMPORT_TOKEN";
 
@@ -23,6 +23,9 @@ export async function authorizeFuelImport(request: Request): Promise<{ ok: true 
   if (fuelImportBearerAuthorized(request)) return { ok: true };
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) return { ok: false, status: 401, error: "Sign in to import fuel." };
+  if (!canWrite(dispatcher.role)) {
+    return { ok: false, status: 403, error: VIEW_ONLY_WRITE_MESSAGE };
+  }
   if (!canUploadFuel(dispatcher.role)) {
     return { ok: false, status: 403, error: "Fuel upload is for Administrator and Standard." };
   }

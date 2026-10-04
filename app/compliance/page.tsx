@@ -7,7 +7,7 @@ import { ComplianceHubTabs, parseComplianceTab } from "@/components/compliance-h
 import { ComplianceList } from "@/components/compliance-badge";
 import { DrugTestStatusPill } from "@/components/drug-test-status-pill";
 import { PageHeader } from "@/components/page-header";
-import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
+import { canViewFleet, getPageAccess } from "@/lib/dispatcher-session";
 import {
   DRUG_TEST_STATUSES,
   DRUG_TEST_TYPES,
@@ -27,7 +27,7 @@ export default async function CompliancePage({
 }: {
   searchParams: Promise<{ tab?: string; status?: string; type?: string; driver?: string }>;
 }) {
-  const dispatcher = await getPageAccess(canEditFleet);
+  const dispatcher = await getPageAccess(canViewFleet);
   if (!dispatcher) {
     return <AccessDenied message="Compliance is for Administrator and Standard." />;
   }

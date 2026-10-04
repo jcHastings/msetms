@@ -20,7 +20,7 @@ export function DispatcherOwnEmailForm({
           ? "Sign-in emails a one-time code to this address after your password."
           : "Add an email on this user. Until you do, sign-in uses your password only. Forgot password also needs this email."}
       </p>
-      <form action={action} className="space-y-4">
+      <form action={action} className="space-y-4" data-view-only-allow="">
         <FormBanner result={state} />
         <div className="field">
           <label htmlFor="own_email">Email</label>

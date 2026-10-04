@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { canEditSettings, getSignedInDispatcher, roleLabel } from "@/lib/dispatcher-session";
+import { canEditSettings, getSignedInDispatcher, isViewerRole, roleLabel } from "@/lib/dispatcher-session";
 import { SETTINGS_SECTIONS, settingsSectionId } from "@/lib/settings-shared";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsHubPage() {
   const dispatcher = await getSignedInDispatcher();
+  if (dispatcher && isViewerRole(dispatcher.role)) redirect("/settings/security");
   return (
     <>
       <PageHeader title="Settings" dense />

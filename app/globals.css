@@ -3586,3 +3586,20 @@ html:has([data-load-embed]) body {
     background: #c5d0dc;
   }
 }
+
+html[data-office-viewer="true"] form:not([method="get"]):not([method="GET"]):not([data-view-only-allow]) :is(button[type="submit"], input[type="submit"], button:not([type])),
+html[data-office-viewer="true"] :is(a.btn-primary, button.btn-primary, button.menu-item),
+html[data-office-viewer="true"] select[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+html[data-office-viewer="true"] [data-view-only-allow] :is(button, a, input, select) {
+  cursor: pointer;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html[data-office-viewer="true"] [data-view-only-locked="true"] {
+  cursor: not-allowed;
+}

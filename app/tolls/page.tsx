@@ -6,7 +6,7 @@ import { TollRollupTable } from "@/components/toll-rollup-table";
 import { TollTransactionLists, TollUnassignedLists, tollPageHref } from "@/components/toll-transaction-lists";
 import { TollFleetCards, TollWeekStrip } from "@/components/toll-week-strip";
 import { deskMetadata } from "@/lib/desk-metadata";
-import { canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
+import { canViewFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { describePrepassPullStatus } from "@/lib/prepass-client";
 import { loadTollPeriodView } from "@/lib/tolls-store";
 import { parseTollPeriod, parseTollTxList } from "@/lib/tolls";
@@ -26,7 +26,7 @@ export default async function TollsPage({
     period?: string;
   }>;
 }) {
-  const dispatcher = await getPageAccess(canUploadFuel);
+  const dispatcher = await getPageAccess(canViewFuel);
   if (!dispatcher) {
     return <AccessDenied message="Tolls is for Administrator and Standard." />;
   }

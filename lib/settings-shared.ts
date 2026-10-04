@@ -139,6 +139,7 @@ export const DISPATCHER_ROLES = [
   { value: "dispatcher", label: "Standard" },
   { value: "manager", label: "Administrator" },
   { value: "read_only", label: "Read-only" },
+  { value: "viewer", label: "Viewer" },
 ] as const;
 
 /** Roles JC picks on Users. Legacy manager/read_only stay valid on existing rows. */
@@ -146,6 +147,7 @@ export const ASSIGNABLE_DISPATCHER_ROLES = [
   { value: "admin", label: "Administrator" },
   { value: "dispatcher", label: "Standard" },
   { value: "accounting", label: "Accounting" },
+  { value: "viewer", label: "Viewer (see everything, change nothing)" },
 ] as const;
 
 export const DISPATCHER_ROLE_HINTS: Record<string, string> = {
@@ -156,6 +158,7 @@ export const DISPATCHER_ROLE_HINTS: Record<string, string> = {
   accounting:
     "Financial dashboard, load financials, invoices/QBO, driver pay, locations, and load create/update/cancel. Not Settings or user admin.",
   read_only: "View only. Kept for existing accounts.",
+  viewer: "See every office screen an Administrator can open, except Settings and Users. Change nothing.",
 };
 
 export const PERMISSION_GROUPS = [
@@ -239,6 +242,7 @@ export function roleLabel(role: string): string {
   if (role === "admin" || role === "manager") return "Administrator";
   if (role === "dispatcher") return "Standard";
   if (role === "accounting") return "Accounting";
+  if (role === "viewer") return "Viewer";
   return DISPATCHER_ROLES.find((item) => item.value === role)?.label ?? role;
 }
 
@@ -278,16 +282,33 @@ export function isStandardRole(role: string): boolean {
   return role === "dispatcher";
 }
 
-export function accessRole(role: string): "admin" | "accounting" | "standard" | "read_only" {
+export function isViewerRole(role: string): boolean {
+  return role === "viewer";
+}
+
+/** Legacy read-only and viewer may not create, update, or delete business data. */
+export function isViewOnlyRole(role: string): boolean {
+  return role === "viewer" || role === "read_only";
+}
+
+export const VIEW_ONLY_WRITE_MESSAGE = "View-only access. You cannot change this.";
+
+export function accessRole(role: string): "admin" | "accounting" | "standard" | "read_only" | "viewer" {
   if (isAdminRole(role)) return "admin";
   if (isAccountingRole(role)) return "accounting";
   if (role === "read_only") return "read_only";
+  if (role === "viewer") return "viewer";
   return "standard";
 }
 
-export function canWriteDesk(role: string): boolean {
+/** Office roles that may change business data. Viewer and legacy read-only cannot. */
+export function canWrite(role: string): boolean {
   const access = accessRole(role);
   return access === "admin" || access === "accounting" || access === "standard";
+}
+
+export function canWriteDesk(role: string): boolean {
+  return canWrite(role);
 }
 
 export function canEditSettings(role: string): boolean {
@@ -327,7 +348,7 @@ export function canEditLoads(role: string): boolean {
 }
 
 export function canViewLoadFinancials(role: string): boolean {
-  return canEditLoads(role);
+  return canEditLoads(role) || isViewerRole(role);
 }
 
 export function canAssignLoads(role: string): boolean {
@@ -350,6 +371,11 @@ export function canEditFleet(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+/** Administrator, Standard, and Viewer can open fleet, drivers, compliance, and safety. */
+export function canViewFleet(role: string): boolean {
+  return canEditFleet(role) || isViewerRole(role);
+}
+
 /** Administrator and Standard can delete fleet. Accounting cannot. */
 export function canDeleteFleet(role: string): boolean {
   return canEditFleet(role);
@@ -359,12 +385,25 @@ export function canUploadFuel(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+/** Fuel and tolls screens. Upload stays with Administrator and Standard. */
+export function canViewFuel(role: string): boolean {
+  return canUploadFuel(role) || isViewerRole(role);
+}
+
+export function canViewAccounting(role: string): boolean {
+  return canAccessAccounting(role) || isViewerRole(role);
+}
+
+export function canViewClaims(role: string): boolean {
+  return canWriteDesk(role) || isViewerRole(role);
+}
+
 export function canViewIfta(role: string): boolean {
-  return canAccessAccounting(role);
+  return canAccessAccounting(role) || isViewerRole(role);
 }
 
 export function canViewAudit(role: string): boolean {
-  return canAccessAccounting(role);
+  return canAccessAccounting(role) || isViewerRole(role);
 }
 
 export function canExportCsv(role: string): boolean {
@@ -372,7 +411,7 @@ export function canExportCsv(role: string): boolean {
 }
 
 export function canViewReports(role: string): boolean {
-  return isAdminRole(role);
+  return isAdminRole(role) || isViewerRole(role);
 }
 
 export function canDeleteDocuments(role: string): boolean {
@@ -391,7 +430,21 @@ export function canLogCheckCall(role: string): boolean {
   return isAdminRole(role) || isStandardRole(role);
 }
 
+/**
+ * Viewer sees the same desk an Administrator sees.
+ * Settings and Users stay hidden so company secrets, API keys, and tokens are not on screen.
+ * /settings/security stays available for this user's own password, email, phone, and authenticator.
+ */
+function viewerCanSeeNavHref(href: string): boolean {
+  if (href === "/settings/security") return true;
+  if (href === "/settings" || href.startsWith("/settings/") || href === "/users" || href.startsWith("/users/")) {
+    return false;
+  }
+  return canSeeNavHref("admin", href);
+}
+
 export function canSeeNavHref(role: string, href: string): boolean {
+  if (isViewerRole(role)) return viewerCanSeeNavHref(href);
   if (href === "/driver/login") return true;
   if (href === "/" || href === "/board" || href === "/desk" || href === "/search" || href === "/control") return true;
   if (href === "/loads/new" || href === "/loads/templates" || href === "/loads/import-sheet") {

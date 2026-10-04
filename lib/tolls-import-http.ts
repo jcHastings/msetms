@@ -1,11 +1,14 @@
 import { getSignedInDispatcher } from "./dispatcher-session";
-import { canUploadFuel } from "./settings-shared";
+import { canUploadFuel, canWrite, VIEW_ONLY_WRITE_MESSAGE } from "./settings-shared";
 
 export async function authorizeTollsImport(): Promise<
   { ok: true } | { ok: false; status: 401 | 403; error: string }
 > {
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) return { ok: false, status: 401, error: "Sign in to import tolls." };
+  if (!canWrite(dispatcher.role)) {
+    return { ok: false, status: 403, error: VIEW_ONLY_WRITE_MESSAGE };
+  }
   if (!canUploadFuel(dispatcher.role)) {
     return { ok: false, status: 403, error: "Tolls is for Administrator and Standard." };
   }

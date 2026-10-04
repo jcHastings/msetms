@@ -1,5 +1,5 @@
-import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
-import { canEditLoads } from "@/lib/settings-shared";
+import { getSignedInDispatcher, unauthorizedResponse, viewOnlyWriteResponse } from "@/lib/dispatcher-session";
+import { canEditLoads, canWrite } from "@/lib/settings-shared";
 import {
   generateDefaultedDocument,
   generateMissingDefaultedDocuments,
@@ -39,6 +39,7 @@ export async function POST(
 ) {
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) return unauthorizedResponse();
+  if (!canWrite(dispatcher.role)) return viewOnlyWriteResponse();
   if (!canEditLoads(dispatcher.role)) {
     return new Response("Generating documents is for dispatch and accounting.", {
       status: 403,

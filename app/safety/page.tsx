@@ -4,7 +4,7 @@ import { deskMetadata } from "@/lib/desk-metadata";
 export const metadata = deskMetadata("Safety");
 import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
-import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
+import { canViewFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listSamsaraDvirFlags } from "@/lib/integrations/samsara-webhook";
@@ -26,7 +26,7 @@ function samsaraDvirWhen(iso: string): string {
 }
 
 export default async function SafetyPage() {
-  const dispatcher = await getPageAccess(canEditFleet);
+  const dispatcher = await getPageAccess(canViewFleet);
   if (!dispatcher) {
     return <AccessDenied message="Safety is for Administrator and Standard." />;
   }

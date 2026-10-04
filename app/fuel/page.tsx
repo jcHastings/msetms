@@ -13,7 +13,7 @@ import { IdleFuelEstimate } from "@/components/idle-fuel-estimate";
 import { FuelWeekSpendCards, FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs, fuelPageHref } from "@/components/fuel-transaction-lists";
-import { canExportCsv, canUploadFuel, getPageAccess } from "@/lib/dispatcher-session";
+import { canExportCsv, canViewFuel, getPageAccess } from "@/lib/dispatcher-session";
 import { fuelAuditWindowForWeek, scoreFuelAudit } from "@/lib/fuel-audit";
 import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
@@ -37,7 +37,7 @@ export default async function FuelPage({
     week?: string;
   }>;
 }) {
-  const dispatcher = await getPageAccess(canUploadFuel);
+  const dispatcher = await getPageAccess(canViewFuel);
   if (!dispatcher) {
     return <AccessDenied message="Fuel is for Administrator and Standard." />;
   }

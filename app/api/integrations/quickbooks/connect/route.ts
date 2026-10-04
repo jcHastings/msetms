@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
+import { getSignedInDispatcher, unauthorizedResponse, viewOnlyWriteResponse } from "@/lib/dispatcher-session";
 import { isQuickbooksOAuthReady } from "@/lib/env";
 import { browserUrl } from "@/lib/http-origin";
-import { canConnectQuickbooks } from "@/lib/settings-shared";
+import { canConnectQuickbooks, canWrite } from "@/lib/settings-shared";
 import { buildQuickbooksAuthorizeUrl, createQuickbooksOAuthState } from "@/lib/integrations/quickbooks";
 
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     if (!dispatcher) {
       return NextResponse.redirect(browserUrl("/login", request));
     }
+    if (!canWrite(dispatcher.role)) return viewOnlyWriteResponse();
     if (!canConnectQuickbooks(dispatcher.role)) {
       return unauthorizedResponse();
     }

@@ -10,15 +10,18 @@ export function LoadStatusSelect({
   loadId,
   status,
   extraStatuses = [],
+  readOnly = false,
 }: {
   loadId: number;
   status: LoadStatus | string;
   extraStatuses?: Array<{ value: string; label: string }>;
+  readOnly?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onChange(next: string) {
+    if (readOnly) return;
     setPending(true);
     setError(null);
     const formData = new FormData();
@@ -35,7 +38,10 @@ export function LoadStatusSelect({
       <select
         className={`w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium ${loadStatusBadgeClass(status)}`}
         defaultValue={status}
-        disabled={pending}
+        disabled={pending || readOnly}
+        aria-disabled={readOnly ? true : undefined}
+        title={readOnly ? "View-only access" : undefined}
+        data-view-only-status={readOnly ? "" : undefined}
         onChange={(event) => onChange(event.target.value)}
         aria-label="Load status"
       >

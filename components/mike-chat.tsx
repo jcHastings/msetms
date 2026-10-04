@@ -130,6 +130,7 @@ export function MikeChat({
         action={formAction}
         className="border-t border-slate-200 p-3"
         data-mike-composer=""
+        data-view-only-allow=""
         onPaste={(event) => {
           if (takeImageFromTransfer(event.clipboardData)) event.preventDefault();
         }}
@@ -187,6 +188,7 @@ function ProposalCard({
     <form
       className="rounded-lg border border-slate-200 bg-slate-50 p-3"
       data-tie-sheet-draft={isTieSheet ? "" : undefined}
+      data-view-only-lock=""
       action={async (formData) => {
         setPending(true);
         const result = await confirmMikeProposalAction(formData);

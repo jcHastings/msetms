@@ -6,7 +6,7 @@ export const metadata = deskMetadata("Drug test");
 import { AccessDenied } from "@/components/access-denied";
 import { DrugTestForm } from "@/components/drug-test-form";
 import { PageHeader } from "@/components/page-header";
-import { canEditFleet, getPageAccess } from "@/lib/dispatcher-session";
+import { canViewFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { getDrugTest, listDrivers } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export default async function EditDrugTestPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const dispatcher = await getPageAccess(canEditFleet);
+  const dispatcher = await getPageAccess(canViewFleet);
   if (!dispatcher) {
     return <AccessDenied message="Compliance is for Administrator and Standard." />;
   }
