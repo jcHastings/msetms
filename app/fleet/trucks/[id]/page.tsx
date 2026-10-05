@@ -1,15 +1,41 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
+import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
+import { HosBadge, LocationBadge } from "@/components/fleet-badges";
+import { OpenDvirDefectsCard } from "@/components/open-dvir-defects";
 import { PageHeader } from "@/components/page-header";
+import { SamsaraSafetyPanel } from "@/components/samsara-safety-panel";
 import { TruckForm } from "@/components/truck-form";
 import { UnitComplianceCard } from "@/components/unit-compliance-card";
-import { updateTruckAction } from "@/lib/actions";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { listFleetDocuments } from "@/lib/files";
-import { getTruck } from "@/lib/queries";
+import { driverOption, truckFormValues } from "@/lib/fleet-form-shared";
+import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
+import {
+  getHosForTruck,
+  getLocationForTruck,
+  getSamsaraDriverForTruck,
+  getSamsaraFleet,
+  samsaraGpsEmptyState,
+  samsaraHosEmptyState,
+} from "@/lib/integrations/samsara";
+import { listTruckSamsaraSafety } from "@/lib/integrations/samsara-safety";
+import { toOfficeDateTime } from "@/lib/format";
+import { getSamsaraStillPanel, loadsForSamsaraStill } from "@/lib/integrations/samsara-still";
+import { getOpenDvirDefectsForTruck } from "@/lib/integrations/samsara-defects";
+import { getTruck, listDrivers } from "@/lib/queries";
+import { samsaraVehicleIdForTruck } from "@/lib/samsara-still-shared";
+import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const truck = getTruck(Number.parseInt((await params).id, 10));
+  return deskMetadata(truck ? `Truck ${truck.unit_number}` : "Truck");
+}
 
 export default async function EditTruckPage({
   params,
@@ -18,27 +44,115 @@ export default async function EditTruckPage({
 }) {
   const truck = getTruck(Number.parseInt((await params).id, 10));
   if (!truck) notFound();
-  const boundAction = updateTruckAction.bind(null, truck.id);
+  const [fleet, location, hos, samsaraDriver, dvir, safety] = await Promise.all([
+    getSamsaraFleet(),
+    getLocationForTruck(truck.id),
+    getHosForTruck(truck.id),
+    getSamsaraDriverForTruck(truck.id),
+    getOpenDvirDefectsForTruck(truck),
+    listTruckSamsaraSafety(truck.samsara_vehicle_id),
+  ]);
 
   return (
     <>
       <PageHeader
         title={`Unit ${truck.unit_number}`}
         actions={
-          <Link href="/fleet" className="btn btn-secondary">
-            Back to fleet
+          <Link href="/fleet/trucks" className="btn btn-secondary">
+            Back to trucks
           </Link>
         }
       />
+      {!fleet.tokenSet ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {SAMSARA_TOKEN_MISSING_MESSAGE}
+        </p>
+      ) : fleet.error ? (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {fleet.error}
+        </p>
+      ) : null}
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Live location (Samsara)</div>
+          <div className="mt-1">
+            <LocationBadge
+              location={location}
+              empty={samsaraGpsEmptyState({
+                truckAssigned: true,
+                samsaraVehicleId: truck.samsara_vehicle_id,
+                location,
+              })}
+            />
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Samsara driver / HOS</div>
+          <div className="mt-1 text-sm font-semibold">
+            {samsaraDriver?.tmsDriverId ? (
+              <Link href={`/fleet/drivers/${samsaraDriver.tmsDriverId}`} className="underline">
+                {samsaraDriver.samsaraDriverName}
+              </Link>
+            ) : (
+              samsaraDriver?.samsaraDriverName || "No Samsara-assigned driver"
+            )}
+          </div>
+          <div className="mt-1">
+            <HosBadge
+              hos={hos}
+              empty={samsaraHosEmptyState({ assigned: Boolean(samsaraDriver || truck.assigned_driver_id), hos })}
+            />
+          </div>
+        </div>
+      </div>
+      <OpenDvirDefectsCard card={dvir} />
+      <SamsaraSafetyPanel result={safety} />
       <UnitComplianceCard
         registrationIssued={truck.registration_issued}
         registrationExpires={truck.registration_expires}
         inspectedOn={truck.dot_inspected_on}
         inspectionExpires={truck.dot_expires}
-        alerts={truckComplianceAlerts(truck)}
+        alerts={truckComplianceAlerts(truck, complianceWindows())}
       />
-      <TruckForm truck={truck} action={boundAction} submitLabel="Save truck" />
-      <FleetDocsPanel ownerType="truck" ownerId={truck.id} documents={listFleetDocuments("truck", truck.id)} />
+      <TruckForm
+        truck={truckFormValues(truck)}
+        drivers={listDrivers().map(driverOption)}
+        submitLabel="Save truck"
+      />
+      <SamsaraStillOnTruck truckId={truck.id} vehicleId={samsaraVehicleIdForTruck(truck)} />
+      <FleetDocsPanel ownerType="truck" ownerId={Number(truck.id)} documents={listFleetDocuments("truck", truck.id)} />
     </>
+  );
+}
+
+function SamsaraStillOnTruck({ truckId, vehicleId }: { truckId: number; vehicleId: string }) {
+  const loads = loadsForSamsaraStill(truckId);
+  const first = loads[0];
+  const panel = first
+    ? getSamsaraStillPanel(first)
+    : {
+        tokenSet: false,
+        vehicleId,
+        canFetch: false,
+        setupMessage: "Open a load on this truck, then fetch the still onto that load's documents.",
+        stopTimes: [],
+      };
+  return (
+    <FetchSamsaraStillPanel
+      loads={loads.map((load) => ({
+        id: load.id,
+        loadNumber: load.load_number,
+        stopTimes: getSamsaraStillPanel(load).stopTimes,
+      }))}
+      vehicleId={vehicleId || panel.vehicleId}
+      canFetch={Boolean(first) && panel.canFetch}
+      setupMessage={
+        first
+          ? panel.setupMessage
+          : "Open a load on this truck, then fetch the still onto that load's documents."
+      }
+      stopTimes={panel.stopTimes}
+      nowValue={toOfficeDateTime(new Date().toISOString())}
+    />
   );
 }
