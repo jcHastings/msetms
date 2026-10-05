@@ -213,13 +213,48 @@ export function dailyRecap(): {
   };
 }
 
+const ON_TIME_GRACE_MS = 30 * 60_000;
+
+/** Null when arrival was never recorded — those loads are left out of on-time, not counted late. */
+export function onTimeForDeliveryArrival(arrivalIso: string, deliveryEndIso: string): boolean | null {
+  const arrival = String(arrivalIso ?? "").trim();
+  if (!arrival) return null;
+  const arrivalMs = new Date(arrival).getTime();
+  const endMs = new Date(deliveryEndIso).getTime();
+  if (Number.isNaN(arrivalMs) || Number.isNaN(endMs)) return null;
+  return arrivalMs <= endMs + ON_TIME_GRACE_MS;
+}
+
+function lastDeliveryArrivals(loadIds: number[]): Map<number, string> {
+  const arrivals = new Map<number, string>();
+  if (!loadIds.length) return arrivals;
+  const seen = new Set<number>();
+  const rows = getDb()
+    .prepare(
+      `SELECT load_id, arrived_at FROM load_stops
+       WHERE kind = 'delivery' AND load_id IN (${loadIds.map(() => "?").join(", ")})
+       ORDER BY sequence DESC, id DESC`,
+    )
+    .all(...loadIds) as Array<{ load_id: number; arrived_at: string }>;
+  for (const row of rows) {
+    if (seen.has(row.load_id)) continue;
+    seen.add(row.load_id);
+    const arrival = String(row.arrived_at ?? "").trim();
+    if (arrival) arrivals.set(row.load_id, arrival);
+  }
+  return arrivals;
+}
+
 export function onTimeReport(): Array<LoadView & { onTime: boolean }> {
-  return listLoads({ status: "delivered" })
-    .concat(listLoads({ status: "completed" }))
-    .map((load) => ({
-      ...load,
-      onTime: new Date(load.updated_at).getTime() <= new Date(load.delivery_end).getTime() + 30 * 60_000,
-    }));
+  const loads = listLoads({ status: "delivered" }).concat(listLoads({ status: "completed" }));
+  const arrivals = lastDeliveryArrivals(loads.map((load) => load.id));
+  const rows: Array<LoadView & { onTime: boolean }> = [];
+  for (const load of loads) {
+    const onTime = onTimeForDeliveryArrival(arrivals.get(load.id) ?? "", load.delivery_end);
+    if (onTime == null) continue;
+    rows.push({ ...load, onTime });
+  }
+  return rows;
 }
 
 export function revenueByCustomer(): Array<{ customer: string; loads: number; revenue: number }> {

@@ -393,65 +393,50 @@ export function loadCriticalReasons(
   return reasons;
 }
 
-function lateExceptions(load: LoadView, now: Date): InboxException[] {
+function lastStopArrival(stops: Array<Pick<InboxStop, "kind" | "arrived_at">>, kind: string): string {
+  let arrival = "";
+  for (const stop of stops) {
+    if (stop.kind !== kind) continue;
+    const value = String(stop.arrived_at ?? "").trim();
+    if (value) arrival = value;
+  }
+  return arrival;
+}
+
+function arrivalIsAfterWindow(arrivalIso: string, windowEnd: string): boolean {
+  const arrival = new Date(arrivalIso).getTime();
+  const end = new Date(windowEnd).getTime();
+  if (!arrivalIso.trim() || Number.isNaN(arrival) || Number.isNaN(end)) return false;
+  return arrival > end;
+}
+
+/** Late only when a stop has an arrival after its window. A blank arrival is not late. */
+function lateExceptions(load: LoadView, _now: Date, stops: InboxStop[]): InboxException[] {
   if (isClosedStatus(load.status)) return [];
 
-  const pickupEndHours = hoursUntil(load.pickup_end, now);
-  const deliveryEndHours = hoursUntil(load.delivery_end, now);
-  const notPicked =
-    load.status === "available" ||
-    load.status === "hold" ||
-    load.status === "assigned" ||
-    load.status === "dispatched" ||
-    load.status === "at_pickup" ||
-    load.status === "loading" ||
-    load.driver_progress === "" ||
-    load.driver_progress === "en_route_pickup";
+  const pickupArrival = lastStopArrival(stops, "pickup");
+  const deliveryArrival = lastStopArrival(stops, "delivery");
 
-  if (notPicked && pickupEndHours != null && pickupEndHours < 0) {
+  if (pickupArrival && arrivalIsAfterWindow(pickupArrival, load.pickup_end)) {
     return [
       withLoad(
         load,
         "late",
         "HIGH",
         "Late to pickup",
-        `Pickup window ended ${formatDateTime(load.pickup_end)}`,
+        `Arrived ${formatDateTime(pickupArrival)}. Pickup window ended ${formatDateTime(load.pickup_end)}`,
       ),
     ];
   }
 
-  if (isRollingStatus(load.status) && !notPicked && deliveryEndHours != null && deliveryEndHours < 0) {
+  if (deliveryArrival && arrivalIsAfterWindow(deliveryArrival, load.delivery_end)) {
     return [
       withLoad(
         load,
         "late",
-        "CRITICAL",
+        isRollingStatus(load.status) ? "CRITICAL" : "HIGH",
         "Late to delivery",
-        `Delivery window ended ${formatDateTime(load.delivery_end)}`,
-      ),
-    ];
-  }
-
-  if (isRollingStatus(load.status) && !notPicked && deliveryEndHours != null && deliveryEndHours >= 0 && deliveryEndHours <= 2) {
-    return [
-      withLoad(
-        load,
-        "late",
-        "MEDIUM",
-        "Delivery window at risk",
-        `Delivery window ends ${formatDateTime(load.delivery_end)}`,
-      ),
-    ];
-  }
-
-  if (notPicked && pickupEndHours != null && pickupEndHours >= 0 && pickupEndHours <= 2) {
-    return [
-      withLoad(
-        load,
-        "late",
-        "MEDIUM",
-        "Pickup window at risk",
-        `Pickup window ends ${formatDateTime(load.pickup_end)}`,
+        `Arrived ${formatDateTime(deliveryArrival)}. Delivery window ended ${formatDateTime(load.delivery_end)}`,
       ),
     ];
   }
@@ -666,7 +651,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   for (const load of active) {
     const reading = readings.get(load.id) ?? null;
     items.push(...reeferExceptions(load, reading));
-    items.push(...lateExceptions(load, now));
+    items.push(...lateExceptions(load, now, ctx.stops.get(load.id) ?? []));
     items.push(...gpsQuietExceptions(load, now, quietHours, ctx));
     items.push(...complianceExceptions(load, ctx));
     items.push(...unassignedExceptions(load, now));

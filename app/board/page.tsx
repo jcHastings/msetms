@@ -14,6 +14,7 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { listExceptionInbox } from "@/lib/exceptions";
 import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
 import { laneAveragesForBoard } from "@/lib/lane-average";
@@ -197,6 +198,12 @@ async function BoardLiveSection({
   const windows = complianceWindows();
   const laneAvgs = laneAveragesForBoard(loads);
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
+  const lateByLoad = new Map<number, { label: string; reason: string }>();
+  for (const item of listExceptionInbox().items) {
+    if (item.kind !== "late" || (item.severity !== "HIGH" && item.severity !== "CRITICAL")) continue;
+    if (lateByLoad.has(item.loadId)) continue;
+    lateByLoad.set(item.loadId, { label: "Running late", reason: item.title });
+  }
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     const live = reefers.readings.find((reading) => reading.loadId === load.id);
@@ -287,6 +294,15 @@ async function BoardLiveSection({
                     </td>
                     <td className="board-status-cell" data-board-status="">
                       <LoadStatusBadge status={load.status} />
+                      {lateByLoad.get(load.id) ? (
+                        <span
+                          className="status-pill status-tone-danger mt-1"
+                          data-board-late=""
+                          title={lateByLoad.get(load.id)?.reason}
+                        >
+                          {lateByLoad.get(load.id)?.label}
+                        </span>
+                      ) : null}
                     </td>
                     <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />
                     <BoardWhenCell kind="delivery" start={load.delivery_start} end={load.delivery_end} />

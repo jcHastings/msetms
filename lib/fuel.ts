@@ -620,12 +620,16 @@ export function startOfLocalWeek(now = new Date()): Date {
   return zonedWallToUtc(addYmdDays(ymd, -daysFromMonday), 0, 0, 0);
 }
 
-export function localWeekRange(anchor: Date | string = new Date()): {
+type LocalWeekRange = {
   start: Date;
   end: Date;
   startYmd: string;
   endYmd: string;
-} {
+};
+
+const localWeekRangeCache = new Map<string, LocalWeekRange>();
+
+function computeLocalWeekRange(anchor: Date | string): LocalWeekRange {
   const start = typeof anchor === "string" ? startOfLocalWeek(zonedWallToUtc(anchor, 12, 0, 0)) : startOfLocalWeek(anchor);
   const startYmd = ymdInTimeZone(start, DISPLAY_TIME_ZONE);
   const endYmd = addYmdDays(startYmd, 6);
@@ -635,6 +639,18 @@ export function localWeekRange(anchor: Date | string = new Date()): {
     startYmd,
     endYmd,
   };
+}
+
+export function localWeekRange(anchor: Date | string = new Date()): LocalWeekRange {
+  if (typeof anchor === "string") {
+    const cached = localWeekRangeCache.get(`s:${anchor}`);
+    if (cached) return cached;
+  }
+  const range = computeLocalWeekRange(anchor);
+  const existing = localWeekRangeCache.get(`s:${range.startYmd}`);
+  if (typeof anchor === "string") localWeekRangeCache.set(`s:${anchor}`, existing ?? range);
+  if (!existing) localWeekRangeCache.set(`s:${range.startYmd}`, range);
+  return existing ?? range;
 }
 
 export function parseFuelWeekStart(value: string | undefined, now = new Date()): string {

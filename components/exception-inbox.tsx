@@ -14,12 +14,14 @@ export function ExceptionInboxCard({
   q,
   variant = "inbox",
   canChangeStatus = false,
+  readOnly = false,
 }: {
   inbox: ExceptionInbox;
   kind?: string;
   q?: string;
   variant?: "inbox" | "workbench";
   canChangeStatus?: boolean;
+  readOnly?: boolean;
 }) {
   const groups = groupInboxExceptions(inbox.items);
   const workbench = variant === "workbench";
@@ -116,7 +118,7 @@ export function ExceptionInboxCard({
                 </div>
                 <ul className="mt-3 space-y-3">
                   {group.items.map((item) => (
-                    <ExceptionIssueLine key={item.id} item={item} />
+                    <ExceptionIssueLine key={item.id} item={item} readOnly={readOnly} />
                   ))}
                 </ul>
               </div>

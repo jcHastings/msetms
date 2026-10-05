@@ -54,13 +54,13 @@ export function getDb(): Database {
   } else {
     backfillDemoRegistration(db);
     backfillDemoTruckDetails(db);
-    backfillDemoInboxExceptions(db);
     backfillDemoLocations(db);
   }
   backfillDemoAccounting(db);
   backfillSampleLoads(db);
   backfillLoadNumbering(db);
   backfillCustomerMainEmail(db);
+  backfillDemoInboxExceptions(db);
   if (appleDevDriverFixtureEnabled()) {
     ensureAppleDevDriverLogin(db);
   }
@@ -1680,6 +1680,23 @@ function backfillDemoInboxExceptions(db: Database): void {
         lateEnd.toISOString(),
         load1046.id,
       );
+    }
+    const windowEnd = (
+      db.prepare("SELECT delivery_end FROM loads WHERE id = ?").get(load1046.id) as { delivery_end: string }
+    ).delivery_end;
+    const arrival = new Date(new Date(windowEnd).getTime() + 3 * 60 * 60 * 1000).toISOString();
+    const deliveryStop = db
+      .prepare(
+        "SELECT id, arrived_at FROM load_stops WHERE load_id = ? AND kind = 'delivery' ORDER BY sequence DESC, id DESC LIMIT 1",
+      )
+      .get(load1046.id) as { id: number; arrived_at: string } | undefined;
+    if (!deliveryStop) {
+      db.prepare(
+        `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_end, arrived_at)
+         VALUES (?, 2, 'delivery', 'St. Louis, MO', 'St. Louis', 'MO', ?, ?)`,
+      ).run(load1046.id, windowEnd, arrival);
+    } else if (!String(deliveryStop.arrived_at ?? "").trim()) {
+      db.prepare("UPDATE load_stops SET arrived_at = ? WHERE id = ?").run(arrival, deliveryStop.id);
     }
   }
 }

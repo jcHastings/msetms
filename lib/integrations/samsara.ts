@@ -1077,12 +1077,14 @@ async function fetchVehicleEngineHourHistory(
   vehicleId: string,
   startTime: string,
   endTime: string,
+  signal?: AbortSignal,
 ): Promise<EngineHourHistoryPull> {
   const token = getSamsaraApiToken();
   if (!token) return { points: [], reason: "token" };
   const points: EngineHourHistoryPull["points"] = [];
   let after: string | undefined;
   for (let page = 0; page < 5; page += 1) {
+    if (signal?.aborted) return { points, reason: "request", error: "Samsara request timed out." };
     const url = new URL("/fleet/vehicles/stats/history", SAMSARA_BASE);
     url.searchParams.set("vehicleIds", vehicleId);
     url.searchParams.set("types", ENGINE_HOUR_HISTORY_TYPES);
@@ -1097,9 +1099,10 @@ async function fetchVehicleEngineHourHistory(
           Accept: "application/json",
         },
         cache: "no-store",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) : AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
     } catch {
+      if (signal?.aborted) return { points, reason: "request", error: "Samsara request timed out." };
       if (page === 0) return { points: [], reason: "request", error: "Samsara request failed." };
       break;
     }
@@ -1147,10 +1150,11 @@ export async function hydrateSamsaraEngineHourWindow(input: {
   if (!isSamsaraTokenSet()) return { fetched: 0, skipped: 0, reason: "token" };
   const trucks = input.trucks ?? listTrucks();
   const deadline = input.budgetMs == null ? Number.POSITIVE_INFINITY : Date.now() + input.budgetMs;
+  const budgetSignal = input.budgetMs == null ? undefined : AbortSignal.timeout(Math.max(1, input.budgetMs));
   let fetched = 0;
   let skipped = 0;
   for (const truck of trucks.slice(0, 40)) {
-    if (Date.now() > deadline) break;
+    if (budgetSignal?.aborted || Date.now() > deadline) break;
     const vehicleId = String(truck.samsara_vehicle_id ?? "").trim();
     if (!vehicleId) {
       skipped += 1;
@@ -1160,7 +1164,7 @@ export async function hydrateSamsaraEngineHourWindow(input: {
     const last = engineHourHistoryFetchedAt.get(cacheKey) ?? 0;
     if (Date.now() - last < 60_000) continue;
     try {
-      const result = await fetchVehicleEngineHourHistory(vehicleId, input.fromIso, input.toIso);
+      const result = await fetchVehicleEngineHourHistory(vehicleId, input.fromIso, input.toIso, budgetSignal);
       if (result.reason === "token" || result.reason === "scope") {
         return { fetched, skipped, reason: result.reason, error: result.error };
       }

@@ -956,6 +956,28 @@ button {
   box-shadow: 0 0 0 3px rgba(19, 124, 221, 0.16);
 }
 
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled,
+input[data-view-only=""]:disabled,
+select[data-view-only=""]:disabled {
+  background: #e8eef4;
+  color: #475569;
+  border-color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.btn[data-view-only=""]:disabled,
+.finance-head .btn[data-view-only=""]:disabled,
+.finance-head .btn-secondary[data-view-only=""]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #d5dee8;
+  color: #334155;
+  border-color: #94a3b8;
+}
+
 .password-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

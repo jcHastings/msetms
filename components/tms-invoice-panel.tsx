@@ -21,8 +21,10 @@ export function TmsInvoicePanel({
   lastInvoiceSent = "",
   extras = [],
   invoiceEmailBody = "",
+  readOnly = false,
 }: {
   loadId: number;
+  readOnly?: boolean;
   status: string;
   invoice: TmsInvoiceModel | null;
   saved?: boolean;
@@ -96,7 +98,14 @@ export function TmsInvoicePanel({
           target="_blank"
           onSubmit={onSubmit}
         >
-          <button className="btn btn-primary" type="submit" disabled={pending || !canInvoice}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            data-view-only={readOnly ? "" : undefined}
+            disabled={pending || !canInvoice || readOnly}
+            aria-disabled={readOnly || undefined}
+            title={readOnly ? "View-only access" : undefined}
+          >
             {pending ? "Creating…" : saved ? "Rebuild invoice" : "Create invoice"}
           </button>
         </form>

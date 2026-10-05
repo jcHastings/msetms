@@ -190,6 +190,10 @@ async function main(): Promise<void> {
   assert.match(read("components/board-toolbar.tsx"), /data-view-only-allow/);
   assert.match(read("components/view-only-guard.tsx"), /textarea/);
   assert.match(read("components/view-only-guard.tsx"), /HTMLInputElement/);
+  assert.match(read("components/load-rate-fields.tsx"), /disabled=\{readOnly\}/);
+  assert.match(read("components/load-workspace.tsx"), /!readOnly && \(create \|\| isSaveTab\(tab\)\)/);
+  assert.match(read("components/exception-issue-line.tsx"), /disabled=\{readOnly\}/);
+  assert.match(read("app/desk/page.tsx"), /readOnly=\{!canWrite\(dispatcher\.role\)\}/);
 
   const readGates: Array<[string, RegExp]> = [
     ["app/fleet/layout.tsx", /canViewFleet/],

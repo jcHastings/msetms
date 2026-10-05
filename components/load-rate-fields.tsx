@@ -17,18 +17,22 @@ function persistMoney(
 }
 
 /** Customer rate — Income / Budget on an existing load, New load on create. */
+const VIEW_ONLY = "View-only access";
+
 export function CustomerRateField({
   load,
   defaultsRate = null,
   onRateChange,
   laneAverage = null,
   miles = null,
+  readOnly = false,
 }: {
   load?: Load;
   defaultsRate?: number | null;
   onRateChange?: (rate: string) => void;
   laneAverage?: LaneAverageSnapshot | null;
   miles?: number | null;
+  readOnly?: boolean;
 }) {
   const { persistFields } = useLoadAssignPersist(load?.id);
   const [rate, setRate] = useState(
@@ -45,16 +49,27 @@ export function CustomerRateField({
         min={0}
         step="0.01"
         data-critical-save=""
+        data-view-only={readOnly ? "" : undefined}
         value={rate}
+        disabled={readOnly}
+        aria-disabled={readOnly || undefined}
+        title={readOnly ? VIEW_ONLY : undefined}
         onChange={(event) => {
+          if (readOnly) return;
           const next = event.target.value;
           setRate(next);
           onRateChange?.(next);
         }}
         onBlur={() => {
+          if (readOnly) return;
           if (load && String(load.rate ?? "") !== rate) persistMoney(persistFields, load, { rate });
         }}
       />
+      {readOnly ? (
+        <p className="mt-1 text-xs text-slate-500" data-view-only-note="">
+          View-only. You cannot change this rate.
+        </p>
+      ) : null}
       {!load ? (
         <p className="mt-1 text-xs text-slate-500" data-create-rate-note="">
           This becomes the customer rate on Income / Budget.
@@ -73,11 +88,13 @@ export function OwnerOperatorPayFields({
   rate = "",
   ooPercent = null,
   onOoPercentChange,
+  readOnly = false,
 }: {
   load?: Load;
   rate?: string;
   ooPercent?: number | null;
   onOoPercentChange?: (percent: number | null) => void;
+  readOnly?: boolean;
 }) {
   const { persistFields } = useLoadAssignPersist(load?.id);
   const [ooPay, setOoPay] = useState(load?.oo_pay != null ? String(load.oo_pay) : "");
@@ -123,8 +140,13 @@ export function OwnerOperatorPayFields({
             min={0}
             step="0.01"
             data-critical-save=""
+            data-view-only={readOnly ? "" : undefined}
             value={ooPay}
+            disabled={readOnly}
+            aria-disabled={readOnly || undefined}
+            title={readOnly ? VIEW_ONLY : undefined}
             onChange={(event) => {
+              if (readOnly) return;
               const next = event.target.value;
               setOoPay(next);
               const livePay = Number(next);
@@ -139,7 +161,7 @@ export function OwnerOperatorPayFields({
               }
             }}
             onBlur={() => {
-              if (!load || String(load.oo_pay ?? "") === ooPay) return;
+              if (readOnly || !load || String(load.oo_pay ?? "") === ooPay) return;
               persistMoney(persistFields, load, {
                 oo_pay: ooPay,
                 ...(percent ? { oo_percent: percent } : {}),
@@ -157,8 +179,13 @@ export function OwnerOperatorPayFields({
             max={100}
             step="0.1"
             data-critical-save=""
+            data-view-only={readOnly ? "" : undefined}
             value={percent}
+            disabled={readOnly}
+            aria-disabled={readOnly || undefined}
+            title={readOnly ? VIEW_ONLY : undefined}
             onChange={(event) => {
+              if (readOnly) return;
               const next = event.target.value;
               setPercent(next);
               const live = Number(next);
@@ -168,7 +195,7 @@ export function OwnerOperatorPayFields({
               setOoPay(pay != null ? String(pay) : "");
             }}
             onBlur={() => {
-              if (!load || String(load.oo_percent ?? "") === percent) return;
+              if (readOnly || !load || String(load.oo_percent ?? "") === percent) return;
               persistMoney(persistFields, load, {
                 oo_percent: percent,
                 ...(ooPay ? { oo_pay: ooPay } : {}),
@@ -187,13 +214,21 @@ export function LoadRateFields({
   defaultsRate = null,
   laneAverage = null,
   miles = null,
+  readOnly = false,
 }: {
   load?: Load;
   defaultsRate?: number | null;
   laneAverage?: LaneAverageSnapshot | null;
   miles?: number | null;
+  readOnly?: boolean;
 }) {
   return (
-    <CustomerRateField load={load} defaultsRate={defaultsRate} laneAverage={laneAverage} miles={miles} />
+    <CustomerRateField
+      load={load}
+      defaultsRate={defaultsRate}
+      laneAverage={laneAverage}
+      miles={miles}
+      readOnly={readOnly}
+    />
   );
 }

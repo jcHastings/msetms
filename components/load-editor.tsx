@@ -93,6 +93,7 @@ export async function LoadEditor({
   const dispatcher = await getSignedInDispatcher();
   const role = dispatcher?.role ?? "dispatcher";
   const showFinancials = canViewLoadFinancials(role);
+  const readOnly = !canEditLoads(role);
   const requestedTab = parseLoadTab(initialTab);
   const tab = requestedTab === "financials" && !showFinancials ? "basics" : requestedTab;
   const boundAction = updateLoadAction.bind(null, load.id);
@@ -205,6 +206,7 @@ export async function LoadEditor({
         smsConfigured={isTwilioConfigured()}
         whatsappConfigured={isWhatsAppConfigured()}
         role={role}
+        readOnly={readOnly}
         returnTo={returnTo}
         watched={Boolean(load.watched)}
         loadNumber={load.load_number}
@@ -311,6 +313,7 @@ export async function LoadEditor({
               ) : null}
               <TmsInvoicePanel
                 loadId={load.id}
+                readOnly={readOnly}
                 status={load.status}
                 saved={Boolean(load.tms_invoice_number)}
                 invoices={attachments.filter((file) => file.kind === "invoice")}
@@ -338,6 +341,7 @@ export async function LoadEditor({
                   consignee_location_id: load.consignee_location_id,
                 })}
                 laneMiles={load.route_miles}
+                readOnly={readOnly}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => assignedLoadName(driver))}

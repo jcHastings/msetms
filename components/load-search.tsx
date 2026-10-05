@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { deleteSearchReportFormAction, saveSearchReportAction } from "@/lib/actions";
@@ -53,9 +53,10 @@ export function LoadSearch({
   const [columns, setColumns] = useState<SearchColumnKey[]>(defaultSearchColumns());
   const [results, setResults] = useState<LoadView[]>(initialResults);
   const [searched, setSearched] = useState(Boolean(seed.q.trim()));
+  const searchedRef = useRef(Boolean(seed.q.trim()));
 
   useEffect(() => {
-    if (seed.q.trim()) return;
+    if (seed.q.trim() || searchedRef.current) return;
     try {
       const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
       if (!raw) return;
@@ -127,9 +128,12 @@ export function LoadSearch({
         data-view-only-allow=""
         onSubmit={(event) => {
           event.preventDefault();
+          const next = criteriaFromForm(event.currentTarget);
+          searchedRef.current = true;
+          setCriteria(next);
           setSearched(true);
           setSearching(true);
-          void runSearch(criteria)
+          void runSearch(next)
             .then(setResults)
             .finally(() => setSearching(false));
         }}
@@ -501,6 +505,33 @@ export function LoadSearch({
       </div>
     </div>
   );
+}
+
+function optionalId(value: FormDataEntryValue | null): number | null {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** Read the form the browser is submitting so Enter and the Search button use the same values. */
+function criteriaFromForm(form: HTMLFormElement): LoadSearchCriteria {
+  const data = new FormData(form);
+  return {
+    ...defaultSearchCriteria(),
+    q: String(data.get("q") ?? ""),
+    originState: String(data.get("originState") ?? ""),
+    destState: String(data.get("destState") ?? ""),
+    dateFrom: String(data.get("dateFrom") ?? ""),
+    dateTo: String(data.get("dateTo") ?? ""),
+    searchBy: "pickup",
+    customerId: optionalId(data.get("customerId")),
+    driverId: optionalId(data.get("driverId")),
+    truckId: optionalId(data.get("truckId")),
+    trailerId: optionalId(data.get("trailerId")),
+    status: String(data.get("status") ?? ""),
+    includeLive: data.get("includeLive") === "on",
+    includeArchived: data.get("includeArchived") === "on",
+    includeCancelled: data.get("includeCancelled") === "on",
+  };
 }
 
 async function runSearch(criteria: LoadSearchCriteria): Promise<LoadView[]> {

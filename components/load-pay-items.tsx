@@ -25,6 +25,7 @@ export function LoadPayItems({
   defaultOoPercent = null,
   laneAverage = null,
   laneMiles = null,
+  readOnly = false,
 }: {
   load: Load;
   items: LoadPayItem[];
@@ -35,6 +36,7 @@ export function LoadPayItems({
   defaultOoPercent?: number | null;
   laneAverage?: LaneAverageSnapshot | null;
   laneMiles?: number | null;
+  readOnly?: boolean;
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
@@ -96,6 +98,7 @@ export function LoadPayItems({
         ownerOperatorName={ownerOperator ? driverName : null}
         ownerOperators={ooNames}
         emptyText="No extra line items. Detention, fuel, and lumpers go here."
+        readOnly={readOnly}
         lead={
           <div className="grid gap-4 md:grid-cols-2">
             <CustomerRateField
@@ -103,8 +106,9 @@ export function LoadPayItems({
               onRateChange={setLiveRate}
               laneAverage={laneAverage}
               miles={laneMiles}
+              readOnly={readOnly}
             />
-            <EmptyMoveField load={load} />
+            <EmptyMoveField load={load} readOnly={readOnly} />
           </div>
         }
       />
@@ -125,6 +129,7 @@ export function LoadPayItems({
             ? "No extra expenses. Lumpers and other pay-outs go here."
             : "No line items. Click + Add Line Item."
         }
+        readOnly={readOnly}
         lead={
           ownerOperator ? (
             <OwnerOperatorPayFields
@@ -132,6 +137,7 @@ export function LoadPayItems({
               rate={liveRate}
               ooPercent={ooPercent}
               onOoPercentChange={setOoPercent}
+              readOnly={readOnly}
             />
           ) : null
         }
@@ -140,7 +146,7 @@ export function LoadPayItems({
   );
 }
 
-function EmptyMoveField({ load }: { load: Load }) {
+function EmptyMoveField({ load, readOnly = false }: { load: Load; readOnly?: boolean }) {
   const { persistFields } = useLoadAssignPersist(load.id);
   return (
     <div className="field" data-empty-move="">
@@ -149,8 +155,13 @@ function EmptyMoveField({ load }: { load: Load }) {
         id="non_revenue"
         name="non_revenue"
         data-critical-save=""
+        data-view-only={readOnly ? "" : undefined}
         defaultValue={load.non_revenue ? "1" : "0"}
+        disabled={readOnly}
+        aria-disabled={readOnly || undefined}
+        title={readOnly ? "View-only access" : undefined}
         onChange={(event) => {
+          if (readOnly) return;
           void persistFields({ non_revenue: event.target.value });
         }}
       >
@@ -176,6 +187,7 @@ function PayItemGroup({
   actions,
   lead,
   emptyText = "No line items. Click + Add Line Item.",
+  readOnly = false,
 }: {
   loadId: number;
   side: PayItemSide;
@@ -191,6 +203,7 @@ function PayItemGroup({
   actions?: ReactNode;
   lead?: ReactNode;
   emptyText?: string;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const tone = side === "income" ? "finance-income" : "finance-expense";
@@ -200,7 +213,17 @@ function PayItemGroup({
         <h2 className="text-sm font-semibold">{title}</h2>
         <div className="flex flex-wrap items-center gap-2">
           {actions}
-          <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            data-view-only={readOnly ? "" : undefined}
+            disabled={readOnly}
+            aria-disabled={readOnly || undefined}
+            title={readOnly ? "View-only access" : undefined}
+            onClick={() => {
+              if (!readOnly) setOpen(true);
+            }}
+          >
             + Add Line Item
           </button>
         </div>
@@ -235,7 +258,14 @@ function PayItemGroup({
                   <td>
                     <form action={async (formData) => { await deletePayItemAction(formData); }}>
                       <input type="hidden" name="pay_item_id" value={item.id} />
-                      <button className="btn btn-ghost text-rose-700" type="submit">
+                      <button
+                        className="btn btn-ghost text-rose-700"
+                        type="submit"
+                        data-view-only={readOnly ? "" : undefined}
+                        disabled={readOnly}
+                        aria-disabled={readOnly || undefined}
+                        title={readOnly ? "View-only access" : undefined}
+                      >
                         Remove
                       </button>
                     </form>

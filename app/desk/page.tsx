@@ -37,7 +37,7 @@ import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { RateConImport } from "@/components/rate-con-import";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
-import { canViewReports, getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { canViewReports, canWrite, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 
@@ -87,7 +87,7 @@ export default async function DashboardPage({
         }
       />
 
-      <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} />
+      <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} readOnly={!canWrite(dispatcher.role)} />
 
       <div className="mb-6" data-email-ingest="">
         <RateConImport
@@ -104,7 +104,7 @@ export default async function DashboardPage({
         <Kpi label="Open loads" value={stats.openLoads} href="/board" />
         <Kpi label="Rolling" value={stats.inTransit} href="/board?status=in_transit" />
         <Kpi label="Available trucks" value={stats.availableTrucks} href="/fleet" />
-        <Kpi label="Unassigned loads" value={stats.unassignedLoads} href="/board?status=available" />
+        <Kpi label="Unassigned loads" value={stats.unassignedLoads} href="/board" />
       </div>
 
       <section className="card mb-6 overflow-hidden" data-need-cover="">
@@ -213,7 +213,7 @@ export default async function DashboardPage({
             <h2 className="text-sm font-semibold">
               Needs a unit{needsUnitAll.length ? ` · ${needsUnitAll.length}` : ""}
             </h2>
-            <Link href="/board?status=available" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+            <Link href="/board" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Open board
             </Link>
           </header>

@@ -13889,6 +13889,12 @@ DISPATCH CONFIRMATION
   );
   assert.ok(liveOnly.some((load) => load.load_number === "MSE-1045"));
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), false, "delivered is archived");
+  assert.ok(
+    queries
+      .searchLoads({ includeLive: true, includeArchived: false, q: "MSE-1047" })
+      .some((load) => load.load_number === "MSE-1047"),
+    "typing the load number finds a delivered load",
+  );
   assert.equal(liveOnly.some((load) => load.load_number === "MSE-1049"), false, "cancelled excluded by default");
   const archived = queries.searchLoads({
     includeLive: false,
@@ -15074,6 +15080,9 @@ DISPATCH CONFIRMATION
   assert.ok(accounting.listCommissions().length >= 1);
 
   const desk = await import("../lib/desk");
+  assert.equal(desk.onTimeForDeliveryArrival("", "2026-09-14T17:00:00.000Z"), null);
+  assert.equal(desk.onTimeForDeliveryArrival("2026-09-14T17:20:00.000Z", "2026-09-14T17:00:00.000Z"), true);
+  assert.equal(desk.onTimeForDeliveryArrival("2026-09-14T18:00:00.000Z", "2026-09-14T17:00:00.000Z"), false);
   const firstException = inbox.items[0];
   desk.setExceptionState(firstException.id, "resolved", "smoke");
   const liveInbox = desk.listLiveExceptionInbox();
@@ -17975,8 +17984,18 @@ DISPATCH CONFIRMATION
   samsara.resetSamsaraCacheForTests();
   let idleHistoryCalls = 0;
   let idleHistoryMode: "deny" | "ok" = "deny";
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("veh-hang")) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 5000);
+        init?.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      });
+      return new Response("slow", { status: 200 });
+    }
     if (url.includes("/fleet/vehicles/stats/history") && url.includes("idlingDurationMilliseconds")) {
       idleHistoryCalls += 1;
       if (url.includes("veh-wrong")) {
@@ -18059,6 +18078,16 @@ DISPATCH CONFIRMATION
     assert.equal(weekHours.stat, "obdEngineSeconds");
     assert.equal(weekHours.hours, 48);
     assert.equal(cumulativeDeltaHours(stored, hourStart, hourEnd, "idlingDurationMilliseconds"), 4.5);
+    samsara.resetSamsaraCacheForTests();
+    const budgetStarted = Date.now();
+    const budgeted = await samsara.hydrateSamsaraEngineHourWindow({
+      fromIso: hourStart,
+      toIso: hourEnd,
+      trucks: [{ id: idleTruckId, samsara_vehicle_id: "veh-hang" }],
+      budgetMs: 80,
+    });
+    assert.ok(Date.now() - budgetStarted < 1000, "engine-hour hydrate must stop at the page budget");
+    assert.equal(budgeted.fetched, 0);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousIdleToken == null) delete process.env.SAMSARA_API_TOKEN;

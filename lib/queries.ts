@@ -1733,7 +1733,7 @@ export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[]
     )
     .all(...params) as LoadView[];
 
-  return rows.flatMap((row) => {
+  const matched = rows.flatMap((row) => {
     const load = asLoadView(row);
     return load ? [load] : [];
   }).filter((load) => {
@@ -1745,6 +1745,34 @@ export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[]
     }
     return true;
   });
+  return withExactLoadNumber(matched, criteria);
+}
+
+function passesSearchFacet(load: LoadView, criteria: LoadSearchCriteria): boolean {
+  if (criteria.customerId && load.customer_id !== criteria.customerId) return false;
+  if (criteria.driverId && load.driver_id !== criteria.driverId) return false;
+  if (criteria.truckId && load.truck_id !== criteria.truckId) return false;
+  if (criteria.trailerId && load.trailer_id !== criteria.trailerId) return false;
+  if (criteria.originState && extractStateCode(load.origin) !== criteria.originState.toUpperCase()) return false;
+  if (criteria.destState && extractStateCode(load.destination) !== criteria.destState.toUpperCase()) return false;
+  const pickupDay = String(load.pickup_start ?? "").slice(0, 10);
+  if (criteria.dateFrom && pickupDay && pickupDay < criteria.dateFrom) return false;
+  if (criteria.dateTo && pickupDay && pickupDay > criteria.dateTo) return false;
+  return true;
+}
+
+/** A typed load number is the load, including delivered and completed rows the Live box would hide. */
+function withExactLoadNumber(rows: LoadView[], criteria: LoadSearchCriteria): LoadView[] {
+  const key = criteria.q.trim();
+  if (!key) return rows;
+  if (rows.some((load) => load.load_number.toLowerCase() === key.toLowerCase())) return rows;
+  const sample = showsSampleData() ? "" : " AND loads.is_sample = 0";
+  const row = getDb()
+    .prepare(`${LOAD_SELECT} WHERE loads.load_number = ? COLLATE NOCASE${sample}`)
+    .get(key) as LoadView | undefined;
+  const exact = asLoadView(row);
+  if (!exact || !passesSearchFacet(exact, criteria)) return rows;
+  return [exact, ...rows];
 }
 
 export function listSavedReports(): SavedReport[] {
@@ -2519,7 +2547,11 @@ export function getDashboardStats(): DashboardStats {
     db.prepare("SELECT COUNT(*) as count FROM trucks WHERE status = 'available'").get() as { count: number }
   ).count;
   const unassignedLoads = (
-    db.prepare(`SELECT COUNT(*) as count FROM loads WHERE status = 'available'${sample}`).get() as { count: number }
+    db
+      .prepare(
+        `SELECT COUNT(*) as count FROM loads WHERE truck_id IS NULL AND status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})${sample}`,
+      )
+      .get(...ACTIVE_LOAD_STATUSES) as { count: number }
   ).count;
   return { openLoads, inTransit, availableTrucks, unassignedLoads };
 }

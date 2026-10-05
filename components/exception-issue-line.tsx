@@ -16,7 +16,17 @@ const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
   LOW: "status-tone-slate",
 };
 
-export function ExceptionIssueLine({ item, compact = false }: { item: InboxException; compact?: boolean }) {
+const VIEW_ONLY = "View-only access";
+
+export function ExceptionIssueLine({
+  item,
+  compact = false,
+  readOnly = false,
+}: {
+  item: InboxException;
+  compact?: boolean;
+  readOnly?: boolean;
+}) {
   const state = exceptionStateFor(item);
   if (compact) {
     const reason = exceptionReasonText(item);
@@ -52,18 +62,54 @@ export function ExceptionIssueLine({ item, compact = false }: { item: InboxExcep
       </div>
       <div className="mt-1 text-sm text-slate-700">{item.title}</div>
       <div className="mt-0.5 text-xs text-slate-600">{item.detail}</div>
-      <form action={exceptionAction} className="mt-2 flex flex-wrap items-center gap-2">
+      <form action={exceptionAction} className="mt-2 flex flex-wrap items-center gap-2" data-exception-actions="">
         <input type="hidden" name="exception_key" value={item.id} />
-        <input name="reason" placeholder="Note" className="w-40 rounded-lg border border-slate-300 px-2 py-1 text-xs" />
-        <button className="btn btn-ghost text-xs" name="status" value="ack" type="submit">
+        <input
+          name="reason"
+          placeholder="Note"
+          className="w-40 rounded-lg border border-slate-300 px-2 py-1 text-xs"
+          disabled={readOnly}
+          aria-disabled={readOnly || undefined}
+          title={readOnly ? VIEW_ONLY : undefined}
+          data-view-only={readOnly ? "" : undefined}
+        />
+        <button
+          className="btn btn-ghost text-xs"
+          name="status"
+          value="ack"
+          type="submit"
+          disabled={readOnly}
+          aria-disabled={readOnly || undefined}
+          title={readOnly ? VIEW_ONLY : undefined}
+          data-view-only={readOnly ? "" : undefined}
+        >
           Ack
         </button>
-        <button className="btn btn-ghost text-xs" name="status" value="snoozed" type="submit">
+        <button
+          className="btn btn-ghost text-xs"
+          name="status"
+          value="snoozed"
+          type="submit"
+          disabled={readOnly}
+          aria-disabled={readOnly || undefined}
+          title={readOnly ? VIEW_ONLY : undefined}
+          data-view-only={readOnly ? "" : undefined}
+        >
           Snooze 4h
         </button>
-        <button className="btn btn-ghost text-xs" name="status" value="resolved" type="submit">
+        <button
+          className="btn btn-ghost text-xs"
+          name="status"
+          value="resolved"
+          type="submit"
+          disabled={readOnly}
+          aria-disabled={readOnly || undefined}
+          title={readOnly ? VIEW_ONLY : undefined}
+          data-view-only={readOnly ? "" : undefined}
+        >
           Resolve
         </button>
+        {readOnly ? <span className="text-xs text-slate-500">View-only</span> : null}
       </form>
     </li>
   );

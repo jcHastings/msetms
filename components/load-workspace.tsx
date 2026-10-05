@@ -54,6 +54,7 @@ export function LoadWorkspace({
   returnTo = "/board",
   watched = false,
   create = false,
+  readOnly = false,
   loadNumber = "",
   customerName = "",
   contactEmail = "",
@@ -78,6 +79,7 @@ export function LoadWorkspace({
   returnTo?: string;
   watched?: boolean;
   create?: boolean;
+  readOnly?: boolean;
   loadNumber?: string;
   customerName?: string;
   contactEmail?: string;
@@ -290,7 +292,7 @@ export function LoadWorkspace({
           </nav>
         )}
         <div className="flex items-center gap-2">
-          {create || isSaveTab(tab) ? (
+          {!readOnly && (create || isSaveTab(tab)) ? (
             <button className="btn btn-primary" type="submit" form={formId} disabled={!canSubmit}>
               {pending ? "Saving…" : "Save"}
             </button>

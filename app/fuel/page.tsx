@@ -20,7 +20,7 @@ import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
 import { buildLiveFuelCloseout, fileFuelCloseout } from "@/lib/fuel-closeout-store";
 import { buildIdleFuelCostBoard, idleFuelHydrateRange } from "@/lib/idle-fuel-cost";
 import { listFuelTransactions, loadFuelWeekView, rematchUnmatchedFuelTransactions } from "@/lib/fuel-store";
-import { getSamsaraFleet, hydrateSamsaraEngineHourWindow } from "@/lib/integrations/samsara";
+import { hydrateSamsaraEngineHourWindow } from "@/lib/integrations/samsara";
 import { listDrivers, listLoads, listTrucks } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -70,10 +70,6 @@ export default async function FuelPage({
         : weekFilter,
   );
   const unmatched = listFuelTransactions({ unmatchedOnly: true, ...weekFilter });
-  await Promise.race([
-    getSamsaraFleet(),
-    new Promise((resolve) => setTimeout(resolve, 1500)),
-  ]);
   const hourWindow = idleFuelHydrateRange(weekView.mpgNow);
   const engineHoursPull = await hydrateSamsaraEngineHourWindow({
     fromIso: hourWindow.fromIso,
