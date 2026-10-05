@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { LocationForm } from "@/components/location-form";
 import { PageHeader } from "@/components/page-header";
 import { SamsaraAddressSync } from "@/components/samsara-address-sync";
@@ -10,6 +12,11 @@ import { getLocation } from "@/lib/queries";
 import { canDeleteLocations } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const location = getLocation(Number.parseInt((await params).id, 10));
+  return deskMetadata(location?.name || "Location");
+}
 
 export default async function EditLocationPage({
   params,

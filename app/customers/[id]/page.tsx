@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { CustomerForm } from "@/components/customer-form";
 import { DeleteCustomerForm } from "@/components/delete-customer-form";
 import { PageHeader } from "@/components/page-header";
@@ -9,6 +11,11 @@ import { countLoadsForCustomer, CUSTOMER_HAS_LOADS_DELETE, getCustomer } from "@
 import { canEditLoads } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const customer = getCustomer(Number.parseInt((await params).id, 10));
+  return deskMetadata(customer?.name || "Customer");
+}
 
 export default async function EditCustomerPage({
   params,

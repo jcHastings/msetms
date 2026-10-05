@@ -31,6 +31,7 @@ export function LoadRelaysPanel({
   locations = [],
   mapsApiKey = "",
   primaryDriverId,
+  catalog = false,
 }: {
   loadId: number;
   relays: LoadRelayView[];
@@ -38,6 +39,7 @@ export function LoadRelaysPanel({
   locations?: RelayLocationOption[];
   mapsApiKey?: string;
   primaryDriverId?: number | null;
+  catalog?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<LoadRelayView | null>(null);
@@ -108,6 +110,7 @@ export function LoadRelaysPanel({
           drivers={drivers}
           locations={locations}
           mapsApiKey={mapsApiKey}
+          catalog={catalog}
           defaultFromId={defaultFromId}
           onClose={() => setOpen(false)}
         />
@@ -118,6 +121,7 @@ export function LoadRelaysPanel({
           drivers={drivers}
           locations={locations}
           mapsApiKey={mapsApiKey}
+          catalog={catalog}
           relay={editing}
           onClose={() => setEditing(null)}
         />
@@ -141,6 +145,7 @@ function RelayDialog({
   drivers,
   locations,
   mapsApiKey,
+  catalog = false,
   defaultFromId = null,
   relay,
   onClose,
@@ -149,6 +154,7 @@ function RelayDialog({
   drivers: RelayDriverOption[];
   locations: RelayLocationOption[];
   mapsApiKey: string;
+  catalog?: boolean;
   defaultFromId?: number | null;
   relay?: LoadRelayView;
   onClose: () => void;
@@ -262,6 +268,7 @@ function RelayDialog({
             <div className="mt-2">
               <p className="text-xs text-slate-500">Google suggestions are off. Type the relay point, or pick a saved location.</p>
               <LocationPicker
+                catalog={catalog}
                 locations={locations}
                 placeholder="Saved locations"
                 emptyLabel="Keep the typed relay point"

@@ -1,3 +1,4 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { QBO_MAP_TABS, hubTabClass, parseQboMapTab } from "@/lib/accounting-desk-shared";
@@ -11,6 +12,7 @@ import { canConnectQuickbooks, getSignedInDispatcher } from "@/lib/dispatcher-se
 import { PAY_ITEM_CATEGORIES } from "@/lib/load-page-shared";
 import { loadQuickbooksDesk } from "@/lib/quickbooks-desk";
 
+export const metadata = deskMetadata("QuickBooks");
 export const dynamic = "force-dynamic";
 
 function QboSoftFail({ message }: { message: string }) {

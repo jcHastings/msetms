@@ -7,7 +7,7 @@ import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
-import { formatDateTime, formatMdYDisplay, loadTouchesToday } from "@/lib/format";
+import { formatDateTime, formatMdYDisplay } from "@/lib/format";
 import { listNeedCover } from "@/lib/need-cover";
 import {
   getSamsaraFleet,
@@ -17,12 +17,10 @@ import {
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
 import { ComplianceList } from "@/components/compliance-badge";
-import { dailyRecap, getHandoffNote, listLiveExceptionInbox } from "@/lib/desk";
+import { dailyRecap, formatOnTimePct, getHandoffNote, listLiveExceptionInbox } from "@/lib/desk";
 import { saveHandoffAction } from "@/lib/dispatcher-actions";
 import {
   getDashboardStats,
-  getLoad,
-  listAttentionLoads,
   listDrivers,
   listLoads,
   listMovingLoads,
@@ -30,7 +28,6 @@ import {
   listUpcomingCompliance,
   listCustomers,
   listFailedDrugTestAlerts,
-  listLocations,
   listTrailers,
   listWatchedLoads,
 } from "@/lib/queries";
@@ -60,8 +57,9 @@ export default async function DashboardPage({
   const current = { kind: params.kind, q: params.q };
   const showReports = canViewReports(dispatcher.role);
   const stats = getDashboardStats();
-  const unassigned = listAttentionLoads().filter((load) => loadTouchesToday(load));
-  const moving = listMovingLoads().filter((load) => loadTouchesToday(load));
+  const needsUnitAll = listLoads({ status: "active" }).filter((load) => !load.truck_id);
+  const needsUnit = needsUnitAll.slice(0, 12);
+  const moving = listMovingLoads();
   const movingRelayLabels = extraRelayLabelsByLoad(moving);
   const fleet = await getSamsaraFleet();
   const trucks = listTrucks();
@@ -71,20 +69,10 @@ export default async function DashboardPage({
   const expirations = listUpcomingCompliance();
   const failedTests = listFailedDrugTestAlerts();
   const inboxRaw = listLiveExceptionInbox({ kind: params.kind, q: params.q });
-  const inboxItems = inboxRaw.items.filter((item) => {
-    const load = getLoad(item.loadId);
-    return Boolean(load && loadTouchesToday(load));
-  });
-  const attentionIds = new Set(inboxItems.map((item) => item.loadId));
-  const todayActive = listLoads({ status: "active" }).filter((load) => loadTouchesToday(load));
-  const inbox = {
-    ...inboxRaw,
-    items: inboxItems,
-    attentionCount: attentionIds.size,
-    fineCount: todayActive.filter((load) => !attentionIds.has(load.id)).length,
-  };
+  const inboxItems = inboxRaw.items;
+  const inbox = { ...inboxRaw, items: inboxItems };
   const recap = dailyRecap();
-  const watched = listWatchedLoads().filter((load) => loadTouchesToday(load) && load.status !== "accounting");
+  const watched = listWatchedLoads().filter((load) => load.status !== "accounting");
   const handoff = getHandoffNote();
   const needCover = listNeedCover(fleet.locations);
 
@@ -106,7 +94,7 @@ export default async function DashboardPage({
           customers={listCustomers()}
           trucks={trucks}
           trailers={listTrailers()}
-          locations={listLocations()}
+          locations={[]}
           drivers={drivers}
           formSettings={loadFormSettings()}
         />
@@ -184,7 +172,7 @@ export default async function DashboardPage({
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-500">On-time %</dt>
-              <dd className="font-semibold">{recap.onTimePct}%</dd>
+              <dd className="font-semibold">{formatOnTimePct(recap.onTimePct)}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-slate-500">Claims opened</dt>
@@ -222,12 +210,14 @@ export default async function DashboardPage({
       <div className="grid gap-6 xl:grid-cols-3">
         <section className="card overflow-hidden xl:col-span-2">
           <header className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-            <h2 className="text-sm font-semibold">Needs a unit</h2>
+            <h2 className="text-sm font-semibold">
+              Needs a unit{needsUnitAll.length ? ` · ${needsUnitAll.length}` : ""}
+            </h2>
             <Link href="/board?status=available" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Open board
             </Link>
           </header>
-          {unassigned.length === 0 ? (
+          {needsUnit.length === 0 ? (
             <p className="px-5 py-8 text-sm text-slate-500">Every active load has a truck.</p>
           ) : (
             <table className="table-grid">
@@ -240,7 +230,7 @@ export default async function DashboardPage({
                 </tr>
               </thead>
               <tbody>
-                {unassigned.map((load) => (
+                {needsUnit.map((load) => (
                   <tr key={load.id} className={loadStatusRowClass(load.status)}>
                     <td>
                       <div className={`font-mono text-sm font-semibold ${loadStatusTextClass(load.status)}`}>

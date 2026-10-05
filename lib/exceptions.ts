@@ -1,16 +1,28 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
 import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
-import { coordsForStop, gpsPingsForLoad, stillInsideGeofenceAt } from "./geofence";
+import { coordsForStop, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
 import { resolveInvoiceCustomerEmail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
-import { getDriver, getTrailer, getTruck, listLoads } from "./queries";
-import { listStopAppointmentTargets, listStops } from "./stops";
+import { matchLocationForStop } from "./locations";
+import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
+import type { LoadStop } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
-import { isBillableStatus, isClosedStatus, isRollingStatus, statusNeedsAssets, type LoadView, type ReeferReading } from "./types";
+import {
+  isBillableStatus,
+  isClosedStatus,
+  isRollingStatus,
+  statusNeedsAssets,
+  type Driver,
+  type LoadView,
+  type ReeferReading,
+  type Trailer,
+  type Truck,
+} from "./types";
+import type { GpsPing } from "./geofence";
 
 export const EXCEPTION_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type ExceptionSeverity = (typeof EXCEPTION_SEVERITIES)[number];
@@ -78,7 +90,11 @@ export function workbenchCardSchedule(
   };
 }
 
-function attachWorkbenchSchedule(items: InboxException[], loads: LoadView[]): void {
+function attachWorkbenchSchedule(
+  items: InboxException[],
+  loads: LoadView[],
+  stopsByLoad: Map<number, Array<{ kind: string; window_start: string }>>,
+): void {
   const byId = new Map(loads.map((load) => [load.id, load]));
   const cache = new Map<number, { driverName: string; pickupAt: string; deliveryAt: string }>();
   for (const item of items) {
@@ -86,7 +102,7 @@ function attachWorkbenchSchedule(items: InboxException[], loads: LoadView[]): vo
     if (!schedule) {
       const load = byId.get(item.loadId);
       schedule = load
-        ? workbenchCardSchedule(load, listStopAppointmentTargets(load.id))
+        ? workbenchCardSchedule(load, stopsByLoad.get(load.id) ?? [])
         : { driverName: "", pickupAt: "", deliveryAt: "" };
       cache.set(item.loadId, schedule);
     }
@@ -443,15 +459,124 @@ function lateExceptions(load: LoadView, now: Date): InboxException[] {
   return [];
 }
 
-function complianceExceptions(load: LoadView): InboxException[] {
+type InboxStop = Pick<
+  LoadStop,
+  | "id"
+  | "load_id"
+  | "kind"
+  | "location_id"
+  | "name"
+  | "street"
+  | "city"
+  | "state"
+  | "zip"
+  | "window_start"
+  | "window_end"
+  | "arrived_at"
+  | "departed_at"
+  | "schedule_type"
+>;
+
+type InboxContext = {
+  drivers: Map<number, Driver>;
+  trucks: Map<number, Truck>;
+  trailers: Map<number, Trailer>;
+  stops: Map<number, InboxStop[]>;
+  pings: Map<number, GpsPing[]>;
+  stopCoords: Map<number, { latitude: number; longitude: number }>;
+  windows: ReturnType<typeof complianceWindows>;
+};
+
+function chunkIds(ids: number[], size = 400): number[][] {
+  const chunks: number[][] = [];
+  for (let index = 0; index < ids.length; index += size) chunks.push(ids.slice(index, index + size));
+  return chunks;
+}
+
+function buildInboxContext(loads: LoadView[]): InboxContext {
+  const drivers = new Map(listDrivers().map((driver) => [driver.id, driver]));
+  const trucks = new Map(listTrucks().map((truck) => [truck.id, truck]));
+  const trailers = new Map(listTrailers().map((trailer) => [trailer.id, trailer]));
+  const loadIds = loads.map((load) => load.id);
+  const stops = new Map<number, InboxStop[]>();
+  for (const chunk of chunkIds(loadIds)) {
+    if (!chunk.length) continue;
+    const rows = getDb()
+      .prepare(
+        `SELECT id, load_id, kind, location_id, name, street, city, state, zip,
+                window_start, window_end, arrived_at, departed_at, schedule_type
+         FROM load_stops
+         WHERE load_id IN (${chunk.map(() => "?").join(", ")})
+         ORDER BY sequence, id`,
+      )
+      .all(...chunk) as InboxStop[];
+    for (const row of rows) {
+      const list = stops.get(row.load_id) ?? [];
+      list.push(row);
+      stops.set(row.load_id, list);
+    }
+  }
+  const locations = listLocations();
+  const locationById = new Map(locations.map((location) => [location.id, location]));
+  const stopCoords = new Map<number, { latitude: number; longitude: number }>();
+  for (const list of stops.values()) {
+    for (const stop of list) {
+      const linked = stop.location_id ? locationById.get(stop.location_id) : null;
+      const matched =
+        linked && linked.latitude != null && linked.longitude != null
+          ? linked
+          : matchLocationForStop(locations, stop);
+      if (matched?.latitude == null || matched.longitude == null) continue;
+      if (!Number.isFinite(matched.latitude) || !Number.isFinite(matched.longitude)) continue;
+      stopCoords.set(stop.id, { latitude: matched.latitude, longitude: matched.longitude });
+    }
+  }
+  const truckIds = [...new Set(loads.map((load) => load.truck_id).filter((id): id is number => id != null))];
+  const pings = new Map<number, GpsPing[]>();
+  for (const chunk of chunkIds(truckIds)) {
+    if (!chunk.length) continue;
+    const rows = getDb()
+      .prepare(
+        `SELECT truck_id, recorded_at, latitude, longitude
+         FROM truck_gps_readings
+         WHERE source = 'samsara' AND latitude IS NOT NULL AND longitude IS NOT NULL
+           AND truck_id IN (${chunk.map(() => "?").join(", ")})
+         ORDER BY recorded_at ASC, id ASC`,
+      )
+      .all(...chunk) as Array<{ truck_id: number; recorded_at: string; latitude: number; longitude: number }>;
+    for (const row of rows) {
+      const list = pings.get(row.truck_id) ?? [];
+      list.push({ latitude: row.latitude, longitude: row.longitude, recordedAt: row.recorded_at });
+      pings.set(row.truck_id, list);
+    }
+  }
+  for (const truckId of truckIds) {
+    const truck = trucks.get(truckId);
+    if (!truck || truck.gps_latitude == null || truck.gps_longitude == null) continue;
+    if (truck.gps_source && truck.gps_source !== "samsara") continue;
+    const recordedAt = String(truck.gps_recorded_at ?? "").trim();
+    const list = pings.get(truckId) ?? [];
+    const already = list.some(
+      (ping) => ping.recordedAt === recordedAt && ping.latitude === truck.gps_latitude && ping.longitude === truck.gps_longitude,
+    );
+    if (!already && Number.isFinite(truck.gps_latitude) && Number.isFinite(truck.gps_longitude)) {
+      list.push({ latitude: truck.gps_latitude, longitude: truck.gps_longitude, recordedAt });
+      list.sort((left, right) => left.recordedAt.localeCompare(right.recordedAt));
+      pings.set(truckId, list);
+    }
+  }
+  return { drivers, trucks, trailers, stops, pings, stopCoords, windows: complianceWindows() };
+}
+
+function complianceExceptions(load: LoadView, ctx: InboxContext): InboxException[] {
   if (!statusNeedsAssets(load.status)) return [];
   const alerts = collectAssignmentAlerts(
     {
-      driver: load.driver_id ? getDriver(load.driver_id) : null,
-      truck: load.truck_id ? getTruck(load.truck_id) : null,
-      trailer: load.trailer_id ? getTrailer(load.trailer_id) : null,
+      driver: load.driver_id ? ctx.drivers.get(load.driver_id) ?? null : null,
+      truck: load.truck_id ? ctx.trucks.get(load.truck_id) ?? null : null,
+      trailer: load.trailer_id ? ctx.trailers.get(load.trailer_id) ?? null : null,
     },
-    complianceWindows(),
+    ctx.windows,
   );
   if (alerts.length === 0) return [];
   const expired = alerts.filter((alert) => alert.severity === "expired");
@@ -467,10 +592,10 @@ function complianceExceptions(load: LoadView): InboxException[] {
   ];
 }
 
-function gpsQuietExceptions(load: LoadView, now: Date, quietHours: number): InboxException[] {
+function gpsQuietExceptions(load: LoadView, now: Date, quietHours: number, ctx: InboxContext): InboxException[] {
   if (isClosedStatus(load.status)) return [];
   if (!load.truck_id) return [];
-  const truck = getTruck(load.truck_id);
+  const truck = ctx.trucks.get(load.truck_id) ?? null;
   const recordedAt = truck?.gps_recorded_at?.trim() ?? "";
   if (!recordedAt || !truck?.gps_latitude || !truck?.gps_longitude) return [];
   const ping = new Date(recordedAt);
@@ -536,15 +661,16 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     list.push(flag);
     samsaraByLoad.set(flag.loadId, list);
   }
+  const ctx = buildInboxContext(active);
 
   for (const load of active) {
     const reading = readings.get(load.id) ?? null;
     items.push(...reeferExceptions(load, reading));
     items.push(...lateExceptions(load, now));
-    items.push(...gpsQuietExceptions(load, now, quietHours));
-    items.push(...complianceExceptions(load));
+    items.push(...gpsQuietExceptions(load, now, quietHours, ctx));
+    items.push(...complianceExceptions(load, ctx));
     items.push(...unassignedExceptions(load, now));
-    items.push(...detentionExceptions(load, now));
+    items.push(...detentionExceptions(load, now, ctx));
     items.push(...missingContactExceptions(load, rateCons.has(load.id)));
     items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
   }
@@ -579,7 +705,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     }
   }
 
-  attachWorkbenchSchedule(items, [...active, ...delivered]);
+  attachWorkbenchSchedule(items, [...active, ...delivered], ctx.stops);
 
   items.sort((a, b) => {
     const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
@@ -628,10 +754,10 @@ function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSams
   );
 }
 
-function detentionExceptions(load: LoadView, now: Date): InboxException[] {
+function detentionExceptions(load: LoadView, now: Date, ctx: InboxContext): InboxException[] {
   if (isClosedStatus(load.status)) return [];
-  const pings = gpsPingsForLoad(load.id);
-  for (const stop of listStops(load.id)) {
+  const pings = load.truck_id ? ctx.pings.get(load.truck_id) ?? [] : [];
+  for (const stop of ctx.stops.get(load.id) ?? []) {
     if (!String(stop.arrived_at ?? "").trim()) continue;
     const mark = detentionTwoHourMark({
       scheduleType: stop.schedule_type,
@@ -648,7 +774,7 @@ function detentionExceptions(load: LoadView, now: Date): InboxException[] {
     })) {
       continue;
     }
-    const dest = coordsForStop(stop);
+    const dest = coordsForStop(stop, ctx.stopCoords);
     if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
     const role = stop.kind === "delivery" ? "receiver" : "shipper";
     const stopLabel = stop.kind === "delivery" ? "delivery" : "pickup";

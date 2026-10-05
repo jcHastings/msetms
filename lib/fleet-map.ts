@@ -15,6 +15,7 @@ import {
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
+import { directoryTrailerLocation } from "./trailer-location";
 import { latestTrailerShareLink, trailerSharePath } from "./trailer-share";
 import {
   driverForTruck,
@@ -326,27 +327,7 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
 
   for (const trailer of trailers) {
     if (usedTrailerIds.has(trailer.id)) continue;
-    const reading = latestReeferForTrailer(trailer);
-    if (reading && reading.source === "orbcomm") {
-      const readingCoord = plottableCoord(reading.latitude, reading.longitude);
-      if (readingCoord) {
-        addPin(
-          pins,
-          usedTrailerIds,
-          orbcommTrailerPin({
-            trailer,
-            lat: readingCoord.lat,
-            lng: readingCoord.lng,
-            href: trailerHref(trailer, loads),
-            recordedAt: reading.recorded_at,
-            snapshot: reading,
-          }),
-          trailer.id,
-        );
-        continue;
-      }
-    }
-    const stored = persistedTrailerLocation(trailer);
+    const stored = directoryTrailerLocation(trailer) ?? persistedTrailerLocation(trailer);
     if (!stored || stored.source !== "orbcomm") continue;
     const coord = plottableCoord(stored.latitude, stored.longitude);
     if (!coord) continue;
@@ -395,16 +376,17 @@ export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
           : null;
     const alarm =
       snapshot && "alarm" in snapshot ? String(snapshot.alarm ?? "") : "";
+    const storedFix = directoryTrailerLocation(trailer);
     const location =
-      snapshot && "address" in snapshot
+      snapshot && "address" in snapshot && String(snapshot.address ?? "").trim()
         ? String(snapshot.address ?? "")
-        : persistedTrailerLocation(trailer)?.address ?? "";
+        : storedFix?.address ?? "";
     const messageAt =
       snapshot && "recordedAt" in snapshot && snapshot.recordedAt
         ? String(snapshot.recordedAt)
         : snapshot && "recorded_at" in snapshot && snapshot.recorded_at
           ? String(snapshot.recorded_at)
-          : persistedTrailerLocation(trailer)?.recordedAt ?? "";
+          : storedFix?.recordedAt ?? "";
     const share = latestTrailerShareLink(trailer.id);
     return {
       id: `status-${trailer.id}`,

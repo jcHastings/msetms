@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { forbidden, redirect } from "next/navigation";
 import { DEVICE_COOKIE, DEVICE_TTL_MS } from "./dispatcher-device";
 import {
   PASSWORD_NOT_RECOGNIZED,
@@ -214,9 +215,10 @@ export async function requireCapability(
   return dispatcher;
 }
 
-export async function getPageAccess(allowed: (role: string) => boolean): Promise<Dispatcher | null> {
+export async function getPageAccess(allowed: (role: string) => boolean): Promise<Dispatcher> {
   const dispatcher = await getSignedInDispatcher();
-  if (!dispatcher || !allowed(dispatcher.role)) return null;
+  if (!dispatcher) redirect("/login");
+  if (!allowed(dispatcher.role)) forbidden();
   return dispatcher;
 }
 

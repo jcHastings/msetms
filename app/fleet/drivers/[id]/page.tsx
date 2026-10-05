@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { DriverComplianceCard } from "@/components/driver-compliance-card";
 import { DriverDrugTestsCard } from "@/components/driver-drug-tests-card";
 import { DriverFuelCard } from "@/components/driver-fuel-card";
@@ -13,6 +15,11 @@ import { getDriver, listDriverDrugTests } from "@/lib/queries";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const driver = getDriver(Number.parseInt((await params).id, 10));
+  return deskMetadata(driver ? driver.name : "Driver");
+}
 
 export default async function EditDriverPage({
   params,

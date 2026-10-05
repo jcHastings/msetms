@@ -127,14 +127,18 @@ export function latestReeferForTrailer(trailer: {
 }): ReeferReading | null {
   const keys = [trailer.orbcomm_asset_id, trailer.unit_number].map(normalizeKey).filter(Boolean);
   if (keys.length === 0) return null;
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM reefer_readings
-       WHERE trailer_id != ''
-       ORDER BY recorded_at DESC, id DESC`,
-    )
-    .all() as ReeferReading[];
-  return rows.find((row) => keys.includes(normalizeKey(row.trailer_id))) ?? null;
+  const normalized =
+    "lower(replace(replace(replace(replace(trailer_id, ' ', ''), '_', ''), '-', ''), '#', ''))";
+  return (
+    (getDb()
+      .prepare(
+        `SELECT * FROM reefer_readings
+         WHERE trailer_id != '' AND ${normalized} IN (${keys.map(() => "?").join(", ")})
+         ORDER BY recorded_at DESC, id DESC
+         LIMIT 1`,
+      )
+      .get(...keys) as ReeferReading | undefined) ?? null
+  );
 }
 
 export function listLatestReeferReadings(source?: "demo" | "orbcomm"): ReeferReading[] {

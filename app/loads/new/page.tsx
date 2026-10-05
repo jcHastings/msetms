@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
 import { createLoadAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 import { equipmentOptions, getCompanySettings, loadFormSettings } from "@/lib/settings";
 import { EQUIPMENT_REQUIRED } from "@/lib/types";
 
@@ -61,7 +61,7 @@ export default async function NewLoadPage() {
           customers={customers}
           trucks={trucks}
           trailers={listTrailers()}
-          locations={listLocations()}
+          locations={[]}
           drivers={drivers}
           formSettings={loadFormSettings()}
         >
@@ -85,7 +85,7 @@ export default async function NewLoadPage() {
               customers={customers}
               trucks={trucks}
               trailers={listTrailers()}
-              locations={listLocations()}
+              locations={[]}
               drivers={drivers}
               defaults={{ special_instructions: getCompanySettings().default_routing_notes }}
               equipmentChoices={equipmentChoices}

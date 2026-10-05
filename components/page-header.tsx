@@ -1,3 +1,5 @@
+import { DocumentTitle } from "@/components/document-title";
+
 export function PageHeader({
   title,
   subtitle,
@@ -11,6 +13,7 @@ export function PageHeader({
 }) {
   return (
     <div className={dense ? "mb-2 flex flex-wrap items-start justify-between gap-2" : "mb-6 flex flex-wrap items-start justify-between gap-4"}>
+      <DocumentTitle title={title} />
       <div>
         <h1 className={dense ? "text-lg font-semibold tracking-tight text-slate-900" : "text-2xl font-semibold tracking-tight text-slate-900"}>
           {title}

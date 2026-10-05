@@ -17,7 +17,12 @@ import {
 } from "@/lib/rate-con-shared";
 import type { Location } from "@/lib/types";
 
-export function useRateConLocationBook(parsed: ParsedRateCon, locations: Location[], mapsApiKey = "") {
+export function useRateConLocationBook(
+  parsed: ParsedRateCon,
+  locations: Location[],
+  mapsApiKey = "",
+  catalog = locations.length === 0,
+) {
   const [book, setBook] = useState(locations);
   const [shipperId, setShipperId] = useState(parsed.shipper_location_id ? String(parsed.shipper_location_id) : "");
   const [consigneeId, setConsigneeId] = useState(
@@ -56,6 +61,7 @@ export function useRateConLocationBook(parsed: ParsedRateCon, locations: Locatio
         shipperId={shipperId}
         consigneeId={consigneeId}
         mapsApiKey={mapsApiKey}
+        catalog={catalog}
         onSaved={remember}
         onPick={pickExisting}
       />
@@ -69,6 +75,7 @@ function RateConLocationReview({
   shipperId,
   consigneeId,
   mapsApiKey,
+  catalog = false,
   onSaved,
   onPick,
 }: {
@@ -77,6 +84,7 @@ function RateConLocationReview({
   shipperId: string;
   consigneeId: string;
   mapsApiKey: string;
+  catalog?: boolean;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
@@ -96,6 +104,7 @@ function RateConLocationReview({
           selectedId={shipperId}
           matched={book.find((location) => String(location.id) === shipperId) ?? null}
           mapsApiKey={mapsApiKey}
+          catalog={catalog}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -109,6 +118,7 @@ function RateConLocationReview({
           selectedId={consigneeId}
           matched={book.find((location) => String(location.id) === consigneeId) ?? null}
           mapsApiKey={mapsApiKey}
+          catalog={catalog}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -167,6 +177,7 @@ function StopReviewCard({
   selectedId,
   matched,
   mapsApiKey,
+  catalog = false,
   onSaved,
   onPick,
 }: {
@@ -177,6 +188,7 @@ function StopReviewCard({
   selectedId: string;
   matched: Location | null;
   mapsApiKey: string;
+  catalog?: boolean;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
@@ -210,6 +222,7 @@ function StopReviewCard({
       </p>
       <div className="mt-2">
         <LocationPicker
+          catalog={catalog}
           locations={book}
           value={selectedId}
           onChange={(locationId) => onPick(locationId, role)}

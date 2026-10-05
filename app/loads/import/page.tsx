@@ -1,11 +1,13 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 import { loadFormSettings } from "@/lib/settings";
 
+export const metadata = deskMetadata("Rate con");
 export const dynamic = "force-dynamic";
 
 export default async function ImportRateConPage() {
@@ -25,7 +27,7 @@ export default async function ImportRateConPage() {
         customers={listCustomers()}
         trucks={listTrucks()}
         trailers={listTrailers()}
-        locations={listLocations()}
+        locations={[]}
         drivers={listDrivers()}
         formSettings={loadFormSettings()}
       />

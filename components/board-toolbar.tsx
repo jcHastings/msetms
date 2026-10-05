@@ -39,7 +39,7 @@ export function BoardToolbar({ status, date }: Props) {
           </Link>
         ))}
       </div>
-      <form className="load-list-search" onSubmit={(event) => event.preventDefault()}>
+      <form className="load-list-search" data-view-only-allow="" onSubmit={(event) => event.preventDefault()}>
         <div className="field min-w-56 flex-1">
           <label htmlFor="load-list-q">Search loads on this tab</label>
           <input

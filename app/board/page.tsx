@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
-export const metadata = deskMetadata("Dispatch board");
+export const metadata = deskMetadata("Board");
 import { Suspense } from "react";
 import { AssignDialog } from "@/components/assign-dialog";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";

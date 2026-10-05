@@ -8,13 +8,13 @@ export function OnTimeDonut({
   delivered,
   late,
 }: {
-  onTimePct: number;
+  onTimePct: number | null;
   delivered: number;
   late: number;
 }) {
   const onTimeCount = Math.max(0, delivered - late);
-  const pct = Math.min(100, Math.max(0, onTimePct));
-  const onTimeLen = (pct / 100) * DONUT_C;
+  const pct = onTimePct == null ? null : Math.min(100, Math.max(0, onTimePct));
+  const onTimeLen = pct == null ? 0 : (pct / 100) * DONUT_C;
   return (
     <div className="report-ontime-chart" data-reports-ontime-chart="">
       <svg viewBox="0 0 36 36" className="report-donut" aria-hidden>
@@ -37,7 +37,7 @@ export function OnTimeDonut({
           transform="rotate(-90 18 18)"
         />
         <text x="18" y="19.2" textAnchor="middle" className="report-donut-label">
-          {pct}%
+          {pct == null ? "—" : `${pct}%`}
         </text>
       </svg>
       <ul className="report-ontime-legend">

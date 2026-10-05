@@ -1,5 +1,11 @@
 import { daysUntil } from "./compliance";
-import { formatDurationMs, formatDutyStatus, isLiveSamsaraHos, type HosClock } from "./integrations/samsara";
+import {
+  formatDurationMs,
+  formatDutyStatus,
+  isLiveSamsaraHos,
+  type HosClock,
+  type SamsaraTruckDriver,
+} from "./integrations/samsara";
 import {
   cleanSafetyDate,
   expiryRank,
@@ -18,6 +24,7 @@ export function buildSafetyBoard(input: {
   insurance: { provider: string; policy: string; expires: string };
   tokenSet: boolean;
   hos: HosClock[];
+  truckDrivers?: SamsaraTruckDriver[];
   now?: Date;
 }): { insurance: SafetyRow | null; rows: SafetyRow[] } {
   const now = input.now ?? new Date();
@@ -31,7 +38,7 @@ export function buildSafetyBoard(input: {
       driver,
       windowDays: input.windowDays,
       tokenSet: input.tokenSet,
-      hos: input.hos.find((clock) => clock.driverId === driver.id) ?? null,
+      hos: hosForSafetyDriver(driver, input.hos, input.truckDrivers ?? []),
       now,
     }),
   );
@@ -63,6 +70,42 @@ function insuranceRow(
   };
 }
 
+function normalizeSafetyKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_\-#]/g, "");
+}
+
+function hosForSafetyDriver(driver: Driver, hos: HosClock[], truckDrivers: SamsaraTruckDriver[]): HosClock | null {
+  const byId = hos.find((clock) => clock.driverId === driver.id);
+  if (byId) return byId;
+  const samsaraId = driver.samsara_driver_id.trim();
+  if (samsaraId) {
+    const bySamsara = hos.find(
+      (clock) => clock.samsaraDriverId && normalizeSafetyKey(clock.samsaraDriverId) === normalizeSafetyKey(samsaraId),
+    );
+    if (bySamsara) return bySamsara;
+  }
+  const nameKey = normalizeSafetyKey(driver.name);
+  if (nameKey) {
+    const byName = hos.find((clock) => clock.driverName && normalizeSafetyKey(clock.driverName) === nameKey);
+    if (byName) return byName;
+  }
+  const linked = truckDrivers.find(
+    (item) =>
+      item.tmsDriverId === driver.id ||
+      (samsaraId && item.samsaraDriverId && normalizeSafetyKey(item.samsaraDriverId) === normalizeSafetyKey(samsaraId)) ||
+      (nameKey && item.samsaraDriverName && normalizeSafetyKey(item.samsaraDriverName) === nameKey),
+  );
+  if (!linked) return null;
+  if (linked.samsaraDriverId) {
+    const byLinked = hos.find(
+      (clock) => clock.samsaraDriverId && normalizeSafetyKey(clock.samsaraDriverId) === normalizeSafetyKey(linked.samsaraDriverId),
+    );
+    if (byLinked) return byLinked;
+  }
+  if (linked.tmsDriverId) return hos.find((clock) => clock.driverId === linked.tmsDriverId) ?? null;
+  return null;
+}
+
 function driverSafetyRow(input: {
   driver: Driver;
   windowDays: number;
@@ -78,7 +121,7 @@ function driverSafetyRow(input: {
   const live = input.tokenSet && isLiveSamsaraHos(input.hos) ? input.hos : null;
   const hos = hosSafetyDetail({
     tokenSet: input.tokenSet,
-    samsaraDriverId: input.driver.samsara_driver_id,
+    samsaraDriverId: input.driver.samsara_driver_id || live?.samsaraDriverId || "",
     hasClock: Boolean(live),
     driveRemainingMs: live?.driveRemainingMs,
     timeUntilBreakMs: live?.timeUntilBreakMs,

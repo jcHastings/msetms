@@ -3,7 +3,7 @@ import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
 import { OnTimeDonut, RevenueBars } from "@/components/report-charts";
 import { OnTimeResultBadge } from "@/components/status-badge";
-import { dailyRecap, onTimeReport, revenueByCustomer } from "@/lib/desk";
+import { dailyRecap, formatOnTimePct, onTimeFromRows, onTimeReport, revenueByCustomer } from "@/lib/desk";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { canExportCsv, canViewReports, getPageAccess } from "@/lib/dispatcher-session";
 import { formatMoney } from "@/lib/format";
@@ -25,6 +25,7 @@ export default async function ReportsPage({
   const q = String((await searchParams).q ?? "").trim();
   const recap = dailyRecap();
   const onTime = onTimeReport();
+  const onTimeStats = onTimeFromRows(onTime);
   const revenue = revenueByCustomer().filter((row) =>
     q ? row.customer.toLowerCase().includes(q.toLowerCase()) : true,
   );
@@ -52,7 +53,7 @@ export default async function ReportsPage({
         title="Reports"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/reports/statistics" className="btn btn-primary">
+            <Link href="/reports/statistics" className="btn btn-primary" data-view-only-allow="">
               Statistics
             </Link>
             <Link href="/reports/manage" className="btn btn-ghost">
@@ -69,7 +70,7 @@ export default async function ReportsPage({
       <div className="mb-4 grid gap-4 md:grid-cols-4">
         <Stat label="Delivered today" value={String(recap.delivered)} />
         <Stat label="Late today" value={String(recap.late)} />
-        <Stat label="On-time %" value={`${recap.onTimePct}%`} />
+        <Stat label="On-time %" value={formatOnTimePct(onTimeStats.onTimePct)} />
         <Stat label="Claims opened today" value={String(recap.claims)} />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
@@ -110,7 +111,11 @@ export default async function ReportsPage({
         </section>
         <section className="card overflow-hidden">
           <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">On-time (delivered)</header>
-          <OnTimeDonut onTimePct={recap.onTimePct} delivered={recap.delivered} late={recap.late} />
+          <OnTimeDonut
+            onTimePct={onTimeStats.onTimePct}
+            delivered={onTimeStats.delivered}
+            late={onTimeStats.late}
+          />
           <table className="table-grid">
             <thead>
               <tr>

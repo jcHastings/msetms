@@ -1,6 +1,6 @@
 import { listArReportRows, renderArApXlsx } from "@/lib/accounting-aging";
 import { dispatcherBinaryResponse } from "@/lib/csv-download";
-import { canAccessAccounting } from "@/lib/settings-shared";
+import { canViewAccounting } from "@/lib/settings-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,6 @@ export async function GET(request: Request) {
     "accounts-receivable.xlsx",
     renderArApXlsx(rows),
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    canAccessAccounting,
+    canViewAccounting,
   );
 }

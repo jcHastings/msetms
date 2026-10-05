@@ -9,6 +9,7 @@ import {
   type LocationPickerRow,
 } from "@/lib/locations";
 import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
+import { searchLocationsAction } from "@/lib/search-actions";
 import { matchLocationForPlace, type PlaceDetails, type PlaceSuggestion } from "@/lib/places-shared";
 
 const RESULT_LIMIT = 50;
@@ -25,6 +26,7 @@ export function LocationPicker({
   placesEnabled = false,
   emptyLabel = "One-off address",
   placeholder = "Type any name or address",
+  catalog = false,
 }: {
   id?: string;
   name?: string;
@@ -37,12 +39,20 @@ export function LocationPicker({
   placesEnabled?: boolean;
   emptyLabel?: string;
   placeholder?: string;
+  catalog?: boolean;
 }) {
   const listId = useId().replace(/:/g, "") + "-location-list";
   const inputId = id ?? (name ? `${name}-search` : listId.replace(/-location-list$/, "-search"));
   const [uncontrolled, setUncontrolled] = useState(defaultValue);
   const selectedId = value ?? uncontrolled;
-  const selected = locations.find((location) => String(location.id) === selectedId) ?? null;
+  const [remoteRows, setRemoteRows] = useState<LocationPickerRow[]>([]);
+  const catalogRows = useMemo(() => {
+    const map = new Map<number, LocationPickerRow>();
+    for (const row of locations) map.set(row.id, row);
+    for (const row of remoteRows) map.set(row.id, row);
+    return [...map.values()];
+  }, [locations, remoteRows]);
+  const selected = catalogRows.find((location) => String(location.id) === selectedId) ?? null;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -50,22 +60,39 @@ export function LocationPicker({
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const matches = useMemo(() => filterLocationsForPicker(locations, query, RESULT_LIMIT), [locations, query]);
+  const matches = useMemo(() => {
+    if (!catalog) return filterLocationsForPicker(locations, query, RESULT_LIMIT);
+    const local = filterLocationsForPicker(locations, query, RESULT_LIMIT);
+    const map = new Map<number, LocationPickerRow>();
+    for (const row of [...local, ...remoteRows]) map.set(row.id, row);
+    return [...map.values()].slice(0, RESULT_LIMIT);
+  }, [catalog, locations, query, remoteRows]);
   const [placeResults, setPlaceResults] = useState<PlaceSuggestion[]>([]);
   const [placePending, setPlacePending] = useState(false);
   const options = useMemo(() => [{ id: "", name: emptyLabel }, ...matches], [emptyLabel, matches]);
 
   useEffect(() => {
-    if (!placesEnabled || !onPlacePick) {
-      setPlaceResults([]);
-      return;
-    }
+    if (!catalog) return;
     const trimmed = query.trim();
-    if (trimmed.length < 3) {
-      setPlaceResults([]);
-      return;
-    }
     const handle = window.setTimeout(() => {
+      if (trimmed.length < 1) {
+        setRemoteRows([]);
+        return;
+      }
+      void searchLocationsAction(trimmed)
+        .then((rows) => setRemoteRows(rows))
+        .catch(() => setRemoteRows([]));
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [catalog, query]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    const handle = window.setTimeout(() => {
+      if (!placesEnabled || !onPlacePick || trimmed.length < 3) {
+        setPlaceResults([]);
+        return;
+      }
       setPlacePending(true);
       void searchPlacesAction(trimmed)
         .then((next) => setPlaceResults(next))
@@ -87,7 +114,7 @@ export function LocationPicker({
   }
 
   function pick(next: string) {
-    const location = next ? locations.find((row) => String(row.id) === next) : null;
+    const location = next ? catalogRows.find((row) => String(row.id) === next) : null;
     if (next && !location) return;
     setSelected(next);
     close();
@@ -96,7 +123,7 @@ export function LocationPicker({
   async function pickPlace(placeId: string) {
     try {
       const place = await placeDetailsAction(placeId);
-      const matchedId = matchLocationForPlace(locations, place);
+      const matchedId = matchLocationForPlace(catalogRows, place);
       if (matchedId != null) {
         pick(String(matchedId));
         return;
@@ -273,6 +300,7 @@ export function LocationPicker({
                     <button
                       type="button"
                       role="option"
+                      aria-selected={false}
                       className="w-full px-3 py-2 text-left hover:bg-slate-100"
                       onClick={() => void pickPlace(item.placeId)}
                     >

@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { FetchSamsaraStillPanel } from "@/components/fetch-samsara-still";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { HosBadge, LocationBadge } from "@/components/fleet-badges";
@@ -29,6 +31,11 @@ import { samsaraVehicleIdForTruck } from "@/lib/samsara-still-shared";
 import { complianceWindows } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const truck = getTruck(Number.parseInt((await params).id, 10));
+  return deskMetadata(truck ? `Truck ${truck.unit_number}` : "Truck");
+}
 
 export default async function EditTruckPage({
   params,

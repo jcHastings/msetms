@@ -1141,13 +1141,16 @@ export async function hydrateSamsaraEngineHourWindow(input: {
   fromIso: string;
   toIso: string;
   trucks?: Array<{ id: number; samsara_vehicle_id: string }>;
+  budgetMs?: number;
 }): Promise<EngineHoursHydrateResult> {
   await loadRuntimeEnv();
   if (!isSamsaraTokenSet()) return { fetched: 0, skipped: 0, reason: "token" };
   const trucks = input.trucks ?? listTrucks();
+  const deadline = input.budgetMs == null ? Number.POSITIVE_INFINITY : Date.now() + input.budgetMs;
   let fetched = 0;
   let skipped = 0;
   for (const truck of trucks.slice(0, 40)) {
+    if (Date.now() > deadline) break;
     const vehicleId = String(truck.samsara_vehicle_id ?? "").trim();
     if (!vehicleId) {
       skipped += 1;

@@ -406,8 +406,9 @@ export function canViewAudit(role: string): boolean {
   return canAccessAccounting(role) || isViewerRole(role);
 }
 
+/** CSV and spreadsheet downloads do not change data. Viewer can export what they can open. */
 export function canExportCsv(role: string): boolean {
-  return isAdminRole(role);
+  return isAdminRole(role) || isViewerRole(role);
 }
 
 export function canViewReports(role: string): boolean {
@@ -440,6 +441,7 @@ function viewerCanSeeNavHref(href: string): boolean {
   if (href === "/settings" || href.startsWith("/settings/") || href === "/users" || href.startsWith("/users/")) {
     return false;
   }
+  if (href === "/loads/import-sheet" || href === "/loads/import") return false;
   return canSeeNavHref("admin", href);
 }
 

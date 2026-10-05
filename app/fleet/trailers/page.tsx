@@ -11,7 +11,8 @@ import { PageHeader } from "@/components/page-header";
 import { trailerComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { latestReeferForTrailer } from "@/lib/integrations/orbcomm";
-import { assignedFleetAssetIds, listTrailers, persistedTrailerLocation } from "@/lib/queries";
+import { assignedFleetAssetIds, listTrailers } from "@/lib/queries";
+import { directoryTrailerLocation } from "@/lib/trailer-location";
 import { complianceWindows } from "@/lib/settings";
 import { fleetDivisionOf, labelForTrailerType } from "@/lib/types";
 
@@ -122,7 +123,7 @@ export default async function TrailersPage({
                       {trailer.reefer_setpoint_f != null ? <div>Setpoint {trailer.reefer_setpoint_f}°F</div> : null}
                     </td>
                     <td className="whitespace-nowrap">
-                      <TrailerLocationBadge location={persistedTrailerLocation(trailer)} />
+                      <TrailerLocationBadge location={directoryTrailerLocation(trailer)} />
                     </td>
                     <ActiveStatusCell active={trailer.active} />
                     <td>

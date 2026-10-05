@@ -1,11 +1,18 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { LoadEditor } from "@/components/load-editor";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { safeReturnTo } from "@/lib/load-page-shared";
 import { getLoad } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const load = getLoad(Number.parseInt((await params).id, 10));
+  return deskMetadata(load?.load_number || "Load");
+}
 
 export default async function LoadDetailPage({
   params,

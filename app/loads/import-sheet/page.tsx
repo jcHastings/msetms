@@ -1,3 +1,4 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccessDenied } from "@/components/access-denied";
@@ -5,6 +6,7 @@ import { LoadSheetImport } from "@/components/load-sheet-import";
 import { PageHeader } from "@/components/page-header";
 import { canEditLoads, getPageAccess, getSignedInDispatcher } from "@/lib/dispatcher-session";
 
+export const metadata = deskMetadata("Import loads");
 export const dynamic = "force-dynamic";
 
 export default async function ImportLoadsPage() {

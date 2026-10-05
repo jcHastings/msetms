@@ -245,9 +245,10 @@ function looksLikeTruckOrLoadAssign(
   return loads.some((load) => sameId(load.truck_id, row.truck_id) && sameId(load.driver_id, row.driver_id));
 }
 
-export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolean }): number {
+export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolean; replaySources?: boolean }): number {
   const unmatchedOnly = Boolean(options?.unmatchedOnly);
-  let updated = applyStoredFuelImportNames(unmatchedOnly);
+  const replaySources = options?.replaySources !== false;
+  let updated = replaySources ? applyStoredFuelImportNames(unmatchedOnly) : 0;
   const drivers = listDrivers();
   const trucks = listTrucks();
   const loads = listFuelMatchLoads();
@@ -296,7 +297,23 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
   return updated;
 }
 
+let fuelSourceReplayKey = "";
+
 export function rematchUnmatchedFuelTransactions(): number {
+  const db = getDb();
+  const unmatched = db.prepare("SELECT COUNT(*) AS count FROM fuel_transactions WHERE driver_id IS NULL").get() as {
+    count: number;
+  };
+  if (!unmatched.count) return 0;
+  const blankNames = db
+    .prepare(
+      "SELECT COUNT(*) AS count FROM fuel_transactions WHERE driver_id IS NULL AND TRIM(IFNULL(driver_name_raw, '')) = ''",
+    )
+    .get() as { count: number };
+  if (!blankNames.count) return rematchFuelTransactionDrivers({ unmatchedOnly: true, replaySources: false });
+  const key = `${unmatched.count}:${blankNames.count}`;
+  if (fuelSourceReplayKey === key) return rematchFuelTransactionDrivers({ unmatchedOnly: true, replaySources: false });
+  fuelSourceReplayKey = key;
   return rematchFuelTransactionDrivers({ unmatchedOnly: true });
 }
 

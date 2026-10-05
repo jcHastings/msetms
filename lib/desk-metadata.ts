@@ -1,4 +1,4 @@
 export function deskMetadata(title: string, opts?: { absolute?: boolean }) {
-  if (opts?.absolute) return { title: { absolute: `${title} · MS Express TMS` } };
-  return { title };
+  if (opts?.absolute === false) return { title };
+  return { title: { absolute: `${title} · MS Express TMS` } };
 }

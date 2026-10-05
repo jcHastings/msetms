@@ -27,12 +27,14 @@ export function LoadStopsPanel({
   locations = [],
   routeGuide,
   placesEnabled = false,
+  catalog = false,
 }: {
   loadId: number;
   stops: LoadStop[];
   locations?: Location[];
   routeGuide?: LoadRouteGuide;
   placesEnabled?: boolean;
+  catalog?: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<{ mode: "add" | "edit"; kind: "pickup" | "delivery"; stop?: LoadStop } | null>(
@@ -148,6 +150,7 @@ export function LoadStopsPanel({
           stop={dialog.stop}
           locations={locations}
           placesEnabled={placesEnabled}
+          catalog={catalog}
           onClose={() => setDialog(null)}
         />
       ) : null}
@@ -257,6 +260,7 @@ function StopDialog({
   stop,
   locations,
   placesEnabled,
+  catalog = false,
   onClose,
 }: {
   loadId: number;
@@ -265,6 +269,7 @@ function StopDialog({
   stop?: LoadStop;
   locations: Location[];
   placesEnabled: boolean;
+  catalog?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -343,6 +348,7 @@ function StopDialog({
           <label>Location</label>
           <LocationPicker
             name="location_id"
+            catalog={catalog}
             locations={locations}
             value={draft.locationId}
             onChange={pickLocation}

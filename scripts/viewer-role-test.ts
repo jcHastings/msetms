@@ -28,6 +28,7 @@ const SELF_SERVICE = new Set([
   "markAllOfficeNotificationsReadAction",
   "askMikeAction",
   "searchLoadsAction",
+  "searchLocationsAction",
   "searchPlacesAction",
   "placeDetailsAction",
   "driverLoginAction",
@@ -162,7 +163,7 @@ async function main(): Promise<void> {
   assert.equal(settings.selectableDispatcherRoles("viewer").some((role) => role.value === "viewer"), true);
 
   const navHrefs = [...read("components/nav-links.tsx").matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
-  const hiddenFromViewer = new Set(["/settings", "/users", "/settings/sign-in"]);
+  const hiddenFromViewer = new Set(["/settings", "/users", "/settings/sign-in", "/loads/import-sheet"]);
   assert.ok(navHrefs.length >= 20, "nav hrefs");
   for (const href of navHrefs) {
     assert.equal(settings.canSeeNavHref("admin", href), true, `admin nav ${href}`);
@@ -180,6 +181,15 @@ async function main(): Promise<void> {
   assert.equal(settings.canSeeNavHref("read_only", "/reports"), false);
   assert.equal(settings.canSeeNavHref("dispatcher", "/ifta"), true);
   assert.equal(settings.canSeeNavHref("accounting", "/accounting"), true);
+  assert.equal(settings.canExportCsv("viewer"), true);
+  assert.equal(settings.canExportCsv("admin"), true);
+  assert.equal(settings.canExportCsv("dispatcher"), false);
+  assert.equal(settings.canSeeNavHref("viewer", "/loads/import"), false);
+  assert.match(read("components/load-search.tsx"), /data-view-only-allow/);
+  assert.match(read("app/reports/page.tsx"), /data-view-only-allow/);
+  assert.match(read("components/board-toolbar.tsx"), /data-view-only-allow/);
+  assert.match(read("components/view-only-guard.tsx"), /textarea/);
+  assert.match(read("components/view-only-guard.tsx"), /HTMLInputElement/);
 
   const readGates: Array<[string, RegExp]> = [
     ["app/fleet/layout.tsx", /canViewFleet/],
@@ -269,6 +279,90 @@ async function main(): Promise<void> {
     assert.equal(callsRejected, true, `${name} returns without rejecting viewer itself`);
     officeWriteCount += 1;
   }
+
+  const viewerBlockedWrites = [
+    "updateLoadAction",
+    "addPayItemAction",
+    "updateCustomerAction",
+    "deleteCustomerAction",
+    "updateDriverAction",
+    "closeDriverPayPeriodAction",
+    "updateLocationAction",
+    "parseRateConAction",
+    "attachFleetDocAction",
+    "importFuelCsvAction",
+    "saveHandoffAction",
+    "updateLoadStatusAction",
+  ];
+  for (const name of viewerBlockedWrites) {
+    assert.equal(rejected.has(name), true, `${name} must reject viewer`);
+  }
+  const searchMod = modules.find((entry) => entry.file === "lib/search-actions.ts");
+  const searchHits = await (searchMod?.mod.searchLoadsAction as (criteria: object) => Promise<unknown>)({
+    q: "",
+    originState: "",
+    destState: "",
+    dateFrom: "",
+    dateTo: "",
+    searchBy: "pickup",
+    customerId: null,
+    driverId: null,
+    truckId: null,
+    trailerId: null,
+    status: "",
+    includeLive: true,
+    includeArchived: false,
+    includeCancelled: false,
+  });
+  assert.equal(Array.isArray(searchHits), true);
+  const locationHits = await (searchMod?.mod.searchLocationsAction as (query: string) => Promise<unknown>)("a");
+  assert.equal(Array.isArray(locationHits), true);
+
+  const safety = await import("../lib/safety");
+  const desk = await import("../lib/desk");
+  const emptyOnTime = desk.onTimeFromRows([]);
+  assert.equal(emptyOnTime.onTimePct, null);
+  assert.equal(desk.formatOnTimePct(null), "—");
+  const mixedOnTime = desk.onTimeFromRows([{ onTime: false }, { onTime: false }, { onTime: true }, { onTime: false }]);
+  assert.equal(mixedOnTime.delivered, 4);
+  assert.equal(mixedOnTime.late, 3);
+  assert.equal(mixedOnTime.onTimePct, 25);
+  const board = safety.buildSafetyBoard({
+    drivers: [
+      {
+        id: 9,
+        name: "Pat Driver",
+        samsara_driver_id: "",
+        driver_type: "company",
+        license_expires: "",
+        medical_issued: "",
+        medical_expires: "",
+        drug_test_last: "",
+        drug_test_next: "",
+      } as import("../lib/types").Driver,
+    ],
+    windowDays: 30,
+    insurance: { provider: "", policy: "", expires: "" },
+    tokenSet: true,
+    hos: [
+      {
+        driverId: null,
+        loadId: null,
+        samsaraDriverId: "sam-9",
+        driverName: "Pat Driver",
+        dutyStatus: "driving",
+        driveRemainingMs: 3_600_000,
+        shiftRemainingMs: 3_600_000,
+        cycleRemainingMs: 3_600_000,
+        timeUntilBreakMs: 3_600_000,
+        recordedAt: "2026-10-05T12:00:00.000Z",
+        source: "samsara",
+      },
+    ],
+    truckDrivers: [],
+  });
+  assert.equal(board.rows[0]?.hos.includes("No Samsara id"), false);
+  assert.match(board.rows[0]?.hos ?? "", /remaining/);
 
   assert.ok(officeWriteCount >= 100, `expected the office write walk to cover the action surface, got ${officeWriteCount}`);
   assert.ok(driverRejected.size >= 5, "driver write actions");

@@ -1,3 +1,4 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
@@ -5,6 +6,7 @@ import { createFromTemplateAction } from "@/lib/dispatcher-actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listTemplates } from "@/lib/templates";
 
+export const metadata = deskMetadata("Templates");
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {

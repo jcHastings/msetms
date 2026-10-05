@@ -48,6 +48,8 @@ const nextConfig: NextConfig = {
     "/api/company/logo": ["./public/ms-express-logo-transparent.png", "./public/ms-express-logo.png"],
   },
   experimental: {
+    // forbidden() / unauthorized() render the 403 page instead of a 500.
+    authInterrupts: true,
     serverActions: {
       bodySizeLimit: "20mb",
     },

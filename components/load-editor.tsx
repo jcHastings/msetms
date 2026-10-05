@@ -48,7 +48,7 @@ import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured, loadRuntimeEnv } from "@/lib/env";
-import { loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
+import { listExceptionInbox, loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
@@ -69,7 +69,7 @@ import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { mapsBrowserKey } from "@/lib/load-map";
-import { getLoad, listCustomers, listDrivers, listLocations, listTrailers, listTrucks } from "@/lib/queries";
+import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks, locationsForIds } from "@/lib/queries";
 import { listRelays } from "@/lib/relay-store";
 import { equipmentOptions, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
 import { listClaims, requiredDocumentsForLoad } from "@/lib/desk";
@@ -104,7 +104,6 @@ export async function LoadEditor({
   const customers = listCustomers();
   const trucks = listTrucks();
   const trailers = listTrailers();
-  const locations = listLocations();
   const drivers = listDrivers();
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
@@ -112,6 +111,11 @@ export async function LoadEditor({
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
   const relays = listRelays(load.id);
   const stops = ensureDefaultStops(load.id);
+  const locations = locationsForIds(
+    [load.shipper_location_id, load.consignee_location_id, ...stops.map((stop) => stop.location_id)].filter(
+      (id): id is number => id != null,
+    ),
+  );
   scheduleLoadOpenWork(load.id);
   const routed = getLoad(load.id) ?? load;
   const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
@@ -151,9 +155,12 @@ export async function LoadEditor({
               <div className="flex items-center gap-3">
                 <CopyTripNumber value={load.load_number} />
                 <LoadStatusBadge status={load.status} />
-                {loadNeedsCriticalTag(load.id) ? (
-                  <CriticalTag reason={loadCriticalReasons(load.id).join(" · ")} />
-                ) : null}
+                {(() => {
+                  const criticalItems = listExceptionInbox().items;
+                  return loadNeedsCriticalTag(load.id, criticalItems) ? (
+                    <CriticalTag reason={loadCriticalReasons(load.id, criticalItems).join(" · ")} />
+                  ) : null;
+                })()}
                 <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
                 {load.qbo_invoice_number || load.qbo_invoice_id ? (
                   <span className="text-sm text-slate-600">
@@ -242,6 +249,7 @@ export async function LoadEditor({
           <LoadRelaysPanel
             loadId={load.id}
             relays={relays}
+            catalog
             locations={locations}
             mapsApiKey={mapsBrowserKey()}
             drivers={drivers.map((driver) => ({
@@ -278,6 +286,7 @@ export async function LoadEditor({
           <LoadStopsPanel
             loadId={load.id}
             stops={stops}
+            catalog
             locations={locations}
             routeGuide={routeGuide}
             placesEnabled={formSettings.placesEnabled}

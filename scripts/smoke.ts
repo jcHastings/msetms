@@ -13242,16 +13242,20 @@ DISPATCH CONFIRMATION
   assert.equal(fuelTxListKind("cash advance"), "money_code");
   assert.equal(fuelTxListKind("def"), "def");
   assert.equal(fuelTxListKind("DATE DB CATEGORY"), null);
-  const fuelWhen = new Date(Date.now() - 2 * 60 * 60 * 1000);
-  const [fuelYear, fuelMonth, fuelDay] = ymdInTimeZone(fuelWhen, DISPLAY_TIME_ZONE).split("-").map(Number);
-  const fuelDate = `${fuelMonth}/${fuelDay}/${fuelYear}`;
+  const fuelNowMs = Date.now();
+  const fuelWeekStartMs = startOfLocalWeek(new Date()).getTime();
+  const fuelWhen = new Date(
+    Math.min(fuelNowMs - 1000, Math.max(fuelNowMs - 2 * 60 * 60 * 1000, fuelWeekStartMs + 1000)),
+  );
+  const fuelDate = `${fuelWhen.getMonth() + 1}/${fuelWhen.getDate()}/${fuelWhen.getFullYear()}`;
   const fuelHour = String(fuelWhen.getHours()).padStart(2, "0");
+  const fuelMinute = String(fuelWhen.getMinutes()).padStart(2, "0");
   const fuelCsv = [
     "Date,Time,Driver Name,Driver ID,Unit,Location,Category,Gallons,Price,Total,Card Number",
-    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
-    `${fuelDate},${fuelHour}:40,, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
-    `${fuelDate},${fuelHour}:50,Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
-    `${fuelDate},${fuelHour}:32,Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:${fuelMinute},Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
+    `${fuelDate},${fuelHour}:${fuelMinute},, ,101,Indianapolis,Diesel,80,3.40,272.00,1111`,
+    `${fuelDate},${fuelHour}:${fuelMinute},Unknown Driver,,8888,Nowhere,Diesel,40,3.10,124.00,2222`,
+    `${fuelDate},${fuelHour}:${fuelMinute},Denise Ortega,,112,Memphis TN,Diesel,100,3.499,349.90,****4321`,
     ",,,,,",
   ].join("\r\n");
   const parsedFuel = parseFuelCsv(fuelCsv);
@@ -16539,8 +16543,8 @@ DISPATCH CONFIRMATION
   assert.equal(cleanSafetyDate("0000-00-00"), "");
   assert.equal(cleanSafetyDate(""), "");
   assert.equal(formatSafetyDatePair("", ""), "");
-  assert.equal(formatSafetyDatePair("0000-00-00", "2026-09-01"), "2026-09-01");
-  assert.equal(formatSafetyDatePair("2026-01-01", "2026-09-01"), "2026-01-01 / 2026-09-01");
+  assert.equal(formatSafetyDatePair("0000-00-00", "2026-09-01"), "09/01/26");
+  assert.equal(formatSafetyDatePair("2026-01-01", "2026-09-01"), "01/01/26 / 09/01/26");
   assert.equal(expiryRank("", 30, new Date("2026-08-24T12:00:00")), "empty");
   assert.equal(expiryRank("2026-07-01", 30, new Date("2026-08-24T12:00:00")), "expired");
   assert.equal(expiryRank("2026-09-01", 30, new Date("2026-08-24T12:00:00")), "due_soon");
@@ -19376,7 +19380,8 @@ DISPATCH CONFIRMATION
   assert.match(fs.readFileSync(path.join(process.cwd(), "components/load-search.tsx"), "utf8"), /Download spreadsheet/);
 
   const dashToday = fs.readFileSync(path.join(process.cwd(), "app/desk/page.tsx"), "utf8");
-  assert.match(dashToday, /loadTouchesToday/);
+  assert.doesNotMatch(dashToday, /loadTouchesToday/);
+  assert.match(dashToday, /!load\.truck_id/);
   assert.doesNotMatch(dashToday, /Loads picking up or delivering today/);
   assert.match(dashToday, /inboxItems/);
   assert.match(dashToday, /Need cover/);

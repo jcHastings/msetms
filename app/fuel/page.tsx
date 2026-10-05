@@ -70,19 +70,23 @@ export default async function FuelPage({
         : weekFilter,
   );
   const unmatched = listFuelTransactions({ unmatchedOnly: true, ...weekFilter });
-  await getSamsaraFleet();
+  await Promise.race([
+    getSamsaraFleet(),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
   const hourWindow = idleFuelHydrateRange(weekView.mpgNow);
   const engineHoursPull = await hydrateSamsaraEngineHourWindow({
     fromIso: hourWindow.fromIso,
     toIso: hourWindow.toIso,
+    budgetMs: 1200,
   });
-  const closeout = fileFuelCloseout(
-    buildLiveFuelCloseout({
-      weekStartYmd: week,
-      now: weekView.mpgNow,
-      engineHoursError: engineHoursPull.error,
-    }),
-  ).report;
+  const liveCloseout = buildLiveFuelCloseout({
+    weekStartYmd: week,
+    now: weekView.mpgNow,
+    engineHoursError: engineHoursPull.error,
+  });
+  const closeout =
+    dispatcher.role === "viewer" ? liveCloseout : fileFuelCloseout(liveCloseout).report;
   const mpgBoard = listDriverMpg(mpgPeriod, weekView.mpgNow);
   const idleBoard = buildIdleFuelCostBoard(weekView.mpgNow);
   const filterLabel = selectedDriver

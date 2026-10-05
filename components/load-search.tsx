@@ -124,6 +124,7 @@ export function LoadSearch({
     <div className="space-y-4">
       <form
         className="card space-y-4 p-5"
+        data-view-only-allow=""
         onSubmit={(event) => {
           event.preventDefault();
           setSearched(true);
@@ -429,6 +430,7 @@ export function LoadSearch({
           <button
             className="btn btn-secondary"
             type="button"
+            data-view-only-allow=""
             disabled={results.length === 0}
             onClick={() => downloadSearchSpreadsheet(results, columns)}
           >

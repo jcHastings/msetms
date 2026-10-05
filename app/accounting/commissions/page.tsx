@@ -1,8 +1,10 @@
+import { deskMetadata } from "@/lib/desk-metadata";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { listCommissions } from "@/lib/accounting";
 import { formatMoney } from "@/lib/format";
 
+export const metadata = deskMetadata("Commissions");
 export const dynamic = "force-dynamic";
 
 export default function CommissionsPage() {

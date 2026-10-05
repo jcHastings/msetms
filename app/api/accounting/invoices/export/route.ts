@@ -1,7 +1,7 @@
 import { listReceivables } from "@/lib/accounting";
 import { dispatcherCsvResponse } from "@/lib/csv-download";
 import { buildTmsInvoice, renderInvoicesCsv } from "@/lib/invoice";
-import { canAccessAccounting } from "@/lib/settings-shared";
+import { canViewAccounting } from "@/lib/settings-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,5 +14,5 @@ export async function GET() {
       return [];
     }
   });
-  return dispatcherCsvResponse("invoices.csv", renderInvoicesCsv(rows), canAccessAccounting);
+  return dispatcherCsvResponse("invoices.csv", renderInvoicesCsv(rows), canViewAccounting);
 }

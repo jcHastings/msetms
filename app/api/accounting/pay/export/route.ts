@@ -1,6 +1,6 @@
 import { listDriverPay, renderDriverPayXlsx } from "@/lib/accounting";
 import { dispatcherBinaryResponse } from "@/lib/csv-download";
-import { canAccessAccounting } from "@/lib/settings-shared";
+import { canViewAccounting } from "@/lib/settings-shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,6 @@ export async function GET(request: Request) {
     "driver-pay.xlsx",
     renderDriverPayXlsx(listDriverPay(from, to)),
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    canAccessAccounting,
+    canViewAccounting,
   );
 }

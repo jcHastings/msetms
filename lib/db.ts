@@ -1191,6 +1191,14 @@ export function migrate(db: Database): void {
   backfillLoadNumbering(db);
   backfillSampleLoads(db);
   migrateFuelReceiptsForDriverOrphans(db);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);
+    CREATE INDEX IF NOT EXISTS idx_load_stops_load ON load_stops(load_id, sequence, id);
+    CREATE INDEX IF NOT EXISTS idx_reefer_trailer_time ON reefer_readings(trailer_id, recorded_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_loads_truck ON loads(truck_id);
+    CREATE INDEX IF NOT EXISTS idx_loads_driver ON loads(driver_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_kind_load ON attachments(kind, load_id);
+  `);
 }
 
 /** Office cutover copy of fuel_receipts before orphan receipts (NOT NULL load_id, no status). */

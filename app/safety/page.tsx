@@ -8,7 +8,7 @@ import { canViewFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import { getSamsaraFleet } from "@/lib/integrations/samsara";
 import { listSamsaraDvirFlags } from "@/lib/integrations/samsara-webhook";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMdYDisplay } from "@/lib/format";
 import { listDrivers } from "@/lib/queries";
 import { buildSafetyBoard } from "@/lib/safety";
 import { formatSafetyDatePair } from "@/lib/safety-shared";
@@ -42,6 +42,7 @@ export default async function SafetyPage() {
     },
     tokenSet: fleet.tokenSet,
     hos: fleet.tokenSet ? fleet.hos : [],
+    truckDrivers: fleet.truckDrivers,
   });
   const ranked = [...board.rows, ...(board.insurance ? [board.insurance] : [])];
   const expired = ranked.filter((row) => row.rank === "expired").length;
@@ -115,7 +116,7 @@ export default async function SafetyPage() {
           <p className="mt-1 text-sm text-slate-700">
             {board.insurance.subject}
             {settings.insurance_policy ? ` · ${settings.insurance_policy}` : ""}
-            {board.insurance.licenseExpires ? ` · expires ${board.insurance.licenseExpires}` : ""}
+            {board.insurance.licenseExpires ? ` · expires ${formatMdYDisplay(board.insurance.licenseExpires)}` : ""}
             {board.insurance.rank !== "ok" ? ` · ${board.insurance.title}` : ""}
           </p>
         </section>
@@ -145,7 +146,7 @@ export default async function SafetyPage() {
                         {labelForDriverKind(row.driverType)}
                       </div>
                     </td>
-                    <td>{row.licenseExpires}</td>
+                    <td>{row.licenseExpires ? formatMdYDisplay(row.licenseExpires) : ""}</td>
                     <td>{formatSafetyDatePair(row.medicalLast, row.medicalNext)}</td>
                     <td>{formatSafetyDatePair(row.drugLast, row.drugNext)}</td>
                     <td>{row.hos}</td>

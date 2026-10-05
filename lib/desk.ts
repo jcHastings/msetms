@@ -171,11 +171,29 @@ export function listAudit(limit = 50): AuditRow[] {
   return getDb().prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(limit) as AuditRow[];
 }
 
+export function onTimeFromRows(rows: Array<{ onTime: boolean }>): {
+  delivered: number;
+  late: number;
+  onTimePct: number | null;
+} {
+  const delivered = rows.length;
+  const late = rows.filter((row) => !row.onTime).length;
+  return {
+    delivered,
+    late,
+    onTimePct: delivered ? Math.round(((delivered - late) / delivered) * 100) : null,
+  };
+}
+
+export function formatOnTimePct(pct: number | null): string {
+  return pct == null ? "—" : `${pct}%`;
+}
+
 export function dailyRecap(): {
   delivered: number;
   late: number;
   claims: number;
-  onTimePct: number;
+  onTimePct: number | null;
 } {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -191,7 +209,7 @@ export function dailyRecap(): {
     delivered: delivered.length,
     late,
     claims,
-    onTimePct: delivered.length ? Math.round(((delivered.length - late) / delivered.length) * 100) : 100,
+    onTimePct: delivered.length ? Math.round(((delivered.length - late) / delivered.length) * 100) : null,
   };
 }
 

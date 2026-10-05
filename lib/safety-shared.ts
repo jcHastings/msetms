@@ -1,4 +1,5 @@
 /** Client-safe Safety board ranking. No env, db, or secrets. */
+import { formatMdYDisplay } from "./format";
 
 export const SAFETY_RANKS = ["expired", "due_soon", "hos_violation", "unavailable", "ok"] as const;
 export type SafetyRank = (typeof SAFETY_RANKS)[number];
@@ -26,9 +27,16 @@ export function cleanSafetyDate(value: string | null | undefined): string {
   return raw.slice(0, 10);
 }
 
+function displaySafetyDate(value: string): string {
+  const day = cleanSafetyDate(value);
+  if (!day) return "";
+  const shown = formatMdYDisplay(day);
+  return shown === "—" ? day : shown;
+}
+
 export function formatSafetyDatePair(last: string, next: string): string {
-  const left = cleanSafetyDate(last);
-  const right = cleanSafetyDate(next);
+  const left = displaySafetyDate(last);
+  const right = displaySafetyDate(next);
   if (!left && !right) return "";
   if (left && right) return `${left} / ${right}`;
   return left || right;
@@ -83,8 +91,13 @@ export function hosSafetyDetail(input: {
   hasClock: boolean;
 }): { rank: SafetyRank; detail: string } {
   if (!input.tokenSet) return { rank: "unavailable", detail: "Samsara token not set" };
-  if (!input.samsaraDriverId.trim()) return { rank: "unavailable", detail: "No Samsara id" };
-  if (!input.hasClock) return { rank: "unavailable", detail: "HOS not available" };
+  if (input.hasClock) {
+    // A live clock is the link, even when drivers.samsara_driver_id is blank.
+  } else if (!input.samsaraDriverId.trim()) {
+    return { rank: "unavailable", detail: "No Samsara id" };
+  } else {
+    return { rank: "unavailable", detail: "HOS not available" };
+  }
   if (
     (input.driveRemainingMs != null && input.driveRemainingMs <= 0) ||
     (input.timeUntilBreakMs != null && input.timeUntilBreakMs <= 0)

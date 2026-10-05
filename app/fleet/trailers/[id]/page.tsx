@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { deskMetadata } from "@/lib/desk-metadata";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
 import { TrailerForm } from "@/components/trailer-form";
@@ -14,6 +16,11 @@ import { complianceWindows } from "@/lib/settings";
 import { latestTrailerShareLink, trailerSharePath } from "@/lib/trailer-share";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const trailer = getTrailer(Number.parseInt((await params).id, 10));
+  return deskMetadata(trailer ? `Trailer ${trailer.unit_number}` : "Trailer");
+}
 
 export default async function EditTrailerPage({
   params,

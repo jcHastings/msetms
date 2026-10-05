@@ -161,6 +161,68 @@ export function listLocations(role?: "shipper" | "receiver"): Location[] {
   return rows.filter((location) => location.role === "both" || location.role === role);
 }
 
+export function locationsForIds(ids: number[]): Location[] {
+  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+  if (!unique.length) return [];
+  return getDb()
+    .prepare(`SELECT * FROM locations WHERE id IN (${unique.map(() => "?").join(", ")})`)
+    .all(...unique) as Location[];
+}
+
+export type LocationPickerHit = {
+  id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  verified_at?: string | null;
+};
+
+export function searchLocationPickerRows(query: string, limit = 50): LocationPickerHit[] {
+  const needle = String(query ?? "").replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
+  if (!needle) return [];
+  const like = `%${needle}%`;
+  const size = Math.min(50, Math.max(1, Math.floor(limit)));
+  return getDb()
+    .prepare(
+      `SELECT id, name, street, city, state, zip, verified_at
+       FROM locations
+       WHERE name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ?
+       ORDER BY name COLLATE NOCASE
+       LIMIT ?`,
+    )
+    .all(like, like, like, like, like, size) as LocationPickerHit[];
+}
+
+export type LocationDirectoryPage = {
+  locations: Location[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+};
+
+export function searchLocationsDirectory(input: { q?: string; page?: number; pageSize?: number } = {}): LocationDirectoryPage {
+  const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize ?? 25)));
+  const needle = String(input.q ?? "").replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
+  const filterSql = needle
+    ? `WHERE name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ? OR IFNULL(phone, '') LIKE ?`
+    : "";
+  const filterParams = needle ? Array<string>(6).fill(`%${needle}%`) : [];
+  const db = getDb();
+  const total =
+    Number((db.prepare(`SELECT COUNT(*) AS count FROM locations ${filterSql}`).get(...filterParams) as { count: number }).count) ||
+    0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const requested = Math.floor(Number(input.page));
+  const page = Math.min(pageCount, Math.max(1, Number.isFinite(requested) && requested > 0 ? requested : 1));
+  const locations = db
+    .prepare(`SELECT * FROM locations ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
+    .all(...filterParams, pageSize, (page - 1) * pageSize) as Location[];
+  return { locations, total, page, pageSize, pageCount };
+}
+
 export function getLocation(id: number): Location | null {
   return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
 }

@@ -7,18 +7,27 @@ import { LocationCsvImport } from "@/components/location-csv-import";
 import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatLocationAddress, formatSchedulingSummary } from "@/lib/locations";
-import { listLocations } from "@/lib/queries";
+import { DirectoryPager, DirectorySearch } from "@/components/directory-chrome";
+import { searchLocationsDirectory } from "@/lib/queries";
 import { LocationVerifyBadge } from "@/components/location-verify-badge";
 import { canEditLocations, canExportCsv, canImportLocations } from "@/lib/settings-shared";
 import { labelForLocationRole } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function LocationsPage() {
+export default async function LocationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) redirect("/login");
+  const params = await searchParams;
+  const q = String(params.q ?? "").trim();
+  const page = Number.parseInt(String(params.page ?? "1"), 10);
   const role = dispatcher.role;
-  const locations = listLocations();
+  const directory = searchLocationsDirectory({ q, page });
+  const locations = directory.locations;
   const canImport = canImportLocations(role);
   const canExport = canExportCsv(role);
   const canVerify = canEditLocations(role);
@@ -49,6 +58,7 @@ export default async function LocationsPage() {
       />
       {canImport ? <LocationCsvImport /> : null}
       <div className="card overflow-hidden">
+        <DirectorySearch action="/locations" q={q} label="Find a location" placeholder="Name, city, street, or state" />
         {locations.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">
             No locations yet.{" "}
@@ -91,6 +101,7 @@ export default async function LocationsPage() {
             </tbody>
           </table>
         )}
+        <DirectoryPager path="/locations" q={q} page={directory.page} pageCount={directory.pageCount} />
       </div>
     </>
   );
