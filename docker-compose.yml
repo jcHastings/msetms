@@ -1,0 +1,12 @@
+services:
+  tms:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      TMS_DB_PATH: /app/data/tms.db
+    restart: unless-stopped
