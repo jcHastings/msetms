@@ -21,6 +21,7 @@ import {
   saveCompanyLogo,
   setDropdownOptionActive,
   updateAlertSettings,
+  updateCarrierAuthority,
   updateCompanyContact,
   updateDocumentDefaults,
   updateInsuranceSettings,
@@ -72,6 +73,10 @@ export async function saveCompanyContactAction(
       city: String(formData.get("city") ?? "").trim(),
       state: String(formData.get("state") ?? "").trim(),
       zip: String(formData.get("zip") ?? "").trim(),
+    });
+    updateCarrierAuthority({
+      usdot: String(formData.get("usdot") ?? ""),
+      mc_number: String(formData.get("mc_number") ?? ""),
     });
     refresh();
     return { ok: true };

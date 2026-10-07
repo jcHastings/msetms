@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { getCompanySettings, hasCustomCompanyLogo } from "@/lib/settings";
+import { getCarrierAuthority, getCompanySettings, hasCustomCompanyLogo } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export default async function CompanySettingsPage() {
       <section className="card mb-6 p-6">
         <h2 className="text-sm font-semibold">Contact</h2>
         <div className="mt-4">
-          <CompanyProfileForm profile={settings} canEdit={canEdit} />
+          <CompanyProfileForm profile={settings} authority={getCarrierAuthority()} canEdit={canEdit} />
         </div>
       </section>
       <section className="card p-6">

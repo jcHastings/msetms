@@ -6,9 +6,11 @@ import type { CompanyProfile } from "@/lib/types";
 
 export function CompanyProfileForm({
   profile,
+  authority,
   canEdit = true,
 }: {
   profile: CompanyProfile;
+  authority: { usdot: string; mc_number: string };
   canEdit?: boolean;
 }) {
   return (
@@ -49,6 +51,17 @@ export function CompanyProfileForm({
         <label htmlFor="zip">ZIP</label>
         <input id="zip" name="zip" defaultValue={profile.zip} />
       </div>
+      <div className="field">
+        <label htmlFor="usdot">USDOT</label>
+        <input id="usdot" name="usdot" defaultValue={authority.usdot} maxLength={32} autoComplete="off" />
+      </div>
+      <div className="field">
+        <label htmlFor="mc_number">MC</label>
+        <input id="mc_number" name="mc_number" defaultValue={authority.mc_number} maxLength={32} autoComplete="off" />
+      </div>
+      <p className="md:col-span-2 text-sm text-slate-600">
+        USDOT and MC print on settlement statements. Leave them blank until the numbers are confirmed.
+      </p>
     </SettingsForm>
   );
 }

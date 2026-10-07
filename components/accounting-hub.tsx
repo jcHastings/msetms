@@ -16,6 +16,10 @@ import {
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
 import { ClosePayPeriodButton } from "@/components/close-pay-period-button";
+import { ReimbursementQueue } from "@/components/reimbursement-queue";
+import { SettlementWeekList } from "@/components/settlement-week-list";
+import { canWrite } from "@/lib/settings-shared";
+import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { InvoicesAcctTable, type InvoiceAcctRow } from "@/components/invoices-acct-table";
 import {
   addDaysIso,
@@ -81,6 +85,7 @@ export function AccountingHub({
   to,
   branch = "",
   driver = "",
+  week = "",
 }: {
   tab: string;
   q?: string;
@@ -88,6 +93,7 @@ export function AccountingHub({
   to?: string;
   branch?: string;
   driver?: string;
+  week?: string;
 }) {
   const current = parseAccountingHubTab(tab);
   const period = defaultPayPeriod();
@@ -116,6 +122,8 @@ export function AccountingHub({
       {current === "archived" ? <ArchivedTab q={q} branch={branch} branches={branches} /> : null}
       {current === "pay" ? <PayTab from={payFrom} to={payTo} driver={driver} /> : null}
       {current === "approve" ? <ApproveTab /> : null}
+      {current === "settlements" ? <SettlementWeekList week={week} /> : null}
+      {current === "reimbursements" ? <ReimbursementTab /> : null}
     </div>
   );
 }
@@ -547,6 +555,9 @@ function PayTab({ from, to, driver }: { from: string; to: string; driver: string
         <a className="btn btn-secondary" href={exportHref}>
           Download Excel
         </a>
+        <a className="btn btn-secondary" href={`/accounting/settlements?week=${encodeURIComponent(from)}`}>
+          Settlement statements
+        </a>
         <ClosePayPeriodButton from={from} to={to} />
       </div>
       {groups.length === 0 ? (
@@ -599,6 +610,11 @@ function PayTab({ from, to, driver }: { from: string; to: string; driver: string
       )}
     </div>
   );
+}
+
+async function ReimbursementTab() {
+  const dispatcher = await getSignedInDispatcher();
+  return <ReimbursementQueue canEdit={dispatcher ? canWrite(dispatcher.role) : false} />;
 }
 
 function ApproveTab() {

@@ -45,6 +45,7 @@ const ACTION_FILES = [
   "lib/places-actions.ts",
   "lib/dispatcher-password-actions.ts",
   "lib/driver-actions.ts",
+  "lib/settlement-actions.ts",
 ];
 
 const GUARD =
