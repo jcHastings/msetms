@@ -1,5 +1,5 @@
 import { getSignedInDriver } from "@/lib/driver-session";
-import { getGustoPublicStatus, listGustoPayLinesForDriver } from "@/lib/integrations/gusto";
+import { listDriverPaystubs } from "@/lib/paystubs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,19 +13,14 @@ export async function GET(request: Request) {
   if (requested && Number(requested) !== driver.id) {
     return Response.json({ ok: false, error: "You can only open your own paystubs." }, { status: 403 });
   }
-  const status = getGustoPublicStatus();
-  const paystubs = listGustoPayLinesForDriver(driver.id).map((row) => ({
+  const paystubs = listDriverPaystubs(driver.id).map((row) => ({
     id: row.id,
-    checkDate: row.check_date,
-    payPeriodStart: row.pay_period_start,
-    payPeriodEnd: row.pay_period_end,
-    grossPay: row.gross_pay,
-    netPay: row.net_pay,
-    source: row.source,
+    payDate: row.pay_date,
+    payPeriodStart: row.period_start,
+    payPeriodEnd: row.period_end,
+    grossPay: row.gross,
+    netPay: row.net,
+    fileName: row.original_name,
   }));
-  return Response.json({
-    ok: true,
-    connected: status.connected,
-    paystubs,
-  });
+  return Response.json({ ok: true, paystubs });
 }

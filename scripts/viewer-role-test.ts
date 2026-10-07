@@ -46,7 +46,6 @@ const ACTION_FILES = [
   "lib/dispatcher-password-actions.ts",
   "lib/driver-actions.ts",
   "lib/settlement-actions.ts",
-  "lib/gusto-actions.ts",
 ];
 
 const GUARD =
@@ -133,6 +132,16 @@ async function main(): Promise<void> {
   assert.equal(settings.canViewFleet("viewer"), true);
   assert.equal(settings.canUploadFuel("viewer"), false);
   assert.equal(settings.canViewFuel("viewer"), true);
+  assert.equal(settings.canUploadPaystubs("viewer"), false);
+  assert.equal(settings.canUploadPaystubs("read_only"), false);
+  assert.equal(settings.canUploadPaystubs("admin"), true);
+  assert.equal(settings.canUploadPaystubs("dispatcher"), true);
+  assert.equal(settings.canUploadPaystubs("accounting"), true);
+  assert.equal(settings.canViewPaystubs("viewer"), true);
+  assert.equal(settings.canViewPaystubs("dispatcher"), true);
+  assert.equal(settings.canSeeNavHref("dispatcher", "/paystubs"), true);
+  assert.equal(settings.canSeeNavHref("accounting", "/paystubs"), true);
+  assert.equal(settings.canSeeNavHref("viewer", "/paystubs"), true);
   assert.equal(settings.canAccessAccounting("viewer"), false);
   assert.equal(settings.canViewAccounting("viewer"), true);
   assert.equal(settings.canViewReports("viewer"), true);
@@ -202,6 +211,7 @@ async function main(): Promise<void> {
     ["app/safety/page.tsx", /canViewFleet/],
     ["app/compliance/page.tsx", /canViewFleet/],
     ["app/fuel/page.tsx", /canViewFuel/],
+    ["app/paystubs/page.tsx", /canViewPaystubs/],
     ["app/tolls/page.tsx", /canViewFuel/],
     ["app/accounting/layout.tsx", /canViewAccounting/],
     ["app/claims/layout.tsx", /canViewClaims/],
@@ -381,14 +391,15 @@ async function main(): Promise<void> {
     "app/api/tolls/pull/route.ts",
     "app/api/integrations/quickbooks/connect/route.ts",
     "app/api/integrations/quickbooks/callback/route.ts",
-    "app/api/integrations/gusto/connect/route.ts",
-    "app/api/integrations/gusto/callback/route.ts",
+    "app/api/paystubs/preview/route.ts",
+    "app/api/paystubs/commit/route.ts",
   ]);
   const allowedWriteRoutes = new Set([
     "app/api/mike/route.ts",
     "app/api/integrations/samsara/webhook/route.ts",
     "app/api/driver/v1/auth/login/route.ts",
     "app/api/driver/v1/auth/logout/route.ts",
+    "app/api/paystubs/upload/route.ts",
   ]);
 
   const routeFiles = walkRouteFiles(path.join(ROOT, "app/api"));
@@ -398,9 +409,7 @@ async function main(): Promise<void> {
     const writes = writeMethods(source);
     const mutatingGet =
       file.endsWith("app/api/integrations/quickbooks/connect/route.ts") ||
-      file.endsWith("app/api/integrations/quickbooks/callback/route.ts") ||
-      file.endsWith("app/api/integrations/gusto/connect/route.ts") ||
-      file.endsWith("app/api/integrations/gusto/callback/route.ts");
+      file.endsWith("app/api/integrations/quickbooks/callback/route.ts");
     if (writes.length === 0 && !mutatingGet) continue;
     const listed = officeWriteRoutes.has(file) || allowedWriteRoutes.has(file) || file.includes("app/api/driver/v1/");
     assert.equal(listed, true, `new write route is not classified: ${file}`);
@@ -456,17 +465,17 @@ async function main(): Promise<void> {
   );
   apiWriteCount += 1;
 
-  const gustoConnect = await import("../app/api/integrations/gusto/connect/route");
+  const paystubPreview = await import("../app/api/paystubs/preview/route");
   await assertOfficeWriteResponse(
-    await gustoConnect.GET(new Request("http://localhost/api/integrations/gusto/connect")),
-    "gusto connect",
+    await paystubPreview.POST(new Request("http://localhost/api/paystubs/preview", { method: "POST" })),
+    "paystub preview",
   );
   apiWriteCount += 1;
 
-  const gustoCallback = await import("../app/api/integrations/gusto/callback/route");
+  const paystubCommit = await import("../app/api/paystubs/commit/route");
   await assertOfficeWriteResponse(
-    await gustoCallback.GET(new Request("http://localhost/api/integrations/gusto/callback")),
-    "gusto callback",
+    await paystubCommit.POST(new Request("http://localhost/api/paystubs/commit", { method: "POST" })),
+    "paystub commit",
   );
   apiWriteCount += 1;
 
