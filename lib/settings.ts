@@ -189,8 +189,8 @@ const SETTINGS_COLUMNS = [
 export function getCarrierAuthority(): { usdot: string; mc_number: string } {
   const settings = getCompanySettings();
   return {
-    usdot: settings.usdot.trim().slice(0, 32),
-    mc_number: settings.mc.trim().slice(0, 32),
+    usdot: String(settings.usdot ?? "").trim().slice(0, 32),
+    mc_number: String(settings.mc ?? "").trim().slice(0, 32),
   };
 }
 

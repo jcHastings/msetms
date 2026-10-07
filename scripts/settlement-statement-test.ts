@@ -413,7 +413,7 @@ async function main() {
   assert.equal(dbaStatement?.identityBlock, "");
   assert.match(dbaStatement?.carrierName ?? "", /DBA MS Express/);
   const dbaPdf = await pdf.renderSettlementPdf(dbaStatement!);
-  const dbaText = String((await extractText(new Uint8Array(dbaPdf), { mergePages: true })).text ?? "");
+  const dbaText = String((await extractText(new Uint8Array(dbaPdf), { mergePages: true })).text ?? "").replace(/\s+/g, " ");
   assert.match(dbaText, /DBA MS Express/);
   assert.doesNotMatch(dbaText, /M&S Loads/);
 
