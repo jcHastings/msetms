@@ -343,6 +343,16 @@ export function canConnectQuickbooks(role: string): boolean {
   return isAdminRole(role);
 }
 
+/** Administrator, Standard, and Accounting can upload paystubs. */
+export function canUploadPaystubs(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role) || isAccountingRole(role);
+}
+
+/** Viewer and legacy read-only can open the screen. Writes stay blocked. */
+export function canViewPaystubs(role: string): boolean {
+  return canUploadPaystubs(role) || isViewerRole(role) || role === "read_only";
+}
+
 export function canEditLoads(role: string): boolean {
   return canWriteDesk(role);
 }
@@ -466,6 +476,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/users") return canManageUsers(role);
   if (href === "/claims") return canWriteDesk(role);
   if (href === "/reports" || href.startsWith("/reports/")) return canViewReports(role);
+  if (href === "/paystubs" || href.startsWith("/paystubs/")) return canViewPaystubs(role);
   if (href === "/settings" || href.startsWith("/settings/")) return canEditSettings(role) || href === "/settings/security";
   return isAdminRole(role);
 }

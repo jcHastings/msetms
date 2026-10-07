@@ -1199,6 +1199,90 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_loads_driver ON loads(driver_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_kind_load ON attachments(kind, load_id);
   `);
+
+  db.exec(`
+    -- Unused tables from the earlier API draft. Paystub upload does not read them.
+    CREATE TABLE IF NOT EXISTS gusto_connection (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      company_uuid TEXT NOT NULL DEFAULT '',
+      company_name TEXT NOT NULL DEFAULT '',
+      access_token TEXT NOT NULL DEFAULT '',
+      refresh_token TEXT NOT NULL DEFAULT '',
+      access_token_expires_at TEXT NOT NULL DEFAULT '',
+      granted_scope TEXT NOT NULL DEFAULT '',
+      connected_at TEXT NOT NULL DEFAULT '',
+      last_sync_at TEXT NOT NULL DEFAULT '',
+      last_sync_error TEXT NOT NULL DEFAULT '',
+      last_sync_summary TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS gusto_people (
+      gusto_uuid TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      match_names TEXT NOT NULL DEFAULT '[]',
+      active INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gusto_driver_links (
+      driver_id INTEGER PRIMARY KEY REFERENCES drivers(id) ON DELETE CASCADE,
+      gusto_uuid TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      match_source TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gusto_pay_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      gusto_external_id TEXT NOT NULL,
+      gusto_person_uuid TEXT NOT NULL DEFAULT '',
+      pay_period_start TEXT NOT NULL DEFAULT '',
+      pay_period_end TEXT NOT NULL DEFAULT '',
+      check_date TEXT NOT NULL DEFAULT '',
+      gross_pay TEXT NOT NULL DEFAULT '',
+      net_pay TEXT NOT NULL DEFAULT '',
+      synced_at TEXT NOT NULL,
+      UNIQUE (driver_id, source, gusto_external_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gusto_pay_lines_driver
+      ON gusto_pay_lines(driver_id, check_date DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS paystub_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uploaded_by TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      summary_original_name TEXT NOT NULL DEFAULT '',
+      summary_stored_name TEXT NOT NULL DEFAULT '',
+      summary_sha256 TEXT NOT NULL DEFAULT '',
+      summary_mime TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS paystubs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER,
+      driver_id INTEGER,
+      suggested_driver_id INTEGER,
+      status TEXT NOT NULL,
+      match_state TEXT NOT NULL DEFAULT '',
+      employee_name TEXT NOT NULL DEFAULT '',
+      pay_date TEXT NOT NULL DEFAULT '',
+      period_start TEXT NOT NULL DEFAULT '',
+      period_end TEXT NOT NULL DEFAULT '',
+      gross TEXT NOT NULL DEFAULT '',
+      net TEXT NOT NULL DEFAULT '',
+      original_name TEXT NOT NULL DEFAULT '',
+      stored_name TEXT NOT NULL DEFAULT '',
+      sha256 TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+      review_reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_paystubs_sha256 ON paystubs(sha256);
+    CREATE INDEX IF NOT EXISTS idx_paystubs_driver_date ON paystubs(driver_id, pay_date, status);
+    CREATE INDEX IF NOT EXISTS idx_paystubs_status ON paystubs(status, id);
+  `);
 }
 
 /** Office cutover copy of fuel_receipts before orphan receipts (NOT NULL load_id, no status). */

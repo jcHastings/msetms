@@ -17,9 +17,22 @@ async function clearDriverSessionBestEffort(): Promise<void> {
   }
 }
 
+function scriptDriver(): DriverWithTruck | null {
+  const raw = process.env.TMS_SCRIPT_DRIVER_ID?.trim();
+  if (!raw) return null;
+  const id = Number.parseInt(raw, 10);
+  if (!id) return null;
+  return getDriver(id);
+}
+
 export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
-  const jar = await cookies();
-  const raw = jar.get(COOKIE)?.value;
+  let raw: string | undefined;
+  try {
+    const jar = await cookies();
+    raw = jar.get(COOKIE)?.value;
+  } catch {
+    return scriptDriver();
+  }
   if (!raw) return null;
   const payload = readSignedSessionToken<DriverSessionPayload>(raw);
   if (!payload || payload.typ !== DRIVER_SESSION_TYP) {
