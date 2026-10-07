@@ -105,6 +105,8 @@ async function main() {
   assert.equal(sent.invoiceId, "900");
   const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(invoice.body.CustomerRef.value, "58");
+  assert.equal(invoice.body.DocNumber, "QBOMAP1", "DocNumber is the MS Express load number");
+  assert.equal(String(invoice.body.DocNumber).length <= 21, true);
   assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "22", "21"], "map, exact name, map");
 
   // Unmapped customer: never query or create a QBO customer during invoice sync.
@@ -160,6 +162,8 @@ async function main() {
   assert.equal(calls.some((c) => c.method === "POST" && /\/vendor\?/.test(c.url)), false);
   const qboSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
   assert.doesNotMatch(qboSrc, /\/customer"|\/vendor"/);
+  assert.doesNotMatch(qboSrc, /load_number\.slice\(0,\s*21\)/);
+  assert.match(qboSrc, /quickbooksDocNumber/);
   const mapPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
   assert.match(mapPage, /htmlFor=\{selectId\}/);
   assert.match(mapPage, /No TMS customers to map yet/);
@@ -201,8 +205,10 @@ async function main() {
   assert.match(legal, /3062879/);
   assert.match(legal, /402-302-0097/);
   assert.match(legal, /State of Nebraska/);
-  assert.match(legal, /JC to confirm/);
-  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|ar@msloads\.com/i);
+  assert.match(legal, /ar@msloads\.com/);
+  assert.match(legal, /10 years/);
+  assert.match(legal, /backup retention: JC to confirm/);
+  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|MC-970613|970613|jc@msloads\.com/i);
   console.log("qbo-mapping-test: ok");
 }
 

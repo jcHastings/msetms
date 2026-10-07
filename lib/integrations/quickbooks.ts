@@ -19,7 +19,7 @@ import {
   markQboInvoice,
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
-import { customerInvoiceBillableItems } from "../pay-items";
+import { customerInvoiceBillableItems, resolveCustomerLumper } from "../pay-items";
 import { isBillableStatus, isOwnerOperator, type LoadView } from "../types";
 
 const MINOR_VERSION = "75";
@@ -29,6 +29,8 @@ const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
+/** QuickBooks Invoice.DocNumber max length. Never truncate a load number to fit. */
+export const QBO_DOC_NUMBER_MAX = 21;
 /** MS Express is in Hastings, NE. Invoice and bill dates use the company's calendar day. */
 const COMPANY_TIME_ZONE = "America/Chicago";
 const SANDBOX_API_HOST = "https://sandbox-quickbooks.api.intuit.com";
@@ -155,9 +157,12 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 
 /**
  * Same lines as the TMS invoice PDF: Flat Rate pay items (or the load rate as Line Haul), then customer extras.
- * Lumper follows INVOICE_INCLUDES_LUMPER (off today). A cancelled load can only bill its TONU lines.
+ * Lumper is one amount, shared with the PDF. Fuel surcharge is only a manual pay line (its own item, never Line Haul).
+ * A cancelled load can only bill its TONU lines.
  */
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
+  const lumper = resolveCustomerLumper(load);
+  if (!lumper.ok) throw new Error(lumper.message);
   const payItems = customerInvoiceBillableItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
   const qboLine = (item: {
@@ -203,6 +208,16 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
     }
   }
   lines.push(...extras.map(qboLine));
+  if (lumper.mode === "actual") {
+    lines.push({
+      category: "lumper",
+      name: labelForPayCategory("lumper"),
+      description: load.load_number,
+      amount: lumper.amount,
+      qty: 1,
+      unitPrice: lumper.amount,
+    });
+  }
   return lines;
 }
 
@@ -402,6 +417,8 @@ function companyDay(date: Date): string {
 /** Customer-visible invoice message: load, lane, and the customer's own references only. No internal notes. */
 function buildMemo(load: LoadView): string {
   const parts = [`Load ${load.load_number}`, `${load.origin} → ${load.destination}`];
+  const customerRef = String(load.customer_reference ?? "").trim();
+  if (customerRef) parts.push(`Customer ref: ${customerRef}`);
   if (load.reference_number) parts.push(`Ref: ${load.reference_number}`);
   if (load.po_number) parts.push(`PO: ${load.po_number}`);
   return parts.join("\n");
@@ -417,8 +434,21 @@ function buildPrivateNote(load: LoadView): string {
 
 type QboInvoiceRecord = { Id?: string; SyncToken?: string; DocNumber?: string; TotalAmt?: number; Balance?: number };
 
+/** MS Express load number, unchanged. Refuses rather than cutting a number QuickBooks cannot store. */
+export function quickbooksDocNumber(loadNumber: string): string {
+  const doc = String(loadNumber ?? "").trim();
+  if (!doc) throw new Error("This load has no MS Express load number, so nothing was sent.");
+  if (doc.length > QBO_DOC_NUMBER_MAX) {
+    throw new Error(
+      `QuickBooks invoice numbers are limited to ${QBO_DOC_NUMBER_MAX} characters. MS Express load # ${doc} is ${doc.length} characters, so nothing was sent. It was not shortened.`,
+    );
+  }
+  return doc;
+}
+
 /**
- * New load: create the invoice with DocNumber = load number (refuses if QuickBooks already has that number).
+ * New load: create the invoice with DocNumber = the MS Express load number (never the customer ref, PO, or broker number).
+ * Refuses if that number is longer than QuickBooks allows, instead of shortening it.
  * Already sent: update the same QuickBooks invoice in place (sparse update, lines replaced). Never a second invoice.
  * Every customer, term, and item is resolved before anything is written.
  */
@@ -426,6 +456,7 @@ async function createOrUpdateLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  const docNumber = quickbooksDocNumber(load.load_number);
   const customerId = await resolveQboCustomer(load);
   const salesTerm = await resolveSalesTermRef(load);
   const linePayload = [];
@@ -442,7 +473,6 @@ async function createOrUpdateLiveInvoice(
       },
     });
   }
-  const docNumber = load.load_number.slice(0, 21);
   const payload: Record<string, unknown> = {
     DocNumber: docNumber,
     TxnDate: preview.txnDate,

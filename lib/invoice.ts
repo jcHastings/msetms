@@ -4,7 +4,7 @@ import { addAttachment } from "./files";
 import { formatInvoiceMoney, formatMdYDisplay, formatStopWindow, formatWeight } from "./format";
 import { labelForPayCategory } from "./load-page-shared";
 import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } from "./locations";
-import { customerInvoiceBillableItems } from "./pay-items";
+import { customerInvoiceBillableItems, resolveCustomerLumper } from "./pay-items";
 import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
@@ -103,8 +103,14 @@ function invoiceLineFromPayItem(item: { category: string; notes: string; total: 
   };
 }
 
-/** Customer freight (rate or Flat Rate) plus extras such as detention. Lumper stays off. */
+/**
+ * Customer freight (rate or Flat Rate) plus extras such as detention.
+ * Lumper is one amount: the customer pay line, or lumper_actual when that is the only figure.
+ * Fuel surcharge is only a manual Fuel Surcharge pay line. Nothing here multiplies miles by a rate.
+ */
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
+  const lumper = resolveCustomerLumper(load);
+  if (!lumper.ok) throw new Error(lumper.message);
   const payItems = customerInvoiceBillableItems(load.id);
   const flats = payItems.filter((item) => item.category === "flat_rate");
   const extras = payItems.filter((item) => item.category !== "flat_rate");
@@ -115,6 +121,15 @@ export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
     lines.push({ name: "Flat Rate", description: "", amount: load.rate, qty: 1, rate: load.rate });
   }
   lines.push(...extras.map(invoiceLineFromPayItem));
+  if (lumper.mode === "actual") {
+    lines.push({
+      name: labelForPayCategory("lumper"),
+      description: "",
+      amount: lumper.amount,
+      qty: 1,
+      rate: lumper.amount,
+    });
+  }
   return lines;
 }
 
@@ -292,7 +307,7 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     customerName: load.customer_name,
     date,
     poNumber: load.po_number || load.customer_reference || "",
-    customerReference: load.customer_reference || load.po_number || "",
+    customerReference: (load.customer_reference ?? "").trim(),
     lane: `${load.origin} → ${load.destination}`,
     lines,
     total: lines.reduce((sum, line) => sum + line.amount, 0),
@@ -613,6 +628,8 @@ function drawInvoiceHeader(
     ["Weight", model.weight],
     ["Distance", invoiceDistance(model.miles)],
   ];
+  const customerRef = model.customerReference.trim();
+  if (customerRef) meta.push(["Customer ref #", customerRef]);
   const rowH = 15;
   const cardY = y + 30;
   const cardH = 12 + meta.length * rowH;

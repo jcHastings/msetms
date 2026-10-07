@@ -9,19 +9,16 @@ export const MS_EXPRESS_CARRIER = {
   phone: "402-302-0097",
 } as const;
 
-const FORBIDDEN_AR_EMAIL = /^ar@msloads\.com$/i;
-
 export function looksLikeMsLoadsName(name: string): boolean {
   const compact = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!compact) return false;
   return compact.includes("msloads") || compact.includes("mandsloads");
 }
 
-/** Invoice From address. Blank and ar@msloads.com are not usable. */
+/** Invoice From address. A blank address is not usable. ar@msloads.com is MS Express's AR email. */
 export function usableArEmail(value: string | null | undefined): string {
   const email = String(value ?? "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "";
-  if (FORBIDDEN_AR_EMAIL.test(email)) return "";
   return email;
 }
 

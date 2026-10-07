@@ -213,7 +213,7 @@ async function main() {
   const { addPayItem } = await import("../lib/pay-items");
   const { upsertQboItemMap, upsertQboVendorMap } = await import("../lib/accounting-desk");
   const accounting = await import("../lib/accounting");
-  const { tmsCustomerInvoiceLines } = await import("../lib/invoice");
+  const { tmsCustomerInvoiceLines: invoiceLines, buildTmsInvoice, renderTmsInvoicePdf } = await import("../lib/invoice");
   const qbo = await import("../lib/integrations/quickbooks");
   const db = getDb();
   if (FRESH) {
@@ -297,7 +297,7 @@ async function main() {
     if (net) fake.terms = [{ Id: netTermId, Name: String(net.Name), DueDays: Number(net.DueDays ?? 0) }];
   }
 
-  // Maps on the COPY only. Lumper is mapped but not billed today (INVOICE_INCLUDES_LUMPER = false).
+  // Maps on the COPY only. Lumper bills through the Lumper item (INVOICE_INCLUDES_LUMPER).
   for (const cat of Object.keys(cats)) upsertQboItemMap(cat, itemId[cat], cats[cat as Cat].item);
   db.prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped', payment_terms = '' WHERE id IN (9, 531)").run(customerQboId);
   const setRemit = (street: string, ar: string) =>
@@ -310,9 +310,9 @@ async function main() {
 
   let seq = 0;
   type PayLine = { category: Cat | "trailer_rental"; rate: number | null; qty?: number; total: number; bill_to?: "customer" | "driver"; notes?: string };
-  function makeLoad(opts: { customerId?: number; rate?: number | null; status?: string; pay?: PayLine[]; delivery?: string; lumperActual?: number; tag?: string }) {
+  function makeLoad(opts: { customerId?: number; rate?: number | null; status?: string; pay?: PayLine[]; delivery?: string; lumperActual?: number; tag?: string; customerReference?: string; loadNumber?: string }) {
     seq += 1;
-    const loadNumber = `MSETMS-T${String(seq).padStart(2, "0")}-${RUN}`;
+    const loadNumber = opts.loadNumber ?? `MSETMS-T${String(seq).padStart(2, "0")}-${RUN}`;
     const delivery = opts.delivery ?? "2026-09-14T17:00:00";
     const id = queries.createLoad({
       customer_id: opts.customerId ?? 9,
@@ -337,6 +337,7 @@ async function main() {
       driver_id: null,
       load_number: loadNumber,
       oo_pay: null,
+      customer_reference: opts.customerReference ?? "",
     } as Parameters<typeof queries.createLoad>[0]);
     for (const p of opts.pay ?? []) {
       addPayItem(id, {
@@ -368,7 +369,7 @@ async function main() {
     const lines = ((read.Line ?? []) as Json[]).filter((l) => l.DetailType === "SalesItemLineDetail");
     const total = exp.lines.reduce((s, l) => s + l.amount, 0);
     check(c.checks, "amount", money(total), money(read.TotalAmt));
-    const tmsTotal = tmsCustomerInvoiceLines(load).reduce((s, l) => s + l.amount, 0);
+    const tmsTotal = invoiceLines(load).reduce((s, l) => s + l.amount, 0);
     check(c.checks, "amount = TMS invoice PDF", money(tmsTotal), money(read.TotalAmt));
     check(c.checks, "item", exp.lines.map((l) => itemId[l.cat]), lines.map((l) => String(l.SalesItemLineDetail?.ItemRef?.value)));
     check(c.checks, "line amounts", exp.lines.map((l) => money(l.amount)), lines.map((l) => money(l.Amount)));
@@ -424,16 +425,54 @@ async function main() {
     await qbo.sendLoadToQuickbooks(id);
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1989.4, qty: 812, unitPrice: 2.45 }] });
   });
-  await runCase("C03a", "Lumper billed to customer (pay item) - follows INVOICE_INCLUDES_LUMPER (off)", async (c) => {
+  await runCase("C03a", "Lumper billed to customer (pay line only)", async (c) => {
     const { id } = makeLoad({ rate: 1500, pay: [{ category: "lumper", rate: 150, total: 150 }] });
     await qbo.sendLoadToQuickbooks(id);
-    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }] });
-    c.note = "Lumper stays off QuickBooks and the TMS PDF alike until JC decides; flipping INVOICE_INCLUDES_LUMPER bills it on both, through the Lumper item map.";
+    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }, { cat: "lumper", amount: 150 }] });
+    c.note = "One customer lumper pay line is billed on the TMS PDF and QuickBooks.";
   });
-  await runCase("C03b", "Lumper paid by driver at the dock (lumper_actual + driver pay item) - never billed", async (c) => {
+  await runCase("C03b", "Driver receipt only (lumper_actual) is billed as one Lumper line", async (c) => {
     const { id } = makeLoad({ rate: 1500, lumperActual: 150, pay: [{ category: "lumper", rate: 150, total: 150, bill_to: "driver" }] });
     await qbo.sendLoadToQuickbooks(id);
-    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }] });
+    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }, { cat: "lumper", amount: 150 }] });
+    c.note = "The driver pay item is not a second customer line. lumper_actual is the one billed amount.";
+  });
+  await runCase("C03c", "Customer lumper pay line and driver receipt match: one line", async (c) => {
+    const { id } = makeLoad({
+      rate: 1500,
+      lumperActual: 150,
+      pay: [{ category: "lumper", rate: 150, total: 150 }],
+    });
+    await qbo.sendLoadToQuickbooks(id);
+    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }, { cat: "lumper", amount: 150 }] });
+  });
+  await runCase("C03d", "Customer lumper pay line and driver receipt differ: block, do not guess", async (c) => {
+    const { id } = makeLoad({
+      rate: 1500,
+      lumperActual: 175,
+      pay: [{ category: "lumper", rate: 150, total: 150 }],
+    });
+    const pattern = /Lumper is entered twice with different amounts \(\$150\.00 pay line vs \$175\.00 driver receipt\)/;
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), pattern);
+    let pdfMessage = "";
+    try {
+      invoiceLines(queries.getLoad(id)!);
+    } catch (error) {
+      pdfMessage = error instanceof Error ? error.message : String(error);
+    }
+    check(c.checks, "PDF blocked with the same warning", pattern.source, pdfMessage, pattern.test(pdfMessage));
+    check(c.checks, "load not marked sent", "", queries.getLoad(id)!.qbo_invoice_id);
+  });
+  await runCase("C03e", "Re-sync replaces the invoice and does not add a second lumper line", async (c) => {
+    const { id } = makeLoad({ rate: 1000, lumperActual: 80 });
+    const first = await qbo.sendLoadToQuickbooks(id);
+    const second = await qbo.sendLoadToQuickbooks(id, { confirmResend: true });
+    check(c.checks, "same invoice id", first.invoiceId, second.invoiceId);
+    const read = await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1000 }, { cat: "lumper", amount: 80 }] }, second.invoiceId);
+    const lumperCount = ((read.Line ?? []) as Json[]).filter(
+      (line) => String(line.SalesItemLineDetail?.ItemRef?.value) === itemId.lumper,
+    ).length;
+    check(c.checks, "one lumper line after re-sync", "1", String(lumperCount));
   });
   await runCase("C04", "Detention (2 h x $75)", async (c) => {
     const { id } = makeLoad({ rate: 1800, pay: [{ category: "detention", rate: 75, qty: 2, total: 150 }] });
@@ -466,10 +505,17 @@ async function main() {
       pdf.actual = `${money(read.TotalAmt)} (TMS PDF blocks cancelled loads: GAP)`;
     }
   });
-  await runCase("C09", "Fuel surcharge (812 mi x $0.45)", async (c) => {
-    const { id } = makeLoad({ rate: 2000, pay: [{ category: "fuel_surcharge", rate: 0.45, qty: 812, total: 365.4 }] });
+  await runCase("C09", "Fuel surcharge is a manual Fuel Surcharge line, not Line Haul", async (c) => {
+    const { id, loadNumber } = makeLoad({ rate: 2000, pay: [{ category: "fuel_surcharge", rate: 0.45, qty: 812, total: 365.4 }] });
     await qbo.sendLoadToQuickbooks(id);
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 2000 }, { cat: "fuel_surcharge", amount: 365.4, qty: 812, unitPrice: 0.45 }] });
+    const sent = [...calls].reverse().find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && x.body?.DocNumber === loadNumber)?.body;
+    const names = ((sent?.Line ?? []) as Json[]).map((line) => String(line.SalesItemLineDetail?.ItemRef?.name));
+    check(c.checks, "item names", "Line Haul | Fuel Surcharge", names.join(" | "));
+    const plain = makeLoad({ rate: 1600 });
+    await qbo.sendLoadToQuickbooks(plain.id);
+    await expectInvoice(c, plain.id, { lines: [{ cat: "flat_rate", amount: 1600 }] });
+    c.note = "No miles × rate fuel calculation. A Fuel Surcharge pay line is the only way it is billed, on its own item.";
   });
   await runCase("C10", "Multi-line invoice", async (c) => {
     const { id } = makeLoad({
@@ -585,13 +631,16 @@ async function main() {
     await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /Map pay item "Trailer Rental"/);
     check(c.checks, "load not marked sent", "", queries.getLoad(id)!.qbo_invoice_id);
   });
-  await runCase("C18", "Missing MS Express remit street / AR email blocks the send", async (c) => {
+  await runCase("C18", "Blank remit street or AR email blocks the send; ar@msloads.com is accepted", async (c) => {
     const { id } = makeLoad({ rate: 1800 });
     setRemit("", "");
     await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /cannot be sent to QuickBooks.*Remit street.*AR email/);
+    setRemit("100 Campaign Test Rd", "");
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /AR email is blank/);
+    c.checks = c.checks.map((x, i) => (i >= 2 ? { ...x, field: `blank AR email: ${x.field}` } : x));
     setRemit("100 Campaign Test Rd", "ar@msloads.com");
-    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /AR email/);
-    c.checks = c.checks.map((x, i) => (i >= 2 ? { ...x, field: `ar@msloads.com refused: ${x.field}` } : x));
+    await qbo.sendLoadToQuickbooks(id);
+    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1800 }] });
     setRemit("100 Campaign Test Rd", "ar-test@example.com");
   });
   await runCase("C19", "Invoice # = load #; an existing QuickBooks invoice with that number blocks a second create", async (c) => {
@@ -613,6 +662,39 @@ async function main() {
     const other = makeLoad({ rate: 1300 });
     await expectBlocked(c, () => qbo.sendLoadToQuickbooks(other.id), /not set up in QuickBooks/);
     db.prepare("UPDATE customers SET payment_terms = '' WHERE id = 9").run();
+  });
+  await runCase("C21", "DocNumber is the MS Express load #; customer ref is on the memo and the PDF", async (c) => {
+    const customerRef = "BROKER-LOAD-555";
+    const { id, loadNumber } = makeLoad({ rate: 1400, customerReference: customerRef });
+    await qbo.sendLoadToQuickbooks(id);
+    const read = await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1400 }] });
+    check(c.checks, "DocNumber is the TMS load #", loadNumber, String(read.DocNumber));
+    check(c.checks, "DocNumber is not the customer ref", "different", String(read.DocNumber) === customerRef ? "same" : "different");
+    check(c.checks, "DocNumber is not the PO", "different", String(read.DocNumber).startsWith("PO-") ? "same" : "different");
+    const memo = String(read.CustomerMemo?.value ?? "");
+    const privateNote = String(read.PrivateNote ?? "");
+    check(c.checks, "customer ref in QBO memo", `Customer ref: ${customerRef}`, memo.includes(`Customer ref: ${customerRef}`) ? `Customer ref: ${customerRef}` : memo);
+    check(c.checks, "memo has no internal notes", "clean", INTERNAL.test(memo) || INTERNAL.test(privateNote) ? "INTERNAL leaked" : "clean");
+    const model = buildTmsInvoice(queries.getLoad(id)!);
+    check(c.checks, "PDF customer ref field", customerRef, model.customerReference);
+    const pdf = await renderTmsInvoicePdf(model);
+    const { extractText } = await import("unpdf");
+    const pdfText = String((await extractText(new Uint8Array(pdf), { mergePages: true })).text ?? "");
+    check(c.checks, "PDF shows Customer ref #", "present", /Customer ref #/.test(pdfText) && pdfText.includes(customerRef) ? "present" : "missing");
+    check(c.checks, "PDF invoice # is not the customer ref", "load number", pdfText.includes(`INV-${loadNumber}`) && !pdfText.includes(`Invoice #: ${customerRef}`) ? "load number" : pdfText);
+
+    const blank = makeLoad({ rate: 900 });
+    await qbo.sendLoadToQuickbooks(blank.id);
+    const blankRead = await expectInvoice(c, blank.id, { lines: [{ cat: "flat_rate", amount: 900 }] });
+    const blankMemo = String(blankRead.CustomerMemo?.value ?? "");
+    check(c.checks, "no customer ref: DocNumber still the load #", blank.loadNumber, String(blankRead.DocNumber));
+    check(c.checks, "no customer ref: memo has no Customer ref line", "absent", blankMemo.includes("Customer ref:") ? "present" : "absent");
+    check(c.checks, "no customer ref: PDF field empty", "", buildTmsInvoice(queries.getLoad(blank.id)!).customerReference);
+
+    const tooLong = "N".repeat(22);
+    const blocked = makeLoad({ rate: 500, loadNumber: tooLong });
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /limited to 21 characters/);
+    check(c.checks, "over-long load # not marked sent", "", queries.getLoad(blocked.id)!.qbo_invoice_id);
   });
   void resyncLoad;
 

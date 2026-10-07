@@ -8,8 +8,8 @@ export const LEGAL_ENTITY = {
   cityState: "Hastings, Nebraska",
   phone: "402-302-0097",
   phoneHref: "tel:+14023020097",
-  /** JC TO CONFIRM: the public contact email for privacy and terms questions. */
-  email: "[contact email: JC to confirm]",
+  /** MS Express accounts receivable. Not an M&S Loads identity. */
+  email: "ar@msloads.com",
 } as const;
 
 export type LegalSection = { id: string; title: string; body: React.ReactNode };

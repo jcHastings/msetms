@@ -98,9 +98,9 @@ const sections: LegalSection[] = [
     title: "How long we keep information",
     body: (
       <p>
-        We keep load, billing, and driver records for as long as we need them to run the business and to meet tax and
-        Department of Transportation record-keeping rules: [retention period: JC to confirm]. QuickBooks tokens are
-        deleted when the connection is removed. Backups roll off on a fixed schedule: [backup retention: JC to confirm].
+        We keep load, billing, and driver records for 10 years to run the business and to meet tax and Department of
+        Transportation record-keeping rules. QuickBooks tokens are deleted when the connection is removed. Backups roll
+        off on a fixed schedule: [backup retention: JC to confirm].
       </p>
     ),
   },

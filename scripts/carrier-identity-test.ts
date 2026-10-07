@@ -130,21 +130,14 @@ async function main() {
     city: "Hastings",
     state: "NE",
     zip: "68901",
-    ar_email: "billing@msexpress.test",
+    ar_email: "ar@msloads.com",
     usdot: "3062879",
     mc: "056299",
   });
-  assert.throws(
-    () =>
-      settings.updateCompanyContact({
-        ...settings.getCompanySettings(),
-        ar_email: "ar@msloads.com",
-      }),
-    /ar@msloads\.com/,
-  );
+  assert.equal(settings.getCompanySettings().ar_email, "ar@msloads.com");
   const ready = buildTmsInvoice(queries.getLoad(loadId)!);
   assert.equal(ready.issuerWarning, "");
-  assert.equal(ready.companyEmail, "billing@msexpress.test");
+  assert.equal(ready.companyEmail, "ar@msloads.com");
   assert.match(ready.companyAddress, /100 Office Pl/);
   let sentFrom = "";
   let sentText = "";
@@ -152,14 +145,26 @@ async function main() {
     sentFrom = mail.from ?? "";
     sentText = mail.text;
   });
-  assert.equal(sentFrom, "billing@msexpress.test");
+  assert.equal(sentFrom, "ar@msloads.com");
   assert.match(sentText, /MS Express · Accounts Receivable/);
-  assert.doesNotMatch(sentText, /M&S Loads|ar@msloads\.com/);
+  assert.doesNotMatch(sentText, /M&S Loads|jc@msloads\.com|970613|Nanuet/);
   const readyPdf = await renderTmsInvoicePdf(ready);
   const readyText = String((await extractText(new Uint8Array(readyPdf), { mergePages: true })).text ?? "");
-  assert.match(readyText, /billing@msexpress\.test/);
+  assert.match(readyText, /ar@msloads\.com/);
   assert.match(readyText, /100 Office Pl/);
-  assert.doesNotMatch(readyText, /M&S Loads|ar@msloads\.com/);
+  assert.doesNotMatch(readyText, /M&S Loads|jc@msloads\.com|970613|Nanuet/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    ar_email: "",
+  });
+  const blankAgain = buildTmsInvoice(queries.getLoad(loadId)!);
+  assert.match(blankAgain.issuerWarning ?? "", /AR email is blank/);
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /cannot be emailed/);
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    ar_email: "ar@msloads.com",
+  });
 
   const draft = loadMail.composeCustomerInvoiceEmail({
     invoiceNumber: "INV-1",
@@ -167,9 +172,10 @@ async function main() {
     customerName: "Kayco",
     totalLabel: "$1,400.00",
   });
-  assert.equal(draft.from, "billing@msexpress.test");
+  assert.equal(draft.from, "ar@msloads.com");
+  assert.equal(draft.replyTo, "ar@msloads.com");
   assert.match(draft.text, /MS Express/);
-  assert.doesNotMatch(draft.text, /M&S Loads|ar@msloads\.com/);
+  assert.doesNotMatch(draft.text, /M&S Loads|jc@msloads\.com/);
   console.log("carrier-identity-test: ok");
 }
 
