@@ -98,6 +98,20 @@ export function listStops(loadId: number, options?: { geofence?: boolean }): Loa
     .map((stop) => hydrateStopFromLocations(stop, locations));
 }
 
+/** First pickup on each load. Does not run geofence writes. */
+export function listPickupStops(): LoadStop[] {
+  const locations = listLocations();
+  const rows = getDb()
+    .prepare("SELECT * FROM load_stops WHERE kind = 'pickup' ORDER BY load_id, sequence, id")
+    .all() as Array<Record<string, unknown>>;
+  const first = new Map<number, LoadStop>();
+  for (const row of rows) {
+    const stop = hydrateStopFromLocations(asStop(row), locations);
+    if (!first.has(stop.load_id)) first.set(stop.load_id, stop);
+  }
+  return [...first.values()];
+}
+
 function splitLaneCityState(value: string): { city: string; state: string } {
   const trimmed = value.trim();
   const match = trimmed.match(/^(.+),\s*([A-Za-z]{2})$/);

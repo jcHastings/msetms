@@ -46,11 +46,13 @@ import {
   listAssignableTrucks,
   listLoads,
 } from "@/lib/queries";
+import { suggestAssignmentsForBoard } from "@/lib/assign-suggestions";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { canWrite } from "@/lib/settings-shared";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
+import type { AssignSuggestion } from "@/lib/assign-suggestion-shared";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +127,8 @@ function BoardAssignDialog({
   drivers,
   ooPercent,
   windows,
+  suggestions,
+  readOnly = false,
   triggerClassName,
 }: {
   load: ReturnType<typeof listLoads>[number];
@@ -133,6 +137,8 @@ function BoardAssignDialog({
   drivers: ReturnType<typeof listAssignableDrivers>;
   ooPercent: number;
   windows: ReturnType<typeof complianceWindows>;
+  suggestions: AssignSuggestion[];
+  readOnly?: boolean;
   triggerClassName?: string;
 }) {
   return (
@@ -148,6 +154,8 @@ function BoardAssignDialog({
       currentDriverId={load.driver_id}
       currentTruckId={load.truck_id}
       currentTrailerId={load.trailer_id}
+      suggestions={suggestions}
+      readOnly={readOnly}
       triggerClassName={triggerClassName}
     />
   );
@@ -204,6 +212,7 @@ async function BoardLiveSection({
     if (lateByLoad.has(item.loadId)) continue;
     lateByLoad.set(item.loadId, { label: "Running late", reason: item.title });
   }
+  const suggestions = suggestAssignmentsForBoard({ loads, fleet });
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     const live = reefers.readings.find((reading) => reading.loadId === load.id);
@@ -394,12 +403,13 @@ async function BoardLiveSection({
                                     drivers={assignableDrivers}
                                     ooPercent={ooPercent}
                                     windows={windows}
+                                    suggestions={suggestions.get(load.id) ?? []}
                                     triggerClassName="menu-item w-full text-left"
                                   />
                                 ) : null
                               }
                             />
-                            {write && !isClosedStatus(load.status) ? (
+                            {!isClosedStatus(load.status) ? (
                               <BoardAssignDialog
                                 load={load}
                                 trucks={assignableTrucks}
@@ -407,6 +417,8 @@ async function BoardLiveSection({
                                 drivers={assignableDrivers}
                                 ooPercent={ooPercent}
                                 windows={windows}
+                                suggestions={suggestions.get(load.id) ?? []}
+                                readOnly={!write}
                               />
                             ) : null}
                             <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">
