@@ -374,6 +374,52 @@ a.driver-dest-featured:hover,
   color: #64748b !important;
 }
 
+.driver-got-it-wrap {
+  margin-top: 0.85rem;
+}
+
+.driver-got-it {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.5rem;
+  border: 0;
+  border-radius: 1rem;
+  background: #f5b400;
+  color: #1a1406;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+
+.driver-got-it:hover {
+  background: #e0a400;
+}
+
+.driver-got-it:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.driver-got-it:disabled {
+  background: #3f4c5f;
+  color: #e2e8f0;
+  cursor: wait;
+  opacity: 1;
+}
+
+.driver-ack-quiet {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  margin-top: 0.85rem;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 input,
 select,
 textarea,

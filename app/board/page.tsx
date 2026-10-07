@@ -14,6 +14,8 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { DispatchAckStatus } from "@/components/dispatch-ack-status";
+import { dispatchAckRules, presentDispatchAck } from "@/lib/dispatch-ack";
 import { listExceptionInbox } from "@/lib/exceptions";
 import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
@@ -206,6 +208,7 @@ async function BoardLiveSection({
   const windows = complianceWindows();
   const laneAvgs = laneAveragesForBoard(loads);
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
+  const ackRules = dispatchAckRules();
   const lateByLoad = new Map<number, { label: string; reason: string }>();
   for (const item of listExceptionInbox().items) {
     if (item.kind !== "late" || (item.severity !== "HIGH" && item.severity !== "CRITICAL")) continue;
@@ -312,6 +315,7 @@ async function BoardLiveSection({
                           {lateByLoad.get(load.id)?.label}
                         </span>
                       ) : null}
+                      <DispatchAckStatus ack={presentDispatchAck(load, ackRules)} compact />
                     </td>
                     <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />
                     <BoardWhenCell kind="delivery" start={load.delivery_start} end={load.delivery_end} />
