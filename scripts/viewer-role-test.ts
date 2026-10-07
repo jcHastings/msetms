@@ -46,6 +46,7 @@ const ACTION_FILES = [
   "lib/dispatcher-password-actions.ts",
   "lib/driver-actions.ts",
   "lib/settlement-actions.ts",
+  "lib/gusto-actions.ts",
 ];
 
 const GUARD =
@@ -380,6 +381,8 @@ async function main(): Promise<void> {
     "app/api/tolls/pull/route.ts",
     "app/api/integrations/quickbooks/connect/route.ts",
     "app/api/integrations/quickbooks/callback/route.ts",
+    "app/api/integrations/gusto/connect/route.ts",
+    "app/api/integrations/gusto/callback/route.ts",
   ]);
   const allowedWriteRoutes = new Set([
     "app/api/mike/route.ts",
@@ -395,7 +398,9 @@ async function main(): Promise<void> {
     const writes = writeMethods(source);
     const mutatingGet =
       file.endsWith("app/api/integrations/quickbooks/connect/route.ts") ||
-      file.endsWith("app/api/integrations/quickbooks/callback/route.ts");
+      file.endsWith("app/api/integrations/quickbooks/callback/route.ts") ||
+      file.endsWith("app/api/integrations/gusto/connect/route.ts") ||
+      file.endsWith("app/api/integrations/gusto/callback/route.ts");
     if (writes.length === 0 && !mutatingGet) continue;
     const listed = officeWriteRoutes.has(file) || allowedWriteRoutes.has(file) || file.includes("app/api/driver/v1/");
     assert.equal(listed, true, `new write route is not classified: ${file}`);
@@ -448,6 +453,20 @@ async function main(): Promise<void> {
   await assertOfficeWriteResponse(
     await qboCallback.GET(new Request("http://localhost/api/integrations/quickbooks/callback")),
     "quickbooks callback",
+  );
+  apiWriteCount += 1;
+
+  const gustoConnect = await import("../app/api/integrations/gusto/connect/route");
+  await assertOfficeWriteResponse(
+    await gustoConnect.GET(new Request("http://localhost/api/integrations/gusto/connect")),
+    "gusto connect",
+  );
+  apiWriteCount += 1;
+
+  const gustoCallback = await import("../app/api/integrations/gusto/callback/route");
+  await assertOfficeWriteResponse(
+    await gustoCallback.GET(new Request("http://localhost/api/integrations/gusto/callback")),
+    "gusto callback",
   );
   apiWriteCount += 1;
 

@@ -89,6 +89,7 @@ const NAV: NavEntry[] = [
     icon: "gear",
     items: [
       { href: "/settings", label: "Settings", short: "Settings", icon: "settings" },
+      { href: "/settings/gusto", label: "Gusto", short: "Gusto", icon: "pay" },
       { href: "/users", label: "Users", short: "Users", icon: "users" },
       { href: "/settings/sign-in", label: "Sign-in log", short: "Sign-in", icon: "audit" },
     ],

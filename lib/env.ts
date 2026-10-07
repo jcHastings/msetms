@@ -484,6 +484,35 @@ export function isMailConfigured(): boolean {
   return isSmtpConfigured() || isSendgridConfigured();
 }
 
+export function getGustoClientId(): string | undefined {
+  return readSecret("GUSTO_CLIENT_ID");
+}
+
+export function getGustoClientSecret(): string | undefined {
+  return readSecret("GUSTO_CLIENT_SECRET");
+}
+
+/** Demo is the default so a missing flag cannot call production. */
+export function getGustoEnv(): "demo" | "production" {
+  return readSecret("GUSTO_ENV")?.toLowerCase() === "production" ? "production" : "demo";
+}
+
+export function getGustoRedirectUri(): string {
+  return (
+    readSecret("GUSTO_REDIRECT_URI") ??
+    "https://msetms.mandsloads.com/api/integrations/gusto/callback"
+  );
+}
+
+/** Current App Integrations reference default. Override only to pin an older version. */
+export function getGustoApiVersion(): string {
+  return readSecret("GUSTO_API_VERSION") ?? "2026-06-15";
+}
+
+export function isGustoOAuthReady(): boolean {
+  return Boolean(getGustoClientId() && getGustoClientSecret());
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&
