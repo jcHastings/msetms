@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Nightly offsite snapshot (separate from Litestream's continuous replica):
+#  - consistent SQLite copy + integrity_check + small JSON state files
+#  - tar | zstd | age (public-key encrypted) -> R2 nightly/<date>.tar.zst.age
+#  - uploads/ -> R2 via an rclone crypt remote (encrypted, incremental)
+#  - prunes nightly archives older than NIGHTLY_KEEP_DAYS (default 35)
+#  - pings Healthchecks (start / success / fail)
+# Credentials come from /etc/msetms/backup.env (root-only). Never printed.
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+need_root
+load_env_file "$BACKUP_ENV"
+: "${R2_ACCOUNT_ID:?} ${R2_BUCKET:?} ${R2_ACCESS_KEY_ID:?} ${R2_SECRET_ACCESS_KEY:?} ${AGE_RECIPIENT:?} ${UPLOADS_CRYPT_PASSWORD:?}"
+
+export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+  RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+  RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" RCLONE_CONFIG_R2_REGION=auto \
+  RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+RCLONE_CONFIG_R2CRYPT_PASSWORD="$(rclone obscure "$UPLOADS_CRYPT_PASSWORD")"
+export RCLONE_CONFIG_R2CRYPT_TYPE=crypt RCLONE_CONFIG_R2CRYPT_REMOTE="r2:$R2_BUCKET/uploads-crypt" RCLONE_CONFIG_R2CRYPT_PASSWORD
+
+hc_ping "${HC_BACKUP_URL:-}" /start
+fail() { hc_ping "${HC_BACKUP_URL:-}" /fail; die "$*"; }
+trap 'fail "backup failed at line $LINENO"' ERR
+
+stamp="$(date +%Y-%m-%d)"
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+mkdir "$work/snap"
+db_backup_to "$work/snap/tms.db"
+for f in qbo-refresh.json orbcomm-live.json; do [[ -f "$SHARED_DATA/$f" ]] && cp -p "$SHARED_DATA/$f" "$work/snap/"; done
+counts="$(db_counts "$work/snap/tms.db")"
+printf 'date=%s counts=%s release=%s\n' "$(date -Is)" "$counts" "$(readlink -f "$CURRENT" || true)" > "$work/snap/MANIFEST"
+tar -C "$work/snap" -cf - . | zstd -q -19 -T0 | age -r "$AGE_RECIPIENT" > "$work/nightly.tar.zst.age"
+rclone copyto --s3-no-check-bucket "$work/nightly.tar.zst.age" "r2:$R2_BUCKET/nightly/$stamp.tar.zst.age"
+rclone sync "$SHARED_DATA/uploads" "r2crypt:current" --backup-dir "r2crypt:deleted/$stamp" --fast-list
+rclone delete --min-age "${NIGHTLY_KEEP_DAYS:-35}d" "r2:$R2_BUCKET/nightly/"
+rclone delete --min-age "${NIGHTLY_KEEP_DAYS:-35}d" "r2crypt:deleted/" --rmdirs || true
+trap - ERR
+log "nightly OK $stamp counts=$counts"
+hc_ping "${HC_BACKUP_URL:-}"

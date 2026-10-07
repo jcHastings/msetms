@@ -1,0 +1,12 @@
+[Unit]
+Description=MS Express TMS: 5-minute heartbeat (app, Litestream, tunnel, disk)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/msetms/backup.env
+
+[Service]
+Type=oneshot
+ExecStartPre=+/usr/local/sbin/msetms-backup-check
+ExecStart=/usr/local/sbin/msetms-heartbeat
+Nice=10
+IOSchedulingClass=idle

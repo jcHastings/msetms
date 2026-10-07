@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Weekly restore drill (read-only for the live system):
+#  1. litestream restore of the live DB into a temp file
+#  2. PRAGMA integrity_check must be ok
+#  3. restored counts must be > 0 and <= live counts (live may be newer)
+#  4. newest nightly archive in R2 must be < 36 h old and non-empty
+#  5. ping Healthchecks
+# Full decrypt of a nightly archive needs JC's age private key -> monthly manual drill
+# (see README "Monthly manual restore drill").
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+need_root
+load_env_file "$BACKUP_ENV"
+fail() { hc_ping "${HC_RESTORE_URL:-}" /fail; die "$*"; }
+trap 'fail "restore-test failed at line $LINENO"' ERR
+hc_ping "${HC_RESTORE_URL:-}" /start
+
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+litestream restore -config "$LITESTREAM_CONFIG" -o "$work/restored.db" "$DB"
+[[ "$(sqlite3 -batch -noheader "$work/restored.db" 'PRAGMA integrity_check;')" == "ok" ]] || fail "restored DB failed integrity_check"
+restored="$(db_counts "$work/restored.db")"; live="$(db_counts)"
+log "restored=$restored live=$live"
+counts_not_lower "$restored" "$live" || fail "restored counts exceed live counts (unexpected)"
+[[ "${restored%%/*}" -gt 0 ]] || fail "restored DB has 0 loads"
+
+export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+  RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+  RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" RCLONE_CONFIG_R2_REGION=auto
+newest="$(rclone lsjson "r2:$R2_BUCKET/nightly/" | jq -r 'map(select(.Size > 0)) | sort_by(.ModTime) | last | .ModTime // empty')"
+[[ -n "$newest" ]] || fail "no nightly archive found"
+age_h=$(( ( $(date +%s) - $(date -d "$newest" +%s) ) / 3600 ))
+(( age_h < 36 )) || fail "newest nightly archive is ${age_h}h old"
+trap - ERR
+log "restore-test OK (nightly ${age_h}h old)"
+hc_ping "${HC_RESTORE_URL:-}"

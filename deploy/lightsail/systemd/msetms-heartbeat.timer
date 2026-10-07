@@ -1,0 +1,10 @@
+[Unit]
+Description=MS Express TMS: 5-minute heartbeat (app, Litestream, tunnel, disk)
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+RandomizedDelaySec=20s
+
+[Install]
+WantedBy=timers.target

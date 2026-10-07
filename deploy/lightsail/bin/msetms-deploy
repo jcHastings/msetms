@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Deploy one exact commit of jcHastings/msetms to the Lightsail server.
+#
+#   sudo msetms-deploy --sha <40-hex tip SHA> --approved-by-jc '<CoS message ref>'
+#
+# Refuses to run without BOTH a full tip SHA and an explicit JC-yes marker.
+# Builds into releases/<sha>, takes a DB backup, flips `current`, restarts,
+# health-checks /login (200) and / (307), and auto-rolls back on failure.
+# Data lives in shared/data (never inside a release). No .env in releases.
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+SHA="" APPROVAL="" BUILD_ENV=0 DRY_RUN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --sha) SHA="${2:-}"; shift 2 ;;
+    --approved-by-jc) APPROVAL="${2:-}"; shift 2 ;;
+    --build-env) BUILD_ENV=1; shift ;;  # only if a future build needs runtime env (today it does not)
+    --check-args) DRY_RUN=1; shift ;;   # validate arguments only (used by tests)
+    -h|--help) usage ;;
+    *) die "unknown argument: $1 (see --help)" ;;
+  esac
+done
+
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "refusing: --sha must be the full 40-char lowercase tip SHA (got '${SHA}')"
+APPROVAL="$(printf '%s' "$APPROVAL" | tr -d '\r\n')"
+[[ ${#APPROVAL} -ge 8 ]] || die "refusing: --approved-by-jc '<CoS message ref>' is required (JC must say yes to this deploy)"
+if [[ $DRY_RUN -eq 1 ]]; then log "args OK: sha=$SHA approval='$APPROVAL'"; exit 0; fi
+
+need_root
+# The unit pins these; an env-file copy would override them (EnvironmentFile wins).
+if grep -qE '^[[:space:]]*(TMS_SKIP_SEED|TMS_DB_PATH|TMS_DATA_DIR|TZ|HOST|PORT|NODE_ENV)=' "$APP_ENV"; then
+  die "$APP_ENV must not set TMS_SKIP_SEED/TMS_DB_PATH/TMS_DATA_DIR/TZ/HOST/PORT/NODE_ENV (the unit pins them)"
+fi
+exec 9>"$STATE/deploy.lock"
+flock -n 9 || die "another deploy/rollback is running"
+
+REL="$RELEASES/$SHA"
+PREV="$(readlink -f "$CURRENT" 2>/dev/null || true)"
+DEPLOY_LOG="$STATE/deploys.log"
+log "deploy start sha=$SHA approval='$APPROVAL' prev=${PREV:-none}" | tee -a "$DEPLOY_LOG"
+
+if [[ "$PREV" == "$REL" ]]; then die "sha $SHA is already current"; fi
+
+# 1) Fetch + build (skipped if this release was already built earlier).
+if [[ ! -f "$REL/.next/standalone/server.js" ]]; then
+  tmp="$(mktemp -d "$RELEASES/.build-$SHA.XXXX")"
+  chmod 755 "$tmp"
+  trap 'rm -rf "$tmp"' EXIT
+  log "fetching $REPO@$SHA"
+  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$SHA" -o "$tmp/src.tgz"
+  mkdir "$tmp/src"
+  tar -xzf "$tmp/src.tgz" -C "$tmp/src" --strip-components=1
+  [[ -f "$tmp/src/package.json" ]] || die "tarball has no package.json"
+  # A release must never carry env files or data.
+  find "$tmp/src" -maxdepth 1 -name '.env*' ! -name '.env.example' -exec rm -f {} +
+  # Build with an EMPTY data dir so Next file tracing can never see/copy live data.
+  rm -rf "$tmp/src/data"; mkdir "$tmp/src/data"
+  chown -R "$APP_USER:$APP_USER" "$tmp/src"
+  log "npm ci"
+  runuser -u "$APP_USER" -- env -i HOME="$APP_ROOT" PATH=/usr/local/bin:/usr/bin:/bin \
+    NODE_ENV=development npm --prefix "$tmp/src" ci --no-audit --no-fund
+  log "npm run build"
+  (
+    # next.config.ts inlines no env and lib/env.ts reads process.env at request
+    # time, so the build needs no secrets. --build-env loads them for this step only.
+    if [[ $BUILD_ENV -eq 1 ]]; then load_env_file "$APP_ENV"; fi
+    export TMS_SKIP_SEED=1 TMS_DATA_DIR="$tmp/build-data" TMS_DB_PATH="$tmp/build-data/build.db"
+    export NODE_OPTIONS="--max-old-space-size=3072" NEXT_TELEMETRY_DISABLED=1 HOME="$APP_ROOT"
+    mkdir -p "$tmp/build-data"; chown "$APP_USER:$APP_USER" "$tmp/build-data"
+    cd "$tmp/src"
+    runuser -u "$APP_USER" --preserve-environment -- npm run build
+  )
+  [[ -f "$tmp/src/.next/standalone/server.js" ]] || die "build produced no .next/standalone/server.js"
+  # Now point the release at the shared data dir (start-standalone.mjs symlinks
+  # .next/standalone/data -> <release>/data on start).
+  rm -rf "$tmp/src/data" "$tmp/src/.next/standalone/data"
+  ln -s "$SHARED_DATA" "$tmp/src/data"
+  chown -h "$APP_USER:$APP_USER" "$tmp/src/data"
+  printf '%s\n' "$SHA" > "$tmp/src/TIP_SHA"
+  printf '%s %s\n' "$(date -Is)" "$APPROVAL" > "$tmp/src/APPROVED_BY_JC"
+  rm -rf "$REL"; mv "$tmp/src" "$REL"
+  rm -rf "$tmp"; trap - EXIT
+else
+  log "release already built: $REL"
+fi
+[[ -L "$REL/data" ]] || die "$REL/data must be a symlink to $SHARED_DATA"
+
+# 2) Pre-deploy backup + baseline counts.
+before=""
+if [[ -f "$DB" ]]; then
+  bk="$BACKUPS/pre-deploy-$(date +%Y%m%d-%H%M%S)-${SHA:0:7}.db"
+  db_backup_to "$bk"
+  before="$(db_counts "$DB")"
+  log "backup $bk counts=$before" | tee -a "$DEPLOY_LOG"
+  find "$BACKUPS" -maxdepth 1 -name 'pre-deploy-*.db' -printf '%T@ %p\n' | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f
+fi
+
+# 3) Flip + restart + health.
+[[ -n "$PREV" ]] && printf '%s\n' "$PREV" > "$STATE/previous"
+flip_current "$REL"
+systemctl restart msetms.service
+if wait_healthy 90 && { [[ -z "$before" ]] || counts_not_lower "$before" "$(db_counts "$DB")"; }; then
+  # Enable the app once current is flipped and health checks passed. Idempotent.
+  # Litestream and the timers wait until backup.env has real values (templates do not).
+  systemctl enable msetms.service
+  enable_backup_units
+  log "deploy OK sha=$SHA counts=$(db_counts "$DB" 2>/dev/null || echo n/a)" | tee -a "$DEPLOY_LOG"
+else
+  log "deploy FAILED sha=$SHA -> rolling back" | tee -a "$DEPLOY_LOG"
+  journalctl -u msetms.service -n 40 --no-pager || true
+  if [[ -n "$PREV" ]]; then
+    flip_current "$PREV"; systemctl restart msetms.service
+    if wait_healthy 90; then log "rolled back to $PREV (healthy)" | tee -a "$DEPLOY_LOG"
+    else log "ROLLBACK UNHEALTHY - restore from $BACKUPS and page JC" | tee -a "$DEPLOY_LOG"; fi
+  fi
+  exit 1
+fi
+
+# 4) Keep current + previous + 3 newest others.
+keep_prev="$(cat "$STATE/previous" 2>/dev/null || true)"
+find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' \
+  | sort -rn | cut -d' ' -f2- | while read -r d; do
+      [[ "$d" == "$REL" || "$d" == "$keep_prev" ]] && continue
+      echo "$d"
+    done | tail -n +4 | xargs -r rm -rf

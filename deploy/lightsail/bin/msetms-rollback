@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Point `current` back at the previous release (or --to <sha>) and restart.
+# Typical time: ~30 s (no build). Data is untouched (shared/data).
+#   sudo msetms-rollback            # previous release
+#   sudo msetms-rollback --to <sha> # a specific already-built release
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+need_root
+target=""
+if [[ "${1:-}" == "--to" ]]; then
+  [[ "${2:-}" =~ ^[0-9a-f]{40}$ ]] || die "--to needs a full 40-char SHA"
+  target="$RELEASES/$2"
+else
+  target="$(cat "$STATE/previous" 2>/dev/null || true)"
+fi
+[[ -n "$target" && -f "$target/.next/standalone/server.js" ]] || die "no built release to roll back to (${target:-none})"
+exec 9>"$STATE/deploy.lock"; flock -n 9 || die "another deploy/rollback is running"
+cur="$(readlink -f "$CURRENT" || true)"
+[[ "$cur" != "$target" ]] || die "target is already current"
+flip_current "$target"
+[[ -n "$cur" ]] && printf '%s\n' "$cur" > "$STATE/previous"
+systemctl restart msetms.service
+if wait_healthy 60; then log "rollback OK -> $target counts=$(db_counts "$DB")" | tee -a "$STATE/deploys.log"
+else log "rollback UNHEALTHY -> $target" | tee -a "$STATE/deploys.log"; exit 1; fi
