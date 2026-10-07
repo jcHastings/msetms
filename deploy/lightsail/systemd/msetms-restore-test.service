@@ -2,6 +2,7 @@
 Description=MS Express TMS: Weekly Litestream restore drill
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/etc/msetms/backup.env
 
 [Service]
 Type=oneshot

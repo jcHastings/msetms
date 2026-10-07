@@ -3,6 +3,7 @@ Description=Litestream continuous replication of the TMS SQLite DB to Cloudflare
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/srv/msetms/shared/data/tms.db
+ConditionPathExists=/etc/msetms/litestream.yml
 
 [Service]
 Type=simple

@@ -7,9 +7,9 @@ web ports are open on the instance.
 
 | Path | What |
 | --- | --- |
-| `bootstrap.sh` | One-time idempotent setup: TZ America/New_York, unattended-upgrades, ufw (deny inbound except SSH), 2 GB swap, Node 24.19.0 (= office PC), Litestream 0.5.17, cloudflared, `msetms` user, dirs, units, templates. Checksums verified. Starts nothing that needs secrets. |
+| `bootstrap.sh` | One-time idempotent setup: TZ America/New_York, unattended-upgrades, ufw (deny inbound except SSH), 2 GB swap, Node 24.19.0 (= office PC), Litestream 0.5.17, cloudflared, `msetms` user, dirs, unit files, templates. Checksums verified. Reloads systemd. Does not enable or start any msetms unit or timer. Starts nothing that needs secrets. |
 | `install-cloudflared.sh` | Installs the tunnel connector as a service. Token read from a hidden prompt at run time → `/etc/cloudflared/token` (root 0600). Never in git. |
-| `systemd/msetms.service` | App unit. Pins `TMS_SKIP_SEED=1`, `TZ`, `HOST=127.0.0.1`, `PORT=3000`, data dir `/srv/msetms/shared/data`. |
+| `systemd/msetms.service` | App unit. Pins `TMS_SKIP_SEED=1`, `TZ`, `HOST=127.0.0.1`, `PORT=3000`, data dir `/srv/msetms/shared/data`. `ConditionPathExists=/srv/msetms/current`. |
 | `systemd/msetms-litestream.service` | Continuous replication to R2 (runs as `msetms`). |
 | `systemd/msetms-{backup-nightly,restore-test,heartbeat}.{service,timer}` | 02:30 nightly offsite snapshot, Sunday 04:00 restore drill, 5-min heartbeat. |
 | `templates/*.template` | Root-only env files (**names only**) + Litestream config (creds via `${VARS}`). |
@@ -56,6 +56,11 @@ variable, builds without secrets (`next.config.ts` inlines no env; `lib/env.ts` 
 request time), takes a consistent DB copy, checks `/login` = 200 and `/` = 307 → `/login`, and that
 loads/drivers/dispatchers counts did not drop. On failure it flips back and restarts the previous
 release automatically.
+
+Units are not enabled at bootstrap. After health checks pass and `current` is flipped, the deploy
+enables `msetms.service` (idempotent). It enables `msetms-litestream.service` and the three backup
+timers only when `/etc/msetms/litestream.yml` and `/etc/msetms/backup.env` both exist and are
+non-empty; otherwise it prints one line that backups are not enabled yet. Env values are never printed.
 
 ## Backups (three layers)
 

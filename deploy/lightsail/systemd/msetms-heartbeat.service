@@ -2,6 +2,7 @@
 Description=MS Express TMS: 5-minute heartbeat (app, Litestream, tunnel, disk)
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/etc/msetms/backup.env
 
 [Service]
 Type=oneshot

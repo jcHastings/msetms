@@ -42,6 +42,13 @@ check "env templates are names-only" names_only
 check "litestream creds via env" grep -qE '(access-key-id|secret-access-key): \$\{' "$HERE/templates/litestream.yml.template"
 check "unit pins TMS_SKIP_SEED=1" grep -q 'TMS_SKIP_SEED=1' "$HERE/systemd/msetms.service"
 check "unit pins TZ" grep -q 'TZ=America/New_York' "$HERE/systemd/msetms.service"
+bootstrap_no_msetms_enable() { ! grep -E 'systemctl[[:space:]]+enable( --now)?[[:space:]]+.*msetms' "$HERE/bootstrap.sh"; }
+check "bootstrap does not enable msetms units" bootstrap_no_msetms_enable
+check "msetms.service waits for current" grep -q 'ConditionPathExists=/srv/msetms/current' "$HERE/systemd/msetms.service"
+check "litestream unit waits for config" grep -q 'ConditionPathExists=/etc/msetms/litestream.yml' "$HERE/systemd/msetms-litestream.service"
+check "backup-nightly waits for backup.env" grep -q 'ConditionPathExists=/etc/msetms/backup.env' "$HERE/systemd/msetms-backup-nightly.service"
+check "restore-test waits for backup.env" grep -q 'ConditionPathExists=/etc/msetms/backup.env' "$HERE/systemd/msetms-restore-test.service"
+check "heartbeat waits for backup.env" grep -q 'ConditionPathExists=/etc/msetms/backup.env' "$HERE/systemd/msetms-heartbeat.service"
 
 if command -v shellcheck >/dev/null; then
   if shellcheck -x -P "$HERE/bin" "$HERE"/bootstrap.sh "$HERE"/install-cloudflared.sh "$HERE"/bin/* "$HERE"/test/run.sh; then ok "shellcheck clean"; else bad "shellcheck clean"; fi

@@ -5,7 +5,10 @@
 # Installs: TZ America/New_York, unattended-upgrades, ufw (deny inbound except SSH),
 # Node (pinned to the office PC's version), Litestream, cloudflared, sqlite3,
 # rclone, age, zstd, jq; the msetms service user; dirs; systemd units; templates.
-# Starts NOTHING that needs secrets. No secrets are read or written here.
+# Installs unit files and reloads systemd. Does not enable or start any msetms
+# unit or timer (a reboot before the first deploy stays quiet). If an earlier
+# run already enabled them, this script leaves that alone. Starts NOTHING that
+# needs secrets. No secrets are read or written here.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
@@ -112,8 +115,8 @@ done
 install -m 0755 "$HERE/install-cloudflared.sh" /usr/local/sbin/msetms-install-cloudflared
 install -m 0644 "$HERE"/systemd/*.service "$HERE"/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable msetms.service msetms-litestream.service   # enabled, not started (no release/data yet)
-systemctl enable msetms-backup-nightly.timer msetms-restore-test.timer msetms-heartbeat.timer
+# Do not enable or start msetms units here. The first successful msetms-deploy
+# enables them, once a release exists. Already-enabled units are left as they are.
 
 step "ssh hardening (keys only, no root login)"
 cat > /etc/ssh/sshd_config.d/60-msetms.conf <<'CONF'
@@ -133,8 +136,12 @@ ufw status verbose
 
 cat <<'NEXT'
 
-Bootstrap done. Nothing is serving yet. Next (see README.md):
+Bootstrap done. Nothing is serving yet.
+Units are installed and systemd was reloaded. No msetms unit or timer was enabled or started,
+so a reboot before the first deploy stays quiet. Next (see README.md):
   1. sudoedit /etc/msetms/msetms.env and /etc/msetms/backup.env (paste from the secret store)
   2. sudo msetms-install-cloudflared        (paste the NEW tunnel token at the prompt)
-  3. Data copy + first deploy per migrate-from-pc.md (needs JC's yes)
+  3. Data copy + first deploy per migrate-from-pc.md (needs JC's yes).
+     That deploy enables msetms.service. It also enables Litestream and the backup timers
+     when /etc/msetms/litestream.yml and /etc/msetms/backup.env both exist and are non-empty.
 NEXT

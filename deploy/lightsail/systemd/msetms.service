@@ -2,6 +2,7 @@
 Description=MS Express TMS (Next.js standalone, node:sqlite)
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/srv/msetms/current
 
 [Service]
 Type=simple
