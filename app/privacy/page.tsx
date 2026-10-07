@@ -176,8 +176,7 @@ const sections: LegalSection[] = [
       <p>
         We keep load, billing, and driver records for 10 years to run the business and to meet tax and Department of
         Transportation record-keeping rules. The QuickBooks refresh token is deleted when an administrator disconnects
-        in the TMS. Encrypted backups are copies of those same records. This policy does not keep a separate, longer
-        backup archive.
+        in the TMS. Encrypted backups are kept for up to 10 years, then deleted, on the same schedule as business records. Deletion requests are honored except where records must be retained by law.
       </p>
     ),
   },

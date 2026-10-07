@@ -280,6 +280,12 @@ async function main() {
   assert.match(legal, /October 7, 2026/);
   assert.match(legal, /ar@msloads\.com/);
   assert.match(legal, /10 years/);
+  assert.match(
+    privacy,
+    /Encrypted backups are kept for up to 10 years, then deleted, on the same schedule as business records\./,
+  );
+  assert.match(privacy, /Deletion requests are honored except where records must be retained by law\./);
+  assert.doesNotMatch(legal, /JC to confirm|longer backup archive|backups are copies of those same records/);
   assert.match(legal, /us-east-1/);
   assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|MC-970613|970613|jc@msloads\.com|Nanuet/i);
   console.log("qbo-mapping-test: ok");

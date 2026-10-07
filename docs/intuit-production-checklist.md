@@ -21,7 +21,7 @@ This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.
 | Storage and security actually in place: AWS us-east-1, TLS in transit, OAuth refresh token stored on the server with restricted file permissions, role-based access, encrypted backups. The server disk is not encrypted today. The page says the disk move is planned and is not done. | Security questions on the same questionnaire (secrets not hardcoded; who can see Intuit data). Disk wording is limited to what is true in this app today. | Privacy `#storage-and-security` | Covered |
 | No selling, renting, or sharing of QuickBooks data. No advertising use. | Same “who else sees Intuit data” question: https://docs.codat.io/integrations/accounting/quickbooksonline/qbo-app-assessment-questionnaire | Privacy `#no-sale` | Covered |
 | Subprocessors and hosting. | Privacy policy must describe the app’s own handling; hosting location is an App details question on the same questionnaire (“Tell us where your app is hosted”). | Privacy `#subprocessors` | Covered |
-| Retention: 10 years for business and financial records. | Stated on the privacy page for tax and DOT records. Intuit’s rendered docs did not publish a required year count. | Privacy `#retention` | Covered |
+| Retention: 10 years for business and financial records. Encrypted Cloudflare R2 backups are kept for up to 10 years, then deleted, on the same schedule as business records. Deletion requests are honored except where records must be retained by law. | JC, October 7, 2026. Stated on the privacy page for tax and DOT records and for the encrypted backups. Intuit’s rendered docs did not publish a required year count. | Privacy `#retention` | Done |
 | Deletion on request. | Same. Contact path is the AR email on the page. | Privacy `#deletion` | Covered |
 | How a user disconnects or revokes access: the TMS Disconnect button, which revokes the token at Intuit, and QuickBooks Apps / Connected apps. | Disconnect URL field, https://help.developer.intuit.com/s/topic/0TOG00000004rJZOAY/disconnect-url . Revoke call is `https://developer.api.intuit.com/v2/oauth2/tokens/revoke` from `disconnectQuickbooks`. | Privacy `#disconnect` | Covered |
 | What happens to data after disconnect. TMS business records stay. The token file is deleted when the TMS button is used. QuickBooks invoices and bills already created stay in QuickBooks. | Same disconnect-URL topic, plus the page text a reviewer reads at the Disconnect URL. | Privacy `#after-disconnect` | Covered |
@@ -59,8 +59,6 @@ This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.
 The in-app buttons that revoke the token are Settings → QuickBooks (`/settings/quickbooks`) and Accounting → QuickBooks (`/accounting/quickbooks`). Both require sign-in, so they are the product controls, not the public URL to paste into Intuit’s Disconnect URL field.
 
 ## Questions only JC can answer
-
-How long are the encrypted Cloudflare R2 backups kept before they are deleted?
 
 Will this QuickBooks app stay private to MS Express, or will it be listed on the QuickBooks App Store?
 
