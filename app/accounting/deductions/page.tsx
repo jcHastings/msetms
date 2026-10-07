@@ -18,7 +18,7 @@ export default async function DeductionSettingsPage() {
     .map((driver) => ({ id: driver.id, name: driver.name }));
   return (
     <>
-      <PageHeader dense title="Deduction items" subtitle="Fixed or per-load amounts for company drivers, owner-operators, or one driver." />
+      <PageHeader dense title="Deduction items" />
       <p className="mb-3">
         <Link className="acct-link" href="/accounting/settlements">
           Back to settlements

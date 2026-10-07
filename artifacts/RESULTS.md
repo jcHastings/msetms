@@ -1,3 +1,72 @@
+# Weekly settlements and driver reimbursements
+
+Branch `cursor/weekly-settlements-563a` off `baaeee2` (draft PR #117). This stays one draft PR, stacked on that tip. Approved receipts are lines on the weekly statement, so a second PR would split the net-pay math. Draft only. Nothing here was merged, and no Office Update was installed.
+
+`npm test` and `npm run build` passed. Screenshots are from a copy of the live-shaped snapshot (not committed). Two-factor sign-in was turned off on that copy only. No email, SMS, or push was sent.
+
+## What changed
+
+Office accounting gained a week list, a per-driver statement, deduction items, and a reimbursement review queue. The driver app gained My pay this week, Submit reimbursement, and My reimbursements. Company contact can store USDOT and MC. New tables and columns are additive: `deduction_templates`, `settlement_one_offs`, `settlement_statements`, `driver_reimbursements`, plus `company_profile.usdot` and `company_profile.mc_number`.
+
+Main files: `lib/settlement-statement.ts`, `lib/settlement-statement-pdf.ts`, `lib/settlement-actions.ts`, `lib/reimbursements.ts`, `lib/reimbursement-shared.ts`, `lib/pay-week.ts`, `lib/db.ts`, `app/accounting/settlements`, `app/accounting/deductions`, `app/accounting/reimbursements`, `app/driver/pay`, `app/driver/reimbursements`, `app/api/reimbursements/[id]/receipt`, and the settlement PDF routes.
+
+## How a statement is built
+
+Week is Monday–Sunday, the same bounds as Driver Pay. The statement number is `SS-{YYYYMMDD}-{driver id}` from the week start. Opening a statement does not insert a row. A paid stamp is the only statement record, and it is written only from Mark statement paid.
+
+1. Header. Carrier name and address from the company profile, as stored. USDOT and MC, or “Not on file”. Statement number, week dates, and the paid-record date or “Not marked paid”.
+2. Who. Driver name, Company driver or Owner-operator, and the owner-operator company name when there is one.
+3. Loads. Load number, pickup → delivery, dates, miles when stored, linehaul or an em dash, and the basis. Owner-operators also get an OO % column. Cancelled loads are left out. A company driver’s customer rate is not the linehaul. Owner-operator linehaul is stored OO pay, or rate times percent when OO pay is empty. A flat-rate driver expense replaces that linehaul and is not added again.
+4. Extra pay. Other driver-billed pay items (detention, layover, and the rest as stored), as positive amounts.
+5. Reimbursements. Own section. Category, load, Approved or Paid, receipt link, and amount. The note on the page says these are added to net and are not a deduction. Submitted and rejected rows are not on the statement.
+6. Deductions. Template lines (fixed, or the amount times the load-line count) and one-time lines for this statement. Inactive templates, including the three seeded examples, do not apply.
+7. Totals. Gross, Reimbursements, Total deductions, Net. Net is gross plus reimbursements minus deductions.
+8. Footnote. Tax is not calculated. The page does not move money or send a copy to the driver.
+
+Print hides the desk chrome. Save as PDF is the pdfkit file with the same sections. Mark statement paid records a date and flips that week’s approved reimbursements to Paid. It does not call Close period, and it does not send money. A second click keeps the original paid date.
+
+## Reimbursements
+
+The driver form requires a receipt photo (or PDF), a positive amount with at most two decimals (up to $100,000), and one category: lumper, washout, scale, parts, tolls, other. Load is optional and limited to that driver’s own loads. Note is optional. The receipt is stored with the same upload helpers as other owned files. If a load is linked, a copy is also attached to that load. The receipt route checks the reimbursement’s driver before it reads the file. Another driver, even one assigned to the same load, gets 403.
+
+Office review lists pending first, with the receipt, driver, amount, category, load, and note. Approve places the row on the submit week, or the next week that is not already marked paid. Reject requires a reason of at least 3 characters. A viewer sees the queue with Approve and Reject disabled, and `requireWriteRole` still rejects the action.
+
+The driver list shows Submitted, Approved, Rejected (with the reason), and Paid, plus the paid date and the settlement week. Status stays in the app. Nothing is texted or emailed.
+
+## How it was verified
+
+`scripts/settlement-statement-test.ts` covers week bounds, owner-operator linehaul, extra detention, inactive examples, fixed and per-load deductions, a one-off, company-driver customer rate left off the statement, cancelled loads, a flat-rate expense replacing OO pay, amount validation (`0`, blank, negative, `abc`, and `12.345` fail; `12.50` passes), receipt required, another driver’s load rejected, cross-driver receipt 403, viewer approve blocked, the approved total added into net, and mark-paid flipping status once and staying idempotent. The viewer walk includes `lib/settlement-actions.ts` (167 office actions on the last run).
+
+On the snapshot copy, Steve Eller’s week of Sep 21, 2026 shows load MSE-1070 at $4,250.00, reimbursements of $104.50 (washout $40.00 approved and parts $64.50 paid), and net $4,354.50. The driver list shows one of each status, including the rejected scale ticket with the reason. The office queue shows the lumper receipt. Signed in as QA Bot, Approve and Reject are disabled.
+
+## Screenshots
+
+- `artifacts/driver-submit-reimbursement.png`
+- `artifacts/driver-reimbursement-statuses.png`
+- `artifacts/driver-my-pay.png`
+- `artifacts/office-reimbursement-queue.png`
+- `artifacts/office-settlement-reimbursement.png`
+- `artifacts/office-settlement-list.png`
+- `artifacts/office-deduction-settings.png`
+- `artifacts/viewer-reimbursement-queue.png`
+
+## Open questions for JC
+
+- The three example deductions (fuel advance $100 fixed for company drivers, escrow $50 per load for owner-operators, ELD / insurance chargeback $35 fixed for company drivers) ship inactive. Turn on only the ones you want, or rename them.
+- The company profile on this snapshot still says “M&S Loads”. USDOT and MC stay blank until someone enters them on Company contact. The statement prints “Not on file” rather than a guessed number.
+- Statements include operations-desk loads (`SETTLEMENT_INCLUDES_OPERATIONS_LOADS` in `lib/settlement-statement.ts`). Driver Pay Mgmt. does not. Set the constant to false to match that screen.
+- A company driver with only a customer rate has no linehaul. The customer rate is not printed as pay.
+- A flat-rate driver expense replaces owner-operator pay on that load.
+- Statement numbers are `SS-{week start}-{driver id}`, not a sequential SS-1001.
+- A per-load deduction multiplies by the number of load lines that week, not by extra-pay lines.
+- A fuel-advance fee stored as a driver pay item stays extra pay. It is not converted into a deduction.
+- An approval lands on the week the driver submitted, unless that statement is already marked paid. Then it moves to the next open week (up to 16 weeks).
+- Rejected items are not reopened from the queue.
+- Close period does not mark the statement paid. Those stay separate on purpose.
+- No pay button moves money, and there is no bank link or QuickBooks bill.
+
+---
+
 # Live QA leftovers
 
 Branch `cursor/live-qa-leftovers-7a2e` off tip `99bc192` (Office Update 116). Draft only.

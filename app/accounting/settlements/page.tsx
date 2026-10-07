@@ -13,11 +13,7 @@ export default async function SettlementsPage({
   const params = await searchParams;
   return (
     <>
-      <PageHeader
-        dense
-        title="Settlements"
-        subtitle="Weekly statement for each driver and owner-operator. This is a record only."
-      />
+      <PageHeader dense title="Settlements" />
       <AccountingHub tab="settlements" week={params.week ?? ""} />
     </>
   );
