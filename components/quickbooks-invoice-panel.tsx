@@ -63,7 +63,7 @@ export function QuickbooksInvoicePanel({
       </dl>
       {preview.customerNeedsQbo ? (
         <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Needs QBO customer: {preview.customerName}. Match or create this customer in QuickBooks, then send again.
+          Map this customer first: {preview.customerName}. Choose them under Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.
         </p>
       ) : null}
       <ul className="mt-3 space-y-1 text-sm text-slate-700">

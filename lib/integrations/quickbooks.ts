@@ -16,7 +16,6 @@ import {
   getCustomer,
   getLoad,
   markCustomerNeedsQbo,
-  markCustomerQboMapped,
   markQboInvoice,
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
@@ -119,7 +118,7 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     mode: configured ? "quickbooks" : "demo",
     environment: getQuickbooksEnvironment(),
     customerName: load.customer_name,
-    customerNeedsQbo: customer?.qbo_status === "needs_qbo",
+    customerNeedsQbo: !String(customer?.qbo_customer_id ?? "").trim(),
     loadNumber: load.load_number,
     lane: `${load.origin} → ${load.destination}`,
     amount,
@@ -190,7 +189,12 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
     return { billId: demoId, source: "demo" };
   }
   const mapped = listQboVendorMaps().find((row) => row.payee === bill.vendor);
-  const vendorId = mapped?.qbo_vendor_id || (await findOrCreateVendor(bill.vendor));
+  const vendorId = mapped?.qbo_vendor_id?.trim() ?? "";
+  if (!vendorId) {
+    throw new Error(
+      `Map this vendor first: ${bill.vendor.trim() || "this vendor"}. Accounting → QuickBooks → Map Vendors.`,
+    );
+  }
   const expenseId = billExpenseAccountId();
   const created = await qboPost<{ Bill?: { Id?: string } }>(
     "/bill",
@@ -212,24 +216,6 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
   if (!id) throw new Error("QuickBooks did not return a bill id.");
   markQboBill(bill.id, id);
   return { billId: id, source: "quickbooks" };
-}
-
-async function findOrCreateVendor(name: string): Promise<string> {
-  const displayName = name.trim().slice(0, 500);
-  const found = await qboQuery<{ Vendor?: Array<{ Id?: string }> }>(
-    `select * from Vendor where DisplayName = '${escapeQboString(displayName)}'`,
-    "vendor query",
-  );
-  const existing = found.QueryResponse?.Vendor?.[0]?.Id;
-  if (existing) return existing;
-  const created = await qboPost<{ Vendor?: { Id?: string } }>(
-    "/vendor",
-    { DisplayName: displayName },
-    "vendor create",
-  );
-  const id = created.Vendor?.Id;
-  if (!id) throw new Error("QuickBooks did not return a vendor id.");
-  return id;
 }
 
 /** Never guess: the first Expense account in a chart of accounts is arbitrary (sandbox: "Accounting"). */
@@ -405,46 +391,13 @@ function uniqueDocNumber(load: LoadView): string {
 
 async function resolveQboCustomer(load: LoadView): Promise<string> {
   const mapped = getCustomer(load.customer_id);
-  if (mapped?.qbo_customer_id) return mapped.qbo_customer_id;
-  const displayName = load.customer_name.trim().slice(0, 500);
-  try {
-    const found = await findQboCustomerId(displayName);
-    if (found) {
-      if (load.customer_id) markCustomerQboMapped(load.customer_id, found);
-      return found;
-    }
-    const created = await qboPost<{ Customer?: { Id?: string } }>(
-      "/customer",
-      { DisplayName: displayName },
-      "customer create",
-    );
-    const id = created.Customer?.Id;
-    if (!id) throw new Error("QuickBooks did not return a customer id.");
-    if (load.customer_id) markCustomerQboMapped(load.customer_id, id);
-    return id;
-  } catch (error) {
-    if (error instanceof QboHttpError) throw error;
-    if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
-    if (error instanceof Error && /Needs QBO customer/i.test(error.message)) throw error;
-    throw new Error(`Needs QBO customer: ${displayName}. Create or match this customer in QuickBooks, then send again.`);
-  }
-}
-
-async function findQboCustomerId(displayName: string): Promise<string | undefined> {
-  const exact = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
-    `select * from Customer where DisplayName = '${escapeQboString(displayName)}'`,
-    "customer query",
+  const id = mapped?.qbo_customer_id?.trim() ?? "";
+  if (id) return id;
+  if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
+  const displayName = load.customer_name.trim() || "this customer";
+  throw new Error(
+    `Map this customer first: ${displayName}. Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.`,
   );
-  const exactHits = exact.QueryResponse?.Customer ?? [];
-  if (exactHits.length === 1 && exactHits[0]?.Id) return exactHits[0].Id;
-  if (exactHits.length > 1) return undefined;
-  const company = await qboQuery<{ Customer?: Array<{ Id?: string }> }>(
-    `select * from Customer where CompanyName = '${escapeQboString(displayName)}'`,
-    "customer company query",
-  );
-  const companyHits = company.QueryResponse?.Customer ?? [];
-  if (companyHits.length === 1 && companyHits[0]?.Id) return companyHits[0].Id;
-  return undefined;
 }
 
 /**

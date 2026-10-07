@@ -217,8 +217,20 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
               </ul>
             </section>
           ) : null}
-          <section className="card overflow-hidden">
-            <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Map Customers</header>
+          <section className="card overflow-hidden" data-qbo-customer-map="">
+            <header className="border-b border-slate-100 px-5 py-3">
+              <h2 className="text-sm font-semibold">Map Customers</h2>
+              <p className="mt-1 text-[12.5px] text-slate-600">
+                Several TMS customers can share one QuickBooks customer. Nothing here creates a customer in QuickBooks.
+              </p>
+            </header>
+            {qboCustomers.length === 0 ? (
+              <p role="status" className="border-b border-slate-100 px-5 py-3 text-sm text-slate-600">
+                {error
+                  ? "QuickBooks customers could not be loaded."
+                  : "No QuickBooks customers loaded. Connect QuickBooks, then pick a customer for each TMS customer."}
+              </p>
+            ) : null}
             <table className="table-grid">
               <thead>
                 <tr>
@@ -227,33 +239,64 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
                 </tr>
               </thead>
               <tbody>
-                {customers.map((customer) => (
-                  <tr key={customer.id}>
-                    <td>
-                      <Link href={`/customers/${customer.id}`} className="font-semibold underline">
-                        {customer.name}
-                      </Link>
-                    </td>
-                    <td>
-                      <form action={saveQboCustomerMapFormAction} className="flex flex-wrap gap-2">
-                        <input type="hidden" name="customer_id" value={customer.id} />
-                        <select name="qbo_customer_id" defaultValue={customer.qbo_customer_id} className="min-w-[200px]">
-                          <option value="">
-                            {qboCustomers.length ? "Pick a customer" : "Connect QuickBooks to load customers"}
-                          </option>
-                          {qboCustomers.map((row) => (
-                            <option key={row.id} value={row.id}>
-                              {row.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="btn btn-secondary" type="submit">
-                          Save
-                        </button>
-                      </form>
+                {customers.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-4 py-6 text-sm text-slate-500">
+                      No TMS customers to map yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  customers.map((customer) => {
+                    const selectId = `qbo-customer-${customer.id}`;
+                    const shares = customers.filter(
+                      (other) =>
+                        other.id !== customer.id &&
+                        customer.qbo_customer_id.trim() &&
+                        other.qbo_customer_id.trim() === customer.qbo_customer_id.trim(),
+                    );
+                    return (
+                      <tr key={customer.id}>
+                        <td>
+                          <Link href={`/customers/${customer.id}`} className="font-semibold underline">
+                            {customer.name}
+                          </Link>
+                        </td>
+                        <td>
+                          <form action={saveQboCustomerMapFormAction} className="flex flex-wrap items-center gap-2">
+                            <input type="hidden" name="customer_id" value={customer.id} />
+                            <label htmlFor={selectId} className="sr-only">
+                              QuickBooks customer for {customer.name}
+                            </label>
+                            <select
+                              id={selectId}
+                              name="qbo_customer_id"
+                              defaultValue={customer.qbo_customer_id}
+                              className="min-w-[200px]"
+                              aria-invalid={customer.qbo_customer_id.trim() ? undefined : true}
+                            >
+                              <option value="">
+                                {qboCustomers.length ? "Pick a customer" : "Connect QuickBooks to load customers"}
+                              </option>
+                              {qboCustomers.map((row) => (
+                                <option key={row.id} value={row.id}>
+                                  {row.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button className="btn btn-secondary" type="submit">
+                              Save
+                            </button>
+                            {shares.length ? (
+                              <p className="w-full text-xs text-slate-500">
+                                Same QuickBooks customer as {shares.map((row) => row.name).join(", ")}.
+                              </p>
+                            ) : null}
+                          </form>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </section>
@@ -262,7 +305,12 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
 
       {tab === "vendors" ? (
         <section className="card overflow-hidden">
-          <header className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Map Vendors</header>
+          <header className="border-b border-slate-100 px-5 py-3">
+            <h2 className="text-sm font-semibold">Map Vendors</h2>
+            <p className="mt-1 text-[12.5px] text-slate-600">
+              Bills use the vendor saved here. Nothing here creates a vendor in QuickBooks.
+            </p>
+          </header>
           <table className="table-grid">
             <thead>
               <tr>
@@ -280,13 +328,23 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
               ) : (
                 vendorNames.map((name) => {
                   const mapped = vendorMaps.find((row) => row.payee === name);
+                  const selectId = `qbo-vendor-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
                   return (
                     <tr key={name}>
                       <td>{name}</td>
                       <td>
-                        <form action={saveQboVendorMapFormAction} className="flex flex-wrap gap-2">
+                        <form action={saveQboVendorMapFormAction} className="flex flex-wrap items-center gap-2">
                           <input type="hidden" name="payee" value={name} />
-                          <select name="qbo_vendor_id" defaultValue={mapped?.qbo_vendor_id ?? ""} className="min-w-[200px]">
+                          <label htmlFor={selectId} className="sr-only">
+                            QuickBooks vendor for {name}
+                          </label>
+                          <select
+                            id={selectId}
+                            name="qbo_vendor_id"
+                            defaultValue={mapped?.qbo_vendor_id ?? ""}
+                            className="min-w-[200px]"
+                            aria-invalid={mapped?.qbo_vendor_id?.trim() ? undefined : true}
+                          >
                             <option value="">
                               {qboVendors.length ? "Pick a vendor" : "Connect QuickBooks to load vendors"}
                             </option>
