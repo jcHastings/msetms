@@ -3625,3 +3625,57 @@ html[data-office-viewer="true"] [data-view-only-allow] :is(button, a, input, sel
 html[data-office-viewer="true"] [data-view-only-locked="true"] {
   cursor: not-allowed;
 }
+
+.assign-suggestion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.assign-suggestion:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.assign-suggestion:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.assign-suggestion[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #eef6fd;
+}
+
+.assign-suggestion-caution {
+  border-color: #f5d0a9;
+  background: #fffaf3;
+}
+
+.assign-suggestion-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.assign-suggestion-reason {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: #334155;
+}
+
+.assign-suggestion:disabled,
+.assign-suggestion[aria-disabled="true"] {
+  cursor: not-allowed;
+  background: #f8fafc;
+  border-color: #d5dee8;
+}
