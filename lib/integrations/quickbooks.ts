@@ -16,9 +16,25 @@ import {
   getCustomer,
   getLoad,
   markCustomerNeedsQbo,
+  markCustomerQboMapped,
   markQboInvoice,
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
+import {
+  accountProblem,
+  billAccountName,
+  DEFAULT_LOAD_PAY_ACCOUNT,
+  INVOICE_RULES,
+  itemMissingMessage,
+  MANAGEMENT_GROUP_CUSTOMER_ID,
+  MANAGEMENT_GROUP_MESSAGE,
+  MS_EXPRESS_CUSTOMER_ID,
+  MS_EXPRESS_CUSTOMER_MESSAGE,
+  NOT_BILLED_ON_INVOICE,
+  notBilledMessage,
+  type BillSplitLine,
+  type ResolvedAccount,
+} from "../qbo-production-map";
 import { customerInvoiceBillableItems, resolveCustomerLumper } from "../pay-items";
 import { isBillableStatus, isOwnerOperator, type LoadView } from "../types";
 
@@ -29,8 +45,10 @@ const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
-/** QuickBooks Invoice.DocNumber max length. Never truncate a load number to fit. */
-export const QBO_DOC_NUMBER_MAX = 21;
+/** QuickBooks CustomerMemo limit. The load number is not a DocNumber, so the old 21-character refusal does not apply. */
+export const QBO_CUSTOMER_MEMO_MAX = 1000;
+/** Seven-digit invoice numbers in MS Express's existing sequence, from 1006000 upward. */
+export const QBO_DOC_SEQUENCE_FLOOR = 1_006_000;
 /** MS Express is in Hastings, NE. Invoice and bill dates use the company's calendar day. */
 const COMPANY_TIME_ZONE = "America/Chicago";
 const SANDBOX_API_HOST = "https://sandbox-quickbooks.api.intuit.com";
@@ -116,8 +134,22 @@ function qboFailure(response: Response, context: string): QboHttpError {
   return new QboHttpError(response.status, context, tid);
 }
 
+type CatalogItem = { id: string; name: string; incomeAccountId: string };
+
+let accountsById: Map<string, ResolvedAccount> | null = null;
+let accountsByName: Map<string, ResolvedAccount> | null = null;
+let itemIdByName: Map<string, string> | null = null;
+
+/** Drop cached account and item ids. The next send reads the company again. */
+export function clearQboCatalogCache(): void {
+  accountsById = null;
+  accountsByName = null;
+  itemIdByName = null;
+}
+
 export function resetQuickbooksForTests(): void {
   cachedAccess = null;
+  clearQboCatalogCache();
 }
 
 export function hasQuickbooksSession(): boolean {
@@ -236,7 +268,7 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
     markQboBill(bill.id, demoId);
     return { billId: demoId, source: "demo" };
   }
-  const payload = buildBillPayload(bill, listQboVendorMaps());
+  const payload = await buildBillPayload(bill, listQboVendorMaps());
   const created = await qboPost<{ Bill?: { Id?: string } }>("/bill", payload, "bill create");
   const id = created.Bill?.Id;
   if (!id) throw new Error("QuickBooks did not return a bill id.");
@@ -244,49 +276,111 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
   return { billId: id, source: "quickbooks" };
 }
 
+type BillForPayload = {
+  id: number;
+  vendor: string;
+  memo: string;
+  amount: number;
+  load_id: number | null;
+  created_at: string;
+  lines_json?: string;
+};
+
 /**
- * Vendor must be mapped. Expense account: the vendor's own account from Map Vendors (e.g. owner-operator
- * settlements vs fuel), else QBO_BILL_EXPENSE_ACCOUNT_ID. Never the first Expense account in the chart.
+ * Vendor: the Map Vendors row, else one exact DisplayName match (stored for next time). Never created.
+ * A single-amount bill uses the vendor's expense account, else QBO_BILL_EXPENSE_ACCOUNT_ID, else
+ * Owner Operators:Owner Operators COL. Split lines use the decision accounts and ignore those overrides.
  */
-export function buildBillPayload(
-  bill: { id: number; vendor: string; memo: string; amount: number; load_id: number | null; created_at: string },
+export async function buildBillPayload(
+  bill: BillForPayload,
   vendorMaps: Array<{ payee: string; qbo_vendor_id: string; qbo_expense_account_id?: string }>,
-): Record<string, unknown> {
-  const mapped = vendorMaps.find((row) => row.payee === bill.vendor);
-  const vendorId = mapped?.qbo_vendor_id?.trim() ?? "";
-  if (!vendorId) {
-    throw new Error(
-      `Map this vendor first: ${bill.vendor.trim() || "this vendor"}. Accounting → QuickBooks → Map Vendors.`,
-    );
-  }
-  const expenseId = mapped?.qbo_expense_account_id?.trim() || billExpenseAccountId();
+): Promise<Record<string, unknown>> {
+  const vendor = await resolveBillVendor(bill.vendor, vendorMaps);
+  const splits = parseBillSplits(bill.lines_json);
   const loadNumber = bill.load_id ? getLoad(bill.load_id)?.load_number ?? "" : "";
   const memo = bill.memo.trim();
   const privateNote = [`MSETMS bill ${bill.id}`, loadNumber ? `Load ${loadNumber}` : "", memo]
     .filter(Boolean)
     .join(" · ");
+  const lines = splits.length
+    ? await splitBillLines(splits, bill.vendor, memo)
+    : [await singleBillLine(bill, vendor.expenseId, memo)];
   return {
-    VendorRef: { value: vendorId },
+    VendorRef: { value: vendor.vendorId },
     TxnDate: invoiceDate(bill.created_at),
     PrivateNote: privateNote.slice(0, 4000),
-    Line: [
-      {
-        Amount: roundMoney(bill.amount),
-        DetailType: "AccountBasedExpenseLineDetail",
-        Description: (memo || `Bill ${bill.id}`).slice(0, 4000),
-        AccountBasedExpenseLineDetail: { AccountRef: { value: expenseId } },
-      },
-    ],
+    Line: lines,
   };
 }
 
-/** Never guess: the first Expense account in a chart of accounts is arbitrary (sandbox: "Accounting"). */
-function billExpenseAccountId(): string {
-  const id = getQuickbooksBillExpenseAccountId()?.trim();
-  if (!id) {
-    throw new Error("Set the QuickBooks expense account for bills (QBO_BILL_EXPENSE_ACCOUNT_ID) before sending bills.");
+function parseBillSplits(linesJson: string | undefined): BillSplitLine[] {
+  const raw = String(linesJson ?? "").trim();
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as BillSplitLine[];
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+async function resolveBillVendor(
+  vendorName: string,
+  vendorMaps: Array<{ payee: string; qbo_vendor_id: string; qbo_expense_account_id?: string }>,
+): Promise<{ vendorId: string; expenseId: string }> {
+  const mapped = vendorMaps.find((row) => row.payee === vendorName);
+  const mappedId = mapped?.qbo_vendor_id?.trim() ?? "";
+  if (mappedId) {
+    return { vendorId: mappedId, expenseId: mapped?.qbo_expense_account_id?.trim() ?? "" };
   }
-  return id;
+  const name = vendorName.trim() || "this vendor";
+  const found = await qboQuery<{ Vendor?: Array<{ Id?: string; DisplayName?: string }> }>(
+    `select Id, DisplayName from Vendor where DisplayName = '${escapeQboString(vendorName.trim())}'`,
+    "vendor query",
+  );
+  const rows = (found.QueryResponse?.Vendor ?? []).filter((row) => String(row.Id ?? "").trim());
+  if (rows.length > 1) {
+    throw new Error(`More than one QuickBooks vendor is named "${name}". Pick one in Map Vendors. Nothing was sent.`);
+  }
+  const id = String(rows[0]?.Id ?? "").trim();
+  if (!id) {
+    throw new Error(`Map this vendor first: ${name}. Accounting → QuickBooks → Map Vendors.`);
+  }
+  const { upsertQboVendorMap } = await import("../accounting-desk");
+  upsertQboVendorMap(vendorName.trim(), id, String(rows[0]?.DisplayName ?? name));
+  return { vendorId: id, expenseId: "" };
+}
+
+async function accountIdByName(name: string): Promise<string> {
+  const account = await accountByName(name);
+  if (!account) {
+    throw new Error(`QuickBooks account "${name}" is not in this company. Nothing was sent.`);
+  }
+  return account.id;
+}
+
+async function singleBillLine(
+  bill: BillForPayload,
+  vendorExpenseId: string,
+  memo: string,
+): Promise<Record<string, unknown>> {
+  const accountId = vendorExpenseId || getQuickbooksBillExpenseAccountId()?.trim() || (await accountIdByName(DEFAULT_LOAD_PAY_ACCOUNT));
+  return {
+    Amount: roundMoney(bill.amount),
+    DetailType: "AccountBasedExpenseLineDetail",
+    Description: (memo || `Bill ${bill.id}`).slice(0, 4000),
+    AccountBasedExpenseLineDetail: { AccountRef: { value: accountId } },
+  };
+}
+
+async function splitBillLines(lines: BillSplitLine[], vendorName: string, memo: string): Promise<Record<string, unknown>[]> {
+  const payload = [];
+  for (const line of lines) {
+    const accountName = billAccountName(line.kind, vendorName);
+    payload.push({
+      Amount: roundMoney(line.amount),
+      DetailType: "AccountBasedExpenseLineDetail",
+      Description: (line.description || memo || line.kind).slice(0, 4000),
+      AccountBasedExpenseLineDetail: { AccountRef: { value: await accountIdByName(accountName) } },
+    });
+  }
+  return payload;
 }
 
 export async function sendLoadToQuickbooks(
@@ -312,7 +406,7 @@ export async function sendLoadToQuickbooks(
   if (!hasQuickbooksSession()) {
     const result: QboSendResult = {
       invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
-      invoiceNumber: load.load_number,
+      invoiceNumber: "",
       sentAt,
       source: "demo",
     };
@@ -329,7 +423,7 @@ export async function sendLoadToQuickbooks(
   const live = await createOrUpdateLiveInvoice(load, preview);
   const result: QboSendResult = {
     invoiceId: live.invoiceId,
-    invoiceNumber: live.invoiceNumber || load.load_number,
+    invoiceNumber: live.invoiceNumber,
     sentAt,
     source: "quickbooks",
   };
@@ -364,6 +458,7 @@ export async function getQuickbooksStatus(): Promise<QboStatus> {
       "company info",
     );
     const companyName = company.CompanyInfo?.CompanyName || company.CompanyInfo?.LegalName || "";
+    await warmQboCatalog();
     return {
       ...base,
       mode: "quickbooks",
@@ -414,14 +509,16 @@ function companyDay(date: Date): string {
   }).format(date);
 }
 
-/** Customer-visible invoice message: load, lane, and the customer's own references only. No internal notes. */
+/** Customer-visible invoice message: MS Express load #, customer ref, lane, and the customer's own references. No internal notes. */
 function buildMemo(load: LoadView): string {
-  const parts = [`Load ${load.load_number}`, `${load.origin} → ${load.destination}`];
   const customerRef = String(load.customer_reference ?? "").trim();
-  if (customerRef) parts.push(`Customer ref: ${customerRef}`);
+  const head = customerRef
+    ? `MS Express load ${load.load_number} · Customer ref ${customerRef}`
+    : `MS Express load ${load.load_number}`;
+  const parts = [head, `${load.origin} → ${load.destination}`];
   if (load.reference_number) parts.push(`Ref: ${load.reference_number}`);
   if (load.po_number) parts.push(`PO: ${load.po_number}`);
-  return parts.join("\n");
+  return parts.join("\n").slice(0, QBO_CUSTOMER_MEMO_MAX);
 }
 
 /** QuickBooks private note (office only). Still no dispatch notes, special instructions, or appointment text. */
@@ -434,51 +531,48 @@ function buildPrivateNote(load: LoadView): string {
 
 type QboInvoiceRecord = { Id?: string; SyncToken?: string; DocNumber?: string; TotalAmt?: number; Balance?: number };
 
-/** MS Express load number, unchanged. Refuses rather than cutting a number QuickBooks cannot store. */
-export function quickbooksDocNumber(loadNumber: string): string {
-  const doc = String(loadNumber ?? "").trim();
-  if (!doc) throw new Error("This load has no MS Express load number, so nothing was sent.");
-  if (doc.length > QBO_DOC_NUMBER_MAX) {
-    throw new Error(
-      `QuickBooks invoice numbers are limited to ${QBO_DOC_NUMBER_MAX} characters. MS Express load # ${doc} is ${doc.length} characters, so nothing was sent. It was not shortened.`,
-    );
+const SEVEN_DIGIT_DOC = /^\d{7}$/;
+
+/**
+ * Next MS Express invoice number: max existing 7-digit DocNumber at or above 1006000, plus one.
+ * Ignores load numbers (MSE-1055) and anything below the 1006 sequence. Never skips into that format.
+ */
+export function nextSequenceDocNumber(docNumbers: Iterable<string>): string {
+  let max = 0;
+  for (const raw of docNumbers) {
+    const value = String(raw ?? "").trim();
+    if (!SEVEN_DIGIT_DOC.test(value)) continue;
+    const parsed = Number(value);
+    if (parsed >= QBO_DOC_SEQUENCE_FLOOR && parsed > max) max = parsed;
   }
-  return doc;
+  if (!max) {
+    throw new Error("No QuickBooks invoice number in the 1006 sequence was found, so nothing was sent.");
+  }
+  if (max >= 9_999_999) {
+    throw new Error("QuickBooks invoice numbers in the 1006 sequence stop at 9999999. Nothing was sent.");
+  }
+  return String(max + 1);
 }
 
 /**
- * New load: create the invoice with DocNumber = the MS Express load number (never the customer ref, PO, or broker number).
- * Refuses if that number is longer than QuickBooks allows, instead of shortening it.
- * Already sent: update the same QuickBooks invoice in place (sparse update, lines replaced). Never a second invoice.
- * Every customer, term, and item is resolved before anything is written.
+ * New invoice: local refusals, then customer, terms, and every item. DocNumber is chosen last.
+ * Custom transaction numbers off: omit DocNumber and let QuickBooks assign it.
+ * Custom transaction numbers on: TMS assigns the next 1006 number, re-checks it, and retries once.
+ * Already sent: sparse-update that same invoice and keep its DocNumber. Never a second number.
  */
 async function createOrUpdateLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
-  const docNumber = quickbooksDocNumber(load.load_number);
+  refuseUnbilledLines(preview.lines);
   const customerId = await resolveQboCustomer(load);
   const salesTerm = await resolveSalesTermRef(load);
-  const linePayload = [];
-  for (const line of preview.lines) {
-    const itemId = await resolveInvoiceItemId(line);
-    linePayload.push({
-      Amount: line.amount,
-      DetailType: "SalesItemLineDetail",
-      Description: line.description,
-      SalesItemLineDetail: {
-        ItemRef: { value: itemId, name: line.name },
-        Qty: line.qty,
-        UnitPrice: line.unitPrice,
-      },
-    });
-  }
+  const linePayload = await resolveInvoiceLines(preview.lines);
   const payload: Record<string, unknown> = {
-    DocNumber: docNumber,
     TxnDate: preview.txnDate,
     CustomerRef: { value: customerId },
     PrivateNote: buildPrivateNote(load).slice(0, 4000),
-    CustomerMemo: { value: preview.memo.slice(0, 1000) },
+    CustomerMemo: { value: preview.memo.slice(0, QBO_CUSTOMER_MEMO_MAX) },
     Line: linePayload,
   };
   if (salesTerm) payload.SalesTermRef = salesTerm;
@@ -502,6 +596,8 @@ async function createOrUpdateLiveInvoice(
         `QuickBooks invoice ${current.DocNumber || existingId} already has a payment applied, so nothing was sent. Adjust it in QuickBooks (credit memo) instead.`,
       );
     }
+    const kept = String(current.DocNumber ?? "").trim();
+    if (kept) payload.DocNumber = kept;
     const updated = await qboPost<{ Invoice?: QboInvoiceRecord }>(
       "/invoice",
       { ...payload, Id: current.Id, SyncToken: current.SyncToken, sparse: true },
@@ -509,29 +605,70 @@ async function createOrUpdateLiveInvoice(
     );
     return {
       invoiceId: updated.Invoice?.Id || current.Id,
-      invoiceNumber: updated.Invoice?.DocNumber || docNumber,
+      invoiceNumber: String(updated.Invoice?.DocNumber || kept).trim(),
     };
   }
 
-  const clash = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
-    `select Id, DocNumber from Invoice where DocNumber = '${escapeQboString(docNumber)}'`,
-    "invoice number check",
-  );
-  const clashId = clash.QueryResponse?.Invoice?.[0]?.Id;
-  if (clashId) {
-    throw new Error(
-      `QuickBooks already has invoice #${docNumber} (id ${clashId}). Nothing was sent. Check it in QuickBooks before sending this load.`,
-    );
-  }
+  const docNumber = await assignCreateDocNumber();
+  if (docNumber) payload.DocNumber = docNumber;
   const created = await qboPost<{ Invoice?: QboInvoiceRecord }>("/invoice", payload, "invoice create");
   const invoiceId = created.Invoice?.Id;
   if (!invoiceId) {
     throw new Error("QuickBooks did not return an invoice id.");
   }
-  return {
-    invoiceId,
-    invoiceNumber: created.Invoice?.DocNumber || docNumber,
-  };
+  const invoiceNumber = String(created.Invoice?.DocNumber ?? "").trim();
+  if (!invoiceNumber) {
+    markQboInvoice(load.id, {
+      invoiceId,
+      invoiceNumber: "",
+      source: "quickbooks",
+      sentAt: new Date().toISOString(),
+    });
+    throw new Error(
+      "QuickBooks created the invoice but did not assign an invoice number. The link was saved so a retry updates that invoice instead of creating another one.",
+    );
+  }
+  return { invoiceId, invoiceNumber };
+}
+
+async function customTxnNumbersOn(): Promise<boolean> {
+  const result = await qboQuery<{
+    Preferences?:
+      | { SalesFormsPrefs?: { CustomTxnNumbers?: boolean } }
+      | Array<{ SalesFormsPrefs?: { CustomTxnNumbers?: boolean } }>;
+  }>("select * from Preferences", "preferences");
+  const prefs = result.QueryResponse?.Preferences;
+  const row = Array.isArray(prefs) ? prefs[0] : prefs;
+  return row?.SalesFormsPrefs?.CustomTxnNumbers === true;
+}
+
+async function listRecentDocNumbers(): Promise<string[]> {
+  const result = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
+    "select Id, DocNumber from Invoice orderby MetaData.LastUpdatedTime desc maxresults 1000",
+    "invoice numbers",
+  );
+  return (result.QueryResponse?.Invoice ?? []).map((row) => String(row.DocNumber ?? ""));
+}
+
+async function invoiceNumberTaken(docNumber: string): Promise<boolean> {
+  const clash = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
+    `select Id, DocNumber from Invoice where DocNumber = '${escapeQboString(docNumber)}'`,
+    "invoice number check",
+  );
+  return Boolean(clash.QueryResponse?.Invoice?.[0]?.Id);
+}
+
+/** Undefined: omit DocNumber. A string: the TMS-assigned 1006 number. */
+async function assignCreateDocNumber(): Promise<string | undefined> {
+  if (!(await customTxnNumbersOn())) return undefined;
+  let candidate = nextSequenceDocNumber(await listRecentDocNumbers());
+  if (await invoiceNumberTaken(candidate)) {
+    candidate = nextSequenceDocNumber(await listRecentDocNumbers());
+    if (await invoiceNumberTaken(candidate)) {
+      throw new Error(`QuickBooks invoice #${candidate} is already used, so nothing was sent.`);
+    }
+  }
+  return candidate;
 }
 
 /** Customer payment terms -> QuickBooks Term by exact name. Blank = the QuickBooks customer's default terms. */
@@ -550,34 +687,84 @@ async function resolveSalesTermRef(load: LoadView): Promise<{ value: string } | 
 }
 
 async function resolveQboCustomer(load: LoadView): Promise<string> {
+  if (load.customer_id === MS_EXPRESS_CUSTOMER_ID) {
+    throw new Error(MS_EXPRESS_CUSTOMER_MESSAGE);
+  }
   const mapped = getCustomer(load.customer_id);
-  const id = mapped?.qbo_customer_id?.trim() ?? "";
-  if (id) return id;
-  if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
-  const displayName = load.customer_name.trim() || "this customer";
-  throw new Error(
-    `Map this customer first: ${displayName}. Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.`,
+  const stored = mapped?.qbo_customer_id?.trim() ?? "";
+  if (load.customer_id === MANAGEMENT_GROUP_CUSTOMER_ID) {
+    if (stored) return stored;
+    throw new Error(MANAGEMENT_GROUP_MESSAGE);
+  }
+  if (stored) return stored;
+  const displayName = (mapped?.name || load.customer_name).trim() || "this customer";
+  const found = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
+    `select Id, DisplayName from Customer where DisplayName = '${escapeQboString(displayName)}'`,
+    "customer query",
   );
+  const rows = (found.QueryResponse?.Customer ?? []).filter((row) => String(row.Id ?? "").trim());
+  if (rows.length > 1) {
+    throw new Error(
+      `More than one QuickBooks customer is named "${displayName}". Pick one in Map Customers. Nothing was sent.`,
+    );
+  }
+  const id = String(rows[0]?.Id ?? "").trim();
+  if (!id) {
+    if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
+    throw new Error(
+      `Map this customer first: ${displayName}. Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.`,
+    );
+  }
+  if (load.customer_id) markCustomerQboMapped(load.customer_id, id);
+  return id;
+}
+
+function refuseUnbilledLines(lines: QboInvoiceLine[]): void {
+  for (const line of lines) {
+    const label = NOT_BILLED_ON_INVOICE[line.category];
+    if (label) throw new Error(notBilledMessage(label));
+  }
+}
+
+async function resolveInvoiceLines(lines: QboInvoiceLine[]): Promise<Array<Record<string, unknown>>> {
+  const payload = [];
+  for (const line of lines) {
+    const item = await resolveInvoiceItem(line);
+    payload.push({
+      Amount: line.amount,
+      DetailType: "SalesItemLineDetail",
+      Description: line.description,
+      SalesItemLineDetail: {
+        ItemRef: { value: item.id, name: item.name },
+        Qty: line.qty,
+        UnitPrice: line.unitPrice,
+      },
+    });
+  }
+  return payload;
 }
 
 /**
- * Pay item -> QBO Item: 1) Accounting > QuickBooks > Map Pay Items (by TMS category; Line Haul uses flat_rate),
- * 2) a QBO Item with the exact same name. Never falls back to an arbitrary Service item and never creates items,
- * so revenue cannot land on the wrong income account.
+ * Pay item -> QBO Item: an office override id (still checked against the decided account), else the
+ * production item name. The item is read again at send time. A stale id falls through to the name.
+ * A missing name is not cached, so a bookkeeper fix is seen on the next send.
  */
-async function resolveInvoiceItemId(line: Pick<QboInvoiceLine, "category" | "name">): Promise<string> {
+async function resolveInvoiceItem(line: Pick<QboInvoiceLine, "category" | "name">): Promise<CatalogItem> {
+  const rule = INVOICE_RULES[line.category];
+  if (!rule) {
+    throw new Error(
+      `Map pay item "${line.name}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`,
+    );
+  }
   const { listQboItemMaps } = await import("../accounting-desk");
-  const mapped = listQboItemMaps().find((row) => row.category === line.category && row.qbo_item_id.trim());
-  if (mapped) return mapped.qbo_item_id.trim();
-  const named = await qboQuery<{ Item?: Array<{ Id?: string; Name?: string }> }>(
-    `select * from Item where Name = '${escapeQboString(line.name)}'`,
-    "item query",
-  );
-  const namedId = named.QueryResponse?.Item?.[0]?.Id;
-  if (namedId) return namedId;
-  throw new Error(
-    `Map pay item "${line.name}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`,
-  );
+  const mappedId = listQboItemMaps().find((row) => row.category === line.category)?.qbo_item_id.trim() ?? "";
+  let item = mappedId ? await readItemById(mappedId) : null;
+  if (!item) item = await itemByExactName(rule.itemName);
+  if (!item) throw new Error(itemMissingMessage(rule));
+  const account = await accountById(item.incomeAccountId);
+  const problem = accountProblem(rule, item.name || rule.itemName, account);
+  if (problem) throw new Error(problem);
+  return item;
 }
 
 function escapeQboString(value: string): string {
@@ -709,6 +896,98 @@ export async function listQboExpenseAccounts(): Promise<QboNamedRef[]> {
       .filter((row) => row.id);
   } catch {
     return [];
+  }
+}
+
+type AccountQueryRow = {
+  Id?: string;
+  Name?: string;
+  FullyQualifiedName?: string;
+  AccountType?: string;
+  Classification?: string;
+};
+
+async function loadAccounts(): Promise<void> {
+  const result = await qboQuery<{ Account?: AccountQueryRow[] }>("select * from Account maxresults 1000", "account list");
+  accountsById = new Map();
+  accountsByName = new Map();
+  for (const row of result.QueryResponse?.Account ?? []) {
+    const id = String(row.Id ?? "").trim();
+    if (!id) continue;
+    const account: ResolvedAccount = {
+      id,
+      fullyQualifiedName: String(row.FullyQualifiedName || row.Name || "").trim(),
+      accountType: String(row.AccountType ?? ""),
+      classification: String(row.Classification ?? ""),
+    };
+    accountsById.set(id, account);
+    if (account.fullyQualifiedName) accountsByName.set(account.fullyQualifiedName, account);
+  }
+}
+
+async function accountById(id: string): Promise<ResolvedAccount | undefined> {
+  if (!id) return undefined;
+  if (!accountsById) await loadAccounts();
+  if (accountsById?.has(id)) return accountsById.get(id);
+  await loadAccounts();
+  return accountsById?.get(id);
+}
+
+async function accountByName(name: string): Promise<ResolvedAccount | undefined> {
+  if (!accountsByName) await loadAccounts();
+  if (accountsByName?.has(name)) return accountsByName.get(name);
+  await loadAccounts();
+  return accountsByName?.get(name);
+}
+
+function catalogItem(row: { Id?: string; Name?: string; IncomeAccountRef?: { value?: string } }): CatalogItem | null {
+  const id = String(row.Id ?? "").trim();
+  if (!id) return null;
+  return {
+    id,
+    name: String(row.Name ?? "").trim(),
+    incomeAccountId: String(row.IncomeAccountRef?.value ?? "").trim(),
+  };
+}
+
+async function queryItems(query: string): Promise<CatalogItem[]> {
+  const result = await qboQuery<{ Item?: Array<{ Id?: string; Name?: string; IncomeAccountRef?: { value?: string } }> }>(
+    query,
+    "item query",
+  );
+  return (result.QueryResponse?.Item ?? []).map(catalogItem).filter((row): row is CatalogItem => Boolean(row));
+}
+
+async function readItemById(id: string): Promise<CatalogItem | null> {
+  const rows = await queryItems(`select * from Item where Id = '${escapeQboString(id)}'`);
+  return rows.find((row) => row.id === id) ?? null;
+}
+
+async function itemByExactName(name: string): Promise<CatalogItem | null> {
+  const cachedId = itemIdByName?.get(name);
+  if (cachedId) {
+    const fresh = await readItemById(cachedId);
+    if (fresh) return fresh;
+    itemIdByName?.delete(name);
+  }
+  const rows = await queryItems(`select * from Item where Name = '${escapeQboString(name)}'`);
+  if (rows.length > 1) {
+    throw new Error(`More than one QuickBooks item is named "${name}". Pick one in Map Pay Items. Nothing was sent.`);
+  }
+  const item = rows[0] ?? null;
+  if (!item) return null;
+  if (!itemIdByName) itemIdByName = new Map();
+  itemIdByName.set(name, item.id);
+  return item;
+}
+
+/** Best-effort account read at connect. A failure leaves the cache empty for the next send. */
+export async function warmQboCatalog(): Promise<void> {
+  if (!hasQuickbooksSession()) return;
+  try {
+    await loadAccounts();
+  } catch {
+    clearQboCatalogCache();
   }
 }
 
@@ -873,6 +1152,7 @@ export async function disconnectQuickbooks(): Promise<{ revoked: boolean }> {
     }
   }
   clearStoredQuickbooksTokens();
+  clearQboCatalogCache();
   return { revoked };
 }
 
@@ -947,6 +1227,7 @@ export async function completeQuickbooksOAuth(input: {
         expiresAt: Date.now() + Math.max(30, payload.expires_in ?? 3600) * 1000,
       }
     : null;
+  await warmQboCatalog();
 }
 
 function qboStatusMessage(status: number, context: string): string {

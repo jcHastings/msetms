@@ -89,18 +89,66 @@ const calls: Call[] = [];
 const realFetch = globalThis.fetch;
 
 type FakeItem = { Id: string; Name: string; Type: string; IncomeAccountRef: { value: string; name: string } };
+type FakeAccount = {
+  Id: string;
+  Name: string;
+  FullyQualifiedName: string;
+  Classification: string;
+  AccountType: string;
+  Active: boolean;
+};
+const acct = (id: string, name: string, accountType: string, classification: string, fullyQualifiedName = name): FakeAccount => ({
+  Id: id,
+  Name: name,
+  FullyQualifiedName: fullyQualifiedName,
+  Classification: classification,
+  AccountType: accountType,
+  Active: true,
+});
 const fake = {
   nextId: 1000,
+  nextDoc: 1006100,
+  customTxnNumbers: false,
+  /** The next N `where DocNumber =` checks insert that number and report it taken. */
+  docCollideRemaining: 0,
   accounts: [
-    { Id: "401", Name: "Freight Income", Classification: "Revenue", AccountType: "Income", Active: true },
-    { Id: "402", Name: "Accessorial Income", Classification: "Revenue", AccountType: "Income", Active: true },
-    { Id: "403", Name: "Fuel Surcharge Income", Classification: "Revenue", AccountType: "Income", Active: true },
-    { Id: "404", Name: "Lumper Reimbursement", Classification: "Revenue", AccountType: "Income", Active: true },
-    { Id: "69", Name: "Legal & Professional Fees:Accounting", Classification: "Expense", AccountType: "Expense", Active: true },
-    { Id: "701", Name: "Owner-Operator Settlements", Classification: "Expense", AccountType: "Cost of Goods Sold", Active: true },
-    { Id: "702", Name: "Fuel", Classification: "Expense", AccountType: "Expense", Active: true },
+    acct("401", "Gross Trucking Income", "Income", "Revenue"),
+    acct("402", "Billable Expense Income", "Income", "Revenue"),
+    acct("403", "Trailer Rentals", "Income", "Revenue"),
+    acct("404", "Factoring Fee", "Income", "Revenue"),
+    acct("405", "Sales", "Income", "Revenue"),
+    acct("406", "Service/Fee Income", "Income", "Revenue"),
+    acct("407", "Uncategorized Income", "Income", "Revenue"),
+    acct("408", "Lumper", "Cost of Goods Sold", "Expense"),
+    acct("409", "Carrier Expense", "Cost of Goods Sold", "Expense"),
+    acct("410", "Owner Operators", "Cost of Goods Sold", "Expense"),
+    acct("411", "Advances", "Cost of Goods Sold", "Expense", "Owner Operators:Advances"),
+    acct("412", "Fuel", "Cost of Goods Sold", "Expense", "Owner Operators:Fuel"),
+    acct("413", "Insurance COL", "Cost of Goods Sold", "Expense", "Owner Operators:Insurance COL"),
+    acct("414", "Owner Operators COL", "Cost of Goods Sold", "Expense", "Owner Operators:Owner Operators COL"),
+    acct("415", "Drivers Paid by RC", "Cost of Goods Sold", "Expense"),
+    acct("416", "Toll", "Expense", "Expense", "Driver Expenses:Toll"),
+    acct("417", "OCC", "Expense", "Expense", "Insurance:OCC"),
+    acct("418", "Software", "Expense", "Expense", "Office and Admin Expense:Software"),
+    acct("419", "Loan - Lumig Transports LLC", "Other Current Asset", "Asset"),
+    acct("420", "Cost of Goods Sold", "Cost of Goods Sold", "Expense"),
+    acct("701", "Owner-Operator Settlements", "Cost of Goods Sold", "Expense"),
+    acct("702", "Fuel Expense Override", "Expense", "Expense"),
   ],
   items: new Map<string, FakeItem>(),
+  customers: [
+    { Id: "58", DisplayName: "M & S Loads LLC." },
+    { Id: "77", DisplayName: "Exact Broker LLC" },
+    { Id: "78", DisplayName: "M&S Management Group" },
+    { Id: "79", DisplayName: "M&S Management" },
+    { Id: "80", DisplayName: "Twin Name LLC" },
+    { Id: "81", DisplayName: "Twin Name LLC" },
+  ],
+  vendors: [
+    { Id: "61", DisplayName: "MSETMS Test Fuel Vendor" },
+    { Id: "62", DisplayName: "Lumig Transports LLC" },
+    { Id: "63", DisplayName: "Lumig Transports" },
+  ],
   terms: [{ Id: "3", Name: "Net 30", DueDays: 30 }],
   invoices: new Map<string, Json>(),
   bills: new Map<string, Json>(),
@@ -115,12 +163,44 @@ function fakeQbo(url: URL, method: string, body: Json | undefined): Response {
   if (tail === "/query") {
     const q = url.searchParams.get("query") ?? "";
     const eq = (field: string) => q.match(new RegExp(`${field} = '((?:[^']|'')*)'`))?.[1]?.replace(/''/g, "'");
-    if (/from Item/i.test(q)) return ok({ QueryResponse: { Item: [...fake.items.values()].filter((i) => i.Name === eq("Name")) } });
+    if (/from Item/i.test(q)) {
+      const name = eq("Name");
+      const id = eq("Id");
+      return ok({
+        QueryResponse: {
+          Item: [...fake.items.values()].filter((i) => (name ? i.Name === name : true) && (id ? i.Id === id : true)),
+        },
+      });
+    }
     if (/from Term/i.test(q)) return ok({ QueryResponse: { Term: fake.terms.filter((t) => !eq("Name") || t.Name === eq("Name")) } });
     if (/from Invoice/i.test(q)) {
-      return ok({ QueryResponse: { Invoice: [...fake.invoices.values()].filter((i) => i.DocNumber === eq("DocNumber")) } });
+      const doc = eq("DocNumber");
+      let rows = [...fake.invoices.values()];
+      if (doc && fake.docCollideRemaining > 0) {
+        fake.docCollideRemaining -= 1;
+        if (!rows.some((i) => i.DocNumber === doc)) {
+          const Id = String(fake.nextId++);
+          const row = { Id, DocNumber: doc, SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] };
+          fake.invoices.set(Id, row);
+          rows = [...fake.invoices.values()];
+        }
+      }
+      if (doc) rows = rows.filter((i) => i.DocNumber === doc);
+      return ok({ QueryResponse: { Invoice: rows } });
     }
     if (/from Account/i.test(q)) return ok({ QueryResponse: { Account: fake.accounts } });
+    if (/from Preferences/i.test(q)) {
+      const prefs = { SalesFormsPrefs: { CustomTxnNumbers: fake.customTxnNumbers } };
+      return ok({ QueryResponse: { Preferences: prefs } });
+    }
+    if (/from Customer/i.test(q)) {
+      const name = eq("DisplayName");
+      return ok({ QueryResponse: { Customer: fake.customers.filter((c) => !name || c.DisplayName === name) } });
+    }
+    if (/from Vendor/i.test(q)) {
+      const name = eq("DisplayName");
+      return ok({ QueryResponse: { Vendor: fake.vendors.filter((v) => !name || v.DisplayName === name) } });
+    }
     return ok({ QueryResponse: {} });
   }
   const get = tail.match(/^\/(invoice|bill|item|companyinfo)\/([^/]+)$/);
@@ -148,18 +228,31 @@ function fakeQbo(url: URL, method: string, body: Json | undefined): Response {
       if (String(current.SyncToken) !== String(body.SyncToken)) return qboError(400, "Stale Object Error");
       const rest: Json = { ...body };
       delete rest.sparse;
-      const next = { ...current, ...rest, SyncToken: String(Number(current.SyncToken) + 1), TotalAmt: total, Balance: total };
+      const next = {
+        ...current,
+        ...rest,
+        DocNumber: body.DocNumber || current.DocNumber,
+        SyncToken: String(Number(current.SyncToken) + 1),
+        TotalAmt: total,
+        Balance: total,
+      };
       fake.invoices.set(next.Id, next);
       return ok({ Invoice: next });
     }
+    let doc = body.DocNumber ? String(body.DocNumber) : "";
+    if (!doc && !fake.customTxnNumbers) {
+      doc = String(fake.nextDoc);
+      fake.nextDoc += 1;
+    }
     const Id = String(fake.nextId++);
-    const created = { ...body, Id, SyncToken: "0", TotalAmt: total, Balance: total };
+    const created = { ...body, DocNumber: doc, Id, SyncToken: "0", TotalAmt: total, Balance: total };
     fake.invoices.set(Id, created);
     return ok({ Invoice: created });
   }
   if (method === "POST" && tail === "/bill" && body) {
-    const Id = String(fake.nextId++);
     const total = Math.round((body.Line ?? []).reduce((s: number, l: Json) => s + l.Amount, 0) * 100) / 100;
+    if (total <= 0) return qboError(400, "Transaction total cannot be negative");
+    const Id = String(fake.nextId++);
     const created = { ...body, Id, SyncToken: "0", TotalAmt: total };
     fake.bills.set(Id, created);
     return ok({ Bill: created });
@@ -234,15 +327,15 @@ async function main() {
   console.log(`${LIVE ? "LIVE SANDBOX" : "OFFLINE"} · ${companyName} · realm ${target.realmId} · run ${RUN}`);
 
   const cats = {
-    flat_rate: { item: "Line Haul", income: "Freight Income" },
-    detention: { item: "Detention", income: "Accessorial Income" },
-    layover: { item: "Layover", income: "Accessorial Income" },
-    tonu: { item: "TONU", income: "Accessorial Income" },
-    washout: { item: "Washout", income: "Accessorial Income" },
-    extra_stop: { item: "Extra Stop", income: "Accessorial Income" },
+    flat_rate: { item: "Line Haul", income: "Gross Trucking Income" },
+    detention: { item: "Detention", income: "Gross Trucking Income" },
+    layover: { item: "Layover", income: "Gross Trucking Income" },
+    tonu: { item: "TONU", income: "Gross Trucking Income" },
+    washout: { item: "Trailer Washout", income: "Gross Trucking Income" },
+    extra_stop: { item: "Picks and Drops", income: "Gross Trucking Income" },
     fuel_surcharge: { item: "Fuel Surcharge", income: "Fuel Surcharge Income" },
-    misc: { item: "Adjustment", income: "Accessorial Income" },
-    lumper: { item: "Lumper", income: "Lumper Reimbursement" },
+    misc: { item: "Adjustment", income: "Gross Trucking Income" },
+    lumper: { item: "Lumper", income: "Lumper" },
   } as const;
   type Cat = keyof typeof cats;
   const itemId: Record<string, string> = {};
@@ -252,53 +345,112 @@ async function main() {
   let fuelVendorId = "61";
   let ooAccountId = "701";
   let fuelAccountId = "702";
+  const ooColAccountId = "414";
   let netTermId = "3";
+  const { productionNamesForSandbox5710 } = await import("../lib/qbo-production-map");
+  const sandboxNames = productionNamesForSandbox5710();
+  console.log(`Sandbox 5710 must already contain these names (this run does not create them).`);
+  console.log(`Items: ${sandboxNames.items.join(", ")}`);
+  console.log(`Accounts: ${sandboxNames.accounts.join(", ")}`);
+
+  const putItem = (id: string, name: string, accountId: string) => {
+    const account = fake.accounts.find((row) => row.Id === accountId);
+    if (!account) throw new Error(`missing fake account ${accountId}`);
+    fake.items.set(id, {
+      Id: id,
+      Name: name,
+      Type: "Service",
+      IncomeAccountRef: { value: account.Id, name: account.FullyQualifiedName },
+    });
+  };
 
   if (!LIVE) {
-    let n = 101;
-    for (const [cat, spec] of Object.entries(cats)) {
-      const acct = fake.accounts.find((a) => a.Name === spec.income)!;
-      const id = String(n++);
-      fake.items.set(id, { Id: id, Name: spec.item, Type: "Service", IncomeAccountRef: { value: acct.Id, name: acct.Name } });
-      itemId[cat] = id;
-      incomeId[cat] = acct.Id;
-    }
+    // Wrong chart first: Lumper is on Gross Trucking Income, Trailer Washout is on Cost of Goods Sold,
+    // and Fuel Surcharge, Layover, TONU, and Adjustment do not exist yet.
+    putItem("101", "Line Haul", "401");
+    putItem("102", "Detention", "401");
+    putItem("103", "Picks and Drops", "401");
+    putItem("104", "Return", "401");
+    putItem("105", "Lumper", "401");
+    putItem("106", "Trailer Washout", "420");
+    itemId.flat_rate = "101";
+    itemId.detention = "102";
+    itemId.extra_stop = "103";
+    itemId.lumper = "105";
+    itemId.washout = "106";
+    incomeId.flat_rate = "401";
+    incomeId.detention = "401";
+    incomeId.extra_stop = "401";
+    incomeId.lumper = "401";
+    incomeId.washout = "420";
   } else {
     const find = async (entity: string, field: string, name: string) =>
       ((await qbo.queryQboReadOnly<Json>(`select * from ${entity} where ${field} = '${name.replace(/'/g, "''")}'`))
         .QueryResponse?.[entity] ?? [])[0] as Json | undefined;
-    const ensure = async (entity: "account" | "item" | "customer" | "vendor", field: string, body: Json) => {
-      const key = entity.charAt(0).toUpperCase() + entity.slice(1);
-      const name = String(body[field]);
-      return (await find(key, field, name)) ?? (await qbo.createQboCampaignFixture(entity, body));
-    };
-    const P = qbo.QBO_CAMPAIGN_FIXTURE_PREFIX;
-    const accounts: Record<string, string> = {};
-    for (const income of ["Freight Income", "Accessorial Income", "Fuel Surcharge Income", "Lumper Reimbursement"]) {
-      accounts[income] = String((await ensure("account", "Name", { Name: `${P} ${income}`, AccountType: "Income" })).Id);
+    const missing: string[] = [];
+    const accountIds: Record<string, string> = {};
+    for (const name of sandboxNames.accounts) {
+      const row = await find("Account", "FullyQualifiedName", name);
+      if (!row?.Id) missing.push(`account ${name}`);
+      else accountIds[name] = String(row.Id);
     }
-    ooAccountId = String((await ensure("account", "Name", { Name: `${P} OO Settlements`, AccountType: "Cost of Goods Sold" })).Id);
-    fuelAccountId = String((await ensure("account", "Name", { Name: `${P} Fuel`, AccountType: "Expense" })).Id);
+    for (const name of sandboxNames.items) {
+      const row = await find("Item", "Name", name);
+      if (!row?.Id) missing.push(`item ${name}`);
+    }
+    if (missing.length) {
+      throw new Error(`Sandbox 5710 is missing ${missing.join("; ")}. Nothing was created.`);
+    }
     for (const [cat, spec] of Object.entries(cats)) {
-      const item = await ensure("item", "Name", {
-        Name: `${P} ${spec.item}`,
-        Type: "Service",
-        IncomeAccountRef: { value: accounts[spec.income] },
-      });
-      itemId[cat] = String(item.Id);
-      incomeId[cat] = accounts[spec.income];
+      const item = await find("Item", "Name", spec.item);
+      itemId[cat] = String(item?.Id);
+      incomeId[cat] = accountIds[spec.income];
     }
-    customerQboId = String((await ensure("customer", "DisplayName", { DisplayName: `${P} M&S Loads bill-to` })).Id);
-    ooVendorId = String((await ensure("vendor", "DisplayName", { DisplayName: `${P} OO Vendor` })).Id);
-    fuelVendorId = String((await ensure("vendor", "DisplayName", { DisplayName: `${P} Fuel Vendor` })).Id);
+    const billTo = await find("Customer", "DisplayName", "M & S Loads LLC.");
+    if (billTo?.Id) customerQboId = String(billTo.Id);
+    const ooVendor = await find("Vendor", "DisplayName", "Lumig Transports LLC");
+    if (ooVendor?.Id) ooVendorId = String(ooVendor.Id);
+    const fuelVendor = await find("Vendor", "DisplayName", "MSETMS Test Fuel Vendor");
+    if (fuelVendor?.Id) fuelVendorId = String(fuelVendor.Id);
+    ooAccountId = accountIds["Owner Operators:Owner Operators COL"] || ooAccountId;
+    fuelAccountId = accountIds["Owner Operators:Fuel"] || fuelAccountId;
     const terms = (await qbo.queryQboReadOnly<Json>("select * from Term")).QueryResponse?.Term ?? [];
     const net = (terms as Json[]).find((t) => t.Name === "Net 30") ?? (terms as Json[])[0];
     netTermId = String(net?.Id ?? "");
     if (net) fake.terms = [{ Id: netTermId, Name: String(net.Name), DueDays: Number(net.DueDays ?? 0) }];
   }
 
-  // Maps on the COPY only. Lumper bills through the Lumper item (INVOICE_INCLUDES_LUMPER).
-  for (const cat of Object.keys(cats)) upsertQboItemMap(cat, itemId[cat], cats[cat as Cat].item);
+  const applyFixedChart = () => {
+    if (LIVE) return;
+    if (!fake.accounts.some((row) => row.FullyQualifiedName === "Fuel Surcharge Income")) {
+      fake.accounts.push(acct("421", "Fuel Surcharge Income", "Income", "Revenue"));
+    }
+    putItem("105", "Lumper", "408");
+    putItem("106", "Trailer Washout", "401");
+    putItem("107", "Layover", "401");
+    putItem("108", "TONU", "401");
+    putItem("109", "Adjustment", "401");
+    putItem("110", "Fuel Surcharge", "421");
+    itemId.flat_rate = "101";
+    itemId.detention = "102";
+    itemId.extra_stop = "103";
+    itemId.lumper = "105";
+    itemId.washout = "106";
+    itemId.layover = "107";
+    itemId.tonu = "108";
+    itemId.misc = "109";
+    itemId.fuel_surcharge = "110";
+    incomeId.flat_rate = "401";
+    incomeId.detention = "401";
+    incomeId.extra_stop = "401";
+    incomeId.layover = "401";
+    incomeId.tonu = "401";
+    incomeId.washout = "401";
+    incomeId.misc = "401";
+    incomeId.lumper = "408";
+    incomeId.fuel_surcharge = "421";
+    qbo.clearQboCatalogCache();
+  };
   db.prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped', payment_terms = '' WHERE id IN (9, 531)").run(customerQboId);
   const setRemit = (street: string, ar: string) =>
     db.prepare("UPDATE company_profile SET company_name = 'MS Express', street = ?, ar_email = ? WHERE id = 1").run(street, ar);
@@ -309,7 +461,14 @@ async function main() {
   upsertQboVendorMap("MSETMS Test Fuel Vendor", fuelVendorId, "Fuel vendor");
 
   let seq = 0;
-  type PayLine = { category: Cat | "trailer_rental"; rate: number | null; qty?: number; total: number; bill_to?: "customer" | "driver"; notes?: string };
+  type PayLine = {
+    category: Cat | "trailer_rental" | "fuel_advance_fee" | "claim_for_damages";
+    rate: number | null;
+    qty?: number;
+    total: number;
+    bill_to?: "customer" | "driver";
+    notes?: string;
+  };
   function makeLoad(opts: { customerId?: number; rate?: number | null; status?: string; pay?: PayLine[]; delivery?: string; lumperActual?: number; tag?: string; customerReference?: string; loadNumber?: string }) {
     seq += 1;
     const loadNumber = opts.loadNumber ?? `MSETMS-T${String(seq).padStart(2, "0")}-${RUN}`;
@@ -388,7 +547,12 @@ async function main() {
     check(c.checks, "customer", exp.customer ?? customerQboId, String(read.CustomerRef?.value));
     const memoText = `${read.CustomerMemo?.value ?? ""}\n${read.PrivateNote ?? ""}\n${lines.map((l) => l.Description).join("\n")}`;
     check(c.checks, "memo (no internal notes)", "no INTERNAL text; Ref label present", INTERNAL.test(memoText) ? "INTERNAL text leaked" : memoText.includes(LABEL) ? "no INTERNAL text; Ref label present" : "label missing");
-    const sentBody = [...calls].reverse().find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && x.body?.DocNumber === load.load_number)?.body;
+    const sentBody = [...calls].reverse().find(
+      (x) =>
+        x.method === "POST" &&
+        /\/invoice\?/.test(x.url) &&
+        String(x.body?.CustomerMemo?.value ?? "").includes(`MS Express load ${load.load_number}`),
+    )?.body;
     const sentTerm = sentBody?.SalesTermRef?.value ? String(sentBody.SalesTermRef.value) : "none sent";
     const readTerm = read.SalesTermRef?.value ? String(read.SalesTermRef.value) : "none sent";
     check(c.checks, "terms (sent)", exp.termsId ?? "none sent", sentTerm);
@@ -397,7 +561,17 @@ async function main() {
     const readClass = read.ClassRef?.value ? String(read.ClassRef.value) : "none";
     check(c.checks, "class (no TMS class source)", "none/none", `${sentClass}/${readClass}`);
     check(c.checks, "txn date", exp.txnDate ?? "2026-09-14", String(read.TxnDate));
-    check(c.checks, "doc number = load #", load.load_number, String(read.DocNumber));
+    const doc = String(read.DocNumber ?? "");
+    const stored = String(load.qbo_doc_number ?? "");
+    check(
+      c.checks,
+      "doc number is 1006 sequence",
+      "7-digit",
+      /^\d{7}$/.test(doc) && Number(doc) >= 1_006_000 && doc !== load.load_number ? "7-digit" : doc,
+    );
+    check(c.checks, "doc number stored on the load", doc, stored);
+    check(c.checks, "no AR account override", "none", sentBody?.ARAccountRef ? "set" : "none");
+    check(c.checks, "sent body found", "yes", sentBody ? "yes" : "no");
     return read;
   }
 
@@ -413,6 +587,184 @@ async function main() {
     check(c.checks, "blocked with warning", pattern.source, message, pattern.test(message));
     check(c.checks, "no QuickBooks write", "0 POST", `${postsSince(mark, "/v3/").length} POST`);
   }
+
+  const stamp = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO customers (id, name, billing_notes, created_at, updated_at) VALUES (317, 'MS Express', '', ?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = 'MS Express', qbo_customer_id = ''`,
+  ).run(stamp, stamp);
+  db.prepare(
+    `INSERT INTO customers (id, name, billing_notes, created_at, updated_at) VALUES (294, 'M&S Management Group', '', ?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = 'M&S Management Group', qbo_customer_id = ''`,
+  ).run(stamp, stamp);
+
+  if (!LIVE) {
+    await runCase("C22", "TMS customer 317 (MS Express) is never mapped or invoiced", async (c) => {
+      db.prepare("UPDATE customers SET qbo_customer_id = '58', qbo_status = 'mapped' WHERE id = 317").run();
+      const { id } = makeLoad({ customerId: 317, rate: 500 });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /MS Express \(customer 317\)/);
+      let mapMessage = "";
+      try {
+        queries.markCustomerQboMapped(317, "58");
+      } catch (error) {
+        mapMessage = error instanceof Error ? error.message : String(error);
+      }
+      check(c.checks, "mapping 317 is refused", "refused", /customer 317/.test(mapMessage) ? "refused" : mapMessage);
+      check(c.checks, "no customer create", "0", String(calls.filter((x) => x.method === "POST" && /\/customer\?/.test(x.url)).length));
+    });
+    await runCase("C23", "TMS customer 294 stays unmapped until the office picks", async (c) => {
+      const { id } = makeLoad({ customerId: 294, rate: 500 });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /M&S Management Group \(customer 294\)/);
+      check(c.checks, "no customer create", "0", String(calls.filter((x) => x.method === "POST" && /\/customer\?/.test(x.url)).length));
+      db.prepare("UPDATE customers SET qbo_customer_id = '78', qbo_status = 'mapped' WHERE id = 294").run();
+      await qbo.sendLoadToQuickbooks(id);
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 500 }], customer: "78" });
+    });
+    await runCase("C24", "Line Haul resolves by name onto Gross Trucking Income when no pay-item map is stored", async (c) => {
+      const { id } = makeLoad({ rate: 1600 });
+      await qbo.sendLoadToQuickbooks(id);
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1600 }] });
+      const maps = db.prepare("SELECT COUNT(*) AS n FROM qbo_item_maps WHERE qbo_item_id != ''").get() as { n: number };
+      check(c.checks, "no pay-item map used", "0", String(maps.n));
+    });
+    await runCase("C25", "Missing accessorials and Trailer Washout on the wrong account block the whole send", async (c) => {
+      const layover = makeLoad({ rate: 1000, pay: [{ category: "layover", rate: 50, total: 50 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(layover.id), /Map pay item "Layover"/);
+      const tonu = makeLoad({ rate: 1000, pay: [{ category: "tonu", rate: 50, total: 50 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(tonu.id), /Map pay item "TONU"/);
+      const wash = makeLoad({ rate: 1000, pay: [{ category: "washout", rate: 75, total: 75 }] });
+      await expectBlocked(
+        c,
+        () => qbo.sendLoadToQuickbooks(wash.id),
+        /QuickBooks item "Trailer Washout" is on "Cost of Goods Sold"\. It must be on "Gross Trucking Income"/,
+      );
+    });
+    await runCase("C26", "Fuel Surcharge missing, then on Gross Trucking Income, both block", async (c) => {
+      const missing = makeLoad({ rate: 1000, pay: [{ category: "fuel_surcharge", rate: 40, total: 40 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(missing.id), /Fuel Surcharge is not in QuickBooks/);
+      putItem("110", "Fuel Surcharge", "401");
+      qbo.clearQboCatalogCache();
+      const wrong = makeLoad({ rate: 1000, pay: [{ category: "fuel_surcharge", rate: 40, total: 40 }] });
+      await expectBlocked(
+        c,
+        () => qbo.sendLoadToQuickbooks(wrong.id),
+        /It must be on its own income account "Fuel Surcharge Income", not Gross Trucking Income/,
+      );
+      fake.items.delete("110");
+      qbo.clearQboCatalogCache();
+    });
+    await runCase("C27", "Lumper on Gross Trucking Income blocks, including a valid line haul beside it", async (c) => {
+      const { id } = makeLoad({ rate: 1500, pay: [{ category: "lumper", rate: 80, total: 80 }] });
+      await expectBlocked(
+        c,
+        () => qbo.sendLoadToQuickbooks(id),
+        /The bookkeeper must repoint the Lumper item to the Lumper COGS account/,
+      );
+    });
+    await runCase("C29", "Trailer rental, fuel advance fee, and damage claims are not billed", async (c) => {
+      const rental = makeLoad({ rate: 1000, pay: [{ category: "trailer_rental", rate: 100, total: 100 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(rental.id), /Trailer Rental is not billed to the customer/);
+      const fee = makeLoad({ rate: 1000, pay: [{ category: "fuel_advance_fee", rate: 25, total: 25 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(fee.id), /Fuel Advance Fee is not billed to the customer/);
+      const claim = makeLoad({ rate: 1000, pay: [{ category: "claim_for_damages", rate: 40, total: 40 }] });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(claim.id), /Claim for Damages is not billed to the customer/);
+    });
+    await runCase("C30", "A single-amount bill with no override uses Owner Operators:Owner Operators COL", async (c) => {
+      delete process.env.QBO_BILL_EXPENSE_ACCOUNT_ID;
+      const billId = accounting.createBill({ vendor: "MSETMS Test Fuel Vendor", memo: `${LABEL} named account`, amount: 90 });
+      await qbo.sendBillToQuickbooks(billId);
+      await expectBill(c, billId, { vendor: fuelVendorId, account: ooColAccountId, amount: 90 });
+    });
+    await runCase("C31", "Lumig-style split bill: positive load pay and negative deductions, net above zero", async (c) => {
+      const ref = makeLoad({ rate: 2000 });
+      let negative = "";
+      try {
+        accounting.createBill({
+          vendor: "Lumig Transports LLC",
+          memo: `${LABEL} negative`,
+          amount: -40,
+          loadId: ref.id,
+          lines: [
+            { kind: "load_pay", amount: 10 },
+            { kind: "fuel", amount: -50 },
+          ],
+        });
+        negative = "(no error)";
+      } catch (error) {
+        negative = error instanceof Error ? error.message : String(error);
+      }
+      check(c.checks, "negative bill total blocked", "greater than zero", /greater than zero/.test(negative) ? "greater than zero" : negative);
+      const billId = accounting.createBill({
+        vendor: "Lumig Transports LLC",
+        memo: `${LABEL} lumig split`,
+        amount: 1200,
+        loadId: ref.id,
+        lines: [
+          { kind: "load_pay", amount: 1500, description: "Load pay" },
+          { kind: "fuel", amount: -200, description: "Fuel" },
+          { kind: "toll", amount: -50, description: "Tolls" },
+          { kind: "insurance", amount: -25, description: "Insurance" },
+          { kind: "eld", amount: -15, description: "ELD" },
+          { kind: "loan", amount: -10, description: "Loan" },
+        ],
+      });
+      await qbo.sendBillToQuickbooks(billId);
+      const bill = accounting.getBill(billId)!;
+      c.qboIds.push(`Bill ${bill.qbo_bill_id}`);
+      const read = (await qbo.readQboEntity<Json>("bill", bill.qbo_bill_id)).Bill as Json;
+      check(c.checks, "net", money(1200), money(read.TotalAmt));
+      check(c.checks, "vendor", "62", String(read.VendorRef?.value));
+      const lines = (read.Line ?? []) as Json[];
+      check(
+        c.checks,
+        "accounts",
+        ["414", "412", "416", "417", "418", "419"],
+        lines.map((line) => String(line.AccountBasedExpenseLineDetail?.AccountRef?.value)),
+      );
+      check(c.checks, "amounts", ["1500.00", "-200.00", "-50.00", "-25.00", "-15.00", "-10.00"], lines.map((line) => money(line.Amount)));
+      check(c.checks, "no vendor create", "0", String(calls.filter((x) => x.method === "POST" && /\/vendor\?/.test(x.url)).length));
+    });
+    await runCase("C32", "Customers and vendors match exact DisplayName only, and are never created", async (c) => {
+      const exactId = queries.createCustomer({ name: "Exact Broker LLC", billing_notes: "", contacts: [] });
+      const exact = makeLoad({ customerId: exactId, rate: 640 });
+      await qbo.sendLoadToQuickbooks(exact.id);
+      await expectInvoice(c, exact.id, { lines: [{ cat: "flat_rate", amount: 640 }], customer: "77" });
+      check(c.checks, "exact customer id stored", "77", String(queries.getCustomer(exactId)?.qbo_customer_id ?? ""));
+      const fuzzyId = queries.createCustomer({ name: "M&S Management", billing_notes: "", contacts: [] });
+      const fuzzy = makeLoad({ customerId: fuzzyId, rate: 610 });
+      await qbo.sendLoadToQuickbooks(fuzzy.id);
+      await expectInvoice(c, fuzzy.id, { lines: [{ cat: "flat_rate", amount: 610 }], customer: "79" });
+      check(c.checks, "fuzzy name did not take the longer customer", "79", String(queries.getCustomer(fuzzyId)?.qbo_customer_id ?? ""));
+      const noneId = queries.createCustomer({ name: "Almost Exact Broker", billing_notes: "", contacts: [] });
+      const none = makeLoad({ customerId: noneId, rate: 500 });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(none.id), /Map this customer first/);
+      const twinId = queries.createCustomer({ name: "Twin Name LLC", billing_notes: "", contacts: [] });
+      const twin = makeLoad({ customerId: twinId, rate: 500 });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(twin.id), /More than one QuickBooks customer is named/);
+      const near = accounting.createBill({ vendor: "Lumig Transport", memo: `${LABEL} near`, amount: 20 });
+      await expectBlocked(c, () => qbo.sendBillToQuickbooks(near), /Map this vendor first/);
+      const shortVendor = accounting.createBill({ vendor: "Lumig Transports", memo: `${LABEL} short vendor`, amount: 30 });
+      await qbo.sendBillToQuickbooks(shortVendor);
+      const shortBill = accounting.getBill(shortVendor)!;
+      const shortRead = (await qbo.readQboEntity<Json>("bill", shortBill.qbo_bill_id)).Bill as Json;
+      check(c.checks, "shorter vendor name is its own match", "63", String(shortRead.VendorRef?.value));
+      check(c.checks, "no customer or vendor create", "0", String(calls.filter((x) => x.method === "POST" && /\/(customer|vendor)\?/.test(x.url)).length));
+    });
+    await runCase("C34", "Invoices do not set ClassRef", async (c) => {
+      const { id } = makeLoad({ rate: 800 });
+      await qbo.sendLoadToQuickbooks(id);
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 800 }] });
+    });
+    await runCase("C35", "Invoices do not set ARAccountRef", async (c) => {
+      const { id } = makeLoad({ rate: 810 });
+      await qbo.sendLoadToQuickbooks(id);
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 810 }] });
+    });
+  }
+
+  applyFixedChart();
+  for (const cat of Object.keys(cats)) upsertQboItemMap(cat, itemId[cat], cats[cat as Cat].item);
+  qbo.clearQboCatalogCache();
 
   // ---------------------------------------------------------------- cases
   await runCase("C01", "Line-haul flat rate (load rate); txn date stays the delivery day", async (c) => {
@@ -509,7 +861,9 @@ async function main() {
     const { id, loadNumber } = makeLoad({ rate: 2000, pay: [{ category: "fuel_surcharge", rate: 0.45, qty: 812, total: 365.4 }] });
     await qbo.sendLoadToQuickbooks(id);
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 2000 }, { cat: "fuel_surcharge", amount: 365.4, qty: 812, unitPrice: 0.45 }] });
-    const sent = [...calls].reverse().find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && x.body?.DocNumber === loadNumber)?.body;
+    const sent = [...calls].reverse().find(
+      (x) => x.method === "POST" && /\/invoice\?/.test(x.url) && String(x.body?.CustomerMemo?.value ?? "").includes(`MS Express load ${loadNumber}`),
+    )?.body;
     const names = ((sent?.Line ?? []) as Json[]).map((line) => String(line.SalesItemLineDetail?.ItemRef?.name));
     check(c.checks, "item names", "Line Haul | Fuel Surcharge", names.join(" | "));
     const plain = makeLoad({ rate: 1600 });
@@ -547,6 +901,12 @@ async function main() {
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 2000 }, { cat: "misc", amount: -150, unitPrice: -150 }] });
     c.note = "A standalone QuickBooks CreditMemo is not built in the TMS (GAP): issue it in QuickBooks by hand for now.";
   });
+  await runCase("C28", "Negative adjustment uses the Adjustment item on Gross Trucking Income", async (c) => {
+    const { id } = makeLoad({ rate: 900, pay: [{ category: "misc", rate: -40, total: -40, notes: "Adjustment" }] });
+    await qbo.sendLoadToQuickbooks(id);
+    await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 900 }, { cat: "misc", amount: -40, unitPrice: -40 }] });
+    check(c.checks, "adjustment account", "401", incomeId.misc);
+  });
   let resyncLoad = 0;
   await runCase("C12", "Re-sync an existing invoice: same QuickBooks invoice updated, no duplicate", async (c) => {
     const { id, loadNumber } = makeLoad({ rate: 1000 });
@@ -561,7 +921,9 @@ async function main() {
     check(c.checks, "same invoice id", first.invoiceId, second.invoiceId);
     const read = await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1100 }, { cat: "detention", amount: 75 }] }, second.invoiceId);
     check(c.checks, "SyncToken advanced", "> " + String(before.SyncToken), String(read.SyncToken), Number(read.SyncToken) > Number(before.SyncToken));
-    const same = (await qbo.queryQboReadOnly<Json>(`select Id from Invoice where DocNumber = '${loadNumber}'`)).QueryResponse?.Invoice ?? [];
+    const storedDoc = String(queries.getLoad(id)!.qbo_doc_number ?? "");
+    check(c.checks, "re-sync keeps DocNumber", first.invoiceNumber, second.invoiceNumber);
+    const same = (await qbo.queryQboReadOnly<Json>(`select Id from Invoice where DocNumber = '${storedDoc}'`)).QueryResponse?.Invoice ?? [];
     check(c.checks, "invoices with this doc number", "1", String((same as Json[]).length));
     if (!LIVE) {
       // A payment applied in QuickBooks (Balance < Total) blocks the update.
@@ -590,7 +952,6 @@ async function main() {
     check(c.checks, "existing invoice untouched", "0 POST", `${postsSince(mark, "/invoice").length} POST`);
     c.note = "No automatic void: the office voids the QuickBooks invoice by hand (TMS tells them to).";
   });
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   async function expectBill(c: CaseResult, billId: number, exp: { vendor: string; account: string; amount: number }) {
     const bill = accounting.getBill(billId)!;
     c.qboIds.push(`Bill ${bill.qbo_bill_id}`);
@@ -598,7 +959,8 @@ async function main() {
     check(c.checks, "amount", money(exp.amount), money(read.TotalAmt));
     check(c.checks, "vendor", exp.vendor, String(read.VendorRef?.value));
     check(c.checks, "expense account", exp.account, String(read.Line?.[0]?.AccountBasedExpenseLineDetail?.AccountRef?.value));
-    check(c.checks, "txn date", today, String(read.TxnDate));
+    const billDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    check(c.checks, "txn date", billDate, String(read.TxnDate));
     const text = `${read.PrivateNote ?? ""} ${read.Line?.[0]?.Description ?? ""}`;
     check(c.checks, "memo labelled, no internal notes", "labelled", INTERNAL.test(text) ? "INTERNAL leaked" : text.includes(LABEL) && text.includes(`MSETMS bill ${billId}`) ? "labelled" : text);
   }
@@ -610,13 +972,17 @@ async function main() {
     await expectBill(c, billId, { vendor: ooVendorId, account: ooAccountId, amount: 1500 });
     c.note = "TMS settlements are not pushed automatically; the office enters one bill per OO settlement (GAP if JC wants it automatic).";
   });
-  await runCase("C15", "Fuel/expense bill -> QBO_BILL_EXPENSE_ACCOUNT_ID; blocked when it is unset", async (c) => {
-    const billId = accounting.createBill({ vendor: "MSETMS Test Fuel Vendor", memo: `${LABEL} fuel`, amount: 412.37 });
+  await runCase("C15", "Single-amount bill uses Owner Operators COL by name; env id overrides that default", async (c) => {
     delete process.env.QBO_BILL_EXPENSE_ACCOUNT_ID;
-    await expectBlocked(c, () => qbo.sendBillToQuickbooks(billId), /QBO_BILL_EXPENSE_ACCOUNT_ID/);
+    const named = accounting.createBill({ vendor: "MSETMS Test Fuel Vendor", memo: `${LABEL} fuel`, amount: 412.37 });
+    await qbo.sendBillToQuickbooks(named);
+    await expectBill(c, named, { vendor: fuelVendorId, account: ooColAccountId, amount: 412.37 });
     process.env.QBO_BILL_EXPENSE_ACCOUNT_ID = fuelAccountId;
-    await qbo.sendBillToQuickbooks(billId);
-    await expectBill(c, billId, { vendor: fuelVendorId, account: fuelAccountId, amount: 412.37 });
+    const overridden = accounting.createBill({ vendor: "MSETMS Test Fuel Vendor", memo: `${LABEL} fuel override`, amount: 80 });
+    await qbo.sendBillToQuickbooks(overridden);
+    const read = (await qbo.readQboEntity<Json>("bill", accounting.getBill(overridden)!.qbo_bill_id)).Bill as Json;
+    check(c.checks, "env expense account", fuelAccountId, String(read.Line?.[0]?.AccountBasedExpenseLineDetail?.AccountRef?.value));
+    delete process.env.QBO_BILL_EXPENSE_ACCOUNT_ID;
   });
   await runCase("C16", "Duplicate customer mapping (TMS 531 and 9 -> one QBO customer)", async (c) => {
     const a = makeLoad({ customerId: 531, rate: 900 });
@@ -628,7 +994,7 @@ async function main() {
   });
   await runCase("C17", "Unmapped pay item stops with a warning (Trailer Rental)", async (c) => {
     const { id } = makeLoad({ rate: 1800, pay: [{ category: "trailer_rental", rate: 100, total: 100 }] });
-    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /Map pay item "Trailer Rental"/);
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /Trailer Rental is not billed to the customer/);
     check(c.checks, "load not marked sent", "", queries.getLoad(id)!.qbo_invoice_id);
   });
   await runCase("C18", "Blank remit street or AR email blocks the send; ar@msloads.com is accepted", async (c) => {
@@ -643,14 +1009,55 @@ async function main() {
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1800 }] });
     setRemit("100 Campaign Test Rd", "ar-test@example.com");
   });
-  await runCase("C19", "Invoice # = load #; an existing QuickBooks invoice with that number blocks a second create", async (c) => {
-    const { id, loadNumber } = makeLoad({ rate: 1200 });
-    const sent = await qbo.sendLoadToQuickbooks(id);
-    check(c.checks, "DocNumber returned", loadNumber, sent.invoiceNumber);
+  await runCase("C19", "Invoice # is QuickBooks' 1006 sequence: auto-assign, TMS assign, one duplicate retry", async (c) => {
+    fake.customTxnNumbers = false;
+    const auto = makeLoad({ rate: 1200, customerReference: "12345", loadNumber: "MSE-1055" });
+    const before = calls.length;
+    const sent = await qbo.sendLoadToQuickbooks(auto.id);
+    const create = calls.slice(before).find((x) => x.method === "POST" && /\/invoice\?/.test(x.url));
+    check(c.checks, "auto path omits DocNumber", "omitted", create?.body?.DocNumber ? String(create.body.DocNumber) : "omitted");
+    const autoDoc = String(queries.getLoad(auto.id)!.qbo_doc_number ?? "");
+    check(c.checks, "auto DocNumber stored", sent.invoiceNumber, autoDoc);
+    check(c.checks, "auto DocNumber is 7-digit", "yes", /^\d{7}$/.test(autoDoc) && Number(autoDoc) >= 1_006_000 ? "yes" : autoDoc);
+    const autoMemo = String(create?.body?.CustomerMemo?.value ?? "");
+    check(
+      c.checks,
+      "memo has load and customer ref",
+      "yes",
+      autoMemo.includes("MS Express load MSE-1055 · Customer ref 12345") ? "yes" : autoMemo,
+    );
     c.qboIds.push(`Invoice ${sent.invoiceId}`);
-    // Simulate a lost link (send succeeded, TMS did not record it), then a fresh send.
-    db.prepare("UPDATE loads SET qbo_invoice_id = '', qbo_invoice_number = '', qbo_source = '' WHERE id = ?").run(id);
-    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(id), /already has invoice #/);
+    const again = await qbo.sendLoadToQuickbooks(auto.id, { confirmResend: true });
+    check(c.checks, "re-sync keeps the number", sent.invoiceNumber, again.invoiceNumber);
+    check(c.checks, "re-sync keeps the invoice", sent.invoiceId, again.invoiceId);
+    const resend = [...calls].reverse().find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && x.body?.Id === sent.invoiceId);
+    check(c.checks, "re-sync sends the same DocNumber", sent.invoiceNumber, String(resend?.body?.DocNumber ?? ""));
+
+    fake.customTxnNumbers = true;
+    fake.invoices.set("seq-seed", { Id: "seq-seed", DocNumber: "1006250", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
+    fake.invoices.set("seq-mse", { Id: "seq-mse", DocNumber: "MSE-1055", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
+    fake.invoices.set("seq-low", { Id: "seq-low", DocNumber: "1005999", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
+    const assigned = makeLoad({ rate: 1100, customerReference: "9988" });
+    const assignedSent = await qbo.sendLoadToQuickbooks(assigned.id);
+    check(c.checks, "TMS assigns 1006251", "1006251", assignedSent.invoiceNumber);
+    check(c.checks, "1006251 stored", "1006251", String(queries.getLoad(assigned.id)!.qbo_doc_number ?? ""));
+    const kept = await qbo.sendLoadToQuickbooks(assigned.id, { confirmResend: true });
+    check(c.checks, "custom re-sync keeps 1006251", "1006251", kept.invoiceNumber);
+    c.qboIds.push(`Invoice ${assignedSent.invoiceId}`);
+
+    fake.docCollideRemaining = 1;
+    const retry = makeLoad({ rate: 1000 });
+    const retrySent = await qbo.sendLoadToQuickbooks(retry.id);
+    check(c.checks, "duplicate retry takes the next free number", "1006253", retrySent.invoiceNumber);
+    check(c.checks, "retry stored", retrySent.invoiceNumber, String(queries.getLoad(retry.id)!.qbo_doc_number ?? ""));
+    c.qboIds.push(`Invoice ${retrySent.invoiceId}`);
+
+    fake.docCollideRemaining = 2;
+    const blocked = makeLoad({ rate: 900 });
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /QuickBooks invoice #\d+ is already used/);
+    check(c.checks, "duplicate block not marked sent", "", queries.getLoad(blocked.id)!.qbo_invoice_id);
+    fake.customTxnNumbers = false;
+    fake.docCollideRemaining = 0;
   });
   await runCase("C20", "Customer payment terms -> QuickBooks Term (and unknown terms block)", async (c) => {
     const termName = fake.terms[0]?.Name ?? "Net 30";
@@ -663,40 +1070,54 @@ async function main() {
     await expectBlocked(c, () => qbo.sendLoadToQuickbooks(other.id), /not set up in QuickBooks/);
     db.prepare("UPDATE customers SET payment_terms = '' WHERE id = 9").run();
   });
-  await runCase("C21", "DocNumber is the MS Express load #; customer ref is on the memo and the PDF", async (c) => {
+  await runCase("C21", "Memo and PDF show the MS Express load # and customer ref; DocNumber stays the QBO number", async (c) => {
     const customerRef = "BROKER-LOAD-555";
+    const unsent = makeLoad({ rate: 700, customerReference: "PRE-SYNC" });
+    const beforeSync = buildTmsInvoice(queries.getLoad(unsent.id)!);
+    check(c.checks, "PDF invoice # before sync", `INV-${unsent.loadNumber}`, beforeSync.invoiceNumber);
     const { id, loadNumber } = makeLoad({ rate: 1400, customerReference: customerRef });
     await qbo.sendLoadToQuickbooks(id);
     const read = await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1400 }] });
-    check(c.checks, "DocNumber is the TMS load #", loadNumber, String(read.DocNumber));
-    check(c.checks, "DocNumber is not the customer ref", "different", String(read.DocNumber) === customerRef ? "same" : "different");
-    check(c.checks, "DocNumber is not the PO", "different", String(read.DocNumber).startsWith("PO-") ? "same" : "different");
+    const doc = String(read.DocNumber ?? "");
+    check(c.checks, "DocNumber is not the TMS load #", "different", doc === loadNumber ? "same" : "different");
+    check(c.checks, "DocNumber is not the customer ref", "different", doc === customerRef ? "same" : "different");
+    check(c.checks, "DocNumber is not the PO", "different", doc.startsWith("PO-") ? "same" : "different");
     const memo = String(read.CustomerMemo?.value ?? "");
     const privateNote = String(read.PrivateNote ?? "");
-    check(c.checks, "customer ref in QBO memo", `Customer ref: ${customerRef}`, memo.includes(`Customer ref: ${customerRef}`) ? `Customer ref: ${customerRef}` : memo);
+    const memoLine = `MS Express load ${loadNumber} · Customer ref ${customerRef}`;
+    check(c.checks, "load and customer ref in QBO memo", memoLine, memo.includes(memoLine) ? memoLine : memo);
     check(c.checks, "memo has no internal notes", "clean", INTERNAL.test(memo) || INTERNAL.test(privateNote) ? "INTERNAL leaked" : "clean");
     const model = buildTmsInvoice(queries.getLoad(id)!);
+    check(c.checks, "PDF invoice # after sync", doc, model.invoiceNumber);
     check(c.checks, "PDF customer ref field", customerRef, model.customerReference);
     const pdf = await renderTmsInvoicePdf(model);
     const { extractText } = await import("unpdf");
     const pdfText = String((await extractText(new Uint8Array(pdf), { mergePages: true })).text ?? "");
     check(c.checks, "PDF shows Customer ref #", "present", /Customer ref #/.test(pdfText) && pdfText.includes(customerRef) ? "present" : "missing");
-    check(c.checks, "PDF invoice # is not the customer ref", "load number", pdfText.includes(`INV-${loadNumber}`) && !pdfText.includes(`Invoice #: ${customerRef}`) ? "load number" : pdfText);
+    check(c.checks, "PDF shows MS Express load #", "present", pdfText.includes("MS Express load #") && pdfText.includes(loadNumber) ? "present" : "missing");
+    check(c.checks, "PDF invoice # is the QBO number", "qbo number", pdfText.includes(doc) && !pdfText.includes(`Invoice #: ${customerRef}`) ? "qbo number" : "missing");
 
     const blank = makeLoad({ rate: 900 });
     await qbo.sendLoadToQuickbooks(blank.id);
     const blankRead = await expectInvoice(c, blank.id, { lines: [{ cat: "flat_rate", amount: 900 }] });
     const blankMemo = String(blankRead.CustomerMemo?.value ?? "");
-    check(c.checks, "no customer ref: DocNumber still the load #", blank.loadNumber, String(blankRead.DocNumber));
-    check(c.checks, "no customer ref: memo has no Customer ref line", "absent", blankMemo.includes("Customer ref:") ? "present" : "absent");
+    check(c.checks, "no customer ref: DocNumber is not the load #", "different", String(blankRead.DocNumber) === blank.loadNumber ? "same" : "different");
+    check(c.checks, "no customer ref: memo has the load #", "present", blankMemo.includes(`MS Express load ${blank.loadNumber}`) ? "present" : "absent");
+    check(c.checks, "no customer ref: memo has no Customer ref line", "absent", blankMemo.includes("Customer ref") ? "present" : "absent");
     check(c.checks, "no customer ref: PDF field empty", "", buildTmsInvoice(queries.getLoad(blank.id)!).customerReference);
 
     const tooLong = "N".repeat(22);
-    const blocked = makeLoad({ rate: 500, loadNumber: tooLong });
-    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /limited to 21 characters/);
-    check(c.checks, "over-long load # not marked sent", "", queries.getLoad(blocked.id)!.qbo_invoice_id);
+    const allowed = makeLoad({ rate: 500, loadNumber: tooLong });
+    await qbo.sendLoadToQuickbooks(allowed.id);
+    const longRead = await expectInvoice(c, allowed.id, { lines: [{ cat: "flat_rate", amount: 500 }] });
+    const longMemo = String(longRead.CustomerMemo?.value ?? "");
+    check(c.checks, "22-character load # is in the memo", "present", longMemo.includes(`MS Express load ${tooLong}`) ? "present" : "absent");
+    check(c.checks, "22-character load # is not the DocNumber", "different", String(longRead.DocNumber) === tooLong ? "same" : "different");
   });
   void resyncLoad;
+
+  const creates = calls.filter((call) => call.method === "POST" && /\/(customer|vendor|item|account)\?/.test(call.url));
+  assert.equal(creates.length, 0, `QuickBooks create calls are not allowed: ${creates.map((call) => call.url).join(" ")}`);
 
   // ---------------------------------------------------------------- cleanup (live only, opt-in)
   if (LIVE && CLEANUP) {

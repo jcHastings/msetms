@@ -21,9 +21,19 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 type Call = { url: string; method: string; body: Json };
 const calls: Call[] = [];
 const ITEMS = [
-  { Id: "3", Name: "Concrete", Type: "Service" },
-  { Id: "21", Name: "Freight Revenue", Type: "Service" },
-  { Id: "22", Name: "Detention", Type: "Service" },
+  { Id: "3", Name: "Concrete", Type: "Service", IncomeAccountRef: { value: "1", name: "Other" } },
+  { Id: "21", Name: "Freight Revenue", Type: "Service", IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } },
+  { Id: "22", Name: "Detention", Type: "Service", IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } },
+];
+const ACCOUNTS = [
+  {
+    Id: "401",
+    Name: "Gross Trucking Income",
+    FullyQualifiedName: "Gross Trucking Income",
+    AccountType: "Income",
+    Classification: "Revenue",
+    Active: true,
+  },
 ];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = input instanceof Request ? input.url : String(input);
@@ -44,12 +54,26 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/tokens/bearer")) return json({ access_token: "at-test", refresh_token: "rt-test-2", expires_in: 3600 });
   if (url.includes("/query?")) {
     const q = decodeURIComponent(url.split("query=")[1].split("&")[0]);
-    const byName = q.match(/from Item where Name = '(.+)'/);
-    if (byName) return json({ QueryResponse: { Item: ITEMS.filter((i) => i.Name === byName[1].replace(/''/g, "'")) } });
-    if (/from Vendor where DisplayName/.test(q)) return json({ QueryResponse: { Vendor: [{ Id: "60" }] } });
+    const quoted = (field: string) => q.match(new RegExp(`${field} = '((?:[^']|'')*)'`))?.[1]?.replace(/''/g, "'");
+    if (/from Item/i.test(q)) {
+      const name = quoted("Name");
+      const id = quoted("Id");
+      return json({
+        QueryResponse: {
+          Item: ITEMS.filter((item) => (name ? item.Name === name : true) && (id ? item.Id === id : true)),
+        },
+      });
+    }
+    if (/from Account/i.test(q)) return json({ QueryResponse: { Account: ACCOUNTS } });
+    if (/from Preferences/i.test(q)) {
+      return json({ QueryResponse: { Preferences: { SalesFormsPrefs: { CustomTxnNumbers: false } } } });
+    }
+    if (/from Customer/i.test(q) || /from Vendor/i.test(q) || /from Invoice/i.test(q)) return json({ QueryResponse: {} });
     return json({ QueryResponse: {} });
   }
-  if (method === "POST" && url.includes("/invoice")) return json({ Invoice: { Id: "900", DocNumber: body.DocNumber } });
+  if (method === "POST" && url.includes("/invoice")) {
+    return json({ Invoice: { Id: "900", DocNumber: body.DocNumber || "1006250", SyncToken: "0" } });
+  }
   if (method === "POST" && url.includes("/bill")) return json({ Bill: { Id: "901" } });
   return json({});
 }) as typeof fetch;
@@ -105,11 +129,15 @@ async function main() {
   assert.equal(sent.invoiceId, "900");
   const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(invoice.body.CustomerRef.value, "58");
-  assert.equal(invoice.body.DocNumber, "QBOMAP1", "DocNumber is the MS Express load number");
-  assert.equal(String(invoice.body.DocNumber).length <= 21, true);
+  assert.equal(invoice.body.DocNumber, undefined, "CustomTxnNumbers is off, so DocNumber is omitted");
+  assert.equal(invoice.body.ARAccountRef, undefined);
+  assert.equal(invoice.body.ClassRef, undefined);
+  assert.equal(sent.invoiceNumber, "1006250");
+  assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "1006250");
+  assert.match(String(invoice.body.CustomerMemo.value), /MS Express load QBOMAP1/);
   assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "22", "21"], "map, exact name, map");
 
-  // Unmapped customer: never query or create a QBO customer during invoice sync.
+  // Unmapped customer: exact DisplayName lookup, and no create when it misses.
   const bareId = queries.createCustomer({ name: "Unmapped Broker", billing_notes: "", contacts: [] });
   const bareLoad = queries.createLoad({
     customer_id: bareId, origin: "Hastings, NE", destination: "Omaha, NE",
@@ -122,7 +150,7 @@ async function main() {
   calls.length = 0;
   await assert.rejects(() => qbo.sendLoadToQuickbooks(bareLoad), /Map this customer first/);
   assert.equal(calls.some((c) => c.method === "POST" && /\/customer\?/.test(c.url)), false, "no customer create");
-  assert.equal(calls.some((c) => /from Customer/.test(decodeURIComponent(c.url))), false, "no customer name lookup");
+  assert.equal(calls.some((c) => /from Customer/.test(decodeURIComponent(c.url))), true, "exact DisplayName lookup");
 
   // Duplicate TMS customers (M&S Loads 531 and 9) can share one QBO customer id.
   const dupId = queries.createCustomer({ name: "M&S Loads", billing_notes: "", contacts: [] });
@@ -150,7 +178,10 @@ async function main() {
   assert.equal(calls.some((c) => c.method === "POST" && /\/vendor\?/.test(c.url)), false, "no vendor create");
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/bill")), false);
   upsertQboVendorMap("QBO Map Vendor", "61", "Mapped Vendor");
-  await assert.rejects(() => qbo.sendBillToQuickbooks(billId), /QBO_BILL_EXPENSE_ACCOUNT_ID/);
+  await assert.rejects(
+    () => qbo.sendBillToQuickbooks(billId),
+    /QuickBooks account "Owner Operators:Owner Operators COL" is not in this company/,
+  );
   process.env.QBO_BILL_EXPENSE_ACCOUNT_ID = "77";
   calls.length = 0;
   const bill = await qbo.sendBillToQuickbooks(billId);
@@ -163,7 +194,7 @@ async function main() {
   const qboSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
   assert.doesNotMatch(qboSrc, /\/customer"|\/vendor"/);
   assert.doesNotMatch(qboSrc, /load_number\.slice\(0,\s*21\)/);
-  assert.match(qboSrc, /quickbooksDocNumber/);
+  assert.match(qboSrc, /nextSequenceDocNumber/);
   const mapPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
   assert.match(mapPage, /htmlFor=\{selectId\}/);
   assert.match(mapPage, /No TMS customers to map yet/);

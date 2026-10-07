@@ -165,9 +165,9 @@ export async function LoadEditor({
                   ) : null;
                 })()}
                 <LoadConfirmationLink loadId={load.id} loadNumber={load.load_number} hasRelays={relays.length > 0} />
-                {load.qbo_invoice_number || load.qbo_invoice_id ? (
+                {load.qbo_doc_number || load.qbo_invoice_number || load.qbo_invoice_id ? (
                   <span className="text-sm text-slate-600">
-                    QBO {load.qbo_invoice_number || load.qbo_invoice_id}
+                    QB invoice # {load.qbo_doc_number || load.qbo_invoice_number || load.qbo_invoice_id}
                   </span>
                 ) : null}
                 {canEditLoads(role) || canAccessAccounting(role) ? (

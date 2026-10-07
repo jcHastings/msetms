@@ -52,7 +52,7 @@ export function QuickbooksInvoicePanel({
         </div>
         {preview.alreadySent ? (
           <div>
-            <dt className="text-slate-500">QBO doc #</dt>
+            <dt className="text-slate-500">QB invoice #</dt>
             <dd className="font-semibold">
               {preview.existingInvoiceNumber || preview.existingInvoiceId}
               {preview.existingSentAt ? ` · ${formatDateTime(preview.existingSentAt)}` : ""}

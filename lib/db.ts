@@ -252,6 +252,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "reefer_readings", "heading_deg", "REAL");
   ensureColumn(db, "loads", "qbo_invoice_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_invoice_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_doc_number", "TEXT");
   ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_source", "TEXT NOT NULL DEFAULT ''");
 
@@ -766,6 +767,7 @@ export function migrate(db: Database): void {
   }
 
   ensureColumn(db, "bills", "qbo_bill_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "bills", "lines_json", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");

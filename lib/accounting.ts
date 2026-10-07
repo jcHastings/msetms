@@ -4,6 +4,7 @@ import { listPayItems, markPayItemPaid, type LoadPayItem } from "./pay-items";
 import { computeOwnerOperatorPay } from "./settlement";
 import { isOwnerOperator, type LoadView } from "./types";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
+import { billAccountName, type BillSplitLine } from "./qbo-production-map";
 
 export type Bill = {
   id: number;
@@ -14,6 +15,8 @@ export type Bill = {
   status: "open" | "paid";
   created_at: string;
   qbo_bill_id: string;
+  /** JSON BillSplitLine[]. Empty means one load-pay line for `amount`. */
+  lines_json: string;
 };
 
 export type Settlement = {
@@ -47,18 +50,44 @@ export function listBills(): Bill[] {
   return (getDb().prepare("SELECT * FROM bills ORDER BY id DESC").all() as Bill[]).map((bill) => ({
     ...bill,
     qbo_bill_id: bill.qbo_bill_id || "",
+    lines_json: bill.lines_json || "",
   }));
 }
 
-export function createBill(input: { vendor: string; memo: string; amount: number; loadId?: number | null }): number {
+export function createBill(input: {
+  vendor: string;
+  memo: string;
+  amount: number;
+  loadId?: number | null;
+  lines?: BillSplitLine[];
+}): number {
   if (!input.vendor.trim()) throw new Error("Vendor is required.");
-  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Amount must be positive.");
+  const lines = input.lines ?? [];
+  for (const line of lines) billAccountName(line.kind, input.vendor);
+  const net = lines.length
+    ? Math.round(lines.reduce((sum, line) => sum + line.amount, 0) * 100) / 100
+    : input.amount;
+  if (!Number.isFinite(net) || net <= 0) {
+    throw new Error(
+      `This bill's lines total $${Number.isFinite(net) ? net.toFixed(2) : "?"}. A QuickBooks bill total has to be greater than zero. Nothing was sent.`,
+    );
+  }
+  if (lines.length && Math.abs(net - input.amount) > 0.009) {
+    throw new Error("Bill lines must add up to the bill amount. Nothing was sent.");
+  }
   const result = getDb()
     .prepare(
-      `INSERT INTO bills (vendor, memo, amount, load_id, status, created_at)
-       VALUES (?, ?, ?, ?, 'open', ?)`,
+      `INSERT INTO bills (vendor, memo, amount, load_id, status, created_at, lines_json)
+       VALUES (?, ?, ?, ?, 'open', ?, ?)`,
     )
-    .run(input.vendor.trim(), input.memo.trim(), input.amount, input.loadId ?? null, now());
+    .run(
+      input.vendor.trim(),
+      input.memo.trim(),
+      net,
+      input.loadId ?? null,
+      now(),
+      lines.length ? JSON.stringify(lines) : "",
+    );
   return Number(result.lastInsertRowid);
 }
 

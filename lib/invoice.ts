@@ -296,7 +296,9 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
   if (!lines.length) {
     throw new Error("Add Income / Budget line items or a customer rate first.");
   }
-  const invoiceNumber = load.tms_invoice_number || `INV-${load.load_number}`;
+  // Before QuickBooks sync the PDF uses INV-{load #}. After sync it uses the QBO DocNumber.
+  const qboNumber = String(load.qbo_doc_number ?? "").trim();
+  const invoiceNumber = qboNumber || load.tms_invoice_number || `INV-${load.load_number}`;
   const settings = getCompanySettings();
   const company = getCompanyProfile();
   const customer = customerBlock(load);
@@ -628,6 +630,7 @@ function drawInvoiceHeader(
     ["Weight", model.weight],
     ["Distance", invoiceDistance(model.miles)],
   ];
+  meta.push(["MS Express load #", model.loadNumber]);
   const customerRef = model.customerReference.trim();
   if (customerRef) meta.push(["Customer ref #", customerRef]);
   const rowH = 15;
@@ -636,11 +639,11 @@ function drawInvoiceHeader(
   doc.rect(cardX, cardY, cardW, cardH).strokeColor(INVOICE_INK).lineWidth(1).stroke();
   let metaY = cardY + 7;
   for (const [label, value] of meta) {
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(INVOICE_INK).text(`${label}:`, cardX + 10, metaY, {
-      width: 78,
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(INVOICE_INK).text(`${label}:`, cardX + 8, metaY, {
+      width: 108,
       lineBreak: false,
     });
-    doc.font("Helvetica").fontSize(9).text(value, cardX + 90, metaY, { width: 128, lineBreak: false });
+    doc.font("Helvetica").fontSize(9).text(value, cardX + 116, metaY, { width: 104, lineBreak: false });
     metaY += rowH;
   }
   const bottom = Math.max(companyY, cardY + cardH) + 14;
