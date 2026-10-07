@@ -1216,7 +1216,78 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_loads_truck ON loads(truck_id);
     CREATE INDEX IF NOT EXISTS idx_loads_driver ON loads(driver_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_kind_load ON attachments(kind, load_id);
+
+    CREATE TABLE IF NOT EXISTS deduction_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      basis TEXT NOT NULL,
+      applies_to TEXT NOT NULL,
+      driver_id INTEGER,
+      active INTEGER NOT NULL DEFAULT 0,
+      example INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS settlement_one_offs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_settlement_one_offs_week
+      ON settlement_one_offs(driver_id, week_start);
+
+    CREATE TABLE IF NOT EXISTS settlement_statements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      week_end TEXT NOT NULL,
+      paid_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      UNIQUE(driver_id, week_start)
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_reimbursements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      category TEXT NOT NULL,
+      load_id INTEGER,
+      note TEXT NOT NULL DEFAULT '',
+      attachment_id INTEGER,
+      stored_name TEXT NOT NULL DEFAULT '',
+      original_name TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'submitted',
+      reject_reason TEXT NOT NULL DEFAULT '',
+      settlement_week_start TEXT NOT NULL DEFAULT '',
+      paid_at TEXT NOT NULL DEFAULT '',
+      reviewed_at TEXT NOT NULL DEFAULT '',
+      reviewed_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reimburse_driver ON driver_reimbursements(driver_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_reimburse_status ON driver_reimbursements(status, id);
+    CREATE INDEX IF NOT EXISTS idx_reimburse_week ON driver_reimbursements(driver_id, settlement_week_start);
   `);
+  seedExampleDeductionTemplates(db);
+}
+
+function seedExampleDeductionTemplates(db: Database): void {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM deduction_templates").get() as { count: number };
+  if (count.count > 0) return;
+  const insert = db.prepare(
+    `INSERT INTO deduction_templates (
+      name, amount, basis, applies_to, driver_id, active, example, created_at
+    ) VALUES (?, ?, ?, ?, NULL, 0, 1, ?)`,
+  );
+  const now = new Date().toISOString();
+  insert.run("Example: Fuel advance", 100, "fixed", "company_driver", now);
+  insert.run("Example: Escrow", 50, "per_load", "owner_operator", now);
+  insert.run("Example: ELD / insurance chargeback", 35, "fixed", "company_driver", now);
 }
 
 /** Office cutover copy of fuel_receipts before orphan receipts (NOT NULL load_id, no status). */

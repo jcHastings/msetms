@@ -135,6 +135,11 @@ export default async function DriverLoadPage({
         {driverFacingPay(load) != null ? (
           <Row label="Your pay" value={formatMoney(driverFacingPay(load))} />
         ) : null}
+        <div className="border-b border-slate-100 py-2 last:border-0">
+          <Link href="/driver/pay" className="hit-target inline-flex items-center text-base font-semibold underline">
+            My pay this week
+          </Link>
+        </div>
         <Row
           label="Ref / PO"
           value={stops.map((stop) => driverFacingStopPo(stop, load)).filter(Boolean).join(" · ") || "—"}

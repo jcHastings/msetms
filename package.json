@@ -11,7 +11,7 @@
     "start": "node scripts/start-standalone.mjs",
     "start:next": "node scripts/run-next.mjs start --hostname 0.0.0.0",
     "lint": "eslint",
-    "test": "tsx scripts/dispatch-ack-test.ts && tsx scripts/assign-suggestions-test.ts && tsx scripts/viewer-role-test.ts && tsx scripts/pod-delivery-test.ts && tsx scripts/smoke.ts && tsx scripts/driver-api-v1-test.ts && tsx scripts/driver-assist-docs-facility-test.ts && tsx scripts/qbo-mapping-test.ts && tsx scripts/qbo-campaign.ts --fresh && tsx scripts/carrier-identity-test.ts && tsx scripts/samsara-address-test.ts && tsx scripts/samsara-routes-test.ts && tsx scripts/trailer-custody-test.ts && tsx scripts/samsara-safety-test.ts && tsx scripts/relay-map-test.ts && tsx scripts/places-pin-test.ts",
+    "test": "tsx scripts/settlement-statement-test.ts && tsx scripts/dispatch-ack-test.ts && tsx scripts/assign-suggestions-test.ts && tsx scripts/viewer-role-test.ts && tsx scripts/pod-delivery-test.ts && tsx scripts/smoke.ts && tsx scripts/driver-api-v1-test.ts && tsx scripts/driver-assist-docs-facility-test.ts && tsx scripts/qbo-mapping-test.ts && tsx scripts/qbo-campaign.ts --fresh && tsx scripts/carrier-identity-test.ts && tsx scripts/samsara-address-test.ts && tsx scripts/samsara-routes-test.ts && tsx scripts/trailer-custody-test.ts && tsx scripts/samsara-safety-test.ts && tsx scripts/relay-map-test.ts && tsx scripts/places-pin-test.ts",
     "test:driver-api": "tsx scripts/driver-api-v1-test.ts",
     "qbo:campaign": "tsx scripts/qbo-campaign.ts",
     "ensure-apple-dev-driver": "tsx scripts/ensure-apple-dev-driver.ts",

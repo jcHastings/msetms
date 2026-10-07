@@ -185,6 +185,15 @@ const SETTINGS_COLUMNS = [
   "mc",
 ] as const;
 
+/** Settlement header reads the same USDOT and MC columns as the company profile. */
+export function getCarrierAuthority(): { usdot: string; mc_number: string } {
+  const settings = getCompanySettings();
+  return {
+    usdot: settings.usdot.trim().slice(0, 32),
+    mc_number: settings.mc.trim().slice(0, 32),
+  };
+}
+
 export function getInvoiceEmailBody(): string {
   const row = getDb()
     .prepare("SELECT invoice_email_body FROM company_profile WHERE id = 1")

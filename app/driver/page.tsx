@@ -82,6 +82,8 @@ export default async function DriverHomePage() {
             label: "Trailer",
             disabled: !trailerHref,
           },
+          { href: "/driver/pay", label: "My pay" },
+          { href: "/driver/reimbursements", label: "Reimbursements" },
         ];
         return <DriverDestinations items={items} />;
       })()}

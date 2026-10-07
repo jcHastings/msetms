@@ -9,6 +9,7 @@ import { authenticateDriverByEmail } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
 import { acknowledgeDispatch } from "./dispatch-ack";
+import { submitDriverReimbursement } from "./reimbursements";
 import { performDriverProgress, performDriverStopCheck, performDriverUpload, podDeliveryFromForm } from "./driver-ops";
 import { type ActionResult } from "./types";
 
@@ -251,6 +252,34 @@ export async function driverAcknowledgeDispatchAction(
       acknowledgeDispatch(loadId, { id: driver.id, name: driver.name });
       refresh();
       return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function submitReimbursementAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const file = formData.get("receipt");
+      if (!(file instanceof File)) throw new Error("A receipt photo is required.");
+      const id = await submitDriverReimbursement({
+        driverId: driver.id,
+        driverName: driver.name,
+        amount: formData.get("amount"),
+        category: formData.get("category"),
+        loadId: parseOptionalInt(formData.get("load_id")),
+        note: formData.get("note"),
+        file,
+      });
+      revalidatePath("/driver/reimbursements");
+      revalidatePath("/accounting/reimbursements");
+      refresh();
+      return { ok: true, id, message: "Submitted. Check My reimbursements for the status. Nothing was texted or emailed." };
     } catch (error) {
       return fail(error);
     }
