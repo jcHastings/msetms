@@ -14,10 +14,7 @@ export default async function PaystubsPage() {
   const canWrite = canUploadPaystubs(dispatcher.role);
   return (
     <>
-      <PageHeader
-        title="Paystubs"
-        subtitle="Download the paystub PDFs and the payroll summary from Gusto, then upload them here. This screen does not connect to Gusto."
-      />
+      <PageHeader title="Paystubs" />
       <PaystubUpload
         canWrite={canWrite}
         drivers={companyDriversForPaystubPicker()}

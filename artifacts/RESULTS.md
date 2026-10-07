@@ -119,20 +119,20 @@ A driver who requests another driver’s stub, or a queued stub that is not thei
 
 ## How it was verified
 
-`npx tsx scripts/paystub-test.ts` passed. It covers the name matcher, label extraction (including a pdfkit fixture read back with the same PDF text extractor), token 401/503, sha256 duplicate, same driver + pay date, owner-operator exclusion, low-confidence not attached, cross-driver 403, and no Gusto API host left in `app/`, `lib/`, `components/`, or `scripts/`.
+`npm test` passed (exit 0). That run includes `scripts/viewer-role-test.ts` (preview and commit return 403 for a viewer; 160 office server actions and 9 office API write routes) and `scripts/paystub-test.ts`. The paystub script covers the name matcher, label extraction (including a pdfkit fixture read back with the same PDF text extractor), token 401/503, sha256 duplicate, same driver + pay date, owner-operator exclusion, low-confidence not attached, cross-driver 403, and no Gusto API host left in `app/`, `lib/`, `components/`, or `scripts/`.
 
-`npx tsx scripts/viewer-role-test.ts` passed (preview and commit are 403 for a viewer).
+`npm run build` passed (exit 0). Routes include `/paystubs`, `/driver/paystubs`, `POST /api/paystubs/upload`, preview, commit, and the driver PDF route.
 
-Full `npm test` and `npm run build`: see the latest note in this file after the verification pass.
+No messages were sent. The screenshot server used a copy of the uploaded database under `/tmp`, with 2FA turned off on that copy only, and a temporary password that is not in the repo.
 
 ## Screenshots
 
-Taken against the uploaded live-shaped database, not committed. Office login was a temporary password on that copy only.
+Taken against the uploaded live-shaped database, not committed. Pay amounts are made up. Office login was a temporary password on that copy only.
 
-- `artifacts/office-paystubs-review.png` — auto-matched, needs review, and duplicate rows.
-- `artifacts/office-paystubs-override.png` — driver override open.
-- `artifacts/office-paystubs-viewer.png` — viewer, writes disabled.
-- `artifacts/driver-paystubs.png` — latest net and Download PDF.
+- `artifacts/office-paystubs-review.png` — auto-matched, needs review, and duplicate pay date in the review table.
+- `artifacts/office-paystubs-override.png` — driver override list open on the unmatched row.
+- `artifacts/office-paystubs-viewer.png` — viewer, upload and save disabled.
+- `artifacts/driver-paystubs.png` — latest net at the top, newest first, Download PDF, and View in Gusto.
 
 ## Open questions for JC
 
