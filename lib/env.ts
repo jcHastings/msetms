@@ -348,6 +348,11 @@ export function getQuickbooksEnvironment(): "sandbox" | "production" {
   return value === "production" ? "production" : "sandbox";
 }
 
+/** QBO Account Id used for TMS bills (AccountBasedExpenseLineDetail). Required before bills sync. */
+export function getQuickbooksBillExpenseAccountId(): string | undefined {
+  return readSecret("QBO_BILL_EXPENSE_ACCOUNT_ID");
+}
+
 export function isQuickbooksOAuthReady(): boolean {
   return Boolean(getQuickbooksClientId() && getQuickbooksClientSecret());
 }

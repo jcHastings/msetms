@@ -390,6 +390,21 @@ async function main() {
     headers: { "x-forwarded-host": "desk.local:3000", "x-forwarded-proto": "https" },
   });
   assert.equal(browserOrigin(forwarded), "https://desk.local:3000");
+  const tunnel = new Request("http://127.0.0.1:3000/api/integrations/quickbooks/callback", {
+    headers: { host: "msetms.mandsloads.com", "x-forwarded-proto": "https" },
+  });
+  assert.equal(browserOrigin(tunnel), "https://msetms.mandsloads.com");
+  assert.equal(browserUrl("/settings/quickbooks", tunnel).href, "https://msetms.mandsloads.com/settings/quickbooks");
+  const tunnelForwarded = new Request("http://127.0.0.1:3000/x", {
+    headers: { "x-forwarded-host": "msetms.mandsloads.com", "x-forwarded-proto": "https" },
+  });
+  assert.equal(browserOrigin(tunnelForwarded), "https://msetms.mandsloads.com");
+  const qboSource = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
+  assert.doesNotMatch(qboSource, /Type = 'Service' maxresults 1/, "invoice lines must not fall back to an arbitrary Service item");
+  assert.doesNotMatch(qboSource, /AccountType = 'Expense' maxresults 1/, "bills must not use an arbitrary Expense account");
+  assert.match(qboSource, /listQboItemMaps/);
+  const { buildInvoiceLines } = await import("../lib/integrations/quickbooks");
+  assert.equal(typeof buildInvoiceLines, "function");
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "lib/env.ts"), "utf8"),
     /http:\/\/localhost:3000\/api\/integrations\/quickbooks\/callback/,
@@ -16693,6 +16708,11 @@ DISPATCH CONFIRMATION
       ["Line Haul", 5869],
       ["Detention", 100],
     ],
+  );
+  assert.deepEqual(
+    freightPlusDetentionQbo.map((line) => line.category),
+    ["flat_rate", "detention"],
+    "invoice lines carry the TMS pay category so Map Pay Items applies",
   );
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
   assert.equal(tmsInvoiceModel.companyEmail, "ar@msloads.com");

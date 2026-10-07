@@ -34,7 +34,9 @@ export function browserOrigin(request: Request): string {
   const proto = firstHeader(request, "x-forwarded-proto") || incoming.protocol.replace(":", "") || "http";
   const rawHost = forwardedHost || hostHeader || incoming.host;
   const hostname = hostName(rawHost) || incoming.hostname;
-  const port = hostPort(rawHost, incoming.port);
+  // A Host / X-Forwarded-Host header without a port means the browser used the default port
+  // (e.g. Cloudflare tunnel -> https://msetms.mandsloads.com). Never leak the internal listen port.
+  const port = hostPort(rawHost, forwardedHost || hostHeader ? "" : incoming.port);
   const safeHost = isUnreachableListenHost(hostname) ? "localhost" : hostname;
   const defaultPort = proto === "https" ? "443" : "80";
   const suffix = port && port !== defaultPort ? `:${port}` : "";
