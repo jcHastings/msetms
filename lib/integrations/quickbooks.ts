@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   getQuickbooksClientId,
+  getQuickbooksBillExpenseAccountId,
   getQuickbooksClientSecret,
   getQuickbooksEnvironment,
   getQuickbooksRealmId,
@@ -15,7 +16,6 @@ import {
   getCustomer,
   getLoad,
   markCustomerNeedsQbo,
-  markCustomerQboMapped,
   markQboInvoice,
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
@@ -39,6 +39,8 @@ function uniqueDemoInvoiceStamp(): number {
 }
 
 export type QboInvoiceLine = {
+  /** TMS pay category used to look up Accounting > QuickBooks > Map Pay Items. Line Haul = flat_rate. */
+  category: string;
   name: string;
   description: string;
   amount: number;
@@ -116,7 +118,7 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     mode: configured ? "quickbooks" : "demo",
     environment: getQuickbooksEnvironment(),
     customerName: load.customer_name,
-    customerNeedsQbo: customer?.qbo_status === "needs_qbo",
+    customerNeedsQbo: !String(customer?.qbo_customer_id ?? "").trim(),
     loadNumber: load.load_number,
     lane: `${load.origin} → ${load.destination}`,
     amount,
@@ -139,6 +141,7 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   const payItems = customerInvoicePayItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
   const qboLine = (item: { category: string; payee: string; notes: string; total: number | null }): QboInvoiceLine => ({
+    category: item.category,
     name: labelForPayCategory(item.category),
     description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
     amount: item.total ?? 0,
@@ -152,7 +155,7 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
     } else {
       const rate = customerBilledRate(load);
       if (rate != null) {
-        lines.push({ name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate });
+        lines.push({ category: "flat_rate", name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate });
       }
     }
     lines.push(...extras.map(qboLine));
@@ -161,10 +164,11 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   const rate = customerBilledRate(load);
   if (rate == null) return [];
   const lines: QboInvoiceLine[] = [
-    { name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
+    { category: "flat_rate", name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
   ];
   if (load.lumper_actual != null && load.lumper_actual > 0) {
     lines.push({
+      category: "lumper",
       name: LUMPER_ITEM_NAME,
       description: `${load.load_number} lumper`,
       amount: load.lumper_actual,
@@ -185,8 +189,13 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
     return { billId: demoId, source: "demo" };
   }
   const mapped = listQboVendorMaps().find((row) => row.payee === bill.vendor);
-  const vendorId = mapped?.qbo_vendor_id || (await findOrCreateVendor(bill.vendor));
-  const expenseId = await findExpenseAccountId();
+  const vendorId = mapped?.qbo_vendor_id?.trim() ?? "";
+  if (!vendorId) {
+    throw new Error(
+      `Map this vendor first: ${bill.vendor.trim() || "this vendor"}. Accounting → QuickBooks → Map Vendors.`,
+    );
+  }
+  const expenseId = billExpenseAccountId();
   const created = await qboPost<{ Bill?: { Id?: string } }>(
     "/bill",
     {
@@ -209,31 +218,12 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
   return { billId: id, source: "quickbooks" };
 }
 
-async function findOrCreateVendor(name: string): Promise<string> {
-  const displayName = name.trim().slice(0, 500);
-  const found = await qboQuery<{ Vendor?: Array<{ Id?: string }> }>(
-    `select * from Vendor where DisplayName = '${escapeQboString(displayName)}'`,
-    "vendor query",
-  );
-  const existing = found.QueryResponse?.Vendor?.[0]?.Id;
-  if (existing) return existing;
-  const created = await qboPost<{ Vendor?: { Id?: string } }>(
-    "/vendor",
-    { DisplayName: displayName },
-    "vendor create",
-  );
-  const id = created.Vendor?.Id;
-  if (!id) throw new Error("QuickBooks did not return a vendor id.");
-  return id;
-}
-
-async function findExpenseAccountId(): Promise<string> {
-  const accounts = await qboQuery<{ Account?: Array<{ Id?: string }> }>(
-    "select * from Account where AccountType = 'Expense' maxresults 1",
-    "expense account query",
-  );
-  const id = accounts.QueryResponse?.Account?.[0]?.Id;
-  if (!id) throw new Error("QuickBooks has no expense account for this bill.");
+/** Never guess: the first Expense account in a chart of accounts is arbitrary (sandbox: "Accounting"). */
+function billExpenseAccountId(): string {
+  const id = getQuickbooksBillExpenseAccountId()?.trim();
+  if (!id) {
+    throw new Error("Set the QuickBooks expense account for bills (QBO_BILL_EXPENSE_ACCOUNT_ID) before sending bills.");
+  }
   return id;
 }
 
@@ -358,7 +348,7 @@ async function createLiveInvoice(
   const docNumber = uniqueDocNumber(load);
   const linePayload = [];
   for (const line of preview.lines) {
-    const itemId = await findOrCreateServiceItem(line.name);
+    const itemId = await resolveInvoiceItemId(line);
     linePayload.push({
       Amount: line.amount,
       DetailType: "SalesItemLineDetail",
@@ -401,83 +391,33 @@ function uniqueDocNumber(load: LoadView): string {
 
 async function resolveQboCustomer(load: LoadView): Promise<string> {
   const mapped = getCustomer(load.customer_id);
-  if (mapped?.qbo_customer_id) return mapped.qbo_customer_id;
-  const displayName = load.customer_name.trim().slice(0, 500);
-  try {
-    const found = await findQboCustomerId(displayName);
-    if (found) {
-      if (load.customer_id) markCustomerQboMapped(load.customer_id, found);
-      return found;
-    }
-    const created = await qboPost<{ Customer?: { Id?: string } }>(
-      "/customer",
-      { DisplayName: displayName },
-      "customer create",
-    );
-    const id = created.Customer?.Id;
-    if (!id) throw new Error("QuickBooks did not return a customer id.");
-    if (load.customer_id) markCustomerQboMapped(load.customer_id, id);
-    return id;
-  } catch (error) {
-    if (error instanceof QboHttpError) throw error;
-    if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
-    if (error instanceof Error && /Needs QBO customer/i.test(error.message)) throw error;
-    throw new Error(`Needs QBO customer: ${displayName}. Create or match this customer in QuickBooks, then send again.`);
-  }
+  const id = mapped?.qbo_customer_id?.trim() ?? "";
+  if (id) return id;
+  if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
+  const displayName = load.customer_name.trim() || "this customer";
+  throw new Error(
+    `Map this customer first: ${displayName}. Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.`,
+  );
 }
 
-async function findQboCustomerId(displayName: string): Promise<string | undefined> {
-  const exact = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
-    `select * from Customer where DisplayName = '${escapeQboString(displayName)}'`,
-    "customer query",
-  );
-  const exactHits = exact.QueryResponse?.Customer ?? [];
-  if (exactHits.length === 1 && exactHits[0]?.Id) return exactHits[0].Id;
-  if (exactHits.length > 1) return undefined;
-  const company = await qboQuery<{ Customer?: Array<{ Id?: string }> }>(
-    `select * from Customer where CompanyName = '${escapeQboString(displayName)}'`,
-    "customer company query",
-  );
-  const companyHits = company.QueryResponse?.Customer ?? [];
-  if (companyHits.length === 1 && companyHits[0]?.Id) return companyHits[0].Id;
-  return undefined;
-}
-
-async function findOrCreateServiceItem(name: string): Promise<string> {
+/**
+ * Pay item -> QBO Item: 1) Accounting > QuickBooks > Map Pay Items (by TMS category; Line Haul uses flat_rate),
+ * 2) a QBO Item with the exact same name. Never falls back to an arbitrary Service item and never creates items,
+ * so revenue cannot land on the wrong income account.
+ */
+async function resolveInvoiceItemId(line: Pick<QboInvoiceLine, "category" | "name">): Promise<string> {
+  const { listQboItemMaps } = await import("../accounting-desk");
+  const mapped = listQboItemMaps().find((row) => row.category === line.category && row.qbo_item_id.trim());
+  if (mapped) return mapped.qbo_item_id.trim();
   const named = await qboQuery<{ Item?: Array<{ Id?: string; Name?: string }> }>(
-    `select * from Item where Name = '${escapeQboString(name)}'`,
+    `select * from Item where Name = '${escapeQboString(line.name)}'`,
     "item query",
   );
   const namedId = named.QueryResponse?.Item?.[0]?.Id;
   if (namedId) return namedId;
-
-  const services = await qboQuery<{ Item?: Array<{ Id?: string; Type?: string }> }>(
-    "select * from Item where Type = 'Service' maxresults 1",
-    "service item query",
+  throw new Error(
+    `Map pay item "${line.name}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`,
   );
-  const serviceId = services.QueryResponse?.Item?.[0]?.Id;
-  if (serviceId) return serviceId;
-
-  const accounts = await qboQuery<{ Account?: Array<{ Id?: string }> }>(
-    "select * from Account where AccountType = 'Income' maxresults 1",
-    "income account query",
-  );
-  const incomeId = accounts.QueryResponse?.Account?.[0]?.Id;
-  if (!incomeId) {
-    throw new Error("QuickBooks has no income account to create a Line Haul item.");
-  }
-  const created = await qboPost<{ Item?: { Id?: string } }>(
-    "/item",
-    {
-      Name: name,
-      Type: "Service",
-      IncomeAccountRef: { value: incomeId },
-    },
-    "item create",
-  );
-  const id = created.Item?.Id;
-  if (!id) throw new Error("QuickBooks did not return an item id.");
-  return id;
 }
 
 function escapeQboString(value: string): string {

@@ -1,3 +1,4 @@
+import { invoiceIssuerProblems, invoiceIssuerWarning } from "./carrier-identity";
 import { listAttachments } from "./files";
 import { sendMail } from "./integrations/mail";
 import { createTmsInvoice } from "./invoice";
@@ -5,7 +6,7 @@ import { resolveInvoiceCustomerEmail, sendCustomerInvoiceMail } from "./load-mai
 import { isUsableEmail } from "./mail-shared";
 import { lastSentMail } from "./mail-store";
 import { getLoad } from "./queries";
-import { getInvoiceSendMode } from "./settings";
+import { getCompanySettings, getInvoiceSendMode } from "./settings";
 import { isBillableStatus } from "./types";
 
 export type AutoInvoiceResult = {
@@ -64,6 +65,16 @@ export async function deliverAutoInvoice(
   if (lastSentMail(loadId, "customer_invoice")) {
     return { created, sent: false, skipped: "already_sent" };
   }
+
+  const profile = getCompanySettings();
+  const issuerWarning = invoiceIssuerWarning(
+    invoiceIssuerProblems({
+      company_name: profile.company_name,
+      street: profile.street,
+      ar_email: profile.ar_email,
+    }),
+  );
+  if (issuerWarning) return { created, sent: false, skipped: issuerWarning };
 
   const fresh = getLoad(loadId) ?? load;
   const email = resolveInvoiceCustomerEmail(fresh);

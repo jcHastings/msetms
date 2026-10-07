@@ -72,6 +72,9 @@ export async function saveCompanyContactAction(
       city: String(formData.get("city") ?? "").trim(),
       state: String(formData.get("state") ?? "").trim(),
       zip: String(formData.get("zip") ?? "").trim(),
+      ar_email: String(formData.get("ar_email") ?? "").trim(),
+      usdot: String(formData.get("usdot") ?? "").trim(),
+      mc: String(formData.get("mc") ?? "").trim(),
     });
     refresh();
     return { ok: true };

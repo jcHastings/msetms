@@ -11,7 +11,8 @@ import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
 import { fillInvoiceEmailBody } from "./invoice-email-shared";
 import { isInvoiceMailCustomerDoc } from "./load-documents-shared";
-import { getInvoiceEmailBody } from "./settings";
+import { assertInvoiceIssuerReady, MS_EXPRESS_CARRIER } from "./carrier-identity";
+import { getCompanySettings, getInvoiceEmailBody } from "./settings";
 import {
   invoiceFromAddress,
   isUsableEmail,
@@ -484,7 +485,7 @@ export function composeCustomerInvoiceEmail(input: {
       ? `Invoice — Load ${loadNumber}`
       : "Invoice";
   const letter = fillInvoiceEmailBody(input.body ?? "", {
-    orgName: "M & S Loads LLC",
+    orgName: MS_EXPRESS_CARRIER.name,
     customerName: input.customerName,
     loadId: loadNumber,
     invoiceNumber,
@@ -498,7 +499,7 @@ export function composeCustomerInvoiceEmail(input: {
         extras.length ? `Also attached: ${extras.join(", ")}.` : "",
         "Questions? Reply to this email.",
         "",
-        "M & S Loads LLC · Accounts Receivable",
+        `${MS_EXPRESS_CARRIER.name} · Accounts Receivable`,
       ]
     : [
         invoiceNumber && loadNumber
@@ -514,7 +515,7 @@ export function composeCustomerInvoiceEmail(input: {
         extras.length ? `Also attached: ${extras.join(", ")}.` : "",
         "Questions? Reply to this email.",
         "",
-        "M & S Loads LLC · Accounts Receivable",
+        `${MS_EXPRESS_CARRIER.name} · Accounts Receivable`,
       ];
   return {
     to: "",
@@ -590,6 +591,12 @@ export async function sendCustomerInvoiceMail(
 ): Promise<{ to: string; subject: string }> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
+  const profile = getCompanySettings();
+  assertInvoiceIssuerReady({
+    company_name: profile.company_name,
+    street: profile.street,
+    ar_email: profile.ar_email,
+  });
   const to = invoiceMailTo(load, options.to);
   if (!isUsableEmail(to)) throw new Error("Enter an email to send this invoice.");
   const extras = mailFilesForLoadDocs(loadId, options.extraIds ?? []);

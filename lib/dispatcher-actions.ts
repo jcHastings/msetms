@@ -1128,7 +1128,7 @@ export async function sendCustomerInvoiceMailAction(formData: FormData): Promise
       return {
         ok: true,
         id: loadId,
-        message: `Invoice emailed to ${sent.to} from ar@msloads.com.`,
+        message: `Invoice emailed to ${sent.to}.`,
       };
     } catch (error) {
       return fail(error);

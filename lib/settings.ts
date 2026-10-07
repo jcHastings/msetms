@@ -30,6 +30,7 @@ import {
 } from "./document-copy";
 import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
 import { DEFAULT_INVOICE_EMAIL_BODY } from "./invoice-email-shared";
+import { MS_EXPRESS_CARRIER } from "./carrier-identity";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
 import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
 
@@ -103,15 +104,18 @@ export function withOfficeAddress<T extends { street: string; city: string; stat
 }
 
 const SETTINGS_DEFAULTS: CompanySettings = {
-  company_name: "M&S Loads",
+  company_name: MS_EXPRESS_CARRIER.name,
   dispatcher_name: "MS Test",
-  dispatcher_phone: "402-302-0097",
+  dispatcher_phone: MS_EXPRESS_CARRIER.phone,
   dispatcher_fax: "",
   dispatcher_email: "ana@msloads.com",
   street: "",
-  city: "",
-  state: "",
+  city: MS_EXPRESS_CARRIER.city,
+  state: MS_EXPRESS_CARRIER.state,
   zip: "",
+  ar_email: "",
+  usdot: MS_EXPRESS_CARRIER.usdot,
+  mc: MS_EXPRESS_CARRIER.mc,
   insurance_provider: "",
   insurance_policy: "",
   insurance_coverage: "",
@@ -176,6 +180,9 @@ const SETTINGS_COLUMNS = [
   "load_number_next",
   "show_sample_data",
   "require_dispatcher_2fa",
+  "ar_email",
+  "usdot",
+  "mc",
 ] as const;
 
 export function getInvoiceEmailBody(): string {
@@ -216,9 +223,13 @@ export function getCompanySettings(): CompanySettings {
 }
 
 function normalizeSettings(row?: Partial<CompanySettings> | null): CompanySettings {
-  const merged = withOfficeAddress({ ...SETTINGS_DEFAULTS, ...(row ?? {}) });
+  // Stored street and AR email stay blank. Do not fill a remit address the office has not saved.
+  const merged = { ...SETTINGS_DEFAULTS, ...(row ?? {}) };
   return {
     ...merged,
+    ar_email: String(merged.ar_email ?? "").trim(),
+    usdot: String(merged.usdot || SETTINGS_DEFAULTS.usdot).trim() || SETTINGS_DEFAULTS.usdot,
+    mc: String(merged.mc || SETTINGS_DEFAULTS.mc).trim() || SETTINGS_DEFAULTS.mc,
     currency: CURRENCIES.includes(merged.currency as (typeof CURRENCIES)[number]) ? merged.currency : "USD",
     weight_unit: merged.weight_unit === "kg" ? "kg" : "lb",
     tax_kind: merged.tax_kind === "gst" ? "gst" : "sales_tax",
@@ -254,7 +265,8 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
          default_routing_notes = ?, default_oo_percent = ?, default_gross_margin_percent = ?,
          carrier_pay_method = ?, carrier_pay_notes = ?,
          load_number_prefix = ?, load_number_next = ?, show_sample_data = ?,
-         require_dispatcher_2fa = ?
+         require_dispatcher_2fa = ?,
+         ar_email = ?, usdot = ?, mc = ?
        WHERE id = 1`,
     )
     .run(
@@ -293,11 +305,19 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
       next.load_number_next,
       next.show_sample_data,
       next.require_dispatcher_2fa,
+      next.ar_email,
+      next.usdot,
+      next.mc,
     );
   return next;
 }
 
 export function updateCompanyContact(input: CompanyProfile): CompanySettings {
+  const current = getCompanySettings();
+  const arEmail = input.ar_email !== undefined ? input.ar_email.trim() : String(current.ar_email ?? "");
+  if (/^ar@msloads\.com$/i.test(arEmail)) {
+    throw new Error("AR email cannot be ar@msloads.com. Leave it blank until MS Express has an accounts receivable address.");
+  }
   return patchSettings({
     company_name: input.company_name.trim() || SETTINGS_DEFAULTS.company_name,
     dispatcher_name: input.dispatcher_name.trim() || SETTINGS_DEFAULTS.dispatcher_name,
@@ -308,6 +328,9 @@ export function updateCompanyContact(input: CompanyProfile): CompanySettings {
     city: input.city.trim(),
     state: input.state.trim().toUpperCase(),
     zip: input.zip.trim(),
+    ar_email: arEmail,
+    usdot: input.usdot !== undefined ? input.usdot.trim() || SETTINGS_DEFAULTS.usdot : current.usdot,
+    mc: input.mc !== undefined ? input.mc.trim() || SETTINGS_DEFAULTS.mc : current.mc,
   });
 }
 
@@ -923,7 +946,7 @@ export function updateWorkflowSettings(input: WorkflowSettings): WorkflowSetting
     db.prepare(
       `INSERT OR IGNORE INTO company_profile (
         id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
-      ) VALUES (1, 'M&S Loads', 'MS Test', '', '', '')`,
+      ) VALUES (1, 'MS Express', 'MS Test', '402-302-0097', '', '')`,
     ).run();
     db.prepare("UPDATE company_profile SET workflow_json = ? WHERE id = 1").run(JSON.stringify(next));
   }

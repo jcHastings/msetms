@@ -584,6 +584,10 @@ export type CompanyProfile = {
   city: string;
   state: string;
   zip: string;
+  /** Invoice From address. Empty until the office sets one. */
+  ar_email?: string;
+  usdot?: string;
+  mc?: string;
 };
 
 export type FleetDocument = {

@@ -21,6 +21,7 @@ export function TmsInvoicePanel({
   lastInvoiceSent = "",
   extras = [],
   invoiceEmailBody = "",
+  issuerWarning = "",
   readOnly = false,
 }: {
   loadId: number;
@@ -33,6 +34,7 @@ export function TmsInvoicePanel({
   lastInvoiceSent?: string;
   extras?: InvoiceMailExtraDoc[];
   invoiceEmailBody?: string;
+  issuerWarning?: string;
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -91,6 +93,15 @@ export function TmsInvoicePanel({
         <h2 className="text-[12.5px] font-semibold">Invoice</h2>
       </div>
       <div className="p-3">
+      {issuerWarning ? (
+        <p
+          role="alert"
+          data-invoice-issuer-warning=""
+          className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+        >
+          {issuerWarning}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start gap-3">
         <form
           action={`/api/loads/${loadId}/invoice`}
@@ -116,6 +127,7 @@ export function TmsInvoicePanel({
             lastSent={lastInvoiceSent}
             extras={extras}
             defaultBody={invoiceEmailBody}
+            issuerWarning={issuerWarning}
             anchorId="email-invoice"
           />
         ) : (

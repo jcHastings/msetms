@@ -16,6 +16,7 @@ import {
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
 import { ClosePayPeriodButton } from "@/components/close-pay-period-button";
+import { invoiceIssuerProblems, invoiceIssuerWarning } from "@/lib/carrier-identity";
 import { InvoicesAcctTable, type InvoiceAcctRow } from "@/components/invoices-acct-table";
 import {
   addDaysIso,
@@ -237,13 +238,25 @@ function toInvoiceAcctRow(
 
 function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const qboConnected = hasQuickbooksSession();
+  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
   const rows = listReceivables()
     .filter((row) => matchesQuery(row, q) && matchesBranch(row, branch))
     .map((row) => toInvoiceAcctRow(row, qboConnected));
   return (
-    <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
-      <InvoicesAcctTable rows={rows} />
-    </HubTableCard>
+    <div className="space-y-3">
+      {issuerWarning ? (
+        <p
+          role="alert"
+          data-invoice-issuer-warning=""
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+        >
+          {issuerWarning}
+        </p>
+      ) : null}
+      <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
+        <InvoicesAcctTable rows={rows} />
+      </HubTableCard>
+    </div>
   );
 }
 
