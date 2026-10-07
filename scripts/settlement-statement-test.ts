@@ -363,6 +363,60 @@ async function main() {
   const bytes = await pdf.renderSettlementPdf(paidStatement!);
   assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
 
+  const settings = await import("../lib/settings");
+  const { extractText } = await import("unpdf");
+  const { StatementIdentityError, STATEMENT_IDENTITY_BLOCK_MESSAGE } = await import("../lib/carrier-identity");
+  const current = settings.getCompanySettings();
+  settings.updateCompanyContact({
+    ...current,
+    company_name: "MS Express",
+    dispatcher_phone: "402-302-0097",
+    city: "Hastings",
+    state: "NE",
+    usdot: "3062879",
+    mc: "056299",
+    ar_email: "ar@msloads.com",
+  });
+  const expressStatement = statements.buildSettlement(ooId, WEEK);
+  assert.equal(expressStatement?.identityBlock, "");
+  assert.equal(expressStatement?.carrierName, "MS Express");
+  assert.equal(expressStatement?.carrierPhone, "402-302-0097");
+  assert.equal(expressStatement?.carrierEmail, "ar@msloads.com");
+  assert.equal(expressStatement?.usdot, "3062879");
+  assert.equal(expressStatement?.mcNumber, "056299");
+  assert.match(expressStatement?.carrierAddress ?? "", /Hastings/);
+  assert.match(expressStatement?.carrierAddress ?? "", /NE/);
+  const expressPdf = await pdf.renderSettlementPdf(expressStatement!);
+  const expressText = String((await extractText(new Uint8Array(expressPdf), { mergePages: true })).text ?? "");
+  assert.match(expressText, /MS Express/);
+  assert.match(expressText, /USDOT 3062879/);
+  assert.match(expressText, /MC 056299/);
+  assert.match(expressText, /Hastings/);
+  assert.match(expressText, /402-302-0097/);
+  assert.match(expressText, /ar@msloads\.com/);
+  assert.doesNotMatch(expressText, /M&S Loads|970613|Nanuet/);
+
+  settings.updateCompanyContact({ ...settings.getCompanySettings(), company_name: "M & S Loads LLC" });
+  const loadsStatement = statements.buildSettlement(ooId, WEEK);
+  assert.equal(loadsStatement?.identityBlock, STATEMENT_IDENTITY_BLOCK_MESSAGE);
+  await assert.rejects(() => pdf.renderSettlementPdf(loadsStatement!), (error: unknown) => {
+    assert.ok(error instanceof StatementIdentityError);
+    assert.equal(error.message, STATEMENT_IDENTITY_BLOCK_MESSAGE);
+    return true;
+  });
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    company_name: "M & S Management Group Inc. DBA MS Express",
+  });
+  const dbaStatement = statements.buildSettlement(ooId, WEEK);
+  assert.equal(dbaStatement?.identityBlock, "");
+  assert.match(dbaStatement?.carrierName ?? "", /DBA MS Express/);
+  const dbaPdf = await pdf.renderSettlementPdf(dbaStatement!);
+  const dbaText = String((await extractText(new Uint8Array(dbaPdf), { mergePages: true })).text ?? "");
+  assert.match(dbaText, /DBA MS Express/);
+  assert.doesNotMatch(dbaText, /M&S Loads/);
+
   const payPage = fs.readFileSync(path.join(process.cwd(), "app/driver/pay/page.tsx"), "utf8");
   assert.match(payPage, /getSignedInDriver\(/);
   assert.match(payPage, /buildSettlement\(driver\.id/);

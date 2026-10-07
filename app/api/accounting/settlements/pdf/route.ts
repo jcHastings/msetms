@@ -1,3 +1,4 @@
+import { StatementIdentityError } from "@/lib/carrier-identity";
 import { dispatcherBinaryResponse } from "@/lib/csv-download";
 import { normalizePayWeek } from "@/lib/pay-week";
 import { renderSettlementPdf } from "@/lib/settlement-statement-pdf";
@@ -14,7 +15,15 @@ export async function GET(request: Request) {
   if (!Number.isFinite(driverId) || driverId <= 0) return new Response("Not found", { status: 404 });
   const statement = buildSettlement(driverId, week.from);
   if (!statement) return new Response("Not found", { status: 404 });
-  const pdf = await renderSettlementPdf(statement);
+  let pdf: Buffer;
+  try {
+    pdf = await renderSettlementPdf(statement);
+  } catch (error) {
+    if (error instanceof StatementIdentityError) {
+      return new Response(error.message, { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    throw error;
+  }
   return dispatcherBinaryResponse(
     `settlement-${statement.statementNumber}.pdf`,
     pdf,

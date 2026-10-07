@@ -219,3 +219,51 @@ export function assertInvoiceIssuerReady(input: CompanyIdentityInput): void {
   const warning = invoiceIssuerWarning(invoiceIssuerProblems(input));
   if (warning) throw new Error(warning);
 }
+
+export const STATEMENT_IDENTITY_BLOCK_MESSAGE =
+  "Set the company name to MS Express in Settings > Company first.";
+
+const STATEMENT_LETTERHEAD_GAPS = new Set<InvoiceIssuerGap>([
+  "company_name",
+  "brokerage_mc",
+  "brokerage_email",
+  "brokerage_address",
+]);
+
+function asIdentityInput(input: CompanyIdentityInput | string | null | undefined): CompanyIdentityInput {
+  if (typeof input === "string" || input == null) return { company_name: input ?? "" };
+  return input;
+}
+
+/**
+ * Settlement screen, PDF, and driver My pay. Uses invoiceIssuerProblems so the
+ * legal-name and brokerage checks stay the one company-identity rule.
+ * A blank remit street or blank AR email blocks invoice email only, not the statement.
+ */
+export function statementIdentityBlockMessage(input: CompanyIdentityInput | string | null | undefined): string {
+  const gaps = invoiceIssuerProblems(asIdentityInput(input)).filter((gap) => STATEMENT_LETTERHEAD_GAPS.has(gap));
+  if (!gaps.length) return "";
+  const parts: string[] = [];
+  if (gaps.includes("company_name")) parts.push(STATEMENT_IDENTITY_BLOCK_MESSAGE);
+  if (gaps.includes("brokerage_mc")) {
+    parts.push("MC number is the brokerage MC-970613. MS Express is MC 056299.");
+  }
+  if (gaps.includes("brokerage_email")) {
+    parts.push("jc@msloads.com is the brokerage email. Use ar@msloads.com for accounts receivable.");
+  }
+  if (gaps.includes("brokerage_address")) {
+    parts.push("Company address is a brokerage office in Nanuet, NY or Deerfield Beach, FL. MS Express is in Hastings, NE.");
+  }
+  return parts.join(" ");
+}
+
+export function statementIdentityBlocked(input: CompanyIdentityInput | string | null | undefined): boolean {
+  return statementIdentityBlockMessage(input) !== "";
+}
+
+export class StatementIdentityError extends Error {
+  constructor(message = STATEMENT_IDENTITY_BLOCK_MESSAGE) {
+    super(message);
+    this.name = "StatementIdentityError";
+  }
+}

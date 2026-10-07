@@ -52,11 +52,13 @@ export default async function DriverPayPage({
           );
         })}
       </nav>
-      <div className="mt-4">
-        <a className="btn btn-secondary hit-target" href={`/api/driver/pay/pdf?week=${statement.weekStart}`}>
-          Save as PDF
-        </a>
-      </div>
+      {statement.identityBlock ? null : (
+        <div className="mt-4">
+          <a className="btn btn-secondary hit-target" href={`/api/driver/pay/pdf?week=${statement.weekStart}`}>
+            Save as PDF
+          </a>
+        </div>
+      )}
       <div className="mt-4">
         <SettlementDocument statement={statement} variant="driver" />
       </div>

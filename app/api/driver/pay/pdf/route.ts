@@ -1,3 +1,4 @@
+import { StatementIdentityError } from "@/lib/carrier-identity";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { normalizePayWeek } from "@/lib/pay-week";
 import { pdfResponseHeaders } from "@/lib/pdf-response";
@@ -13,7 +14,15 @@ export async function GET(request: Request) {
   const week = normalizePayWeek(new URL(request.url).searchParams.get("week"));
   const statement = buildSettlement(driver.id, week.from);
   if (!statement) return new Response("Not found", { status: 404 });
-  const pdf = await renderSettlementPdf(statement);
+  let pdf: Buffer;
+  try {
+    pdf = await renderSettlementPdf(statement);
+  } catch (error) {
+    if (error instanceof StatementIdentityError) {
+      return new Response(error.message, { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    throw error;
+  }
   const headers = new Headers(pdfResponseHeaders(`my-pay-${statement.statementNumber}.pdf`));
   return new Response(new Uint8Array(pdf), { headers });
 }

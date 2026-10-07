@@ -1,3 +1,4 @@
+import { StatementIdentityError } from "./carrier-identity";
 import { formatMdYDisplay } from "./format";
 import PDFDocument from "./pdfkit-document";
 import { formatStatementMoney, type SettlementStatement } from "./settlement-statement";
@@ -17,6 +18,7 @@ function percentLabel(value: number | null): string {
 }
 
 export async function renderSettlementPdf(statement: SettlementStatement): Promise<Buffer> {
+  if (statement.identityBlock) throw new StatementIdentityError();
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
     const chunks: Buffer[] = [];
@@ -54,7 +56,16 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   doc.text(statement.usdot ? `USDOT ${statement.usdot}` : "USDOT Not on file", left, y, { width: 320, lineBreak: false });
   y += 12;
   doc.text(statement.mcNumber ? `MC ${statement.mcNumber}` : "MC Not on file", left, y, { width: 320, lineBreak: false });
-  y += 16;
+  y += 12;
+  if (statement.carrierPhone) {
+    doc.text(statement.carrierPhone, left, y, { width: 320, lineBreak: false });
+    y += 12;
+  }
+  if (statement.carrierEmail) {
+    doc.text(statement.carrierEmail, left, y, { width: 320, lineBreak: false });
+    y += 12;
+  }
+  y += 4;
 
   doc.font("Helvetica").fontSize(9).fillColor(MUTED);
   const meta = [

@@ -11,6 +11,7 @@ import {
   type DriverReimbursement,
 } from "./reimbursements";
 import { computeOwnerOperatorPay, impliedOwnerOperatorPercent } from "./settlement";
+import { statementIdentityBlockMessage, usableArEmail } from "./carrier-identity";
 import { formatCompanyAddress, getCarrierAuthority, getCompanySettings } from "./settings";
 import { isOwnerOperator, labelForDriverKind, normalizeDriverKind, type DriverWithTruck, type LoadView } from "./types";
 
@@ -93,6 +94,9 @@ export type SettlementStatement = {
   paidAt: string;
   carrierName: string;
   carrierAddress: string;
+  carrierPhone: string;
+  carrierEmail: string;
+  identityBlock: string;
   usdot: string;
   mcNumber: string;
   loads: SettlementLoadLine[];
@@ -238,12 +242,18 @@ function paidAtFor(driverId: number, weekStart: string): string {
   return String(row?.paid_at ?? "");
 }
 
-function carrierHeader(): Pick<SettlementStatement, "carrierName" | "carrierAddress" | "usdot" | "mcNumber"> {
+function carrierHeader(): Pick<
+  SettlementStatement,
+  "carrierName" | "carrierAddress" | "carrierPhone" | "carrierEmail" | "identityBlock" | "usdot" | "mcNumber"
+> {
   const settings = getCompanySettings();
   const authority = getCarrierAuthority();
   return {
     carrierName: settings.company_name,
     carrierAddress: formatCompanyAddress(settings),
+    carrierPhone: settings.dispatcher_phone.trim(),
+    carrierEmail: usableArEmail(settings.ar_email),
+    identityBlock: statementIdentityBlockMessage(settings.company_name),
     usdot: authority.usdot,
     mcNumber: authority.mc_number,
   };

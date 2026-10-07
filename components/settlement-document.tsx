@@ -32,12 +32,27 @@ export function SettlementDocument({
       <header className="statement-header">
         <div>
           <p className="statement-kicker">Settlement statement</p>
-          <h2 id="statement-title" className="statement-carrier">
-            {statement.carrierName || "Carrier"}
-          </h2>
-          {statement.carrierAddress ? <p className="statement-address">{statement.carrierAddress}</p> : null}
-          <p className="statement-authority">{statement.usdot ? `USDOT ${statement.usdot}` : "USDOT Not on file"}</p>
-          <p className="statement-authority">{statement.mcNumber ? `MC ${statement.mcNumber}` : "MC Not on file"}</p>
+          {statement.identityBlock ? (
+            <p
+              id="statement-title"
+              role="alert"
+              data-statement-identity-block=""
+              className="statement-carrier rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-base font-semibold text-amber-950"
+            >
+              {statement.identityBlock}
+            </p>
+          ) : (
+            <>
+              <h2 id="statement-title" className="statement-carrier">
+                {statement.carrierName || "Carrier"}
+              </h2>
+              {statement.carrierAddress ? <p className="statement-address">{statement.carrierAddress}</p> : null}
+              <p className="statement-authority">{statement.usdot ? `USDOT ${statement.usdot}` : "USDOT Not on file"}</p>
+              <p className="statement-authority">{statement.mcNumber ? `MC ${statement.mcNumber}` : "MC Not on file"}</p>
+              {statement.carrierPhone ? <p className="statement-authority">{statement.carrierPhone}</p> : null}
+              {statement.carrierEmail ? <p className="statement-authority">{statement.carrierEmail}</p> : null}
+            </>
+          )}
         </div>
         <dl className="statement-meta">
           <div>

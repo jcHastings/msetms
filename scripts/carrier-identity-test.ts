@@ -495,6 +495,44 @@ async function main() {
   const deerfieldText = String((await extractText(new Uint8Array(deerfieldPdf), { mergePages: true })).text ?? "");
   assert.doesNotMatch(deerfieldText, /Deerfield/);
 
+  const { statementIdentityBlocked, STATEMENT_IDENTITY_BLOCK_MESSAGE } = identity;
+  const statementBlocked = [
+    "M&S Loads",
+    "M & S Loads",
+    "M&S Loads LLC",
+    "M & S Loads LLC.",
+    "M and S Loads",
+    "M&S Loads LLC DBA MS Express",
+    "M&S Loads LLC - MS Express",
+  ];
+  for (const name of statementBlocked) {
+    assert.equal(statementIdentityBlocked(name), true, name);
+  }
+  const statementAllowed = [
+    "MS Express",
+    "M&S Loads DBA MS Express",
+    "M & S Loads DBA MS Express",
+    "M and S Loads DBA MS Express",
+    "M & S Management Group Inc.",
+    "M & S Management Group Inc. DBA MS Express",
+    "Northwind Logistics DBA MS Express",
+  ];
+  for (const name of statementAllowed) {
+    assert.equal(statementIdentityBlocked(name), false, name);
+  }
+  assert.equal(identity.statementIdentityBlockMessage("M & S Loads"), STATEMENT_IDENTITY_BLOCK_MESSAGE);
+  assert.equal(identity.statementIdentityBlockMessage("MS Express"), "");
+  assert.equal(identity.statementIdentityBlockMessage({ ...allowedIdentity, company_name: "M&S Loads DBA MS Express" }), "");
+  assert.match(
+    identity.statementIdentityBlockMessage({ ...allowedIdentity, company_name: "MS Express", mc: "MC-970613" }),
+    /MC-970613/,
+  );
+  assert.match(
+    identity.statementIdentityBlockMessage({ ...allowedIdentity, company_name: "MS Express", ar_email: "jc@msloads.com" }),
+    /jc@msloads\.com/,
+  );
+  assert.match(identity.statementIdentityBlockMessage(nanuet), /Nanuet/);
+  assert.match(identity.statementIdentityBlockMessage(deerfield), /Deerfield Beach/);
   console.log("carrier-identity-test: ok");
 }
 

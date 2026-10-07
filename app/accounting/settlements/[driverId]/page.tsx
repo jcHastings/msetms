@@ -45,12 +45,14 @@ export default async function SettlementDetailPage({
         dense
         title={`${statement.driverName}`}
         actions={
-          <div className="no-print flex flex-wrap gap-2" data-view-only-allow="">
-            <PrintStatementButton />
-            <a className="btn btn-secondary hit-target" href={pdfHref}>
-              Save as PDF
-            </a>
-          </div>
+          statement.identityBlock ? null : (
+            <div className="no-print flex flex-wrap gap-2" data-view-only-allow="">
+              <PrintStatementButton />
+              <a className="btn btn-secondary hit-target" href={pdfHref}>
+                Save as PDF
+              </a>
+            </div>
+          )
         }
       />
       <p className="no-print mb-3">
