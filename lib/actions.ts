@@ -1,5 +1,6 @@
 "use server";
 
+import { saveFacilityInfoFromForm } from "./location-facility";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
@@ -1530,6 +1531,7 @@ export async function createLocationAction(
       }
     }
     const id = createLocation(input);
+    saveFacilityInfoFromForm(id, formData);
     await syncLocationToSamsara(id);
     refresh();
     redirect(`/locations/${id}`);
@@ -1549,6 +1551,7 @@ export async function updateLocationAction(
     const existing = getLocation(id);
     if (!existing) return { ok: false, error: "Location not found." };
     updateLocation(id, withLocationVerification(parseLocationInput(formData), existing));
+    saveFacilityInfoFromForm(id, formData);
     const synced = await syncLocationToSamsara(id);
     refresh();
     const message = synced.ok

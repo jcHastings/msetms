@@ -635,7 +635,7 @@ async function main() {
   assert.equal(assistJunk.status, 200);
   const assistJunkBody = assistJunk.json as { answer: string; unknown: boolean };
   assert.equal(assistJunkBody.unknown, true);
-  assert.match(assistJunkBody.answer, /assigned load and assigned equipment documents/i);
+  assert.match(assistJunkBody.answer, /assigned load, truck and trailer papers, company docs/i);
 
   const ownAssistDoc = await assistDocRoute.GET(
     request(`${BASE}/assist/docs/${assistDocA.id}`, { headers: { Authorization: `Bearer ${assistToken}` } }),

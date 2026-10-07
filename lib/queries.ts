@@ -5,6 +5,7 @@ import {
   truckComplianceAlerts,
   type ComplianceAlert,
 } from "./compliance";
+import { companyDocAlerts } from "./company-docs";
 import {
   deriveDrugTestStatus,
   isDrugTestResult,
@@ -2576,6 +2577,7 @@ export function listUpcomingCompliance(): ComplianceAlert[] {
     ...listDrivers().flatMap((driver) => driverComplianceAlerts(driver, windows)),
     ...listTrucks().flatMap((truck) => truckComplianceAlerts(truck, windows)),
     ...listTrailers().flatMap((trailer) => trailerComplianceAlerts(trailer, windows)),
+    ...companyDocAlerts(),
   ].sort((a, b) => a.days - b.days);
 }
 

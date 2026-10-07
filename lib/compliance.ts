@@ -5,7 +5,7 @@ import type { Driver, Trailer, Truck } from "./types";
 
 export type { ComplianceWindows };
 
-export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection" | "drug_test";
+export type ComplianceKind = "license" | "medical" | "registration" | "dot_inspection" | "drug_test" | "company_doc";
 
 export type ComplianceAlert = {
   severity: "expired" | "expiring" | "failed";

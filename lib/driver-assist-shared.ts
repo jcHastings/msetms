@@ -18,6 +18,10 @@ export function assistCabDocKindLabel(kind: string): string {
       return "CDL";
     case "med_card":
       return "Med card";
+    case "insurance_card":
+      return "Insurance card";
+    case "ifta_license":
+      return "IFTA license";
     default:
       return "Other";
   }
@@ -27,5 +31,6 @@ export function assistCabDocOwnerLabel(owner: string): string {
   if (owner === "truck") return "Truck";
   if (owner === "trailer") return "Trailer";
   if (owner === "driver") return "Driver";
+  if (owner === "company") return "MS Express";
   return "Owner";
 }

@@ -174,6 +174,15 @@ export type Location = {
   scheduling_type: SchedulingType;
   hours: string;
   scheduling_notes: string;
+  /** Driver-facing facility fields. Empty means not on file. Assist never reads `notes`. */
+  receiving_hours?: string;
+  shipping_hours?: string;
+  /** "" (not on file), "yes", "limited", or "no". */
+  parking?: string;
+  /** "" (not on file), "yes", or "no". */
+  overnight_parking?: string;
+  parking_notes?: string;
+  gate_dock_notes?: string;
   call_before: number;
   latitude: number | null;
   longitude: number | null;

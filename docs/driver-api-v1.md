@@ -101,37 +101,64 @@ Returns the driver object from login.
 
 ### `POST /assist`
 
-Driver-only helper for load and equipment questions. Not Office deploy.
+Driver-only helper for load, equipment, company-doc, and facility questions. Not Office deploy.
 
 Auth accepts either:
 
 - `Authorization: Bearer drv_...`
 - Signed-in `/driver` web cookie session
 
-Body: `{ "question": "..." }`
+Body: `{ "question": "...", "facility_id"?: number }`
 
-Response: `{ "answer": string, "unknown": boolean, "documents": AssistDocument[] }`
+Response: `{ "answer": string, "unknown": boolean, "documents": AssistDocument[], "facility"?: { id, name }, "choices"?: { id, label }[] }`
+
+`AssistDocument`: `{ id, kind, owner_type: "truck" | "trailer" | "driver" | "company", owner_id, original_name, href, unit_label, expires_on? }`.
+Company docs use `href` `/api/driver/v1/assist/company-docs/{id}`; fleet docs use `/api/driver/v1/assist/docs/{id}`.
 
 Rules:
 
-- Answers are grounded only in the signed-in driver's assigned load and assigned truck/trailer docs (plus optional driver-owned docs).
-- If no active load is assigned, response is `"Nothing is assigned to you right now."` with `unknown: true`.
-- Missing source fields return `"Not in TMS."`
-- Unrecognized questions are refused (`unknown: true`) and do not call Mike/OpenAI.
-- Web Assist chips send fixed questions (no LLM): Appointment time, Shipper hours, Pickup address, My truck docs.
-- `My truck docs` returns cab kinds `registration`, `dot_inspection`, and `insurance` on the assigned truck and trailer, then this driver's `cdl` and `med_card`. Other kinds stay out of that list until the question names them.
-- A missing named kind returns `unknown: true` and `No [kind] file on file for your assigned truck/trailer.` (CDL / med card: `for you`).
-- Equipment ids come from the assigned load (or that driver's relay leg). Home truck is not the load truck.
-- Offline cache of those files is out of scope here.
+- Only active MS Express drivers (`drivers.active = 1`, division `MSE`) get answers or files. Others get `"Assist is for active MS Express drivers. Call the office."`.
+- Deterministic intent routing, no LLM, no world knowledge. Unrecognized questions are refused (`unknown: true`).
+- Missing source fields return `"Not in TMS."` or a "not on file" sentence. Assist never guesses.
+
+Documents (typos and plurals accepted: "regestration", "regs", "insurence", "iftf"):
+
+- Registration (`registration`, `reg`, `cab card`, `IRP`, `apportioned`):
+  - Truck: the assigned truck only (load truck, relay leg, else the driver's home truck). A named truck that is not theirs is refused. `cab card` / `IRP` mean the truck.
+  - Trailer: fleet-wide for active MS Express drivers. A named trailer ("trailer 5312", "#5312", "T5312", "MS-5312") matches on digits. No name → the assigned trailer (load trailer, else trailer hooked to the home truck). No name and no assignment → ask which trailer. Unknown number → "not found in MS Express units".
+  - Plain "registration" returns truck + trailer. Missing files are named per unit: `Truck 36: no registration on file.`
+- Insurance (`insurance card`, `proof of insurance`, `COI`, `insurance`): current company insurance cards (company-wide) plus per-unit cards for the assigned truck and trailer. Naming a unit returns that unit's card (fleet-wide) plus company-wide cards. Older insurance files on the assigned truck/trailer record are included and stay gated.
+- IFTA (`IFTA`, `IFTA license`, `fuel tax license`): the current company IFTA license for any active driver, assignment not required.
+- DOT inspection and other equipment docs: assigned truck/trailer only (a trailer's non-registration docs are not fleet-wide).
+- CDL and med card: the driver's own files only.
+- `My truck docs` (no kind named): cab kinds on the assigned truck and trailer, current company docs (IFTA, company-wide and assigned-unit insurance cards), then this driver's CDL and med card.
+
+Facilities (any shipper or receiver in Locations):
+
+- Fields: name, address, hours, receiving hours, shipping hours, onsite/overnight parking and parking notes, check-in/appointment notes (`scheduling_notes`, `scheduling_type`, `call_before`), phone, gate and dock notes.
+- Never: private location `notes`, rates, customers, billing, invoices, loads, other drivers.
+- Names match fuzzily (typos, `Inc`/`LLC` ignored, acronyms like `NCS`, a city narrows: "NCS Hastings hours"). Same-name rows in the same city collapse to the most complete record. Distinct sites → `choices` (send the picked `id` back as `facility_id`).
+- `facility` in a response is the place the answer was about. The client sends it back as `facility_id`, so "Do they have onsite parking?" resolves next turn. Load-scoped words (pickup, delivery, appointment, shipper, receiver) keep the answer on the driver's load unless a pronoun points at the remembered facility.
+- A named place that is not on file returns `"That place is not in the TMS. Check the name, or ask the office."`.
+- Load stops still answer "Shipper hours", "Pickup address", "Appointment time" from the active load. Stop hours prefer shipping hours (pickup) or receiving hours (delivery), then general hours.
+
+- If no active load is assigned, load questions return `"Nothing is assigned to you right now."` Documents and facility questions still work.
+- Offline cache of files is out of scope here.
 
 ### `GET /assist/docs/{fleetDocumentId}`
 
 Driver-only document bytes endpoint for Assist sources.
 
-- Returns file bytes only when the `fleet_documents` row belongs to the requesting driver's assigned truck/trailer.
-- Optional allowlist: the driver's own `owner_type=driver` files.
+- Active MS Express drivers only.
+- Truck docs: assigned truck only. Trailer docs: assigned trailer, plus `registration` on any active MS Express trailer.
+- Driver docs: the requesting driver's own files only.
 - Never use Office `/api/fleet-docs/[id]` for driver access.
 - `Content-Disposition: inline` so a new tab can show the PDF or image.
+
+### `GET /assist/company-docs/{companyDocumentId}`
+
+- Current MS Express company docs (IFTA license, insurance cards) for any active MS Express driver. Read-only.
+- Replaced or removed versions return 404 (history is office-only at `/api/company-docs/{id}`).
 
 ### `GET /loads?scope=active|recent`
 

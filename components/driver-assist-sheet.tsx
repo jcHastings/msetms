@@ -10,16 +10,21 @@ import {
 type AssistDocument = {
   id: number;
   kind: string;
-  owner_type: "driver" | "truck" | "trailer";
+  owner_type: "driver" | "truck" | "trailer" | "company";
   owner_id: number;
   original_name: string;
   href: string;
+  unit_label?: string;
 };
+
+type AssistChoice = { id: number; label: string };
 
 type AssistReply = {
   answer: string;
   unknown: boolean;
   documents: AssistDocument[];
+  facility?: { id: number; name: string };
+  choices?: AssistChoice[];
 };
 
 type ChatRow = {
@@ -45,8 +50,10 @@ export function DriverAssistSheet({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<ChatRow[]>([]);
+  // Last facility Assist answered about, so "Do they have parking?" resolves on the next turn.
+  const [facilityId, setFacilityId] = useState<number | null>(null);
 
-  async function send(raw?: string) {
+  async function send(raw?: string, pickedFacilityId?: number) {
     const trimmed = (raw ?? question).trim();
     if (!trimmed || pending) return;
     setPending(true);
@@ -55,7 +62,7 @@ export function DriverAssistSheet({
       const response = await fetch("/api/driver/v1/assist", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({ question: trimmed, facility_id: pickedFacilityId ?? facilityId ?? undefined }),
       });
       const body = (await response.json()) as AssistReply | { ok?: false; error?: string };
       if (!response.ok || !("answer" in body)) {
@@ -64,6 +71,7 @@ export function DriverAssistSheet({
         return;
       }
       setRows((prev) => [...prev, { question: trimmed, reply: body }]);
+      if (body.facility?.id) setFacilityId(body.facility.id);
       setQuestion("");
     } catch {
       setError("Could not answer right now.");
@@ -95,7 +103,7 @@ export function DriverAssistSheet({
                   Assist
                 </h2>
                 <p className="text-sm text-slate-300">
-                  This load, and cab docs for the truck and trailer on it.
+                  Your load, cab papers, company docs, and facility info on file.
                 </p>
               </div>
               <button type="button" className="btn btn-secondary min-h-12" onClick={() => setOpen(false)}>
@@ -106,7 +114,7 @@ export function DriverAssistSheet({
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {rows.length === 0 ? (
                 <p className="rounded-xl bg-slate-800 px-3 py-3 text-sm leading-relaxed text-slate-200">
-                  Tap a question. Answers come from this load and the cab docs on the assigned truck and trailer.
+                  Tap a question, or ask about registration, insurance cards, the IFTA license, or any shipper or receiver.
                 </p>
               ) : null}
               {rows.map((row, index) => (
@@ -120,6 +128,21 @@ export function DriverAssistSheet({
                   ) : (
                     <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-100">{row.reply.answer}</p>
                   )}
+                  {row.reply.choices?.length && index === rows.length - 1 ? (
+                    <div className="grid grid-cols-1 gap-2" data-assist-choices="">
+                      {row.reply.choices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          type="button"
+                          className="btn btn-secondary min-h-12 w-full justify-start text-left text-base active:scale-[0.98]"
+                          disabled={pending}
+                          onClick={() => void send(`${row.question} (${choice.label})`, choice.id)}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -172,17 +195,21 @@ export function DriverAssistSheet({
 
 function CabDocs({ answer, documents }: { answer: string; documents: AssistDocument[] }) {
   if (!documents.length) {
-    return <p className="text-base leading-relaxed text-slate-100">{answer}</p>;
+    return <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-100">{answer}</p>;
   }
+  const notes = answer
+    .split("\n")
+    .slice(1)
+    .filter((line) => line.trim());
   return (
     <section aria-label="Cab docs">
       <h3 className="text-base font-semibold text-white">Cab docs</h3>
       <ul className="mt-2 space-y-2">
         {documents.map((doc) => {
           const kind = assistCabDocKindLabel(doc.kind);
-          const owner = assistCabDocOwnerLabel(doc.owner_type);
+          const owner = doc.unit_label || assistCabDocOwnerLabel(doc.owner_type);
           return (
-            <li key={doc.id}>
+            <li key={`${doc.owner_type}-${doc.id}`}>
               <a
                 href={doc.href}
                 target="_blank"
@@ -200,6 +227,13 @@ function CabDocs({ answer, documents }: { answer: string; documents: AssistDocum
           );
         })}
       </ul>
+      {notes.length ? (
+        <ul className="mt-2 space-y-1 text-sm text-amber-100" data-assist-missing="">
+          {notes.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

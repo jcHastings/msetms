@@ -1182,6 +1182,7 @@ export function migrate(db: Database): void {
   `);
 
   migrateDriverApiIdempotencyKey(db);
+  migrateFacilityAndCompanyDocs(db);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1706,6 +1707,39 @@ function backfillDemoLocations(db: Database): void {
   const count = (db.prepare("SELECT COUNT(*) as count FROM locations").get() as { count: number }).count;
   if (count > 0) return;
   seedDemoLocations(db);
+}
+
+/**
+ * Driver-facing facility fields on locations (Assist reads these, never `notes`),
+ * plus versioned MS Express company documents (IFTA license, insurance cards).
+ */
+function migrateFacilityAndCompanyDocs(db: Database): void {
+  ensureColumn(db, "locations", "receiving_hours", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "shipping_hours", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "parking", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "overnight_parking", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "parking_notes", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "locations", "gate_dock_notes", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      division TEXT NOT NULL DEFAULT 'MSE',
+      slot TEXT NOT NULL,
+      unit_type TEXT NOT NULL DEFAULT '',
+      unit_id INTEGER,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      expires_on TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'current',
+      replaces_id INTEGER,
+      uploaded_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL DEFAULT '',
+      ended_by TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_company_documents_slot ON company_documents(division, slot, status, id);
+  `);
 }
 
 function ensureColumn(

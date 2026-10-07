@@ -3,6 +3,11 @@
 import { useActionState, useState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
+import {
+  FACILITY_TEXT_MAX,
+  OVERNIGHT_PARKING_OPTIONS,
+  PARKING_OPTIONS,
+} from "@/lib/location-facility-shared";
 import { US_STATES } from "@/lib/locations";
 import { applyNyBoroughState, nyBoroughStateError } from "@/lib/places-shared";
 import {
@@ -163,13 +168,92 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
             id="scheduling_notes"
             name="scheduling_notes"
             rows={3}
+            aria-describedby="scheduling_notes-help"
             defaultValue={location?.scheduling_notes}
             placeholder="Appointment window, dock numbers, gate instructions"
           />
+          <p id="scheduling_notes-help" className="mt-1 text-xs text-slate-600">
+            Check-in and appointment steps. Drivers see this in Assist.
+          </p>
         </div>
+      </div>
+      <fieldset className="space-y-4 border-t border-slate-200 pt-5" data-facility-fields="">
+        <legend className="text-sm font-semibold text-slate-900">Driver facility info</legend>
+        <p className="-mt-2 text-sm text-slate-600">
+          Drivers can ask Assist about these. Leave a field blank and Assist says it is not on file.
+        </p>
+        <input type="hidden" name="facility_fields" value="1" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="field">
+            <label htmlFor="receiving_hours">Receiving hours</label>
+            <input
+              id="receiving_hours"
+              name="receiving_hours"
+              maxLength={FACILITY_TEXT_MAX}
+              defaultValue={location?.receiving_hours ?? ""}
+              placeholder="Mon–Fri 06:00–14:00"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="shipping_hours">Shipping hours</label>
+            <input
+              id="shipping_hours"
+              name="shipping_hours"
+              maxLength={FACILITY_TEXT_MAX}
+              defaultValue={location?.shipping_hours ?? ""}
+              placeholder="Mon–Sat 08:00–20:00"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="parking">Onsite parking</label>
+            <select id="parking" name="parking" defaultValue={location?.parking ?? ""}>
+              {PARKING_OPTIONS.map((item) => (
+                <option key={item.value || "none"} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="overnight_parking">Overnight parking</label>
+            <select id="overnight_parking" name="overnight_parking" defaultValue={location?.overnight_parking ?? ""}>
+              {OVERNIGHT_PARKING_OPTIONS.map((item) => (
+                <option key={item.value || "none"} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field md:col-span-2">
+            <label htmlFor="parking_notes">Parking notes</label>
+            <input
+              id="parking_notes"
+              name="parking_notes"
+              maxLength={FACILITY_TEXT_MAX}
+              defaultValue={location?.parking_notes ?? ""}
+              placeholder="Truck lot behind building B"
+            />
+          </div>
+          <div className="field md:col-span-2">
+            <label htmlFor="gate_dock_notes">Gate and dock notes</label>
+            <textarea
+              id="gate_dock_notes"
+              name="gate_dock_notes"
+              rows={2}
+              maxLength={FACILITY_TEXT_MAX}
+              defaultValue={location?.gate_dock_notes ?? ""}
+              placeholder="Gate code at guard shack, reefer docks 4–7"
+            />
+          </div>
+        </div>
+      </fieldset>
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="field md:col-span-2 note-private">
           <label htmlFor="notes">Private notes</label>
-          <textarea id="notes" name="notes" rows={3} defaultValue={location?.notes} />
+          <textarea id="notes" name="notes" rows={3} aria-describedby="notes-help" defaultValue={location?.notes} />
+          <p id="notes-help" className="mt-1 text-xs text-slate-600">
+            Office only. Drivers never see these.
+          </p>
         </div>
       </div>
       <div className="flex justify-end">

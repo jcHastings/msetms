@@ -4,12 +4,13 @@ export const COMPLIANCE_TABS = [
   { value: "overview", label: "Overview", href: "/compliance" },
   { value: "drug", label: "Drug & alcohol", href: "/compliance?tab=drug" },
   { value: "docs", label: "Docs (reuse)", href: "/compliance?tab=docs" },
+  { value: "company", label: "Company docs", href: "/compliance/company-docs" },
   { value: "safety", label: "Safety →", href: "/safety" },
 ] as const;
 
 export type ComplianceTab = (typeof COMPLIANCE_TABS)[number]["value"];
 
-export function parseComplianceTab(value: string | null | undefined): Exclude<ComplianceTab, "safety"> {
+export function parseComplianceTab(value: string | null | undefined): Exclude<ComplianceTab, "safety" | "company"> {
   if (value === "drug" || value === "docs") return value;
   return "overview";
 }
