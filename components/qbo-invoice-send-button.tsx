@@ -69,7 +69,7 @@ export function QboInvoiceSendButton({
         title={alreadySent ? "Send again to QuickBooks?" : "Send to QuickBooks?"}
         body={
           alreadySent
-            ? "This invoice was already exported. Send it again?"
+            ? "This invoice was already exported. Send it again? The same QuickBooks invoice is updated, not duplicated."
             : "Export this invoice to QuickBooks?"
         }
         confirmLabel={alreadySent ? "Send again" : "Send to QuickBooks"}

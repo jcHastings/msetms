@@ -15270,14 +15270,16 @@ DISPATCH CONFIRMATION
     assert.equal(ooPreview.mode, "demo");
     assert.equal(ooPreview.amount, coleDelivered.rate, "QBO invoice uses customer rate, not OO pay");
     assert.notEqual(ooPreview.amount, coleDelivered.oo_pay);
-    assert.match(ooPreview.memo, /Customer invoice only/);
+    assert.match(ooPreview.ownerOperatorNote, /Customer invoice only/);
+    assert.doesNotMatch(ooPreview.memo, /Customer invoice only|owner-operator/i, "customer memo stays customer-facing");
     assert.equal(
       ooPreview.lines.some((line) => /relay|owner-operator|oo pay/i.test(`${line.name} ${line.description}`)),
       false,
     );
+    // Lumper paid at the dock is not billed: QuickBooks matches the TMS invoice PDF (INVOICE_INCLUDES_LUMPER).
     const lumperLines = qbo.buildInvoiceLines({ ...coleDelivered, lumper_actual: 150 });
-    assert.equal(lumperLines.reduce((sum, line) => sum + line.amount, 0), (coleDelivered.rate ?? 0) + 150);
-    assert.ok(lumperLines.some((line) => line.name === "Lumper"));
+    assert.equal(lumperLines.reduce((sum, line) => sum + line.amount, 0), coleDelivered.rate ?? 0);
+    assert.equal(lumperLines.some((line) => line.name === "Lumper"), false);
     assert.equal(qbo.oauthStatesMatch("abc123", "abc123"), true);
     assert.equal(qbo.oauthStatesMatch("abc123", "abc124"), false);
 

@@ -103,7 +103,7 @@ export function QuickbooksInvoicePanel({
               checked={confirmResend}
               onChange={(event) => setConfirmResend(event.target.checked)}
             />
-            <span>This load already has invoice {preview.existingInvoiceId}. Send again anyway.</span>
+            <span>This load already has invoice {preview.existingInvoiceId}. Send again to update that same invoice.</span>
           </label>
         ) : null}
         <button className="btn btn-primary" type="submit" disabled={pending || sendBlocked}>

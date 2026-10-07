@@ -38,6 +38,8 @@ export const PAY_ITEM_CATEGORIES = [
   { value: "layover", label: "Layover" },
   { value: "tonu", label: "TONU" },
   { value: "washout", label: "Washout" },
+  { value: "extra_stop", label: "Extra Stop" },
+  { value: "fuel_surcharge", label: "Fuel Surcharge" },
   { value: "misc", label: "Misc." },
   { value: "trailer_rental", label: "Trailer Rental" },
   { value: "fuel_advance_fee", label: "Fuel Advance Fee" },

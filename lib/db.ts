@@ -345,6 +345,9 @@ export function migrate(db: Database): void {
       qbo_vendor_name TEXT NOT NULL DEFAULT ''
     );
   `);
+  // Per-vendor bill expense account (owner-operator settlements vs fuel). Blank = QBO_BILL_EXPENSE_ACCOUNT_ID.
+  ensureColumn(db, "qbo_vendor_maps", "qbo_expense_account_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "qbo_vendor_maps", "qbo_expense_account_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "truck_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "branch", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "declared_value", "REAL");

@@ -4,7 +4,7 @@ import { addAttachment } from "./files";
 import { formatInvoiceMoney, formatMdYDisplay, formatStopWindow, formatWeight } from "./format";
 import { labelForPayCategory } from "./load-page-shared";
 import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } from "./locations";
-import { customerInvoicePayItems } from "./pay-items";
+import { customerInvoiceBillableItems } from "./pay-items";
 import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
@@ -105,7 +105,7 @@ function invoiceLineFromPayItem(item: { category: string; notes: string; total: 
 
 /** Customer freight (rate or Flat Rate) plus extras such as detention. Lumper stays off. */
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
-  const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
+  const payItems = customerInvoiceBillableItems(load.id);
   const flats = payItems.filter((item) => item.category === "flat_rate");
   const extras = payItems.filter((item) => item.category !== "flat_rate");
   const lines: TmsInvoiceLine[] = [];

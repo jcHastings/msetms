@@ -1002,11 +1002,26 @@ export async function saveQboVendorMapAction(formData: FormData): Promise<Action
       await requireCapability(canAccessAccounting, "QuickBooks maps are for Administrator and Accounting.");
       const payee = String(formData.get("payee") ?? "").trim();
       const qboVendorId = String(formData.get("qbo_vendor_id") ?? "").trim();
+      const expenseField = formData.get("qbo_expense_account_id");
       if (!payee) throw new Error("Pick a vendor.");
-      const { listQboVendors } = await import("./integrations/quickbooks");
-      const { upsertQboVendorMap } = await import("./accounting-desk");
+      const { listQboExpenseAccounts, listQboVendors } = await import("./integrations/quickbooks");
+      const { upsertQboVendorMap, listQboVendorMaps } = await import("./accounting-desk");
       const named = (await listQboVendors()).find((row) => row.id === qboVendorId)?.name ?? "";
-      upsertQboVendorMap(payee, qboVendorId, named);
+      let expenseAccount: { id: string; name: string } | undefined;
+      if (expenseField != null) {
+        const accountId = String(expenseField).trim();
+        const saved = listQboVendorMaps().find((row) => row.payee === payee);
+        const unchanged = Boolean(accountId) && saved?.qbo_expense_account_id === accountId;
+        const accountName = accountId
+          ? (await listQboExpenseAccounts()).find((row) => row.id === accountId)?.name ??
+            (unchanged ? saved?.qbo_expense_account_name ?? "" : "")
+          : "";
+        if (accountId && !accountName && !unchanged) {
+          throw new Error("Pick an expense account from the QuickBooks list.");
+        }
+        expenseAccount = { id: accountId, name: accountName };
+      }
+      upsertQboVendorMap(payee, qboVendorId, named, expenseAccount);
       refresh();
       return { ok: true, message: "Vendor mapped." };
     } catch (error) {

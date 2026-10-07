@@ -31,7 +31,16 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const body = init?.body && typeof init.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : init?.body;
   calls.push({ url, method, body });
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
-  assert.ok(url.startsWith("https://sandbox-quickbooks.api.intuit.com/") || url.startsWith("https://oauth.platform.intuit.com/"), `unexpected host ${url}`);
+  assert.ok(
+    url.startsWith("https://sandbox-quickbooks.api.intuit.com/") ||
+      url.startsWith("https://oauth.platform.intuit.com/") ||
+      url.startsWith("https://developer.api.intuit.com/v2/oauth2/tokens/revoke"),
+    `unexpected host ${url}`,
+  );
+  if (url.includes("/tokens/revoke")) return new Response("", { status: 200 });
+  if (url.includes("/invoice/") && method === "GET") {
+    return new Response(JSON.stringify({ Fault: {} }), { status: 500, headers: { intuit_tid: "tid-test-123" } });
+  }
   if (url.includes("/tokens/bearer")) return json({ access_token: "at-test", refresh_token: "rt-test-2", expires_in: 3600 });
   if (url.includes("/query?")) {
     const q = decodeURIComponent(url.split("query=")[1].split("&")[0]);
@@ -62,6 +71,9 @@ async function main() {
   const qbo = await import("../lib/integrations/quickbooks");
   const accounting = await import("../lib/accounting");
   const db = getDb();
+  // Live sends need the MS Express remit street and AR email (qbo-campaign.ts covers the block).
+  db.prepare("UPDATE company_profile SET street = '100 Test Remit St', ar_email = 'billing@example.com' WHERE id = 1").run();
+  assert.equal((db.prepare("SELECT changes() AS n").get() as { n: number }).n, 1);
   const customerId = queries.createCustomer({ name: "QBO Map Customer", billing_notes: "", contacts: [] });
   db.prepare("UPDATE customers SET qbo_customer_id = '58', qbo_status = 'mapped' WHERE id = ?").run(customerId);
   const day = new Date(Date.now() - 86_400_000).toISOString();
@@ -154,6 +166,43 @@ async function main() {
   assert.match(mapPage, /Several TMS customers can share one QuickBooks customer/);
   assert.match(mapPage, /Nothing here creates a customer in QuickBooks/);
   assert.match(mapPage, /Nothing here creates a vendor in QuickBooks/);
+  // Re-sync reads the existing invoice first; an Intuit error carries intuit_tid and nothing is written.
+  db.prepare("UPDATE loads SET qbo_source = 'quickbooks', qbo_invoice_id = '900' WHERE id = ?").run(dupLoad);
+  calls.length = 0;
+  const quiet = console.error;
+  console.error = () => {};
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(dupLoad, { confirmResend: true }), /Intuit ref tid-test-123/);
+  console.error = quiet;
+  assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "no write after a failed read");
+
+  // Disconnect revokes the refresh token at Intuit, then deletes the local token file.
+  calls.length = 0;
+  const disconnected = await qbo.disconnectQuickbooks();
+  assert.equal(disconnected.revoked, true);
+  const revoke = calls.find((c) => c.url.includes("/tokens/revoke"));
+  assert.ok(revoke && revoke.method === "POST", "revoke called");
+  assert.equal(fs.existsSync(path.join(tmp, "qbo-refresh.json")), false, "token file removed");
+  assert.equal(qbo.hasQuickbooksSession(), false);
+  // Intuit production settings link to public /privacy and /terms: signed-out, DRAFT-marked, MS Express identity only.
+  const { config: mwConfig } = await import("../middleware");
+  const matcher = new RegExp(`^${mwConfig.matcher[0]}$`);
+  for (const open of ["/privacy", "/terms", "/login", "/driver"]) assert.equal(matcher.test(open), false, `${open} is public`);
+  for (const closed of ["/settings/quickbooks", "/accounting/quickbooks", "/privacy-admin", "/termsheet", "/"]) {
+    assert.equal(matcher.test(closed), true, `${closed} needs sign-in`);
+  }
+  const shell = fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8");
+  assert.match(shell, /pathname === "\/privacy"/);
+  assert.match(shell, /pathname === "\/terms"/);
+  const legal = ["app/privacy/page.tsx", "app/terms/page.tsx", "components/legal-document.tsx"]
+    .map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"))
+    .join("\n");
+  assert.match(legal, /DRAFT/);
+  assert.match(legal, /data-legal-draft/);
+  assert.match(legal, /3062879/);
+  assert.match(legal, /402-302-0097/);
+  assert.match(legal, /State of Nebraska/);
+  assert.match(legal, /JC to confirm/);
+  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|ar@msloads\.com/i);
   console.log("qbo-mapping-test: ok");
 }
 

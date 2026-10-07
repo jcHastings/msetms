@@ -89,6 +89,17 @@ export function deletePayItem(id: number): void {
   syncCustomerRateFromPayItems(row.load_id);
 }
 
+/**
+ * Lumper is not billed to the customer today (TMS invoice PDF and QuickBooks agree).
+ * JC decision pending: flip this to bill customer-billed Lumper pay items on both.
+ */
+export const INVOICE_INCLUDES_LUMPER = false;
+
+/** Customer income lines that belong on the customer invoice (TMS PDF and QuickBooks use the same rule). */
+export function customerInvoiceBillableItems(loadId: number): LoadPayItem[] {
+  return customerInvoicePayItems(loadId).filter((item) => INVOICE_INCLUDES_LUMPER || item.category !== "lumper");
+}
+
 export function customerInvoicePayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId, "income").filter((item) => item.bill_to === "customer");
 }

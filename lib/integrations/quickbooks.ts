@@ -19,16 +19,20 @@ import {
   markQboInvoice,
 } from "../queries";
 import { labelForPayCategory } from "../load-page-shared";
-import { customerInvoicePayItems } from "../pay-items";
+import { customerInvoiceBillableItems } from "../pay-items";
 import { isBillableStatus, isOwnerOperator, type LoadView } from "../types";
 
 const MINOR_VERSION = "75";
 const FETCH_TIMEOUT_MS = 15_000;
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
+const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
-const LUMPER_ITEM_NAME = "Lumper";
+/** MS Express is in Hastings, NE. Invoice and bill dates use the company's calendar day. */
+const COMPANY_TIME_ZONE = "America/Chicago";
+const SANDBOX_API_HOST = "https://sandbox-quickbooks.api.intuit.com";
+const PRODUCTION_API_HOST = "https://quickbooks.api.intuit.com";
 
 let lastDemoInvoiceStamp = 0;
 
@@ -44,6 +48,9 @@ export type QboInvoiceLine = {
   name: string;
   description: string;
   amount: number;
+  /** Per-unit lines (e.g. 812 miles at $2.45) keep their quantity and rate. Flat lines are 1 x amount. */
+  qty: number;
+  unitPrice: number;
 };
 
 export type QboInvoicePreview = {
@@ -91,11 +98,20 @@ export type QboStatus = {
 
 class QboHttpError extends Error {
   status: number;
-  constructor(status: number, context: string) {
-    super(qboStatusMessage(status, context));
+  intuitTid: string;
+  constructor(status: number, context: string, intuitTid = "") {
+    super(`${qboStatusMessage(status, context)}${intuitTid ? ` Intuit ref ${intuitTid}.` : ""}`);
     this.name = "QboHttpError";
     this.status = status;
+    this.intuitTid = intuitTid;
   }
+}
+
+/** Log a failed Intuit call with its intuit_tid for support. Never logs tokens, bodies, or keys. */
+function qboFailure(response: Response, context: string): QboHttpError {
+  const tid = response.headers.get("intuit_tid") ?? "";
+  console.error(`[qbo] ${context} failed status=${response.status}${tid ? ` intuit_tid=${tid}` : ""}`);
+  return new QboHttpError(response.status, context, tid);
 }
 
 export function resetQuickbooksForTests(): void {
@@ -137,44 +153,61 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
   };
 }
 
+/**
+ * Same lines as the TMS invoice PDF: Flat Rate pay items (or the load rate as Line Haul), then customer extras.
+ * Lumper follows INVOICE_INCLUDES_LUMPER (off today). A cancelled load can only bill its TONU lines.
+ */
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
-  const payItems = customerInvoicePayItems(load.id);
+  const payItems = customerInvoiceBillableItems(load.id);
   const lane = `${load.origin} → ${load.destination}`;
-  const qboLine = (item: { category: string; payee: string; notes: string; total: number | null }): QboInvoiceLine => ({
-    category: item.category,
-    name: labelForPayCategory(item.category),
-    description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
-    amount: item.total ?? 0,
-  });
-  if (payItems.length) {
-    const flats = payItems.filter((item) => item.category === "flat_rate");
-    const extras = payItems.filter((item) => item.category !== "flat_rate" && item.category !== "lumper");
-    const lines: QboInvoiceLine[] = [];
-    if (flats.length) {
-      lines.push(...flats.map(qboLine));
-    } else {
-      const rate = customerBilledRate(load);
-      if (rate != null) {
-        lines.push({ category: "flat_rate", name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate });
-      }
+  const qboLine = (item: {
+    category: string;
+    payee: string;
+    notes: string;
+    total: number | null;
+    qty: number | null;
+    rate: number | null;
+  }): QboInvoiceLine => {
+    const amount = roundMoney(item.total ?? 0);
+    const qty = item.qty ?? 1;
+    const perUnit =
+      item.rate != null && qty > 0 && qty !== 1 && Math.abs(roundMoney(item.rate * qty) - amount) < 0.005;
+    return {
+      category: item.category,
+      name: labelForPayCategory(item.category),
+      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+      amount,
+      qty: perUnit ? qty : 1,
+      unitPrice: perUnit ? (item.rate as number) : amount,
+    };
+  };
+  if (load.status === "cancelled") {
+    return payItems.filter((item) => item.category === "tonu").map(qboLine);
+  }
+  const flats = payItems.filter((item) => item.category === "flat_rate");
+  const extras = payItems.filter((item) => item.category !== "flat_rate");
+  const lines: QboInvoiceLine[] = [];
+  if (flats.length) {
+    lines.push(...flats.map(qboLine));
+  } else {
+    const rate = customerBilledRate(load);
+    if (rate != null) {
+      lines.push({
+        category: "flat_rate",
+        name: LINE_HAUL_ITEM_NAME,
+        description: `${load.load_number} ${lane}`,
+        amount: rate,
+        qty: 1,
+        unitPrice: rate,
+      });
     }
-    lines.push(...extras.map(qboLine));
-    return lines;
   }
-  const rate = customerBilledRate(load);
-  if (rate == null) return [];
-  const lines: QboInvoiceLine[] = [
-    { category: "flat_rate", name: LINE_HAUL_ITEM_NAME, description: `${load.load_number} ${lane}`, amount: rate },
-  ];
-  if (load.lumper_actual != null && load.lumper_actual > 0) {
-    lines.push({
-      category: "lumper",
-      name: LUMPER_ITEM_NAME,
-      description: `${load.load_number} lumper`,
-      amount: load.lumper_actual,
-    });
-  }
+  lines.push(...extras.map(qboLine));
   return lines;
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 export async function sendBillToQuickbooks(billId: number): Promise<{ billId: string; source: "demo" | "quickbooks" }> {
@@ -188,34 +221,48 @@ export async function sendBillToQuickbooks(billId: number): Promise<{ billId: st
     markQboBill(bill.id, demoId);
     return { billId: demoId, source: "demo" };
   }
-  const mapped = listQboVendorMaps().find((row) => row.payee === bill.vendor);
+  const payload = buildBillPayload(bill, listQboVendorMaps());
+  const created = await qboPost<{ Bill?: { Id?: string } }>("/bill", payload, "bill create");
+  const id = created.Bill?.Id;
+  if (!id) throw new Error("QuickBooks did not return a bill id.");
+  markQboBill(bill.id, id);
+  return { billId: id, source: "quickbooks" };
+}
+
+/**
+ * Vendor must be mapped. Expense account: the vendor's own account from Map Vendors (e.g. owner-operator
+ * settlements vs fuel), else QBO_BILL_EXPENSE_ACCOUNT_ID. Never the first Expense account in the chart.
+ */
+export function buildBillPayload(
+  bill: { id: number; vendor: string; memo: string; amount: number; load_id: number | null; created_at: string },
+  vendorMaps: Array<{ payee: string; qbo_vendor_id: string; qbo_expense_account_id?: string }>,
+): Record<string, unknown> {
+  const mapped = vendorMaps.find((row) => row.payee === bill.vendor);
   const vendorId = mapped?.qbo_vendor_id?.trim() ?? "";
   if (!vendorId) {
     throw new Error(
       `Map this vendor first: ${bill.vendor.trim() || "this vendor"}. Accounting → QuickBooks → Map Vendors.`,
     );
   }
-  const expenseId = billExpenseAccountId();
-  const created = await qboPost<{ Bill?: { Id?: string } }>(
-    "/bill",
-    {
-      VendorRef: { value: vendorId },
-      PrivateNote: (bill.memo || `Bill ${bill.id}`).slice(0, 4000),
-      Line: [
-        {
-          Amount: bill.amount,
-          DetailType: "AccountBasedExpenseLineDetail",
-          Description: bill.memo || `Bill ${bill.id}`,
-          AccountBasedExpenseLineDetail: { AccountRef: { value: expenseId } },
-        },
-      ],
-    },
-    "bill create",
-  );
-  const id = created.Bill?.Id;
-  if (!id) throw new Error("QuickBooks did not return a bill id.");
-  markQboBill(bill.id, id);
-  return { billId: id, source: "quickbooks" };
+  const expenseId = mapped?.qbo_expense_account_id?.trim() || billExpenseAccountId();
+  const loadNumber = bill.load_id ? getLoad(bill.load_id)?.load_number ?? "" : "";
+  const memo = bill.memo.trim();
+  const privateNote = [`MSETMS bill ${bill.id}`, loadNumber ? `Load ${loadNumber}` : "", memo]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    VendorRef: { value: vendorId },
+    TxnDate: invoiceDate(bill.created_at),
+    PrivateNote: privateNote.slice(0, 4000),
+    Line: [
+      {
+        Amount: roundMoney(bill.amount),
+        DetailType: "AccountBasedExpenseLineDetail",
+        Description: (memo || `Bill ${bill.id}`).slice(0, 4000),
+        AccountBasedExpenseLineDetail: { AccountRef: { value: expenseId } },
+      },
+    ],
+  };
 }
 
 /** Never guess: the first Expense account in a chart of accounts is arbitrary (sandbox: "Accounting"). */
@@ -233,13 +280,17 @@ export async function sendLoadToQuickbooks(
 ): Promise<QboSendResult> {
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
-  if (!isBillableStatus(load.status)) {
+  const cancelled = load.status === "cancelled";
+  if (!isBillableStatus(load.status) && !cancelled) {
     throw new Error("Mark the load Delivered before sending an invoice.");
   }
   if (load.qbo_invoice_id && !options.confirmResend) {
-    throw new Error("This load was already sent to QuickBooks. Confirm to send again.");
+    throw new Error("This load was already sent to QuickBooks. Confirm to update that invoice.");
   }
   const preview = previewQuickbooksInvoice(load);
+  if (cancelled && !preview.lines.length) {
+    throw new Error(QBO_CANCELLED_MESSAGE);
+  }
   assertCustomerInvoiceReady(preview);
   const sentAt = new Date().toISOString();
 
@@ -254,7 +305,13 @@ export async function sendLoadToQuickbooks(
     return result;
   }
 
-  const live = await createLiveInvoice(load, preview);
+  const { getCompanySettings } = await import("../settings");
+  const { invoiceIssuerProblems, invoiceIssuerWarning } = await import("../carrier-identity");
+  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
+  if (issuerWarning) {
+    throw new Error(issuerWarning.replace("Invoices cannot be emailed", "Invoices cannot be sent to QuickBooks"));
+  }
+  const live = await createOrUpdateLiveInvoice(load, preview);
   const result: QboSendResult = {
     invoiceId: live.invoiceId,
     invoiceNumber: live.invoiceNumber || load.load_number,
@@ -310,6 +367,9 @@ export async function getQuickbooksStatus(): Promise<QboStatus> {
 export const QBO_MISSING_RATE_MESSAGE =
   "This load has no customer billed rate. Set a rate on Financials before sending to QuickBooks.";
 
+export const QBO_CANCELLED_MESSAGE =
+  "This load is cancelled. Only a TONU can be invoiced: add a customer TONU pay item. If an invoice already went to QuickBooks, void it there.";
+
 function assertCustomerInvoiceReady(preview: QboInvoicePreview): void {
   if (!preview.lines.length || preview.amount <= 0) {
     throw new Error(QBO_MISSING_RATE_MESSAGE);
@@ -321,31 +381,53 @@ function customerBilledRate(load: LoadView): number | null {
   return load.rate;
 }
 
-function invoiceDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
-  return date.toISOString().slice(0, 10);
+/** Calendar day for TxnDate. TMS times are local wall-clock ("2026-09-14T17:00:00"): keep that day, never shift through UTC. */
+export function invoiceDate(value: string): string {
+  const raw = String(value ?? "").trim();
+  const wallClock = raw.match(/^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/);
+  if (wallClock) return wallClock[1];
+  const date = new Date(raw);
+  return companyDay(Number.isNaN(date.getTime()) ? new Date() : date);
 }
 
+function companyDay(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: COMPANY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** Customer-visible invoice message: load, lane, and the customer's own references only. No internal notes. */
 function buildMemo(load: LoadView): string {
   const parts = [`Load ${load.load_number}`, `${load.origin} → ${load.destination}`];
   if (load.reference_number) parts.push(`Ref: ${load.reference_number}`);
   if (load.po_number) parts.push(`PO: ${load.po_number}`);
-  if (load.special_instructions) parts.push(load.special_instructions);
-  if (load.appointment_notes) parts.push(`Appointment: ${load.appointment_notes}`);
-  if (load.notes) parts.push(load.notes);
-  if (isOwnerOperator(load.driver_type)) {
-    parts.push("Customer invoice only.");
-  }
   return parts.join("\n");
 }
 
-async function createLiveInvoice(
+/** QuickBooks private note (office only). Still no dispatch notes, special instructions, or appointment text. */
+function buildPrivateNote(load: LoadView): string {
+  const parts = [`MSETMS load ${load.load_number}`, `TMS id ${load.id}`];
+  if (load.reference_number) parts.push(`Ref: ${load.reference_number}`);
+  if (isOwnerOperator(load.driver_type)) parts.push("Customer invoice only. Owner-operator pay is settled separately.");
+  return parts.join(" · ");
+}
+
+type QboInvoiceRecord = { Id?: string; SyncToken?: string; DocNumber?: string; TotalAmt?: number; Balance?: number };
+
+/**
+ * New load: create the invoice with DocNumber = load number (refuses if QuickBooks already has that number).
+ * Already sent: update the same QuickBooks invoice in place (sparse update, lines replaced). Never a second invoice.
+ * Every customer, term, and item is resolved before anything is written.
+ */
+async function createOrUpdateLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
   const customerId = await resolveQboCustomer(load);
-  const docNumber = uniqueDocNumber(load);
+  const salesTerm = await resolveSalesTermRef(load);
   const linePayload = [];
   for (const line of preview.lines) {
     const itemId = await resolveInvoiceItemId(line);
@@ -355,24 +437,63 @@ async function createLiveInvoice(
       Description: line.description,
       SalesItemLineDetail: {
         ItemRef: { value: itemId, name: line.name },
-        Qty: 1,
-        UnitPrice: line.amount,
+        Qty: line.qty,
+        UnitPrice: line.unitPrice,
       },
     });
   }
-  const payload = {
+  const docNumber = load.load_number.slice(0, 21);
+  const payload: Record<string, unknown> = {
     DocNumber: docNumber,
     TxnDate: preview.txnDate,
     CustomerRef: { value: customerId },
-    PrivateNote: preview.memo.slice(0, 4000),
+    PrivateNote: buildPrivateNote(load).slice(0, 4000),
     CustomerMemo: { value: preview.memo.slice(0, 1000) },
     Line: linePayload,
   };
-  const created = await qboPost<{ Invoice?: { Id?: string; DocNumber?: string } }>(
-    "/invoice",
-    payload,
-    "invoice create",
+  if (salesTerm) payload.SalesTermRef = salesTerm;
+
+  const existingId = load.qbo_source === "quickbooks" ? load.qbo_invoice_id.trim() : "";
+  if (existingId) {
+    let current: QboInvoiceRecord | undefined;
+    try {
+      current = (await qboGet<{ Invoice?: QboInvoiceRecord }>(`/invoice/${encodeURIComponent(existingId)}`, "invoice read"))
+        .Invoice;
+    } catch (error) {
+      throw new Error(
+        `Could not read QuickBooks invoice ${existingId}, so nothing was sent. ${publicQboError(error)} If it was deleted in QuickBooks, ask an administrator to clear the link on this load.`,
+      );
+    }
+    if (!current?.Id || current.SyncToken == null) {
+      throw new Error(`QuickBooks invoice ${existingId} was not found, so nothing was sent.`);
+    }
+    if (typeof current.Balance === "number" && typeof current.TotalAmt === "number" && current.Balance < current.TotalAmt) {
+      throw new Error(
+        `QuickBooks invoice ${current.DocNumber || existingId} already has a payment applied, so nothing was sent. Adjust it in QuickBooks (credit memo) instead.`,
+      );
+    }
+    const updated = await qboPost<{ Invoice?: QboInvoiceRecord }>(
+      "/invoice",
+      { ...payload, Id: current.Id, SyncToken: current.SyncToken, sparse: true },
+      "invoice update",
+    );
+    return {
+      invoiceId: updated.Invoice?.Id || current.Id,
+      invoiceNumber: updated.Invoice?.DocNumber || docNumber,
+    };
+  }
+
+  const clash = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
+    `select Id, DocNumber from Invoice where DocNumber = '${escapeQboString(docNumber)}'`,
+    "invoice number check",
   );
+  const clashId = clash.QueryResponse?.Invoice?.[0]?.Id;
+  if (clashId) {
+    throw new Error(
+      `QuickBooks already has invoice #${docNumber} (id ${clashId}). Nothing was sent. Check it in QuickBooks before sending this load.`,
+    );
+  }
+  const created = await qboPost<{ Invoice?: QboInvoiceRecord }>("/invoice", payload, "invoice create");
   const invoiceId = created.Invoice?.Id;
   if (!invoiceId) {
     throw new Error("QuickBooks did not return an invoice id.");
@@ -383,10 +504,19 @@ async function createLiveInvoice(
   };
 }
 
-function uniqueDocNumber(load: LoadView): string {
-  if (!load.qbo_invoice_id) return load.load_number.slice(0, 21);
-  const suffix = Date.now().toString().slice(-4);
-  return `${load.load_number}-${suffix}`.slice(0, 21);
+/** Customer payment terms -> QuickBooks Term by exact name. Blank = the QuickBooks customer's default terms. */
+async function resolveSalesTermRef(load: LoadView): Promise<{ value: string } | undefined> {
+  const terms = String(getCustomer(load.customer_id)?.payment_terms ?? "").trim();
+  if (!terms) return undefined;
+  const found = await qboQuery<{ Term?: Array<{ Id?: string; Name?: string }> }>(
+    `select * from Term where Name = '${escapeQboString(terms)}'`,
+    "terms query",
+  );
+  const id = found.QueryResponse?.Term?.[0]?.Id;
+  if (id) return { value: id };
+  throw new Error(
+    `Customer terms "${terms}" are not set up in QuickBooks. Add that term in QuickBooks or fix the customer's payment terms, then send again.`,
+  );
 }
 
 async function resolveQboCustomer(load: LoadView): Promise<string> {
@@ -460,11 +590,96 @@ async function listQboNamed(entity: "Customer" | "Item" | "Vendor", nameField: s
 function apiBase(): string {
   const realmId = resolveRealmId();
   if (!realmId) throw new Error("Connect QuickBooks in Settings to store the company (realm) id.");
-  const host =
-    getQuickbooksEnvironment() === "production"
-      ? "https://quickbooks.api.intuit.com"
-      : "https://sandbox-quickbooks.api.intuit.com";
-  return `${host}/v3/company/${realmId}`;
+  return `${apiHost()}/v3/company/${realmId}`;
+}
+
+function apiHost(): string {
+  return getQuickbooksEnvironment() === "production" ? PRODUCTION_API_HOST : SANDBOX_API_HOST;
+}
+
+/** Where API calls would go right now. Names only, no tokens. Used by the sandbox campaign guard. */
+export function quickbooksApiTarget(): { host: string; realmId: string; environment: "sandbox" | "production" } {
+  return { host: apiHost(), realmId: resolveRealmId() ?? "", environment: getQuickbooksEnvironment() };
+}
+
+const CAMPAIGN_READ_ENTITIES = ["invoice", "bill", "item", "account", "customer", "vendor", "term", "companyinfo"] as const;
+export type QboCampaignEntity = (typeof CAMPAIGN_READ_ENTITIES)[number];
+
+/** Read-only GET of one entity for read-back checks. */
+export async function readQboEntity<T = Record<string, unknown>>(entity: QboCampaignEntity, id: string): Promise<T> {
+  if (!CAMPAIGN_READ_ENTITIES.includes(entity)) throw new Error("Unsupported QuickBooks entity.");
+  return qboGet<T>(`/${entity}/${encodeURIComponent(id)}`, `${entity} read`);
+}
+
+/**
+ * Sandbox-only cleanup for the mapping campaign: voids a test invoice or deletes a test bill, and only when the
+ * document carries the campaign label. Refuses in production.
+ */
+export async function cleanupQboCampaignDoc(entity: "invoice" | "bill", id: string, label: string): Promise<void> {
+  assertSandboxCampaign();
+  if (!label.trim()) throw new Error("Campaign label is required.");
+  const key = entity === "invoice" ? "Invoice" : "Bill";
+  const doc = (await readQboEntity<Record<string, Record<string, unknown>>>(entity, id))[key] ?? {};
+  const text = `${String(doc.DocNumber ?? "")} ${String(doc.PrivateNote ?? "")}`;
+  if (!text.includes(label)) throw new Error(`${key} ${id} is not a campaign document. Left as is.`);
+  const operation = entity === "invoice" ? "void" : "delete";
+  await qboRequest(
+    `${apiBase()}/${entity}?operation=${operation}&minorversion=${MINOR_VERSION}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Id: id, SyncToken: String(doc.SyncToken ?? "0") }),
+    },
+    `${entity} ${operation}`,
+  );
+}
+
+function assertSandboxCampaign(): void {
+  if (getQuickbooksEnvironment() !== "sandbox" || apiHost() !== SANDBOX_API_HOST) {
+    throw new Error("The mapping campaign only runs against the QuickBooks sandbox.");
+  }
+}
+
+/** Read-only QuickBooks query for campaign read-back. Only SELECT statements. */
+export async function queryQboReadOnly<T = Record<string, unknown>>(query: string): Promise<QueryEnvelope<T>> {
+  if (!/^\s*select\s/i.test(query)) throw new Error("Only read-only select queries are allowed.");
+  return qboQuery<T>(query, "campaign query");
+}
+
+export const QBO_CAMPAIGN_FIXTURE_PREFIX = "MSETMS Test";
+
+/**
+ * Sandbox-only fixture create for the mapping campaign (test income/expense accounts, items, customer, vendors).
+ * The name must start with "MSETMS Test" so nothing real is ever touched. Refuses in production.
+ */
+export async function createQboCampaignFixture(
+  entity: "account" | "item" | "customer" | "vendor",
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  assertSandboxCampaign();
+  const name = String(body.Name ?? body.DisplayName ?? "");
+  if (!name.startsWith(QBO_CAMPAIGN_FIXTURE_PREFIX)) {
+    throw new Error(`Campaign fixtures must be named "${QBO_CAMPAIGN_FIXTURE_PREFIX} …".`);
+  }
+  const key = entity.charAt(0).toUpperCase() + entity.slice(1);
+  const created = await qboPost<Record<string, Record<string, unknown>>>(`/${entity}`, body, `${entity} fixture`);
+  return created[key] ?? {};
+}
+
+/** Expense-classified accounts (incl. cost of goods sold) for Map Vendors. Read-only. */
+export async function listQboExpenseAccounts(): Promise<QboNamedRef[]> {
+  if (!hasQuickbooksSession()) return [];
+  try {
+    const result = await qboQuery<{
+      Account?: Array<{ Id?: string; Name?: string; FullyQualifiedName?: string; Classification?: string; Active?: boolean }>;
+    }>("select * from Account maxresults 1000", "account list");
+    return (result.QueryResponse?.Account ?? [])
+      .filter((row) => row.Classification === "Expense" && row.Active !== false)
+      .map((row) => ({ id: String(row.Id ?? "").trim(), name: String(row.FullyQualifiedName || row.Name || "").trim() }))
+      .filter((row) => row.id);
+  } catch {
+    return [];
+  }
 }
 
 type QueryEnvelope<T> = { QueryResponse?: T };
@@ -502,7 +717,7 @@ async function qboRequest<T>(url: string, init: RequestInit, context: string): P
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new QboHttpError(response.status, context);
+    throw qboFailure(response, context);
   }
   return (await response.json()) as T;
 }
@@ -536,7 +751,8 @@ async function getAccessToken(): Promise<string> {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new QboHttpError(response.status, "token refresh");
+    // 400 invalid_grant = refresh token expired or revoked: the office must reconnect.
+    throw qboFailure(response, "token refresh");
   }
   const payload = (await response.json()) as {
     access_token?: string;
@@ -599,6 +815,37 @@ function writeStoredTokens(input: { refresh_token: string; realm_id?: string }):
   );
 }
 
+/**
+ * Disconnect: revoke the refresh token at Intuit (best effort), then delete the stored token file.
+ * The local file is removed even when Intuit cannot be reached.
+ */
+export async function disconnectQuickbooks(): Promise<{ revoked: boolean }> {
+  const refreshToken = resolveRefreshToken();
+  const clientId = getQuickbooksClientId();
+  const clientSecret = getQuickbooksClientSecret();
+  let revoked = false;
+  if (refreshToken && clientId && clientSecret) {
+    try {
+      const response = await fetch(REVOKE_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token: refreshToken }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      revoked = response.ok;
+      if (!response.ok) qboFailure(response, "token revoke");
+    } catch {
+      revoked = false;
+    }
+  }
+  clearStoredQuickbooksTokens();
+  return { revoked };
+}
+
 export function clearStoredQuickbooksTokens(): void {
   cachedAccess = null;
   try {
@@ -657,7 +904,7 @@ export async function completeQuickbooksOAuth(input: {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new QboHttpError(response.status, "OAuth connect");
+    throw qboFailure(response, "OAuth connect");
   }
   const payload = (await response.json()) as { refresh_token?: string; access_token?: string; expires_in?: number };
   if (!payload.refresh_token) {
@@ -673,7 +920,7 @@ export async function completeQuickbooksOAuth(input: {
 }
 
 function qboStatusMessage(status: number, context: string): string {
-  if (status === 401 || status === 403) {
+  if (status === 401 || status === 403 || (status === 400 && context === "token refresh")) {
     return `QuickBooks ${context} failed (${status}). Re-connect QuickBooks in Settings.`;
   }
   if (status === 429) return `QuickBooks rate-limited the ${context} request. Try again shortly.`;
