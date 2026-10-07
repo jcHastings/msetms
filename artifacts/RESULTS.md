@@ -113,21 +113,28 @@ Opening the dialog does not wait on Samsara. The list is already on the page.
 
 ## Timings
 
-Focused rank of the test fleet: **7ms** (asserted under 50ms). Two runs return the same rows; there is no accept/reject table.
+Focused rank of the test fleet: **8ms** on `npm test` (asserted under 50ms). Two runs return the same rows; there is no accept/reject table.
 
 Samsara budget: **1200ms**. The budget test hangs a promise for 80ms of a 1200ms cap and returns the fallback with `timedOut` in under 1000ms. A fast promise wins and is not marked timed out.
+
+The board page for MSE-1071 rendered in about 4.4s on the first compile, then the dialog opened from data already on the page. Opening Assign did not start another Samsara call.
 
 ## How verified
 
 - `scripts/assign-suggestions-test.ts`: order (miles, then HOS, reefer, docs), hard blocks, stale GPS, no token, demo HOS ignored, timeout phrase, out of service disabled, back-to-back not overlapping, off duty, dry load, pickup point, dialog and board source strings.
-- `npm test` and `npm run build`: see the PR update after the full run.
-- Screenshots under `artifacts/` (office board only; the driver app does not use this dialog).
+- `npm test` passed (assign suggestions, viewer role, smoke, driver API, Samsara, trailer custody, relay map, places).
+- `npm run build` passed (TypeScript included). The cold fleet helper now returns `{ fleet, timedOut }` from the budget race.
+- Office board only. The driver app does not use this dialog.
+- Screenshot login used a copy of the snapshot outside the repo. Two-factor was turned off on that copy only, so sign-in did not send a code. `sent_mail` stayed at 11 rows.
 
 ## Screenshots
 
-- `artifacts/assign-suggestions.png` — dispatcher, Assign dialog, top 3 with reasons.
-- `artifacts/assign-suggestions-missing-data.png` — same dialog when live Samsara is not usable (stale GPS, HOS unknown).
-- `artifacts/assign-suggestions-viewer.png` — viewer, suggestions visible, select and Assign disabled.
+Taken on MSE-1071 (Dodge City, KS → Bronx, NY) from the snapshot. This environment has no Samsara token, so the suggestion lines are the missing-data case: saved GPS about 47 hours old, no live clock.
+
+- `artifacts/assign-suggestions.png` — dispatcher Ana Garcia. Top 3: unit 32 Christopher Howell (161 empty mi), unit 27 Luis Fuentes (398), unit 26 Steve Eller (622). Each line includes `GPS 47h old · no Samsara token · HOS unknown`, a reefer, and `docs OK`. The form still shows the load's current driver until a suggestion is tapped.
+- `artifacts/assign-suggestions-filled.png` — one tap on unit 32 fills driver Christopher Howell, truck 32, and reefer MS1522, and marks that row selected. Assign is still required.
+- `artifacts/assign-suggestions-missing-data.png` — the same dialog. The reasons are the missing-data case (`GPS 47h old`, `no Samsara token`, `HOS unknown`) because live Samsara is not connected here.
+- `artifacts/assign-suggestions-viewer.png` — QA Bot, viewer. Same three suggestions, with the view-only sentence. Driver, truck, trailer, owner-operator %, the suggestion buttons, Assign, and Assign & Dispatch are disabled. Close still works.
 
 ## Open questions for JC
 
