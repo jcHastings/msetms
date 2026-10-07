@@ -8,6 +8,7 @@ import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login
 import { authenticateDriverByEmail } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
+import { acknowledgeDispatch } from "./dispatch-ack";
 import { performDriverProgress, performDriverStopCheck, performDriverUpload } from "./driver-ops";
 import { type ActionResult } from "./types";
 
@@ -230,6 +231,24 @@ export async function driverMatchFuelReceiptAction(
       revalidatePath("/driver/fuel");
       refresh();
       return { ok: true, id: receiptId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function driverAcknowledgeDispatchAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const loadId = parseOptionalInt(formData?.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      acknowledgeDispatch(loadId, { id: driver.id, name: driver.name });
+      refresh();
+      return { ok: true, id: loadId };
     } catch (error) {
       return fail(error);
     }

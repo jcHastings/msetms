@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { DriverAckState } from "@/components/driver-got-it";
 import { DriverLoadActions } from "@/components/driver-load-actions";
 import { LoadChatPanel } from "@/components/load-chat-panel";
+import { presentDispatchAck } from "@/lib/dispatch-ack";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { driverLaneEnds, driverStopWhen } from "@/lib/driver-load-display";
@@ -71,6 +73,16 @@ export default async function DriverLoadPage({
         <DriverAssistSheet className="min-h-10 px-3 text-sm" />
       </div>
       {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
+      {(() => {
+        const ack = load.driver_id === driver.id ? presentDispatchAck(load) : null;
+        if (!ack || ack.state === "none") return null;
+        return (
+          <DriverAckState
+            loadId={load.id}
+            acknowledgedClock={ack.state === "acknowledged" ? ack.clock : null}
+          />
+        );
+      })()}
       {yourLeg ? (
         <p className="driver-sheet mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium">
           Your leg: {formatRelayLane(yourLeg.pickup, yourLeg.delivery)}

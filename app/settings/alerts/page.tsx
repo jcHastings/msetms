@@ -6,7 +6,7 @@ import { SettingsBack } from "@/components/settings-nav";
 import { alertRuleListRows, syncAlertNotifications } from "@/lib/alert-rules";
 import { canEditSettings, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatDateTime } from "@/lib/format";
-import { getCompanySettings, listDispatcherUsers } from "@/lib/settings";
+import { getCompanySettings, getDispatchAckHours, listDispatcherUsers } from "@/lib/settings";
 import { saveAlertsAction } from "@/lib/settings-actions";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function AlertsSettingsPage() {
   const dispatcher = await getSignedInDispatcher();
   const settings = getCompanySettings();
+  const ackHours = getDispatchAckHours();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
   syncAlertNotifications();
   const rules = alertRuleListRows().map((rule) => ({
@@ -65,6 +66,26 @@ export default async function AlertsSettingsPage() {
                 max={365}
                 defaultValue={settings.alert_dot_days}
               />
+            </div>
+            <div className="field md:col-span-2">
+              <label htmlFor="dispatch_ack_hours">Driver Got it, hours before pickup</label>
+              <input
+                id="dispatch_ack_hours"
+                name="dispatch_ack_hours"
+                type="number"
+                min={1}
+                max={168}
+                step={1}
+                defaultValue={ackHours}
+                disabled={!canEdit}
+                aria-disabled={!canEdit || undefined}
+                aria-describedby="dispatch_ack_hours_help"
+                data-view-only={canEdit ? undefined : ""}
+              />
+              <p className="text-xs text-slate-600" id="dispatch_ack_hours_help">
+                Desk flags an assigned load when the driver has not tapped Got it by this many hours before pickup.
+                Default 12. No text or email. Picked-up, unassigned, and pickups already past when this shipped stay off the list.
+              </p>
             </div>
             <div className="field">
               <label htmlFor="alert_gps_quiet_hours">GPS quiet window (hours)</label>
