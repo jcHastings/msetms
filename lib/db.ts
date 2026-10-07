@@ -938,6 +938,11 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "samsara_route_eta", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "samsara_route_note", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "samsara_route_synced_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_outcome", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_reason_note", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_recorded_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "rate_con_amount", "REAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS samsara_route_feed (
       id INTEGER PRIMARY KEY CHECK (id = 1),

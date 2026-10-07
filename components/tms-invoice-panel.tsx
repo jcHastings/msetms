@@ -10,6 +10,8 @@ import type { TmsInvoiceModel } from "@/lib/invoice";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 import { isBillableStatus, labelForUploader, type Attachment } from "@/lib/types";
 import { EmailInvoiceButton } from "@/components/email-invoice-button";
+import { InvoiceReadyChecklist } from "@/components/invoice-ready-checklist";
+import type { InvoiceReadyChecklistModel } from "@/lib/invoice-ready";
 
 export function TmsInvoicePanel({
   loadId,
@@ -23,6 +25,7 @@ export function TmsInvoicePanel({
   invoiceEmailBody = "",
   issuerWarning = "",
   readOnly = false,
+  checklist = null,
 }: {
   loadId: number;
   readOnly?: boolean;
@@ -35,6 +38,7 @@ export function TmsInvoicePanel({
   extras?: InvoiceMailExtraDoc[];
   invoiceEmailBody?: string;
   issuerWarning?: string;
+  checklist?: InvoiceReadyChecklistModel | null;
 }) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -102,6 +106,11 @@ export function TmsInvoicePanel({
           {issuerWarning}
         </p>
       ) : null}
+      {checklist ? (
+        <div className="mb-3">
+          <InvoiceReadyChecklist checklist={checklist} />
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start gap-3">
         <form
           action={`/api/loads/${loadId}/invoice`}
@@ -129,6 +138,8 @@ export function TmsInvoicePanel({
             defaultBody={invoiceEmailBody}
             issuerWarning={issuerWarning}
             anchorId="email-invoice"
+            checklist={checklist}
+            readOnly={readOnly}
           />
         ) : (
           <span className="pt-1.5 text-[12.5px] text-slate-600">Email invoice after Delivered</span>

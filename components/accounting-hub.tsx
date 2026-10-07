@@ -35,6 +35,7 @@ import { listLoadsOnAccountingDesk } from "@/lib/accounting-desk";
 import { listAttachments } from "@/lib/files";
 import { formatDateTime, formatMdYDisplay, formatMdYFull, formatMoney } from "@/lib/format";
 import { invoiceEmailBodyForLoad, invoiceMailExtraDocs, resolveInvoiceCustomerEmail } from "@/lib/load-mail";
+import { invoiceReadyForLoad } from "@/lib/invoice-ready";
 import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
@@ -226,6 +227,7 @@ function toInvoiceAcctRow(
     })(),
     extras: invoiceMailExtraDocs(row.id),
     invoiceEmailBody: invoiceEmailBodyForLoad(row),
+    checklist: invoiceReadyForLoad(row),
     pick: stopLabel(pick, row.origin),
     drop: stopLabel(drop, row.destination),
     paperwork: [

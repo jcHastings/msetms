@@ -38,6 +38,7 @@ import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
 import { buildTmsInvoice } from "@/lib/invoice";
+import { invoiceReadyForLoad } from "@/lib/invoice-ready";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
 import { refreshSamsaraRouteProgress } from "@/lib/integrations/samsara-routes";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -126,6 +127,7 @@ export async function LoadEditor({
   const family = listMasterFamily(load.id);
   const masterRow = family.find((row) => !row.parent_load_id) ?? family[0];
   const childRows = family.filter((row) => row.parent_load_id);
+  const invoiceChecklist = showFinancials ? invoiceReadyForLoad(load) : null;
   const invoice = (() => {
     try {
       return buildTmsInvoice(load);
@@ -179,6 +181,7 @@ export async function LoadEditor({
                     canSend={canEditLoads(role) && !load.non_revenue}
                     canReturn={canAccessAccounting(role)}
                     variant="header"
+                    checklist={invoiceChecklist}
                   />
                 ) : null}
               </div>
@@ -328,6 +331,7 @@ export async function LoadEditor({
                   return sent ? `Last emailed ${formatDateTime(sent.created_at)} to ${sent.to_email}` : "";
                 })()}
                 invoice={invoice}
+                checklist={invoiceChecklist}
               />
               <LoadPayItems
                 load={load}

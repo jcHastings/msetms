@@ -32,6 +32,7 @@ function sourceForActor(kind: AuditActorKind): LoadTimelineSource {
 }
 
 function titleForAudit(action: string, field: string): string {
+  if (action === "pod_delivery") return "POD at delivery";
   const key = action.trim() || field.trim() || "update";
   return key.replaceAll("_", " ");
 }
@@ -42,6 +43,7 @@ function detailForAudit(row: {
   old_value: string;
   new_value: string;
 }): string {
+  if (row.action === "pod_delivery") return row.new_value;
   if (row.action === "check_call") return row.new_value;
   if (row.action === "sms") {
     return [row.new_value ? `to ${row.new_value}` : "", row.old_value].filter(Boolean).join(" · ");

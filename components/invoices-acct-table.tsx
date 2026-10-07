@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { InvoiceCollapsedActions, InvoiceSendPostGroup } from "@/components/invoice-row-actions";
+import type { InvoiceReadyChecklistModel } from "@/lib/invoice-ready";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
 export type InvoiceAcctRow = {
@@ -28,6 +29,7 @@ export type InvoiceAcctRow = {
   lastInvoiceSent: string;
   extras: InvoiceMailExtraDoc[];
   invoiceEmailBody: string;
+  checklist: InvoiceReadyChecklistModel | null;
   pick: string;
   drop: string;
   paperwork: Array<{ label: string; found: boolean }>;
