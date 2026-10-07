@@ -167,11 +167,12 @@ export async function loadAssignSuggestionFleet(
   if (!isSamsaraTokenSet()) {
     return { fleet: persistedSuggestionFleet("Samsara is not connected."), timedOut: false };
   }
-  return fleetWithinBudget(
+  const raced = await fleetWithinBudget(
     () => getSamsaraFleet(),
     budgetMs,
     () => persistedSuggestionFleet("Samsara did not answer in time."),
   );
+  return { fleet: raced.value, timedOut: raced.timedOut };
 }
 
 export function pickupPointForSuggestion(
