@@ -1,6 +1,7 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
 import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
+import { missingPodAlert } from "./pod-delivery";
 import { coordsForStop, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
@@ -661,16 +662,9 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   }
 
   for (const load of delivered) {
-    if (!pods.has(load.id)) {
-      items.push(
-        withLoad(
-          load,
-          "missing_pod",
-          "HIGH",
-          "Missing POD",
-          `${load.customer_name} — delivered, no proof of delivery on file.`,
-        ),
-      );
+    const podAlert = missingPodAlert(load, pods.has(load.id));
+    if (podAlert.show) {
+      items.push(withLoad(load, "missing_pod", podAlert.severity, podAlert.title, podAlert.detail));
       continue;
     }
     if (

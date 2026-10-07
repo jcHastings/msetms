@@ -453,6 +453,12 @@ export type Load = {
   weight: number | null;
   commodity: string;
   rate: number | null;
+  /** Rate printed on the rate con. Null until a rate con is applied. */
+  rate_con_amount: number | null;
+  pod_outcome: string;
+  pod_reason: string;
+  pod_reason_note: string;
+  pod_recorded_at: string;
   notes: string;
   special_instructions: string;
   appointment_notes: string;

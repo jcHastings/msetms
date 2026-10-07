@@ -1,3 +1,53 @@
+# POD at delivery
+
+Branch `cursor/pod-at-delivery-f27b`. Draft PR only. No Office Update and no live database changes.
+
+**missing_pod applies to every load**, per JC (2026-10-07). msetms is MS Express only. M&S Loads is a bill-to customer, not a brokerage signal. There is no brokerage flag, column, or setting. On the snapshot, 264 billable loads have no POD file and no recorded driver reason, so all 264 stay on the alert. A POD file hides it. “Receiver kept the POD” and “Sent to the customer” clear it. “I’ll upload it later” and “Other” soften it to a low “POD later” alert.
+
+## What changed
+
+- `lib/pod-delivery-shared.ts`, `lib/pod-delivery.ts` — photo or reason on the load (`pod_outcome`, `pod_reason`, `pod_reason_note`, `pod_recorded_at`) and the missing-POD rule.
+- `lib/invoice-ready.ts`, `components/invoice-ready-checklist.tsx` — advisory “Invoice ready?” checklist.
+- `components/driver-load-actions.tsx`, `components/driver-upload.tsx`, `app/driver/loads/[id]/page.tsx` — Delivered opens the POD sheet (camera/upload, or a one-tap reason).
+- `lib/driver-ops.ts`, `lib/driver-actions.ts`, `lib/driver-api.ts` — the same photo or reason is stored from the driver app and the driver API. Omitting it still allows Delivered, so an older app build does not get stuck.
+- `lib/exceptions.ts`, `lib/load-timeline.ts` — the alert follows the rule above. The timeline title is “POD at delivery”.
+- `lib/db.ts`, `lib/types.ts`, `lib/queries.ts` — additive columns. Existing rows keep working with empty defaults. `rate_con_amount` is stored when a rate-con inbox is applied (`lib/actions.ts`) so a later rate edit does not erase it.
+- `components/tms-invoice-panel.tsx`, `components/email-invoice-button.tsx`, `components/send-to-accounting.tsx`, `components/load-editor.tsx`, `components/accounting-hub.tsx`, `components/invoices-acct-table.tsx`, `components/invoice-row-actions.tsx` — checklist on the invoice panel, in the send-to-accounting confirm, and in the email composer. Send stays enabled.
+- `scripts/pod-delivery-test.ts`, `package.json` — focused tests in `npm test`.
+
+## How it works
+
+Tapping **Delivered** (delivery check out) opens a full-screen sheet. The driver takes or uploads the POD on the existing upload path, or picks a reason. Other asks for a short note. **Not yet** closes the sheet and does not mark the load delivered. Either a photo or a reason still records Delivered, and the choice is written on the load timeline.
+
+The office checklist is pass or warn for POD (file or driver reason), a BOL file on the load, a lumper receipt when a lumper line exists, arrive and depart times when a detention line exists, and the invoice amount against the rate captured from the rate con. Copy on the checklist: “Advisory only. Send stays available.” No OCR. A viewer sees the checklist. Create invoice and Email invoice render disabled. Send to Accounting Management is not offered. The server still rejects the write.
+
+## How verified
+
+`npm test` passed, including `scripts/pod-delivery-test.ts` and the viewer write guard. `npm run build` passed.
+
+Chrome, against the production build, on a copy of the snapshot database that is not in the repo. No invoice, email, or SMS was sent. Two-factor was off on that copy so sign-in did not email a code.
+
+- Delivered opened the POD sheet. The four reasons were on it. Other required a note before save.
+- Not yet left the load at delivery with no POD outcome.
+- I’ll upload it later set the load to delivered, stored that reason, and wrote a “POD at delivery” audit row.
+- Load 1006237 financials: all five checklist items Pass.
+- Load 1006233: all five Check. The confirm dialog still had **Yes, Send Load #1006233 to Accounting** enabled. Cancel left the load on operations.
+- QA Bot (viewer) on 1006237: checklist visible, Create invoice and Email invoice disabled, email composer did not open, no send-to-accounting button.
+
+## Screenshots
+
+- `artifacts/driver-delivered-pod-prompt.png` — Delivered sheet, camera/upload and reasons.
+- `artifacts/driver-pod-reason-picker.png` — Other, with the note filled in.
+- `artifacts/office-checklist-pass.png` — invoice checklist, all Pass.
+- `artifacts/office-checklist-warn-send.png` — all Check, send still enabled.
+- `artifacts/office-viewer-checklist.png` — same checklist, write actions disabled.
+
+## Open questions
+
+None. missing_pod applies to every load per JC (2026-10-07).
+
+---
+
 # Live QA leftovers
 
 Branch `cursor/live-qa-leftovers-7a2e` off tip `99bc192` (Office Update 116). Draft only.

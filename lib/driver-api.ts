@@ -852,7 +852,15 @@ export async function handleDriverProgress(
           if (!allowed.includes(progress)) {
             throw new DriverApiHttpError(409, "That status is not the next step.", "CONFLICT");
           }
-          await performDriverProgress({ driver, loadId, progress });
+          const { readPodDeliveryFields } = await import("./pod-delivery");
+          await performDriverProgress({
+            driver,
+            loadId,
+            progress,
+            pod: readPodDeliveryFields({
+              get: (name) => (body as Record<string, unknown>)[name],
+            }),
+          });
         }
         const next = requireAssignedLoad(loadId, driver.id, { allowCancelled: true });
         return { status: 200, body: { load: toLoadSummary(next, driver.id) } };
@@ -878,11 +886,15 @@ export async function handleDriverStopCheck(
     const clientRequestId = readClientRequestId(body.client_request_id);
     return await withIdempotency(request, driver, clientRequestId, async () => {
       return runWithAuditActor({ name: driver.name, kind: "driver" }, async () => {
+        const { readPodDeliveryFields } = await import("./pod-delivery");
         performDriverStopCheck({
           driver,
           loadId,
           stopId,
           kind: String(body.kind ?? "").trim(),
+          pod: readPodDeliveryFields({
+            get: (name) => (body as Record<string, unknown>)[name],
+          }),
         });
         const next = requireAssignedLoad(loadId, driver.id, { allowCancelled: true });
         return { status: 200, body: { load: toLoadSummary(next, driver.id) } };

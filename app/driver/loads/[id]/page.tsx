@@ -206,6 +206,7 @@ export default async function DriverLoadPage({
           current={load.driver_progress}
           closed={isClosedStatus(load.status)}
           stops={stops}
+          hasPod={attachments.some((file) => file.kind === "pod")}
         />
       </div>
 
