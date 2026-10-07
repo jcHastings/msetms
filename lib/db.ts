@@ -190,7 +190,7 @@ export function migrate(db: Database): void {
 
     INSERT OR IGNORE INTO company_profile (
       id, company_name, dispatcher_name, dispatcher_phone, dispatcher_fax, dispatcher_email
-    ) VALUES (1, 'M&S Loads', 'MS Test', '402-302-0097', '', 'ana@msloads.com');
+    ) VALUES (1, 'MS Express', 'MS Test', '402-302-0097', '', 'ana@msloads.com');
 
     CREATE TABLE IF NOT EXISTS reefer_readings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -719,8 +719,8 @@ export function migrate(db: Database): void {
 
   for (const [column, definition] of [
     ["street", "TEXT NOT NULL DEFAULT ''"],
-    ["city", "TEXT NOT NULL DEFAULT ''"],
-    ["state", "TEXT NOT NULL DEFAULT ''"],
+    ["city", "TEXT NOT NULL DEFAULT 'Hastings'"],
+    ["state", "TEXT NOT NULL DEFAULT 'NE'"],
     ["zip", "TEXT NOT NULL DEFAULT ''"],
     ["insurance_provider", "TEXT NOT NULL DEFAULT ''"],
     ["insurance_policy", "TEXT NOT NULL DEFAULT ''"],
@@ -755,17 +755,12 @@ export function migrate(db: Database): void {
     ["workflow_json", "TEXT NOT NULL DEFAULT ''"],
     ["invoice_email_body", "TEXT NOT NULL DEFAULT ''"],
     ["invoice_send_mode", "TEXT NOT NULL DEFAULT 'ask'"],
+    ["ar_email", "TEXT NOT NULL DEFAULT ''"],
+    ["usdot", "TEXT NOT NULL DEFAULT '3062879'"],
+    ["mc", "TEXT NOT NULL DEFAULT '056299'"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
   }
-  db.prepare(
-    `UPDATE company_profile
-     SET street = '600 E 39th St',
-         city = 'Hastings',
-         state = CASE WHEN trim(state) = '' THEN 'NE' ELSE state END,
-         zip = CASE WHEN trim(zip) = '' THEN '68901' ELSE zip END
-     WHERE id = 1 AND trim(street) = '' AND trim(city) = ''`,
-  ).run();
 
   ensureColumn(db, "bills", "qbo_bill_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");

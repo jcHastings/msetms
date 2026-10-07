@@ -18,6 +18,14 @@ export function CompanyProfileForm({
         <input id="company_name" name="company_name" required defaultValue={profile.company_name} />
       </div>
       <div className="field">
+        <label htmlFor="usdot">USDOT</label>
+        <input id="usdot" name="usdot" defaultValue={profile.usdot ?? ""} autoComplete="off" />
+      </div>
+      <div className="field">
+        <label htmlFor="mc">MC</label>
+        <input id="mc" name="mc" defaultValue={profile.mc ?? ""} autoComplete="off" />
+      </div>
+      <div className="field">
         <label htmlFor="dispatcher_name">Dispatcher</label>
         <input id="dispatcher_name" name="dispatcher_name" required defaultValue={profile.dispatcher_name} />
       </div>
@@ -34,8 +42,31 @@ export function CompanyProfileForm({
         <input id="dispatcher_email" name="dispatcher_email" defaultValue={profile.dispatcher_email} />
       </div>
       <div className="field md:col-span-2">
-        <label htmlFor="street">Street</label>
-        <input id="street" name="street" defaultValue={profile.street} />
+        <label htmlFor="ar_email">AR email</label>
+        <input
+          id="ar_email"
+          name="ar_email"
+          type="email"
+          autoComplete="email"
+          defaultValue={profile.ar_email ?? ""}
+          aria-describedby="ar-email-hint"
+        />
+        <p id="ar-email-hint" className="text-xs text-slate-500">
+          Invoice From address. Required before an invoice can be emailed.
+        </p>
+      </div>
+      <div className="field md:col-span-2">
+        <label htmlFor="street">Remit street address</label>
+        <input
+          id="street"
+          name="street"
+          defaultValue={profile.street}
+          autoComplete="street-address"
+          aria-describedby="remit-street-hint"
+        />
+        <p id="remit-street-hint" className="text-xs text-slate-500">
+          Required before an invoice can be emailed. MS Express is in Hastings, NE.
+        </p>
       </div>
       <div className="field">
         <label htmlFor="city">City</label>

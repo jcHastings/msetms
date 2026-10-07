@@ -13,6 +13,9 @@ export function getCompanyProfile(): CompanyProfile {
     city: settings.city,
     state: settings.state,
     zip: settings.zip,
+    ar_email: settings.ar_email,
+    usdot: settings.usdot,
+    mc: settings.mc,
   };
 }
 

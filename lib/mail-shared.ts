@@ -1,8 +1,9 @@
+import { usableArEmail } from "./carrier-identity";
+
 export const MAIL_MISSING = "Add SMTP or SendGrid in .env";
 export const MAIL_FROM_DEFAULT = "dispatch@msloads.com";
 export const MAIL_FROM_NAME = "MS Express TMS";
 export const MAIL_NOREPLY = "noreply@msloads.com";
-export const MAIL_INVOICE_FROM = "ar@msloads.com";
 
 export const LOAD_MAIL_KINDS = ["driver_load", "customer_update", "customer_invoice"] as const;
 export type LoadMailKind = (typeof LOAD_MAIL_KINDS)[number];
@@ -44,6 +45,12 @@ export function isUsableEmail(value: string | null | undefined): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+/** Saved AR email only. Blank when the office has not set one. */
 export function invoiceFromAddress(): string {
-  return MAIL_INVOICE_FROM;
+  // Lazy: db imports dispatcher-password, which imports this module.
+  const { getDb } = require("./db") as typeof import("./db");
+  const row = getDb()
+    .prepare("SELECT ar_email FROM company_profile WHERE id = 1")
+    .get() as { ar_email?: string } | undefined;
+  return usableArEmail(row?.ar_email);
 }

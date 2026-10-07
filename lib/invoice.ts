@@ -13,7 +13,14 @@ import { routeGuideFromLoad } from "./routing-shared";
 import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
 import { resolveCustomerMainPhone } from "./load-contact";
-import { invoiceFromAddress } from "./mail-shared";
+import {
+  invoiceIssuerDocket,
+  invoiceIssuerLegalName,
+  invoiceIssuerProblems,
+  invoiceIssuerWarning,
+  MS_EXPRESS_CARRIER,
+  usableArEmail,
+} from "./carrier-identity";
 
 export type TmsInvoiceLine = {
   name: string;
@@ -65,14 +72,13 @@ export type TmsInvoiceModel = {
   companyDocket?: string;
   stops: TmsInvoiceStop[];
   publicNotes?: string;
+  /** Set when the office must fix the company profile before emailing. */
+  issuerWarning?: string;
 };
 
-/** Paperwork legal name. Settings "M&S Loads" prints as M&S Loads LLC. Other names are unchanged. */
+/** Carrier name on paperwork. M&S Loads is a customer, so it never prints as the issuer. */
 export function paperworkCompanyName(name: string): string {
-  const trimmed = name.trim() || "M&S Loads";
-  if (/\bllc\b/i.test(trimmed)) return trimmed;
-  if (/^m\s*&\s*s\s+loads$/i.test(trimmed)) return "M&S Loads LLC";
-  return trimmed;
+  return invoiceIssuerLegalName(name);
 }
 
 export function isCompanyCustomerName(customerName: string, companyName: string): boolean {
@@ -290,11 +296,16 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     lane: `${load.origin} → ${load.destination}`,
     lines,
     total: lines.reduce((sum, line) => sum + line.amount, 0),
-    companyName: company.company_name,
+    companyName: paperworkCompanyName(company.company_name),
     companyLegalName: paperworkCompanyName(company.company_name),
-    companyAddress: formatCompanyAddress(settings),
-    companyPhone: company.dispatcher_phone,
-    companyEmail: invoiceFromAddress(),
+    companyAddress: formatCompanyAddress({
+      ...settings,
+      street: settings.street.trim(),
+      city: settings.city.trim() || MS_EXPRESS_CARRIER.city,
+      state: settings.state.trim() || MS_EXPRESS_CARRIER.state,
+    }),
+    companyPhone: company.dispatcher_phone.trim() || MS_EXPRESS_CARRIER.phone,
+    companyEmail: usableArEmail(settings.ar_email),
     weight: load.weight != null ? formatWeight(load.weight, settings.weight_unit) : "",
     miles: (() => {
       const total = routeGuideFromLoad(load, { stopCount: listStops(load.id).length }).totalMiles;
@@ -308,9 +319,16 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     terms: customer.terms || "Net 30",
     dueDate: dueDateFromTerms(customer.terms || "Net 30", date),
     dispatcherName: "",
-    companyDocket: "",
+    companyDocket: invoiceIssuerDocket(settings.usdot, settings.mc),
     stops: invoiceStops(load),
     publicNotes: (load.public_notes ?? "").trim(),
+    issuerWarning: invoiceIssuerWarning(
+      invoiceIssuerProblems({
+        company_name: company.company_name,
+        street: settings.street,
+        ar_email: settings.ar_email,
+      }),
+    ),
   };
 }
 
@@ -558,27 +576,28 @@ function drawInvoiceHeader(
 ): number {
   const logoH = drawInvoiceLogo(doc, x, y, [176, 62]);
   let companyY = y + logoH + 8;
-  doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK).text(model.companyLegalName, x, companyY, {
+  const legalName = invoiceIssuerLegalName(model.companyLegalName);
+  const street = settings.street.trim();
+  const city = settings.city.trim() || MS_EXPRESS_CARRIER.city;
+  const state = settings.state.trim() || MS_EXPRESS_CARRIER.state;
+  const email = usableArEmail(model.companyEmail);
+  const docket = model.companyDocket?.trim() || invoiceIssuerDocket();
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK).text(legalName, x, companyY, {
     width: 250,
   });
   companyY += 16;
-  for (const line of addressLines(
-    settings.street,
-    cityStateZipLine(settings.city, settings.state, settings.zip),
-  )) {
+  for (const line of addressLines(street, cityStateZipLine(city, state, settings.zip))) {
     doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK).text(line, x, companyY, { width: 250 });
     companyY += 13;
   }
-  if (model.companyDocket?.trim()) {
-    doc.font("Helvetica").fontSize(9).text(model.companyDocket.trim(), x, companyY, { width: 250 });
-    companyY += 13;
-  }
+  doc.font("Helvetica").fontSize(9).text(docket, x, companyY, { width: 250 });
+  companyY += 13;
   if (model.companyPhone) {
     doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, x, companyY, { width: 250 });
     companyY += 13;
   }
-  if (model.companyEmail) {
-    doc.font("Helvetica").fontSize(9).text(model.companyEmail, x, companyY, { width: 250 });
+  if (email) {
+    doc.font("Helvetica").fontSize(9).text(email, x, companyY, { width: 250 });
     companyY += 13;
   }
 
@@ -708,7 +727,7 @@ function drawPinnedFooter(
   doc.page.margins = { top: 0, bottom: 0, left: 0, right: 0 };
   const top = 748;
   doc.moveTo(x, top).lineTo(x + width, top).strokeColor(INVOICE_INK).lineWidth(0.7).stroke();
-  const remit = `Remit to ${model.companyLegalName} / ${HASTINGS_OFFICE.city}`;
+  const remit = `Remit to ${invoiceIssuerLegalName(model.companyLegalName)} / ${HASTINGS_OFFICE.city}`;
   doc.font("Helvetica").fontSize(8).fillColor(INVOICE_INK);
   doc.text(`Page ${page} of ${pageCount}`, x, top + 10, {
     width: 150,

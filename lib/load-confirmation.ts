@@ -835,7 +835,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const nameWidth = Math.max(120, cardX - left - 10);
   const nameY = 96;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INK);
-  doc.text(model.company.company_name || "M&S Loads", left, nameY, { width: nameWidth, lineBreak: false });
+  doc.text(model.company.company_name || "MS Express", left, nameY, { width: nameWidth, lineBreak: false });
   const address = formatCompanyAddress(getCompanySettings());
   if (address) {
     doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text(address, left, nameY + 16, {

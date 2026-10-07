@@ -1354,7 +1354,8 @@ async function main() {
   assert.doesNotMatch(emailInvoiceUi, /window\.confirm/);
   assert.match(emailInvoiceUi, /anchorId/);
   assert.match(emailInvoiceUi, /id=\{anchorId\}/);
-  assert.match(emailInvoiceUi, /ar@msloads\.com/);
+  assert.doesNotMatch(emailInvoiceUi, /ar@msloads\.com/);
+  assert.match(emailInvoiceUi, /issuerWarning/);
   assert.match(emailInvoiceUi, /sendCustomerInvoiceMailAction/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /invoiceMailTo/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/load-mail.ts"), "utf8"), /resolveInvoiceCustomerEmail/);
@@ -1973,7 +1974,7 @@ async function main() {
   assert.match(envExample, /SMTP_FROM=dispatch@msloads.com/);
   assert.match(envExample, /SMTP_USER=dispatch@msloads.com/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_FROM_DEFAULT = "dispatch@msloads.com"/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /MAIL_INVOICE_FROM = "ar@msloads.com"/);
+  assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /ar@msloads\.com/);
   assert.match(envExample, /SENDGRID_API_KEY=/);
   for (const file of [
     "app/fleet/layout.tsx",
@@ -4583,8 +4584,10 @@ async function main() {
     customerName: "Kayco",
     totalLabel: "$2,200.00",
   });
-  assert.equal(invoiceDraft.from, "ar@msloads.com");
-  assert.equal(invoiceDraft.replyTo, "ar@msloads.com");
+  assert.equal(invoiceDraft.from, "");
+  assert.equal(invoiceDraft.replyTo, "");
+  assert.match(invoiceDraft.text, /MS Express · Accounts Receivable/);
+  assert.doesNotMatch(invoiceDraft.text, /M&S Loads|ar@msloads\.com/);
   assert.match(invoiceDraft.subject, /INV-12345/);
   assert.match(invoiceDraft.subject, /12345/);
   assert.match(invoiceDraft.text, /Invoice INV-12345 for load 12345/);
@@ -4874,18 +4877,18 @@ async function main() {
   await mailer.sendMail(
     {
       to: "ap.mail@customer.example",
-      from: "ar@msloads.com",
+      from: "billing@msexpress.test",
       subject: "Invoice INV-12345",
       text: "Invoice attached.",
-      replyTo: "ar@msloads.com",
+      replyTo: "billing@msexpress.test",
     },
     (async (_url, init) => {
       invoiceSendgridBody = String(init && typeof init === "object" && "body" in init ? init.body : "");
       return new Response(null, { status: 202 });
     }) as typeof fetch,
   );
-  assert.match(invoiceSendgridBody, /"email":"ar@msloads.com"/);
-  assert.match(invoiceSendgridBody, /"reply_to":\{"email":"ar@msloads.com"\}/);
+  assert.match(invoiceSendgridBody, /"email":"billing@msexpress.test"/);
+  assert.match(invoiceSendgridBody, /"reply_to":\{"email":"billing@msexpress.test"\}/);
   assert.doesNotMatch(invoiceSendgridBody, /dispatch@msloads\.com|noreply@msloads\.com/);
   await loadMail.sendCustomerUpdateMail(mailLoadId, async (input) => {
     assert.equal(input.to, "ap.mail@customer.example");
@@ -4911,6 +4914,9 @@ async function main() {
   });
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_update")?.to_email, "ap.mail@customer.example");
   queries.updateLoadStatus(mailLoadId, "delivered");
+  getDb()
+    .prepare("UPDATE company_profile SET street = ?, city = ?, state = ?, ar_email = ? WHERE id = 1")
+    .run("100 Fleet Way", "Hastings", "NE", "billing@msexpress.test");
   let invoiceMailTo = "";
   let invoiceMailFrom = "";
   let invoiceMailReplyTo = "";
@@ -4925,8 +4931,8 @@ async function main() {
     assert.doesNotMatch(input.text, /Do not reply|not monitored/);
   });
   assert.equal(invoiceMailTo, "pat@example.com");
-  assert.equal(invoiceMailFrom, "ar@msloads.com");
-  assert.equal(invoiceMailReplyTo, "ar@msloads.com");
+  assert.equal(invoiceMailFrom, "billing@msexpress.test");
+  assert.equal(invoiceMailReplyTo, "billing@msexpress.test");
   assert.equal(invoiceMailHasPdf, true);
   assert.equal(loadMail.lastLoadMail(mailLoadId, "customer_invoice")?.to_email, "pat@example.com");
   const lumperReceipt = addAttachment({
@@ -8613,7 +8619,7 @@ DISPATCH CONFIRMATION
   const confirmation = await import("../lib/load-confirmation");
   const { getCompanyProfile } = await import("../lib/company");
   const header = getCompanyProfile();
-  assert.equal(header.company_name, "M&S Loads");
+  assert.equal(header.company_name, "MS Express");
   const { companyLogoPath, defaultCompanyLogoPath, getDocumentDefaults, hasCustomCompanyLogo, readDefaultCompanyLogo } =
     await import("../lib/settings");
   assert.equal(getDocumentDefaults("load_confirmation").footer_text, "");
@@ -16605,8 +16611,8 @@ DISPATCH CONFIRMATION
     renderTmsInvoicePdf,
     isCompanyCustomerName,
   } = await import("../lib/invoice");
-  assert.equal(paperworkCompanyName("M&S Loads"), "M&S Loads LLC");
-  assert.equal(paperworkCompanyName("M&S Loads LLC"), "M&S Loads LLC");
+  assert.equal(paperworkCompanyName("M&S Loads"), "MS Express");
+  assert.equal(paperworkCompanyName("M&S Loads LLC"), "MS Express");
   assert.equal(paperworkCompanyName("Other Carrier"), "Other Carrier");
   const invoiceLoadId = queries.findLoadIdByNumber("1005911");
   assert.ok(invoiceLoadId);
@@ -16715,9 +16721,9 @@ DISPATCH CONFIRMATION
     "invoice lines carry the TMS pay category so Map Pay Items applies",
   );
   const tmsInvoiceModel = buildTmsInvoice(queries.getLoad(invoiceLoadId)!);
-  assert.equal(tmsInvoiceModel.companyEmail, "ar@msloads.com");
-  assert.equal(tmsInvoiceModel.companyLegalName, "M&S Loads LLC");
-  assert.match(tmsInvoiceModel.companyLegalName, /LLC/);
+  assert.equal(tmsInvoiceModel.companyEmail, "billing@msexpress.test");
+  assert.equal(tmsInvoiceModel.companyLegalName, "MS Express");
+  assert.doesNotMatch(tmsInvoiceModel.companyLegalName, /M&S Loads/);
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
   assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
   assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
@@ -16775,7 +16781,10 @@ DISPATCH CONFIRMATION
   assert.ok(recoveredConfirm);
   assert.equal(recoveredConfirm.buffer.subarray(0, 4).toString(), "%PDF");
   const invoicePdfText = await extractDocumentText(made.buffer, "application/pdf", "INV-1005911.pdf");
-  assert.match(invoicePdfText, /ar@msloads\.com/);
+  assert.match(invoicePdfText, /billing@msexpress\.test/);
+  assert.doesNotMatch(invoicePdfText, /ar@msloads\.com/);
+  assert.match(invoicePdfText, /USDOT 3062879/);
+  assert.match(invoicePdfText, /MC 056299/);
   assert.doesNotMatch(invoicePdfText, /Linehaul is the customer rate/);
   assert.doesNotMatch(invoicePdfText, /Accessorials are billed separately/);
   assert.doesNotMatch(invoicePdfText, /Payment due per customer terms/);
@@ -16791,7 +16800,8 @@ DISPATCH CONFIRMATION
   assert.match(invoicePdfText, /Primary Contact:/);
   assert.match(invoicePdfText, /Fax:/);
   assert.match(invoicePdfText, /Net 30/);
-  assert.match(invoicePdfText, /Remit to M&S Loads LLC/);
+  assert.match(invoicePdfText, /Remit to MS Express/);
+  assert.doesNotMatch(invoicePdfText, /Remit to M&S|Remit to M & S/);
   assert.match(invoicePdfText, /Qty/);
   assert.doesNotMatch(invoicePdfText, /Subtotal/);
   assert.doesNotMatch(invoicePdfText, /AscendTMS|Powered by|Nanuet|228 East Route|Esti Katz|MC970613/);
@@ -16869,7 +16879,7 @@ DISPATCH CONFIRMATION
   assert.match(onePageText, /Fax:/);
   assert.match(onePageText, /Notes/);
   assert.match(onePageText, /Qty/);
-  assert.match(onePageText, /Remit to M&S Loads LLC \/ Hastings/);
+  assert.match(onePageText, /Remit to MS Express \/ Hastings/);
   assert.doesNotMatch(onePageText, /MS Test \(M&S Loads LLC\)/);
   assert.doesNotMatch(onePageText, /MS Test/);
   const mse1055Invoice = await renderTmsInvoicePdf({
@@ -16927,10 +16937,12 @@ DISPATCH CONFIRMATION
   assert.equal((await PDFDocument.load(mse1055Invoice)).getPageCount(), 1, "MSE-1055 invoice stays on one letter page");
   const mse1055InvoiceText = await extractDocumentText(mse1055Invoice, "application/pdf", "INV-MSE-1055.pdf");
   assert.match(mse1055InvoiceText, /INV-MSE-1055/);
-  assert.match(mse1055InvoiceText, /M&S Loads LLC/);
+  assert.match(mse1055InvoiceText, /MS Express/);
+  assert.match(mse1055InvoiceText, /M\s*&\s*S Loads LLC/);
+  assert.doesNotMatch(mse1055InvoiceText, /Remit to M&S|Remit to M & S/);
   assert.match(mse1055InvoiceText, /600 E 39th/);
   assert.match(mse1055InvoiceText, /402-302-0097/);
-  assert.match(mse1055InvoiceText, /ar@msloads\.com/);
+  assert.doesNotMatch(mse1055InvoiceText, /ar@msloads\.com/);
   assert.match(mse1055InvoiceText, /Primary Contact:\s*JC/);
   assert.match(mse1055InvoiceText, /Fax:/);
   assert.match(mse1055InvoiceText, /Net 30/);
@@ -16943,7 +16955,7 @@ DISPATCH CONFIRMATION
   assert.match(mse1055InvoiceText, /ESSENTIA PROTEIN SOLUTIONS/);
   assert.match(mse1055InvoiceText, /1347 Highway 44/);
   assert.match(mse1055InvoiceText, /Load #MSE-1055/);
-  assert.match(mse1055InvoiceText, /Remit to M&S Loads LLC \/ Hastings/);
+  assert.match(mse1055InvoiceText, /Remit to MS Express \/ Hastings/);
   assert.doesNotMatch(mse1055InvoiceText, /MS Test/);
   assert.doesNotMatch(mse1055InvoiceText, /AscendTMS|Powered by|Nanuet|228 East Route|Esti Katz|MC970613/);
   const freightPdf = await renderTmsInvoicePdf({

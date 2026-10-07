@@ -13,6 +13,7 @@ export function EmailInvoiceButton({
   lastSent,
   extras = [],
   defaultBody = "",
+  issuerWarning = "",
   variant = "button",
   anchorId,
   label = "Email invoice",
@@ -25,6 +26,7 @@ export function EmailInvoiceButton({
   lastSent?: string;
   extras?: InvoiceMailExtraDoc[];
   defaultBody?: string;
+  issuerWarning?: string;
   variant?: "button" | "link";
   anchorId?: string;
   label?: string;
@@ -76,6 +78,10 @@ export function EmailInvoiceButton({
   }
 
   function requestSend() {
+    if (issuerWarning) {
+      setNotice({ ok: false, text: issuerWarning });
+      return;
+    }
     const to = storedTo || typedTo.trim();
     if (!to) {
       setNotice({ ok: false, text: "Enter an email to send this invoice." });
@@ -209,7 +215,7 @@ export function EmailInvoiceButton({
           className={variant === "link" ? "acct-link" : "btn btn-secondary"}
           type="button"
           data-email-invoice=""
-          disabled={pending}
+          disabled={pending || Boolean(issuerWarning)}
           onClick={() => (open ? requestSend() : start())}
         >
           {pending ? "Sending…" : open ? "Send invoice email" : label}
@@ -245,7 +251,7 @@ export function EmailInvoiceButton({
       <ConfirmDialog
         open={confirmOpen}
         title="Email invoice?"
-        body={`Email this invoice${extraNote} to ${to || "the customer"} from ar@msloads.com?`}
+        body={`Email this invoice${extraNote} to ${to || "the customer"}?`}
         confirmLabel="Send email"
         tone="primary"
         busy={pending}
