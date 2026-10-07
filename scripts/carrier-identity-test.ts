@@ -80,6 +80,21 @@ async function main() {
   assert.match(blocked.issuerWarning ?? "", /AR email is blank/);
   assert.doesNotMatch(blocked.companyLegalName, /M&S Loads/);
   await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /cannot be emailed/);
+  const { addAttachment } = await import("../lib/files");
+  addAttachment({
+    loadId,
+    kind: "pod",
+    originalName: "pod.pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const { deliverAutoInvoice } = await import("../lib/auto-invoice");
+  const skippedAuto = await deliverAutoInvoice(loadId, async () => {
+    throw new Error("auto invoice must not send");
+  });
+  assert.equal(skippedAuto.sent, false);
+  assert.match(skippedAuto.skipped, /cannot be emailed/);
 
   const blockedPdf = await renderTmsInvoicePdf(blocked);
   const blockedText = String((await extractText(new Uint8Array(blockedPdf), { mergePages: true })).text ?? "");

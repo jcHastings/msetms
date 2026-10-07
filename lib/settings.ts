@@ -314,7 +314,7 @@ function patchSettings(patch: Partial<CompanySettings>): CompanySettings {
 
 export function updateCompanyContact(input: CompanyProfile): CompanySettings {
   const current = getCompanySettings();
-  const arEmail = input.ar_email !== undefined ? input.ar_email.trim() : current.ar_email;
+  const arEmail = input.ar_email !== undefined ? input.ar_email.trim() : String(current.ar_email ?? "");
   if (/^ar@msloads\.com$/i.test(arEmail)) {
     throw new Error("AR email cannot be ar@msloads.com. Leave it blank until MS Express has an accounts receivable address.");
   }

@@ -3181,6 +3181,11 @@ async function main() {
   assert.equal(queries.getLoad(invoiceAskLoadId)?.status, "delivered");
   assert.equal(queries.getLoad(invoiceAskLoadId)?.tms_invoice_number ?? "", "");
   assert.equal(askSent, false, "driver progress does not send while invoice mode is ask");
+  getDb()
+    .prepare(
+      "UPDATE company_profile SET company_name = ?, street = ?, city = ?, state = ?, ar_email = ? WHERE id = 1",
+    )
+    .run("MS Express", "100 Fleet Way", "Hastings", "NE", "billing@msexpress.test");
   let confirmSends = 0;
   const invoiceConfirmed = await askGate.deliverAutoInvoice(invoiceAskLoadId, async () => {
     confirmSends += 1;
@@ -4584,8 +4589,8 @@ async function main() {
     customerName: "Kayco",
     totalLabel: "$2,200.00",
   });
-  assert.equal(invoiceDraft.from, "");
-  assert.equal(invoiceDraft.replyTo, "");
+  assert.equal(invoiceDraft.from, "billing@msexpress.test");
+  assert.equal(invoiceDraft.replyTo, "billing@msexpress.test");
   assert.match(invoiceDraft.text, /MS Express · Accounts Receivable/);
   assert.doesNotMatch(invoiceDraft.text, /M&S Loads|ar@msloads\.com/);
   assert.match(invoiceDraft.subject, /INV-12345/);
@@ -15382,6 +15387,10 @@ DISPATCH CONFIRMATION
     globalThis.fetch = (async () => new Response("unauthorized", { status: 401 })) as typeof fetch;
     try {
       const beforeFail = queries.getLoad(loadId);
+      assert.ok(beforeFail?.customer_id);
+      getDb()
+        .prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped' WHERE id = ?")
+        .run("58", beforeFail.customer_id);
       await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId, { confirmResend: true }), /401/);
       const afterFail = queries.getLoad(loadId);
       assert.equal(afterFail?.qbo_invoice_id, beforeFail?.qbo_invoice_id, "401 must not mark the load sent");
@@ -15657,7 +15666,7 @@ DISPATCH CONFIRMATION
     ),
   );
   settings.updateCompanyContact({
-    company_name: "M&S Loads",
+    company_name: "MS Express",
     dispatcher_name: "MS Test",
     dispatcher_phone: "402-302-0097",
     dispatcher_fax: "",
