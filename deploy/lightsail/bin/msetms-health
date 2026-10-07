@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Local health check: /login 200 and / 307 -> /login. Optional --public URL check.
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+health_ok || exit 1
+if [[ "${1:-}" == "--public" ]]; then
+  url="${2:-https://msetms.mandsloads.com/login}"
+  code="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$url" || true)"
+  log "public $url -> $code"; [[ "$code" == "200" ]] || exit 1
+fi
+log "healthy"

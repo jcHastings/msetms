@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Every 5 min: app + Litestream + tunnel running, local health OK, disk < 85%.
+# Pings HC_HEARTBEAT_URL on success, /fail otherwise.
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+need_root
+load_env_file "$BACKUP_ENV"
+problems=()
+for u in msetms.service msetms-litestream.service cloudflared.service; do
+  systemctl is-active --quiet "$u" || problems+=("$u not active")
+done
+health_ok >/dev/null 2>&1 || problems+=("local health failed")
+use="$(df --output=pcent "$APP_ROOT" | tail -1 | tr -dc '0-9')"
+(( use < 85 )) || problems+=("disk ${use}%")
+if ((${#problems[@]})); then log "heartbeat FAIL: ${problems[*]}"; hc_ping "${HC_HEARTBEAT_URL:-}" /fail; exit 1; fi
+hc_ping "${HC_HEARTBEAT_URL:-}"

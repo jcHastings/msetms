@@ -1,0 +1,10 @@
+[Unit]
+Description=MS Express TMS: Nightly encrypted offsite snapshot (DB + uploads) to R2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/msetms-backup-nightly
+Nice=10
+IOSchedulingClass=idle

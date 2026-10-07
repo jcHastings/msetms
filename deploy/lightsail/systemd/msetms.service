@@ -1,0 +1,37 @@
+[Unit]
+Description=MS Express TMS (Next.js standalone, node:sqlite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=msetms
+Group=msetms
+# `current` -> releases/<sha>; releases/<sha>/data -> /srv/msetms/shared/data
+WorkingDirectory=/srv/msetms/current
+# Secrets (names in templates/msetms.env.template). Root-only 0600; read by systemd before dropping to msetms.
+EnvironmentFile=/etc/msetms/msetms.env
+Environment=NODE_ENV=production
+Environment=TZ=America/New_York
+Environment=TMS_SKIP_SEED=1
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=TMS_DATA_DIR=/srv/msetms/shared/data
+Environment=TMS_DB_PATH=/srv/msetms/shared/data/tms.db
+ExecStart=/usr/local/bin/node scripts/start-standalone.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+LimitNOFILE=65536
+MemoryHigh=2600M
+MemoryMax=3200M
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

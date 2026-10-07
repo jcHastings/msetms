@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Print loads/drivers/dispatchers counts for the live DB (read-only).
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+need_root
+db_counts "${1:-$DB}"

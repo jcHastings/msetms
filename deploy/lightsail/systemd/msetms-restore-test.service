@@ -1,0 +1,10 @@
+[Unit]
+Description=MS Express TMS: Weekly Litestream restore drill
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/msetms-restore-test
+Nice=10
+IOSchedulingClass=idle

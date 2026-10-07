@@ -1,0 +1,28 @@
+# /etc/msetms/litestream.yml (root:msetms 0640). No secrets in this file: ${VARS}
+# are expanded by Litestream from /etc/msetms/backup.env (systemd EnvironmentFile).
+# Docs: https://litestream.io/reference/config/  https://litestream.io/guides/s3-compatible/  https://litestream.io/tips/
+# The app sets WAL + busy_timeout=5000 and never runs wal_checkpoint itself, so
+# Litestream owns checkpointing (PASSIVE every 1m; TRUNCATE only past ~500 MB WAL).
+# Note: Litestream v0.5 has no client-side encryption; R2 encrypts at rest. The
+# nightly archive (msetms-backup-nightly) is age-encrypted on top of that.
+
+# Health-gated dead-man's switch: pings only while every DB synced recently.
+heartbeat-url: ${HC_LITESTREAM_URL}
+heartbeat-interval: 5m
+
+snapshot:
+  interval: 24h
+  retention: 168h   # 7 days of point-in-time restore
+
+dbs:
+  - path: /srv/msetms/shared/data/tms.db
+    busy-timeout: 5s
+    replica:
+      type: s3
+      bucket: ${R2_BUCKET}
+      path: litestream/tms.db
+      endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      region: auto
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}
+      sync-interval: 10s
