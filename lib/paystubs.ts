@@ -378,7 +378,7 @@ function insertPaystub(input: {
 
 function writePdf(buffer: Buffer): string {
   const storedName = `${randomUUID()}.pdf`;
-  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(paystubRoot("files"), storedName), buffer);
+  fs.writeFileSync(path.join(/*turbopackIgnore: true*/ paystubRoot("files"), storedName), buffer);
   return storedName;
 }
 
@@ -449,7 +449,7 @@ export async function ingestUploadedPaystubs(input: {
     if (input.summary) {
       const ext = input.summary.name.toLowerCase().endsWith(".csv") ? "csv" : "pdf";
       const storedName = `${randomUUID()}.${ext}`;
-      fs.writeFileSync(/*turbopackIgnore: true*/ path.join(paystubRoot("summaries"), storedName), input.summary.buffer);
+      fs.writeFileSync(path.join(/*turbopackIgnore: true*/ paystubRoot("summaries"), storedName), input.summary.buffer);
       summaryMeta = {
         originalName: sanitizeName(input.summary.name || `summary.${ext}`),
         storedName,
@@ -555,7 +555,7 @@ export async function previewPaystubUpload(input: {
       batchDriverDate,
     });
     const storedName = `${randomUUID()}.pdf`;
-    fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), file.buffer);
+    fs.writeFileSync(path.join(/*turbopackIgnore: true*/ dir, storedName), file.buffer);
     const key = hash || randomUUID();
     manifestRows.push({ key, fileName: file.name || "paystub.pdf", storedName });
     rows.push({
@@ -577,7 +577,7 @@ export async function previewPaystubUpload(input: {
   if (input.summary) {
     const ext = input.summary.name.toLowerCase().endsWith(".csv") ? "csv" : "pdf";
     const storedName = `${randomUUID()}.${ext}`;
-    fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.summary.buffer);
+    fs.writeFileSync(path.join(/*turbopackIgnore: true*/ dir, storedName), input.summary.buffer);
     summary = {
       originalName: input.summary.name || `summary.${ext}`,
       storedName,
@@ -586,7 +586,7 @@ export async function previewPaystubUpload(input: {
     };
   }
   const manifest: PreviewManifest = { id: previewId, createdAt: new Date().toISOString(), summary, rows: manifestRows };
-  fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, "manifest.json"), JSON.stringify(manifest));
+  fs.writeFileSync(path.join(/*turbopackIgnore: true*/ dir, "manifest.json"), JSON.stringify(manifest));
   return { previewId, summaryName: summary?.originalName ?? "", rows };
 }
 
@@ -634,7 +634,7 @@ export async function commitPaystubPreview(input: {
       results.push({ file: row.fileName, status: "needs_review", reason: "Skipped." });
       continue;
     }
-    const buffer = fs.readFileSync(/*turbopackIgnore: true*/ path.join(loaded.dir, row.storedName));
+    const buffer = fs.readFileSync(path.join(/*turbopackIgnore: true*/ loaded.dir, row.storedName));
     const { decision, hash } = await decisionForBuffer({
       buffer,
       name: row.fileName,
@@ -656,7 +656,7 @@ export async function commitPaystubPreview(input: {
     let summary = loaded.manifest.summary;
     if (summary) {
       const from = path.join(/*turbopackIgnore: true*/ loaded.dir, summary.storedName);
-      const dest = path.join(paystubRoot("summaries"), summary.storedName);
+      const dest = path.join(/*turbopackIgnore: true*/ paystubRoot("summaries"), summary.storedName);
       fs.copyFileSync(/*turbopackIgnore: true*/ from, /*turbopackIgnore: true*/ dest);
     }
     runId = createRun(input.uploadedBy, "office", summary, now);
@@ -679,7 +679,7 @@ export async function commitPaystubPreview(input: {
   if (loaded.manifest.rows.length === 0) {
     fs.rmSync(/*turbopackIgnore: true*/ loaded.dir, { recursive: true, force: true });
   } else {
-    fs.writeFileSync(/*turbopackIgnore: true*/ path.join(loaded.dir, "manifest.json"), JSON.stringify(loaded.manifest));
+    fs.writeFileSync(path.join(/*turbopackIgnore: true*/ loaded.dir, "manifest.json"), JSON.stringify(loaded.manifest));
   }
   return { ok: true, runId, saved: pending.length, results };
 }
