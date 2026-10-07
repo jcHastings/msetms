@@ -9,6 +9,7 @@ import {
   markReceivablePaidAction,
   returnLoadToOperationsFormAction,
 } from "@/lib/dispatcher-actions";
+import type { InvoiceReadyChecklistModel } from "@/lib/invoice-ready";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
 
 type InvoiceActionRow = {
@@ -21,6 +22,7 @@ type InvoiceActionRow = {
   lastInvoiceSent: string;
   extras: InvoiceMailExtraDoc[];
   invoiceEmailBody: string;
+  checklist: InvoiceReadyChecklistModel | null;
 };
 
 type InvoiceIntent = "email" | "qbo" | "pay" | "return";
@@ -61,6 +63,7 @@ export function InvoiceCollapsedActions({ row }: { row: InvoiceActionRow }) {
           lastSent={row.lastInvoiceSent}
           extras={row.extras}
           defaultBody={row.invoiceEmailBody}
+          checklist={row.checklist}
           variant="link"
           label="Email invoice..."
           autoOpen
@@ -123,6 +126,7 @@ export function InvoiceSendPostGroup({ row }: { row: InvoiceActionRow }) {
         lastSent={row.lastInvoiceSent}
         extras={row.extras}
         defaultBody={row.invoiceEmailBody}
+        checklist={row.checklist}
         variant="link"
         label="Email invoice..."
       />

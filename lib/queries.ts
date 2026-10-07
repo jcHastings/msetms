@@ -138,6 +138,11 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
   if (!row) return null;
   return {
     ...row,
+    pod_outcome: row.pod_outcome || "",
+    pod_reason: row.pod_reason || "",
+    pod_reason_note: row.pod_reason_note || "",
+    pod_recorded_at: row.pod_recorded_at || "",
+    rate_con_amount: row.rate_con_amount ?? null,
     accounting_desk: row.accounting_desk || "operations",
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
@@ -2707,7 +2712,11 @@ export function cloneLoad(loadId: number): number {
     truck_id: null,
     driver_id: null,
   });
-  getDb().prepare("UPDATE loads SET cloned_from_id = ? WHERE id = ?").run(loadId, id);
+  getDb().prepare("UPDATE loads SET cloned_from_id = ?, rate_con_amount = ? WHERE id = ?").run(
+    loadId,
+    load.rate_con_amount ?? null,
+    id,
+  );
   recordLoadAudit({
     loadId: id,
     action: "clone",

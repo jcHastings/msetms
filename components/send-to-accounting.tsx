@@ -10,6 +10,8 @@ import {
   sendToAccountingAction,
 } from "@/lib/dispatcher-actions";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
+import { InvoiceReadyChecklist } from "@/components/invoice-ready-checklist";
+import type { InvoiceReadyChecklistModel } from "@/lib/invoice-ready";
 import { isBillableStatus } from "@/lib/types";
 
 export const ACCOUNTING_MANAGEMENT_HREF = "/accounting/invoices";
@@ -31,6 +33,7 @@ export function SendToAccountingControls({
   canSend,
   canReturn,
   variant = "button",
+  checklist = null,
 }: {
   loadId: number;
   loadNumber: string;
@@ -39,6 +42,7 @@ export function SendToAccountingControls({
   canSend: boolean;
   canReturn: boolean;
   variant?: "button" | "menu" | "header";
+  checklist?: InvoiceReadyChecklistModel | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -196,6 +200,11 @@ export function SendToAccountingControls({
           invoicing and billing, leaves Active loads, and shows in Accounting Management. To undo
           later, use Send back to Load Management from Admin / Financials.
         </p>
+        {checklist ? (
+          <div className="mt-3">
+            <InvoiceReadyChecklist checklist={checklist} />
+          </div>
+        ) : null}
         {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)} disabled={pending}>
