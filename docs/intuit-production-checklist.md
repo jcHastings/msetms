@@ -42,8 +42,9 @@ This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.
 | Termination. | Same | Terms `#termination` | Covered |
 | Governing law and venue in Nebraska. | Same | Terms `#law` | Covered |
 | Canonical link on each page, a visible link to the other page, and links from the login footer. | So the URLs entered in Intuit are the public pages, and a signed-out user can open them from sign-in. | `alternates.canonical` on each page. Footer of `components/legal-document.tsx`. Login footer in `components/login-canvas.tsx`. | Covered |
-| App Store / marketplace listing requirements, if the app is published. Publishing requires the valid EULA and privacy URLs above. Listing also asks for marketing assets (name, description, screenshots, pricing, support contact). Those are not part of these two pages. The official listing articles did not return body text on October 7, 2026. | https://developer.intuit.com/app/developer/qbo/docs/go-live/publish-app/app-store-requirements and https://developer.intuit.com/app/developer/qbo/docs/go-live/list-on-the-app-store and https://developer.intuit.com/app/developer/qbo/docs/go-live/publish-app | Privacy and terms URLs are ready if JC lists the app. Marketing assets are not in this change. | See the question below |
-| Security questionnaire items that are portal answers, not page text: whether client id and secret are hardcoded, multi-factor authentication, captcha, and whether the company has had a notifiable breach. | https://docs.codat.io/integrations/accounting/quickbooksonline/qbo-app-assessment-questionnaire (Security section) | Not stated on the privacy page, on purpose. The page does say who can see QuickBooks data (`#no-sale`, `#storage-and-security`). | Breach history is the question below. Do not invent an MFA or breach claim. |
+| App Store / marketplace listing (name, description, screenshots, pricing, support contact). | JC, October 7, 2026: the app stays private to MS Express and will not be listed on the QuickBooks App Store. What a listing would have required: https://developer.intuit.com/app/developer/qbo/docs/go-live/publish-app/app-store-requirements and https://developer.intuit.com/app/developer/qbo/docs/go-live/list-on-the-app-store and https://developer.intuit.com/app/developer/qbo/docs/go-live/publish-app | Not a page. Production settings still get the real privacy and terms URLs, which Intuit asks for even on an internal app. | N/A, private app |
+| Notifiable security breach. | JC, October 7, 2026: MS Express has never had a breach that required notifying customers or any agency. Questionnaire security section: https://docs.codat.io/integrations/accounting/quickbooksonline/qbo-app-assessment-questionnaire | Portal answer, not page text. | Done |
+| Other security questionnaire items that are portal answers, not page text: whether client id and secret are hardcoded, multi-factor authentication, and captcha. | https://docs.codat.io/integrations/accounting/quickbooksonline/qbo-app-assessment-questionnaire (Security section) | Not stated on the privacy page, on purpose. The page does say who can see QuickBooks data (`#no-sale`, `#storage-and-security`). | Portal answers. Do not invent an MFA or captcha claim. |
 
 ## URLs to enter in Intuit
 
@@ -58,8 +59,6 @@ This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.
 
 The in-app buttons that revoke the token are Settings → QuickBooks (`/settings/quickbooks`) and Accounting → QuickBooks (`/accounting/quickbooks`). Both require sign-in, so they are the product controls, not the public URL to paste into Intuit’s Disconnect URL field.
 
-## Questions only JC can answer
+## Open questions
 
-Will this QuickBooks app stay private to MS Express, or will it be listed on the QuickBooks App Store?
-
-Has MS Express had a security breach that required notice to customers or a government agency?
+None. JC answered the remaining Intuit questions on October 7, 2026. The app stays private to MS Express and will not be listed on the QuickBooks App Store. MS Express has never had a breach that required notifying customers or any agency. Both answers are in the rows above.
