@@ -63,9 +63,30 @@ export function saveOrphanFuelReceiptFile(input: {
   buffer: Buffer;
   mimeType: string;
 }): { storedName: string; originalName: string; mimeType: string } {
+  return saveOwnedUpload("fuel-receipts", input);
+}
+
+/** Driver-owned reimbursement photo. Same photo/PDF checks as other uploads. */
+export function saveReimbursementReceiptFile(input: {
+  originalName: string;
+  buffer: Buffer;
+  mimeType: string;
+}): { storedName: string; originalName: string; mimeType: string } {
+  return saveOwnedUpload("reimbursements", input);
+}
+
+export function reimbursementReceiptPath(storedName: string): string {
+  const safe = path.basename(storedName);
+  return path.join(/*turbopackIgnore: true*/ getDataDir(), "uploads", "reimbursements", safe);
+}
+
+function saveOwnedUpload(
+  folder: string,
+  input: { originalName: string; buffer: Buffer; mimeType: string },
+): { storedName: string; originalName: string; mimeType: string } {
   const originalName = sanitizeName(input.originalName || "receipt.bin");
   const storedName = `${randomUUID()}-${originalName}`;
-  const dir = uploadsDir("fuel-receipts");
+  const dir = uploadsDir(folder);
   fs.writeFileSync(/*turbopackIgnore: true*/ path.join(dir, storedName), input.buffer);
   return {
     storedName,

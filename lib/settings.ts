@@ -178,6 +178,23 @@ const SETTINGS_COLUMNS = [
   "require_dispatcher_2fa",
 ] as const;
 
+export function getCarrierAuthority(): { usdot: string; mc_number: string } {
+  const row = getDb().prepare("SELECT usdot, mc_number FROM company_profile WHERE id = 1").get() as
+    | { usdot?: string; mc_number?: string }
+    | undefined;
+  return {
+    usdot: String(row?.usdot ?? "").trim().slice(0, 32),
+    mc_number: String(row?.mc_number ?? "").trim().slice(0, 32),
+  };
+}
+
+export function updateCarrierAuthority(input: { usdot: string; mc_number: string }): { usdot: string; mc_number: string } {
+  const usdot = String(input.usdot ?? "").trim().replace(/\s+/g, " ").slice(0, 32);
+  const mcNumber = String(input.mc_number ?? "").trim().replace(/\s+/g, " ").slice(0, 32);
+  getDb().prepare("UPDATE company_profile SET usdot = ?, mc_number = ? WHERE id = 1").run(usdot, mcNumber);
+  return { usdot, mc_number: mcNumber };
+}
+
 export function getInvoiceEmailBody(): string {
   const row = getDb()
     .prepare("SELECT invoice_email_body FROM company_profile WHERE id = 1")
