@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default function ReimbursementsPage() {
   return (
     <>
-      <PageHeader dense title="Reimbursements" subtitle="Review driver receipt submissions. Approving adds them to a settlement." />
+      <PageHeader dense title="Reimbursements" />
       <AccountingHub tab="reimbursements" />
     </>
   );

@@ -6,7 +6,6 @@ import { SettlementDocument } from "@/components/settlement-document";
 import { PageHeader } from "@/components/page-header";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { formatMdYDisplay } from "@/lib/format";
 import { normalizePayWeek } from "@/lib/pay-week";
 import { canWrite } from "@/lib/settings-shared";
 import { buildSettlement } from "@/lib/settlement-statement";
@@ -45,7 +44,6 @@ export default async function SettlementDetailPage({
       <PageHeader
         dense
         title={`${statement.driverName}`}
-        subtitle={`${formatMdYDisplay(statement.weekStart)} – ${formatMdYDisplay(statement.weekEnd)}`}
         actions={
           <div className="no-print flex flex-wrap gap-2" data-view-only-allow="">
             <PrintStatementButton />

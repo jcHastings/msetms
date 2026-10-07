@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { FormBanner } from "@/components/form-banner";
 import { submitReimbursementAction } from "@/lib/driver-actions";
-import { REIMBURSEMENT_CATEGORIES } from "@/lib/reimbursements";
+import { REIMBURSEMENT_CATEGORIES } from "@/lib/reimbursement-shared";
 
 export function ReimbursementForm({
   loads,
