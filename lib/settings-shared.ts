@@ -107,11 +107,6 @@ export const SETTINGS_SECTIONS = [
         hint: "Connect QuickBooks",
       },
       {
-        href: "/settings/gusto",
-        label: "Gusto",
-        hint: "Connect payroll and match employees to drivers",
-      },
-      {
         href: "/settings/integrations",
         label: "Samsara, Orbcomm, QuickBooks, tracking",
         hint: "Samsara, Orbcomm, and QuickBooks",
@@ -348,14 +343,14 @@ export function canConnectQuickbooks(role: string): boolean {
   return isAdminRole(role);
 }
 
-/** Administrator (and manager, which this app treats as admin) can connect Gusto. */
-export function canConnectGusto(role: string): boolean {
-  return isAdminRole(role);
+/** Administrator, Standard, and Accounting can upload paystubs. */
+export function canUploadPaystubs(role: string): boolean {
+  return isAdminRole(role) || isStandardRole(role) || isAccountingRole(role);
 }
 
-/** Viewer can open the Gusto screens with controls disabled. Writes stay blocked. */
-export function canViewGusto(role: string): boolean {
-  return isAdminRole(role) || isViewerRole(role);
+/** Viewer and legacy read-only can open the screen. Writes stay blocked. */
+export function canViewPaystubs(role: string): boolean {
+  return canUploadPaystubs(role) || isViewerRole(role) || role === "read_only";
 }
 
 export function canEditLoads(role: string): boolean {
@@ -453,7 +448,6 @@ export function canLogCheckCall(role: string): boolean {
  */
 function viewerCanSeeNavHref(href: string): boolean {
   if (href === "/settings/security") return true;
-  if (href === "/settings/gusto" || href.startsWith("/settings/gusto/")) return true;
   if (href === "/settings" || href.startsWith("/settings/") || href === "/users" || href.startsWith("/users/")) {
     return false;
   }
@@ -482,7 +476,7 @@ export function canSeeNavHref(role: string, href: string): boolean {
   if (href === "/users") return canManageUsers(role);
   if (href === "/claims") return canWriteDesk(role);
   if (href === "/reports" || href.startsWith("/reports/")) return canViewReports(role);
-  if (href === "/settings/gusto" || href.startsWith("/settings/gusto/")) return canViewGusto(role);
+  if (href === "/paystubs" || href.startsWith("/paystubs/")) return canViewPaystubs(role);
   if (href === "/settings" || href.startsWith("/settings/")) return canEditSettings(role) || href === "/settings/security";
   return isAdminRole(role);
 }

@@ -1,5 +1,6 @@
 import { getSignedInDriver } from "@/lib/driver-session";
-import { fetchGustoPaystubPdf, getGustoPayLine, getGustoPublicStatus } from "@/lib/integrations/gusto";
+import { getPaystubRow, readPaystubPdf } from "@/lib/paystubs";
+import { sanitizeName } from "@/lib/files";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,31 +11,21 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const lineId = Number(id);
   if (!lineId) return new Response("Paystub not found.", { status: 404 });
-  const line = getGustoPayLine(lineId);
+  const line = getPaystubRow(lineId);
   if (!line) return new Response("Paystub not found.", { status: 404 });
-  if (line.driver_id !== driver.id) {
+  if (line.driver_id !== driver.id || line.status !== "stored") {
     return new Response("You can only open your own paystubs.", { status: 403 });
   }
-  if (line.source !== "employee_payroll") return new Response("Paystub not found.", { status: 404 });
-  if (!getGustoPublicStatus().connected) {
-    return new Response("Gusto is not connected.", { status: 404 });
-  }
-  try {
-    const pdf = await fetchGustoPaystubPdf({
-      payrollId: line.gusto_external_id,
-      employeeUuid: line.gusto_person_uuid,
-    });
-    const stamp = line.check_date || String(line.id);
-    return new Response(Buffer.from(pdf), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="paystub-${stamp}.pdf"`,
-        "Cache-Control": "private, no-store",
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Gusto paystub request failed.";
-    return new Response(message, { status: 502, headers: { "Content-Type": "text/plain; charset=utf-8" } });
-  }
+  const pdf = readPaystubPdf(line.stored_name);
+  if (!pdf) return new Response("Paystub not found.", { status: 404 });
+  const stamp = line.pay_date || String(line.id);
+  const filename = sanitizeName(line.original_name || `paystub-${stamp}.pdf`);
+  return new Response(new Uint8Array(pdf), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
 }
