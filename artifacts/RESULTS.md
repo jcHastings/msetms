@@ -1,87 +1,163 @@
-# Live QA leftovers
+# Gusto paystubs
 
-Branch `cursor/live-qa-leftovers-7a2e` off tip `99bc192` (Office Update 116). Draft only.
+Branch `cursor/gusto-paystubs-c1fe` off `baaeee20` (draft PR #117, `cursor/live-qa-leftovers-7a2e`). Draft only. No live Gusto call. No credentials in the repo.
 
-Measured on a copy of the live SQLite snapshot (272 loads, 10 drivers, 7 users). The copy is not committed. No Samsara token was set on this machine, so engine-hour calls return immediately unless a test forces a hang.
+## Paystub PDF needs Embedded approval
 
-## Fuel speed
+**A paystub PDF is not available on an App Integration.** Gusto’s comparison table marks “Retrieve a Paystub/Tax Form (PDF)” as unavailable for App Integrations and available for Gusto Embedded.
 
-**Root cause (code).** Two layers.
+https://docs.gusto.com/app-integrations/docs/app-integrations-vs-embedded-payroll
 
-1. `loadFuelWeekView` called `localWeekRange` for every fuel row on every week scan. Each call built several `Intl.DateTimeFormat` objects. On this copy that was most of the page: the before profile spent **6543 ms** inside the week view, **7783 ms** for the whole fuel data path (rematch, week view, closeout, mpg, idle, audit).
-2. `hydrateSamsaraEngineHourWindow` checked its budget only between trucks. Each history request used a **15s** abort that ignored the budget, and the page also waited up to 1.5s on a Samsara fleet call whose result was thrown away. That matches the re-walk **~14.9s** (week math plus one hung history call) better than the seeded-data ~5s claim.
+The PDF call itself is published only under Embedded, scope `pay_stubs:read`, and the OpenAPI marks the operation `embedded`:
 
-**Fix.** Memoize `localWeekRange` by week start. Pass the budget abort into the history fetch. Drop the unused fleet wait.
+`GET https://api.gusto-demo.com/v1/payrolls/{payroll_id}/employees/{employee_id}/pay_stub`
 
-**Timings (copy of the live DB, no token).**
+https://docs.gusto.com/embedded-payroll/reference/get-v1-payrolls-payroll_uuid-employees-employee_uuid-pay_stub
 
-| Path | Before | After |
-| --- | --- | --- |
-| Data path, cold (`tsx` script, same steps as the page) | 7783 ms (week view 6543 ms) | 1037 ms |
-| Week view only, warm | — | 183 ms |
-| `GET /fuel` on the dev server, first hit | — | 4.86 s (includes compile) |
-| `GET /fuel` on the dev server, second hit | — | 2.92 s |
+The response is `application/pdf`. A list of paystub links is the same restriction: https://docs.gusto.com/embedded-payroll/reference/get-v1-employees-employee_uuid-pay_stubs
 
-Smoke covers a hung history call: with a 80 ms budget the hydrate returns in under 1s and fetches nothing. On a live host with a token, a stuck vehicle is now cut off at the 1200 ms page budget instead of 15s.
+This build still proxies that GET through the server. Until Embedded access is approved, Download returns an empty result and the office card says so. Weekly gross and net do not need that PDF. They come from processed payrolls, which App Integrations can retrieve.
 
-## Viewer financials lock
+## Integration type
 
-**Root cause (code).** `ViewOnlyGuard` set `disabled` in a client effect. Server HTML and the next React render both painted the rate input and Save as enabled. The server already rejected the write.
+msetms should use an **App Integration with company-admin OAuth**, not Embedded. MS Express already runs payroll in Gusto. This screen only reads it. Embedded means the product runs payroll itself and the employee never uses Gusto’s app. https://docs.gusto.com/app-integrations/docs/app-integrations-vs-embedded-payroll
 
-**Fix.** The financials form takes `readOnly` from the role. The customer rate (and the other money inputs) render `disabled`, `aria-disabled`, and `title="View-only access"`. Save is omitted. Create invoice is disabled. Disabled fields use a gray background so the lock is visible. `requireWriteRole` is unchanged.
+**Partner approval, review, and production access are required. A fee is not published.**
 
-**Verified.** Signed in as QA Bot (viewer) on a copy of the live DB, `GET /loads/500?tab=financials` (MSE-1071):
+- The API is restricted to App Integration and Embedded partners. A Gusto customer connecting their own company systems directly is listed as **not currently supported**. Gusto points that case at the Gusto CLI or Gusto MCP. https://docs.gusto.com/app-integrations/docs/introduction
+- Production keys require an approved **Production Pre-Approval and Security Review**. Gusto says this is not a formality and not every application is approved. Apply from the introduction page (“Apply for Production Pre-Approval”) and from the comparison page (“To apply for an App Integration”).
+- After pre-approval, demo keys come from an app in the Developer Portal (https://dev.gusto.com) once a redirect URI is set. QA uses the Partner Checklist, sent to developer@gusto.com. Production keys are issued after that review.
+- Scopes are assigned during review, tested in demo, and enforced in production. Extra scopes go through developer@gusto.com. https://docs.gusto.com/app-integrations/docs/scopes
+- No App Integration fee is stated on those pages. Embedded is a separate partnership application on the same comparison page. Any Embedded commercial fee is not published there.
 
-- `#rate` is `disabled`, title `View-only access`
-- no Save button
-- Create invoice is `disabled`
-- the note "View-only. You cannot change this rate." is in the document
+## OAuth, refresh, and hosts
 
-Screenshot: `viewer-financials.png`.
+https://docs.gusto.com/app-integrations/docs/oauth2
 
-## Desk and on-time vs missing arrivals
+https://docs.gusto.com/app-integrations/docs/authentication
 
-**Root cause (code).** On-time treated `updated_at` against `delivery_end + 30 min`. Imported completed loads were touched recently and their windows are in the past, so almost every one looked late. SQL on the snapshot matched the reports screen exactly: **1 on time / 263 late** of 264 delivered+completed loads. Desk "Late to pickup" did the same kind of thing for active loads: a blank `driver_progress` plus a past pickup window was late, even when the stops already had on-time arrivals. MSE-1071 is `at_delivery`, pickup arrived `2026-09-20T14:49` before `18:00`, delivery arrived `2026-09-23T13:03` before `18:00`, and `driver_progress` is blank. That is why Desk said Running late and the board, which never read that signal, showed no badge.
+- Authorize: `GET {base}/oauth/authorize` with `client_id`, `redirect_uri`, `response_type=code`, and `state`. The code expires in 10 minutes. Only a primary admin or a full-access admin can approve. Since API version `v2023-05-01`, one token is one company.
+- Exchange: `POST {base}/oauth/token` JSON, `grant_type=authorization_code`, plus `client_id`, `client_secret`, `redirect_uri`, and `code`. Response: `access_token`, `token_type` bearer, `expires_in` 7200, `refresh_token`.
+- Refresh: same URL, `grant_type=refresh_token`. The refresh token works once. The previous refresh token is revoked when the new access token is first used.
+- Demo base: `https://api.gusto-demo.com`. Production base: `https://api.gusto.com`.
+- Changing a **production** redirect URI is an email to developer@gusto.com. Demo redirects can be edited in the Developer Portal.
 
-**Fix.** A load is late only when a pickup or delivery stop has a non-empty `arrived_at` after that window. A blank arrival is left out, not marked late and not an attention item. Reports use the last delivery stop's arrival, with the same 30 minute grace, and skip the load when that arrival is blank. The board Running late pill is the same late inbox item Desk uses.
+This app also sends `scope` on the authorize URL (read-only names below). Gusto’s sample authorize link does not include `scope`; scopes are assigned at review. If their portal rejects the parameter, drop it. That is an open question below.
 
-**After, on the live copy.**
+## Read-only scopes
 
-- On-time report: **18 loads with a delivery arrival, 15 late, 3 on time, 17%**. The other delivered/completed loads have no last-delivery arrival and are excluded.
-- Those 15 late rows are **data, not missing arrivals**. Examples: load 1005961 window `2026-06-16T17:00`, arrived `2026-09-29T02:44`; 1005974 window `2026-06-22T17:00`, arrived `2026-09-16T13:40`.
-- Desk inbox: **4 loads fine, 267 need attention**. Late items: **none** (MSE-1071 is not late on Desk or the board).
-- What remains is mostly **data**: `missing_pod` 264. The attachments table has one row, kind `other`, and zero `pod` rows. The other open items are reefer 1, gps quiet 1, compliance 1, unassigned 1, Samsara 10.
+Requested, and nothing else:
 
-## A. Search Enter vs click
+- `companies:read`
+- `employees:read`
+- `payrolls:read`
+- `contractors:read`
+- `pay_stubs:read` (the PDF scope; unused until Embedded approval)
 
-**Root cause (code).** Enter and the Search button both submit one form, but the handler searched React state. Enter could run before that state had the typed query, so `q` was still empty and the search returned the 7 live loads. A click happened after the re-render, so `q` was `1006198`. With Archived unchecked, delivered loads were hidden, and the click correctly returned 0. Load 1006198 is `delivered` and shows LATE on Reports.
+`employees:read` does not include compensation rates. Those need `compensations:read`, which this app does not request. Scope names are `resource:action`. https://docs.gusto.com/app-integrations/docs/scopes
 
-A saved search in `sessionStorage` could also paint those 7 loads back over a new result.
+There is no code path that creates, updates, prepares, submits, or cancels a payroll. The HTTP client allows GET on the read paths below, and POST only to `/oauth/token`.
 
-**Fix.** Submit reads `FormData`, so Enter and the button use the same fields. A restored session does not overwrite a search that just ran. An exact load number is included even when Archived is off (other filters still apply). Browsing with an empty query still honors the Archived checkbox.
+## Endpoints
 
-**Verified.** `searchLoads({ q: "1006198", includeArchived: false })` returns that one delivered load. In the browser, Enter and the Search button each showed **1 load**, 1006198, DELIVERED. Screenshot: `search-enter.png`.
+Demo host `https://api.gusto-demo.com`. Header `X-Gusto-API-Version` defaults to `2026-06-15` (`GUSTO_API_VERSION`).
 
-## B. Desk Unassigned vs Needs a unit, and the board late badge
+| Need | Method and path | Scope | Docs |
+| --- | --- | --- | --- |
+| Who authorized | `GET /v1/token_info` | token | https://docs.gusto.com/app-integrations/docs/authentication |
+| Company name | `GET /v1/companies/{company_id}` | `companies:read` | https://docs.gusto.com/app-integrations/reference/get-v1-companies |
+| Employees | `GET /v1/companies/{company_id}/employees` | `employees:read` | https://docs.gusto.com/app-integrations/reference/get-v1-employees |
+| Contractors | `GET /v1/companies/{company_uuid}/contractors` | `contractors:read` | https://docs.gusto.com/app-integrations/reference/get-v1-companies-company_id-contractors |
+| Processed payrolls | `GET /v1/companies/{company_id}/payrolls` | `payrolls:read` | https://docs.gusto.com/app-integrations/reference/get-v1-companies-company_id-payrolls |
+| Gross and net on a payroll | `GET /v1/companies/{company_id}/payrolls/{payroll_id}` | `payrolls:read` | https://docs.gusto.com/app-integrations/reference/get-v1-companies-company_id-payrolls-payroll_id |
+| Contractor payments (read) | `GET /v1/companies/{company_id}/contractor_payments` | `payrolls:read` | https://docs.gusto.com/app-integrations/reference/get-v1-companies-company_id-contractor_payments |
+| Paystub PDF | `GET /v1/payrolls/{payroll_id}/employees/{employee_id}/pay_stub` | `pay_stubs:read` | Embedded only. Link at the top of this file. |
 
-**Root cause (code).** The Unassigned loads KPI counted `status = 'available'` (**1**, MSE-1070, which has truck 19). Needs a unit lists active loads with no truck (**2**: 1006238 dispatched, 1006240 in transit). The board never rendered Desk's late item, so MSE-1071 could be late on Desk and unmarked on the board.
+The payroll list defaults to processed regular payrolls. This sync asks for `processing_statuses=processed` and `payroll_types=regular,off_cycle`, about 18 months back. The single-payroll payload carries `employee_compensations[].gross_pay` and `net_pay` as decimal strings, plus `check_date` and `pay_period.start_date` / `end_date`. Gusto’s sample amounts are gross `2791.25` and net `1953.31`. Net is present on processed payrolls.
 
-**Fix.** The KPI counts active loads with `truck_id IS NULL`, the same set as Needs a unit. Both links open the active board, where those two rows are visible (the old link was the available-status tab, which hid them). The board late pill uses the Desk late items.
+Contractor payments are a read on the App Integrations reference. Creating a contractor payment (“Pay a Contractor”) is Embedded-only, and this app never does that. A payment has `wage_total`, `date`, and `status` (`Funded` or `Unfunded`). There is no `net_pay`. This app stores `wage_total` as both gross and net, leaves reimbursement out, and skips `Unfunded`.
 
-**After, on the live copy.** KPI **2**, Needs a unit **· 2**, load numbers 1006238 and 1006240. No Running late pill on MSE-1071, matching Desk.
+## What changed
 
-**Still a different definition, called out.** The inbox kind `unassigned` still means `status = available` (MSE-1070, which has a truck). It is not the Needs a unit list. That exception is one of the 267 attention items. It was not the KPI the re-walk counted as 1.
+- `lib/integrations/gusto-read.ts` — scopes, allowed paths, parsers, email-then-name match.
+- `lib/integrations/gusto.ts` — OAuth, refresh, sync, mapping, public status, PDF stream. Tokens stay in `gusto_connection`. Public status and driver JSON omit them. Errors redact token and secret fields.
+- `lib/gusto-actions.ts` — sync, disconnect, link, unlink. Each starts with `requireSettingsEditor()`.
+- `app/api/integrations/gusto/connect/route.ts` and `callback/route.ts` — admin OAuth. State is checked with `timingSafeEqual` before any token POST.
+- `app/api/driver/paystubs/route.ts` and `app/api/driver/paystubs/[id]/pdf/route.ts` — the signed-in driver only. Another driver’s row is 403. A missing row, or a contractor payment (no PDF), is 404.
+- `app/settings/gusto/page.tsx` and `app/settings/gusto/mapping/page.tsx` — office card and mapping.
+- `app/driver/paystubs/page.tsx` and a Paystubs tile on `app/driver/page.tsx`.
+- `lib/db.ts` — additive tables `gusto_connection`, `gusto_people`, `gusto_driver_links`, `gusto_pay_lines`. Unique on driver, source, and Gusto id.
+- `lib/env.ts` and `.env.example` — `GUSTO_CLIENT_ID`, `GUSTO_CLIENT_SECRET`, `GUSTO_ENV` (`demo` unless the value is exactly `production`), `GUSTO_REDIRECT_URI` (default `https://msetms.mandsloads.com/api/integrations/gusto/callback`).
+- Settings nav, layout, and the viewer route list so a viewer can open Gusto read-only. `scripts/gusto-test.ts` and the viewer write-route list.
 
-## C. Desk Ack / Snooze / Resolve for viewers
+The repo stores QuickBooks tokens in a private file, not with app-level encryption. Gusto follows the database, in `gusto_connection`, and never returns those columns to the browser. Disconnect deletes the token row and keeps people, links, and pay lines.
 
-**Root cause (code).** Those controls were normal submit buttons. `exceptionAction` already calls `requireLoadEditor`, which rejects a viewer, but the HTML looked clickable.
+No SMS, email, or push is sent to drivers.
 
-**Fix.** The desk inbox passes `readOnly` for a view-only role. The note field and Ack, Snooze 4h, and Resolve render disabled with the same view-only title. The server check is unchanged.
+## How it works
 
-**Verified.** QA Bot desk HTML: 278 Ack buttons, all `disabled` with `title="View-only access"`. The page reads **4 loads fine · 267 need attention**.
+Office admins (and managers, because `isAdminRole` includes manager) see Connect, the company name, last sync, Disconnect, and Sync now. Viewers see the same card with those actions disabled. The server still rejects the write. Employee mapping stays a link so a viewer can look, not edit.
 
-## Tests and build
+Sync is manual. It pulls employees, then contractors, replaces the Gusto people list, and auto-matches only drivers who are not already linked: email, then name. An admin can override or unlink. A later sync does not replace an existing link. Unmatched people and unmatched drivers both stay on the mapping screen.
 
-`npm test` passed (viewer-role, smoke, driver API, Samsara address/routes/safety, trailer custody, relay map, places pin).
+Pay lines are upserted. Running sync twice does not duplicate them. The PDF is streamed from Gusto through the server and is not stored.
 
-`npm run build` passed (`next build` and standalone asset copy) on this same tree.
+Company drivers see Paystubs: latest net on top, then check date, pay period, gross, net, and Download PDF. A driver who is not mapped, or a company that is not connected, gets an empty state.
+
+Owner-operators (`driver_type` owner operator, company name used when matching) do not get W-2 stubs. The screen says “Your pay is on the settlement statement.” Funded contractor payments, when the read API returns them, are listed with no PDF button. The settlement statement itself is the other draft.
+
+## How it was verified
+
+No live Gusto credentials. `npm test` (including `scripts/gusto-test.ts` and the viewer write walk) and `npm run build` passed on this branch before the screenshot pass. Tests use mocked JSON shaped like the documented payloads, including gross `2791.25` / net `1953.31` and contractor payment `04552eb9-7829-4b18-ae96-6983552948df` with `wage_total` `740.00`.
+
+Covered:
+
+- OAuth `state` must match or the token POST is never made.
+- Access token, refresh token, and client secret are absent from the public status JSON.
+- Auto-match by email, then name. Manual override sticks. Unmatched people stay unmatched.
+- Sync twice keeps one row per payroll. A changed net updates that row.
+- Gross, net, check date, and pay period map from the payroll payload. Contractor `wage_total` maps to both gross and net.
+- Another driver’s list is 403. Another driver’s PDF is 403. A missing PDF is 404.
+- Viewer sync, disconnect, link, and unlink throw the existing view-only error. Connect and callback are on the viewer write-route list.
+- The client rejects any path outside the read list, and the test double rejects PUT, PATCH, DELETE, and any POST other than `/oauth/token`.
+
+Screenshots used a copy of the attached SQLite snapshot (272 loads, 10 drivers, 7 users). The database and the zip are not in git. Office and driver cookies were minted locally. Connected screens used rows inserted in that copy, not a live Gusto response. The HTML for the connected office page did not contain the token sentinels.
+
+On the viewer page, the DOM for Reconnect, Sync now, and Disconnect is `disabled`, `aria-disabled="true"`, background `#d5dee8`, opacity `0.55`, cursor `not-allowed`. Employee mapping stays a normal link.
+
+## Screenshots
+
+- `artifacts/driver-paystubs-populated.png` — company driver, latest net $1,412.55, two rows, Download PDF.
+- `artifacts/driver-paystubs-empty.png` — driver with no Gusto link.
+- `artifacts/driver-paystubs-not-connected.png` — same driver app when the office has not connected Gusto.
+- `artifacts/driver-paystubs-owner-operator.png` — settlement note, contractor payment $2,200.00, no PDF.
+- `artifacts/office-gusto-disconnected.png` — Not connected, Connect Gusto.
+- `artifacts/office-gusto-connected.png` — connected company, last sync, Reconnect, Sync now, Disconnect.
+- `artifacts/office-gusto-viewer.png` — same card for a viewer; the three write actions are disabled.
+- `artifacts/office-gusto-mapping.png` — email and name matches, an unmatched Gusto employee, and unmatched drivers.
+
+## What JC must do to go live
+
+1. Read the own-company restriction before spending time on production. If Gusto will not approve an App Integration for MS Express’s own account, stop here. https://docs.gusto.com/app-integrations/docs/introduction
+2. Create a Developer Portal account and an application at https://dev.gusto.com. Demo keys appear after the app exists.
+3. Set the redirect URI to `https://msetms.mandsloads.com/api/integrations/gusto/callback`. No wildcard and no `#`. Production redirect changes later go to developer@gusto.com.
+4. Put `GUSTO_CLIENT_ID` and `GUSTO_CLIENT_SECRET` in the office `.env`. Leave `GUSTO_ENV=demo` until production keys exist. Do not commit that file.
+5. Apply for Production Pre-Approval and the Security Review from https://docs.gusto.com/app-integrations/docs/introduction. Approval is not guaranteed.
+6. Have a Gusto primary admin or full-access admin approve the OAuth prompt for the MS Express company.
+7. Ask Gusto, during review, for the read scopes listed above. `pay_stubs:read` and the PDF endpoint still need an Embedded partnership: https://docs.gusto.com/app-integrations/docs/app-integrations-vs-embedded-payroll
+8. Complete the Partner Checklist and send it to developer@gusto.com. Production keys come after that QA.
+9. Set `GUSTO_ENV=production` only after those keys are in the office `.env`.
+
+No App Integration fee is documented. Ask Partnerships what an Embedded PDF partnership costs before promising Download to drivers.
+
+## Open questions for JC
+
+1. Gusto says a customer connecting their own company via the API is not currently supported, and Production Pre-Approval can be denied. Proceed with the App Integration application anyway?
+2. Keep Download PDF visible, knowing it fails until Embedded approval, or hide it until that approval exists? The button is visible today, and the office card explains the gap.
+3. Will Gusto’s authorize URL reject the `scope` query parameter? The sample link omits it. The constant is `GUSTO_READ_SCOPES` in `lib/integrations/gusto-read.ts`.
+4. Contractor payments have `wage_total` and no net. Both columns store that wage, and reimbursement is left out. Is that the number owner-operators should see next to the settlement note?
+5. Disconnect keeps historical pay lines. Should disconnect also clear them?
+6. Managers can connect and sync, because they already count as admins. Should Gusto be limited to the admin role only?
+7. Auto-match does not move a driver who is already linked. Confirm that a wrong automatic match must be fixed by hand.
+8. Any driver flagged owner-operator, even with a blank company name, is treated as 1099 and does not see W-2 stubs.
+9. Embedded fees are not on the docs pages. Confirm with Partnerships before applying.
