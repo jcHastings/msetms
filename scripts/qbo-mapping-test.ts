@@ -187,7 +187,7 @@ async function main() {
   assert.ok(revoke && revoke.method === "POST", "revoke called");
   assert.equal(fs.existsSync(path.join(tmp, "qbo-refresh.json")), false, "token file removed");
   assert.equal(qbo.hasQuickbooksSession(), false);
-  // Intuit production settings link to public /privacy and /terms: signed-out, DRAFT-marked, MS Express identity only.
+  // Intuit production settings link to public /privacy and /terms: signed-out, in effect, MS Express identity only.
   const { config: mwConfig } = await import("../middleware");
   const matcher = new RegExp(`^${mwConfig.matcher[0]}$`);
   for (const open of ["/privacy", "/terms", "/login", "/driver"]) assert.equal(matcher.test(open), false, `${open} is public`);
@@ -197,18 +197,60 @@ async function main() {
   const shell = fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8");
   assert.match(shell, /pathname === "\/privacy"/);
   assert.match(shell, /pathname === "\/terms"/);
-  const legal = ["app/privacy/page.tsx", "app/terms/page.tsx", "components/legal-document.tsx"]
-    .map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"))
-    .join("\n");
-  assert.match(legal, /DRAFT/);
-  assert.match(legal, /data-legal-draft/);
+  const login = fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8");
+  assert.match(login, /href="\/privacy"/);
+  assert.match(login, /href="\/terms"/);
+  const privacy = fs.readFileSync(path.join(process.cwd(), "app/privacy/page.tsx"), "utf8");
+  const terms = fs.readFileSync(path.join(process.cwd(), "app/terms/page.tsx"), "utf8");
+  const legal = [privacy, terms, fs.readFileSync(path.join(process.cwd(), "components/legal-document.tsx"), "utf8")].join("\n");
+  const privacyIds = [
+    "effective-date",
+    "who-we-are",
+    "quickbooks-data",
+    "how-we-use-quickbooks",
+    "storage-and-security",
+    "no-sale",
+    "subprocessors",
+    "retention",
+    "deletion",
+    "disconnect",
+    "after-disconnect",
+    "children",
+    "changes",
+    "governing-law",
+    "contact",
+  ];
+  const termsIds = [
+    "effective-date",
+    "parties",
+    "license",
+    "license-restrictions",
+    "acceptable-use",
+    "accounts",
+    "third-party",
+    "warranties",
+    "liability",
+    "indemnity",
+    "termination",
+    "data",
+    "law",
+    "contact",
+  ];
+  for (const id of privacyIds) assert.match(privacy, new RegExp(`id: "${id}"`), `privacy heading ${id}`);
+  for (const id of termsIds) assert.match(terms, new RegExp(`id: "${id}"`), `terms heading ${id}`);
+  assert.match(privacy, /alternates: \{ canonical: PRIVACY_URL \}/);
+  assert.match(terms, /alternates: \{ canonical: TERMS_URL \}/);
+  assert.doesNotMatch(legal, /data-legal-draft|Not yet in effect|\bDRAFT\b/);
+  assert.match(legal, /is not encrypted at rest today/);
   assert.match(legal, /3062879/);
+  assert.match(legal, /056299/);
   assert.match(legal, /402-302-0097/);
   assert.match(legal, /State of Nebraska/);
+  assert.match(legal, /October 7, 2026/);
   assert.match(legal, /ar@msloads\.com/);
   assert.match(legal, /10 years/);
-  assert.match(legal, /backup retention: JC to confirm/);
-  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|MC-970613|970613|jc@msloads\.com/i);
+  assert.match(legal, /us-east-1/);
+  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|MC-970613|970613|jc@msloads\.com|Nanuet/i);
   console.log("qbo-mapping-test: ok");
 }
 

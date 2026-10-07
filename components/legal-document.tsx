@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-/** MS Express public identity for legal pages. Never M&S Loads (a bill-to customer only). */
+/** MS Express public identity for legal pages. */
 export const LEGAL_ENTITY = {
   name: "MS Express",
   usdot: "3062879",
@@ -8,15 +8,18 @@ export const LEGAL_ENTITY = {
   cityState: "Hastings, Nebraska",
   phone: "402-302-0097",
   phoneHref: "tel:+14023020097",
-  /** MS Express accounts receivable. Not an M&S Loads identity. */
+  /** MS Express accounts receivable. */
   email: "ar@msloads.com",
+  site: "https://msetms.mandsloads.com",
 } as const;
+
+export const PRIVACY_URL = `${LEGAL_ENTITY.site}/privacy`;
+export const TERMS_URL = `${LEGAL_ENTITY.site}/terms`;
 
 export type LegalSection = { id: string; title: string; body: React.ReactNode };
 
 /**
  * Public, signed-out legal page (Privacy, Terms). Static: no session, no database.
- * Shows a visible DRAFT banner until JC approves the text.
  */
 export function LegalDocument({
   title,
@@ -31,6 +34,10 @@ export function LegalDocument({
   sections: LegalSection[];
   current: "privacy" | "terms";
 }) {
+  const otherHref = current === "privacy" ? "/terms" : "/privacy";
+  const otherLabel = current === "privacy" ? "Terms of Use" : "Privacy Policy";
+  const otherUrl = current === "privacy" ? TERMS_URL : PRIVACY_URL;
+
   return (
     <div className="legal-page" data-legal-page={current}>
       <a href="#legal-main" className="legal-skip">
@@ -50,12 +57,6 @@ export function LegalDocument({
           </nav>
         </div>
       </header>
-
-      <div className="legal-draft" role="note" aria-label="Draft notice" data-legal-draft="">
-        <div className="legal-wrap">
-          <strong>DRAFT</strong> for review. This text is not in effect yet and may change before MS Express publishes it.
-        </div>
-      </div>
 
       <main id="legal-main" className="legal-wrap legal-main" tabIndex={-1}>
         <h1>{title}</h1>
@@ -88,6 +89,11 @@ export function LegalDocument({
 
       <footer className="legal-footer">
         <div className="legal-wrap">
+          <p>
+            <Link href={otherHref}>{otherLabel}</Link>
+            {" · "}
+            <a href={otherUrl}>{otherUrl}</a>
+          </p>
           <p>
             {LEGAL_ENTITY.name} · USDOT {LEGAL_ENTITY.usdot} · MC {LEGAL_ENTITY.mc} · {LEGAL_ENTITY.cityState}
           </p>
