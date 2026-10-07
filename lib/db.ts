@@ -39,6 +39,14 @@ export function getDb(): Database {
 
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
+  // Wait up to 5 s for a lock instead of failing with SQLITE_BUSY. Litestream
+  // (cloud backup) holds short read locks and runs checkpoints; it requires
+  // WAL + busy_timeout = 5000: https://litestream.io/tips/
+  // Set before journal_mode so the WAL switch itself also waits.
+  // Do NOT add wal_checkpoint(TRUNCATE) / wal_autocheckpoint = 0 here:
+  // Litestream owns checkpointing when it runs; SQLite's default autocheckpoint
+  // keeps the WAL bounded when it does not (office PC).
+  db.pragma("busy_timeout = 5000");
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   migrate(db);
