@@ -56,6 +56,7 @@ export default async function DriverHomePage() {
             disabled: !current,
           },
           { href: "/driver/fuel", label: "Fuel" },
+          { href: "/driver/paystubs", label: "Paystubs" },
           {
             href: trailerHref ?? "",
             label: "Trailer",
