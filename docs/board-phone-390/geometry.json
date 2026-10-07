@@ -1,0 +1,246 @@
+{
+  "href": "http://127.0.0.1:3000/board",
+  "title": "Dispatch board · MS Express TMS",
+  "cssPx": 390,
+  "viewport": {
+    "width": 390,
+    "height": 1400,
+    "devicePixelRatio": 1
+  },
+  "tabFlexWrap": "nowrap",
+  "tabOverflowX": "auto",
+  "hasAtDel": true,
+  "hasDispatched": true,
+  "hasAvailable": true,
+  "pickupCrushed": false,
+  "stickyLeft": false,
+  "noOverlap": true,
+  "pass": true,
+  "results": [
+    {
+      "row": 1,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AT DEL",
+      "pickupText": "09/05/26 6:00 AM",
+      "status": {
+        "top": 371.359375,
+        "right": 354.40625,
+        "bottom": 389.890625,
+        "left": 298.453125,
+        "width": 55.953125,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 475.015625,
+        "right": 354.40625,
+        "bottom": 595.359375,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 2,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "DISPATCHED",
+      "pickupText": "09/06/26 3:00 AM",
+      "status": {
+        "top": 629.34375,
+        "right": 354.40625,
+        "bottom": 647.875,
+        "left": 265.375,
+        "width": 89.03125,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 733,
+        "right": 354.40625,
+        "bottom": 853.34375,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 3,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "ASSIGNED",
+      "pickupText": "09/08/26 2:30 AM",
+      "status": {
+        "top": 887.328125,
+        "right": 354.40625,
+        "bottom": 905.859375,
+        "left": 278.234375,
+        "width": 76.171875,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 990.984375,
+        "right": 354.40625,
+        "bottom": 1111.328125,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 4,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/06/26 2:00 AM",
+      "status": {
+        "top": 1145.3125,
+        "right": 354.40625,
+        "bottom": 1163.84375,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 1248.96875,
+        "right": 354.40625,
+        "bottom": 1369.3125,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 5,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/07/26 5:00 AM",
+      "status": {
+        "top": 1403.296875,
+        "right": 354.40625,
+        "bottom": 1421.828125,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 1506.953125,
+        "right": 354.40625,
+        "bottom": 1627.296875,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 6,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/07/26 9:00 AM",
+      "status": {
+        "top": 1661.28125,
+        "right": 354.40625,
+        "bottom": 1679.8125,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 1764.9375,
+        "right": 354.40625,
+        "bottom": 1885.28125,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 7,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/08/26 4:00 AM",
+      "status": {
+        "top": 1919.265625,
+        "right": 354.40625,
+        "bottom": 1937.796875,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 2022.921875,
+        "right": 354.40625,
+        "bottom": 2143.265625,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 8,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/09/26 5:00 AM",
+      "status": {
+        "top": 2177.25,
+        "right": 354.40625,
+        "bottom": 2195.78125,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 2280.90625,
+        "right": 354.40625,
+        "bottom": 2401.25,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    },
+    {
+      "row": 9,
+      "overlap": false,
+      "gapPx": 85,
+      "statusPosition": "static",
+      "movePosition": "static",
+      "statusText": "AVAILABLE",
+      "pickupText": "09/10/26 3:00 AM",
+      "status": {
+        "top": 2435.234375,
+        "right": 354.40625,
+        "bottom": 2453.765625,
+        "left": 275.140625,
+        "width": 79.265625,
+        "height": 18.53125
+      },
+      "move": {
+        "top": 2538.890625,
+        "right": 354.40625,
+        "bottom": 2659.234375,
+        "left": 35.59375,
+        "width": 318.8125,
+        "height": 120.34375
+      }
+    }
+  ]
+}
