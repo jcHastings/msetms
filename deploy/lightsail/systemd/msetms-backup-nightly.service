@@ -6,6 +6,7 @@ ConditionPathExists=/etc/msetms/backup.env
 
 [Service]
 Type=oneshot
+ExecStartPre=+/usr/local/sbin/msetms-backup-check
 ExecStart=/usr/local/sbin/msetms-backup-nightly
 Nice=10
 IOSchedulingClass=idle

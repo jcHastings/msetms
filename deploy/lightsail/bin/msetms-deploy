@@ -103,14 +103,10 @@ fi
 flip_current "$REL"
 systemctl restart msetms.service
 if wait_healthy 90 && { [[ -z "$before" ]] || counts_not_lower "$before" "$(db_counts "$DB")"; }; then
-  # Enable only after current is flipped and health checks passed. Idempotent.
+  # Enable the app once current is flipped and health checks passed. Idempotent.
+  # Litestream and the timers wait until backup.env has real values (templates do not).
   systemctl enable msetms.service
-  if [[ -s "$LITESTREAM_CONFIG" && -s "$BACKUP_ENV" ]]; then
-    systemctl enable msetms-litestream.service msetms-backup-nightly.timer msetms-restore-test.timer msetms-heartbeat.timer
-    log "enabled msetms.service, msetms-litestream.service, and the backup timers" | tee -a "$DEPLOY_LOG"
-  else
-    log "backups are not enabled yet: $LITESTREAM_CONFIG and $BACKUP_ENV must both exist and be non-empty" | tee -a "$DEPLOY_LOG"
-  fi
+  enable_backup_units
   log "deploy OK sha=$SHA counts=$(db_counts "$DB" 2>/dev/null || echo n/a)" | tee -a "$DEPLOY_LOG"
 else
   log "deploy FAILED sha=$SHA -> rolling back" | tee -a "$DEPLOY_LOG"

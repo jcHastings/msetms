@@ -12,9 +12,13 @@ User=msetms
 Group=msetms
 # R2_* credentials. Root-only 0600; read by systemd, expanded by Litestream from ${VARS} in the config.
 EnvironmentFile=/etc/msetms/backup.env
+# '+' runs as root so the check can read backup.env (0600). Exit 78 means the
+# file is still a template; do not restart-loop on that.
+ExecStartPre=+/usr/local/sbin/msetms-backup-check
 ExecStart=/usr/bin/litestream replicate -config /etc/msetms/litestream.yml
 Restart=always
 RestartSec=5
+RestartPreventExitStatus=78
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full

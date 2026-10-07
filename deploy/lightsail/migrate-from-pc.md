@@ -13,8 +13,8 @@ numbers from the PC immediately before the freeze; the server must match exactly
    from the secret store, new tunnel **msetms-cloud** connected (`sudo msetms-install-cloudflared`)
    with a **test hostname** (e.g. `msetms-new.mandsloads.com`) behind Cloudflare Access. The live
    hostname is untouched. The first successful deploy (step 11) enables `msetms.service`, and
-   enables Litestream plus the backup timers when `litestream.yml` and `backup.env` both exist
-   and are non-empty.
+   enables Litestream plus the backup timers only when `backup.env` has real R2, age, and uploads
+   values and every variable `litestream.yml` references is set. Unfilled templates do not enable them.
 2. Copy a **backup copy** of the PC data (not the live folder) to the server (see step 3 below for
    the mechanics), start the app on the tip SHA, and verify:
    * `/login` 200 via the test hostname; log in as QA Bot (viewer); open a load, the board, /fuel.

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fail closed when backup.env / litestream.yml are still templates.
+# Prints missing KEY NAMES only. Never prints values.
+# Exit 78 (configuration error) so Litestream's Restart= does not loop.
+# shellcheck source=lib.sh
+. "$(dirname "$(readlink -f "$0")")/lib.sh"
+missing=""
+if missing="$(backups_configured "$BACKUP_ENV" "$LITESTREAM_CONFIG")"; then
+  exit 0
+fi
+printf '%s\n' "$missing"
+exit 78

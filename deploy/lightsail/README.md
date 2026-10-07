@@ -59,8 +59,14 @@ release automatically.
 
 Units are not enabled at bootstrap. After health checks pass and `current` is flipped, the deploy
 enables `msetms.service` (idempotent). It enables `msetms-litestream.service` and the three backup
-timers only when `/etc/msetms/litestream.yml` and `/etc/msetms/backup.env` both exist and are
-non-empty; otherwise it prints one line that backups are not enabled yet. Env values are never printed.
+timers only when `backup.env` has real values for `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `AGE_RECIPIENT`, `UPLOADS_CRYPT_PASSWORD`, and every `${VAR}` in
+`litestream.yml` (that adds `HC_LITESTREAM_URL`). Empty settings and placeholders (`CHANGEME`,
+`REPLACE`, `<...>`, `xxx`) do not count, so the bootstrap templates do not enable backups.
+Otherwise it prints one line: `backups not enabled yet, missing keys: <names>`. Values are never printed.
+`HC_BACKUP_URL`, `HC_RESTORE_URL`, `HC_HEARTBEAT_URL`, and `NIGHTLY_KEEP_DAYS` are optional.
+The Litestream, nightly, restore, and heartbeat units run `msetms-backup-check` first and refuse
+to start on a template even if someone enables them by hand.
 
 ## Backups (three layers)
 

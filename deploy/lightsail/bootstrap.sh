@@ -108,7 +108,7 @@ chmod 0750 /etc/msetms; chgrp msetms /etc/msetms   # msetms may read litestream.
 step "scripts + units"
 install -d /usr/local/lib/msetms
 install -m 0644 "$HERE/bin/lib.sh" /usr/local/lib/msetms/lib.sh
-for s in msetms-deploy msetms-rollback msetms-counts msetms-health msetms-backup-nightly msetms-restore-test msetms-heartbeat; do
+for s in msetms-deploy msetms-rollback msetms-counts msetms-health msetms-backup-nightly msetms-restore-test msetms-heartbeat msetms-backup-check; do
   install -m 0755 "$HERE/bin/$s" "/usr/local/lib/msetms/$s"
   ln -sfn "/usr/local/lib/msetms/$s" "/usr/local/sbin/$s"
 done
@@ -143,5 +143,6 @@ so a reboot before the first deploy stays quiet. Next (see README.md):
   2. sudo msetms-install-cloudflared        (paste the NEW tunnel token at the prompt)
   3. Data copy + first deploy per migrate-from-pc.md (needs JC's yes).
      That deploy enables msetms.service. It also enables Litestream and the backup timers
-     when /etc/msetms/litestream.yml and /etc/msetms/backup.env both exist and are non-empty.
+     only when backup.env has real values for the R2, age, and uploads keys and for every
+     variable litestream.yml references. An unfilled template does not count.
 NEXT
