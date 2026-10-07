@@ -17,6 +17,7 @@ import { LoadStopsMap } from "@/components/load-stops-map";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
+import { DispatchAckStatus } from "@/components/dispatch-ack-status";
 import { CopyTripNumber } from "@/components/copy-trip-number";
 import { PageHeader } from "@/components/page-header";
 import { QuickbooksInvoicePanel } from "@/components/quickbooks-invoice-panel";
@@ -60,6 +61,7 @@ import {
   resolveLoadCustomerEmail,
   resolveLoadDriverEmail,
 } from "@/lib/load-mail";
+import { dispatchAckRules, presentDispatchAck } from "@/lib/dispatch-ack";
 import { formatDateTime, toOfficeDateTime } from "@/lib/format";
 import { getSamsaraStillPanel } from "@/lib/integrations/samsara-still";
 import { formatLoadSummary } from "@/lib/load-summary";
@@ -125,6 +127,8 @@ export async function LoadEditor({
   const family = listMasterFamily(load.id);
   const masterRow = family.find((row) => !row.parent_load_id) ?? family[0];
   const childRows = family.filter((row) => row.parent_load_id);
+  const ackRules = dispatchAckRules();
+  const dispatchAck = presentDispatchAck(load, ackRules);
   const invoice = (() => {
     try {
       return buildTmsInvoice(load);
@@ -156,6 +160,7 @@ export async function LoadEditor({
               <div className="flex items-center gap-3">
                 <CopyTripNumber value={load.load_number} />
                 <LoadStatusBadge status={load.status} />
+                <DispatchAckStatus ack={dispatchAck} />
                 {(() => {
                   const criticalItems = listExceptionInbox().items;
                   return loadNeedsCriticalTag(load.id, criticalItems) ? (
@@ -214,6 +219,22 @@ export async function LoadEditor({
         contactEmail={resolveLoadCustomerEmail(load)}
         driverEmail={resolveLoadDriverEmail(load)}
       >
+        {dispatchAck.state !== "none" ? (
+          <div className="mb-3 text-sm text-slate-700" data-office-dispatch-ack="">
+            <DispatchAckStatus ack={dispatchAck} />
+            {dispatchAck.state === "waiting" ? (
+              <p className="mt-1 text-sm font-normal text-slate-600">
+                {dispatchAck.flagged
+                  ? "On the desk until the driver taps Got it. No text or email was sent."
+                  : `Desk flags this ${ackRules.hours} hours before pickup if there is still no Got it.`}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm font-normal text-slate-600">
+                {load.dispatch_ack_by ? `${load.dispatch_ack_by} tapped Got it.` : "Driver tapped Got it."}
+              </p>
+            )}
+          </div>
+        ) : null}
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
           {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
             <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">

@@ -544,6 +544,10 @@ export type Load = {
   samsara_route_synced_at: string;
   non_revenue: number;
   bol_json: string;
+  dispatch_ack_at: string;
+  dispatch_ack_by: string;
+  dispatch_ack_driver_id: number | null;
+  dispatch_ack_fingerprint: string;
   created_at: string;
   updated_at: string;
 };

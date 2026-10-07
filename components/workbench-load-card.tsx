@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LoadCardFastActions } from "@/components/load-card-fast-actions";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
+import { DispatchAckStatus } from "@/components/dispatch-ack-status";
 import { ExceptionIssueLine } from "@/components/exception-issue-line";
 import { WorkbenchStatusControl } from "@/components/workbench-status-control";
 import { findCityCenter } from "@/lib/city-coords-shared";
@@ -14,6 +15,7 @@ import {
 } from "@/lib/load-map-shared";
 import { buildStopsMapModel, mapsBrowserKey } from "@/lib/load-map";
 import type { InboxExceptionGroup } from "@/lib/exceptions";
+import { presentDispatchAck, type DispatchAckView } from "@/lib/dispatch-ack";
 import { formatDateTime } from "@/lib/format";
 import { nextLoadStatuses } from "@/lib/load-status-transition";
 import { getLoad } from "@/lib/queries";
@@ -208,12 +210,14 @@ export async function WorkbenchLoadCard({
   const stops = listStopAppointmentTargets(group.loadId);
   const framing = workbenchCardMapFraming(points);
   let loadStatus = "";
+  let ack: DispatchAckView = { state: "none", clock: "", flagged: false, needsButton: false };
   let statusOptions: Array<{ value: string; label: string }> = [];
   let telematics = { truckPlace: WORKBENCH_TELEMATICS_EMPTY, reeferTemp: WORKBENCH_TELEMATICS_EMPTY };
   try {
     const load = getLoad(group.loadId);
     if (load) {
       loadStatus = load.status;
+      ack = presentDispatchAck(load);
       telematics = workbenchTelematics(load);
       if (canChangeStatus) statusOptions = nextLoadStatuses(load.status);
     }
@@ -315,6 +319,14 @@ export async function WorkbenchLoadCard({
                 {telematics.truckPlace}
               </dd>
             </div>
+            {ack.state === "none" ? null : (
+              <div>
+                <dt>Ack</dt>
+                <dd data-workbench-ack="">
+                  <DispatchAckStatus ack={ack} compact />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Reefer</dt>
               <dd

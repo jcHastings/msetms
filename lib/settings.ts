@@ -359,6 +359,7 @@ export function updateAlertSettings(input: {
   alert_dot_days: number;
   alert_emails_enabled: boolean;
   alert_gps_quiet_hours?: number;
+  dispatch_ack_hours?: number;
 }): CompanySettings {
   for (const [label, value] of [
     ["License / medical window", input.alert_driver_days],
@@ -373,6 +374,7 @@ export function updateAlertSettings(input: {
   if (!Number.isFinite(quietHours) || quietHours < 1 || quietHours > 48) {
     throw new Error("GPS quiet window must be between 1 and 48 hours.");
   }
+  if (input.dispatch_ack_hours != null) updateDispatchAckHours(input.dispatch_ack_hours);
   return patchSettings({
     alert_driver_days: input.alert_driver_days,
     alert_registration_days: input.alert_registration_days,
@@ -380,6 +382,46 @@ export function updateAlertSettings(input: {
     alert_emails_enabled: input.alert_emails_enabled ? 1 : 0,
     alert_gps_quiet_hours: quietHours,
   });
+}
+
+/** Hours before pickup that a missing driver "Got it" becomes a desk flag. Default 12. */
+export const DEFAULT_DISPATCH_ACK_HOURS = 12;
+export const MIN_DISPATCH_ACK_HOURS = 1;
+export const MAX_DISPATCH_ACK_HOURS = 168;
+
+export function getDispatchAckHours(): number {
+  const row = getDb()
+    .prepare("SELECT dispatch_ack_hours AS hours FROM company_profile WHERE id = 1")
+    .get() as { hours?: number } | undefined;
+  const hours = Number(row?.hours);
+  if (!Number.isFinite(hours) || hours < MIN_DISPATCH_ACK_HOURS || hours > MAX_DISPATCH_ACK_HOURS) {
+    return DEFAULT_DISPATCH_ACK_HOURS;
+  }
+  return hours;
+}
+
+/** Set once, the first time this database opens after the ack feature ships. */
+export function getDispatchAckIntroducedAt(): string {
+  const row = getDb()
+    .prepare("SELECT dispatch_ack_introduced_at AS at FROM company_profile WHERE id = 1")
+    .get() as { at?: string } | undefined;
+  return String(row?.at ?? "").trim();
+}
+
+export function setDispatchAckIntroducedAt(iso: string): void {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) throw new Error("Enter a valid ack start time.");
+  getDb().prepare("UPDATE company_profile SET dispatch_ack_introduced_at = ? WHERE id = 1").run(at.toISOString());
+}
+
+export function updateDispatchAckHours(hours: number): number {
+  if (!Number.isFinite(hours) || hours < MIN_DISPATCH_ACK_HOURS || hours > MAX_DISPATCH_ACK_HOURS) {
+    throw new Error(
+      `Driver ack window must be between ${MIN_DISPATCH_ACK_HOURS} and ${MAX_DISPATCH_ACK_HOURS} hours.`,
+    );
+  }
+  getDb().prepare("UPDATE company_profile SET dispatch_ack_hours = ? WHERE id = 1").run(hours);
+  return hours;
 }
 
 export function updateRoutingNotes(notes: string): CompanySettings {

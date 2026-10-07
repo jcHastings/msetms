@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSignedInDriver } from "@/lib/driver-session";
+import { presentDispatchAck } from "@/lib/dispatch-ack";
 import { formatDateTime } from "@/lib/format";
 import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
 import { listLoadsForDriver } from "@/lib/queries";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
+import { DriverAckState } from "@/components/driver-got-it";
 import { DriverDispatchBoard } from "@/components/driver-dispatch-board";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { formatReeferHeader, resolveReeferSpec } from "@/lib/reefer-shared";
@@ -45,10 +47,10 @@ export default async function DriverDispatchPage() {
                 const reefer = reeferByLoad.get(load.id);
                 const spec = resolveReeferSpec(load);
                 return (
-                  <li key={load.id}>
+                  <li key={load.id} className="rounded-2xl bg-slate-900 p-4 ring-1 ring-white/10">
                     <Link
                       href={`/driver/loads/${load.id}`}
-                      className="block rounded-2xl bg-slate-900 p-4 ring-1 ring-white/10"
+                      className="block"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-mono text-lg font-semibold text-white">{load.load_number}</div>
@@ -94,6 +96,16 @@ export default async function DriverDispatchPage() {
                         </div>
                       ) : null}
                     </Link>
+                    {(() => {
+                      const ack = presentDispatchAck(load);
+                      if (ack.state === "none") return null;
+                      return (
+                        <DriverAckState
+                          loadId={load.id}
+                          acknowledgedClock={ack.state === "acknowledged" ? ack.clock : null}
+                        />
+                      );
+                    })()}
                   </li>
                 );
               })}

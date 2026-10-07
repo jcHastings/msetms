@@ -755,8 +755,20 @@ export function migrate(db: Database): void {
     ["workflow_json", "TEXT NOT NULL DEFAULT ''"],
     ["invoice_email_body", "TEXT NOT NULL DEFAULT ''"],
     ["invoice_send_mode", "TEXT NOT NULL DEFAULT 'ask'"],
+    ["dispatch_ack_hours", "REAL NOT NULL DEFAULT 12"],
+    ["dispatch_ack_introduced_at", "TEXT NOT NULL DEFAULT ''"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
+  }
+  ensureColumn(db, "loads", "dispatch_ack_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "dispatch_ack_by", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "dispatch_ack_driver_id", "INTEGER");
+  ensureColumn(db, "loads", "dispatch_ack_fingerprint", "TEXT NOT NULL DEFAULT ''");
+  const ackIntroduced = db
+    .prepare("SELECT dispatch_ack_introduced_at AS at FROM company_profile WHERE id = 1")
+    .get() as { at?: string } | undefined;
+  if (ackIntroduced && !String(ackIntroduced.at ?? "").trim()) {
+    db.prepare("UPDATE company_profile SET dispatch_ack_introduced_at = ? WHERE id = 1").run(new Date().toISOString());
   }
   db.prepare(
     `UPDATE company_profile
