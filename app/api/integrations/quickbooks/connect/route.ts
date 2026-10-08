@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     const jar = await cookies();
     jar.set("tms_qbo_oauth_state", state, {
       httpOnly: true,
+      secure: settings.protocol === "https:",
       sameSite: "lax",
       path: "/",
       maxAge: 600,

@@ -4491,7 +4491,7 @@ async function main() {
   assert.match(companyDraft.text, /Pickup 1/);
   assert.match(companyDraft.text, /Delivery 1/);
   assert.match(companyDraft.text, /34°F · Continuous/);
-  assert.match(companyDraft.text, /M & S Loads LLC/);
+  assert.match(companyDraft.text, /M&S Loads DBA MS Express/);
   assert.equal(companyDraft.replyTo, "noreply@msloads.com");
   assert.match(companyDraft.text, /Do not reply/);
   assert.match(companyDraft.text, /not monitored/);
@@ -9047,7 +9047,8 @@ DISPATCH CONFIRMATION
   assert.match(bolText, /Description of the goods/);
   assert.match(bolText, /Weight in LBS/);
   assert.match(bolText, /NMFC/);
-  assert.match(bolText, /M & S Loads LLC - MS Express/);
+  assert.match(bolText, /MS Express/);
+  assert.doesNotMatch(bolText, /M & S Loads LLC - MS Express/);
   assert.match(bolText, /Transportation Company/);
   assert.match(bolText, /3rd Party Billing/);
   assert.match(bolText, /Emergency Response Phone/);
@@ -9232,7 +9233,7 @@ DISPATCH CONFIRMATION
   const { parseBolDraftFromForm, writeBolDraftToForm } = await import("../lib/bol-shared");
   const itsDraft = {
     ...bolMod.buildBolDraftFromLoad(deniseLoad),
-    thirdParty: "M & S Loads LLC - MS Express",
+    thirdParty: "M&S Loads DBA MS Express",
     seals: "S-441, S-442",
     items: [
       {
@@ -15270,14 +15271,21 @@ DISPATCH CONFIRMATION
     assert.equal(ooPreview.mode, "demo");
     assert.equal(ooPreview.amount, coleDelivered.rate, "QBO invoice uses customer rate, not OO pay");
     assert.notEqual(ooPreview.amount, coleDelivered.oo_pay);
-    assert.match(ooPreview.memo, /Customer invoice only/);
+    assert.match(ooPreview.ownerOperatorNote, /Customer invoice only/);
+    assert.doesNotMatch(ooPreview.memo, /Customer invoice only|owner-operator/i, "customer memo stays customer-facing");
     assert.equal(
       ooPreview.lines.some((line) => /relay|owner-operator|oo pay/i.test(`${line.name} ${line.description}`)),
       false,
     );
-    const lumperLines = qbo.buildInvoiceLines({ ...coleDelivered, lumper_actual: 150 });
-    assert.equal(lumperLines.reduce((sum, line) => sum + line.amount, 0), (coleDelivered.rate ?? 0) + 150);
-    assert.ok(lumperLines.some((line) => line.name === "Lumper"));
+    // Driver receipt (lumper_actual) is billed once, and the PDF total matches QuickBooks.
+    const lumperLoad = { ...coleDelivered, lumper_actual: 150 };
+    const lumperLines = qbo.buildInvoiceLines(lumperLoad);
+    const pdfLumperLines = (await import("../lib/invoice")).tmsCustomerInvoiceLines(lumperLoad);
+    const lumperTotal = (coleDelivered.rate ?? 0) + 150;
+    assert.equal(lumperLines.reduce((sum, line) => sum + line.amount, 0), lumperTotal);
+    assert.equal(pdfLumperLines.reduce((sum, line) => sum + line.amount, 0), lumperTotal);
+    assert.equal(lumperLines.filter((line) => line.name === "Lumper").length, 1);
+    assert.equal(pdfLumperLines.filter((line) => line.name === "Lumper").length, 1);
     assert.equal(qbo.oauthStatesMatch("abc123", "abc123"), true);
     assert.equal(qbo.oauthStatesMatch("abc123", "abc124"), false);
 
@@ -16653,13 +16661,14 @@ DISPATCH CONFIRMATION
     rate: 150,
     qty: 1,
     total: 150,
-    notes: "do not bill lumper",
+    notes: "Dock lumper",
   });
   const invoiceLines = tmsCustomerInvoiceLines(queries.getLoad(invoiceLoadId)!);
-  assert.equal(invoiceLines.length, 1);
+  assert.equal(invoiceLines.length, 2);
   assert.equal(invoiceLines[0]?.amount, 1500);
-  assert.ok(!invoiceLines.some((line) => /lumper/i.test(line.name)));
-  assert.ok(!invoiceLines.some((line) => /internal|do not bill/i.test(line.description)));
+  assert.equal(invoiceLines.filter((line) => line.name === "Lumper").length, 1);
+  assert.equal(invoiceLines.find((line) => line.name === "Lumper")?.amount, 150);
+  assert.ok(!invoiceLines.some((line) => /internal/i.test(line.description)));
   const freightPlusDetentionId = queries.createLoad({
     customer_id: customerId,
     origin: "Hastings, NE",
@@ -16735,7 +16744,11 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(tmsInvoiceModel.companyLegalName, /M&S Loads/);
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
   assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
-  assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
+  assert.equal(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"), false);
+  assert.equal(isCompanyCustomerName("Express", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("DBA", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("MS Express", "M&S Loads"), true);
+  assert.equal(isCompanyCustomerName("M&S Loads DBA MS Express", "MS Express"), true);
   assert.doesNotMatch(tmsInvoiceModel.customerStreet, /600 E 39th|100 Fleet Way/);
   assert.doesNotMatch(tmsInvoiceModel.customerCityStateZip, /Hastings/);
   assert.doesNotMatch(tmsInvoiceModel.customerPhone, /402-302-0097/);
@@ -16749,12 +16762,13 @@ DISPATCH CONFIRMATION
   assert.equal(settings.withOfficeAddress({ street: "100 Fleet Way", city: "Omaha", state: "NE", zip: "68102" }).street, "100 Fleet Way");
   assert.ok(tmsInvoiceModel.stops.length >= 1);
   assert.ok(tmsInvoiceModel.lines.every((line) => line.qty != null || line.rate != null || line.amount));
-  assert.doesNotMatch(tmsInvoiceModel.lines.map((line) => line.name).join(" "), /owner-operator|relay|lumper/i);
+  assert.doesNotMatch(tmsInvoiceModel.lines.map((line) => line.name).join(" "), /owner-operator|relay/i);
+  assert.equal(tmsInvoiceModel.lines.filter((line) => line.name === "Lumper").length, 1);
   const made = await createTmsInvoice(invoiceLoadId);
   assert.equal(made.invoiceNumber, "INV-1005911");
   assert.equal(made.filename, "INV-1005911.pdf");
   assert.equal(made.buffer.subarray(0, 4).toString(), "%PDF");
-  assert.equal((await PDFDocument.load(made.buffer)).getPageCount(), 1);
+  assert.equal((await PDFDocument.load(made.buffer)).getPageCount(), 2, "lumper line and customer ref # continue onto page 2");
   const { regenerateMissingAttachment } = await import("../lib/regenerate-attachment");
   const storedInvoice = getAttachment(made.attachmentId);
   assert.ok(storedInvoice);
@@ -16806,6 +16820,8 @@ DISPATCH CONFIRMATION
   assert.match(invoicePdfText, /Pay Items/);
   assert.match(invoicePdfText, /Page 1 of /);
   assert.match(invoicePdfText, /Load #/);
+  assert.match(invoicePdfText, /Customer ref #/);
+  assert.match(invoicePdfText, /PO-5911/);
   assert.match(invoicePdfText, /Primary Contact:/);
   assert.match(invoicePdfText, /Fax:/);
   assert.match(invoicePdfText, /Net 30/);
@@ -16951,7 +16967,7 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(mse1055InvoiceText, /Remit to M&S|Remit to M & S/);
   assert.match(mse1055InvoiceText, /600 E 39th/);
   assert.match(mse1055InvoiceText, /402-302-0097/);
-  assert.doesNotMatch(mse1055InvoiceText, /ar@msloads\.com/);
+  assert.match(mse1055InvoiceText, /ar@msloads\.com/);
   assert.match(mse1055InvoiceText, /Primary Contact:\s*JC/);
   assert.match(mse1055InvoiceText, /Fax:/);
   assert.match(mse1055InvoiceText, /Net 30/);

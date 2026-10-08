@@ -27,8 +27,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
+  // /privacy and /terms are public legal pages (Intuit production app settings link to them).
   // Logo files stay public. A signed-out /login request must receive image bytes, not a redirect to HTML.
   matcher: [
-    "/((?!api(?:/|$)|_next/static|_next/image|favicon\\.ico$|ms-express-logo(?:-on-dark|-transparent)?\\.png$|login(?:/.*)?$|driver(?:/.*)?$|t(?:/.*)?$|l(?:/.*)?$).*)",
+    "/((?!api(?:/|$)|_next/static|_next/image|favicon\\.ico$|ms-express-logo(?:-on-dark|-transparent)?\\.png$|login(?:/.*)?$|privacy/?$|terms/?$|driver(?:/.*)?$|t(?:/.*)?$|l(?:/.*)?$).*)",
   ],
 };

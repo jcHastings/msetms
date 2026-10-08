@@ -119,7 +119,13 @@ export function listLoadsOnAccountingDesk(desk: Extract<AccountingDesk, "account
 }
 
 export type QboItemMap = { category: string; qbo_item_id: string; qbo_item_name: string };
-export type QboVendorMap = { payee: string; qbo_vendor_id: string; qbo_vendor_name: string };
+export type QboVendorMap = {
+  payee: string;
+  qbo_vendor_id: string;
+  qbo_vendor_name: string;
+  qbo_expense_account_id: string;
+  qbo_expense_account_name: string;
+};
 
 export function listQboItemMaps(): QboItemMap[] {
   return getDb().prepare("SELECT * FROM qbo_item_maps ORDER BY category").all() as QboItemMap[];
@@ -139,7 +145,12 @@ export function listQboVendorMaps(): QboVendorMap[] {
   return getDb().prepare("SELECT * FROM qbo_vendor_maps ORDER BY payee").all() as QboVendorMap[];
 }
 
-export function upsertQboVendorMap(payee: string, qboVendorId: string, qboVendorName: string): void {
+export function upsertQboVendorMap(
+  payee: string,
+  qboVendorId: string,
+  qboVendorName: string,
+  expenseAccount?: { id: string; name: string },
+): void {
   getDb()
     .prepare(
       `INSERT INTO qbo_vendor_maps (payee, qbo_vendor_id, qbo_vendor_name)
@@ -147,4 +158,9 @@ export function upsertQboVendorMap(payee: string, qboVendorId: string, qboVendor
        ON CONFLICT(payee) DO UPDATE SET qbo_vendor_id = excluded.qbo_vendor_id, qbo_vendor_name = excluded.qbo_vendor_name`,
     )
     .run(payee.trim(), qboVendorId.trim(), qboVendorName.trim());
+  if (expenseAccount) {
+    getDb()
+      .prepare("UPDATE qbo_vendor_maps SET qbo_expense_account_id = ?, qbo_expense_account_name = ? WHERE payee = ?")
+      .run(expenseAccount.id.trim(), expenseAccount.name.trim(), payee.trim());
+  }
 }

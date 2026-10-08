@@ -481,6 +481,8 @@ export type Load = {
   driver_id: number | null;
   qbo_invoice_id: string;
   qbo_invoice_number: string;
+  /** QuickBooks Invoice.DocNumber after a successful sync. Null until then. */
+  qbo_doc_number: string | null;
   qbo_sent_at: string;
   qbo_source: "demo" | "quickbooks" | "";
   status_reason: string;

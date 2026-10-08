@@ -4,6 +4,7 @@ import type { QboMapTab } from "./accounting-desk-shared";
 import {
   getQuickbooksStatus,
   listQboCustomers,
+  listQboExpenseAccounts,
   listQboItems,
   listQboVendors,
   type QboNamedRef,
@@ -18,6 +19,7 @@ export type QuickbooksDeskData = {
   qboCustomers: QboNamedRef[];
   qboItems: QboNamedRef[];
   qboVendors: QboNamedRef[];
+  qboExpenseAccounts: QboNamedRef[];
   customers: Customer[];
   needsCustomer: Customer[];
   itemMaps: QboItemMap[];
@@ -64,7 +66,7 @@ export async function loadQuickbooksDesk(tab: QboMapTab): Promise<QuickbooksDesk
     if (message && !errors.includes(message)) errors.push(message);
   };
 
-  const [qbo, qboCustomers, qboItems, qboVendors, customers, needsCustomer, itemMaps, vendorMaps, vendorNames] =
+  const [qbo, qboCustomers, qboItems, qboVendors, qboExpenseAccounts, customers, needsCustomer, itemMaps, vendorMaps, vendorNames] =
     await Promise.all([
       settle(getQuickbooksStatus, qboUnavailableStatus("QuickBooks status is unavailable."), note, "QuickBooks status is unavailable."),
       settle(
@@ -75,6 +77,12 @@ export async function loadQuickbooksDesk(tab: QboMapTab): Promise<QuickbooksDesk
       ),
       settle(() => (tab === "items" ? listQboItems() : []), [], note, "QuickBooks items could not be loaded."),
       settle(() => (tab === "vendors" ? listQboVendors() : []), [], note, "QuickBooks vendors could not be loaded."),
+      settle(
+        () => (tab === "vendors" ? listQboExpenseAccounts() : []),
+        [],
+        note,
+        "QuickBooks expense accounts could not be loaded.",
+      ),
       settle(listCustomers, [], note, "TMS customers could not be loaded."),
       settle(listCustomersNeedingQbo, [], note, "Customers needing QuickBooks could not be loaded."),
       settle(listQboItemMaps, [], note, "Pay-item maps could not be loaded."),
@@ -99,6 +107,7 @@ export async function loadQuickbooksDesk(tab: QboMapTab): Promise<QuickbooksDesk
     qboCustomers,
     qboItems,
     qboVendors,
+    qboExpenseAccounts,
     customers,
     needsCustomer,
     itemMaps,

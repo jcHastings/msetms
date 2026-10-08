@@ -252,6 +252,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "reefer_readings", "heading_deg", "REAL");
   ensureColumn(db, "loads", "qbo_invoice_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_invoice_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_doc_number", "TEXT");
   ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_source", "TEXT NOT NULL DEFAULT ''");
 
@@ -345,6 +346,9 @@ export function migrate(db: Database): void {
       qbo_vendor_name TEXT NOT NULL DEFAULT ''
     );
   `);
+  // Per-vendor bill expense account (owner-operator settlements vs fuel). Blank = QBO_BILL_EXPENSE_ACCOUNT_ID.
+  ensureColumn(db, "qbo_vendor_maps", "qbo_expense_account_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "qbo_vendor_maps", "qbo_expense_account_name", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "truck_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "branch", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "declared_value", "REAL");
@@ -763,6 +767,7 @@ export function migrate(db: Database): void {
   }
 
   ensureColumn(db, "bills", "qbo_bill_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "bills", "lines_json", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "email", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "dispatchers", "active", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "dispatchers", "permission_group", "TEXT NOT NULL DEFAULT 'all'");

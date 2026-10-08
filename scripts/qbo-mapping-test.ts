@@ -21,9 +21,19 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 type Call = { url: string; method: string; body: Json };
 const calls: Call[] = [];
 const ITEMS = [
-  { Id: "3", Name: "Concrete", Type: "Service" },
-  { Id: "21", Name: "Freight Revenue", Type: "Service" },
-  { Id: "22", Name: "Detention", Type: "Service" },
+  { Id: "3", Name: "Concrete", Type: "Service", IncomeAccountRef: { value: "1", name: "Other" } },
+  { Id: "21", Name: "Freight Revenue", Type: "Service", IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } },
+  { Id: "22", Name: "Detention", Type: "Service", IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } },
+];
+const ACCOUNTS = [
+  {
+    Id: "401",
+    Name: "Gross Trucking Income",
+    FullyQualifiedName: "Gross Trucking Income",
+    AccountType: "Income",
+    Classification: "Revenue",
+    Active: true,
+  },
 ];
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = input instanceof Request ? input.url : String(input);
@@ -31,16 +41,39 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const body = init?.body && typeof init.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : init?.body;
   calls.push({ url, method, body });
   const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
-  assert.ok(url.startsWith("https://sandbox-quickbooks.api.intuit.com/") || url.startsWith("https://oauth.platform.intuit.com/"), `unexpected host ${url}`);
+  assert.ok(
+    url.startsWith("https://sandbox-quickbooks.api.intuit.com/") ||
+      url.startsWith("https://oauth.platform.intuit.com/") ||
+      url.startsWith("https://developer.api.intuit.com/v2/oauth2/tokens/revoke"),
+    `unexpected host ${url}`,
+  );
+  if (url.includes("/tokens/revoke")) return new Response("", { status: 200 });
+  if (url.includes("/invoice/") && method === "GET") {
+    return new Response(JSON.stringify({ Fault: {} }), { status: 500, headers: { intuit_tid: "tid-test-123" } });
+  }
   if (url.includes("/tokens/bearer")) return json({ access_token: "at-test", refresh_token: "rt-test-2", expires_in: 3600 });
   if (url.includes("/query?")) {
     const q = decodeURIComponent(url.split("query=")[1].split("&")[0]);
-    const byName = q.match(/from Item where Name = '(.+)'/);
-    if (byName) return json({ QueryResponse: { Item: ITEMS.filter((i) => i.Name === byName[1].replace(/''/g, "'")) } });
-    if (/from Vendor where DisplayName/.test(q)) return json({ QueryResponse: { Vendor: [{ Id: "60" }] } });
+    const quoted = (field: string) => q.match(new RegExp(`${field} = '((?:[^']|'')*)'`))?.[1]?.replace(/''/g, "'");
+    if (/from Item/i.test(q)) {
+      const name = quoted("Name");
+      const id = quoted("Id");
+      return json({
+        QueryResponse: {
+          Item: ITEMS.filter((item) => (name ? item.Name === name : true) && (id ? item.Id === id : true)),
+        },
+      });
+    }
+    if (/from Account/i.test(q)) return json({ QueryResponse: { Account: ACCOUNTS } });
+    if (/from Preferences/i.test(q)) {
+      return json({ QueryResponse: { Preferences: { SalesFormsPrefs: { CustomTxnNumbers: false } } } });
+    }
+    if (/from Customer/i.test(q) || /from Vendor/i.test(q) || /from Invoice/i.test(q)) return json({ QueryResponse: {} });
     return json({ QueryResponse: {} });
   }
-  if (method === "POST" && url.includes("/invoice")) return json({ Invoice: { Id: "900", DocNumber: body.DocNumber } });
+  if (method === "POST" && url.includes("/invoice")) {
+    return json({ Invoice: { Id: "900", DocNumber: body.DocNumber || "1006250", SyncToken: "0" } });
+  }
   if (method === "POST" && url.includes("/bill")) return json({ Bill: { Id: "901" } });
   return json({});
 }) as typeof fetch;
@@ -62,6 +95,9 @@ async function main() {
   const qbo = await import("../lib/integrations/quickbooks");
   const accounting = await import("../lib/accounting");
   const db = getDb();
+  // Live sends need the MS Express remit street and AR email (qbo-campaign.ts covers the block).
+  db.prepare("UPDATE company_profile SET street = '100 Test Remit St', ar_email = 'billing@example.com' WHERE id = 1").run();
+  assert.equal((db.prepare("SELECT changes() AS n").get() as { n: number }).n, 1);
   const customerId = queries.createCustomer({ name: "QBO Map Customer", billing_notes: "", contacts: [] });
   db.prepare("UPDATE customers SET qbo_customer_id = '58', qbo_status = 'mapped' WHERE id = ?").run(customerId);
   const day = new Date(Date.now() - 86_400_000).toISOString();
@@ -93,9 +129,15 @@ async function main() {
   assert.equal(sent.invoiceId, "900");
   const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(invoice.body.CustomerRef.value, "58");
+  assert.equal(invoice.body.DocNumber, undefined, "CustomTxnNumbers is off, so DocNumber is omitted");
+  assert.equal(invoice.body.ARAccountRef, undefined);
+  assert.equal(invoice.body.ClassRef, undefined);
+  assert.equal(sent.invoiceNumber, "1006250");
+  assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "1006250");
+  assert.match(String(invoice.body.CustomerMemo.value), /MS Express load QBOMAP1/);
   assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "22", "21"], "map, exact name, map");
 
-  // Unmapped customer: never query or create a QBO customer during invoice sync.
+  // Unmapped customer: exact DisplayName lookup, and no create when it misses.
   const bareId = queries.createCustomer({ name: "Unmapped Broker", billing_notes: "", contacts: [] });
   const bareLoad = queries.createLoad({
     customer_id: bareId, origin: "Hastings, NE", destination: "Omaha, NE",
@@ -108,7 +150,7 @@ async function main() {
   calls.length = 0;
   await assert.rejects(() => qbo.sendLoadToQuickbooks(bareLoad), /Map this customer first/);
   assert.equal(calls.some((c) => c.method === "POST" && /\/customer\?/.test(c.url)), false, "no customer create");
-  assert.equal(calls.some((c) => /from Customer/.test(decodeURIComponent(c.url))), false, "no customer name lookup");
+  assert.equal(calls.some((c) => /from Customer/.test(decodeURIComponent(c.url))), true, "exact DisplayName lookup");
 
   // Duplicate TMS customers (M&S Loads 531 and 9) can share one QBO customer id.
   const dupId = queries.createCustomer({ name: "M&S Loads", billing_notes: "", contacts: [] });
@@ -136,7 +178,10 @@ async function main() {
   assert.equal(calls.some((c) => c.method === "POST" && /\/vendor\?/.test(c.url)), false, "no vendor create");
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/bill")), false);
   upsertQboVendorMap("QBO Map Vendor", "61", "Mapped Vendor");
-  await assert.rejects(() => qbo.sendBillToQuickbooks(billId), /QBO_BILL_EXPENSE_ACCOUNT_ID/);
+  await assert.rejects(
+    () => qbo.sendBillToQuickbooks(billId),
+    /QuickBooks account "Owner Operators:Owner Operators COL" is not in this company/,
+  );
   process.env.QBO_BILL_EXPENSE_ACCOUNT_ID = "77";
   calls.length = 0;
   const bill = await qbo.sendBillToQuickbooks(billId);
@@ -148,12 +193,101 @@ async function main() {
   assert.equal(calls.some((c) => c.method === "POST" && /\/vendor\?/.test(c.url)), false);
   const qboSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
   assert.doesNotMatch(qboSrc, /\/customer"|\/vendor"/);
+  assert.doesNotMatch(qboSrc, /load_number\.slice\(0,\s*21\)/);
+  assert.match(qboSrc, /nextSequenceDocNumber/);
   const mapPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
   assert.match(mapPage, /htmlFor=\{selectId\}/);
   assert.match(mapPage, /No TMS customers to map yet/);
   assert.match(mapPage, /Several TMS customers can share one QuickBooks customer/);
   assert.match(mapPage, /Nothing here creates a customer in QuickBooks/);
   assert.match(mapPage, /Nothing here creates a vendor in QuickBooks/);
+  // Re-sync reads the existing invoice first; an Intuit error carries intuit_tid and nothing is written.
+  db.prepare("UPDATE loads SET qbo_source = 'quickbooks', qbo_invoice_id = '900' WHERE id = ?").run(dupLoad);
+  calls.length = 0;
+  const quiet = console.error;
+  console.error = () => {};
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(dupLoad, { confirmResend: true }), /Intuit ref tid-test-123/);
+  console.error = quiet;
+  assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "no write after a failed read");
+
+  // Disconnect revokes the refresh token at Intuit, then deletes the local token file.
+  calls.length = 0;
+  const disconnected = await qbo.disconnectQuickbooks();
+  assert.equal(disconnected.revoked, true);
+  const revoke = calls.find((c) => c.url.includes("/tokens/revoke"));
+  assert.ok(revoke && revoke.method === "POST", "revoke called");
+  assert.equal(fs.existsSync(path.join(tmp, "qbo-refresh.json")), false, "token file removed");
+  assert.equal(qbo.hasQuickbooksSession(), false);
+  // Intuit production settings link to public /privacy and /terms: signed-out, in effect, MS Express identity only.
+  const { config: mwConfig } = await import("../middleware");
+  const matcher = new RegExp(`^${mwConfig.matcher[0]}$`);
+  for (const open of ["/privacy", "/terms", "/login", "/driver"]) assert.equal(matcher.test(open), false, `${open} is public`);
+  for (const closed of ["/settings/quickbooks", "/accounting/quickbooks", "/privacy-admin", "/termsheet", "/"]) {
+    assert.equal(matcher.test(closed), true, `${closed} needs sign-in`);
+  }
+  const shell = fs.readFileSync(path.join(process.cwd(), "components/shell-switch.tsx"), "utf8");
+  assert.match(shell, /pathname === "\/privacy"/);
+  assert.match(shell, /pathname === "\/terms"/);
+  const login = fs.readFileSync(path.join(process.cwd(), "components/login-canvas.tsx"), "utf8");
+  assert.match(login, /href="\/privacy"/);
+  assert.match(login, /href="\/terms"/);
+  const privacy = fs.readFileSync(path.join(process.cwd(), "app/privacy/page.tsx"), "utf8");
+  const terms = fs.readFileSync(path.join(process.cwd(), "app/terms/page.tsx"), "utf8");
+  const legal = [privacy, terms, fs.readFileSync(path.join(process.cwd(), "components/legal-document.tsx"), "utf8")].join("\n");
+  const privacyIds = [
+    "effective-date",
+    "who-we-are",
+    "quickbooks-data",
+    "how-we-use-quickbooks",
+    "storage-and-security",
+    "no-sale",
+    "subprocessors",
+    "retention",
+    "deletion",
+    "disconnect",
+    "after-disconnect",
+    "children",
+    "changes",
+    "governing-law",
+    "contact",
+  ];
+  const termsIds = [
+    "effective-date",
+    "parties",
+    "license",
+    "license-restrictions",
+    "acceptable-use",
+    "accounts",
+    "third-party",
+    "warranties",
+    "liability",
+    "indemnity",
+    "termination",
+    "data",
+    "law",
+    "contact",
+  ];
+  for (const id of privacyIds) assert.match(privacy, new RegExp(`id: "${id}"`), `privacy heading ${id}`);
+  for (const id of termsIds) assert.match(terms, new RegExp(`id: "${id}"`), `terms heading ${id}`);
+  assert.match(privacy, /alternates: \{ canonical: PRIVACY_URL \}/);
+  assert.match(terms, /alternates: \{ canonical: TERMS_URL \}/);
+  assert.doesNotMatch(legal, /data-legal-draft|Not yet in effect|\bDRAFT\b/);
+  assert.match(legal, /is not encrypted at rest today/);
+  assert.match(legal, /3062879/);
+  assert.match(legal, /056299/);
+  assert.match(legal, /402-302-0097/);
+  assert.match(legal, /State of Nebraska/);
+  assert.match(legal, /October 7, 2026/);
+  assert.match(legal, /ar@msloads\.com/);
+  assert.match(legal, /10 years/);
+  assert.match(
+    privacy,
+    /Encrypted backups are kept for up to 10 years, then deleted, on the same schedule as business records\./,
+  );
+  assert.match(privacy, /Deletion requests are honored except where records must be retained by law\./);
+  assert.doesNotMatch(legal, /JC to confirm|longer backup archive|backups are copies of those same records/);
+  assert.match(legal, /us-east-1/);
+  assert.doesNotMatch(legal, /M&S Loads LLC|M & S Loads|MC-970613|970613|jc@msloads\.com|Nanuet/i);
   console.log("qbo-mapping-test: ok");
 }
 

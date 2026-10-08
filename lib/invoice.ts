@@ -4,7 +4,7 @@ import { addAttachment } from "./files";
 import { formatInvoiceMoney, formatMdYDisplay, formatStopWindow, formatWeight } from "./format";
 import { labelForPayCategory } from "./load-page-shared";
 import { applyLocationToStop, formatStopPartyAddress, matchLocationForStop } from "./locations";
-import { customerInvoicePayItems } from "./pay-items";
+import { customerInvoiceBillableItems, resolveCustomerLumper } from "./pay-items";
 import { listChildLoads } from "./master-load";
 import { getCustomer, getLoad, listLocations, markTmsInvoice } from "./queries";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
@@ -14,11 +14,14 @@ import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
 import { resolveCustomerMainPhone } from "./load-contact";
 import {
-  invoiceIssuerDocket,
   invoiceIssuerLegalName,
   invoiceIssuerProblems,
   invoiceIssuerWarning,
+  isBrokerageMc,
   MS_EXPRESS_CARRIER,
+  MS_EXPRESS_LEGAL_NAME,
+  normalizeCarrierName,
+  paperworkIssuer,
   usableArEmail,
 } from "./carrier-identity";
 
@@ -81,16 +84,15 @@ export function paperworkCompanyName(name: string): string {
   return invoiceIssuerLegalName(name);
 }
 
+/** Customer is the carrier only when the whole name matches the company, MS Express, or the DBA name. */
 export function isCompanyCustomerName(customerName: string, companyName: string): boolean {
-  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const customer = norm(customerName);
+  const customer = normalizeCarrierName(customerName);
   if (!customer) return false;
-  if (customer.includes("msloads") || customer.includes("mandsloads") || customer.includes("msexpress")) {
-    return true;
-  }
-  const company = norm(companyName).replace(/llc$/, "");
-  const customerCore = customer.replace(/llc$/, "");
-  return Boolean(company) && (customerCore === company || customerCore.includes(company) || company.includes(customerCore));
+  return (
+    customer === normalizeCarrierName(companyName) ||
+    customer === normalizeCarrierName(MS_EXPRESS_CARRIER.name) ||
+    customer === normalizeCarrierName(MS_EXPRESS_LEGAL_NAME)
+  );
 }
 
 function invoiceLineFromPayItem(item: { category: string; notes: string; total: number | null; qty: number | null; rate: number | null }): TmsInvoiceLine {
@@ -103,9 +105,15 @@ function invoiceLineFromPayItem(item: { category: string; notes: string; total: 
   };
 }
 
-/** Customer freight (rate or Flat Rate) plus extras such as detention. Lumper stays off. */
+/**
+ * Customer freight (rate or Flat Rate) plus extras such as detention.
+ * Lumper is one amount: the customer pay line, or lumper_actual when that is the only figure.
+ * Fuel surcharge is only a manual Fuel Surcharge pay line. Nothing here multiplies miles by a rate.
+ */
 export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
-  const payItems = customerInvoicePayItems(load.id).filter((item) => item.category !== "lumper");
+  const lumper = resolveCustomerLumper(load);
+  if (!lumper.ok) throw new Error(lumper.message);
+  const payItems = customerInvoiceBillableItems(load.id);
   const flats = payItems.filter((item) => item.category === "flat_rate");
   const extras = payItems.filter((item) => item.category !== "flat_rate");
   const lines: TmsInvoiceLine[] = [];
@@ -115,6 +123,15 @@ export function tmsCustomerInvoiceLines(load: LoadView): TmsInvoiceLine[] {
     lines.push({ name: "Flat Rate", description: "", amount: load.rate, qty: 1, rate: load.rate });
   }
   lines.push(...extras.map(invoiceLineFromPayItem));
+  if (lumper.mode === "actual") {
+    lines.push({
+      name: labelForPayCategory("lumper"),
+      description: "",
+      amount: lumper.amount,
+      qty: 1,
+      rate: lumper.amount,
+    });
+  }
   return lines;
 }
 
@@ -281,9 +298,12 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
   if (!lines.length) {
     throw new Error("Add Income / Budget line items or a customer rate first.");
   }
-  const invoiceNumber = load.tms_invoice_number || `INV-${load.load_number}`;
+  // Before QuickBooks sync the PDF uses INV-{load #}. After sync it uses the QBO DocNumber.
+  const qboNumber = String(load.qbo_doc_number ?? "").trim();
+  const invoiceNumber = qboNumber || load.tms_invoice_number || `INV-${load.load_number}`;
   const settings = getCompanySettings();
   const company = getCompanyProfile();
+  const issuer = paperworkIssuer(settings);
   const customer = customerBlock(load);
   const date = invoiceDate(load);
   return {
@@ -292,20 +312,21 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     customerName: load.customer_name,
     date,
     poNumber: load.po_number || load.customer_reference || "",
-    customerReference: load.customer_reference || load.po_number || "",
+    customerReference: (load.customer_reference ?? "").trim(),
     lane: `${load.origin} → ${load.destination}`,
     lines,
     total: lines.reduce((sum, line) => sum + line.amount, 0),
-    companyName: paperworkCompanyName(company.company_name),
-    companyLegalName: paperworkCompanyName(company.company_name),
+    companyName: issuer.name,
+    companyLegalName: issuer.name,
     companyAddress: formatCompanyAddress({
       ...settings,
-      street: settings.street.trim(),
-      city: settings.city.trim() || MS_EXPRESS_CARRIER.city,
-      state: settings.state.trim() || MS_EXPRESS_CARRIER.state,
+      street: issuer.street,
+      city: issuer.city,
+      state: issuer.state,
+      zip: issuer.zip,
     }),
-    companyPhone: company.dispatcher_phone.trim() || MS_EXPRESS_CARRIER.phone,
-    companyEmail: usableArEmail(settings.ar_email),
+    companyPhone: issuer.phone || company.dispatcher_phone.trim() || MS_EXPRESS_CARRIER.phone,
+    companyEmail: issuer.email,
     weight: load.weight != null ? formatWeight(load.weight, settings.weight_unit) : "",
     miles: (() => {
       const total = routeGuideFromLoad(load, { stopCount: listStops(load.id).length }).totalMiles;
@@ -319,16 +340,10 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     terms: customer.terms || "Net 30",
     dueDate: dueDateFromTerms(customer.terms || "Net 30", date),
     dispatcherName: "",
-    companyDocket: invoiceIssuerDocket(settings.usdot, settings.mc),
+    companyDocket: issuer.docket,
     stops: invoiceStops(load),
     publicNotes: (load.public_notes ?? "").trim(),
-    issuerWarning: invoiceIssuerWarning(
-      invoiceIssuerProblems({
-        company_name: company.company_name,
-        street: settings.street,
-        ar_email: settings.ar_email,
-      }),
-    ),
+    issuerWarning: invoiceIssuerWarning(invoiceIssuerProblems(settings)),
   };
 }
 
@@ -576,24 +591,27 @@ function drawInvoiceHeader(
 ): number {
   const logoH = drawInvoiceLogo(doc, x, y, [176, 62]);
   let companyY = y + logoH + 8;
-  const legalName = invoiceIssuerLegalName(model.companyLegalName);
-  const street = settings.street.trim();
-  const city = settings.city.trim() || MS_EXPRESS_CARRIER.city;
-  const state = settings.state.trim() || MS_EXPRESS_CARRIER.state;
-  const email = usableArEmail(model.companyEmail);
-  const docket = model.companyDocket?.trim() || invoiceIssuerDocket();
+  const issuer = paperworkIssuer(settings);
+  const legalName = invoiceIssuerLegalName(model.companyLegalName || issuer.name);
+  const street = issuer.street;
+  const city = issuer.city;
+  const state = issuer.state;
+  const email = usableArEmail(model.companyEmail) || issuer.email;
+  const requestedDocket = model.companyDocket?.trim();
+  const docket = requestedDocket && !isBrokerageMc(requestedDocket) ? requestedDocket : issuer.docket;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK).text(legalName, x, companyY, {
     width: 250,
   });
   companyY += 16;
-  for (const line of addressLines(street, cityStateZipLine(city, state, settings.zip))) {
+  for (const line of addressLines(street, cityStateZipLine(city, state, issuer.zip))) {
     doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK).text(line, x, companyY, { width: 250 });
     companyY += 13;
   }
   doc.font("Helvetica").fontSize(9).text(docket, x, companyY, { width: 250 });
   companyY += 13;
-  if (model.companyPhone) {
-    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, x, companyY, { width: 250 });
+  const phone = model.companyPhone.trim() || issuer.phone;
+  if (phone) {
+    doc.font("Helvetica").fontSize(9).text(`Phone: ${phone}`, x, companyY, { width: 250 });
     companyY += 13;
   }
   if (email) {
@@ -613,17 +631,20 @@ function drawInvoiceHeader(
     ["Weight", model.weight],
     ["Distance", invoiceDistance(model.miles)],
   ];
+  meta.push(["MS Express load #", model.loadNumber]);
+  const customerRef = model.customerReference.trim();
+  if (customerRef) meta.push(["Customer ref #", customerRef]);
   const rowH = 15;
   const cardY = y + 30;
   const cardH = 12 + meta.length * rowH;
   doc.rect(cardX, cardY, cardW, cardH).strokeColor(INVOICE_INK).lineWidth(1).stroke();
   let metaY = cardY + 7;
   for (const [label, value] of meta) {
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(INVOICE_INK).text(`${label}:`, cardX + 10, metaY, {
-      width: 78,
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(INVOICE_INK).text(`${label}:`, cardX + 8, metaY, {
+      width: 108,
       lineBreak: false,
     });
-    doc.font("Helvetica").fontSize(9).text(value, cardX + 90, metaY, { width: 128, lineBreak: false });
+    doc.font("Helvetica").fontSize(9).text(value, cardX + 116, metaY, { width: 104, lineBreak: false });
     metaY += rowH;
   }
   const bottom = Math.max(companyY, cardY + cardH) + 14;

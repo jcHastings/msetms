@@ -28,6 +28,8 @@ export function ShellSwitch({
     pathname.startsWith("/driver") ||
     pathname === "/login" ||
     pathname.startsWith("/login/") ||
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
     pathname.startsWith("/t/") ||
     pathname.startsWith("/l/");
   const changePath = pathname === "/login/change-password";

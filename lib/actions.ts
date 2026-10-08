@@ -678,8 +678,8 @@ export async function fetchSamsaraStillAction(
 
 export async function disconnectQuickbooksAction(): Promise<void> {
   await requireSettingsEditor();
-  const { clearStoredQuickbooksTokens } = await import("./integrations/quickbooks");
-  clearStoredQuickbooksTokens();
+  const { disconnectQuickbooks } = await import("./integrations/quickbooks");
+  await disconnectQuickbooks();
   refresh();
 }
 
@@ -703,7 +703,7 @@ export async function sendToQuickbooksAction(
     return {
       ok: true,
       id: loadId,
-      message: confirmResend ? "Invoice sent again to QuickBooks." : "Invoice sent to QuickBooks.",
+      message: confirmResend ? "Invoice sent again to QuickBooks. The same invoice was updated." : "Invoice sent to QuickBooks.",
     };
   } catch (error) {
     return fail(error);

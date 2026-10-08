@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 
 export function LoginCanvas({
@@ -17,6 +18,10 @@ export function LoginCanvas({
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
       {children}
+      <footer className="login-legal">
+        <Link href="/privacy">Privacy Policy</Link>
+        <Link href="/terms">Terms of Use</Link>
+      </footer>
     </div>
   );
 }

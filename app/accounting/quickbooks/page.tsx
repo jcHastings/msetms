@@ -56,6 +56,7 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
     qboCustomers,
     qboItems,
     qboVendors,
+    qboExpenseAccounts,
     customers,
     needsCustomer,
     itemMaps,
@@ -310,12 +311,16 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
             <p className="mt-1 text-[12.5px] text-slate-600">
               Bills use the vendor saved here. Nothing here creates a vendor in QuickBooks.
             </p>
+            <p className="mt-1 text-[12.5px] text-slate-600">
+              Expense account: where that vendor&apos;s bills post, for example owner-operator settlements or fuel.
+              Leave it on the default to use the company bill account.
+            </p>
           </header>
           <table className="table-grid">
             <thead>
               <tr>
                 <th>TMS vendor / OO</th>
-                <th>QuickBooks vendor</th>
+                <th>QuickBooks vendor and expense account</th>
               </tr>
             </thead>
             <tbody>
@@ -329,6 +334,16 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
                 vendorNames.map((name) => {
                   const mapped = vendorMaps.find((row) => row.payee === name);
                   const selectId = `qbo-vendor-${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+                  const accountSelectId = `${selectId}-expense`;
+                  const savedAccountId = mapped?.qbo_expense_account_id?.trim() ?? "";
+                  // Keep a saved account selectable while QuickBooks is offline so Save never clears it.
+                  const accountOptions =
+                    savedAccountId && !qboExpenseAccounts.some((row) => row.id === savedAccountId)
+                      ? [
+                          ...qboExpenseAccounts,
+                          { id: savedAccountId, name: mapped?.qbo_expense_account_name || `Account ${savedAccountId}` },
+                        ]
+                      : qboExpenseAccounts;
                   return (
                     <tr key={name}>
                       <td>{name}</td>
@@ -355,6 +370,23 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
                             ))}
                           </select>
                           <input type="hidden" name="qbo_vendor_name" value={mapped?.qbo_vendor_name ?? ""} />
+                          <label htmlFor={accountSelectId} className="sr-only">
+                            Expense account for {name} bills
+                          </label>
+                          <select
+                            id={accountSelectId}
+                            name="qbo_expense_account_id"
+                            defaultValue={mapped?.qbo_expense_account_id ?? ""}
+                            className="min-w-[220px]"
+                            data-qbo-expense-account=""
+                          >
+                            <option value="">Default bill account</option>
+                            {accountOptions.map((row) => (
+                              <option key={row.id} value={row.id}>
+                                {row.name}
+                              </option>
+                            ))}
+                          </select>
                           <button className="btn btn-secondary" type="submit">
                             Save
                           </button>

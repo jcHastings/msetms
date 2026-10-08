@@ -89,6 +89,59 @@ export function deletePayItem(id: number): void {
   syncCustomerRateFromPayItems(row.load_id);
 }
 
+/**
+ * Lumper is always billed to the customer (TMS invoice PDF and QuickBooks use the same amount).
+ * JC, 5:11 PM ET: bill it regardless of the rate confirmation.
+ */
+export const INVOICE_INCLUDES_LUMPER = true;
+
+/** Customer income lines that belong on the customer invoice (TMS PDF and QuickBooks use the same rule). */
+export function customerInvoiceBillableItems(loadId: number): LoadPayItem[] {
+  return customerInvoicePayItems(loadId).filter((item) => INVOICE_INCLUDES_LUMPER || item.category !== "lumper");
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function payItemAmount(item: { total: number | null; rate: number | null; qty: number | null }): number {
+  if (item.total != null && !Number.isNaN(item.total)) return roundMoney(item.total);
+  if (item.rate != null && !Number.isNaN(item.rate)) return roundMoney(item.rate * (item.qty ?? 1));
+  return 0;
+}
+
+function moneyLabel(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+/**
+ * One lumper amount for the customer invoice.
+ * Customer lumper pay lines and the driver receipt (lumper_actual) must not both be billed.
+ * A blank or zero receipt counts as not entered. A driver-side pay item is not a customer line.
+ */
+export function resolveCustomerLumper(load: { id: number; lumper_actual?: number | null }):
+  | { ok: true; mode: "none" }
+  | { ok: true; mode: "pay-lines" }
+  | { ok: true; mode: "actual"; amount: number }
+  | { ok: false; message: string } {
+  if (!INVOICE_INCLUDES_LUMPER) return { ok: true, mode: "none" };
+  const payItems = customerInvoicePayItems(load.id).filter((item) => item.category === "lumper");
+  const payTotal = roundMoney(payItems.reduce((sum, item) => sum + payItemAmount(item), 0));
+  const hasPay = payItems.length > 0;
+  const actualRaw = load.lumper_actual;
+  const hasActual = actualRaw != null && !Number.isNaN(Number(actualRaw)) && roundMoney(Number(actualRaw)) > 0;
+  const actual = hasActual ? roundMoney(Number(actualRaw)) : 0;
+  if (hasPay && hasActual && Math.abs(payTotal - actual) >= 0.005) {
+    return {
+      ok: false,
+      message: `Lumper is entered twice with different amounts (${moneyLabel(payTotal)} pay line vs ${moneyLabel(actual)} driver receipt). Fix one before invoicing.`,
+    };
+  }
+  if (hasPay) return { ok: true, mode: "pay-lines" };
+  if (hasActual) return { ok: true, mode: "actual", amount: actual };
+  return { ok: true, mode: "none" };
+}
+
 export function customerInvoicePayItems(loadId: number): LoadPayItem[] {
   return listPayItems(loadId, "income").filter((item) => item.bill_to === "customer");
 }

@@ -52,7 +52,7 @@ export function QuickbooksInvoicePanel({
         </div>
         {preview.alreadySent ? (
           <div>
-            <dt className="text-slate-500">QBO doc #</dt>
+            <dt className="text-slate-500">QB invoice #</dt>
             <dd className="font-semibold">
               {preview.existingInvoiceNumber || preview.existingInvoiceId}
               {preview.existingSentAt ? ` · ${formatDateTime(preview.existingSentAt)}` : ""}
@@ -103,7 +103,7 @@ export function QuickbooksInvoicePanel({
               checked={confirmResend}
               onChange={(event) => setConfirmResend(event.target.checked)}
             />
-            <span>This load already has invoice {preview.existingInvoiceId}. Send again anyway.</span>
+            <span>This load already has invoice {preview.existingInvoiceId}. Send again to update that same invoice.</span>
           </label>
         ) : null}
         <button className="btn btn-primary" type="submit" disabled={pending || sendBlocked}>

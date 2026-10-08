@@ -67,13 +67,7 @@ export async function deliverAutoInvoice(
   }
 
   const profile = getCompanySettings();
-  const issuerWarning = invoiceIssuerWarning(
-    invoiceIssuerProblems({
-      company_name: profile.company_name,
-      street: profile.street,
-      ar_email: profile.ar_email,
-    }),
-  );
+  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(profile));
   if (issuerWarning) return { created, sent: false, skipped: issuerWarning };
 
   const fresh = getLoad(loadId) ?? load;

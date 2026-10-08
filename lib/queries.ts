@@ -2306,6 +2306,11 @@ export function listCustomersNeedingQbo(): Customer[] {
 }
 
 export function markCustomerQboMapped(customerId: number, qboCustomerId: string): void {
+  if (customerId === 317) {
+    throw new Error(
+      "MS Express (customer 317) is not a QuickBooks customer. It cannot be mapped or invoiced. Nothing was sent.",
+    );
+  }
   getDb()
     .prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped', updated_at = ? WHERE id = ?")
     .run(qboCustomerId, now(), customerId);
@@ -2334,13 +2339,14 @@ export function markQboInvoice(
   },
 ): void {
   if (!getLoad(loadId)) throw new Error("Load not found.");
+  const docNumber = input.invoiceNumber.trim();
   getDb()
     .prepare(
       `UPDATE loads
-       SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_sent_at = ?, qbo_source = ?, updated_at = ?
+       SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_doc_number = ?, qbo_sent_at = ?, qbo_source = ?, updated_at = ?
        WHERE id = ?`,
     )
-    .run(input.invoiceId, input.invoiceNumber, input.sentAt, input.source, input.sentAt, loadId);
+    .run(input.invoiceId, docNumber, docNumber || null, input.sentAt, input.source, input.sentAt, loadId);
 }
 
 export function updateLoadTruckStatus(loadId: number, truckStatus: string): void {
