@@ -794,7 +794,16 @@ async function main() {
   assert.match(assistSheet, /Cab docs/);
   const driverHome = fs.readFileSync(path.join(process.cwd(), "app/driver/page.tsx"), "utf8");
   const homeLabels = [...driverHome.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(homeLabels, ["Dispatch", "Upload", "Confirmation", "Fuel", "Trailer"]);
+  assert.deepEqual(homeLabels, [
+    "Dispatch",
+    "Upload",
+    "Confirmation",
+    "Fuel",
+    "Paystubs",
+    "Trailer",
+    "My pay",
+    "Reimbursements",
+  ]);
   assert.doesNotMatch(driverHome, /label: "Binder"|label: "Cab docs"|label: "My truck docs"/);
 
   const unauth = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`)));

@@ -68,6 +68,8 @@ export function LoadSheetImport() {
       {rows.length > 0 ? (
         <form action={confirmAction} className="space-y-3">
           <input type="hidden" name="rows" value={JSON.stringify(rows)} />
+          <input type="hidden" name="source_name" value={preview?.sourceName ?? ""} />
+          <input type="hidden" name="export_snapshot" value={preview?.exportSnapshot ?? ""} />
           <p className="text-sm text-slate-700">
             <strong>{rows.length}</strong> load{rows.length === 1 ? "" : "s"} will import in this one
             step. First numbers:{" "}

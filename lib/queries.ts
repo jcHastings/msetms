@@ -139,10 +139,19 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
   if (!row) return null;
   return {
     ...row,
+    pod_outcome: row.pod_outcome || "",
+    pod_reason: row.pod_reason || "",
+    pod_reason_note: row.pod_reason_note || "",
+    pod_recorded_at: row.pod_recorded_at || "",
+    rate_con_amount: row.rate_con_amount ?? null,
     accounting_desk: row.accounting_desk || "operations",
     accounting_return_status: row.accounting_return_status || "",
     accounting_sent_at: row.accounting_sent_at || "",
     bol_json: row.bol_json || "",
+    dispatch_ack_at: row.dispatch_ack_at || "",
+    dispatch_ack_by: row.dispatch_ack_by || "",
+    dispatch_ack_driver_id: row.dispatch_ack_driver_id ?? null,
+    dispatch_ack_fingerprint: row.dispatch_ack_fingerprint || "",
     samsara_route_id: row.samsara_route_id || "",
     samsara_route_status: row.samsara_route_status || "",
     samsara_route_eta: row.samsara_route_eta || "",
@@ -2715,7 +2724,11 @@ export function cloneLoad(loadId: number): number {
     truck_id: null,
     driver_id: null,
   });
-  getDb().prepare("UPDATE loads SET cloned_from_id = ? WHERE id = ?").run(loadId, id);
+  getDb().prepare("UPDATE loads SET cloned_from_id = ?, rate_con_amount = ? WHERE id = ?").run(
+    loadId,
+    load.rate_con_amount ?? null,
+    id,
+  );
   recordLoadAudit({
     loadId: id,
     action: "clone",

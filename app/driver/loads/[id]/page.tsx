@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { DriverAckState } from "@/components/driver-got-it";
 import { DriverLoadActions } from "@/components/driver-load-actions";
 import { LoadChatPanel } from "@/components/load-chat-panel";
+import { presentDispatchAck } from "@/lib/dispatch-ack";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { listAttachments } from "@/lib/files";
 import { driverLaneEnds, driverStopWhen } from "@/lib/driver-load-display";
@@ -71,6 +73,16 @@ export default async function DriverLoadPage({
         <DriverAssistSheet className="min-h-10 px-3 text-sm" />
       </div>
       {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
+      {(() => {
+        const ack = load.driver_id === driver.id ? presentDispatchAck(load) : null;
+        if (!ack || ack.state === "none") return null;
+        return (
+          <DriverAckState
+            loadId={load.id}
+            acknowledgedClock={ack.state === "acknowledged" ? ack.clock : null}
+          />
+        );
+      })()}
       {yourLeg ? (
         <p className="driver-sheet mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium">
           Your leg: {formatRelayLane(yourLeg.pickup, yourLeg.delivery)}
@@ -123,6 +135,11 @@ export default async function DriverLoadPage({
         {driverFacingPay(load) != null ? (
           <Row label="Your pay" value={formatMoney(driverFacingPay(load))} />
         ) : null}
+        <div className="border-b border-slate-100 py-2 last:border-0">
+          <Link href="/driver/pay" className="hit-target inline-flex items-center text-base font-semibold underline">
+            My pay this week
+          </Link>
+        </div>
         <Row
           label="Ref / PO"
           value={stops.map((stop) => driverFacingStopPo(stop, load)).filter(Boolean).join(" · ") || "—"}
@@ -216,6 +233,7 @@ export default async function DriverLoadPage({
           current={load.driver_progress}
           closed={isClosedStatus(load.status)}
           stops={stops}
+          hasPod={attachments.some((file) => file.kind === "pod")}
         />
       </div>
 

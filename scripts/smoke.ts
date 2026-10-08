@@ -16272,7 +16272,7 @@ DISPATCH CONFIRMATION
   assert.equal(addressedStops.find((stop) => stop.kind === "pickup")?.phone, "732-555-0001");
   assert.equal(addressedStops.find((stop) => stop.kind === "delivery")?.zip, "68901");
   assert.equal(matchAssetUnit([{ id: 7, unit_number: "36" }], "36"), 7);
-  assert.equal(matchAssetUnit([{ id: 8, unit_number: "1518" }], "MS1518"), 8);
+  assert.equal(matchAssetUnit([{ id: 8, unit_number: "1518" }], "MS1518"), null);
   assert.equal(matchAssetUnit([{ id: 9, unit_number: "41" }], "Assign Later"), null);
   const csvCell = (value: string) => (/[",]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
   const loadSheetRow = [
@@ -16329,7 +16329,8 @@ DISPATCH CONFIRMATION
   assert.equal(importedStops.filter((stop) => stop.kind === "delivery").length, 2);
   const loadAgain = applyLoadImport(previewLoadsFromText(`${ASCEND_LOAD_HEADERS.join(",")}\n${loadSheetRow}`));
   assert.equal(loadAgain.created, 0);
-  assert.equal(loadAgain.updated, 1);
+  assert.equal(loadAgain.updated, 0);
+  assert.equal(loadAgain.unchanged, 1);
   const xlsxLoads = previewLoadsFromXlsx(
     buildXlsxFromGrid([
       [...ASCEND_LOAD_HEADERS],

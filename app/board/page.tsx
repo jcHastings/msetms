@@ -14,6 +14,8 @@ import { LoadStatusSelect } from "@/components/load-status-select";
 import { PageHeader } from "@/components/page-header";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { LoadStatusBadge } from "@/components/status-badge";
+import { DispatchAckStatus } from "@/components/dispatch-ack-status";
+import { dispatchAckRules, presentDispatchAck } from "@/lib/dispatch-ack";
 import { listExceptionInbox } from "@/lib/exceptions";
 import { LaneAvgBadge } from "@/components/lane-avg-badge";
 import { formatBoardDateTime, formatDateTime, formatMoney } from "@/lib/format";
@@ -46,11 +48,13 @@ import {
   listAssignableTrucks,
   listLoads,
 } from "@/lib/queries";
+import { suggestAssignmentsForBoard } from "@/lib/assign-suggestions";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { canWrite } from "@/lib/settings-shared";
 import { complianceWindows, customLoadStatuses, defaultOoPercent } from "@/lib/settings";
+import type { AssignSuggestion } from "@/lib/assign-suggestion-shared";
 import { isClosedStatus, labelForDriverProgress, type ReeferReading } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +129,8 @@ function BoardAssignDialog({
   drivers,
   ooPercent,
   windows,
+  suggestions,
+  readOnly = false,
   triggerClassName,
 }: {
   load: ReturnType<typeof listLoads>[number];
@@ -133,6 +139,8 @@ function BoardAssignDialog({
   drivers: ReturnType<typeof listAssignableDrivers>;
   ooPercent: number;
   windows: ReturnType<typeof complianceWindows>;
+  suggestions: AssignSuggestion[];
+  readOnly?: boolean;
   triggerClassName?: string;
 }) {
   return (
@@ -148,6 +156,8 @@ function BoardAssignDialog({
       currentDriverId={load.driver_id}
       currentTruckId={load.truck_id}
       currentTrailerId={load.trailer_id}
+      suggestions={suggestions}
+      readOnly={readOnly}
       triggerClassName={triggerClassName}
     />
   );
@@ -198,12 +208,14 @@ async function BoardLiveSection({
   const windows = complianceWindows();
   const laneAvgs = laneAveragesForBoard(loads);
   const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
+  const ackRules = dispatchAckRules();
   const lateByLoad = new Map<number, { label: string; reason: string }>();
   for (const item of listExceptionInbox().items) {
     if (item.kind !== "late" || (item.severity !== "HIGH" && item.severity !== "CRITICAL")) continue;
     if (lateByLoad.has(item.loadId)) continue;
     lateByLoad.set(item.loadId, { label: "Running late", reason: item.title });
   }
+  const suggestions = suggestAssignmentsForBoard({ loads, fleet });
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of loads) {
     const live = reefers.readings.find((reading) => reading.loadId === load.id);
@@ -303,6 +315,7 @@ async function BoardLiveSection({
                           {lateByLoad.get(load.id)?.label}
                         </span>
                       ) : null}
+                      <DispatchAckStatus ack={presentDispatchAck(load, ackRules)} compact />
                     </td>
                     <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />
                     <BoardWhenCell kind="delivery" start={load.delivery_start} end={load.delivery_end} />
@@ -394,12 +407,13 @@ async function BoardLiveSection({
                                     drivers={assignableDrivers}
                                     ooPercent={ooPercent}
                                     windows={windows}
+                                    suggestions={suggestions.get(load.id) ?? []}
                                     triggerClassName="menu-item w-full text-left"
                                   />
                                 ) : null
                               }
                             />
-                            {write && !isClosedStatus(load.status) ? (
+                            {!isClosedStatus(load.status) ? (
                               <BoardAssignDialog
                                 load={load}
                                 trucks={assignableTrucks}
@@ -407,6 +421,8 @@ async function BoardLiveSection({
                                 drivers={assignableDrivers}
                                 ooPercent={ooPercent}
                                 windows={windows}
+                                suggestions={suggestions.get(load.id) ?? []}
+                                readOnly={!write}
                               />
                             ) : null}
                             <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">

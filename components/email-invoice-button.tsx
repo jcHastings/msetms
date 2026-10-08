@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { InvoiceReadyChecklist } from "@/components/invoice-ready-checklist";
+import type { InvoiceReadyChecklistModel } from "@/lib/invoice-ready";
 import { sendCustomerInvoiceMailAction } from "@/lib/dispatcher-actions";
 import { isInvoiceMailCustomerDoc } from "@/lib/load-documents-shared";
 import type { InvoiceMailExtraDoc } from "@/lib/load-mail";
@@ -20,6 +22,8 @@ export function EmailInvoiceButton({
   autoOpen = false,
   composerPlacement = "inline",
   onComposerClose,
+  checklist = null,
+  readOnly = false,
 }: {
   loadId: number;
   email: string;
@@ -33,6 +37,8 @@ export function EmailInvoiceButton({
   autoOpen?: boolean;
   composerPlacement?: "inline" | "dialog";
   onComposerClose?: () => void;
+  checklist?: InvoiceReadyChecklistModel | null;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(autoOpen);
@@ -197,6 +203,7 @@ export function EmailInvoiceButton({
       ) : (
         <p className="text-xs text-slate-500">Invoice PDF is always attached.</p>
       )}
+      {checklist ? <InvoiceReadyChecklist checklist={checklist} /> : null}
       <div className="flex flex-wrap gap-3">
         <button className="acct-link" type="button" disabled={pending} onClick={requestSend}>
           {pending ? "Sending…" : "Send invoice email"}
@@ -215,8 +222,15 @@ export function EmailInvoiceButton({
           className={variant === "link" ? "acct-link" : "btn btn-secondary"}
           type="button"
           data-email-invoice=""
-          disabled={pending || Boolean(issuerWarning)}
-          onClick={() => (open ? requestSend() : start())}
+          data-view-only={readOnly ? "" : undefined}
+          disabled={pending || readOnly || Boolean(issuerWarning)}
+          aria-disabled={readOnly || undefined}
+          title={readOnly ? "View-only access" : issuerWarning || undefined}
+          onClick={() => {
+            if (readOnly || issuerWarning) return;
+            if (open) requestSend();
+            else start();
+          }}
         >
           {pending ? "Sending…" : open ? "Send invoice email" : label}
         </button>

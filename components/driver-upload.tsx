@@ -12,15 +12,24 @@ type Page = Draft & { id: string };
 export function DriverUpload({
   loadId,
   loadNumber,
+  lockedKind,
+  title = "Upload",
+  intro = "Pick the document type, then take a photo or choose a file.",
+  onUploaded,
 }: {
   loadId: number;
   loadNumber: string;
+  /** When set, the document type is fixed and the picker is hidden. */
+  lockedKind?: string;
+  title?: string;
+  intro?: string;
+  onUploaded?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const captureRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [kind, setKind] = useState("");
+  const [kind, setKind] = useState(lockedKind ?? "");
   const [gallons, setGallons] = useState("");
   const [state, setState] = useState("");
   const [station, setStation] = useState("");
@@ -54,6 +63,7 @@ export function DriverUpload({
   }
 
   function requireKind(): string | null {
+    if (lockedKind) return lockedKind;
     if (!kind) {
       setError("Pick what kind of document this is.");
       return null;
@@ -214,6 +224,7 @@ export function DriverUpload({
     }
     setSaved("Saved on this load.");
     router.refresh();
+    await onUploaded?.();
     return true;
   }
 
@@ -253,11 +264,10 @@ export function DriverUpload({
 
   return (
     <section className="rounded-2xl bg-slate-900 p-4 shadow-sm ring-1 ring-white/10" data-driver-upload="">
-      <h2 className="text-base font-semibold text-white">Upload</h2>
-      <p className="mt-1 text-sm text-slate-400">
-        Pick the document type, then take a photo or choose a file.
-      </p>
+      <h2 className="text-base font-semibold text-white">{title}</h2>
+      <p className="mt-1 text-sm text-slate-400">{intro}</p>
 
+      {lockedKind ? null : (
       <div className="mt-3 field">
         <label htmlFor="driver-upload-kind" className="text-slate-300">
           Document type
@@ -282,6 +292,7 @@ export function DriverUpload({
           ))}
         </select>
       </div>
+      )}
 
       {fuel ? (
         <div className="mt-3 space-y-3" data-fuel-extras="">
@@ -394,20 +405,23 @@ export function DriverUpload({
         <div className="mt-4 space-y-2">
           <button
             type="button"
-            className="min-h-20 w-full rounded-2xl bg-navy text-xl font-bold text-white shadow-sm"
+            className="min-h-20 w-full rounded-2xl bg-navy text-xl font-bold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label={lockedKind === "pod" ? "Take POD photo" : "Take photo"}
+            autoFocus={lockedKind === "pod"}
             onClick={() => void takePhoto()}
           >
-            Take photo
+            {lockedKind === "pod" ? "Take POD photo" : "Take photo"}
           </button>
           <button
             type="button"
-            className="min-h-12 w-full rounded-2xl bg-white text-base font-semibold text-slate-800 ring-1 ring-slate-300"
+            className="min-h-14 w-full rounded-2xl bg-white text-base font-semibold text-slate-800 ring-1 ring-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy"
+            aria-label={lockedKind === "pod" ? "Upload POD" : "Choose a file"}
             onClick={() => {
               if (!requireKind()) return;
               fileRef.current?.click();
             }}
           >
-            Choose a file
+            {lockedKind === "pod" ? "Upload POD" : "Choose a file"}
           </button>
         </div>
       ) : null}

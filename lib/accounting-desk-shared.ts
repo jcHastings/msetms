@@ -7,6 +7,8 @@ export const ACCOUNTING_HUB_TABS = [
   { value: "archived", label: "Search Archived Loads" },
   { value: "pay", label: "Driver Pay Mgmt." },
   { value: "approve", label: "Approve Load Pay Items for Driver Pay" },
+  { value: "settlements", label: "Settlements" },
+  { value: "reimbursements", label: "Reimbursements" },
 ] as const;
 
 export type AccountingHubTab = (typeof ACCOUNTING_HUB_TABS)[number]["value"];
@@ -31,6 +33,8 @@ export function parseAccountingHubTab(value: string | null | undefined): Account
 
 export function hrefForAccountingHubTab(tab: AccountingHubTab): string {
   if (tab === "pay") return "/accounting/pay";
+  if (tab === "settlements") return "/accounting/settlements";
+  if (tab === "reimbursements") return "/accounting/reimbursements";
   return `/accounting/invoices?tab=${tab}`;
 }
 

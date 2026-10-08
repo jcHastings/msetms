@@ -484,6 +484,11 @@ export function isMailConfigured(): boolean {
   return isSmtpConfigured() || isSendgridConfigured();
 }
 
+/** Empty or unset disables POST /api/paystubs/upload. Never log the value. */
+export function getPaystubUploadToken(): string | undefined {
+  return readSecret("PAYSTUB_UPLOAD_TOKEN");
+}
+
 export function isQuickbooksConfigured(): boolean {
   return Boolean(
     getQuickbooksClientId() &&
