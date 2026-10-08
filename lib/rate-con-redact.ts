@@ -9,6 +9,7 @@ import {
   documentIssuedByBrokerage,
   findBrokerageSpans,
   findMoneySpans,
+  lineAnchorsBrokerageLetterhead,
   textHasExtractableMoney,
   type MoneySpan,
 } from "./rate-con-redact-money";
@@ -73,6 +74,14 @@ type PdfjsModule = {
   getDocument: (src: Record<string, unknown>) => { promise: Promise<PdfDoc>; destroy: () => Promise<void> };
   GlobalWorkerOptions: { workerSrc: string };
   AnnotationMode: { DISABLE: number };
+  OPS: {
+    save: number;
+    restore: number;
+    transform: number;
+    paintImageXObject: number;
+    paintInlineImageXObject: number;
+    paintImageXObjectRepeat: number;
+  };
   Util: { transform: (m1: number[], m2: number[]) => number[] };
 };
 
@@ -81,15 +90,20 @@ type PdfDoc = {
   getPage: (n: number) => Promise<PdfPage>;
 };
 
+type PdfViewport = {
+  width: number;
+  height: number;
+  transform: number[];
+  convertToViewportPoint: (x: number, y: number) => number[];
+};
+
+type PdfOperatorList = { fnArray: number[]; argsArray: unknown[] };
+
 type PdfPage = {
-  getViewport: (params: { scale: number }) => {
-    width: number;
-    height: number;
-    transform: number[];
-    convertToViewportPoint: (x: number, y: number) => number[];
-  };
+  getViewport: (params: { scale: number }) => PdfViewport;
   getTextContent: () => Promise<{ items: unknown[]; styles?: Record<string, TextStyle> }>;
   getAnnotations: (params?: { intent?: string }) => Promise<unknown[]>;
+  getOperatorList: (params?: { intent?: string; annotationMode?: number }) => Promise<PdfOperatorList>;
   render: (params: Record<string, unknown>) => { promise: Promise<void> };
 };
 
@@ -115,10 +129,47 @@ function asTextItem(value: unknown): PdfTextItem | null {
   return item;
 }
 
-export function officeOnlyPageReason(text: string): string {
-  if (/\bINVOICE\b/i.test(text)) return "Page 1 is an invoice.";
-  if (/customer\s+confirmation/i.test(text)) return "Page 1 is a customer confirmation.";
-  if (/bill\s+of\s+lading/i.test(text)) return "Page 1 is a bill of lading.";
+export type OfficePageLine = { text: string; fontSize?: number; y?: number };
+
+function titleKind(text: string, fontSize: number, median: number): "" | "invoice" | "customer" | "bol" {
+  const line = text.trim();
+  if (!line || line.length > 64) return "";
+  const words = line.split(/\s+/);
+  const large = fontSize >= 14 && (median <= 0 || fontSize >= median * 1.25);
+  const short = words.length <= 6 && line.length <= 42;
+  if (!large && !short) return "";
+  if (/\b(?:your|receipt|email|upon)\b/i.test(line) && !/^invoice\s*(?:#|no\.?|number)\b/i.test(line)) return "";
+  if (/^invoice\s*(?:#|no\.?\b|number\b)/i.test(line)) return "invoice";
+  if (/^invoice\s*[:.]?\s*$/i.test(line)) return "invoice";
+  if (large && /^invoice\b/i.test(line) && words.length <= 4) return "invoice";
+  if (/^customer\s+confirmation\s*[:.]?\s*$/i.test(line)) return "customer";
+  if (large && /^customer\s+confirmation\b/i.test(line) && words.length <= 6) return "customer";
+  if (/^bill\s+of\s+lading\s*[:.]?\s*$/i.test(line)) return "bol";
+  if (large && /^bill\s+of\s+lading\b/i.test(line) && words.length <= 6) return "bol";
+  return "";
+}
+
+/**
+ * Hold invoices, customer confirmations, and bills of lading when the title
+ * says so. A mention in the terms ("email your invoice", "receipt of invoice")
+ * is not a title.
+ */
+export function officeOnlyPageReason(text: string, lines?: OfficePageLine[], pageHeight = 792): string {
+  const rows: OfficePageLine[] = lines?.length ? lines : text.split(/\n/).map((line) => ({ text: line }));
+  const heights = rows.map((row) => row.fontSize ?? 0).filter((size) => size > 0);
+  const median = heights.length ? [...heights].sort((a, b) => a - b)[Math.floor(heights.length / 2)] : 0;
+  const positioned = rows.some((row) => row.y != null);
+  const top = rows.filter((row, index) => {
+    if (positioned && row.y != null && pageHeight > 0) return row.y >= pageHeight * 0.62;
+    if (positioned && row.y == null) return false;
+    return index < 8;
+  });
+  for (const row of top.length ? top : rows.slice(0, 8)) {
+    const kind = titleKind(row.text, row.fontSize ?? 0, median);
+    if (kind === "invoice") return "Page 1 is an invoice.";
+    if (kind === "customer") return "Page 1 is a customer confirmation.";
+    if (kind === "bol") return "Page 1 is a bill of lading.";
+  }
   return "";
 }
 
@@ -234,6 +285,18 @@ function widthFractions(item: PlacedItem, from: number, to: number, styles: Reco
   return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, right))];
 }
 
+function requirementValue(text: string): boolean {
+  const value = text.trim();
+  if (!value || value.length > 48) return false;
+  if (/^(?:reefer|van|flatbed|step\s*deck|straight\s+truck|power\s*only)$/i.test(value)) return true;
+  if (/^\d{1,2}\s*['′](?:\s*(?:ft|feet))?$/i.test(value)) return true;
+  if (/^(?:equipment|length|temp(?:erature)?|date|time|weight|p\.?\s*o\.?|po|ref(?:erence)?)\b/i.test(value)) return true;
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(value)) return true;
+  if (/^-?\d+(?:\.\d+)?\s*°\s*[FfCc]?$/.test(value)) return true;
+  if (/^\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:lbs?|pounds?)$/i.test(value)) return true;
+  return false;
+}
+
 function paintSpans(
   ctx: {
     fillStyle: string;
@@ -243,9 +306,11 @@ function paintSpans(
   items: PlacedItem[],
   spans: MoneySpan[],
   styles: Record<string, TextStyle>,
+  options?: { skipRequirementItems?: boolean },
 ): PaintBox[] {
   const boxes: PaintBox[] = [];
   for (const item of items) {
+    if (options?.skipRequirementItems && requirementValue(item.str)) continue;
     for (const span of spans) {
       const from = Math.max(span.start, item.start);
       const to = Math.min(span.end, item.end);
@@ -255,16 +320,18 @@ function paintSpans(
       const y = item.transform[5];
       const width = item.width;
       const height = Math.max(item.height || 0, Math.abs(item.transform[3] || 0), 8);
-      const pad = height * 0.5;
-      const x0 = x + width * f0 - pad;
-      const x1 = x + width * f1 + pad;
-      const p0 = viewport.convertToViewportPoint(x0, y - height * 0.25 - pad);
-      const p1 = viewport.convertToViewportPoint(x1, y + height * 0.95 + pad);
+      const padX = height * 0.5;
+      const below = Math.max(1, height * 0.18);
+      const above = Math.max(0.8, height * 0.06);
+      const x0 = x + width * f0 - padX;
+      const x1 = x + width * f1 + padX;
+      const p0 = viewport.convertToViewportPoint(x0, y - below);
+      const p1 = viewport.convertToViewportPoint(x1, y + height + above);
       const left = Math.min(p0[0], p1[0]) - 1;
       const top = Math.min(p0[1], p1[1]) - 1;
       const boxW = Math.abs(p0[0] - p1[0]) + 2;
       const boxH = Math.abs(p0[1] - p1[1]) + 2;
-      const viewportPad = Math.max(4, Math.abs(p0[1] - p1[1]) * 0.08);
+      const viewportPad = Math.max(4, padX * (RENDER_SCALE / 2));
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
       boxes.push({ left, top, w: boxW, h: boxH, pad: viewportPad });
@@ -360,9 +427,16 @@ function paintOcrMoney(
   }
   const lineTexts = lines.map((lineWords) => lineWords.map((word) => word.text).join(" "));
   const brokerage = documentIssuedByBrokerage(lineTexts.join("\n"));
+  const lineTop = lines.map((lineWords) => lineWords[0]?.y0 ?? 0);
+  const pageBottom = Math.max(...words.map((word) => word.y1), 1);
+  const anchorTops = lineTexts.flatMap((text, index) =>
+    lineAnchorsBrokerageLetterhead(text) && lineTop[index] <= pageBottom * 0.34 ? [lineTop[index]] : [],
+  );
   let painted = 0;
   for (let index = 0; index < lines.length; index += 1) {
     const lineWords = lines[index];
+    const letterhead =
+      lineTop[index] <= pageBottom * 0.34 && anchorTops.some((anchor) => Math.abs(anchor - lineTop[index]) <= 36);
     let text = "";
     const placed: Array<OcrWord & { start: number; end: number }> = [];
     for (const word of lineWords) {
@@ -373,7 +447,7 @@ function paintOcrMoney(
     }
     const spans = [
       ...findMoneySpans(text, lineTexts[index - 1] ?? ""),
-      ...(brokerage ? findBrokerageSpans(text) : []),
+      ...(brokerage ? findBrokerageSpans(text, { letterhead }) : []),
     ];
     for (const span of spans) {
       for (const word of placed) {
@@ -391,23 +465,15 @@ function digitTouchesBox(word: OcrWord, box: PaintBox, originX: number, originY:
   if (!/^[^A-Za-z]*\d[^A-Za-z]*$/.test(word.text)) return false;
   const x0 = originX + word.x0;
   const x1 = originX + word.x1;
-  const y0 = originY + word.y0;
-  const y1 = originY + word.y1;
   const cx = (x0 + x1) / 2;
-  const cy = (y0 + y1) / 2;
+  const cy = originY + (word.y0 + word.y1) / 2;
+  // Digits centered on the line above or below belong to that line.
+  const lineSlack = Math.max(3, box.h * 0.3);
+  if (cy < box.top - lineSlack || cy > box.top + box.h + lineSlack) return false;
   const edge = 4;
-  const onBox =
-    cx >= box.left - edge &&
-    cx <= box.left + box.w + edge &&
-    cy >= box.top - edge &&
-    cy <= box.top + box.h + edge;
-  if (!onBox) return false;
+  if (cx < box.left - edge || cx > box.left + box.w + edge) return false;
   const inset = 6;
-  const buried =
-    x0 >= box.left + inset &&
-    x1 <= box.left + box.w - inset &&
-    y0 >= box.top + inset &&
-    y1 <= box.top + box.h - inset;
+  const buried = x0 >= box.left + inset && x1 <= box.left + box.w - inset;
   return !buried;
 }
 
@@ -423,9 +489,7 @@ async function widenBoxes(
     if (!touching) continue;
     const grow = Math.max(6, box.pad);
     box.left -= grow;
-    box.top -= grow;
     box.w += grow * 2;
-    box.h += grow * 2;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(box.left, box.top, box.w, box.h);
     touching = await boxEdgeDigits(canvas, box);
@@ -435,11 +499,12 @@ async function widenBoxes(
 }
 
 async function boxEdgeDigits(canvas: Canvas, box: PaintBox): Promise<boolean> {
-  const band = 10;
-  const x = Math.max(0, Math.floor(box.left - band));
-  const y = Math.max(0, Math.floor(box.top - band));
-  const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(box.w + band * 2)));
-  const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(box.h + band * 2)));
+  const bandX = 12;
+  const bandY = 2;
+  const x = Math.max(0, Math.floor(box.left - bandX));
+  const y = Math.max(0, Math.floor(box.top - bandY));
+  const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(box.w + bandX * 2)));
+  const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(box.h + bandY * 2)));
   const slice = createCanvas(w + 16, h + 16);
   const sliceCtx = slice.getContext("2d");
   sliceCtx.fillStyle = "#ffffff";
@@ -509,7 +574,7 @@ function sourceHasDollarAmount(sourceText: string, digits: string): boolean {
   return new RegExp(`\\$\\s*${escaped}\\b`).test(normalized);
 }
 
-function ocrDollarLeak(ocrText: string, sourceText: string): string | null {
+export function ocrDollarLeak(ocrText: string, sourceText: string): string | null {
   for (const hit of ocrText.matchAll(/\$\s*(\d[\d,]*(?:\.\d+)?)/g)) {
     const digits = hit[1].replace(/,/g, "");
     if (!sourceText.trim() || sourceHasDollarAmount(sourceText, digits)) return hit[0];
@@ -521,7 +586,17 @@ function ocrDollarLeak(ocrText: string, sourceText: string): string | null {
     }
   }
   // Same amounts without the "$" (unit-price columns, OCR dropping the sign).
-  const ocrTokens = new Set(ocrText.split(/\s+/).map((token) => token.replace(/[^\d.]/g, "")).filter(Boolean));
+  // "100 percent" / "100%" is not the digits of a "$100" amount.
+  const rawTokens = ocrText.split(/\s+/).filter(Boolean);
+  const ocrTokens = new Set<string>();
+  for (let index = 0; index < rawTokens.length; index += 1) {
+    const raw = rawTokens[index] ?? "";
+    const next = rawTokens[index + 1] ?? "";
+    if (/%|percent/i.test(raw)) continue;
+    if (/^%/.test(next) || /^percent\b/i.test(next)) continue;
+    const cleaned = raw.replace(/[^\d.]/g, "");
+    if (cleaned) ocrTokens.add(cleaned);
+  }
   for (const hit of sourceText.matchAll(/\$\s*(\d[\d,]*(?:\.\d{2})?)/g)) {
     const compact = hit[1].replace(/,/g, "");
     const whole = compact.split(".")[0];
@@ -568,9 +643,138 @@ function failed(reason: string): DriverRateConBuild {
   };
 }
 
+function lineBaseline(line: { items: PlacedItem[] }): number {
+  return line.items[0]?.transform[5] ?? 0;
+}
+
+const COLUMN_GAP = 56;
+
+function columnBrokerageSpans(
+  line: { text: string; items: PlacedItem[] },
+  letterhead: boolean,
+): MoneySpan[] {
+  if (!line.items.length) return findBrokerageSpans(line.text, { letterhead });
+  const columns: PlacedItem[][] = [];
+  for (const item of line.items) {
+    const current = columns[columns.length - 1];
+    const prev = current?.[current.length - 1];
+    const gap = prev ? item.transform[4] - (prev.transform[4] + Math.max(prev.width, 0)) : 0;
+    if (!current || (prev && gap > COLUMN_GAP)) columns.push([item]);
+    else current.push(item);
+  }
+  const spans: MoneySpan[] = [];
+  for (const column of columns) {
+    const start = column[0]?.start ?? 0;
+    const end = column[column.length - 1]?.end ?? start;
+    const text = line.text.slice(start, end);
+    for (const span of findBrokerageSpans(text, { letterhead })) {
+      spans.push({ ...span, start: start + span.start, end: start + span.end });
+    }
+  }
+  return spans;
+}
+
+function letterheadLineIndexes(lines: PagePlan["lines"], pageHeight: number): Set<number> {
+  const anchors = lines.flatMap((line) => {
+    const y = lineBaseline(line);
+    if (!lineAnchorsBrokerageLetterhead(line.text) || y < pageHeight * 0.58) return [];
+    return [{ y }];
+  });
+  const indexes = new Set<number>();
+  if (!anchors.length) return indexes;
+  lines.forEach((line, index) => {
+    const y = lineBaseline(line);
+    if (y < pageHeight * 0.58) return;
+    if (anchors.some((anchor) => Math.abs(anchor.y - y) <= 30)) indexes.add(index);
+  });
+  return indexes;
+}
+
+type PdfRect = { x: number; y: number; width: number; height: number };
+
+function unitSquareBox(ctm: number[]): PdfRect | null {
+  if (ctm.length < 6 || ctm.some((value) => !Number.isFinite(value))) return null;
+  const [a, b, c, d, e, f] = ctm;
+  const xs = [e, a + e, c + e, a + c + e];
+  const ys = [f, b + f, d + f, b + d + f];
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function paintPdfRect(
+  ctx: { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void },
+  viewport: PdfViewport,
+  box: PdfRect,
+): void {
+  const p0 = viewport.convertToViewportPoint(box.x, box.y);
+  const p1 = viewport.convertToViewportPoint(box.x + box.width, box.y + box.height);
+  const left = Math.min(p0[0], p1[0]) - 1;
+  const top = Math.min(p0[1], p1[1]) - 1;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(left, top, Math.abs(p1[0] - p0[0]) + 2, Math.abs(p1[1] - p0[1]) + 2);
+}
+
+/** Cover letterhead rasters. Returns true when an image was seen but not located. */
+async function coverHeaderLogos(
+  page: PdfPage,
+  pdfjs: PdfjsModule,
+  ctx: { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void },
+  viewport: PdfViewport,
+  pageWidth: number,
+  pageHeight: number,
+): Promise<boolean> {
+  let unlocated = false;
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack: number[][] = [];
+  const list = await page.getOperatorList({
+    intent: "display",
+    annotationMode: pdfjs.AnnotationMode.DISABLE,
+  });
+  const ops = pdfjs.OPS;
+  for (let index = 0; index < list.fnArray.length; index += 1) {
+    const fn = list.fnArray[index];
+    const args = list.argsArray[index];
+    if (fn === ops.save) {
+      stack.push(ctm.slice());
+      continue;
+    }
+    if (fn === ops.restore) {
+      ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0];
+      continue;
+    }
+    if (fn === ops.transform && args && typeof args === "object" && "length" in args) {
+      const list = args as ArrayLike<unknown>;
+      if (list.length >= 6) {
+        const matrix = [0, 1, 2, 3, 4, 5].map((slot) => Number(list[slot]));
+        if (matrix.every((value) => Number.isFinite(value))) ctm = pdfjs.Util.transform(ctm, matrix);
+      }
+      continue;
+    }
+    if (fn === ops.paintImageXObjectRepeat) {
+      unlocated = true;
+      continue;
+    }
+    if (fn !== ops.paintImageXObject && fn !== ops.paintInlineImageXObject) continue;
+    const box = unitSquareBox(ctm);
+    if (!box) {
+      unlocated = true;
+      continue;
+    }
+    if (box.width < 8 || box.height < 8) continue;
+    if (box.width > pageWidth * 0.85 && box.height > pageHeight * 0.45) continue;
+    const centerY = box.y + box.height / 2;
+    if (centerY < pageHeight * 0.72) continue;
+    paintPdfRect(ctx, viewport, box);
+  }
+  return unlocated;
+}
+
 async function rasterPages(
   buffer: Buffer,
-): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; pageSizes: PageSize[] } | null> {
+): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; logoUnlocated: boolean; pageSizes: PageSize[] } | null> {
   const opened = await openPdf(buffer);
   try {
     const prepared: Array<{ page: PdfPage; plan: PagePlan }> = [];
@@ -586,6 +790,7 @@ async function rasterPages(
     const pageSizes: PageSize[] = [];
     let blank = false;
     let edgeLeak = false;
+    let logoUnlocated = false;
     for (const entry of prepared) {
       const plan = entry.plan;
       plans.push(plan);
@@ -601,19 +806,40 @@ async function rasterPages(
       }).promise;
       if (plan.textChars >= 80 && darkRatio(canvas) < 0.0015) blank = true;
       const paint = ctx as { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void };
+      const letterhead = brokerage ? letterheadLineIndexes(plan.lines, natural.height) : new Set<number>();
+      if (brokerage && pngs.length === 0) {
+        if (await coverHeaderLogos(entry.page, opened.pdfjs, paint, viewport, natural.width, natural.height)) {
+          logoUnlocated = true;
+        }
+      }
       const boxes: PaintBox[] = [];
       for (let index = 0; index < plan.lines.length; index += 1) {
         const line = plan.lines[index];
-        const spans = [
-          ...findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
-          ...(brokerage ? findBrokerageSpans(line.text) : []),
-        ];
-        boxes.push(...paintSpans(paint, viewport, line.items, spans, plan.styles));
+        boxes.push(
+          ...paintSpans(
+            paint,
+            viewport,
+            line.items,
+            findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
+            plan.styles,
+          ),
+        );
+        if (!brokerage) continue;
+        boxes.push(
+          ...paintSpans(
+            paint,
+            viewport,
+            line.items,
+            columnBrokerageSpans(line, letterhead.has(index)),
+            plan.styles,
+            { skipRequirementItems: true },
+          ),
+        );
       }
       if (await widenBoxes(canvas, paint, boxes)) edgeLeak = true;
       pngs.push(canvas.toBuffer("image/png"));
     }
-    return { pngs, plans, blank, edgeLeak, pageSizes };
+    return { pngs, plans, blank, edgeLeak, logoUnlocated, pageSizes };
   } finally {
     await opened.destroy();
   }
@@ -662,7 +888,14 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   if (!buffer.subarray(0, 5).toString("latin1").includes("%PDF")) {
     return failed("This file is not a PDF. Office review.");
   }
-  let raster: { pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; pageSizes: PageSize[] } | null = null;
+  let raster: {
+    pngs: Buffer[];
+    plans: PagePlan[];
+    blank: boolean;
+    edgeLeak: boolean;
+    logoUnlocated: boolean;
+    pageSizes: PageSize[];
+  } | null = null;
   try {
     raster = await rasterPages(buffer);
   } catch (error) {
@@ -688,10 +921,20 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   if (annotationOnly) reasons.push("Text was only in an annotation or form field.");
   if (raster.plans.some((plan) => plan.lowConfidence) || raster.blank) reasons.push("Low extraction confidence.");
   if (!scanned && amounts < 1) reasons.push("No dollar amount found.");
-  const pageOne = raster.plans[0]?.lines.map((line) => line.text).join("\n") ?? "";
-  const officeOnly = officeOnlyPageReason(pageOne);
+  const pageOneLines = raster.plans[0]?.lines ?? [];
+  const pageOneHeight = raster.pageSizes[0]?.height ?? 792;
+  const officeOnly = officeOnlyPageReason(
+    pageOneLines.map((line) => line.text).join("\n"),
+    pageOneLines.map((line) => ({
+      text: line.text,
+      fontSize: Math.max(0, ...line.items.map((item) => Math.abs(item.transform[3] || item.height || 0))),
+      y: lineBaseline(line),
+    })),
+    pageOneHeight,
+  );
   if (officeOnly) reasons.push(officeOnly);
   if (raster.edgeLeak) reasons.push("A redaction box still touches a digit.");
+  if (raster.logoUnlocated) reasons.push("Brokerage logo could not be located.");
   const sourceText = raster.plans.flatMap((plan) => plan.lines.map((line) => line.text)).join("\n");
   const forbidden = raster.plans.flatMap((plan) =>
     plan.lines.flatMap((line, index) => findMoneySpans(line.text, plan.lines[index - 1]?.text ?? "").map((span) => span.text)),

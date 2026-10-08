@@ -208,6 +208,96 @@ async function main(): Promise<void> {
     doc.text("Total: $3,100.00");
   });
 
+  await writePdf("m-shared-address.pdf", "SECRET-BROKER-META-SHARED", (doc) => {
+    doc.fontSize(14).text("M&S Loads LLC", 48, 64);
+    doc.fontSize(11);
+    doc.text("MC-970613", 48, 84);
+    doc.text("228 East Route 59 #190, Nanuet, NY 10954", 48, 108);
+    doc.text("Reefer", 400, 108);
+    doc.text("53'", 490, 108);
+    doc.text("Phone: (845) 555-0148", 48, 126);
+    doc.text("Date: 08/25/2026", 48, 160);
+    doc.text("Temperature: 34°F", 280, 160);
+    doc.fontSize(16).text("LOAD CONFIRMATION", 48, 190);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 220);
+    doc.text("Office: 402-302-0097", 48, 238);
+    doc.text("Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901", 48, 262);
+    doc.text("Phone: (531) 555-0144", 48, 280);
+    doc.text("Weight: 40,000 lbs", 48, 298);
+    doc.text("Line haul: $1,100.00", 48, 322);
+    doc.text("Maria Lopez (M & S LOADS LLC.)", 48, 700);
+  });
+
+  const logo = createCanvas(320, 48);
+  const logoCtx = logo.getContext("2d");
+  logoCtx.fillStyle = "#ffffff";
+  logoCtx.fillRect(0, 0, 320, 48);
+  logoCtx.fillStyle = "#111111";
+  logoCtx.font = "bold 28px sans-serif";
+  logoCtx.fillText("MSLOADSLOGO", 8, 34);
+  const mark = createCanvas(220, 32);
+  const markCtx = mark.getContext("2d");
+  markCtx.fillStyle = "#ffffff";
+  markCtx.fillRect(0, 0, 220, 32);
+  markCtx.fillStyle = "#111111";
+  markCtx.font = "bold 20px sans-serif";
+  markCtx.fillText("SHIPPERMARK", 4, 24);
+
+  await writePdf("n-header-logo.pdf", "SECRET-BROKER-META-LOGO", (doc) => {
+    doc.image(logo.toBuffer("image/png"), 48, 40, { width: 160, height: 24 });
+    doc.fontSize(14).text("M&S Loads LLC", 240, 46);
+    doc.fontSize(11);
+    doc.text("MC-970613", 240, 68);
+    doc.fontSize(16).text("LOAD CONFIRMATION", 48, 120);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 150);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 172);
+    doc.text("Line haul: $900.00", 48, 200);
+    doc.image(mark.toBuffer("image/png"), 48, 460, { width: 140, height: 20 });
+  });
+
+  await writePdf("o-neighbor-tonu.pdf", "SECRET-BROKER-META-TONU", (doc) => {
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 72);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 110);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 130);
+    doc.text("• TONU", 48, 200);
+    doc.text("Line haul: $2,150.00", 48, 214);
+  });
+
+  await writePdf("p-invoice-terms.pdf", "SECRET-BROKER-META-TERMS", (doc) => {
+    doc.fontSize(16).text("RATE CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express");
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901");
+    doc.text("Line haul: $800.00");
+    doc.moveDown();
+    doc.text("EMAIL your invoice to billing@example.test within 24 hours.");
+    doc.text("Payment is due upon receipt of invoice.");
+    doc.text("Sign the bill of lading at delivery.");
+  });
+
+  await writePdf("q-percent.pdf", "SECRET-BROKER-META-PERCENT", (doc) => {
+    doc.fontSize(16).text("RATE CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express");
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901");
+    doc.text("A $100 fine applies when the seal is broken.");
+    doc.text("Deliveries must be 100 percent (100%) on time.");
+    doc.text("Line haul: $640.00");
+  });
+
+  await writePdf("r-third-party.pdf", "SECRET-BROKER-META-CARRIER", (doc) => {
+    doc.fontSize(16).text("ACME FREIGHT");
+    doc.fontSize(14).text("RATE CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Carrier: M&S Loads");
+    doc.text("Phone: 402-302-0097");
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901");
+    doc.text("Line haul: $900.00");
+  });
+
   const scan = createCanvas(1224, 1584);
   const ctx = scan.getContext("2d");
   ctx.fillStyle = "#ffffff";
