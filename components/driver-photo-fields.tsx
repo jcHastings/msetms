@@ -8,6 +8,7 @@ import {
   EMPTY_PICK_SETTLE_MS,
   GALLERY_ACCEPT,
   emptyPickMessage,
+  fileWithDriverMime,
   handlePhotoInputChange,
   parkFileForSubmit,
   shouldSignalEmptyPick,
@@ -122,7 +123,7 @@ export function DriverPhotoFields({
   function onChange(source: PhotoPickSource) {
     return (event: ChangeEvent<HTMLInputElement>) => {
       const input = event.currentTarget;
-      const incoming = input.files?.[0] ?? null;
+      const incoming = input.files?.[0] ? fileWithDriverMime(input.files[0]) : null;
       const holderNode = input.form?.querySelector('input[data-photo-role="submit"]');
       const holder = holderNode instanceof HTMLInputElement ? holderNode : null;
       const needsHold = Boolean(submitName && holder);
@@ -143,13 +144,14 @@ export function DriverPhotoFields({
         setNotice(message);
         return;
       }
+      const typed = incoming && incoming.size > 0 ? incoming : fileWithDriverMime(file);
       pickedRef.current = true;
       setNotice(null);
       if (needsHold) {
         setNamedSource("holder");
-        setChosenName(file.name);
+        setChosenName(typed.name);
       }
-      onPick(file, source);
+      onPick(typed, source);
     };
   }
 

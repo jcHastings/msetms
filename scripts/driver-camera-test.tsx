@@ -14,6 +14,7 @@ import {
   EMPTY_FILE_MESSAGE,
   EMPTY_GALLERY_MESSAGE,
   GALLERY_ACCEPT,
+  fileWithDriverMime,
   handlePhotoInputChange,
   mimeForDriverPhoto,
   shouldSignalEmptyPick,
@@ -173,6 +174,14 @@ async function main() {
   assert.equal(mimeForDriverPhoto({ name: "a.bin", type: "image/heic-sequence" }), "image/heic");
   assert.equal(mimeForDriverPhoto({ name: "a.bin", type: "image/heif" }), "image/heif");
   assert.equal(mimeForDriverPhoto({ name: "bol.jpg", type: "image/jpeg" }), "image/jpeg");
+  const heicFile = new File([Uint8Array.from([1, 2, 3])], "IMG_1.HEIC", { type: "" });
+  const typedHeic = fileWithDriverMime(heicFile);
+  assert.equal(typedHeic.type, "image/heic");
+  assert.equal(typedHeic.name, "IMG_1.HEIC");
+  const heifFile = new File([Uint8Array.from([1])], "scan.heif", { type: "application/octet-stream" });
+  assert.equal(fileWithDriverMime(heifFile).type, "image/heif");
+  const jpegFile = new File([Uint8Array.from([1])], "bol.jpg", { type: "image/jpeg" });
+  assert.equal(fileWithDriverMime(jpegFile), jpegFile);
 
   const undecoded = await prepareDriverPhoto(new Blob([Uint8Array.from([1, 2, 3])], { type: "image/heic" }));
   assert.equal(undecoded.kind, "original");

@@ -74,6 +74,13 @@ export function mimeForDriverPhoto(file: { name?: string; type?: string }): stri
   return "application/octet-stream";
 }
 
+/** Copy a pick onto a File whose type is image/heic or image/heif when the browser left it blank. */
+export function fileWithDriverMime(file: File): File {
+  const type = mimeForDriverPhoto(file);
+  if ((file.type || "").toLowerCase().split(";")[0].trim() === type) return file;
+  return new File([file], file.name || "photo", { type, lastModified: file.lastModified });
+}
+
 export function parkFileForSubmit(holder: HTMLInputElement, file: File): boolean {
   if (typeof DataTransfer === "undefined") return false;
   try {
