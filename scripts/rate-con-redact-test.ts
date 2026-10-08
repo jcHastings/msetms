@@ -49,6 +49,9 @@ const READY = [
   "ae-tab-space.pdf",
   "af-per-mile.pdf",
   "ag-grey-header.pdf",
+  "ah-long-amount.pdf",
+  "ai-fuel-helvetica.pdf",
+  "aj-draw-order.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -85,6 +88,9 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("ae-")) return ["$900.00", "BILLING@MSLOADS.COM", "MSLOADS"];
   if (name.startsWith("af-")) return ["$2.00", "$50", "$900.00"];
   if (name.startsWith("ag-")) return ["$900.00"];
+  if (name.startsWith("ah-")) return ["$125", "$150", "$900.00"];
+  if (name.startsWith("ai-")) return ["$150.00", "$900.00"];
+  if (name.startsWith("aj-")) return ["$2.00", "$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -565,6 +571,41 @@ async function main(): Promise<void> {
           if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) ink += 1;
         }
         assert.equal(ink, 0, `residual ink in the dollar cell (${ink})`);
+      }
+    }
+    if (item.name.startsWith("ah-") || item.name.startsWith("ai-") || item.name.startsWith("aj-")) {
+      const stats = glyphAdvanceStats();
+      assert.ok(stats.used > 0, `${item.name} glyph path used ${stats.used}`);
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 1400));
+      if (item.name.startsWith("ah-")) {
+        assert.equal(stats.fallback, 0, `${item.name} glyph fallback ${stats.fallback}`);
+        assert.match(seen, /Layovers/i, seen.slice(0, 1400));
+        assert.match(seen, /Max of/i, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("ai-")) {
+        assert.equal(stats.fallback, 0, `${item.name} glyph fallback ${stats.fallback}`);
+        assert.match(seen, /Fuel/i, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("aj-")) {
+        assert.equal(stats.fallback, 0, `${item.name} glyph fallback ${stats.fallback}`);
+        assert.ok(stats.position > 0, `${item.name} position search ${stats.position}`);
+        assert.match(seen, /\bTO\b/, seen.slice(0, 1400));
+        assert.match(seen, /RELOCATE/, seen.slice(0, 1400));
+        assert.match(seen, /PAY/, seen.slice(0, 1400));
+      }
+      const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+      const edgeImage = await loadImage(built.pagePngs[0]);
+      const edgeCanvas = createCanvas(edgeImage.width, edgeImage.height);
+      const edgeCtx = edgeCanvas.getContext("2d");
+      edgeCtx.drawImage(edgeImage, 0, 0);
+      for (const box of redactionBoxes()[0] ?? []) {
+        if (box.kind !== "money" || !/\d\s*$/.test(box.token ?? "")) continue;
+        const x = Math.min(edgeImage.width - 1, Math.ceil(box.left + box.w));
+        const y0 = Math.max(0, Math.floor(box.top + box.h * 0.28));
+        const y1 = Math.min(edgeImage.height - 1, Math.ceil(box.top + box.h * 0.78));
+        const column = edgeCtx.getImageData(x, y0, 1, Math.max(1, y1 - y0)).data;
+        assert.ok(longestDarkRun(column) < 4, `${item.name} digit ink past ${box.token} at x=${x}`);
       }
     }
   }
