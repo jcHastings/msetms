@@ -15,9 +15,10 @@ import {
   EMPTY_GALLERY_MESSAGE,
   GALLERY_ACCEPT,
   handlePhotoInputChange,
+  mimeForDriverPhoto,
   shouldSignalEmptyPick,
 } from "../lib/driver-photo-pick";
-import { grayscaleAndCrop } from "../lib/prepare-driver-photo";
+import { grayscaleAndCrop, prepareDriverPhoto } from "../lib/prepare-driver-photo";
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -62,6 +63,12 @@ function assertPhotoEntry(html: string, entry: string) {
     assert.match(html, new RegExp(`<label[^>]*\\bfor="${id}"`), `${entry} label for ${id}`);
   }
   assert.equal(camera.includes("driver-photo-input-hold"), false);
+  const labels = html.match(/<label\b[\s\S]*?<\/label>/g) ?? [];
+  const photoLabels = labels.filter((label) => label.includes("driver-photo-trigger"));
+  assert.ok(photoLabels.length >= 2, `${entry} photo labels`);
+  for (const label of photoLabels) {
+    assert.doesNotMatch(label, /<input\b/, `${entry} label must not wrap the file input`);
+  }
   return { cameraId: attr(camera, "id") ?? "", galleryId: attr(gallery, "id") ?? "" };
 }
 
@@ -92,6 +99,16 @@ async function main() {
   assert.match(upload, /prepareDriverPhoto/);
   assert.match(upload, /handlePhotoInputChange|DriverPhotoFields/);
   assert.match(fields, /handlePhotoInputChange/);
+  assert.match(fields, /htmlFor=\{cameraId\}/);
+  assert.match(fields, /htmlFor=\{galleryId\}/);
+  assert.doesNotMatch(fields, /\.click\s*\(/);
+  const armWatch = fields.slice(fields.indexOf("function armWatch"), fields.indexOf("function onLabelClick"));
+  const armSync = armWatch.slice(0, armWatch.indexOf("const report"));
+  assert.doesNotMatch(armSync, /setNotice|setChosenName|setNamedSource/);
+  const labelClick = fields.slice(fields.indexOf("function onLabelClick"), fields.indexOf("function onChange"));
+  assert.match(labelClick, /if \(disabled\)/);
+  assert.match(labelClick, /preventDefault/);
+  assert.match(labelClick, /armWatch\(source\)/);
   assert.match(actions, /lockedKind="pod"/);
   assert.doesNotMatch(assist, /type="file"|getUserMedia/);
   assert.doesNotMatch(claims, /type="file"|getUserMedia/);
@@ -100,8 +117,18 @@ async function main() {
   const cameraRule = css.slice(css.indexOf('input.driver-photo-input[type="file"]'));
   const cameraBody = cameraRule.slice(0, cameraRule.indexOf("}"));
   assert.doesNotMatch(cameraBody, /display\s*:\s*none/);
+  assert.doesNotMatch(cameraBody, /visibility\s*:\s*hidden/);
   assert.match(cameraBody, /opacity:\s*0\.02/);
   assert.match(cameraBody, /min-height:\s*44px/);
+  assert.match(cameraBody, /pointer-events:\s*none/);
+  const triggerRule = css.slice(css.indexOf(".driver-photo-trigger {"), css.indexOf(".driver-photo-trigger-primary"));
+  assert.doesNotMatch(triggerRule, /transform\s*:/);
+  assert.equal(CAMERA_ACCEPT, "image/*");
+  assert.match(GALLERY_ACCEPT, /image\/heic/);
+  assert.match(GALLERY_ACCEPT, /image\/heif/);
+  assert.doesNotMatch(CAMERA_ACCEPT, /heic|heif|pdf/);
+  const filesSource = read("lib/files.ts");
+  assert.match(filesSource, /if \(ext === "\.heif"\) return "image\/heif"/);
   assert.match(css, /\.driver-photo-trigger-primary[\s\S]*min-height:\s*5rem/);
   assert.match(css, /\.driver-photo-trigger-secondary[\s\S]*min-height:\s*3\.5rem/);
 
@@ -140,6 +167,34 @@ async function main() {
   assert.equal(shouldSignalEmptyPick({ left: false, picked: false }), false);
   assert.equal(shouldSignalEmptyPick({ left: true, picked: true }), false);
   assert.equal(shouldSignalEmptyPick({ left: true, picked: false }), true);
+
+  assert.equal(mimeForDriverPhoto({ name: "IMG.HEIC", type: "" }), "image/heic");
+  assert.equal(mimeForDriverPhoto({ name: "scan.heif", type: "application/octet-stream" }), "image/heif");
+  assert.equal(mimeForDriverPhoto({ name: "a.bin", type: "image/heic-sequence" }), "image/heic");
+  assert.equal(mimeForDriverPhoto({ name: "a.bin", type: "image/heif" }), "image/heif");
+  assert.equal(mimeForDriverPhoto({ name: "bol.jpg", type: "image/jpeg" }), "image/jpeg");
+
+  const undecoded = await prepareDriverPhoto(new Blob([Uint8Array.from([1, 2, 3])], { type: "image/heic" }));
+  assert.equal(undecoded.kind, "original");
+  const previousDocument = globalThis.document;
+  const previousBitmap = globalThis.createImageBitmap;
+  Object.defineProperty(globalThis, "document", {
+    value: {
+      createElement() {
+        throw new Error("HEIC decode");
+      },
+    },
+    configurable: true,
+  });
+  globalThis.createImageBitmap = async () => {
+    throw new Error("HEIC decode");
+  };
+  const thrown = await prepareDriverPhoto(new Blob([Uint8Array.from([1])], { type: "image/heic" }));
+  assert.equal(thrown.kind, "original");
+  if (previousDocument === undefined) Reflect.deleteProperty(globalThis, "document");
+  else Object.defineProperty(globalThis, "document", { value: previousDocument, configurable: true });
+  if (previousBitmap === undefined) Reflect.deleteProperty(globalThis, "createImageBitmap");
+  else globalThis.createImageBitmap = previousBitmap;
 
   const width = 50;
   const height = 50;

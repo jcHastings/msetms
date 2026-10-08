@@ -6,9 +6,10 @@ import { DriverPhotoFields } from "@/components/driver-photo-fields";
 import { driverUploadAction } from "@/lib/driver-actions";
 import { DRIVER_UPLOAD_KINDS } from "@/lib/driver-docs";
 import { imagesToPdf, pdfFileName } from "@/lib/image-pdf";
+import { mimeForDriverPhoto } from "@/lib/driver-photo-pick";
 import { prepareDriverPhoto } from "@/lib/prepare-driver-photo";
 
-type Draft = { previewUrl: string; blob: Blob };
+type Draft = { previewUrl: string; blob: Blob; name: string; type: string };
 type Page = Draft & { id: string };
 
 export function DriverUpload({
@@ -34,6 +35,7 @@ export function DriverUpload({
   const [state, setState] = useState("");
   const [station, setStation] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [previewReady, setPreviewReady] = useState(true);
   const draftUrl = useRef<string | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [pending, setPending] = useState(false);
@@ -59,11 +61,17 @@ export function DriverUpload({
     };
   }, []);
 
-  function setDraftFromBlob(blob: Blob) {
+  function setDraftFromFile(file: File) {
     if (draftUrl.current) URL.revokeObjectURL(draftUrl.current);
-    const previewUrl = URL.createObjectURL(blob);
+    const previewUrl = URL.createObjectURL(file);
     draftUrl.current = previewUrl;
-    setDraft({ blob, previewUrl });
+    setPreviewReady(true);
+    setDraft({
+      blob: file,
+      previewUrl,
+      name: file.name || "photo",
+      type: mimeForDriverPhoto(file),
+    });
     setSaved(null);
   }
 
@@ -114,7 +122,7 @@ export function DriverUpload({
       void uploadFile(file, nextKind).finally(() => setPending(false));
       return;
     }
-    setDraftFromBlob(file);
+    setDraftFromFile(file);
     if (!lockedKind && !kind) {
       setError("Pick what kind of document this is before you save this photo.");
       return;
@@ -153,19 +161,56 @@ export function DriverUpload({
     setError(null);
     setSaved(null);
     try {
-      const images = await Promise.all(
-        pages.map(async (page) => ({
-          bytes: await prepareDriverPhoto(page.blob),
-          format: "jpeg" as const,
-        })),
-      );
-      const pdfBytes = await imagesToPdf(images);
-      const copy = new Uint8Array(pdfBytes);
-      const file = new File([copy], pdfFileName(nextKind, loadNumber), { type: "application/pdf" });
-      const ok = await uploadFile(file, nextKind);
+      const jpegPages: Array<{ page: Page; bytes: Uint8Array }> = [];
+      const originalPages: Page[] = [];
+      for (const page of pages) {
+        const prepared = await prepareDriverPhoto(page.blob);
+        if (prepared.kind === "jpeg") jpegPages.push({ page, bytes: prepared.bytes });
+        else originalPages.push(page);
+      }
+      const uploadedIds = new Set<string>();
+      let ok = true;
+      if (jpegPages.length > 0) {
+        const pdfBytes = await imagesToPdf(
+          jpegPages.map((item) => ({ bytes: item.bytes, format: "jpeg" as const })),
+        );
+        const copy = new Uint8Array(pdfBytes);
+        const file = new File([copy], pdfFileName(nextKind, loadNumber), { type: "application/pdf" });
+        ok = await uploadFile(file, nextKind);
+        if (ok) {
+          for (const item of jpegPages) uploadedIds.add(item.page.id);
+        }
+      }
       if (ok) {
-        for (const page of pages) URL.revokeObjectURL(page.previewUrl);
-        setPages([]);
+        for (const page of originalPages) {
+          const type = page.type || mimeForDriverPhoto(page);
+          const file = new File([page.blob], page.name || "photo", { type });
+          const uploaded = await uploadFile(file, nextKind);
+          if (!uploaded) {
+            ok = false;
+            break;
+          }
+          uploadedIds.add(page.id);
+        }
+      }
+      if (uploadedIds.size > 0) {
+        setPages((current) => {
+          const keep: Page[] = [];
+          for (const page of current) {
+            if (uploadedIds.has(page.id)) URL.revokeObjectURL(page.previewUrl);
+            else keep.push(page);
+          }
+          return keep;
+        });
+      }
+      if (ok && originalPages.length > 0) {
+        setSaved(
+          jpegPages.length > 0
+            ? "Saved on this load. A photo this phone could not convert was uploaded as the original file."
+            : originalPages.length === 1
+              ? "Saved the original photo on this load."
+              : "Saved the original photos on this load.",
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not make the PDF.");
@@ -257,8 +302,19 @@ export function DriverUpload({
 
       {draft ? (
         <div className="mt-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={draft.previewUrl} alt="Photo preview" className="max-h-80 w-full rounded-2xl bg-slate-100 object-contain" />
+          {previewReady ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={draft.previewUrl}
+              alt="Photo preview"
+              className="max-h-80 w-full rounded-2xl bg-slate-100 object-contain"
+              onError={() => setPreviewReady(false)}
+            />
+          ) : (
+            <p className="rounded-2xl bg-slate-800 px-3 py-4 text-sm text-slate-100" role="status">
+              Photo attached: {draft.name}. This phone cannot show a preview. The original file will upload.
+            </p>
+          )}
           <button
             type="button"
             className="driver-photo-trigger driver-photo-trigger-primary mt-3"

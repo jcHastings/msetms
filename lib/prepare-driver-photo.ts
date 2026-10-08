@@ -77,31 +77,44 @@ export async function grayscaleAndCrop(
   return { rgba: cropped, width: sw, height: sh };
 }
 
-export async function prepareDriverPhoto(blob: Blob): Promise<Uint8Array> {
-  if (typeof document === "undefined") throw new Error("Could not prepare the photo.");
-  const bitmap = await createImageBitmap(blob);
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) {
+export type PreparedDriverPhoto = { kind: "jpeg"; bytes: Uint8Array } | { kind: "original" };
+
+/**
+ * JPEG bytes for the PDF, or the original file when this browser cannot decode it.
+ * HEIC from the iOS photo library throws in createImageBitmap on many engines;
+ * that must not surface as a silent failure.
+ */
+export async function prepareDriverPhoto(blob: Blob): Promise<PreparedDriverPhoto> {
+  try {
+    if (typeof document === "undefined" || typeof createImageBitmap !== "function") {
+      return { kind: "original" };
+    }
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      bitmap.close?.();
+      return { kind: "original" };
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close?.();
-    throw new Error("Could not prepare the photo.");
+    const source = ctx.getImageData(0, 0, width, height);
+    const cropped = await grayscaleAndCrop(source.data, width, height);
+    const pixelBuffer = new ArrayBuffer(cropped.rgba.byteLength);
+    const pixels = new Uint8ClampedArray(pixelBuffer);
+    pixels.set(cropped.rgba);
+    canvas.width = cropped.width;
+    canvas.height = cropped.height;
+    ctx.putImageData(new ImageData(pixels, cropped.width, cropped.height), 0, 0);
+    const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    if (!jpeg) return { kind: "original" };
+    return { kind: "jpeg", bytes: new Uint8Array(await jpeg.arrayBuffer()) };
+  } catch {
+    return { kind: "original" };
   }
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close?.();
-  const source = ctx.getImageData(0, 0, width, height);
-  const cropped = await grayscaleAndCrop(source.data, width, height);
-  const pixelBuffer = new ArrayBuffer(cropped.rgba.byteLength);
-  const pixels = new Uint8ClampedArray(pixelBuffer);
-  pixels.set(cropped.rgba);
-  canvas.width = cropped.width;
-  canvas.height = cropped.height;
-  ctx.putImageData(new ImageData(pixels, cropped.width, cropped.height), 0, 0);
-  const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
-  if (!jpeg) throw new Error("Could not convert the photo.");
-  return new Uint8Array(await jpeg.arrayBuffer());
 }
