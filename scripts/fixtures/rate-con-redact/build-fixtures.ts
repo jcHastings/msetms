@@ -679,6 +679,23 @@ async function main(): Promise<void> {
     doc.fillColor("#000000").fontSize(12).text("Line haul: $900.00", 48, 240);
   });
 
+  // The rule continues above the covered name, so the frame repaint samples rule ink and calls putImageData.
+  await writePdf("ak-header-rule.pdf", "SECRET-BROKER-META-HEADRULE", (doc) => {
+    doc.save();
+    doc.strokeColor("#b0b0b0").lineWidth(1).moveTo(248, 8).lineTo(248, 120).stroke();
+    doc.restore();
+    doc.fillColor("#000000").fontSize(14).text("M&S Loads", 252, 48);
+    doc.fontSize(11);
+    doc.text("600 E 39th St · Hastings, NE 68901", 48, 132);
+    doc.text("MC 056299", 48, 148);
+    doc.text("402-302-0097", 48, 164);
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 200);
+    doc.fontSize(11);
+    doc.text("Carrier: M&S Loads DBA MS Express", 48, 230);
+    doc.text("Pickup: Omaha Cold, Omaha, NE 68102", 48, 250);
+    doc.text("Line haul: $900.00", 48, 278);
+  });
+
   console.log(`Wrote fixtures in ${outDir}`);
 }
 

@@ -52,6 +52,7 @@ const READY = [
   "ah-long-amount.pdf",
   "ai-fuel-helvetica.pdf",
   "aj-draw-order.pdf",
+  "ak-header-rule.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -91,6 +92,7 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("ah-")) return ["$125", "$150", "$900.00"];
   if (name.startsWith("ai-")) return ["$150.00", "$900.00"];
   if (name.startsWith("aj-")) return ["$2.00", "$900.00"];
+  if (name.startsWith("ak-")) return ["$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -607,6 +609,36 @@ async function main(): Promise<void> {
         const column = edgeCtx.getImageData(x, y0, 1, Math.max(1, y1 - y0)).data;
         assert.ok(longestDarkRun(column) < 4, `${item.name} digit ink past ${box.token} at x=${x}`);
       }
+    }
+    if (item.name.startsWith("ak-")) {
+      const stats = glyphAdvanceStats();
+      assert.ok(stats.frames > 0, `${item.name} frame repaint ${stats.frames}`);
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
+      assert.match(seen, /DBA/i, seen.slice(0, 800));
+      assert.match(seen, /Hast|39th|402/, seen.slice(0, 800));
+      assert.doesNotMatch(seen, /M\s*&\s*S\s+Loads(?!\s+DBA)/i, seen.slice(0, 800));
+      const identity = (redactionBoxes()[0] ?? []).filter((box) => box.kind === "identity");
+      assert.ok(identity.length >= 1, "header name box");
+      const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+      const ruleImage = await loadImage(built.pagePngs[0]);
+      const ruleCanvas = createCanvas(ruleImage.width, ruleImage.height);
+      const ruleCtx = ruleCanvas.getContext("2d");
+      ruleCtx.drawImage(ruleImage, 0, 0);
+      const box = identity[0];
+      const y0 = Math.max(0, Math.floor(box.top));
+      const h = Math.max(1, Math.floor(box.h));
+      const x0 = Math.max(0, Math.floor(box.left) - 16);
+      let columns = 0;
+      for (let x = x0; x < Math.floor(box.left); x += 1) {
+        const column = ruleCtx.getImageData(x, y0, 1, h).data;
+        let ink = 0;
+        for (let i = 0; i < column.length; i += 4) {
+          if (column[i] < 250 || column[i + 1] < 250 || column[i + 2] < 250) ink += 1;
+        }
+        if (ink > 8) columns += 1;
+      }
+      assert.ok(columns >= 1 && columns <= 3, `header rule columns beside the name (${columns})`);
     }
   }
 
