@@ -476,6 +476,14 @@ export function driverFromApiToken(token: string): DriverWithTruck | null {
   return driver;
 }
 
+/** Portal cookie, or the driver-app bearer token when one is sent. A bad token does not fall through to the cookie. */
+export async function driverFromCookieOrBearer(request: Request): Promise<DriverWithTruck | null> {
+  const token = bearerToken(request);
+  if (token) return driverFromApiToken(token);
+  const { getSignedInDriver } = await import("./driver-session");
+  return getSignedInDriver();
+}
+
 export function requireDriverApiAuth(request: Request): DriverWithTruck {
   const token = bearerToken(request);
   if (!token) {
