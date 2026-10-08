@@ -386,6 +386,57 @@ async function main(): Promise<void> {
     doc.text("Line haul: $900.00", 48, 256);
   });
 
+  const subsetFont = [
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/croscore/Arimo-Regular.ttf",
+  ].find((file) => fs.existsSync(file));
+
+  await new Promise<void>((resolve, reject) => {
+    if (!subsetFont) {
+      reject(new Error("Need Noto Sans or Arimo to embed an Identity-H subset font."));
+      return;
+    }
+    const doc = new PDFDocumentKit({ size: "LETTER", margin: 48, info: { Title: "SECRET-BROKER-META-ASCEND-SUBSET" } });
+    const stream = fs.createWriteStream(path.join(outDir, "y-ascend-subset.pdf"));
+    doc.pipe(stream);
+    doc.font(subsetFont).fontSize(14);
+    doc.text("M & S Rate Confirmation", 48, 48);
+    doc.fontSize(11);
+    doc.text("228 East Route 59 Unit 190, Nanuet, NY 10954", 48, 72);
+    doc.text("Docket: MC970613", 48, 88);
+    doc.text("Carrier: MS Express", 48, 120);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 140);
+    doc.text("reported to M & S Loads and must inform the office", 48, 180);
+    doc.text("representative of M&S Loads LLC. while on site", 48, 200);
+    doc.text("appropriate by M&S Loads LLC. Carrier", 48, 220);
+    doc.text("EMAILED TO BILLING@MSLOADS.COM We received it", 48, 240);
+    doc.text("Note: The $30 entrance gate fee", 48, 270);
+    doc.text("Line haul: $900.00", 48, 300);
+    doc.end();
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    if (!subsetFont) {
+      reject(new Error("Need Noto Sans or Arimo to embed an Identity-H subset font."));
+      return;
+    }
+    const doc = new PDFDocumentKit({ size: "LETTER", margin: 48, info: { Title: "SECRET-BROKER-META-TQL-CAP" } });
+    const stream = fs.createWriteStream(path.join(outDir, "z-tql-cap.pdf"));
+    doc.pipe(stream);
+    doc.font(subsetFont).fontSize(16);
+    doc.text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    doc.text("free, $30 per hour thereafter, cap $150", 48, 160);
+    doc.text("Line haul: $900.00", 48, 190);
+    doc.end();
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+
   await writePdf("x-glyph-edges.pdf", "SECRET-BROKER-META-GLYPH", (doc) => {
     doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
     doc.fontSize(12);
