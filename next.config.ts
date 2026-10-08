@@ -37,7 +37,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Next gzip of invoice PDFs + RSC flights stacked zlib listeners and froze the desk.
   compress: false,
-  serverExternalPackages: ["tesseract.js", "unpdf", "pdfkit", "dotenv"],
+  serverExternalPackages: ["tesseract.js", "unpdf", "pdfkit", "dotenv", "pdfjs-dist", "@napi-rs/canvas"],
   // Standalone tracing otherwise keeps only pdfkit.browser.mjs (no Helvetica).
   outputFileTracingIncludes: {
     "/api/loads/*/confirmation": [

@@ -31,8 +31,6 @@ import {
   deleteDrugTest,
   getDriver,
   getDrugTest,
-  getTrailer,
-  getTruck,
   importLocationsFromCsv,
   updateCustomer,
   updateDriver,
@@ -58,7 +56,6 @@ import {
   requireAssignmentHardBlock,
 } from "./workflow";
 import {
-  DRIVER_STATUSES,
   DRIVER_TYPES,
   TRUCK_STATUSES,
   isLocationRole,
@@ -69,7 +66,6 @@ import {
   isBillableStatus,
   type ActionResult,
   type DriverKind,
-  type DriverStatus,
   type Location,
   type LocationRole,
   type SchedulingType,
@@ -232,14 +228,6 @@ function parseTruckStatus(value: FormDataEntryValue | null): TruckStatus {
     throw new Error("Invalid truck status.");
   }
   return status as TruckStatus;
-}
-
-function parseDriverStatus(value: FormDataEntryValue | null): DriverStatus {
-  const status = String(value ?? "available");
-  if (!DRIVER_STATUSES.some((item) => item.value === status)) {
-    throw new Error("Invalid driver status.");
-  }
-  return status as DriverStatus;
 }
 
 export async function createCustomerAction(
@@ -519,7 +507,9 @@ export async function createLoadAction(
       if (inboxId) {
         const { attachInboxToLoad, readInboxParse } = await import("./files");
         const { captureRateConAmount } = await import("./pod-delivery");
-        attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const attached = attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const { redactStoredRateCon } = await import("./rate-con-redact");
+        await redactStoredRateCon(attached.id);
         const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
         if (parsed) captureRateConAmount(id, parsed.rate ?? null);
       }
@@ -581,7 +571,9 @@ export async function updateLoadAction(
       if (inboxId) {
         const { attachInboxToLoad, readInboxParse } = await import("./files");
         const { captureRateConAmount } = await import("./pod-delivery");
-        attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const attached = attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const { redactStoredRateCon } = await import("./rate-con-redact");
+        await redactStoredRateCon(attached.id);
         const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
         if (parsed) captureRateConAmount(id, parsed.rate ?? null);
       }
@@ -1033,7 +1025,7 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
       }
       if (file.size > 15 * 1024 * 1024) throw new Error("File is over 15 MB.");
       if (!isPdfOrImage(file)) throw new Error("Upload a PDF or image.");
-      await addAttachment({
+      const attachment = addAttachment({
         loadId,
         kind: kind as (typeof ATTACHMENT_KINDS)[number]["value"],
         originalName: file.name,
@@ -1041,6 +1033,10 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
         mimeType: file.type,
         uploadedBy: "dispatcher",
       });
+      if (attachment.kind === "rate_con") {
+        const { redactStoredRateCon } = await import("./rate-con-redact");
+        await redactStoredRateCon(attachment.id);
+      }
       if (kind === "pod") {
         const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
         await maybeAutoInvoiceLoad(loadId);
@@ -1071,12 +1067,16 @@ export async function replaceAttachmentAction(formData: FormData): Promise<Actio
       if (file.size > 15 * 1024 * 1024) throw new Error("File is over 15 MB.");
       const { replaceAttachment, fileToBuffer, isPdfOrImage } = await import("./files");
       if (!isPdfOrImage(file)) throw new Error("Upload a PDF or image.");
-      replaceAttachment(attachmentId, {
+      const replaced = replaceAttachment(attachmentId, {
         originalName: file.name,
         buffer: await fileToBuffer(file),
         mimeType: file.type,
         uploadedBy: "dispatcher",
       });
+      if (replaced.kind === "rate_con") {
+        const { redactStoredRateCon } = await import("./rate-con-redact");
+        await redactStoredRateCon(replaced.id);
+      }
       refresh();
       return { ok: true, id: attachmentId };
     } catch (error) {
@@ -1645,10 +1645,7 @@ export async function importTollsCsvAction(
   }
 }
 
-export async function pullPrepassTollsAction(
-  _prev: ActionResult | null,
-  _formData: FormData,
-): Promise<ActionResult> {
+export async function pullPrepassTollsAction(): Promise<ActionResult> {
   try {
     await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
     const result = await pullPrepassTollTransactions();
@@ -1841,10 +1838,7 @@ export async function updateCompanyProfileAction(
   }
 }
 
-export async function previewSamsaraTrucksAction(
-  _prev: SamsaraPreviewState | null,
-  _formData: FormData,
-): Promise<SamsaraPreviewState> {
+export async function previewSamsaraTrucksAction(): Promise<SamsaraPreviewState> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const { listSamsaraVehicles } = await import("./integrations/samsara");

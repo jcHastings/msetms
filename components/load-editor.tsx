@@ -28,6 +28,7 @@ import { MasterLoadPanel } from "@/components/master-load-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
 import { listDefaultedDocuments } from "@/lib/load-documents";
+import { RateConRedactionPanel } from "@/components/rate-con-redaction-panel";
 import { RateConApply } from "@/components/rate-con-apply";
 import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
 import { laneAverageSnapshot } from "@/lib/lane-average";
@@ -35,6 +36,7 @@ import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments } from "@/lib/files";
+import { listRateConRedactions } from "@/lib/rate-con-redact-store";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
@@ -140,9 +142,28 @@ export async function LoadEditor({
     }
   })();
   const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
+  const rateConCopies = listRateConRedactions(load.id);
+  const rateConReview = rateConCopies.filter((copy) => copy.status === "needs_review");
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
+      {rateConReview.length ? (
+        <div
+          role="status"
+          data-rate-con-review-flag=""
+          className="card mx-3 mt-3 border border-amber-400 bg-amber-50 p-3 text-amber-950"
+        >
+          <p className="text-sm font-semibold">Rate confirmation needs office review</p>
+          <p className="mt-1 text-sm">
+            {rateConReview.length === 1
+              ? "One driver copy is waiting. The driver cannot see it until you release it."
+              : `${rateConReview.length} driver copies are waiting. The driver cannot see them until you release them.`}
+          </p>
+          <a className="btn btn-secondary mt-2 min-h-11" href={`/loads/${load.id}?tab=docs#rate-con-driver-copy`}>
+            Review rate confirmation
+          </a>
+        </div>
+      ) : null}
       <LoadWorkspace
         header={
           <PageHeader
@@ -445,6 +466,7 @@ export async function LoadEditor({
             stopTimes={samsaraStill.stopTimes}
             nowValue={toOfficeDateTime(new Date().toISOString())}
           />
+          <RateConRedactionPanel loadId={load.id} attachments={attachments} canRelease={!readOnly} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
           </div>
         </LoadTabPanel>

@@ -49,6 +49,8 @@ In-repo OpenAPI / allowlist for this BFF (additive vs the 2026-09-11 frozen hand
 
 Changed vs the frozen handoff: the native API accepts `ifta`, `claim`, `unclassified`, and `other` in addition to the frozen driver-upload set. iOS should keep subsetting the picker; do not treat the 2026-09-11 frozen list as the server allowlist.
 
+Broker rate confirmations are never returned as attachments. A load detail may include `rate_confirmations`: released driver copies only, each `{ id, name: "Rate confirmation", href }`. `GET /loads/{id}/rate-confirmation/{redactionId}` returns that image-only PDF. The original `rate_con` file is office-only.
+
 ## Errors
 
 Uniform body: `{ "ok": false, "error": "...", "code?": "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "RATE_LIMITED" }`

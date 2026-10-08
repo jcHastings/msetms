@@ -1200,6 +1200,7 @@ export function migrate(db: Database): void {
 
   migrateDriverApiIdempotencyKey(db);
   migrateFacilityAndCompanyDocs(db);
+  migrateRateConRedactions(db);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1885,6 +1886,33 @@ function backfillDemoLocations(db: Database): void {
  * Driver-facing facility fields on locations (Assist reads these, never `notes`),
  * plus versioned MS Express company documents (IFTA license, insurance cards).
  */
+/** Additive. One driver copy per broker rate confirmation attachment. */
+function migrateRateConRedactions(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rate_con_redactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      source_attachment_id INTEGER NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      stored_name TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+      page_count INTEGER NOT NULL DEFAULT 0,
+      amounts_found INTEGER NOT NULL DEFAULT 0,
+      text_chars INTEGER NOT NULL DEFAULT 0,
+      verification TEXT NOT NULL DEFAULT '',
+      released_at TEXT NOT NULL DEFAULT '',
+      released_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rate_con_redactions_source
+      ON rate_con_redactions(source_attachment_id);
+    CREATE INDEX IF NOT EXISTS idx_rate_con_redactions_load
+      ON rate_con_redactions(load_id, status);
+  `);
+}
+
 function migrateFacilityAndCompanyDocs(db: Database): void {
   ensureColumn(db, "locations", "receiving_hours", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "locations", "shipping_hours", "TEXT NOT NULL DEFAULT ''");

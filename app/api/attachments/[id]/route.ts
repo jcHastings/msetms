@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { getAttachment, getAttachmentPath, sanitizeName } from "@/lib/files";
-import { isCustomerRateDocument } from "@/lib/load-documents-shared";
+import { isCustomerRateDocument, isDriverFacingAttachment } from "@/lib/load-documents-shared";
 import { getLoad } from "@/lib/queries";
 import { isMissingFileError, regenerateMissingAttachment } from "@/lib/regenerate-attachment";
 import { reimbursementDriverForAttachment } from "@/lib/reimbursements";
@@ -25,12 +25,15 @@ export async function GET(
 ) {
   const dispatcher = await getSignedInDispatcher();
   const driver = dispatcher ? null : await getSignedInDriver();
-  if (!dispatcher && !driver) {
-    return unauthorizedResponse();
-  }
   const attachment = getAttachment(Number.parseInt((await params).id, 10));
   if (!attachment) {
     return new Response("Not found", { status: 404 });
+  }
+  if (!dispatcher && isCustomerRateDocument(attachment)) {
+    return new Response("Not found", { status: 404 });
+  }
+  if (!dispatcher && !driver) {
+    return unauthorizedResponse();
   }
   if (driver) {
     const receiptOwner = reimbursementDriverForAttachment(attachment.id);
@@ -45,6 +48,9 @@ export async function GET(
     }
   }
   if (driver && isCustomerRateDocument(attachment)) {
+    return new Response("Not found", { status: 404 });
+  }
+  if (driver && !isDriverFacingAttachment(attachment)) {
     return new Response("Not found", { status: 404 });
   }
   const download = new URL(request.url).searchParams.get("download") === "1";
