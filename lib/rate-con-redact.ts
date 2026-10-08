@@ -947,6 +947,61 @@ function growToBlank(
   return { left, width };
 }
 
+/** First device column fully outside the painted box. */
+function outsideColumn(left: number, width: number, side: "left" | "right"): number {
+  if (side === "left") return Math.floor(left) - 1;
+  return Math.ceil(left + width - 1e-6);
+}
+
+/** How many tall stems sit just outside the box before a gap. Stops at `max`. */
+function outwardStemRun(
+  canvas: FrameCanvas,
+  origin: number,
+  top: number,
+  height: number,
+  dir: -1 | 1,
+  max: number,
+): number {
+  let run = 0;
+  for (let step = 0; step < max; step += 1) {
+    if (columnStem(canvas, origin + dir * step, top, height) < 4) break;
+    run += 1;
+  }
+  return run;
+}
+
+/**
+ * Cover a 1–2 px leftover of the span glyph. A run of 3 or more is the next
+ * letter (`/Each`), and the box must not enter it.
+ */
+function coverIsolatedSliver(
+  canvas: FrameCanvas,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  side: "left" | "right",
+): { left: number; width: number } {
+  const dir: -1 | 1 = side === "left" ? -1 : 1;
+  const origin = outsideColumn(left, width, side);
+  const run = outwardStemRun(canvas, origin, top, height, dir, 3);
+  if (run < 1 || run > 2) return { left, width };
+  if (side === "right") {
+    const target = origin + run;
+    const grow = target - (left + width);
+    if (grow > 0) width += grow;
+    return { left, width };
+  }
+  const target = origin - (run - 1);
+  const frame = frameColumn(canvas, left, top, height);
+  const minLeft = frame == null ? target : Math.max(frame + 1, target);
+  if (minLeft < left) {
+    width += left - minLeft;
+    left = minLeft;
+  }
+  return { left, width };
+}
+
 /** Pull a money box out to the next blank column. The `$` side stops at 0.6 em; the other side only takes a 1–2 px sliver. */
 function extendMoneyBox(
   canvas: FrameCanvas,
@@ -962,16 +1017,15 @@ function extendMoneyBox(
   const leftTrigger = inkCrossesColumn(canvas, left, top, height) || columnStem(canvas, left - 1, top, height) >= 4;
   const rightEdge = left + width;
   const rightTrigger = inkCrossesColumn(canvas, rightEdge, top, height) || columnStem(canvas, rightEdge, top, height) >= 4;
-  if (leftTrigger) {
-    const thin = columnStem(canvas, left - 1, top, height) >= 4 && columnIsBlank(canvas, left - 3, top, height);
-    const cap = sides.left ? dollarCap : thin ? 3 : 0;
-    if (cap > 0) ({ left, width } = growToBlank(canvas, left, width, top, height, "left", cap));
+  if (sides.left && leftTrigger) {
+    ({ left, width } = growToBlank(canvas, left, width, top, height, "left", dollarCap));
+  } else if (!sides.left) {
+    ({ left, width } = coverIsolatedSliver(canvas, left, top, width, height, "left"));
   }
-  if (rightTrigger) {
-    const edge = left + width;
-    const thin = columnStem(canvas, edge, top, height) >= 4 && columnIsBlank(canvas, edge + 2, top, height);
-    const cap = sides.right ? dollarCap : thin ? 3 : 0;
-    if (cap > 0) ({ left, width } = growToBlank(canvas, left, width, top, height, "right", cap));
+  if (sides.right && rightTrigger) {
+    ({ left, width } = growToBlank(canvas, left, width, top, height, "right", dollarCap));
+  } else if (!sides.right) {
+    ({ left, width } = coverIsolatedSliver(canvas, left, top, width, height, "right"));
   }
   return { left, width };
 }
