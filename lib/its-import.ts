@@ -1130,7 +1130,7 @@ function writeException(key: string, status: "open" | "resolved", reason: string
       .run(key, status, nextReason, new Date().toISOString());
     return;
   }
-  if (existing.status === "resolved" || existing.status === "snoozed") return;
+  if (existing.status === "resolved" || existing.status === "snoozed" || existing.status === "ack") return;
   if (existing.status === status && existing.reason === nextReason) return;
   if (status === "open" && existing.status === "open") {
     getDb().prepare("UPDATE exception_states SET reason = ? WHERE exception_key = ?").run(nextReason, key);
@@ -1153,7 +1153,7 @@ function syncExceptions(loadNumber: string, issues: Array<{ issue: ItsImportIssu
     const row = getDb().prepare("SELECT status FROM exception_states WHERE exception_key = ?").get(key) as
       | { status: string }
       | undefined;
-    if (row && row.status !== "resolved" && row.status !== "snoozed") {
+    if (row && row.status !== "resolved" && row.status !== "snoozed" && row.status !== "ack") {
       writeException(key, "resolved", "Cleared by a later ITS import.");
     }
   }

@@ -435,6 +435,17 @@ async function main(): Promise<void> {
     until: "2026-12-01",
     updated_at: "2026-03-03T00:00:00.000Z",
   });
+  db.prepare(
+    "UPDATE exception_states SET status = 'ack', reason = 'office acknowledged', until = '', updated_at = '2026-04-04T00:00:00.000Z' WHERE exception_key = ?",
+  ).run(openKey);
+  its.importItsRecords(nobody, { apply: true, snapshot: FRESH });
+  const ackRow = db.prepare("SELECT status, reason, until, updated_at FROM exception_states WHERE exception_key = ?").get(openKey) as typeof openBefore;
+  assert.deepEqual(ackRow, {
+    status: "ack",
+    reason: "office acknowledged",
+    until: "",
+    updated_at: "2026-04-04T00:00:00.000Z",
+  });
 
   const rated = its.importItsRecords(
     sheet([loadRow({ "Load #": "1008301", Status: "Invoiced", "Total Billing Rate": "1,850.50" })]),
