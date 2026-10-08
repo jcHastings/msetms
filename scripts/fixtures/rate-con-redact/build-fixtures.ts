@@ -4,6 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { createCanvas } from "@napi-rs/canvas";
 import PDFDocumentKit from "../../../lib/pdfkit-document";
@@ -525,6 +526,34 @@ async function main(): Promise<void> {
     doc.text("Line haul: $900.00", 48, 248);
   });
 
+  await writePdf("af-per-mile.pdf", "SECRET-BROKER-META-PERMILE", (doc) => {
+    doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    doc.text("WILL PAY $2.00 PER MILE TO RELOCATE", 48, 160);
+    doc.text("Detention 2 hrs free then $50/hr thereafter", 48, 184);
+    doc.text("Line haul: $900.00", 48, 220);
+  });
+
+  await writePdf("ag-grey-header.pdf", "SECRET-BROKER-META-GREYHEAD", (doc) => {
+    doc.fontSize(11);
+    doc.text("600 E 39th St · Hastings, NE 68901", 48, 72);
+    doc.text("402-302-0097", 48, 88);
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 120);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 156);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 176);
+    doc.save();
+    doc.rect(40, 210, 280, 18).fill("#e6e6e6");
+    doc.fillColor("#111111").fontSize(10).text("Agreed amount", 48, 214);
+    doc.restore();
+    doc.save();
+    doc.strokeColor("#d4d4d4").lineWidth(1).moveTo(36, 232).lineTo(36, 258).stroke();
+    doc.restore();
+    doc.fillColor("#000000").fontSize(12).text("$900.00 due on delivery", 48, 236);
+  });
+
   await writePdf("x-glyph-edges.pdf", "SECRET-BROKER-META-GLYPH", (doc) => {
     doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
     doc.fontSize(12);
@@ -572,7 +601,106 @@ async function main(): Promise<void> {
   field.updateAppearances(font);
   fs.writeFileSync(path.join(outDir, "f-form-field.pdf"), Buffer.from(await formPdf.save()));
 
+  if (!subsetFont) throw new Error("Need Noto Sans or Arimo to embed an Identity-H subset font.");
+  await new Promise<void>((resolve, reject) => {
+    const doc = new PDFDocumentKit({ size: "LETTER", margin: 48, info: { Title: "SECRET-BROKER-META-TABSPACE" } });
+    const stream = fs.createWriteStream(path.join(outDir, "ae-tab-space.pdf"));
+    doc.pipe(stream);
+    doc.font(subsetFont).fontSize(14);
+    doc.text("M & S Rate Confirmation", 48, 48);
+    doc.fontSize(11);
+    doc.text("228 East Route 59 Unit 190, Nanuet, NY 10954", 48, 72);
+    doc.text("Docket: MC970613", 48, 88);
+    doc.text("Carrier: MS Express", 48, 120);
+    doc.text("appropriate by M&S Loads LLC. Carrier", 48, 160);
+    doc.text("EMAILED TO BILLING@MSLOADS.COM We", 48, 180);
+    doc.text("reported to M & S Loads and must", 48, 200);
+    doc.text("Line haul: $900.00", 48, 240);
+    doc.end();
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+  retargetSpaceGlyph(path.join(outDir, "ae-tab-space.pdf"));
+
   console.log(`Wrote fixtures in ${outDir}`);
+}
+
+/** Map the embedded font's space glyph to a tab, the way an Ascend subset does. */
+function retargetSpaceGlyph(filePath: string): void {
+  const source = fs.readFileSync(filePath);
+  const xrefAt = Number(source.subarray(source.lastIndexOf("startxref") + "startxref".length).toString("latin1").trim().split(/\s+/)[0]);
+  const xrefBody = source.subarray(xrefAt).toString("latin1");
+  const lines = xrefBody.split("\n");
+  const entries: Array<{ offset: number; gen: string; flag: string }> = [];
+  if (lines[0].trim() !== "xref") throw new Error("fixture xref missing");
+  for (let line = 1; line < lines.length && !lines[line].startsWith("trailer"); ) {
+    const head = lines[line].trim().split(/\s+/);
+    const count = Number(head[1]);
+    line += 1;
+    for (let index = 0; index < count; index += 1) {
+      const parts = lines[line].trim().split(/\s+/);
+      entries.push({ offset: Number(parts[0]), gen: parts[1], flag: parts[2] });
+      line += 1;
+    }
+  }
+  let bytes = Buffer.from(source);
+  for (const entry of entries) {
+    if (entry.flag !== "n") continue;
+    const head = bytes.subarray(entry.offset, Math.min(bytes.length, entry.offset + 400)).toString("latin1");
+    const streamAt = head.search(/stream\r?\n/);
+    if (streamAt < 0 || !head.includes("FlateDecode")) continue;
+    const newline = head.slice(streamAt).startsWith("stream\r\n") ? 8 : 7;
+    const dataAt = entry.offset + streamAt + newline;
+    const end = bytes.indexOf("endstream", dataAt);
+    if (end < 0) continue;
+    let raw = bytes.subarray(dataAt, end);
+    if (raw[raw.length - 1] === 0x0a) raw = raw.subarray(0, raw.length - 1);
+    if (raw[raw.length - 1] === 0x0d) raw = raw.subarray(0, raw.length - 1);
+    let decoded: Buffer;
+    try {
+      decoded = zlib.inflateSync(raw);
+    } catch {
+      continue;
+    }
+    if (!decoded.includes(Buffer.from("beginbfrange"))) continue;
+    const next = decoded.toString("latin1").replace("<0020>", "<0009>");
+    if (next === decoded.toString("latin1")) throw new Error("space glyph was not in the ToUnicode map");
+    const compressed = zlib.deflateSync(Buffer.from(next, "latin1"));
+    const lengthMatch = head.slice(0, streamAt).match(/\/Length\s+(\d+)/);
+    if (!lengthMatch || lengthMatch.index == null) throw new Error("stream length missing");
+    const oldDigits = lengthMatch[1];
+    const newDigits = String(compressed.length);
+    const lengthAt = entry.offset + lengthMatch.index + lengthMatch[0].length - oldDigits.length;
+    const withLength = Buffer.concat([bytes.subarray(0, lengthAt), Buffer.from(newDigits), bytes.subarray(lengthAt + oldDigits.length)]);
+    const shift = newDigits.length - oldDigits.length;
+    const dataAt2 = dataAt + shift;
+    const end2 = withLength.indexOf("endstream", dataAt2);
+    let rawEnd = end2;
+    if (withLength[rawEnd - 1] === 0x0a) rawEnd -= 1;
+    if (withLength[rawEnd - 1] === 0x0d) rawEnd -= 1;
+    bytes = Buffer.concat([withLength.subarray(0, dataAt2), compressed, withLength.subarray(rawEnd)]);
+    const delta = compressed.length - (rawEnd - dataAt2);
+    const moved = bytes;
+    const trailerAt = moved.lastIndexOf("\nxref\n");
+    const rebuilt: string[] = ["xref"];
+    const objects = entries.map((row, index) => ({ ...row, index, offset: row.offset > entry.offset ? row.offset + shift + delta : row.offset }));
+    // The edited object's own offset is unchanged. Objects after the stream move.
+    rebuilt.push(`0 ${objects.length}`);
+    for (const row of objects) {
+      rebuilt.push(`${String(row.offset).padStart(10, "0")} ${row.gen} ${row.flag} `);
+    }
+    const trailer = moved.subarray(trailerAt + 1).toString("latin1");
+    const trailerBody = trailer.slice(trailer.indexOf("trailer"));
+    const start = trailerBody.replace(/startxref\s+\d+/, `startxref\n${trailerAt + 1}`);
+    bytes = Buffer.concat([moved.subarray(0, trailerAt + 1), Buffer.from(`${rebuilt.join("\n")}\n${start.startsWith("trailer") ? start : trailerBody}`)]);
+    // The replacement above may duplicate if start already includes trailer. Rewrite cleanly.
+    const cleanTrailer = moved.subarray(moved.indexOf("trailer", trailerAt)).toString("latin1");
+    const clean = cleanTrailer.replace(/startxref\s+\d+/, `startxref\n${trailerAt + 1}`);
+    bytes = Buffer.concat([moved.subarray(0, trailerAt + 1), Buffer.from(`${rebuilt.join("\n")}\n`), Buffer.from(clean)]);
+    fs.writeFileSync(filePath, bytes);
+    return;
+  }
+  throw new Error("ToUnicode map was not found");
 }
 
 main().catch((error) => {

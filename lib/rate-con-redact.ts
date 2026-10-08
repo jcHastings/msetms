@@ -58,6 +58,8 @@ type TextStyle = { fontFamily?: string };
 
 type PlacedItem = PdfTextItem & { start: number; end: number };
 
+type GlyphMark = { text: string; x0: number; x1: number; y: number };
+
 type PagePlan = {
   textChars: number;
   annotationChars: number;
@@ -65,6 +67,7 @@ type PagePlan = {
   lowConfidence: boolean;
   lines: Array<{ text: string; items: PlacedItem[] }>;
   styles: Record<string, TextStyle>;
+  dollarMarks: GlyphMark[];
 };
 
 type PaintBox = {
@@ -285,7 +288,7 @@ async function openPdf(buffer: Buffer): Promise<{ pdfjs: PdfjsModule; doc: PdfDo
 async function planPage(page: PdfPage): Promise<PagePlan> {
   const textContent = await page.getTextContent();
   const items = textContent.items.map(asTextItem).filter((item): item is PdfTextItem => item != null);
-  await attachGlyphAdvances(page, items);
+  const marks = await attachGlyphAdvances(page, items);
   const lines = groupLines(items);
   const textChars = lines.reduce((sum, line) => sum + line.text.trim().length, 0);
   const annotations = await page.getAnnotations({ intent: "any" });
@@ -310,6 +313,7 @@ async function planPage(page: PdfPage): Promise<PagePlan> {
     lowConfidence: measured > 0 && zeroWidth / measured > 0.5,
     lines,
     styles: textContent.styles ?? {},
+    dollarMarks: marks.filter((mark) => mark.text.includes("$")),
   };
 }
 
@@ -347,6 +351,10 @@ const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 
 type GlyphPiece = { unicode?: unknown; width?: unknown; isSpace?: unknown };
 
+function isSpaceGlyph(text: string): boolean {
+  return text.length === 0 || /^\s+$/u.test(text);
+}
+
 type TextDrawState = {
   ctm: number[];
   textMatrix: number[];
@@ -359,8 +367,6 @@ type TextDrawState = {
   textRise: number;
   matrix0: number;
 };
-
-type GlyphMark = { text: string; x0: number; x1: number; y: number };
 
 function cloneDrawState(state: TextDrawState): TextDrawState {
   return {
@@ -460,7 +466,7 @@ function drawGlyphs(state: TextDrawState, glyphs: unknown[], marks: GlyphMark[])
     const start = userPoint(state);
     translateMatrix(state.textMatrix, advance, 0);
     const end = userPoint(state);
-    if (!unicode) continue;
+    if (!unicode && !(advance > 0)) continue;
     marks.push({ text: unicode, x0: start.x, x1: end.x, y: start.y });
   }
 }
@@ -498,8 +504,14 @@ function alignItemGlyphs(item: PdfTextItem, glyphs: GlyphMark[], cursor: number)
     if (glyph.x1 < originX - 1.5) continue;
     if (glyph.x0 > originX + Math.max(2, (item.width || 0) * 0.35)) break;
     const piece = glyph.text.trimEnd();
-    if (!piece) continue;
-    if (target.startsWith(glyph.text) || target.startsWith(piece) || (target[0] === " " && !/^\s/.test(piece))) {
+    const spaceGlyph = isSpaceGlyph(glyph.text);
+    if (!piece && !(target[0] === " " && spaceGlyph)) continue;
+    if (
+      target.startsWith(glyph.text) ||
+      (piece && target.startsWith(piece)) ||
+      (target[0] === " " && spaceGlyph) ||
+      (target[0] === " " && piece && !/^\s/u.test(piece))
+    ) {
       start = probe;
       break;
     }
@@ -517,18 +529,26 @@ function alignItemGlyphs(item: PdfTextItem, glyphs: GlyphMark[], cursor: number)
     if (glyph.x0 > endX + 2 && textIndex > 0) break;
     const needed = target[textIndex] ?? "";
     const raw = glyph.text;
-    if (needed === " " && raw && !/^\s/.test(raw)) {
+    if (needed === " " && isSpaceGlyph(raw)) {
+      const width = Math.max(0, glyph.x1 - glyph.x0);
+      if (textIndex > 0) {
+        const gap = glyph.x0 - prevEnd;
+        if (Math.abs(gap) > 0.01 && !/\s/u.test(target[textIndex - 1] ?? "")) advances[textIndex - 1] += gap;
+      }
+      advances[textIndex] += width;
+      textIndex += 1;
+      prevEnd = glyph.x1;
+      index += 1;
+      consumed = index;
+      continue;
+    }
+    if (needed === " " && raw && !/^\s/u.test(raw)) {
       advances[textIndex] = Math.max(0, glyph.x0 - prevEnd);
       textIndex += 1;
       prevEnd = glyph.x0;
       continue;
     }
-    if (raw && /^\s+$/.test(raw) && needed !== " ") {
-      index += 1;
-      consumed = index;
-      continue;
-    }
-    if (!raw) {
+    if (isSpaceGlyph(raw) && needed !== " ") {
       index += 1;
       consumed = index;
       continue;
@@ -552,7 +572,7 @@ function alignItemGlyphs(item: PdfTextItem, glyphs: GlyphMark[], cursor: number)
   while (consumed < glyphs.length) {
     const glyph = glyphs[consumed];
     if (!glyph || Math.abs(glyph.y - originY) > yTol) break;
-    if (!/^\s+$/.test(glyph.text)) break;
+    if (!isSpaceGlyph(glyph.text)) break;
     if (glyph.x0 > endX + 1.5) break;
     consumed += 1;
   }
@@ -560,7 +580,7 @@ function alignItemGlyphs(item: PdfTextItem, glyphs: GlyphMark[], cursor: number)
 }
 
 /** Per-glyph advances from the operator list, in user space (Tm, Tz, and font size applied). */
-async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise<void> {
+async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise<GlyphMark[]> {
   for (const item of items) {
     item.advances = null;
     item.altAdvances = null;
@@ -569,7 +589,7 @@ async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise
   try {
     list = await page.getOperatorList({ intent: "display" });
   } catch {
-    return;
+    return [];
   }
   const marks: GlyphMark[] = [];
   const stack: TextDrawState[] = [];
@@ -680,6 +700,7 @@ async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise
     cursor = matched.next;
     glyphAdvanceUsed += 1;
   }
+  return marks;
 }
 
 /** Unicode widths, when every character has one and the sum matches the item. */
@@ -748,6 +769,13 @@ function prefixAdvance(advances: number[], index: number): number {
   return sum;
 }
 
+function coveredItemRange(item: PlacedItem, from: number, to: number): [number, number] {
+  const full = item.str;
+  const localFrom = Math.max(0, Math.min(full.length, from - item.start));
+  const localTo = Math.max(localFrom, Math.min(full.length, to - item.start));
+  return coverTouchingDollar(full, localFrom, localTo);
+}
+
 function widthFractions(
   item: PlacedItem,
   from: number,
@@ -756,9 +784,7 @@ function widthFractions(
 ): [number, number, number, number] {
   const full = item.str;
   const len = Math.max(1, full.length);
-  let localFrom = Math.max(0, Math.min(full.length, from - item.start));
-  let localTo = Math.max(localFrom, Math.min(full.length, to - item.start));
-  [localFrom, localTo] = coverTouchingDollar(full, localFrom, localTo);
+  let [localFrom, localTo] = coveredItemRange(item, from, to);
   const advances = item.advances;
   const aligned = advances != null && advances.length === full.length && full.length > 0;
   const advanceTotal = aligned ? prefixAdvance(advances, advances.length) : 0;
@@ -817,7 +843,23 @@ function rulePixel(data: Uint8ClampedArray, index: number): boolean {
   return data[index] < 245 && data[index + 1] < 245 && data[index + 2] < 245;
 }
 
-/** A vertical rule just left of the text, including a light gray rule. Returns its right-most column. */
+function columnLuma(data: Uint8ClampedArray, width: number, column: number, y0: number, y1: number): number {
+  let sum = 0;
+  let count = 0;
+  for (let y = y0; y < y1; y += 1) {
+    const index = (y * width + column) * 4;
+    sum += data[index] + data[index + 1] + data[index + 2];
+    count += 1;
+  }
+  return count ? sum / (count * 3) : 255;
+}
+
+/**
+ * A thin vertical rule just left of the text, including a light gray rule.
+ * The scan stops at the box's left edge, so a glyph inside the box is not a rule.
+ * A grey header fill is not a rule: the dark run has to be 1–3 px with a lighter side.
+ * Returns the rule's right-most column.
+ */
 function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH: number): number | null {
   const ctx = canvas.getContext("2d");
   if (!ctx || boxH < 6) return null;
@@ -827,11 +869,11 @@ function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH:
   const above = Math.floor(boxTop) - y0;
   if (h < 8 || above < 4) return null;
   const x0 = Math.max(0, Math.floor(boxLeft - 40));
-  const x1 = Math.min(canvas.width, Math.ceil(boxLeft + 6));
+  const x1 = Math.min(canvas.width, Math.floor(boxLeft));
   const w = x1 - x0;
   if (w < 2) return null;
   const data = ctx.getImageData(x0, y0, w, h).data;
-  let found = -1;
+  const passes = new Array<boolean>(w).fill(false);
   for (let column = 0; column < w; column += 1) {
     let darkAbove = 0;
     let darkBody = 0;
@@ -846,17 +888,84 @@ function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH:
         if (ink) darkBody += 1;
       }
     }
-    if (darkAbove >= above * 0.7 && body > 0 && darkBody >= body * 0.7) found = x0 + column;
+    passes[column] = darkAbove >= above * 0.7 && body > 0 && darkBody >= body * 0.7;
+  }
+  let found = -1;
+  for (let column = 0; column < w; ) {
+    if (!passes[column]) {
+      column += 1;
+      continue;
+    }
+    let end = column;
+    while (end + 1 < w && passes[end + 1]) end += 1;
+    const length = end - column + 1;
+    if (length <= 3) {
+      const leftCol = column - 1;
+      const rightCol = end + 1;
+      const ruleLuma = columnLuma(data, w, end, 0, above);
+      const leftLighter = leftCol >= 0 && columnLuma(data, w, leftCol, 0, above) >= ruleLuma + 18;
+      const rightLighter = rightCol < w && columnLuma(data, w, rightCol, 0, above) >= ruleLuma + 18;
+      if (leftLighter || rightLighter) found = x0 + end;
+    }
+    column = end + 1;
   }
   return found >= 0 ? found : null;
 }
 
-function clipLeftOfFrame(canvas: FrameCanvas, left: number, top: number, width: number, height: number): { left: number; width: number } {
+type InkContext = {
+  getImageData: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray };
+  putImageData?: (data: { data: Uint8ClampedArray; width: number; height: number }, x: number, y: number) => void;
+};
+
+/** Letter ink that landed on a header rule is painted back to the rule's own colour. */
+function repaintFrameSpecks(ctx: InkContext, column: number, top: number, height: number): void {
+  if (!ctx.putImageData || column < 0 || height < 4) return;
+  const aboveTop = Math.max(0, Math.floor(top - 24));
+  const aboveH = Math.floor(top) - aboveTop;
+  if (aboveH < 4) return;
+  const sample = ctx.getImageData(column, aboveTop, 1, aboveH).data;
+  const channels: number[][] = [[], [], []];
+  for (let index = 0; index < sample.length; index += 4) {
+    if (sample[index] > 250 && sample[index + 1] > 250 && sample[index + 2] > 250) continue;
+    channels[0].push(sample[index]);
+    channels[1].push(sample[index + 1]);
+    channels[2].push(sample[index + 2]);
+  }
+  if (channels[0].length < 4) return;
+  const modal = channels.map((values) => {
+    values.sort((a, b) => a - b);
+    return values[Math.floor(values.length / 2)] ?? 255;
+  });
+  const modalLuma = (modal[0] + modal[1] + modal[2]) / 3;
+  const y0 = Math.max(0, Math.floor(top));
+  const y1 = Math.max(y0 + 1, Math.ceil(top + height));
+  const body = ctx.getImageData(column, y0, 1, y1 - y0);
+  let changed = false;
+  for (let index = 0; index < body.data.length; index += 4) {
+    const luma = (body.data[index] + body.data[index + 1] + body.data[index + 2]) / 3;
+    if (luma > modalLuma - 25) continue;
+    body.data[index] = modal[0];
+    body.data[index + 1] = modal[1];
+    body.data[index + 2] = modal[2];
+    changed = true;
+  }
+  if (changed) ctx.putImageData({ data: body.data, width: 1, height: y1 - y0 }, column, y0);
+}
+
+function clipLeftOfFrame(
+  canvas: FrameCanvas,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  glyphLeft: number | null,
+): { left: number; width: number; frame: number | null } {
   const frame = frameColumn(canvas, left, top, height);
-  if (frame == null) return { left, width };
-  const minLeft = frame + 1;
-  if (minLeft <= left || minLeft >= left + width - 2) return { left, width };
-  return { left: minLeft, width: width - (minLeft - left) };
+  if (frame == null) return { left, width, frame: null };
+  let minLeft = frame + 1;
+  if (glyphLeft != null && Number.isFinite(glyphLeft)) minLeft = Math.min(minLeft, glyphLeft);
+  if (minLeft <= left || minLeft >= left + width - 2) return { left, width, frame };
+  return { left: minLeft, width: width - (minLeft - left), frame };
 }
 
 function pixelDark(data: Uint8ClampedArray, index: number): boolean {
@@ -953,8 +1062,8 @@ function outsideColumn(left: number, width: number, side: "left" | "right"): num
   return Math.ceil(left + width - 1e-6);
 }
 
-/** How many tall stems sit just outside the box before a gap. Stops at `max`. */
-function outwardStemRun(
+/** How many ink columns sit just outside the box before a gap. Stops at `max`. */
+function outwardInkRun(
   canvas: FrameCanvas,
   origin: number,
   top: number,
@@ -964,7 +1073,7 @@ function outwardStemRun(
 ): number {
   let run = 0;
   for (let step = 0; step < max; step += 1) {
-    if (columnStem(canvas, origin + dir * step, top, height) < 4) break;
+    if (columnIsBlank(canvas, origin + dir * step, top, height)) break;
     run += 1;
   }
   return run;
@@ -984,7 +1093,7 @@ function coverIsolatedSliver(
 ): { left: number; width: number } {
   const dir: -1 | 1 = side === "left" ? -1 : 1;
   const origin = outsideColumn(left, width, side);
-  const run = outwardStemRun(canvas, origin, top, height, dir, 3);
+  const run = outwardInkRun(canvas, origin, top, height, dir, 3);
   if (run < 1 || run > 2) return { left, width };
   if (side === "right") {
     const target = origin + run;
@@ -1002,6 +1111,16 @@ function coverIsolatedSliver(
   return { left, width };
 }
 
+type GrowthLimit = { minLeft: number | null; maxRight: number | null };
+
+function applyGrowthLimit(left: number, width: number, limit: GrowthLimit): { left: number; width: number } {
+  let right = left + width;
+  if (limit.maxRight != null) right = Math.min(right, limit.maxRight);
+  if (limit.minLeft != null) left = Math.max(left, limit.minLeft);
+  if (right < left + 1) right = left + 1;
+  return { left, width: right - left };
+}
+
 /** Pull a money box out to the next blank column. The `$` side stops at 0.6 em; the other side only takes a 1–2 px sliver. */
 function extendMoneyBox(
   canvas: FrameCanvas,
@@ -1011,6 +1130,7 @@ function extendMoneyBox(
   height: number,
   spanText: string,
   emPx: number,
+  limit: GrowthLimit,
 ): { left: number; width: number } {
   const dollarCap = Math.max(1, Math.round(emPx * 0.6));
   const sides = moneyExtendSides(spanText);
@@ -1027,7 +1147,45 @@ function extendMoneyBox(
   } else if (!sides.right) {
     ({ left, width } = coverIsolatedSliver(canvas, left, top, width, height, "right"));
   }
-  return { left, width };
+  return applyGrowthLimit(left, width, limit);
+}
+
+/** Keep growth on the span's own glyphs: 1–2 px past the last edge, and never into the next word. */
+function spanGrowthLimit(
+  item: PlacedItem,
+  localFrom: number,
+  localTo: number,
+  viewport: { convertToViewportPoint: (x: number, y: number) => number[] },
+  y: number,
+): GrowthLimit {
+  const advances = item.advances;
+  const full = item.str;
+  if (!advances || advances.length !== full.length || !(item.width > 0)) return { minLeft: null, maxRight: null };
+  const total = prefixAdvance(advances, advances.length);
+  if (!(total > 0) || Math.abs(total - item.width) / item.width > 0.03) return { minLeft: null, maxRight: null };
+  const origin = item.transform[4];
+  const leftPx = viewport.convertToViewportPoint(origin + prefixAdvance(advances, localFrom), y)[0];
+  const rightPx = viewport.convertToViewportPoint(origin + prefixAdvance(advances, localTo), y)[0];
+  const glyphLeft = Math.min(leftPx, rightPx);
+  const glyphRight = Math.max(leftPx, rightPx);
+  let minLeft = glyphLeft - 1;
+  let maxRight = glyphRight + 2;
+  if (localTo < full.length) {
+    let next = localTo;
+    while (next < full.length && /\s/u.test(full[next] ?? "")) next += 1;
+    if (next < full.length) {
+      const nextPx = viewport.convertToViewportPoint(origin + prefixAdvance(advances, next), y)[0];
+      if (nextPx >= glyphRight - 0.5) maxRight = Math.min(maxRight, nextPx);
+    }
+  }
+  if (localFrom > 0) {
+    let prev = localFrom;
+    while (prev > 0 && /\s/u.test(full[prev - 1] ?? "")) prev -= 1;
+    const prevPx = viewport.convertToViewportPoint(origin + prefixAdvance(advances, prev), y)[0];
+    if (prev < localFrom && prevPx <= glyphLeft + 0.5) minLeft = Math.max(minLeft, prevPx);
+    else minLeft = Math.max(minLeft, glyphLeft);
+  }
+  return { minLeft, maxRight };
 }
 
 function paintSpans(
@@ -1050,6 +1208,8 @@ function paintSpans(
       const from = Math.max(span.start, item.start);
       const to = Math.min(span.end, item.end);
       if (to <= from) continue;
+      const [localFrom, localTo] = coveredItemRange(item, from, to);
+      const coveredText = item.str.slice(localFrom, localTo);
       const [f0, f1, slopLeft, slopRight] = widthFractions(item, from, to, styles);
       const x = item.transform[4];
       const y = item.transform[5];
@@ -1069,11 +1229,20 @@ function paintSpans(
       const top = Math.min(p0[1], p1[1]);
       let boxW = Math.abs(p0[0] - p1[0]);
       const boxH = Math.abs(p0[1] - p1[1]) + 1;
-      const clipped = clipLeftOfFrame(canvas, left, top, boxW, boxH);
+      const advances = item.advances;
+      const advanceTotal = advances && advances.length === item.str.length ? prefixAdvance(advances, advances.length) : 0;
+      const advanceOk = advances != null && item.width > 0 && advanceTotal > 0 && Math.abs(advanceTotal - item.width) / item.width <= 0.03;
+      const glyphLeft = advanceOk && advances ? viewport.convertToViewportPoint(x + prefixAdvance(advances, localFrom), y)[0] : null;
+      const clipped = clipLeftOfFrame(canvas, left, top, boxW, boxH, glyphLeft);
       left = clipped.left;
       boxW = clipped.width;
+      if (clipped.frame != null) {
+        const ink = canvas.getContext("2d") as InkContext | null;
+        if (ink) repaintFrameSpecks(ink, clipped.frame, top, boxH);
+      }
       if (kind === "money") {
-        const extended = extendMoneyBox(canvas, left, top, boxW, boxH, span.text || "", height * RENDER_SCALE);
+        const limit = spanGrowthLimit(item, localFrom, localTo, viewport, y);
+        const extended = extendMoneyBox(canvas, left, top, boxW, boxH, coveredText || span.text || "", height * RENDER_SCALE, limit);
         left = extended.left;
         boxW = extended.width;
       }
@@ -1086,7 +1255,7 @@ function paintSpans(
         h: boxH,
         pad: kind === "identity" ? Math.max(8, Math.round(boxH * 0.55)) : 4,
         kind,
-        token: span.text || item.str.slice(from - item.start, to - item.start),
+        token: coveredText || span.text || item.str.slice(from - item.start, to - item.start),
       });
     }
   }
@@ -1636,9 +1805,74 @@ async function coverHeaderLogos(
   return unlocated;
 }
 
+function dollarInsideBox(
+  mark: GlyphMark,
+  boxes: PaintBox[],
+  viewport: { convertToViewportPoint: (x: number, y: number) => number[] },
+): boolean {
+  const p0 = viewport.convertToViewportPoint(mark.x0, mark.y);
+  const p1 = viewport.convertToViewportPoint(mark.x1, mark.y);
+  const left = Math.min(p0[0], p1[0]);
+  const right = Math.max(p0[0], p1[0]);
+  const y = (p0[1] + p1[1]) / 2;
+  return boxes.some(
+    (box) =>
+      box.kind === "money" &&
+      left >= box.left - 0.75 &&
+      right <= box.left + box.w + 0.75 &&
+      y >= box.top - 2 &&
+      y <= box.top + box.h + 2,
+  );
+}
+
+/** Every `$` in a money span has to sit inside a painted box. Missing glyph positions fail closed. */
+function pageHasExposedDollar(
+  plan: PagePlan,
+  boxes: PaintBox[],
+  viewport: { convertToViewportPoint: (x: number, y: number) => number[] },
+): boolean {
+  for (let index = 0; index < plan.lines.length; index += 1) {
+    const line = plan.lines[index];
+    const spans = findMoneySpans(line.text, plan.lines[index - 1]?.text ?? "");
+    for (const item of line.items) {
+      for (const span of spans) {
+        const from = Math.max(span.start, item.start);
+        const to = Math.min(span.end, item.end);
+        if (to <= from) continue;
+        const [localFrom, localTo] = coveredItemRange(item, from, to);
+        const slice = item.str.slice(localFrom, localTo);
+        if (!slice.includes("$")) continue;
+        const advances = item.advances;
+        const total = advances && advances.length === item.str.length ? prefixAdvance(advances, advances.length) : 0;
+        const advanceOk = advances != null && item.width > 0 && total > 0 && Math.abs(total - item.width) / item.width <= 0.03;
+        if (advanceOk && advances) {
+          for (let cursor = localFrom; cursor < localTo; cursor += 1) {
+            if (item.str[cursor] !== "$") continue;
+            const mark = {
+              text: "$",
+              x0: item.transform[4] + prefixAdvance(advances, cursor),
+              x1: item.transform[4] + prefixAdvance(advances, cursor + 1),
+              y: item.transform[5],
+            };
+            if (!dollarInsideBox(mark, boxes, viewport)) return true;
+          }
+          continue;
+        }
+        const itemLeft = item.transform[4];
+        const itemRight = itemLeft + Math.max(item.width, 0);
+        const nearby = plan.dollarMarks.filter(
+          (mark) => Math.abs(mark.y - item.transform[5]) < 3 && mark.x0 >= itemLeft - 1.5 && mark.x0 <= itemRight + 1.5,
+        );
+        if (nearby.length === 0 || nearby.some((mark) => !dollarInsideBox(mark, boxes, viewport))) return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function rasterPages(
   buffer: Buffer,
-): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; logoUnlocated: boolean; pageSizes: PageSize[]; identityBoxes: PaintBox[][] } | null> {
+): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; logoUnlocated: boolean; dollarExposed: boolean; pageSizes: PageSize[]; identityBoxes: PaintBox[][] } | null> {
   resetRedactionDiagnostics();
   const opened = await openPdf(buffer);
   try {
@@ -1657,6 +1891,7 @@ async function rasterPages(
     let blank = false;
     let edgeLeak = false;
     let logoUnlocated = false;
+    let dollarExposed = false;
     for (const entry of prepared) {
       const plan = entry.plan;
       plans.push(plan);
@@ -1717,12 +1952,13 @@ async function rasterPages(
       }
       identityBoxes.push(pageIdentity);
       if (await widenBoxes(canvas, paint, boxes)) edgeLeak = true;
+      if (pageHasExposedDollar(plan, boxes, viewport)) dollarExposed = true;
       lastRedactionBoxes.push(
         boxes.map((box) => ({ left: box.left, top: box.top, w: box.w, h: box.h, kind: box.kind, token: box.token })),
       );
       pngs.push(canvas.toBuffer("image/png"));
     }
-    return { pngs, plans, blank, edgeLeak, logoUnlocated, pageSizes, identityBoxes };
+    return { pngs, plans, blank, edgeLeak, logoUnlocated, dollarExposed, pageSizes, identityBoxes };
   } finally {
     await opened.destroy();
   }
@@ -1778,6 +2014,7 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
     blank: boolean;
     edgeLeak: boolean;
     logoUnlocated: boolean;
+    dollarExposed: boolean;
     pageSizes: PageSize[];
     identityBoxes: PaintBox[][];
   } | null = null;
@@ -1819,6 +2056,7 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   );
   if (officeOnly) reasons.push(officeOnly);
   if (raster.edgeLeak) reasons.push("A redaction box still touches covered text.");
+  if (raster.dollarExposed) reasons.push("A dollar sign is still visible.");
   if (raster.logoUnlocated) reasons.push("Brokerage logo could not be located.");
   const sourceText = raster.plans.flatMap((plan) => plan.lines.map((line) => line.text)).join("\n");
   const forbidden = raster.plans.flatMap((plan) =>

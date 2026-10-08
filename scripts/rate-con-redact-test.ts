@@ -46,6 +46,9 @@ const READY = [
   "ab-tm-scale.pdf",
   "ac-trailing-space.pdf",
   "ad-light-frame.pdf",
+  "ae-tab-space.pdf",
+  "af-per-mile.pdf",
+  "ag-grey-header.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -79,6 +82,9 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("ab-")) return ["$100,000", "$250", "$100", "$900.00"];
   if (name.startsWith("ac-")) return ["$30", "$150", "$900.00"];
   if (name.startsWith("ad-")) return ["$900.00"];
+  if (name.startsWith("ae-")) return ["$900.00", "BILLING@MSLOADS.COM", "MSLOADS"];
+  if (name.startsWith("af-")) return ["$2.00", "$50", "$900.00"];
+  if (name.startsWith("ag-")) return ["$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -478,7 +484,7 @@ async function main(): Promise<void> {
       assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
       assert.match(seen, /thereafter,\s*cap/i, seen.slice(0, 800));
     }
-    if (item.name.startsWith("aa-") || item.name.startsWith("ab-") || item.name.startsWith("ac-")) {
+    if (item.name.startsWith("aa-") || item.name.startsWith("ab-") || item.name.startsWith("ac-") || item.name.startsWith("ae-") || item.name.startsWith("af-")) {
       const stats = glyphAdvanceStats();
       assert.ok(stats.used > 0, `${item.name} glyph path used ${stats.used}`);
       assert.equal(stats.fallback, 0, `${item.name} glyph fallback ${stats.fallback}`);
@@ -498,6 +504,20 @@ async function main(): Promise<void> {
       }
       if (item.name.startsWith("ac-")) {
         assert.match(seen, /thereafter,\s*cap/i, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("ae-")) {
+        assert.doesNotMatch(seen, /M\s*&\s*S/i, seen.slice(0, 1400));
+        assert.doesNotMatch(seen, /LLC/i, seen.slice(0, 1400));
+        assert.doesNotMatch(seen, /msloads/i, seen.slice(0, 1400));
+        assert.match(seen, /\bto\b/i, seen.slice(0, 1400));
+        assert.match(seen, /\bby\b/, seen.slice(0, 1400));
+        assert.match(seen, /\bWe\b/, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("af-")) {
+        assert.match(seen, /\bTO\b/, seen.slice(0, 1400));
+        assert.match(seen, /RELOCATE/, seen.slice(0, 1400));
+        assert.match(seen, /\bPAY\b/, seen.slice(0, 1400));
+        assert.match(seen, /thereafter/i, seen.slice(0, 1400));
       }
       await assertClearBoxEdges(built.pagePngs[0], redactionBoxes()[0] ?? []);
     }
@@ -521,6 +541,31 @@ async function main(): Promise<void> {
         if (ink > 8) columns += 1;
       }
       assert.ok(columns >= 2, `light frame thinned to ${columns} column(s)`);
+    }
+    if (item.name.startsWith("ag-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
+      assert.match(seen, /due on/i, seen.slice(0, 800));
+      assert.match(seen, /Agreed/i, seen.slice(0, 800));
+      const money = (redactionBoxes()[0] ?? []).filter((box) => box.kind === "money");
+      assert.ok(money.length >= 1, "grey header money box");
+      const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+      const cellImage = await loadImage(built.pagePngs[0]);
+      const cellCanvas = createCanvas(cellImage.width, cellImage.height);
+      const cellCtx = cellCanvas.getContext("2d");
+      cellCtx.drawImage(cellImage, 0, 0);
+      for (const box of money) {
+        const x = Math.max(0, Math.floor(box.left) + 2);
+        const y = Math.max(0, Math.floor(box.top + box.h * 0.3));
+        const w = Math.max(1, Math.floor(box.w) - 4);
+        const h = Math.max(1, Math.floor(box.h * 0.4));
+        const data = cellCtx.getImageData(x, y, w, h).data;
+        let ink = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) ink += 1;
+        }
+        assert.equal(ink, 0, `residual ink in the dollar cell (${ink})`);
+      }
     }
   }
 
