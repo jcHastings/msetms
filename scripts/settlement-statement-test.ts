@@ -407,15 +407,69 @@ async function main() {
 
   settings.updateCompanyContact({
     ...settings.getCompanySettings(),
-    company_name: "M & S Management Group Inc. DBA MS Express",
+    company_name: "M & S Loads DBA MS Express",
   });
   const dbaStatement = statements.buildSettlement(ooId, WEEK);
   assert.equal(dbaStatement?.identityBlock, "");
-  assert.match(dbaStatement?.carrierName ?? "", /DBA MS Express/);
+  assert.equal(dbaStatement?.carrierName, "M & S Loads DBA MS Express");
+  assert.equal(dbaStatement?.carrierPhone, "402-302-0097");
+  assert.equal(dbaStatement?.carrierEmail, "ar@msloads.com");
+  assert.equal(dbaStatement?.usdot, "3062879");
+  assert.equal(dbaStatement?.mcNumber, "056299");
   const dbaPdf = await pdf.renderSettlementPdf(dbaStatement!);
   const dbaText = String((await extractText(new Uint8Array(dbaPdf), { mergePages: true })).text ?? "").replace(/\s+/g, " ");
-  assert.match(dbaText, /DBA MS Express/);
-  assert.doesNotMatch(dbaText, /M&S Loads/);
+  assert.match(dbaText, /M & S Loads DBA MS Express/);
+  assert.match(dbaText, /USDOT 3062879/);
+  assert.match(dbaText, /Hastings/);
+  assert.match(dbaText, /402-302-0097/);
+  assert.match(dbaText, /ar@msloads\.com/);
+  assert.doesNotMatch(dbaText, /970613|Nanuet|Deerfield|jc@msloads\.com/);
+
+  const cleanExpress = {
+    ...settings.getCompanySettings(),
+    company_name: "MS Express",
+    dispatcher_phone: "402-302-0097",
+    street: "600 E 39th St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    ar_email: "ar@msloads.com",
+    usdot: "3062879",
+    mc: "056299",
+  };
+  const blockedProfiles = [
+    { company_name: "M&S Loads", expect: /Set the company name to MS Express/ },
+    { company_name: "M & S Loads", expect: /Set the company name to MS Express/ },
+    { company_name: "M&S Loads LLC DBA MS Express", expect: /Set the company name to MS Express/ },
+    { mc: "MC-970613", expect: /MC-970613/ },
+    { ar_email: "jc@msloads.com", expect: /jc@msloads\.com/ },
+    {
+      company_name: "M&S Loads DBA MS Express",
+      street: "228 East Route 59",
+      city: "Nanuet",
+      state: "NY",
+      zip: "10954",
+      expect: /Nanuet/,
+    },
+    {
+      street: "100 Sample St",
+      city: "Deerfield Beach",
+      state: "FL",
+      zip: "33441",
+      expect: /Deerfield Beach/,
+    },
+  ];
+  for (const { expect, ...profile } of blockedProfiles) {
+    settings.updateCompanyContact({ ...cleanExpress, ...profile });
+    const blocked = statements.buildSettlement(ooId, WEEK);
+    assert.match(blocked?.identityBlock ?? "", expect, JSON.stringify(profile));
+    await assert.rejects(() => pdf.renderSettlementPdf(blocked!), (error: unknown) => {
+      assert.ok(error instanceof StatementIdentityError);
+      assert.match(error.message, expect);
+      return true;
+    });
+  }
+  settings.updateCompanyContact(cleanExpress);
 
   const payPage = fs.readFileSync(path.join(process.cwd(), "app/driver/pay/page.tsx"), "utf8");
   assert.match(payPage, /getSignedInDriver\(/);

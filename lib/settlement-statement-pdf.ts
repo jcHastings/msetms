@@ -18,7 +18,7 @@ function percentLabel(value: number | null): string {
 }
 
 export async function renderSettlementPdf(statement: SettlementStatement): Promise<Buffer> {
-  if (statement.identityBlock) throw new StatementIdentityError();
+  if (statement.identityBlock) throw new StatementIdentityError(statement.identityBlock);
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
     const chunks: Buffer[] = [];
