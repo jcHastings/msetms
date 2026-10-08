@@ -796,6 +796,7 @@ async function main() {
   const homeLabels = [...driverHome.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(homeLabels, [
     "Dispatch",
+    "Truck documents",
     "Upload",
     "Confirmation",
     "Fuel",
@@ -804,7 +805,22 @@ async function main() {
     "My pay",
     "Reimbursements",
   ]);
+  assert.match(driverHome, /href: "\/driver\/truck-docs", label: "Truck documents", wide: true/);
   assert.doesNotMatch(driverHome, /label: "Binder"|label: "Cab docs"|label: "My truck docs"/);
+  const driverLoadPage = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
+  assert.doesNotMatch(driverLoadPage, /id="cab-docs"|Open cab docs|Cab docs|My truck docs/);
+  assert.doesNotMatch(driverLoadPage, /assist\/docs|assist\/company-docs|Registration, DOT/);
+  assert.match(driverLoadPage, /truckDocs=\{false\}/);
+  assert.match(driverLoadPage, /Download load confirmation/);
+  assert.match(driverLoadPage, /id="bol"/);
+  assert.match(driverLoadPage, /DriverDocClassify/);
+  const truckDocsPage = fs.readFileSync(path.join(process.cwd(), "app/driver/truck-docs/page.tsx"), "utf8");
+  assert.match(truckDocsPage, /answerDriverAssist\(driver, "My truck docs"\)/);
+  assert.match(truckDocsPage, /Truck documents/);
+  assert.match(truckDocsPage, /data-driver-truck-docs/);
+  const loadDetailSource = fs.readFileSync(path.join(process.cwd(), "lib/driver-api.ts"), "utf8");
+  assert.doesNotMatch(loadDetailSource, /cab_docs|cabDocs|truck_documents/);
+  assert.match(loadDetailSource, /attachments: DriverApiAttachment\[\]/);
 
   const unauth = await read(await loadsRoute.GET(request(`${BASE}/loads?scope=active`)));
   assert.equal(unauth.status, 401);
