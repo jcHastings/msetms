@@ -81,6 +81,35 @@ type PageSize = { width: number; height: number };
 
 const RENDER_SCALE = 2;
 
+export type RedactionBox = {
+  left: number;
+  top: number;
+  w: number;
+  h: number;
+  kind: "money" | "identity";
+  token: string;
+};
+
+let glyphAdvanceUsed = 0;
+let glyphAdvanceFallback = 0;
+let lastRedactionBoxes: RedactionBox[][] = [];
+
+/** How many text items took operator-list advances on the last build. */
+export function glyphAdvanceStats(): { used: number; fallback: number } {
+  return { used: glyphAdvanceUsed, fallback: glyphAdvanceFallback };
+}
+
+/** Paint boxes from the last build, one array per page, in canvas pixels. */
+export function redactionBoxes(): RedactionBox[][] {
+  return lastRedactionBoxes.map((page) => page.map((box) => ({ ...box })));
+}
+
+function resetRedactionDiagnostics(): void {
+  glyphAdvanceUsed = 0;
+  glyphAdvanceFallback = 0;
+  lastRedactionBoxes = [];
+}
+
 function pdfjsPaths(): { workerSrc: string; standardFontDataUrl: string } {
   const root = path.dirname(nodeRequire.resolve("pdfjs-dist/package.json"));
   return {
@@ -295,25 +324,81 @@ function fontFamily(styles: Record<string, TextStyle>, fontName: string): string
 const TEXT_OPS = {
   save: 10,
   restore: 11,
+  transform: 12,
+  beginText: 31,
+  endText: 32,
   setCharSpacing: 33,
   setWordSpacing: 34,
   setHScale: 35,
+  setLeading: 36,
   setFont: 37,
+  setTextRise: 39,
+  moveText: 40,
+  setLeadingMoveText: 41,
+  setTextMatrix: 42,
+  nextLine: 43,
   showText: 44,
   showSpacedText: 45,
   nextLineShowText: 46,
   nextLineSetSpacingShowText: 47,
 };
 
+const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
+
 type GlyphPiece = { unicode?: unknown; width?: unknown; isSpace?: unknown };
 
 type TextDrawState = {
+  ctm: number[];
+  textMatrix: number[];
+  lineMatrix: number[];
   fontSize: number;
   hScale: number;
   charSpacing: number;
   wordSpacing: number;
+  leading: number;
+  textRise: number;
   matrix0: number;
 };
+
+type GlyphMark = { text: string; x0: number; x1: number; y: number };
+
+function cloneDrawState(state: TextDrawState): TextDrawState {
+  return {
+    ...state,
+    ctm: state.ctm.slice(),
+    textMatrix: state.textMatrix.slice(),
+    lineMatrix: state.lineMatrix.slice(),
+  };
+}
+
+function multiplyMatrix(left: number[], right: number[]): number[] {
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5],
+  ];
+}
+
+function translateMatrix(matrix: number[], x: number, y: number): void {
+  matrix[4] = matrix[0] * x + matrix[2] * y + matrix[4];
+  matrix[5] = matrix[1] * x + matrix[3] * y + matrix[5];
+}
+
+function numberList(value: unknown, count: number): number[] | null {
+  if (!value || typeof value !== "object" || !("length" in value)) return null;
+  const list = value as ArrayLike<unknown>;
+  if (typeof list.length !== "number" || list.length < count) return null;
+  const out: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const entry = list[index];
+    if (typeof entry !== "number" || !Number.isFinite(entry)) return null;
+    out.push(entry);
+  }
+  return out;
+}
 
 function fontMatrixScale(page: PdfPage, fontName: string): number {
   if (!page.commonObjs || !fontName) return 0.001;
@@ -325,44 +410,156 @@ function fontMatrixScale(page: PdfPage, fontName: string): number {
   return 0.001;
 }
 
-function glyphRun(glyphs: unknown[], state: TextDrawState): { text: string; advances: number[] } | null {
-  let text = "";
-  const advances: number[] = [];
-  let pending = 0;
-  // A TJ number adjusts x before the next glyph, so it belongs to the gap after the previous one.
-  const kernOf = (value: number) => (-value * state.fontSize) / 1000 * state.hScale;
-  const widthOf = (glyph: GlyphPiece) => {
-    const width = typeof glyph.width === "number" ? glyph.width : 0;
-    const spacing = (glyph.isSpace ? state.wordSpacing : 0) + state.charSpacing;
-    return (width * state.fontSize * state.matrix0 + spacing) * state.hScale;
-  };
-  for (const entry of glyphs) {
-    if (typeof entry === "number") {
-      const kern = kernOf(entry);
-      if (advances.length) advances[advances.length - 1] += kern;
-      else pending += kern;
-      continue;
-    }
-    if (!entry || typeof entry !== "object") return null;
-    const glyph = entry as GlyphPiece;
-    const unicode = typeof glyph.unicode === "string" ? glyph.unicode : "";
-    const advance = widthOf(glyph) + pending;
-    pending = 0;
-    if (!unicode) {
-      pending += advance;
-      continue;
-    }
-    const start = text.length;
-    text += unicode;
-    const units = text.length - start;
-    for (let unit = 0; unit < units; unit += 1) advances.push(unit === 0 ? advance : 0);
+function fontNameOf(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "name" in value && typeof (value as { name?: unknown }).name === "string") {
+    return (value as { name: string }).name;
   }
-  if (pending && advances.length) advances[advances.length - 1] += pending;
-  if (advances.length !== text.length) return null;
-  return { text, advances };
+  return "";
 }
 
-/** Per-glyph advances from showText / showSpacedText. Widths are the font's char codes, not Unicode. */
+function userPoint(state: TextDrawState): { x: number; y: number } {
+  const rise = state.textRise;
+  const matrix = state.textMatrix;
+  const localX = matrix[2] * rise + matrix[4];
+  const localY = matrix[3] * rise + matrix[5];
+  return {
+    x: state.ctm[0] * localX + state.ctm[2] * localY + state.ctm[4],
+    y: state.ctm[1] * localX + state.ctm[3] * localY + state.ctm[5],
+  };
+}
+
+function freshTextState(): TextDrawState {
+  return {
+    ctm: IDENTITY_MATRIX.slice(),
+    textMatrix: IDENTITY_MATRIX.slice(),
+    lineMatrix: IDENTITY_MATRIX.slice(),
+    fontSize: 12,
+    hScale: 1,
+    charSpacing: 0,
+    wordSpacing: 0,
+    leading: 0,
+    textRise: 0,
+    matrix0: 0.001,
+  };
+}
+
+/** Move the pen by a text-space delta. Glyph widths already include Tz and font size. */
+function drawGlyphs(state: TextDrawState, glyphs: unknown[], marks: GlyphMark[]): void {
+  for (const entry of glyphs) {
+    if (typeof entry === "number") {
+      translateMatrix(state.textMatrix, ((-entry * state.fontSize) / 1000) * state.hScale, 0);
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const glyph = entry as GlyphPiece;
+    const unicode = typeof glyph.unicode === "string" ? glyph.unicode : "";
+    const width = typeof glyph.width === "number" ? glyph.width : 0;
+    const spacing = ((glyph.isSpace ? state.wordSpacing : 0) + state.charSpacing) * state.hScale;
+    const advance = width * state.fontSize * state.matrix0 * state.hScale + spacing;
+    const start = userPoint(state);
+    translateMatrix(state.textMatrix, advance, 0);
+    const end = userPoint(state);
+    if (!unicode) continue;
+    marks.push({ text: unicode, x0: start.x, x1: end.x, y: start.y });
+  }
+}
+
+function carriageReturn(state: TextDrawState): void {
+  translateMatrix(state.lineMatrix, 0, -state.leading);
+  state.textMatrix = state.lineMatrix.slice();
+}
+
+function moveTextPen(state: TextDrawState, x: number, y: number): void {
+  translateMatrix(state.lineMatrix, x, y);
+  state.textMatrix = state.lineMatrix.slice();
+}
+
+/**
+ * Walk item.str against glyphs placed on the page. pdfjs drops a trailing
+ * space and inserts a space when two glyphs have a word gap, so the match
+ * is by characters and positions, not by a whole showText string.
+ */
+function alignItemGlyphs(item: PdfTextItem, glyphs: GlyphMark[], cursor: number): { advances: number[]; next: number } | null {
+  const target = item.str;
+  if (!target) return null;
+  const originX = item.transform[4];
+  const originY = item.transform[5];
+  if (!Number.isFinite(originX) || !Number.isFinite(originY)) return null;
+  const yTol = Math.max(1.25, Math.abs(item.height || 0) * 0.45 || 2);
+  const endX = originX + (item.width > 0 ? item.width : 0);
+
+  let index = cursor;
+  const scanEnd = Math.min(glyphs.length, cursor + 80);
+  let start = -1;
+  for (let probe = cursor; probe < scanEnd; probe += 1) {
+    const glyph = glyphs[probe];
+    if (!glyph || Math.abs(glyph.y - originY) > yTol) continue;
+    if (glyph.x1 < originX - 1.5) continue;
+    if (glyph.x0 > originX + Math.max(2, (item.width || 0) * 0.35)) break;
+    const piece = glyph.text.trimEnd();
+    if (!piece) continue;
+    if (target.startsWith(glyph.text) || target.startsWith(piece) || (target[0] === " " && !/^\s/.test(piece))) {
+      start = probe;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  index = start;
+
+  const advances = new Array<number>(target.length).fill(0);
+  let textIndex = 0;
+  let prevEnd = originX;
+  let consumed = index;
+  while (textIndex < target.length && index < glyphs.length) {
+    const glyph = glyphs[index];
+    if (!glyph || Math.abs(glyph.y - originY) > yTol * 2) break;
+    if (glyph.x0 > endX + 2 && textIndex > 0) break;
+    const needed = target[textIndex] ?? "";
+    const raw = glyph.text;
+    if (needed === " " && raw && !/^\s/.test(raw)) {
+      advances[textIndex] = Math.max(0, glyph.x0 - prevEnd);
+      textIndex += 1;
+      prevEnd = glyph.x0;
+      continue;
+    }
+    if (raw && /^\s+$/.test(raw) && needed !== " ") {
+      index += 1;
+      consumed = index;
+      continue;
+    }
+    if (!raw) {
+      index += 1;
+      consumed = index;
+      continue;
+    }
+    let used = "";
+    if (target.startsWith(raw, textIndex)) used = raw;
+    else if (raw.trimEnd() && target.startsWith(raw.trimEnd(), textIndex)) used = raw.trimEnd();
+    else break;
+    const width = glyph.x1 - glyph.x0;
+    if (textIndex > 0) {
+      const gap = glyph.x0 - prevEnd;
+      if (Math.abs(gap) > 0.01 && !/\s/.test(target[textIndex - 1] ?? "")) advances[textIndex - 1] += gap;
+    }
+    advances[textIndex] += width;
+    textIndex += used.length;
+    prevEnd = glyph.x0 + width;
+    index += 1;
+    consumed = index;
+  }
+  if (textIndex !== target.length) return null;
+  while (consumed < glyphs.length) {
+    const glyph = glyphs[consumed];
+    if (!glyph || Math.abs(glyph.y - originY) > yTol) break;
+    if (!/^\s+$/.test(glyph.text)) break;
+    if (glyph.x0 > endX + 1.5) break;
+    consumed += 1;
+  }
+  return { advances, next: consumed };
+}
+
+/** Per-glyph advances from the operator list, in user space (Tm, Tz, and font size applied). */
 async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise<void> {
   for (const item of items) {
     item.advances = null;
@@ -374,23 +571,67 @@ async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise
   } catch {
     return;
   }
-  const runs: Array<{ text: string; advances: number[] }> = [];
+  const marks: GlyphMark[] = [];
   const stack: TextDrawState[] = [];
-  let state: TextDrawState = { fontSize: 12, hScale: 1, charSpacing: 0, wordSpacing: 0, matrix0: 0.001 };
+  let state = freshTextState();
   for (let index = 0; index < list.fnArray.length; index += 1) {
     const fn = list.fnArray[index];
     const args = list.argsArray[index];
     if (fn === TEXT_OPS.save) {
-      stack.push({ ...state });
+      stack.push(cloneDrawState(state));
       continue;
     }
     if (fn === TEXT_OPS.restore) {
       state = stack.pop() ?? state;
       continue;
     }
+    if (fn === TEXT_OPS.beginText) {
+      state.textMatrix = IDENTITY_MATRIX.slice();
+      state.lineMatrix = IDENTITY_MATRIX.slice();
+      continue;
+    }
+    if (fn === TEXT_OPS.endText) continue;
+    if (fn === TEXT_OPS.nextLine) {
+      carriageReturn(state);
+      continue;
+    }
     if (!Array.isArray(args)) continue;
+    if (fn === TEXT_OPS.transform) {
+      const matrix = numberList(args, 6);
+      if (matrix) state.ctm = multiplyMatrix(state.ctm, matrix);
+      continue;
+    }
+    if (fn === TEXT_OPS.setTextMatrix) {
+      const matrix = numberList(args, 6) ?? numberList(args[0], 6);
+      if (matrix) {
+        state.textMatrix = matrix;
+        state.lineMatrix = matrix.slice();
+      }
+      continue;
+    }
+    if (fn === TEXT_OPS.moveText) {
+      const tx = typeof args[0] === "number" ? args[0] : 0;
+      const ty = typeof args[1] === "number" ? args[1] : 0;
+      moveTextPen(state, tx, ty);
+      continue;
+    }
+    if (fn === TEXT_OPS.setLeadingMoveText) {
+      const tx = typeof args[0] === "number" ? args[0] : 0;
+      const ty = typeof args[1] === "number" ? args[1] : 0;
+      state.leading = -ty;
+      moveTextPen(state, tx, ty);
+      continue;
+    }
+    if (fn === TEXT_OPS.setLeading && typeof args[0] === "number") {
+      state.leading = args[0];
+      continue;
+    }
+    if (fn === TEXT_OPS.setTextRise && typeof args[0] === "number") {
+      state.textRise = args[0];
+      continue;
+    }
     if (fn === TEXT_OPS.setFont) {
-      const fontName = typeof args[0] === "string" ? args[0] : "";
+      const fontName = fontNameOf(args[0]);
       const fontSize = typeof args[1] === "number" ? args[1] : state.fontSize;
       state = { ...state, fontSize, matrix0: fontMatrixScale(page, fontName) };
       continue;
@@ -408,40 +649,36 @@ async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise
       continue;
     }
     let glyphs: unknown[] | null = null;
-    let draw = state;
-    if (fn === TEXT_OPS.showText || fn === TEXT_OPS.showSpacedText || fn === TEXT_OPS.nextLineShowText) {
+    if (fn === TEXT_OPS.nextLineShowText) {
+      carriageReturn(state);
       glyphs = Array.isArray(args[0]) ? args[0] : null;
     } else if (fn === TEXT_OPS.nextLineSetSpacingShowText) {
-      const wordSpacing = typeof args[0] === "number" ? args[0] : state.wordSpacing;
-      const charSpacing = typeof args[1] === "number" ? args[1] : state.charSpacing;
-      draw = { ...state, wordSpacing, charSpacing };
-      state = draw;
+      if (typeof args[0] === "number") state.wordSpacing = args[0];
+      if (typeof args[1] === "number") state.charSpacing = args[1];
+      carriageReturn(state);
       glyphs = Array.isArray(args[2]) ? args[2] : null;
+    } else if (fn === TEXT_OPS.showText || fn === TEXT_OPS.showSpacedText) {
+      glyphs = Array.isArray(args[0]) ? args[0] : null;
     }
     if (!glyphs) continue;
-    const run = glyphRun(glyphs, draw);
-    if (run && run.text) runs.push(run);
+    drawGlyphs(state, glyphs, marks);
   }
   let cursor = 0;
   for (const item of items) {
     if (!item.str) continue;
-    let matched = false;
-    const limit = Math.min(runs.length, cursor + 6);
-    for (let index = cursor; index < limit; index += 1) {
-      const run = runs[index];
-      if (!run || run.text !== item.str || run.advances.length !== item.str.length) continue;
-      const total = run.advances.reduce((sum, width) => sum + width, 0);
-      if (!(item.width > 0) || Math.abs(total - item.width) / item.width > 0.03) break;
-      item.advances = run.advances;
-      item.altAdvances = unicodeAdvances(page, item);
-      cursor = index + 1;
-      matched = true;
-      break;
-    }
-    if (!matched) {
+    const matched = alignItemGlyphs(item, marks, cursor);
+    const total = matched ? matched.advances.reduce((sum, width) => sum + width, 0) : 0;
+    const close = matched != null && item.width > 0 && Math.abs(total - item.width) / item.width <= 0.03 && total > 0;
+    if (!matched || !close) {
+      if (item.str.trim()) glyphAdvanceFallback += 1;
       item.advances = null;
       item.altAdvances = null;
+      continue;
     }
+    item.advances = matched.advances;
+    item.altAdvances = unicodeAdvances(page, item);
+    cursor = matched.next;
+    glyphAdvanceUsed += 1;
   }
 }
 
@@ -576,7 +813,11 @@ type FrameCanvas = {
   } | null;
 };
 
-/** A vertical rule just left of the text. Returns the column, or null. */
+function rulePixel(data: Uint8ClampedArray, index: number): boolean {
+  return data[index] < 245 && data[index + 1] < 245 && data[index + 2] < 245;
+}
+
+/** A vertical rule just left of the text, including a light gray rule. Returns its right-most column. */
 function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH: number): number | null {
   const ctx = canvas.getContext("2d");
   if (!ctx || boxH < 6) return null;
@@ -597,15 +838,15 @@ function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH:
     let body = 0;
     for (let y = 0; y < h; y += 1) {
       const index = (y * w + column) * 4;
-      const dark = data[index] < 90 && data[index + 1] < 90 && data[index + 2] < 90;
+      const ink = rulePixel(data, index);
       if (y < above) {
-        if (dark) darkAbove += 1;
+        if (ink) darkAbove += 1;
       } else {
         body += 1;
-        if (dark) darkBody += 1;
+        if (ink) darkBody += 1;
       }
     }
-    if (darkAbove >= above * 0.7 && body > 0 && darkBody >= body * 0.55) found = x0 + column;
+    if (darkAbove >= above * 0.7 && body > 0 && darkBody >= body * 0.7) found = x0 + column;
   }
   return found >= 0 ? found : null;
 }
@@ -613,9 +854,126 @@ function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH:
 function clipLeftOfFrame(canvas: FrameCanvas, left: number, top: number, width: number, height: number): { left: number; width: number } {
   const frame = frameColumn(canvas, left, top, height);
   if (frame == null) return { left, width };
-  const minLeft = frame + 2;
+  const minLeft = frame + 1;
   if (minLeft <= left || minLeft >= left + width - 2) return { left, width };
   return { left: minLeft, width: width - (minLeft - left) };
+}
+
+function pixelDark(data: Uint8ClampedArray, index: number): boolean {
+  return data[index] < 210 || data[index + 1] < 210 || data[index + 2] < 210;
+}
+
+function columnBand(canvas: FrameCanvas, x: number, top: number, height: number): Uint8ClampedArray | null {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const col = Math.round(x);
+  if (col < 0 || col >= canvas.width) return null;
+  const y0 = Math.max(0, Math.floor(top + height * 0.22));
+  const y1 = Math.min(canvas.height, Math.ceil(top + height * 0.82));
+  const h = y1 - y0;
+  if (h < 2) return null;
+  return ctx.getImageData(col, y0, 1, h).data;
+}
+
+function columnIsBlank(canvas: FrameCanvas, x: number, top: number, height: number): boolean {
+  const data = columnBand(canvas, x, top, height);
+  if (!data) return true;
+  for (let index = 0; index < data.length; index += 4) {
+    if (pixelDark(data, index)) return false;
+  }
+  return true;
+}
+
+function columnStem(canvas: FrameCanvas, x: number, top: number, height: number): number {
+  const data = columnBand(canvas, x, top, height);
+  if (!data) return 0;
+  let run = 0;
+  let longest = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    run = pixelDark(data, index) ? run + 1 : 0;
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
+/** Ink on both sides of the edge column: the glyph is cut by the box. */
+function inkCrossesColumn(canvas: FrameCanvas, edge: number, top: number, height: number): boolean {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  const x = Math.round(edge);
+  if (x < 1 || x >= canvas.width - 1) return false;
+  const y0 = Math.max(0, Math.floor(top + height * 0.22));
+  const y1 = Math.min(canvas.height, Math.ceil(top + height * 0.82));
+  const h = y1 - y0;
+  if (h < 2) return false;
+  const data = ctx.getImageData(x - 1, y0, 3, h).data;
+  for (let row = 0; row < h; row += 1) {
+    const index = row * 12;
+    if (pixelDark(data, index) && pixelDark(data, index + 8)) return true;
+  }
+  return false;
+}
+
+function moneyExtendSides(spanText: string): { left: boolean; right: boolean } {
+  const dollar = spanText.indexOf("$");
+  if (dollar < 0) return { left: true, right: true };
+  return dollar <= spanText.length / 2 ? { left: true, right: false } : { left: false, right: true };
+}
+
+function growToBlank(
+  canvas: FrameCanvas,
+  left: number,
+  width: number,
+  top: number,
+  height: number,
+  side: "left" | "right",
+  cap: number,
+): { left: number; width: number } {
+  if (side === "left") {
+    const frame = frameColumn(canvas, left, top, height);
+    const minLeft = frame == null ? left - cap : Math.max(frame + 1, left - cap);
+    while (left > minLeft + 0.5) {
+      if (columnIsBlank(canvas, left - 1, top, height)) break;
+      left -= 1;
+      width += 1;
+    }
+    return { left, width };
+  }
+  const maxRight = left + width + cap;
+  while (left + width < maxRight - 0.5) {
+    if (columnIsBlank(canvas, left + width, top, height)) break;
+    width += 1;
+  }
+  return { left, width };
+}
+
+/** Pull a money box out to the next blank column. The `$` side stops at 0.6 em; the other side only takes a 1–2 px sliver. */
+function extendMoneyBox(
+  canvas: FrameCanvas,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  spanText: string,
+  emPx: number,
+): { left: number; width: number } {
+  const dollarCap = Math.max(1, Math.round(emPx * 0.6));
+  const sides = moneyExtendSides(spanText);
+  const leftTrigger = inkCrossesColumn(canvas, left, top, height) || columnStem(canvas, left - 1, top, height) >= 4;
+  const rightEdge = left + width;
+  const rightTrigger = inkCrossesColumn(canvas, rightEdge, top, height) || columnStem(canvas, rightEdge, top, height) >= 4;
+  if (leftTrigger) {
+    const thin = columnStem(canvas, left - 1, top, height) >= 4 && columnIsBlank(canvas, left - 3, top, height);
+    const cap = sides.left ? dollarCap : thin ? 3 : 0;
+    if (cap > 0) ({ left, width } = growToBlank(canvas, left, width, top, height, "left", cap));
+  }
+  if (rightTrigger) {
+    const edge = left + width;
+    const thin = columnStem(canvas, edge, top, height) >= 4 && columnIsBlank(canvas, edge + 2, top, height);
+    const cap = sides.right ? dollarCap : thin ? 3 : 0;
+    if (cap > 0) ({ left, width } = growToBlank(canvas, left, width, top, height, "right", cap));
+  }
+  return { left, width };
 }
 
 function paintSpans(
@@ -660,6 +1018,11 @@ function paintSpans(
       const clipped = clipLeftOfFrame(canvas, left, top, boxW, boxH);
       left = clipped.left;
       boxW = clipped.width;
+      if (kind === "money") {
+        const extended = extendMoneyBox(canvas, left, top, boxW, boxH, span.text || "", height * RENDER_SCALE);
+        left = extended.left;
+        boxW = extended.width;
+      }
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
       boxes.push({
@@ -820,12 +1183,41 @@ function digitTouchSide(word: OcrWord, box: PaintBox, originX: number, originY: 
 
 function identityTouchSide(word: OcrWord, box: PaintBox, originX: number, originY: number): "left" | "right" | null {
   if (box.kind !== "identity") return null;
-  const letters = word.text.replace(/[^A-Za-z]/g, "").toLowerCase();
+  const letters = word.text.replace(/[^A-Za-z]/g, "");
   const token = box.token.replace(/[^A-Za-z]/g, "").toLowerCase();
-  // A one-letter sliver of a neighbour ("a" in "and") is also a letter of "Loads".
-  // Fragments that fail a real file are at least two letters ('ads', 'Lo').
-  if (letters.length < 2 || !token.includes(letters)) return null;
+  const lower = letters.toLowerCase();
+  if (letters.length >= 2) {
+    if (!token.includes(lower)) return null;
+  } else if (!/^b$/i.test(letters) || !token.includes("b")) {
+    return null;
+  }
   return wordTouchesEdge(word, box, originX, originY);
+}
+
+/** Walk an identity edge out by 2 px until the next column is blank. */
+function growIdentityToGap(
+  canvas: Canvas,
+  ctx: { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void },
+  box: PaintBox,
+  side: "left" | "right",
+): void {
+  const frame = side === "left" ? frameColumn(canvas, box.left, box.top, box.h) : null;
+  for (let step = 0; step < 24; step += 1) {
+    const edge = side === "left" ? box.left : box.left + box.w;
+    const outward = side === "left" ? -1 : 1;
+    if (columnIsBlank(canvas, edge + outward, box.top, box.h)) break;
+    let amount = columnIsBlank(canvas, edge + outward * 2, box.top, box.h) ? 1 : 2;
+    if (side === "left" && frame != null) amount = Math.min(amount, Math.max(0, box.left - (frame + 1)));
+    if (amount <= 0) break;
+    if (side === "left") {
+      box.left -= amount;
+      box.w += amount;
+    } else {
+      box.w += amount;
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(box.left, box.top, box.w, box.h);
+  }
 }
 
 async function widenBoxes(
@@ -836,23 +1228,12 @@ async function widenBoxes(
   let leak = false;
   for (const box of boxes) {
     if (box.w < 4 || box.h < 4) continue;
-    const passes = box.kind === "identity" ? 4 : 1;
-    for (let pass = 0; pass < passes; pass += 1) {
-      const sides = await boxEdgeSides(canvas, box);
-      if (!sides.size) break;
-      const grow = Math.max(4, box.pad);
-      if (sides.has("left")) {
-        const frame = frameColumn(canvas, box.left, box.top, box.h);
-        const room = frame == null ? grow : Math.max(0, box.left - (frame + 2));
-        const growLeft = Math.min(grow, room);
-        box.left -= growLeft;
-        box.w += growLeft;
-      }
-      if (sides.has("right")) box.w += grow;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(box.left, box.top, box.w, box.h);
-      if (pass === passes - 1 && (await boxEdgeSides(canvas, box, true)).size) leak = true;
+    const sides = await boxEdgeSides(canvas, box);
+    if (box.kind === "identity" && sides.size) {
+      if (sides.has("left")) growIdentityToGap(canvas, ctx, box, "left");
+      if (sides.has("right")) growIdentityToGap(canvas, ctx, box, "right");
     }
+    if (sides.size && (await boxEdgeSides(canvas, box, true)).size) leak = true;
   }
   return leak;
 }
@@ -1204,6 +1585,7 @@ async function coverHeaderLogos(
 async function rasterPages(
   buffer: Buffer,
 ): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; logoUnlocated: boolean; pageSizes: PageSize[]; identityBoxes: PaintBox[][] } | null> {
+  resetRedactionDiagnostics();
   const opened = await openPdf(buffer);
   try {
     const prepared: Array<{ page: PdfPage; plan: PagePlan }> = [];
@@ -1281,6 +1663,9 @@ async function rasterPages(
       }
       identityBoxes.push(pageIdentity);
       if (await widenBoxes(canvas, paint, boxes)) edgeLeak = true;
+      lastRedactionBoxes.push(
+        boxes.map((box) => ({ left: box.left, top: box.top, w: box.w, h: box.h, kind: box.kind, token: box.token })),
+      );
       pngs.push(canvas.toBuffer("image/png"));
     }
     return { pngs, plans, blank, edgeLeak, logoUnlocated, pageSizes, identityBoxes };
@@ -1321,6 +1706,7 @@ async function fromImage(buffer: Buffer): Promise<DriverRateConBuild> {
 }
 
 export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf"): Promise<DriverRateConBuild> {
+  resetRedactionDiagnostics();
   const isImage = mime.startsWith("image/") && !mime.includes("pdf");
   if (isImage) {
     try {

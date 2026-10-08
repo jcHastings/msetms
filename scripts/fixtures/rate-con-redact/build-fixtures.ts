@@ -437,6 +437,94 @@ async function main(): Promise<void> {
     stream.on("error", reject);
   });
 
+  function fontId(doc: InstanceType<typeof PDFDocumentKit>): string {
+    const font = (doc as unknown as { _font?: { id?: string; encode?: (text: string) => [string[], unknown] } })._font;
+    if (!font?.id || !font.encode) throw new Error("pdfkit font is not ready");
+    return font.id;
+  }
+
+  function emitText(
+    doc: InstanceType<typeof PDFDocumentKit>,
+    text: string,
+    x: number,
+    yTop: number,
+    fontSize: number,
+    tmScale: number,
+  ): void {
+    const font = (doc as unknown as { _font: { id: string; encode: (text: string) => [string[], unknown] }; page: { height: number } })._font;
+    const pageHeight = (doc as unknown as { page: { height: number } }).page.height;
+    const visual = fontSize * tmScale;
+    const y = pageHeight - yTop - visual;
+    const encoded = font.encode(text)[0].join("");
+    const content = doc as unknown as { addContent: (value: string) => void };
+    content.addContent("q");
+    content.addContent(`1 0 0 -1 0 ${pageHeight} cm`);
+    content.addContent("BT");
+    content.addContent(`/${font.id} ${fontSize} Tf`);
+    content.addContent(`${tmScale} 0 0 ${tmScale} ${x} ${y.toFixed(2)} Tm`);
+    content.addContent(`<${encoded}> Tj`);
+    content.addContent("ET");
+    content.addContent("Q");
+  }
+
+  function emitPerLetter(doc: InstanceType<typeof PDFDocumentKit>, text: string, x: number, yTop: number, size: number): void {
+    doc.font("Helvetica").fontSize(size);
+    let cursor = x;
+    for (const ch of Array.from(text)) {
+      doc.text(ch, cursor, yTop, { lineBreak: false });
+      cursor += doc.widthOfString(ch);
+    }
+  }
+
+  await writePdf("aa-ascend-letters.pdf", "SECRET-BROKER-META-LETTERS", (doc) => {
+    doc.font("Helvetica").fontSize(14).text("M & S Rate Confirmation", 48, 48);
+    doc.fontSize(11);
+    doc.text("228 East Route 59 Unit 190, Nanuet, NY 10954", 48, 72);
+    doc.text("Docket: MC970613", 48, 88);
+    doc.text("Carrier: MS Express", 48, 120);
+    emitPerLetter(doc, "appropriate by M&S Loads LLC. Carrier", 48, 160, 11);
+    emitPerLetter(doc, "EMAILED TO BILLING@MSLOADS.COM We", 48, 180, 11);
+    emitPerLetter(doc, "reported to M & S Loads and must", 48, 200, 11);
+    doc.text("Line haul: $900.00", 48, 240);
+  });
+
+  await writePdf("ab-tm-scale.pdf", "SECRET-BROKER-META-TMSCALE", (doc) => {
+    doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    fontId(doc);
+    emitText(doc, "at least $100,000 of cargo", 48, 160, 1, 9);
+    emitText(doc, "fines- $250/Each BOL", 48, 180, 1, 9);
+    emitText(doc, "fined $100/each Picture", 48, 200, 1, 9);
+    doc.fontSize(12).text("Line haul: $900.00", 48, 240);
+  });
+
+  await writePdf("ac-trailing-space.pdf", "SECRET-BROKER-META-TRAILSPACE", (doc) => {
+    doc.font("Helvetica").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    fontId(doc);
+    emitText(doc, "free, $30 per hour thereafter, cap $150 ", 48, 160, 12, 1);
+    doc.text("Line haul: $900.00", 48, 200);
+  });
+
+  await writePdf("ad-light-frame.pdf", "SECRET-BROKER-META-LIGHTFRAME", (doc) => {
+    doc.fontSize(11);
+    doc.text("600 E 39th St · Hastings, NE 68901", 48, 84);
+    doc.text("402-302-0097", 48, 100);
+    doc.save();
+    doc.strokeColor("#d4d4d4").lineWidth(1).moveTo(248, 36).lineTo(248, 68).stroke();
+    doc.restore();
+    doc.fillColor("#000000").fontSize(14).text("M&S Loads", 250, 48);
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 170);
+    doc.fontSize(11);
+    doc.text("Carrier: M&S Loads DBA MS Express", 48, 200);
+    doc.text("Pickup: Omaha Cold, Omaha, NE 68102", 48, 220);
+    doc.text("Line haul: $900.00", 48, 248);
+  });
+
   await writePdf("x-glyph-edges.pdf", "SECRET-BROKER-META-GLYPH", (doc) => {
     doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
     doc.fontSize(12);

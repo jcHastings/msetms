@@ -286,7 +286,9 @@ export function documentIssuedByBrokerage(text: string): boolean {
  * "M&S Loads DBA MS Express" is the carrier legal name and does not count.
  */
 export function brokerageIdentityVisible(text: string): boolean {
-  const withoutLegalName = text.replace(/m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi, " ");
+  const withoutLegalName = text
+    .replace(/m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi, " ")
+    .replace(/\bar@msloads\.com\b/gi, " ");
   return (
     /\bnanuet\b/i.test(withoutLegalName) ||
     /route\s*59/i.test(withoutLegalName) ||

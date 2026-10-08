@@ -42,6 +42,10 @@ const READY = [
   "x-glyph-edges.pdf",
   "y-ascend-subset.pdf",
   "z-tql-cap.pdf",
+  "aa-ascend-letters.pdf",
+  "ab-tm-scale.pdf",
+  "ac-trailing-space.pdf",
+  "ad-light-frame.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -71,6 +75,10 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("x-")) return ["$100,000", "$250", "$100", "$900.00"];
   if (name.startsWith("y-")) return ["$30", "$900.00", "MSLOADS.COM"];
   if (name.startsWith("z-")) return ["$30", "$150", "$900.00"];
+  if (name.startsWith("aa-")) return ["$900.00", "BILLING@MSLOADS.COM", "MSLOADS"];
+  if (name.startsWith("ab-")) return ["$100,000", "$250", "$100", "$900.00"];
+  if (name.startsWith("ac-")) return ["$30", "$150", "$900.00"];
+  if (name.startsWith("ad-")) return ["$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -94,6 +102,34 @@ async function pdfPageSize(buffer: Buffer): Promise<{ width: number; height: num
     return { width: view.width, height: view.height };
   } finally {
     await task.destroy();
+  }
+}
+
+async function assertClearBoxEdges(
+  png: Buffer,
+  boxes: Array<{ left: number; top: number; w: number; h: number; kind: string }>,
+): Promise<void> {
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const image = await loadImage(png);
+  const canvas = createCanvas(image.width, image.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(image, 0, 0);
+  for (const box of boxes) {
+    const y0 = Math.max(0, Math.floor(box.top + box.h * 0.28));
+    const y1 = Math.min(image.height - 1, Math.ceil(box.top + box.h * 0.78));
+    const height = Math.max(1, y1 - y0);
+    for (const x of [Math.floor(box.left) - 1, Math.ceil(box.left + box.w)]) {
+      if (x < 0 || x >= image.width) continue;
+      const data = ctx.getImageData(x, y0, 1, height).data;
+      let run = 0;
+      let longest = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const dark = data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200;
+        run = dark ? run + 1 : 0;
+        if (run > longest) longest = run;
+      }
+      assert.ok(longest < 4, `${box.kind} ink touches a box edge at x=${x} (${longest} px stem)`);
+    }
   }
 }
 
@@ -203,6 +239,9 @@ async function main(): Promise<void> {
   assert.equal(money.brokerageIdentityVisible("Nanuet, NY 10954"), true);
   assert.equal(money.brokerageIdentityVisible("M & S Rate Confirmation"), true);
   assert.equal(money.brokerageIdentityVisible("MSLOADS.COM"), true);
+  assert.equal(money.brokerageIdentityVisible("ar@msloads.com"), false);
+  assert.equal(money.brokerageIdentityVisible("AR@MSLOADS.COM"), false);
+  assert.equal(money.brokerageIdentityVisible("billing@msloads.com"), true);
   assert.equal(money.brokerageIdentityVisible("M&S Loads DBA MS Express"), false);
   assert.equal(money.brokerageIdentityVisible("Carrier: M&S Loads DBA MS Express"), false);
   assert.equal(money.documentIsMsExpressCarrier("M&S Loads\n600 E 39th St · Hastings, NE 68901\n402-302-0097"), true);
@@ -240,7 +279,7 @@ async function main(): Promise<void> {
   assert.equal(money.textHasExtractableMoney("Temp 34°F PO 123456.00 at 10.30"), false);
   assert.equal(money.textHasExtractableMoney("Total $2,150.00"), true);
 
-  const { buildDriverRateCon, ocrDollarLeak, officeOnlyPageReason, redactStoredRateCon, shutdownDriverRateConOcr } = await import("../lib/rate-con-redact");
+  const { buildDriverRateCon, glyphAdvanceStats, ocrDollarLeak, officeOnlyPageReason, redactStoredRateCon, redactionBoxes, shutdownDriverRateConOcr } = await import("../lib/rate-con-redact");
   assert.match(officeOnlyPageReason("INVOICE\nTotal $1"), /invoice/i);
   assert.match(officeOnlyPageReason("Customer Confirmation"), /customer confirmation/i);
   assert.match(officeOnlyPageReason("Bill of Lading"), /bill of lading/i);
@@ -408,6 +447,50 @@ async function main(): Promise<void> {
       const seen = await ocrPng(built.pagePngs[0]);
       assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
       assert.match(seen, /thereafter,\s*cap/i, seen.slice(0, 800));
+    }
+    if (item.name.startsWith("aa-") || item.name.startsWith("ab-") || item.name.startsWith("ac-")) {
+      const stats = glyphAdvanceStats();
+      assert.ok(stats.used > 0, `${item.name} glyph path used ${stats.used}`);
+      assert.equal(stats.fallback, 0, `${item.name} glyph fallback ${stats.fallback}`);
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 1400));
+      if (item.name.startsWith("aa-")) {
+        assert.doesNotMatch(seen, /M\s*&\s*S/i, seen.slice(0, 1400));
+        assert.doesNotMatch(seen, /LLC/i, seen.slice(0, 1400));
+        assert.doesNotMatch(seen, /msloads/i, seen.slice(0, 1400));
+        assert.match(seen, /\bto\b/i, seen.slice(0, 1400));
+        assert.match(seen, /\bby\b/, seen.slice(0, 1400));
+        assert.match(seen, /\bWe\b/, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("ab-")) {
+        assert.match(seen, /\bof\b/i, seen.slice(0, 1400));
+        assert.match(seen, /Each/, seen.slice(0, 1400));
+      }
+      if (item.name.startsWith("ac-")) {
+        assert.match(seen, /thereafter,\s*cap/i, seen.slice(0, 1400));
+      }
+      await assertClearBoxEdges(built.pagePngs[0], redactionBoxes()[0] ?? []);
+    }
+    if (item.name.startsWith("ad-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.match(seen, /DBA/i, seen.slice(0, 800));
+      assert.doesNotMatch(seen, /M\s*&\s*S\s+Loads(?!\s+DBA)/i, seen.slice(0, 800));
+      const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+      const frameImage = await loadImage(built.pagePngs[0]);
+      const frameCanvas = createCanvas(frameImage.width, frameImage.height);
+      const frameCtx = frameCanvas.getContext("2d");
+      frameCtx.drawImage(frameImage, 0, 0);
+      const frameX = Math.round(248 * 2);
+      let columns = 0;
+      for (let dx = -3; dx <= 4; dx += 1) {
+        const column = frameCtx.getImageData(frameX + dx, 80, 1, 40).data;
+        let ink = 0;
+        for (let i = 0; i < column.length; i += 4) {
+          if (column[i] < 250 || column[i + 1] < 250 || column[i + 2] < 250) ink += 1;
+        }
+        if (ink > 8) columns += 1;
+      }
+      assert.ok(columns >= 2, `light frame thinned to ${columns} column(s)`);
     }
   }
 
