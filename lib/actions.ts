@@ -31,8 +31,6 @@ import {
   deleteDrugTest,
   getDriver,
   getDrugTest,
-  getTrailer,
-  getTruck,
   importLocationsFromCsv,
   updateCustomer,
   updateDriver,
@@ -58,7 +56,6 @@ import {
   requireAssignmentHardBlock,
 } from "./workflow";
 import {
-  DRIVER_STATUSES,
   DRIVER_TYPES,
   TRUCK_STATUSES,
   isLocationRole,
@@ -69,7 +66,6 @@ import {
   isBillableStatus,
   type ActionResult,
   type DriverKind,
-  type DriverStatus,
   type Location,
   type LocationRole,
   type SchedulingType,
@@ -232,14 +228,6 @@ function parseTruckStatus(value: FormDataEntryValue | null): TruckStatus {
     throw new Error("Invalid truck status.");
   }
   return status as TruckStatus;
-}
-
-function parseDriverStatus(value: FormDataEntryValue | null): DriverStatus {
-  const status = String(value ?? "available");
-  if (!DRIVER_STATUSES.some((item) => item.value === status)) {
-    throw new Error("Invalid driver status.");
-  }
-  return status as DriverStatus;
 }
 
 export async function createCustomerAction(
@@ -1657,10 +1645,7 @@ export async function importTollsCsvAction(
   }
 }
 
-export async function pullPrepassTollsAction(
-  _prev: ActionResult | null,
-  _formData: FormData,
-): Promise<ActionResult> {
+export async function pullPrepassTollsAction(): Promise<ActionResult> {
   try {
     await requireCapability(canUploadFuel, "Tolls is for Administrator and Standard.");
     const result = await pullPrepassTollTransactions();
@@ -1853,10 +1838,7 @@ export async function updateCompanyProfileAction(
   }
 }
 
-export async function previewSamsaraTrucksAction(
-  _prev: SamsaraPreviewState | null,
-  _formData: FormData,
-): Promise<SamsaraPreviewState> {
+export async function previewSamsaraTrucksAction(): Promise<SamsaraPreviewState> {
   try {
     await requireCapability(canEditFleet, "Fleet is for Administrator and Standard.");
     const { listSamsaraVehicles } = await import("./integrations/samsara");

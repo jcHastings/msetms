@@ -221,24 +221,71 @@ export function maskMoney(line: string, previousLine = ""): string {
   return out;
 }
 
-/**
- * True when this rate confirmation is issued by the M&S Loads brokerage.
- * The carrier legal name "M&S Loads DBA MS Express" does not count.
- */
-export function documentIssuedByBrokerage(text: string): boolean {
-  const withoutLegal = text.replace(/m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi, " ");
-  return /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads/i.test(withoutLegal);
+const BROKERAGE_NAME = /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads/i;
+const LEGAL_CARRIER_NAME = /m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi;
+const HEADER_STOP = /^(?:carrier|pickup|delivery|deliver|shipper|consignee|stop)\b/i;
+
+function withoutLegalCarrierName(text: string): string {
+  return text.replace(LEGAL_CARRIER_NAME, " ");
 }
 
-/** Brokerage letterhead, MC, offices, and broker contact. Shipper lines stay. */
-export function findBrokerageSpans(line: string): MoneySpan[] {
+/**
+ * True when this rate confirmation is issued by the M&S Loads brokerage.
+ * Only the letterhead (lines before the carrier/pickup block) or a Broker: field counts.
+ * "M&S Loads DBA MS Express" is the carrier legal name, not the brokerage.
+ */
+export function documentIssuedByBrokerage(text: string): boolean {
+  const lines = text
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const header: string[] = [];
+  for (const line of lines) {
+    if (HEADER_STOP.test(line)) break;
+    header.push(line);
+    if (header.length >= 10) break;
+  }
+  if (BROKERAGE_NAME.test(withoutLegalCarrierName(header.join("\n")))) return true;
+  return lines.some((line) => {
+    if (!/\bbroker\s*:/i.test(line)) return false;
+    return BROKERAGE_NAME.test(withoutLegalCarrierName(line));
+  });
+}
+
+/** A line that marks the brokerage letterhead: issuer name or office address, not a Carrier: row. */
+export function lineAnchorsBrokerageLetterhead(line: string): boolean {
+  if (/^\s*carrier\b/i.test(line)) return false;
+  const stripped = withoutLegalCarrierName(line);
+  if (BROKERAGE_NAME.test(stripped)) return true;
+  if (/228\s+e(?:ast)?\.?\s+route\s+59|nanuet|deerfield\s+beach/i.test(line)) return true;
+  if (/\b10954\b/.test(line) && /nanuet|route\s+59/i.test(line)) return true;
+  if (/\b33441\b/.test(line) && /deerfield/i.test(line)) return true;
+  return false;
+}
+
+function isMsExpressPhone(text: string): boolean {
+  return text.replace(/\D/g, "").includes("4023020097");
+}
+
+const ADDRESS_PATTERNS = [
+  /228\s+e(?:ast)?\.?\s+route\s+59(?:\s*#\s*\d+)?(?:\s*,?\s*nanuet\s*,?\s*ny\s+10954)?/gi,
+  /nanuet\s*,?\s*ny\s+10954/gi,
+  /deerfield\s+beach\s*,?\s*fl\s+33441/gi,
+];
+
+export type BrokerageSpanContext = {
+  /** Line sits in the letterhead block with the brokerage name or address. */
+  letterhead?: boolean;
+};
+
+/** Brokerage letterhead, MC, offices, and broker contact. Requirement fields and shippers stay. */
+export function findBrokerageSpans(line: string, context: BrokerageSpanContext = {}): MoneySpan[] {
   const spans: MoneySpan[] = [];
   const patterns = [
     /M\s*&\s*S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
     /M\s+and\s+S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
     /MC\s*-?\s*970613/gi,
     /\b970613\b/g,
-    /\bEsti\s+Katz\b/g,
     /[A-Z0-9._%+-]+@msloads\.com\b/gi,
   ];
   for (const pattern of patterns) {
@@ -248,22 +295,40 @@ export function findBrokerageSpans(line: string): MoneySpan[] {
       pushSpan(spans, line, range.start, range.end);
     }
   }
-  const address =
-    /nanuet|deerfield\s+beach|228\s+e(?:ast)?\.?\s+route\s+59/i.test(line) ||
-    (/\b10954\b/.test(line) && /nanuet|\bny\b|route\s+59/i.test(line)) ||
-    (/\b33441\b/.test(line) && /deerfield|\bfl\b/i.test(line));
-  if (address) pushSpan(spans, line, 0, line.length);
-  const identityLine = address || /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads|970613|@msloads\.com|esti\s+katz/i.test(line);
-  if (identityLine) {
-    for (const range of collect(/\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/g, line)) {
+  let addressMatched = false;
+  for (const pattern of ADDRESS_PATTERNS) {
+    for (const range of collect(pattern, line)) {
+      addressMatched = true;
       pushSpan(spans, line, range.start, range.end);
     }
-    if (/@msloads\.com/i.test(line)) {
-      for (const range of collect(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g, line)) {
-        const text = line.slice(range.start, range.end);
-        if (/deerfield\s+beach/i.test(text)) continue;
-        pushSpan(spans, line, range.start, range.end);
-      }
+  }
+  const footerNameBefore =
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*(?=\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC)/gi;
+  for (const match of line.matchAll(footerNameBefore)) {
+    const name = match[1];
+    if (!name || match.index == null) continue;
+    pushSpan(spans, line, match.index, match.index + name.length);
+  }
+  const footerNameAfter = /\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC\.?\s*\)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/gi;
+  for (const match of line.matchAll(footerNameAfter)) {
+    const name = match[1];
+    if (!name || match.index == null) continue;
+    const start = match.index + match[0].length - name.length;
+    pushSpan(spans, line, start, start + name.length);
+  }
+  const coverPhones = context.letterhead || addressMatched || /@msloads\.com/i.test(line);
+  if (coverPhones) {
+    for (const range of collect(/\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/g, line)) {
+      const text = line.slice(range.start, range.end);
+      if (isMsExpressPhone(text)) continue;
+      pushSpan(spans, line, range.start, range.end);
+    }
+  }
+  if (/@msloads\.com/i.test(line)) {
+    for (const range of collect(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g, line)) {
+      const text = line.slice(range.start, range.end);
+      if (/deerfield\s+beach/i.test(text)) continue;
+      pushSpan(spans, line, range.start, range.end);
     }
   }
   const merged = mergeSpans(spans);
@@ -271,8 +336,8 @@ export function findBrokerageSpans(line: string): MoneySpan[] {
   return merged;
 }
 
-export function maskBrokerage(line: string): string {
-  const spans = findBrokerageSpans(line);
+export function maskBrokerage(line: string, context: BrokerageSpanContext = {}): string {
+  const spans = findBrokerageSpans(line, context);
   let cursor = 0;
   let out = "";
   for (const span of spans) {
