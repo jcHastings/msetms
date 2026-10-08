@@ -98,11 +98,12 @@ export type RedactionBox = {
 let glyphAdvanceUsed = 0;
 let glyphAdvanceFallback = 0;
 let glyphPositionFinds = 0;
+let frameRepaints = 0;
 let lastRedactionBoxes: RedactionBox[][] = [];
 
 /** How many text items took operator-list advances on the last build. */
-export function glyphAdvanceStats(): { used: number; fallback: number; position: number } {
-  return { used: glyphAdvanceUsed, fallback: glyphAdvanceFallback, position: glyphPositionFinds };
+export function glyphAdvanceStats(): { used: number; fallback: number; position: number; frames: number } {
+  return { used: glyphAdvanceUsed, fallback: glyphAdvanceFallback, position: glyphPositionFinds, frames: frameRepaints };
 }
 
 /** Paint boxes from the last build, one array per page, in canvas pixels. */
@@ -114,6 +115,7 @@ function resetRedactionDiagnostics(): void {
   glyphAdvanceUsed = 0;
   glyphAdvanceFallback = 0;
   glyphPositionFinds = 0;
+  frameRepaints = 0;
   lastRedactionBoxes = [];
 }
 
@@ -941,9 +943,15 @@ function frameColumn(canvas: FrameCanvas, boxLeft: number, boxTop: number, boxH:
   return found >= 0 ? found : null;
 }
 
+type CanvasImageData = {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+};
+
 type InkContext = {
-  getImageData: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray };
-  putImageData?: (data: { data: Uint8ClampedArray; width: number; height: number }, x: number, y: number) => void;
+  getImageData: (x: number, y: number, w: number, h: number) => CanvasImageData;
+  putImageData?: (image: CanvasImageData, x: number, y: number) => void;
 };
 
 /** Letter ink that landed on a header rule is painted back to the rule's own colour. */
@@ -973,7 +981,14 @@ function repaintFrameSpecks(ctx: InkContext, column: number, top: number, height
     body.data[index + 1] = modal[1];
     body.data[index + 2] = modal[2];
   }
-  ctx.putImageData({ data: body.data, width: 1, height: y1 - y0 }, column, y0);
+  // ImageData is not a Node global. A plain {data,width,height} makes @napi-rs/canvas throw.
+  const ImageData = ctx.getImageData(0, 0, 1, 1).constructor as new (
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+  ) => CanvasImageData;
+  ctx.putImageData(new ImageData(body.data, 1, y1 - y0), column, y0);
+  frameRepaints += 1;
 }
 
 function clipLeftOfFrame(
