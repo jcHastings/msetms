@@ -11,6 +11,7 @@ import { matchLocationForStop } from "./locations";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import type { LoadStop } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
+import { itsImportIssueCode, itsImportIssueTitle, itsImportLoadNumber } from "./its-import-shared";
 import {
   isBillableStatus,
   isClosedStatus,
@@ -38,6 +39,7 @@ export const EXCEPTION_KINDS = [
   "compliance",
   "unassigned",
   "samsara",
+  "its_import",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -130,6 +132,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   compliance: 7,
   unassigned: 8,
   samsara: 9,
+  its_import: 10,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -690,6 +693,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     }
   }
 
+  items.push(...itsImportInboxItems());
   attachWorkbenchSchedule(items, [...active, ...delivered], ctx.stops);
 
   items.sort((a, b) => {
@@ -730,7 +734,55 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Rate-con phone";
     case "samsara":
       return "Samsara";
+    case "its_import":
+      return "ITS import";
   }
+}
+
+function itsImportInboxItems(): InboxException[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT exception_key, reason FROM exception_states
+       WHERE exception_key LIKE 'its-import:%' AND status = 'open'
+       ORDER BY exception_key`,
+    )
+    .all() as Array<{ exception_key: string; reason: string }>;
+  if (rows.length === 0) return [];
+  const numbers = [...new Set(rows.map((row) => itsImportLoadNumber(row.exception_key)).filter(Boolean))];
+  const loads = numbers.length
+    ? (getDb()
+        .prepare(
+          `SELECT loads.id, loads.load_number, loads.origin, loads.destination, customers.name AS customer_name
+           FROM loads JOIN customers ON customers.id = loads.customer_id
+           WHERE loads.load_number IN (${numbers.map(() => "?").join(", ")})`,
+        )
+        .all(...numbers) as Array<{
+        id: number;
+        load_number: string;
+        origin: string;
+        destination: string;
+        customer_name: string;
+      }>)
+    : [];
+  const byNumber = new Map(loads.map((load) => [load.load_number, load]));
+  return rows.map((row) => {
+    const loadNumber = itsImportLoadNumber(row.exception_key);
+    const load = byNumber.get(loadNumber);
+    const issue = itsImportIssueCode(row.exception_key);
+    return {
+      id: row.exception_key,
+      loadId: load?.id ?? 0,
+      loadNumber,
+      customerName: load?.customer_name ?? "",
+      origin: load?.origin ?? "",
+      destination: load?.destination ?? "",
+      kind: "its_import",
+      severity: "MEDIUM",
+      title: itsImportIssueTitle(issue),
+      detail: row.reason,
+      demo: false,
+    };
+  });
 }
 
 function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSamsaraInboxFlags>): InboxException[] {
