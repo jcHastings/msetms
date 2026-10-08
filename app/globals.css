@@ -353,6 +353,13 @@ a.driver-dest-featured:hover,
   font-size: 1.35rem;
 }
 
+.driver-dest-wide,
+a.driver-dest-wide,
+a.driver-dest-wide:hover,
+.driver-dest-off.driver-dest-wide {
+  grid-column: 1 / -1;
+}
+
 .driver-app a.btn-secondary {
   color: #1c2b3c !important;
 }

@@ -39,10 +39,16 @@ function isCabDocsTurn(row: ChatRow): boolean {
 export function DriverAssistSheet({
   className = "",
   label = "Assist",
+  truckDocs = true,
 }: {
   className?: string;
   label?: string;
+  /** Load page passes false so cab and company papers stay off Dispatch. */
+  truckDocs?: boolean;
 }) {
+  const chips = truckDocs
+    ? DRIVER_ASSIST_CHIPS
+    : DRIVER_ASSIST_CHIPS.filter((chip) => chip.question !== "My truck docs");
   const titleId = useId();
   const fieldId = useId();
   const [open, setOpen] = useState(false);
@@ -103,7 +109,9 @@ export function DriverAssistSheet({
                   Assist
                 </h2>
                 <p className="text-sm text-slate-300">
-                  Your load, cab papers, company docs, and facility info on file.
+                  {truckDocs
+                    ? "Your load, cab papers, company docs, and facility info on file."
+                    : "Appointment, hours, address, and facility info on this load."}
                 </p>
               </div>
               <button type="button" className="btn btn-secondary min-h-12" onClick={() => setOpen(false)}>
@@ -114,7 +122,9 @@ export function DriverAssistSheet({
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
               {rows.length === 0 ? (
                 <p className="rounded-xl bg-slate-800 px-3 py-3 text-sm leading-relaxed text-slate-200">
-                  Tap a question, or ask about registration, insurance cards, the IFTA license, or any shipper or receiver.
+                  {truckDocs
+                    ? "Tap a question, or ask about registration, insurance cards, the IFTA license, or any shipper or receiver."
+                    : "Tap a question, or ask about the appointment, hours, or address on this load."}
                 </p>
               ) : null}
               {rows.map((row, index) => (
@@ -150,7 +160,7 @@ export function DriverAssistSheet({
             <div className="border-t border-white/10 px-4 py-3">
               {error ? <p className="mb-2 text-sm text-rose-200">{error}</p> : null}
               <div className="grid grid-cols-1 gap-2" data-assist-chips="">
-                {DRIVER_ASSIST_CHIPS.map((chip) => (
+                {chips.map((chip) => (
                   <button
                     key={chip.label}
                     type="button"
