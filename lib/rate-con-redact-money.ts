@@ -11,7 +11,7 @@ export type MoneySpan = {
 };
 
 const RATE_KEYWORD =
-  "(?:carrier\\s+pay|line\\s*-?\\s*haul|linehaul|fuel\\s+surcharge|all[-\\s]in(?:\\s+(?:rate|total))?|quick\\s*pay(?:\\s+(?:fee|discount))?|accessorials?|fsc|tonu|layover|lumper|detention|amount|total|flat|pay|rate)";
+  "(?:fuel|carrier\\s+pay|line\\s*-?\\s*haul|linehaul|fuel\\s+surcharge|all[-\\s]in(?:\\s+(?:rate|total))?|quick\\s*pay(?:\\s+(?:fee|discount))?|accessorials?|fsc|tonu|layover|lumper|detention|amount|total|flat|pay|rate)";
 
 const RATE_KEYWORD_RE = new RegExp(`(?<![\\w])${RATE_KEYWORD}(?![\\w])(?!\\s*(?:confirmation|con\\b|agreement|sheet))`, "i");
 
@@ -67,14 +67,24 @@ function rateContext(line: string, start: number, end: number): boolean {
   return RATE_KEYWORD_RE.test(around);
 }
 
+function immediatelyAfterRateKeyword(line: string, numberStart: number): boolean {
+  const before = line.slice(Math.max(0, numberStart - 32), numberStart);
+  return new RegExp(
+    `${RATE_KEYWORD}(?![\\w])(?!\\s*(?:confirmation|con\\b|agreement|sheet))\\s*[:#]?\\s*(?:usd\\s*)?\\$?\\s*$`,
+    "i",
+  ).test(before);
+}
+
 function dropClockFalsePositives(line: string, span: MoneySpan): boolean {
-  const core = span.text.match(/\d{1,2}\.\d{2}/);
-  if (!core) return false;
-  const token = core[0];
-  if (!isClockNumber(token)) return false;
-  const at = line.indexOf(token, span.start);
+  const compact = span.text.replace(/[$,\s]/g, "");
+  if (!/^\d{1,2}\.\d{2}$/.test(compact) || !isClockNumber(compact)) return false;
+  if (/\$|usd/i.test(span.text)) return false;
+  const at = line.indexOf(compact, span.start);
   const numberStart = at >= 0 ? at : span.start;
-  return !rateContext(line, numberStart, numberStart + token.length);
+  const after = line.slice(numberStart + compact.length, numberStart + compact.length + 16);
+  if (/(?:\/\s*mi(?:le)?|per\s+mile|\/\s*(?:hr|hour)|per\s+hour)/i.test(after)) return false;
+  if (immediatelyAfterRateKeyword(line, numberStart)) return false;
+  return true;
 }
 
 function pushSpan(spans: MoneySpan[], line: string, start: number, end: number): void {
@@ -86,7 +96,7 @@ function pushSpan(spans: MoneySpan[], line: string, start: number, end: number):
   spans.push({ start: from, end: to, text: line.slice(from, to) });
 }
 
-function moneyCandidates(line: string): MoneySpan[] {
+function moneyCandidates(line: string, previousLine = ""): MoneySpan[] {
   const spans: MoneySpan[] = [];
   const patterns: RegExp[] = [
     /\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?(?:\s*\/\s*(?:mi(?:le)?|hr|hour)|\s+per\s+(?:mile|hour))?/gi,
@@ -135,13 +145,21 @@ function moneyCandidates(line: string): MoneySpan[] {
     pushSpan(spans, line, numberStart, numberStart + number.length);
   }
 
-  if (/quick\s*pay/i.test(line)) {
+  if (/quick\s*pay/i.test(line) || /quick\s*pay/i.test(previousLine)) {
     for (const range of collect(/\d+(?:\.\d+)?\s*%/g, line)) {
       pushSpan(spans, line, range.start, range.end);
     }
   }
   for (const range of collect(/\$\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})?\s*(?:will\s+be\s+)?deducted/gi, line)) {
     pushSpan(spans, line, range.start, range.end);
+  }
+
+  // Table rows: "Flat Rate | 1 | 1234.00 | $ 1,234.00". Once a line has a
+  // dollar amount or a rate word, every other bare decimal on it is money.
+  if (spans.some((span) => /\$|usd/i.test(span.text)) || RATE_KEYWORD_RE.test(line)) {
+    for (const range of collect(/(?<![\w$.,:/-])(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?![\w.%/-])/g, line)) {
+      pushSpan(spans, line, range.start, range.end);
+    }
   }
 
   return spans;
@@ -173,9 +191,9 @@ function mergeSpans(spans: MoneySpan[]): MoneySpan[] {
 }
 
 /** Character ranges that must be painted out of a driver copy. */
-export function findMoneySpans(line: string): MoneySpan[] {
+export function findMoneySpans(line: string, previousLine = ""): MoneySpan[] {
   const guards = protectedSpans(line);
-  const kept = moneyCandidates(line).filter((span) => {
+  const kept = moneyCandidates(line, previousLine).filter((span) => {
     if (overlaps(span, guards)) return false;
     if (dropClockFalsePositives(line, span)) return false;
     return true;
@@ -185,13 +203,76 @@ export function findMoneySpans(line: string): MoneySpan[] {
   return merged;
 }
 
-export function lineHasMoney(line: string): boolean {
-  return findMoneySpans(line).length > 0;
+export function lineHasMoney(line: string, previousLine = ""): boolean {
+  return findMoneySpans(line, previousLine).length > 0;
 }
 
 /** Replace money spans so tests can see what would be covered. */
-export function maskMoney(line: string): string {
-  const spans = findMoneySpans(line);
+export function maskMoney(line: string, previousLine = ""): string {
+  const spans = findMoneySpans(line, previousLine);
+  let cursor = 0;
+  let out = "";
+  for (const span of spans) {
+    out += line.slice(cursor, span.start);
+    out += "█".repeat(Math.max(1, span.end - span.start));
+    cursor = span.end;
+  }
+  out += line.slice(cursor);
+  return out;
+}
+
+/**
+ * True when this rate confirmation is issued by the M&S Loads brokerage.
+ * The carrier legal name "M&S Loads DBA MS Express" does not count.
+ */
+export function documentIssuedByBrokerage(text: string): boolean {
+  const withoutLegal = text.replace(/m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi, " ");
+  return /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads/i.test(withoutLegal);
+}
+
+/** Brokerage letterhead, MC, offices, and broker contact. Shipper lines stay. */
+export function findBrokerageSpans(line: string): MoneySpan[] {
+  const spans: MoneySpan[] = [];
+  const patterns = [
+    /M\s*&\s*S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
+    /M\s+and\s+S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
+    /MC\s*-?\s*970613/gi,
+    /\b970613\b/g,
+    /\bEsti\s+Katz\b/g,
+    /[A-Z0-9._%+-]+@msloads\.com\b/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const range of collect(pattern, line)) {
+      const text = line.slice(range.start, range.end);
+      if (/^ar@msloads\.com$/i.test(text)) continue;
+      pushSpan(spans, line, range.start, range.end);
+    }
+  }
+  const address =
+    /nanuet|deerfield\s+beach|228\s+e(?:ast)?\.?\s+route\s+59/i.test(line) ||
+    (/\b10954\b/.test(line) && /nanuet|\bny\b|route\s+59/i.test(line)) ||
+    (/\b33441\b/.test(line) && /deerfield|\bfl\b/i.test(line));
+  if (address) pushSpan(spans, line, 0, line.length);
+  const identityLine = address || /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads|970613|@msloads\.com|esti\s+katz/i.test(line);
+  if (identityLine) {
+    for (const range of collect(/\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/g, line)) {
+      pushSpan(spans, line, range.start, range.end);
+    }
+    if (/@msloads\.com/i.test(line)) {
+      for (const range of collect(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g, line)) {
+        const text = line.slice(range.start, range.end);
+        if (/deerfield\s+beach/i.test(text)) continue;
+        pushSpan(spans, line, range.start, range.end);
+      }
+    }
+  }
+  const merged = mergeSpans(spans);
+  for (const span of merged) span.text = line.slice(span.start, span.end);
+  return merged;
+}
+
+export function maskBrokerage(line: string): string {
+  const spans = findBrokerageSpans(line);
   let cursor = 0;
   let out = "";
   for (const span of spans) {
