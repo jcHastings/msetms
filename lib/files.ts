@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { currentAuditActor, recordLoadAudit } from "./audit";
 import { getDataDir, getDb } from "./db";
+import { deleteRedactionsForSource, markRateConRedactionProcessing } from "./rate-con-redact-store";
 import type { Attachment, AttachmentKind, FleetDocKind, FleetDocument } from "./types";
 
 function uploadsDir(...parts: string[]): string {
@@ -174,6 +175,9 @@ export function replaceAttachment(
   if (fs.existsSync(/*turbopackIgnore: true*/ oldPath)) {
     fs.unlinkSync(/*turbopackIgnore: true*/ oldPath);
   }
+  if (existing.kind === "rate_con") {
+    markRateConRedactionProcessing({ loadId: existing.load_id, sourceAttachmentId: existing.id });
+  }
   recordLoadAudit({
     loadId: existing.load_id,
     action: "attachment",
@@ -190,6 +194,7 @@ export function deleteAttachment(id: number): void {
   const attachment = getAttachment(id);
   if (!attachment) throw new Error("Attachment not found.");
   const stored = getAttachmentPath(attachment);
+  deleteRedactionsForSource(id);
   getDb().prepare("DELETE FROM attachments WHERE id = ?").run(id);
   if (fs.existsSync(/*turbopackIgnore: true*/ stored)) {
     fs.unlinkSync(/*turbopackIgnore: true*/ stored);

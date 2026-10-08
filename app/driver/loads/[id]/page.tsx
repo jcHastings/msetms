@@ -24,6 +24,7 @@ import { DriverDocClassify } from "@/components/driver-doc-classify";
 import { DriverAssistSheet } from "@/components/driver-assist-sheet";
 import { driverFacingStopPo } from "@/lib/load-confirmation";
 import { isCustomerRateDocument } from "@/lib/load-documents-shared";
+import { listDriverRateConRedactions, listRateConRedactions } from "@/lib/rate-con-redact-store";
 import { isClosedStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,8 @@ export default async function DriverLoadPage({
   const reeferSnap = (await getReeferSnapshots()).readings.find((row) => row.loadId === load.id);
   const hos = await getHosForDriver(driver.id);
   const attachments = listAttachments(load.id).filter((file) => !isCustomerRateDocument(file));
+  const driverRateCons = listDriverRateConRedactions(load.id);
+  const officeRateCons = listRateConRedactions(load.id);
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
   const stops = ensureDefaultStops(load.id);
@@ -96,6 +99,20 @@ export default async function DriverLoadPage({
             Dispatch asked for BOL/POD/photos on this load. Upload them below.
           </p>
         </section>
+      ) : null}
+
+      {driverRateCons.length ? (
+        <Link
+          href={`/driver/loads/${load.id}/rate-confirmation`}
+          className="btn btn-primary mt-4 flex min-h-14 w-full text-base"
+          data-driver-rate-confirmation=""
+        >
+          Rate confirmation
+        </Link>
+      ) : officeRateCons.some((copy) => copy.status === "needs_review" || copy.status === "processing" || copy.status === "office_only") ? (
+        <p className="mt-4 rounded-2xl bg-slate-900 px-4 py-3 text-base text-slate-200" data-driver-rate-confirmation-pending="">
+          Rate confirmation is with the office.
+        </p>
       ) : null}
 
       <div id="confirmation" className="mt-4 flex flex-wrap gap-2">
