@@ -224,17 +224,14 @@ export function maskMoney(line: string, previousLine = ""): string {
 const BROKERAGE_NAME = /m\s*&\s*s\s+loads|m\s+and\s+s\s+loads/i;
 const LEGAL_CARRIER_NAME = /m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi;
 const HEADER_STOP = /^(?:carrier|pickup|delivery|deliver|shipper|consignee|stop)\b/i;
+const BROKERAGE_ANCHOR =
+  /228\s+e(?:ast)?\.?\s+route\s+59|nanuet\s*,?\s*ny|deerfield\s+beach\s*,?\s*fl|\bMC\s*-?\s*970613\b/i;
 
 function withoutLegalCarrierName(text: string): string {
   return text.replace(LEGAL_CARRIER_NAME, " ");
 }
 
-/**
- * True when this rate confirmation is issued by the M&S Loads brokerage.
- * Only the letterhead (lines before the carrier/pickup block) or a Broker: field counts.
- * "M&S Loads DBA MS Express" is the carrier legal name, not the brokerage.
- */
-export function documentIssuedByBrokerage(text: string): boolean {
+function headerLinesOf(text: string): string[] {
   const lines = text
     .split(/\n/)
     .map((line) => line.trim())
@@ -245,11 +242,55 @@ export function documentIssuedByBrokerage(text: string): boolean {
     header.push(line);
     if (header.length >= 10) break;
   }
+  return header;
+}
+
+function headerHasBrokerageAnchor(lines: string[]): boolean {
+  return lines.some((line) => BROKERAGE_ANCHOR.test(line));
+}
+
+/** Older MS Express confirmations used the profile name "M&S Loads" with the Hastings office. */
+function headerIsMsExpressOffice(lines: string[]): boolean {
+  if (headerHasBrokerageAnchor(lines)) return false;
+  const text = lines.join("\n");
+  if (/600\s+e(?:ast)?\.?\s+39(?:th)?/i.test(text)) return true;
+  if (/\bMC\s*-?\s*0?56299\b/i.test(text)) return true;
+  if (/402[\s.\-]*302[\s.\-]*0097/.test(text)) return true;
+  return false;
+}
+
+/**
+ * True when this rate confirmation is issued by the M&S Loads brokerage.
+ * The letterhead (before Carrier/Pickup), a Broker: field, or the brokerage
+ * office address / MC counts. Ascend prints the name only in the logo.
+ * "M&S Loads DBA MS Express" and the Hastings / MC056299 / 402 office do not.
+ */
+export function documentIssuedByBrokerage(text: string): boolean {
+  const lines = text
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const header = headerLinesOf(text);
+  if (headerIsMsExpressOffice(header)) return false;
   if (BROKERAGE_NAME.test(withoutLegalCarrierName(header.join("\n")))) return true;
+  // Ascend letterheads carry the name only in a raster logo; the office address / MC is text.
+  if (headerHasBrokerageAnchor(header)) return true;
   return lines.some((line) => {
     if (!/\bbroker\s*:/i.test(line)) return false;
     return BROKERAGE_NAME.test(withoutLegalCarrierName(line));
   });
+}
+
+/** OCR of a driver copy still shows brokerage letterhead or footer identity. */
+export function brokerageIdentityVisible(text: string): boolean {
+  return (
+    /\bnanuet\b/i.test(text) ||
+    /route\s*59/i.test(text) ||
+    /\b970613\b/.test(text) ||
+    /billing@msloads/i.test(text) ||
+    /deerfield\s+beach/i.test(text) ||
+    /m\s*&\s*s\s+loads\s+llc/i.test(text)
+  );
 }
 
 /** A line that marks the brokerage letterhead: issuer name or office address, not a Carrier: row. */
@@ -257,6 +298,7 @@ export function lineAnchorsBrokerageLetterhead(line: string): boolean {
   if (/^\s*carrier\b/i.test(line)) return false;
   const stripped = withoutLegalCarrierName(line);
   if (BROKERAGE_NAME.test(stripped)) return true;
+  if (/\bMC\s*-?\s*970613\b/i.test(line) || /\bdocket\s*:/i.test(line)) return true;
   if (/228\s+e(?:ast)?\.?\s+route\s+59|nanuet|deerfield\s+beach/i.test(line)) return true;
   if (/\b10954\b/.test(line) && /nanuet|route\s+59/i.test(line)) return true;
   if (/\b33441\b/.test(line) && /deerfield/i.test(line)) return true;
@@ -268,7 +310,7 @@ function isMsExpressPhone(text: string): boolean {
 }
 
 const ADDRESS_PATTERNS = [
-  /228\s+e(?:ast)?\.?\s+route\s+59(?:\s*#\s*\d+)?(?:\s*,?\s*nanuet\s*,?\s*ny\s+10954)?/gi,
+  /228\s+e(?:ast)?\.?\s+route\s+59(?:\s*(?:unit|suite|ste\.?|#)\s*\w+)?(?:\s*,?\s*nanuet\s*,?\s*ny\s+10954)?/gi,
   /nanuet\s*,?\s*ny\s+10954/gi,
   /deerfield\s+beach\s*,?\s*fl\s+33441/gi,
 ];
