@@ -3919,6 +3919,133 @@ html[data-office-viewer="true"] [data-view-only-locked="true"] {
   min-height: 44px;
 }
 
+/* File inputs stay mounted and tappable. display:none makes iOS Safari swallow the camera tap. */
+.driver-photo-fields {
+  position: relative;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.driver-photo-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 1rem;
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.driver-photo-trigger-primary {
+  min-height: 5rem;
+  font-size: 1.25rem;
+  background: var(--navy);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.driver-photo-trigger-secondary {
+  min-height: 3.5rem;
+  background: #fff;
+  color: #1e293b;
+  box-shadow: inset 0 0 0 1px #cbd5e1;
+}
+
+.driver-photo-trigger:has(input:focus-visible),
+.driver-photo-trigger:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.driver-photo-fields[data-tone="light"] .driver-photo-trigger:has(input:focus-visible),
+.driver-photo-fields[data-tone="light"] .driver-photo-trigger:focus-visible {
+  outline-color: var(--navy);
+}
+
+.driver-photo-trigger[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input.driver-photo-input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0.02;
+  overflow: visible;
+  clip: auto;
+  appearance: none;
+  background: transparent;
+  color: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+input.driver-photo-input.driver-photo-input-hold[type="file"] {
+  position: absolute;
+  inset: auto;
+  left: -10000px;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.driver-photo-trigger > span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.driver-photo-help,
+.driver-photo-chosen,
+.driver-photo-notice {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.driver-photo-help {
+  color: #cbd5e1;
+}
+
+.driver-photo-chosen {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.driver-photo-notice {
+  font-weight: 600;
+  color: #fecdd3;
+}
+
+.driver-photo-fields[data-tone="light"] .driver-photo-help,
+.driver-photo-fields[data-tone="light"] .driver-photo-chosen {
+  color: #334155;
+}
+
+.driver-photo-fields[data-tone="light"] .driver-photo-notice {
+  color: #9f1239;
+}
+
 .field input.deduction-active-check {
   width: 1.15rem;
   height: 1.15rem;
