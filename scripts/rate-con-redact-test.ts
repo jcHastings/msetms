@@ -105,30 +105,60 @@ async function pdfPageSize(buffer: Buffer): Promise<{ width: number; height: num
   }
 }
 
+function longestDarkRun(data: Uint8ClampedArray): number {
+  let run = 0;
+  let longest = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const dark = data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200;
+    run = dark ? run + 1 : 0;
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
+/** `$` sits on this side of the money span, so a stem here is a cut amount rather than the next word. */
+function moneyDollarSide(token: string | undefined, side: "left" | "right"): boolean {
+  if (!token) return true;
+  const dollar = token.indexOf("$");
+  if (dollar < 0) return true;
+  const onLeft = dollar <= token.length / 2;
+  return side === "left" ? onLeft : !onLeft;
+}
+
 async function assertClearBoxEdges(
   png: Buffer,
-  boxes: Array<{ left: number; top: number; w: number; h: number; kind: string }>,
+  boxes: Array<{ left: number; top: number; w: number; h: number; kind: string; token?: string }>,
 ): Promise<void> {
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const image = await loadImage(png);
   const canvas = createCanvas(image.width, image.height);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(image, 0, 0);
+  const stemAt = (x: number, y0: number, height: number): number => {
+    if (x < 0 || x >= image.width) return 0;
+    return longestDarkRun(ctx.getImageData(x, y0, 1, height).data);
+  };
   for (const box of boxes) {
     const y0 = Math.max(0, Math.floor(box.top + box.h * 0.28));
     const y1 = Math.min(image.height - 1, Math.ceil(box.top + box.h * 0.78));
     const height = Math.max(1, y1 - y0);
-    for (const x of [Math.floor(box.left) - 1, Math.ceil(box.left + box.w)]) {
-      if (x < 0 || x >= image.width) continue;
-      const data = ctx.getImageData(x, y0, 1, height).data;
-      let run = 0;
-      let longest = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const dark = data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200;
-        run = dark ? run + 1 : 0;
-        if (run > longest) longest = run;
+    const edges: Array<{ x: number; side: "left" | "right" }> = [
+      { x: Math.floor(box.left) - 1, side: "left" },
+      { x: Math.ceil(box.left + box.w), side: "right" },
+    ];
+    for (const edge of edges) {
+      const longest = stemAt(edge.x, y0, height);
+      if (longest < 4) continue;
+      // The side away from `$` can sit against the next letter. A stem that
+      // continues for another column is that letter; a stem with blank beside
+      // it is a cut glyph OCR will miss.
+      const strict = box.kind !== "money" || moneyDollarSide(box.token, edge.side);
+      if (!strict) {
+        const dir = edge.side === "left" ? -1 : 1;
+        if (stemAt(edge.x + dir, y0, height) >= 4 || stemAt(edge.x + dir * 2, y0, height) >= 4) continue;
       }
-      assert.ok(longest < 4, `${box.kind} ink touches a box edge at x=${x} (${longest} px stem)`);
+      const label = box.token ? `${box.kind} ${JSON.stringify(box.token)}` : box.kind;
+      assert.fail(`${label} ink touches a box edge at x=${edge.x} (${longest} px stem)`);
     }
   }
 }
