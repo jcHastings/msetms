@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import {
   CAMERA_ACCEPT,
   CAMERA_CAPTURE,
@@ -67,9 +67,7 @@ export function DriverPhotoFields({
   }, []);
 
   function armWatch(source: PhotoPickSource) {
-    if (disabled) return;
     pickedRef.current = false;
-    setNotice(null);
     watchStop.current?.();
     let left = false;
     let stopped = false;
@@ -81,6 +79,7 @@ export function DriverPhotoFields({
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("focusin", onFocusIn);
     };
     const report = () => {
       window.clearTimeout(timer);
@@ -101,10 +100,23 @@ export function DriverPhotoFields({
     const onFocus = () => {
       if (left) report();
     };
+    const onFocusIn = () => {
+      if (left) report();
+    };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
+    document.addEventListener("focusin", onFocusIn);
     watchStop.current = stop;
+  }
+
+  function onLabelClick(source: PhotoPickSource, event: MouseEvent<HTMLLabelElement>) {
+    if (disabled) {
+      event.preventDefault();
+      return;
+    }
+    // No setState here. A re-render in this turn can replace the input before WebKit opens it.
+    armWatch(source);
   }
 
   function onChange(source: PhotoPickSource) {
@@ -149,8 +161,7 @@ export function DriverPhotoFields({
 
   return (
     <div className="driver-photo-fields" data-driver-photo-entry={entry} data-tone={tone}>
-      <label htmlFor={cameraId} className={cameraClass} aria-disabled={disabled || undefined}>
-        <span>{cameraLabel}</span>
+      <div className="driver-photo-choice">
         <input
           ref={cameraRef}
           id={cameraId}
@@ -162,12 +173,18 @@ export function DriverPhotoFields({
           name={submitName && namedSource === "camera" ? submitName : undefined}
           disabled={disabled}
           aria-describedby={describedBy}
-          onClick={() => armWatch("camera")}
           onChange={onChange("camera")}
         />
-      </label>
-      <label htmlFor={galleryId} className="driver-photo-trigger driver-photo-trigger-secondary" aria-disabled={disabled || undefined}>
-        <span>{galleryLabel}</span>
+        <label
+          htmlFor={cameraId}
+          className={cameraClass}
+          aria-disabled={disabled || undefined}
+          onClick={(event) => onLabelClick("camera", event)}
+        >
+          <span>{cameraLabel}</span>
+        </label>
+      </div>
+      <div className="driver-photo-choice">
         <input
           ref={galleryRef}
           id={galleryId}
@@ -178,10 +195,17 @@ export function DriverPhotoFields({
           name={submitName && namedSource === "gallery" ? submitName : undefined}
           disabled={disabled}
           aria-describedby={describedBy}
-          onClick={() => armWatch("gallery")}
           onChange={onChange("gallery")}
         />
-      </label>
+        <label
+          htmlFor={galleryId}
+          className="driver-photo-trigger driver-photo-trigger-secondary"
+          aria-disabled={disabled || undefined}
+          onClick={(event) => onLabelClick("gallery", event)}
+        >
+          <span>{galleryLabel}</span>
+        </label>
+      </div>
       {submitName ? (
         <input
           data-photo-role="submit"
