@@ -60,6 +60,11 @@ async function main(): Promise<void> {
   assert.equal(shared.ITS_ALL_LOADS_HEADERS[0], "Load #");
   assert.equal(shared.ITS_ALL_LOADS_HEADERS[22], "Carrier/Driver");
   assert.equal(shared.ITS_ALL_LOADS_HEADERS[25], "Total Billing Rate");
+  for (const bad of [0, "$0.00", "0.00", 1234.567, "1e3", "0x10", "-", "abc"]) {
+    assert.equal(status.parseBillingRate(bad), null);
+  }
+  assert.equal(status.parseBillingRate("1,850.50"), 1850.5);
+  assert.equal(status.parseBillingRate(1850.5), 1850.5);
   assert.equal(shared.ITS_ALL_LOADS_HEADERS[27], "Equipment Type");
   assert.equal(status.lookupItsStatus("On Route"), "in_transit");
   assert.equal(status.lookupItsStatus("Invoiced Paid"), "completed");
@@ -466,6 +471,37 @@ async function main(): Promise<void> {
   );
   assert.equal(noRate.added, 1);
   assert.equal(loadField("1008303", "rate"), null);
+  const rejectedRates: Array<[string, string]> = [
+    ["1008310", "0"],
+    ["1008311", "$0.00"],
+    ["1008312", "0.00"],
+    ["1008313", "1234.567"],
+    ["1008314", "1e3"],
+    ["1008315", "0x10"],
+    ["1008316", "-"],
+    ["1008317", "abc"],
+  ];
+  const rejected = its.importItsRecords(
+    sheet(rejectedRates.map(([loadNumber, raw]) => loadRow({ "Load #": loadNumber, Status: "Invoiced", "Total Billing Rate": raw }))),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(rejected.added, rejectedRates.length);
+  assert.equal(rejected.rate_filled, 0);
+  for (const [loadNumber] of rejectedRates) assert.equal(loadField(loadNumber, "rate"), null);
+  officeLoad({ loadNumber: "1008318", status: "delivered", rate: 0, updatedAt: "2026-08-01T00:00:00.000Z" });
+  officeLoad({ loadNumber: "1008319", status: "delivered", rate: null, updatedAt: "2026-08-01T00:00:00.000Z" });
+  db.prepare("UPDATE loads SET rate = 'abc' WHERE load_number = '1008319'").run();
+  const keepStoredRate = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1008318", Status: "Invoiced", "Total Billing Rate": "1,850.50" }),
+      loadRow({ "Load #": "1008319", Status: "Invoiced", "Total Billing Rate": "1,850.50" }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1008318", "rate"), 0);
+  assert.equal(loadField("1008319", "rate"), "abc");
+  assert.equal(keepStoredRate.rate_filled, 0);
+  assert.equal(keepStoredRate.diff_sample.some((diff) => diff.field === "rate"), false);
 
   const beforeInactive = counts();
   const inactiveOff = its.importItsRecords(

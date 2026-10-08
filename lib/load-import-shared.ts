@@ -247,12 +247,31 @@ export function mapImportedLoadStatus(value: string): LoadStatus {
   return lookupItsStatus(value) ?? "available";
 }
 
+const GROUPED_MONEY = /^\$?\d{1,3}(,\d{3})*(\.\d{1,2})?$/;
+const PLAIN_MONEY = /^\$?\d+(\.\d{1,2})?$/;
+
+function atMostTwoDecimalPlaces(amount: number): boolean {
+  const rendered = String(amount);
+  const scientific = rendered.match(/^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  if (scientific) {
+    const digits = `${scientific[2]}${scientific[3] ?? ""}`;
+    return digits.length - 1 - Number(scientific[4]) <= 2;
+  }
+  const dot = rendered.indexOf(".");
+  return dot === -1 || rendered.length - dot - 1 <= 2;
+}
+
 export function parseBillingRate(value: unknown): number | null {
-  const text = asImportText(value).replace(/[$,]/g, "").trim();
-  if (!text) return null;
-  const amount = Number(text);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-  return Math.round(amount * 100) / 100;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0 || !atMostTwoDecimalPlaces(value)) return null;
+    return value;
+  }
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!GROUPED_MONEY.test(text) && !PLAIN_MONEY.test(text)) return null;
+  const amount = Number(text.replace(/[$,]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return amount;
 }
 
 /**
