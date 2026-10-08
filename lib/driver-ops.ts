@@ -14,6 +14,7 @@ import {
   type DriverWithTruck,
   type LoadView,
 } from "./types";
+import { readPodDeliveryFields, recordPodDelivery, type PodDeliveryOutcome, type PodDeliveryReason } from "./pod-delivery";
 import { applyWorkflowAfterGeofence } from "./workflow";
 
 export type DriverOpsKind = "not_found" | "forbidden" | "conflict" | "validation";
@@ -48,11 +49,27 @@ export function requireAssignedLoad(
   return load;
 }
 
+export type DriverPodDeliveryInput = {
+  outcome: PodDeliveryOutcome;
+  reason: PodDeliveryReason | "";
+  note: string;
+};
+
+export function podDeliveryFromForm(formData: FormData): DriverPodDeliveryInput | null {
+  return readPodDeliveryFields(formData);
+}
+
+function rememberDeliveredPod(loadId: number, progress: string, pod: DriverPodDeliveryInput | null | undefined): void {
+  if (progress !== "delivered" || !pod) return;
+  recordPodDelivery(loadId, pod);
+}
+
 export function performDriverStopCheck(input: {
   driver: DriverWithTruck;
   loadId: number;
   stopId: number;
   kind: string;
+  pod?: DriverPodDeliveryInput | null;
 }): { loadId: number } {
   if (!isStopCheckKind(input.kind)) {
     throw new DriverOpsError("conflict", "Pick Check In or Check Out.");
@@ -70,9 +87,11 @@ export function performDriverStopCheck(input: {
   if (input.kind === "depart" && !stop.arrived_at.trim()) {
     throw new DriverOpsError("conflict", "Check in first.");
   }
+  const progress = progressForStopEvent(input.kind, stop.kind);
   stampStopTime(input.stopId, input.kind === "arrive" ? "arrived_at" : "departed_at", new Date().toISOString());
   applyWorkflowAfterGeofence(input.loadId);
-  updateDriverProgress(input.loadId, input.driver.id, progressForStopEvent(input.kind, stop.kind));
+  updateDriverProgress(input.loadId, input.driver.id, progress);
+  rememberDeliveredPod(input.loadId, progress, input.pod);
   return { loadId: input.loadId };
 }
 
@@ -80,12 +99,14 @@ export async function performDriverProgress(input: {
   driver: DriverWithTruck;
   loadId: number;
   progress: string;
+  pod?: DriverPodDeliveryInput | null;
 }): Promise<{ loadId: number }> {
   if (!isDriverProgress(input.progress)) {
     throw new DriverOpsError("conflict", "Pick a status.");
   }
   requireAssignedLoad(input.loadId, input.driver.id);
   updateDriverProgress(input.loadId, input.driver.id, input.progress);
+  rememberDeliveredPod(input.loadId, input.progress, input.pod);
   if (input.progress === "delivered") {
     const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
     await maybeAutoInvoiceLoad(input.loadId);
@@ -127,6 +148,7 @@ export async function performDriverUpload(input: {
     uploadedBy: "driver",
   });
   if (kind === "pod") {
+    recordPodDelivery(input.loadId, { outcome: "photo", reason: "", note: "" });
     const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
     await maybeAutoInvoiceLoad(input.loadId);
   }

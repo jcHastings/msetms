@@ -8,7 +8,9 @@ import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login
 import { authenticateDriverByEmail } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
 import { isDriverUploadKind } from "./driver-docs";
-import { performDriverProgress, performDriverStopCheck, performDriverUpload } from "./driver-ops";
+import { acknowledgeDispatch } from "./dispatch-ack";
+import { submitDriverReimbursement } from "./reimbursements";
+import { performDriverProgress, performDriverStopCheck, performDriverUpload, podDeliveryFromForm } from "./driver-ops";
 import { type ActionResult } from "./types";
 
 function refresh(): void {
@@ -64,7 +66,7 @@ export async function driverStopCheckAction(formData: FormData): Promise<ActionR
       const stopId = parseOptionalInt(formData.get("stop_id"));
       const kind = String(formData.get("kind") ?? "");
       if (!loadId || !stopId) throw new Error("Stop is missing.");
-      performDriverStopCheck({ driver, loadId, stopId, kind });
+      performDriverStopCheck({ driver, loadId, stopId, kind, pod: podDeliveryFromForm(formData) });
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -80,7 +82,7 @@ export async function driverProgressAction(formData: FormData): Promise<ActionRe
       const loadId = parseOptionalInt(formData.get("load_id"));
       const progress = String(formData.get("progress") ?? "");
       if (!loadId) throw new Error("Load is missing.");
-      await performDriverProgress({ driver, loadId, progress });
+      await performDriverProgress({ driver, loadId, progress, pod: podDeliveryFromForm(formData) });
       refresh();
       return { ok: true, id: loadId };
     } catch (error) {
@@ -144,6 +146,8 @@ export async function driverClassifyAction(formData: FormData): Promise<ActionRe
       }
       updateAttachmentKind(attachmentId, kind);
       if (kind === "pod") {
+        const { recordPodDelivery } = await import("./pod-delivery");
+        recordPodDelivery(load.id, { outcome: "photo", reason: "", note: "" });
         const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
         await maybeAutoInvoiceLoad(load.id);
       }
@@ -230,6 +234,52 @@ export async function driverMatchFuelReceiptAction(
       revalidatePath("/driver/fuel");
       refresh();
       return { ok: true, id: receiptId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function driverAcknowledgeDispatchAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const loadId = parseOptionalInt(formData?.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      acknowledgeDispatch(loadId, { id: driver.id, name: driver.name });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+export async function submitReimbursementAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const file = formData.get("receipt");
+      if (!(file instanceof File)) throw new Error("A receipt photo is required.");
+      const id = await submitDriverReimbursement({
+        driverId: driver.id,
+        driverName: driver.name,
+        amount: formData.get("amount"),
+        category: formData.get("category"),
+        loadId: parseOptionalInt(formData.get("load_id")),
+        note: formData.get("note"),
+        file,
+      });
+      revalidatePath("/driver/reimbursements");
+      revalidatePath("/accounting/reimbursements");
+      refresh();
+      return { ok: true, id, message: "Submitted. Check My reimbursements for the status. Nothing was texted or emailed." };
     } catch (error) {
       return fail(error);
     }

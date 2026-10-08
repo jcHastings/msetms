@@ -28,11 +28,11 @@ export function CompanyProfileForm({
       </div>
       <div className="field">
         <label htmlFor="usdot">USDOT</label>
-        <input id="usdot" name="usdot" defaultValue={profile.usdot ?? ""} autoComplete="off" />
+        <input id="usdot" name="usdot" defaultValue={profile.usdot ?? ""} maxLength={32} autoComplete="off" />
       </div>
       <div className="field">
         <label htmlFor="mc">MC</label>
-        <input id="mc" name="mc" defaultValue={profile.mc ?? ""} autoComplete="off" />
+        <input id="mc" name="mc" defaultValue={profile.mc ?? ""} maxLength={32} autoComplete="off" />
       </div>
       <div className="field">
         <label htmlFor="dispatcher_name">Dispatcher</label>
@@ -89,6 +89,9 @@ export function CompanyProfileForm({
         <label htmlFor="zip">ZIP</label>
         <input id="zip" name="zip" defaultValue={profile.zip} />
       </div>
+      <p className="md:col-span-2 text-sm text-slate-600">
+        USDOT and MC print on invoices and settlement statements. They come from this company profile.
+      </p>
     </SettingsForm>
   );
 }

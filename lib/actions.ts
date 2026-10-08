@@ -517,8 +517,11 @@ export async function createLoadAction(
       maybeAssignCreatingDispatcher(id, actor.id);
       if (input.driver_id) applyWorkflowOnDriverAssign(id);
       if (inboxId) {
-        const { attachInboxToLoad } = await import("./files");
+        const { attachInboxToLoad, readInboxParse } = await import("./files");
+        const { captureRateConAmount } = await import("./pod-delivery");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
+        if (parsed) captureRateConAmount(id, parsed.rate ?? null);
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
@@ -576,8 +579,11 @@ export async function updateLoadAction(
       }
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
-        const { attachInboxToLoad } = await import("./files");
+        const { attachInboxToLoad, readInboxParse } = await import("./files");
+        const { captureRateConAmount } = await import("./pod-delivery");
         attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
+        const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
+        if (parsed) captureRateConAmount(id, parsed.rate ?? null);
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);

@@ -1,6 +1,8 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
+import { dispatchAckRules, shouldFlagMissingDispatchAck, type DispatchAckRules } from "./dispatch-ack";
 import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
+import { missingPodAlert } from "./pod-delivery";
 import { coordsForStop, stillInsideGeofenceAt } from "./geofence";
 import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
@@ -38,6 +40,7 @@ export const EXCEPTION_KINDS = [
   "compliance",
   "unassigned",
   "samsara",
+  "dispatch_ack",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -130,6 +133,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   compliance: 7,
   unassigned: 8,
   samsara: 9,
+  dispatch_ack: 10,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -346,6 +350,7 @@ export function groupInboxExceptions(items: InboxException[]): InboxExceptionGro
 
 export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | "title">): string {
   if (item.kind === "samsara") return "Samsara";
+  if (item.kind === "dispatch_ack") return "No ack";
   if (item.kind === "detention") return "Detention";
   if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
   if (item.severity === "CRITICAL") return "Critical";
@@ -639,6 +644,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   const readings = latestReadingByLoad();
   const rateCons = loadIdsWithRateCon();
   const quietHours = getCompanySettings().alert_gps_quiet_hours || 2;
+  const ackRules = dispatchAckRules(now);
   const items: InboxException[] = [];
   const samsaraByLoad = new Map<number, ReturnType<typeof listSamsaraInboxFlags>>();
   for (const flag of listSamsaraInboxFlags()) {
@@ -655,22 +661,16 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     items.push(...gpsQuietExceptions(load, now, quietHours, ctx));
     items.push(...complianceExceptions(load, ctx));
     items.push(...unassignedExceptions(load, now));
+    items.push(...dispatchAckExceptions(load, ackRules));
     items.push(...detentionExceptions(load, now, ctx));
     items.push(...missingContactExceptions(load, rateCons.has(load.id)));
     items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
   }
 
   for (const load of delivered) {
-    if (!pods.has(load.id)) {
-      items.push(
-        withLoad(
-          load,
-          "missing_pod",
-          "HIGH",
-          "Missing POD",
-          `${load.customer_name} — delivered, no proof of delivery on file.`,
-        ),
-      );
+    const podAlert = missingPodAlert(load, pods.has(load.id));
+    if (podAlert.show) {
+      items.push(withLoad(load, "missing_pod", podAlert.severity, podAlert.title, podAlert.detail));
       continue;
     }
     if (
@@ -730,7 +730,25 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "Rate-con phone";
     case "samsara":
       return "Samsara";
+    case "dispatch_ack":
+      return "No ack";
   }
+}
+
+function dispatchAckExceptions(load: LoadView, rules: DispatchAckRules): InboxException[] {
+  if (!shouldFlagMissingDispatchAck(load, rules)) return [];
+  const pickup = new Date(load.pickup_start).getTime();
+  const hoursUntil = (pickup - rules.now.getTime()) / 3_600_000;
+  const who = (load.driver_name ?? "").trim() || "Driver";
+  return [
+    withLoad(
+      load,
+      "dispatch_ack",
+      hoursUntil <= 2 ? "HIGH" : "MEDIUM",
+      "No driver ack",
+      `${who} has not tapped Got it. Pickup ${formatDateTime(load.pickup_start)}. Desk flag only — no text or email.`,
+    ),
+  ];
 }
 
 function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSamsaraInboxFlags>): InboxException[] {

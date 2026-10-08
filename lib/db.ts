@@ -762,8 +762,20 @@ export function migrate(db: Database): void {
     ["ar_email", "TEXT NOT NULL DEFAULT ''"],
     ["usdot", "TEXT NOT NULL DEFAULT '3062879'"],
     ["mc", "TEXT NOT NULL DEFAULT '056299'"],
+    ["dispatch_ack_hours", "REAL NOT NULL DEFAULT 12"],
+    ["dispatch_ack_introduced_at", "TEXT NOT NULL DEFAULT ''"],
   ] as const) {
     ensureColumn(db, "company_profile", column, definition);
+  }
+  ensureColumn(db, "loads", "dispatch_ack_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "dispatch_ack_by", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "dispatch_ack_driver_id", "INTEGER");
+  ensureColumn(db, "loads", "dispatch_ack_fingerprint", "TEXT NOT NULL DEFAULT ''");
+  const ackIntroduced = db
+    .prepare("SELECT dispatch_ack_introduced_at AS at FROM company_profile WHERE id = 1")
+    .get() as { at?: string } | undefined;
+  if (ackIntroduced && !String(ackIntroduced.at ?? "").trim()) {
+    db.prepare("UPDATE company_profile SET dispatch_ack_introduced_at = ? WHERE id = 1").run(new Date().toISOString());
   }
 
   ensureColumn(db, "bills", "qbo_bill_id", "TEXT NOT NULL DEFAULT ''");
@@ -938,6 +950,11 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "samsara_route_eta", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "samsara_route_note", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "samsara_route_synced_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_outcome", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_reason_note", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pod_recorded_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "rate_con_amount", "REAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS samsara_route_feed (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -1199,7 +1216,162 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_loads_truck ON loads(truck_id);
     CREATE INDEX IF NOT EXISTS idx_loads_driver ON loads(driver_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_kind_load ON attachments(kind, load_id);
+
+    CREATE TABLE IF NOT EXISTS deduction_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      basis TEXT NOT NULL,
+      applies_to TEXT NOT NULL,
+      driver_id INTEGER,
+      active INTEGER NOT NULL DEFAULT 0,
+      example INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS settlement_one_offs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_settlement_one_offs_week
+      ON settlement_one_offs(driver_id, week_start);
+
+    CREATE TABLE IF NOT EXISTS settlement_statements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      week_start TEXT NOT NULL,
+      week_end TEXT NOT NULL,
+      paid_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      UNIQUE(driver_id, week_start)
+    );
+
+    CREATE TABLE IF NOT EXISTS driver_reimbursements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      category TEXT NOT NULL,
+      load_id INTEGER,
+      note TEXT NOT NULL DEFAULT '',
+      attachment_id INTEGER,
+      stored_name TEXT NOT NULL DEFAULT '',
+      original_name TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'submitted',
+      reject_reason TEXT NOT NULL DEFAULT '',
+      settlement_week_start TEXT NOT NULL DEFAULT '',
+      paid_at TEXT NOT NULL DEFAULT '',
+      reviewed_at TEXT NOT NULL DEFAULT '',
+      reviewed_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reimburse_driver ON driver_reimbursements(driver_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_reimburse_status ON driver_reimbursements(status, id);
+    CREATE INDEX IF NOT EXISTS idx_reimburse_week ON driver_reimbursements(driver_id, settlement_week_start);
   `);
+  seedExampleDeductionTemplates(db);
+
+  db.exec(`
+    -- Unused tables from the earlier API draft. Paystub upload does not read them.
+    CREATE TABLE IF NOT EXISTS gusto_connection (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      company_uuid TEXT NOT NULL DEFAULT '',
+      company_name TEXT NOT NULL DEFAULT '',
+      access_token TEXT NOT NULL DEFAULT '',
+      refresh_token TEXT NOT NULL DEFAULT '',
+      access_token_expires_at TEXT NOT NULL DEFAULT '',
+      granted_scope TEXT NOT NULL DEFAULT '',
+      connected_at TEXT NOT NULL DEFAULT '',
+      last_sync_at TEXT NOT NULL DEFAULT '',
+      last_sync_error TEXT NOT NULL DEFAULT '',
+      last_sync_summary TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS gusto_people (
+      gusto_uuid TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      match_names TEXT NOT NULL DEFAULT '[]',
+      active INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gusto_driver_links (
+      driver_id INTEGER PRIMARY KEY REFERENCES drivers(id) ON DELETE CASCADE,
+      gusto_uuid TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      match_source TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gusto_pay_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      gusto_external_id TEXT NOT NULL,
+      gusto_person_uuid TEXT NOT NULL DEFAULT '',
+      pay_period_start TEXT NOT NULL DEFAULT '',
+      pay_period_end TEXT NOT NULL DEFAULT '',
+      check_date TEXT NOT NULL DEFAULT '',
+      gross_pay TEXT NOT NULL DEFAULT '',
+      net_pay TEXT NOT NULL DEFAULT '',
+      synced_at TEXT NOT NULL,
+      UNIQUE (driver_id, source, gusto_external_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gusto_pay_lines_driver
+      ON gusto_pay_lines(driver_id, check_date DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS paystub_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uploaded_by TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      summary_original_name TEXT NOT NULL DEFAULT '',
+      summary_stored_name TEXT NOT NULL DEFAULT '',
+      summary_sha256 TEXT NOT NULL DEFAULT '',
+      summary_mime TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS paystubs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER,
+      driver_id INTEGER,
+      suggested_driver_id INTEGER,
+      status TEXT NOT NULL,
+      match_state TEXT NOT NULL DEFAULT '',
+      employee_name TEXT NOT NULL DEFAULT '',
+      pay_date TEXT NOT NULL DEFAULT '',
+      period_start TEXT NOT NULL DEFAULT '',
+      period_end TEXT NOT NULL DEFAULT '',
+      gross TEXT NOT NULL DEFAULT '',
+      net TEXT NOT NULL DEFAULT '',
+      original_name TEXT NOT NULL DEFAULT '',
+      stored_name TEXT NOT NULL DEFAULT '',
+      sha256 TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+      review_reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_paystubs_sha256 ON paystubs(sha256);
+    CREATE INDEX IF NOT EXISTS idx_paystubs_driver_date ON paystubs(driver_id, pay_date, status);
+    CREATE INDEX IF NOT EXISTS idx_paystubs_status ON paystubs(status, id);
+  `);
+}
+
+function seedExampleDeductionTemplates(db: Database): void {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM deduction_templates").get() as { count: number };
+  if (count.count > 0) return;
+  const insert = db.prepare(
+    `INSERT INTO deduction_templates (
+      name, amount, basis, applies_to, driver_id, active, example, created_at
+    ) VALUES (?, ?, ?, ?, NULL, 0, 1, ?)`,
+  );
+  const now = new Date().toISOString();
+  insert.run("Example: Fuel advance", 100, "fixed", "company_driver", now);
+  insert.run("Example: Escrow", 50, "per_load", "owner_operator", now);
+  insert.run("Example: ELD / insurance chargeback", 35, "fixed", "company_driver", now);
 }
 
 /** Office cutover copy of fuel_receipts before orphan receipts (NOT NULL load_id, no status). */

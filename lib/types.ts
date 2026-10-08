@@ -462,6 +462,12 @@ export type Load = {
   weight: number | null;
   commodity: string;
   rate: number | null;
+  /** Rate printed on the rate con. Null until a rate con is applied. */
+  rate_con_amount: number | null;
+  pod_outcome: string;
+  pod_reason: string;
+  pod_reason_note: string;
+  pod_recorded_at: string;
   notes: string;
   special_instructions: string;
   appointment_notes: string;
@@ -555,6 +561,10 @@ export type Load = {
   samsara_route_synced_at: string;
   non_revenue: number;
   bol_json: string;
+  dispatch_ack_at: string;
+  dispatch_ack_by: string;
+  dispatch_ack_driver_id: number | null;
+  dispatch_ack_fingerprint: string;
   created_at: string;
   updated_at: string;
 };
