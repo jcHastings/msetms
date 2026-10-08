@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { DriverPhotoFields } from "@/components/driver-photo-fields";
 import { FormBanner } from "@/components/form-banner";
 import { submitReimbursementAction } from "@/lib/driver-actions";
 import { REIMBURSEMENT_CATEGORIES } from "@/lib/reimbursement-shared";
@@ -11,23 +12,41 @@ export function ReimbursementForm({
   loads: Array<{ id: number; label: string }>;
 }) {
   const [state, action, pending] = useActionState(submitReimbursementAction, null);
+  const [formError, setFormError] = useState<string | null>(null);
   const errorId = "reimbursement-error";
   return (
-    <form action={action} className="driver-reimburse driver-sheet mt-4 rounded-2xl bg-white p-4 shadow-sm" aria-describedby={state && !state.ok ? errorId : undefined}>
+    <form
+      action={action}
+      className="driver-reimburse driver-sheet mt-4 rounded-2xl bg-white p-4 shadow-sm"
+      aria-describedby={state && !state.ok ? errorId : undefined}
+      onSubmit={(event) => {
+        const file = new FormData(event.currentTarget).get("receipt");
+        if (!(file instanceof File) || file.size === 0) {
+          event.preventDefault();
+          setFormError("A receipt photo is required. Tap Take photo or Choose from photos.");
+        }
+      }}
+    >
       <FormBanner result={state} />
       {state && !state.ok ? <span id={errorId} className="sr-only">{state.error}</span> : null}
-      <div className="field">
-        <label htmlFor="receipt">Receipt photo</label>
-        <input
-          id="receipt"
-          name="receipt"
-          type="file"
-          accept="image/*,application/pdf"
-          capture="environment"
-          required
-          className="hit-target"
-        />
-        <p className="mt-1 text-sm text-slate-600">Required. Photo or PDF.</p>
+      <div>
+        <p className="text-sm font-semibold text-slate-700">Receipt photo</p>
+        <div className="mt-2">
+          <DriverPhotoFields
+            entry="reimbursement"
+            tone="light"
+            cameraLabel="Take photo"
+            onPick={() => setFormError(null)}
+            disabled={pending}
+            submitName="receipt"
+          />
+        </div>
+        <p className="mt-2 text-sm text-slate-600">Required. Photo or PDF.</p>
+        {formError ? (
+          <p className="mt-2 text-sm text-rose-700" role="alert">
+            {formError}
+          </p>
+        ) : null}
       </div>
       <div className="field">
         <label htmlFor="amount">Amount</label>
