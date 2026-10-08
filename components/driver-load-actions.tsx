@@ -43,11 +43,12 @@ export function DriverLoadActions({
   const [otherOpen, setOtherOpen] = useState(false);
   const [note, setNote] = useState("");
   const [podOnFile, setPodOnFile] = useState(hasPod);
-  const buttons = driverStopButtons(stops);
-
-  useEffect(() => {
+  const [podFromServer, setPodFromServer] = useState(hasPod);
+  if (hasPod !== podFromServer) {
+    setPodFromServer(hasPod);
     setPodOnFile(hasPod);
-  }, [hasPod]);
+  }
+  const buttons = driverStopButtons(stops);
 
   useEffect(() => {
     if (!podStop) return;
