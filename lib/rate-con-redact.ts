@@ -46,6 +46,12 @@ type PdfTextItem = {
   fontName: string;
   /** User-space advance of each UTF-16 unit. Null when the operator list could not be aligned. */
   advances?: number[] | null;
+  /**
+   * Unicode-keyed advances, only when that table actually sums to the item.
+   * Subset fonts fail this check. A standard font can sit a fraction of a point
+   * to the right of the operator-list edge; the paint uses the wider of the two.
+   */
+  altAdvances?: number[] | null;
 };
 
 type TextStyle = { fontFamily?: string };
@@ -323,6 +329,7 @@ function glyphRun(glyphs: unknown[], state: TextDrawState): { text: string; adva
   let text = "";
   const advances: number[] = [];
   let pending = 0;
+  // A TJ number adjusts x before the next glyph, so it belongs to the gap after the previous one.
   const kernOf = (value: number) => (-value * state.fontSize) / 1000 * state.hScale;
   const widthOf = (glyph: GlyphPiece) => {
     const width = typeof glyph.width === "number" ? glyph.width : 0;
@@ -331,7 +338,9 @@ function glyphRun(glyphs: unknown[], state: TextDrawState): { text: string; adva
   };
   for (const entry of glyphs) {
     if (typeof entry === "number") {
-      pending += kernOf(entry);
+      const kern = kernOf(entry);
+      if (advances.length) advances[advances.length - 1] += kern;
+      else pending += kern;
       continue;
     }
     if (!entry || typeof entry !== "object") return null;
@@ -355,7 +364,10 @@ function glyphRun(glyphs: unknown[], state: TextDrawState): { text: string; adva
 
 /** Per-glyph advances from showText / showSpacedText. Widths are the font's char codes, not Unicode. */
 async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise<void> {
-  for (const item of items) item.advances = null;
+  for (const item of items) {
+    item.advances = null;
+    item.altAdvances = null;
+  }
   let list: PdfOperatorList;
   try {
     list = await page.getOperatorList({ intent: "display" });
@@ -421,12 +433,47 @@ async function attachGlyphAdvances(page: PdfPage, items: PdfTextItem[]): Promise
       const total = run.advances.reduce((sum, width) => sum + width, 0);
       if (!(item.width > 0) || Math.abs(total - item.width) / item.width > 0.03) break;
       item.advances = run.advances;
+      item.altAdvances = unicodeAdvances(page, item);
       cursor = index + 1;
       matched = true;
       break;
     }
-    if (!matched) item.advances = null;
+    if (!matched) {
+      item.advances = null;
+      item.altAdvances = null;
+    }
   }
+}
+
+/** Unicode widths, when every character has one and the sum matches the item. */
+function unicodeAdvances(page: PdfPage, item: PdfTextItem): number[] | null {
+  if (!page.commonObjs || !(item.width > 0) || !item.str) return null;
+  let widths: { get?: (key: number) => unknown } & Record<number, unknown> | null = null;
+  let matrix0 = 0.001;
+  for (const [id, data] of page.commonObjs) {
+    if (id !== item.fontName || !data || typeof data !== "object" || !("widths" in data)) continue;
+    const row = data as { widths?: unknown; fontMatrix?: number[] };
+    if (!row.widths || (typeof row.widths !== "object" && !(row.widths instanceof Map))) return null;
+    widths = row.widths as { get?: (key: number) => unknown } & Record<number, unknown>;
+    const scale = row.fontMatrix?.[0];
+    if (typeof scale === "number" && scale > 0) matrix0 = scale;
+  }
+  if (!widths) return null;
+  const fontSize = Math.max(1, Math.hypot(item.transform[2] || 0, item.transform[3] || 0) || item.height || 12);
+  const advances: number[] = [];
+  for (let index = 0; index < item.str.length; ) {
+    const code = item.str.codePointAt(index) ?? 0;
+    const units = code > 0xffff ? 2 : 1;
+    const raw = widths instanceof Map ? widths.get(code) : widths[code];
+    if (typeof raw !== "number" || !(raw > 0)) return null;
+    advances.push(raw * fontSize * matrix0);
+    if (units === 2) advances.push(0);
+    index += units;
+  }
+  if (advances.length !== item.str.length) return null;
+  const total = advances.reduce((sum, width) => sum + width, 0);
+  if (Math.abs(total - item.width) / item.width > 0.03) return null;
+  return advances;
 }
 
 function stepCodeUnit(text: string, index: number, direction: -1 | 1): number {
@@ -488,8 +535,16 @@ function widthFractions(
   const slopLeft = prev != null && /\s/.test(prev) ? 0.4 : 0;
   const slopRight = next != null && /\s/.test(next) ? 0.4 : 0;
   if (advanceOk && advances) {
-    const left = prefixAdvance(advances, localFrom) / advanceTotal;
-    const right = prefixAdvance(advances, localTo) / advanceTotal;
+    let left = prefixAdvance(advances, localFrom) / advanceTotal;
+    let right = prefixAdvance(advances, localTo) / advanceTotal;
+    const alt = item.altAdvances;
+    if (alt && alt.length === full.length) {
+      const altTotal = prefixAdvance(alt, alt.length);
+      if (altTotal > 0) {
+        left = Math.min(left, prefixAdvance(alt, localFrom) / altTotal);
+        right = Math.max(right, prefixAdvance(alt, localTo) / altTotal);
+      }
+    }
     return [Math.max(0, Math.min(1, left)), Math.max(left, Math.min(1, right)), slopLeft, slopRight];
   }
   const size = Math.max(8, Math.hypot(item.transform[2] || 0, item.transform[3] || 0) || item.height || 12);
