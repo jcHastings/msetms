@@ -11,7 +11,7 @@ import { lastSentMail, recordSentMail } from "./mail-store";
 import { getCompanyProfile } from "./company";
 import { fillInvoiceEmailBody } from "./invoice-email-shared";
 import { isInvoiceMailCustomerDoc } from "./load-documents-shared";
-import { assertInvoiceIssuerReady, MS_EXPRESS_CARRIER } from "./carrier-identity";
+import { assertInvoiceIssuerReady, MS_EXPRESS_CARRIER, MS_EXPRESS_LEGAL_NAME } from "./carrier-identity";
 import { getCompanySettings, getInvoiceEmailBody } from "./settings";
 import {
   invoiceFromAddress,
@@ -200,7 +200,7 @@ export function composeDriverLoadEmail(input: {
     "",
     mailNoReplyLine(input.officePhone, locale),
     "",
-    "M & S Loads LLC · MS Express TMS",
+    MS_EXPRESS_LEGAL_NAME,
   ].filter((line, index, all) => line !== "" || all[index - 1] !== "");
   return {
     to: "",
@@ -298,7 +298,7 @@ export function composeCustomerUpdateEmail(input: {
       ? ["Deliveries", ...deliveries.map((stop, index) => `${index + 1}. ${stopLine(stop)}`)].join("\n")
       : "",
     mailNoReplyLine(input.officePhone),
-    "M & S Loads LLC · MS Express TMS",
+    MS_EXPRESS_LEGAL_NAME,
   ].filter(Boolean);
   return {
     to: "",
@@ -592,11 +592,7 @@ export async function sendCustomerInvoiceMail(
   const load = getLoad(loadId);
   if (!load) throw new Error("Load not found.");
   const profile = getCompanySettings();
-  assertInvoiceIssuerReady({
-    company_name: profile.company_name,
-    street: profile.street,
-    ar_email: profile.ar_email,
-  });
+  assertInvoiceIssuerReady(profile);
   const to = invoiceMailTo(load, options.to);
   if (!isUsableEmail(to)) throw new Error("Enter an email to send this invoice.");
   const extras = mailFilesForLoadDocs(loadId, options.extraIds ?? []);

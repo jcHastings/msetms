@@ -1,3 +1,5 @@
+import { MS_EXPRESS_LEGAL_NAME } from "./carrier-identity";
+
 export const BOL_FREIGHT_CHARGES = ["Prepaid", "Collect", "3rd Party"] as const;
 export type BolFreightCharges = (typeof BOL_FREIGHT_CHARGES)[number];
 
@@ -9,7 +11,7 @@ export type BolHm = (typeof BOL_HM_OPTIONS)[number];
 
 export const BOL_REEFER_MODES = ["Continuous", "Start/Stop"] as const;
 
-export const BOL_PAPERWORK_NAME = "M & S Loads LLC - MS Express";
+export const BOL_PAPERWORK_NAME = MS_EXPRESS_LEGAL_NAME;
 export const BOL_THIRD_PARTY_OPTIONS = ["", BOL_PAPERWORK_NAME] as const;
 
 export type BolItemDraft = {

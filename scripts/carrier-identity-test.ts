@@ -18,6 +18,7 @@ async function main() {
   const settings = await import("../lib/settings");
   const queries = await import("../lib/queries");
   const { buildTmsInvoice, paperworkCompanyName, renderTmsInvoicePdf } = await import("../lib/invoice");
+  const identity = await import("../lib/carrier-identity");
   const loadMail = await import("../lib/load-mail");
   const { extractText } = await import("unpdf");
 
@@ -33,7 +34,16 @@ async function main() {
   assert.equal(fresh.mc, "056299");
   assert.equal(paperworkCompanyName("M&S Loads"), "MS Express");
   assert.equal(paperworkCompanyName("M&S Loads LLC"), "MS Express");
+  assert.equal(paperworkCompanyName("M & S Loads"), "MS Express");
+  assert.equal(paperworkCompanyName("M and S Loads"), "MS Express");
+  assert.equal(paperworkCompanyName("M&S Loads LLC - MS Express"), "MS Express");
   assert.equal(paperworkCompanyName("MS Express"), "MS Express");
+  assert.equal(paperworkCompanyName("M&S Loads DBA MS Express"), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("  m&s   loads   dba   ms   express  "), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M AND S LOADS DBA MS EXPRESS"), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M and S Loads DBA MS Express"), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M & S Loads DBA MS Express"), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M& S Loads DBA MS Express"), "M&S Loads DBA MS Express");
   assert.equal(paperworkCompanyName("Other Carrier"), "Other Carrier");
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /ar@msloads\.com/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /street = '600 E 39th St'/);
@@ -176,6 +186,192 @@ async function main() {
   assert.equal(draft.replyTo, "ar@msloads.com");
   assert.match(draft.text, /MS Express/);
   assert.doesNotMatch(draft.text, /M&S Loads|jc@msloads\.com/);
+
+  const allowedIdentity = {
+    company_name: "M&S Loads DBA MS Express",
+    street: "100 Office Pl",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    ar_email: "ar@msloads.com",
+    dispatcher_email: "ana@msloads.com",
+    dispatcher_phone: "402-302-0097",
+    usdot: "3062879",
+    mc: "056299",
+  };
+  const acceptNames = [
+    "M&S Loads DBA MS Express",
+    "m&s loads dba ms express",
+    "  M&S   Loads   DBA   MS   Express  ",
+    "M and S Loads DBA MS Express",
+    "M & S Loads DBA MS Express",
+    "M& S Loads DBA MS Express",
+  ];
+  for (const company_name of acceptNames) {
+    const gaps = identity.invoiceIssuerProblems({ ...allowedIdentity, company_name });
+    assert.deepEqual(gaps, [], `accepted name should not block: ${company_name}`);
+    assert.equal(identity.invoiceIssuerLegalName(company_name), "M&S Loads DBA MS Express");
+    assert.equal(identity.isMsExpressLegalName(company_name), true);
+    assert.equal(identity.looksLikeMsLoadsName(company_name), false);
+  }
+  assert.deepEqual(
+    identity.invoiceIssuerProblems({ ...allowedIdentity, company_name: "MS Express" }),
+    [],
+    "operating name MS Express stays allowed",
+  );
+  assert.equal(identity.isBrokerageMc("056299"), false);
+  assert.equal(identity.isBrokerageMc("MC 056299"), false);
+  assert.equal(identity.isBrokerageMc("MC-056299"), false);
+  assert.equal(identity.isBrokerageMc(allowedIdentity.usdot), false);
+  assert.equal(identity.isBrokerageEmail(allowedIdentity.ar_email), false);
+  assert.equal(identity.isBrokerageAddress(allowedIdentity), false);
+
+  const blockNames = ["M&S Loads", "M&S Loads LLC", "M & S Loads", "M and S Loads", "M&S Loads LLC - MS Express"];
+  for (const company_name of blockNames) {
+    const gaps = identity.invoiceIssuerProblems({ ...allowedIdentity, company_name });
+    assert.ok(gaps.includes("company_name"), `blocked name: ${company_name}`);
+    assert.match(identity.invoiceIssuerWarning(gaps), /looks like M&S Loads/);
+    assert.equal(identity.invoiceIssuerLegalName(company_name), "MS Express");
+    assert.equal(identity.isMsExpressLegalName(company_name), false);
+  }
+  const mcGaps = identity.invoiceIssuerProblems({ ...allowedIdentity, company_name: "MS Express", mc: "MC-970613" });
+  assert.ok(mcGaps.includes("brokerage_mc"));
+  assert.match(identity.invoiceIssuerWarning(mcGaps), /MC-970613/);
+  assert.match(identity.invoiceIssuerWarning(mcGaps), /056299/);
+  assert.equal(identity.invoiceIssuerDocket(allowedIdentity.usdot, "MC-970613"), "USDOT 3062879 · MC 056299");
+  assert.equal(identity.isBrokerageMc("970613"), true);
+  assert.equal(identity.isBrokerageMc("MC 970613"), true);
+
+  const emailGaps = identity.invoiceIssuerProblems({
+    ...allowedIdentity,
+    company_name: "MS Express",
+    ar_email: "JC@msloads.com",
+  });
+  assert.ok(emailGaps.includes("brokerage_email"));
+  assert.equal(emailGaps.includes("ar_email"), false);
+  assert.match(identity.invoiceIssuerWarning(emailGaps), /jc@msloads\.com/);
+  assert.match(identity.invoiceIssuerWarning(emailGaps), /ar@msloads\.com/);
+  assert.equal(identity.usableArEmail("jc@msloads.com"), "");
+  assert.equal(identity.usableArEmail("ar@msloads.com"), "ar@msloads.com");
+  const dispatcherEmailGaps = identity.invoiceIssuerProblems({
+    ...allowedIdentity,
+    company_name: "MS Express",
+    dispatcher_email: "jc@msloads.com",
+  });
+  assert.ok(dispatcherEmailGaps.includes("brokerage_email"));
+
+  const nanuet = {
+    ...allowedIdentity,
+    company_name: "MS Express",
+    street: "228 East Route 59 #190",
+    city: "Nanuet",
+    state: "NY",
+    zip: "10954",
+  };
+  const nanuetGaps = identity.invoiceIssuerProblems(nanuet);
+  assert.ok(nanuetGaps.includes("brokerage_address"));
+  assert.match(identity.invoiceIssuerWarning(nanuetGaps), /Nanuet/);
+  assert.equal(identity.paperworkIssuer(nanuet).city, "Hastings");
+  assert.equal(identity.paperworkIssuer(nanuet).state, "NE");
+  assert.equal(identity.paperworkIssuer(nanuet).street, "");
+  assert.equal(identity.paperworkIssuer(nanuet).zip, "");
+  const deerfield = {
+    ...allowedIdentity,
+    company_name: "MS Express",
+    street: "100 Sample St",
+    city: "Deerfield Beach",
+    state: "FL",
+    zip: "33441",
+  };
+  const deerfieldGaps = identity.invoiceIssuerProblems(deerfield);
+  assert.ok(deerfieldGaps.includes("brokerage_address"));
+  assert.match(identity.invoiceIssuerWarning(deerfieldGaps), /Deerfield Beach/);
+  assert.equal(identity.paperworkIssuer(deerfield).city, "Hastings");
+  assert.equal(identity.isBrokerageAddress({ street: "228 E Route 59", city: "Hastings", state: "NE", zip: "68901" }), true);
+
+  const settingsPage = fs.readFileSync(path.join(process.cwd(), "app/settings/company/page.tsx"), "utf8");
+  const qboSend = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
+  assert.match(settingsPage, /invoiceIssuerProblems\(settings\)/);
+  assert.match(qboSend, /invoiceIssuerProblems\(getCompanySettings\(\)\)/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    ...allowedIdentity,
+  });
+  const legalInvoice = buildTmsInvoice(queries.getLoad(loadId)!);
+  assert.equal(legalInvoice.issuerWarning, "");
+  assert.equal(legalInvoice.companyLegalName, "M&S Loads DBA MS Express");
+  assert.equal(legalInvoice.companyEmail, "ar@msloads.com");
+  assert.match(legalInvoice.companyDocket ?? "", /USDOT 3062879/);
+  assert.match(legalInvoice.companyDocket ?? "", /MC 056299/);
+  const legalPdf = await renderTmsInvoicePdf(legalInvoice);
+  const legalText = String((await extractText(new Uint8Array(legalPdf), { mergePages: true })).text ?? "");
+  assert.match(legalText, /M&S Loads DBA MS Express/);
+  assert.match(legalText, /USDOT 3062879/);
+  assert.match(legalText, /MC 056299/);
+  assert.match(legalText, /Hastings/);
+  assert.match(legalText, /402-302-0097/);
+  assert.match(legalText, /ar@msloads\.com/);
+  assert.doesNotMatch(legalText, /jc@msloads\.com|970613|Nanuet|Deerfield Beach/);
+  await loadMail.sendCustomerInvoiceMail(loadId, async () => {});
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    company_name: "M&S Loads",
+  });
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /looks like M&S Loads/);
+  const barePdf = await renderTmsInvoicePdf(buildTmsInvoice(queries.getLoad(loadId)!));
+  const bareText = String((await extractText(new Uint8Array(barePdf), { mergePages: true })).text ?? "");
+  assert.match(bareText, /MS Express/);
+  assert.doesNotMatch(bareText, /M&S Loads/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    company_name: "MS Express",
+    mc: "MC-970613",
+  });
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /MC-970613/);
+  const mcPdf = await renderTmsInvoicePdf(buildTmsInvoice(queries.getLoad(loadId)!));
+  const mcText = String((await extractText(new Uint8Array(mcPdf), { mergePages: true })).text ?? "");
+  assert.match(mcText, /MC 056299/);
+  assert.doesNotMatch(mcText, /970613/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    mc: "056299",
+    ar_email: "jc@msloads.com",
+  });
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /jc@msloads\.com/);
+  const emailPdf = await renderTmsInvoicePdf(buildTmsInvoice(queries.getLoad(loadId)!));
+  const emailText = String((await extractText(new Uint8Array(emailPdf), { mergePages: true })).text ?? "");
+  assert.doesNotMatch(emailText, /jc@msloads\.com/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    ar_email: "ar@msloads.com",
+    street: "228 East Route 59 #190",
+    city: "Nanuet",
+    state: "NY",
+    zip: "10954",
+  });
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /Nanuet/);
+  const nanuetPdf = await renderTmsInvoicePdf(buildTmsInvoice(queries.getLoad(loadId)!));
+  const nanuetText = String((await extractText(new Uint8Array(nanuetPdf), { mergePages: true })).text ?? "");
+  assert.doesNotMatch(nanuetText, /Nanuet|10954|Route 59/);
+  assert.match(nanuetText, /Hastings/);
+
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    street: "100 Sample St",
+    city: "Deerfield Beach",
+    state: "FL",
+    zip: "33441",
+  });
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(loadId, async () => {}), /Deerfield Beach/);
+  const deerfieldPdf = await renderTmsInvoicePdf(buildTmsInvoice(queries.getLoad(loadId)!));
+  const deerfieldText = String((await extractText(new Uint8Array(deerfieldPdf), { mergePages: true })).text ?? "");
+  assert.doesNotMatch(deerfieldText, /Deerfield/);
+
   console.log("carrier-identity-test: ok");
 }
 

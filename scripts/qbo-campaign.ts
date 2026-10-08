@@ -1114,6 +1114,95 @@ async function main() {
     check(c.checks, "22-character load # is in the memo", "present", longMemo.includes(`MS Express load ${tooLong}`) ? "present" : "absent");
     check(c.checks, "22-character load # is not the DocNumber", "different", String(longRead.DocNumber) === tooLong ? "same" : "different");
   });
+  await runCase("C36", "Legal name is accepted; brokerage name, MC, email, and addresses block the send", async (c) => {
+    const restore = () => {
+      db.prepare(
+        `UPDATE company_profile
+         SET company_name = 'MS Express', street = '100 Campaign Test Rd', city = 'Hastings', state = 'NE', zip = '68901',
+             ar_email = 'ar-test@example.com', dispatcher_email = 'ana@msloads.com', dispatcher_phone = '402-302-0097',
+             usdot = '3062879', mc = '056299'
+         WHERE id = 1`,
+      ).run();
+    };
+    const setIdentity = (patch: {
+      company_name?: string;
+      street?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      ar_email?: string;
+      dispatcher_email?: string;
+      mc?: string;
+    }) => {
+      const row = {
+        company_name: "MS Express",
+        street: "100 Campaign Test Rd",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        ar_email: "ar@msloads.com",
+        dispatcher_email: "ana@msloads.com",
+        mc: "056299",
+        ...patch,
+      };
+      db.prepare(
+        `UPDATE company_profile
+         SET company_name = ?, street = ?, city = ?, state = ?, zip = ?, ar_email = ?, dispatcher_email = ?, mc = ?
+         WHERE id = 1`,
+      ).run(
+        row.company_name,
+        row.street,
+        row.city,
+        row.state,
+        row.zip,
+        row.ar_email,
+        row.dispatcher_email,
+        row.mc,
+      );
+    };
+    try {
+      const blocked = makeLoad({ rate: 1600 });
+      setIdentity({ company_name: "M&S Loads" });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /M&S Loads/);
+      setIdentity({ company_name: "M&S Loads LLC" });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /without DBA MS Express/);
+      setIdentity({ company_name: "MS Express", mc: "MC-970613" });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /970613/);
+      setIdentity({ mc: "056299", ar_email: "jc@msloads.com" });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /jc@msloads\.com/);
+      setIdentity({
+        ar_email: "ar@msloads.com",
+        street: "228 East Route 59 #190",
+        city: "Nanuet",
+        state: "NY",
+        zip: "10954",
+      });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /Nanuet/);
+      setIdentity({ street: "100 Sample St", city: "Deerfield Beach", state: "FL", zip: "33441" });
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /Deerfield Beach/);
+      setIdentity({
+        company_name: "M and S Loads DBA MS Express",
+        street: "100 Campaign Test Rd",
+        city: "Hastings",
+        state: "NE",
+        zip: "68901",
+        ar_email: "ar@msloads.com",
+        mc: "056299",
+      });
+      const accepted = makeLoad({ rate: 1610 });
+      await qbo.sendLoadToQuickbooks(accepted.id);
+      const stored = queries.getLoad(accepted.id)!;
+      check(c.checks, "legal name send stored", "sent", stored.qbo_invoice_id ? "sent" : "missing");
+      const model = buildTmsInvoice(stored);
+      check(c.checks, "PDF legal name", "M&S Loads DBA MS Express", model.companyLegalName);
+      check(c.checks, "USDOT stays 3062879", "yes", (model.companyDocket ?? "").includes("3062879") ? "yes" : model.companyDocket ?? "");
+      check(c.checks, "MC stays 056299", "yes", (model.companyDocket ?? "").includes("056299") ? "yes" : model.companyDocket ?? "");
+      check(c.checks, "no issuer warning", "", model.issuerWarning ?? "");
+      c.qboIds.push(`Invoice ${stored.qbo_invoice_id}`);
+    } finally {
+      restore();
+    }
+  });
   void resyncLoad;
 
   const creates = calls.filter((call) => call.method === "POST" && /\/(customer|vendor|item|account)\?/.test(call.url));

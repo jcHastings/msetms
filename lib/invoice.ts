@@ -14,11 +14,12 @@ import { listStops, type LoadStop } from "./stops";
 import { isBillableStatus, type LoadView, type Location } from "./types";
 import { resolveCustomerMainPhone } from "./load-contact";
 import {
-  invoiceIssuerDocket,
   invoiceIssuerLegalName,
   invoiceIssuerProblems,
   invoiceIssuerWarning,
+  isBrokerageMc,
   MS_EXPRESS_CARRIER,
+  paperworkIssuer,
   usableArEmail,
 } from "./carrier-identity";
 
@@ -301,6 +302,7 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
   const invoiceNumber = qboNumber || load.tms_invoice_number || `INV-${load.load_number}`;
   const settings = getCompanySettings();
   const company = getCompanyProfile();
+  const issuer = paperworkIssuer(settings);
   const customer = customerBlock(load);
   const date = invoiceDate(load);
   return {
@@ -313,16 +315,17 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     lane: `${load.origin} → ${load.destination}`,
     lines,
     total: lines.reduce((sum, line) => sum + line.amount, 0),
-    companyName: paperworkCompanyName(company.company_name),
-    companyLegalName: paperworkCompanyName(company.company_name),
+    companyName: issuer.name,
+    companyLegalName: issuer.name,
     companyAddress: formatCompanyAddress({
       ...settings,
-      street: settings.street.trim(),
-      city: settings.city.trim() || MS_EXPRESS_CARRIER.city,
-      state: settings.state.trim() || MS_EXPRESS_CARRIER.state,
+      street: issuer.street,
+      city: issuer.city,
+      state: issuer.state,
+      zip: issuer.zip,
     }),
-    companyPhone: company.dispatcher_phone.trim() || MS_EXPRESS_CARRIER.phone,
-    companyEmail: usableArEmail(settings.ar_email),
+    companyPhone: issuer.phone || company.dispatcher_phone.trim() || MS_EXPRESS_CARRIER.phone,
+    companyEmail: issuer.email,
     weight: load.weight != null ? formatWeight(load.weight, settings.weight_unit) : "",
     miles: (() => {
       const total = routeGuideFromLoad(load, { stopCount: listStops(load.id).length }).totalMiles;
@@ -336,16 +339,10 @@ export function buildTmsInvoice(load: LoadView, options: { allowDraft?: boolean 
     terms: customer.terms || "Net 30",
     dueDate: dueDateFromTerms(customer.terms || "Net 30", date),
     dispatcherName: "",
-    companyDocket: invoiceIssuerDocket(settings.usdot, settings.mc),
+    companyDocket: issuer.docket,
     stops: invoiceStops(load),
     publicNotes: (load.public_notes ?? "").trim(),
-    issuerWarning: invoiceIssuerWarning(
-      invoiceIssuerProblems({
-        company_name: company.company_name,
-        street: settings.street,
-        ar_email: settings.ar_email,
-      }),
-    ),
+    issuerWarning: invoiceIssuerWarning(invoiceIssuerProblems(settings)),
   };
 }
 
@@ -593,24 +590,27 @@ function drawInvoiceHeader(
 ): number {
   const logoH = drawInvoiceLogo(doc, x, y, [176, 62]);
   let companyY = y + logoH + 8;
-  const legalName = invoiceIssuerLegalName(model.companyLegalName);
-  const street = settings.street.trim();
-  const city = settings.city.trim() || MS_EXPRESS_CARRIER.city;
-  const state = settings.state.trim() || MS_EXPRESS_CARRIER.state;
-  const email = usableArEmail(model.companyEmail);
-  const docket = model.companyDocket?.trim() || invoiceIssuerDocket();
+  const issuer = paperworkIssuer(settings);
+  const legalName = invoiceIssuerLegalName(model.companyLegalName || issuer.name);
+  const street = issuer.street;
+  const city = issuer.city;
+  const state = issuer.state;
+  const email = usableArEmail(model.companyEmail) || issuer.email;
+  const requestedDocket = model.companyDocket?.trim();
+  const docket = requestedDocket && !isBrokerageMc(requestedDocket) ? requestedDocket : issuer.docket;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INVOICE_INK).text(legalName, x, companyY, {
     width: 250,
   });
   companyY += 16;
-  for (const line of addressLines(street, cityStateZipLine(city, state, settings.zip))) {
+  for (const line of addressLines(street, cityStateZipLine(city, state, issuer.zip))) {
     doc.font("Helvetica").fontSize(9).fillColor(INVOICE_INK).text(line, x, companyY, { width: 250 });
     companyY += 13;
   }
   doc.font("Helvetica").fontSize(9).text(docket, x, companyY, { width: 250 });
   companyY += 13;
-  if (model.companyPhone) {
-    doc.font("Helvetica").fontSize(9).text(`Phone: ${model.companyPhone}`, x, companyY, { width: 250 });
+  const phone = model.companyPhone.trim() || issuer.phone;
+  if (phone) {
+    doc.font("Helvetica").fontSize(9).text(`Phone: ${phone}`, x, companyY, { width: 250 });
     companyY += 13;
   }
   if (email) {

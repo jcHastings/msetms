@@ -15,7 +15,16 @@ export function CompanyProfileForm({
     <SettingsForm action={saveCompanyContactAction} submitLabel="Save company contact" canEdit={canEdit}>
       <div className="field md:col-span-2">
         <label htmlFor="company_name">Company name</label>
-        <input id="company_name" name="company_name" required defaultValue={profile.company_name} />
+        <input
+          id="company_name"
+          name="company_name"
+          required
+          defaultValue={profile.company_name}
+          aria-describedby="company-name-hint"
+        />
+        <p id="company-name-hint" className="text-xs text-slate-500">
+          MS Express, or the legal name M&amp;S Loads DBA MS Express. A bare M&amp;S Loads name is blocked.
+        </p>
       </div>
       <div className="field">
         <label htmlFor="usdot">USDOT</label>

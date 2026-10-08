@@ -4491,7 +4491,7 @@ async function main() {
   assert.match(companyDraft.text, /Pickup 1/);
   assert.match(companyDraft.text, /Delivery 1/);
   assert.match(companyDraft.text, /34°F · Continuous/);
-  assert.match(companyDraft.text, /M & S Loads LLC/);
+  assert.match(companyDraft.text, /M&S Loads DBA MS Express/);
   assert.equal(companyDraft.replyTo, "noreply@msloads.com");
   assert.match(companyDraft.text, /Do not reply/);
   assert.match(companyDraft.text, /not monitored/);
@@ -9047,7 +9047,7 @@ DISPATCH CONFIRMATION
   assert.match(bolText, /Description of the goods/);
   assert.match(bolText, /Weight in LBS/);
   assert.match(bolText, /NMFC/);
-  assert.match(bolText, /M & S Loads LLC - MS Express/);
+  assert.match(bolText, /M&S Loads DBA MS Express/);
   assert.match(bolText, /Transportation Company/);
   assert.match(bolText, /3rd Party Billing/);
   assert.match(bolText, /Emergency Response Phone/);
@@ -9232,7 +9232,7 @@ DISPATCH CONFIRMATION
   const { parseBolDraftFromForm, writeBolDraftToForm } = await import("../lib/bol-shared");
   const itsDraft = {
     ...bolMod.buildBolDraftFromLoad(deniseLoad),
-    thirdParty: "M & S Loads LLC - MS Express",
+    thirdParty: "M&S Loads DBA MS Express",
     seals: "S-441, S-442",
     items: [
       {

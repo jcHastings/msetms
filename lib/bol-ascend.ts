@@ -1,6 +1,7 @@
 import PDFDocument from "./pdfkit-document";
 import { getCompanyProfile } from "./company";
 import { formatDateTime, formatMdYDisplay, formatWeight } from "./format";
+import { paperworkIssuer } from "./carrier-identity";
 import { paperworkCompanyName } from "./invoice";
 import { resolveLoadCustomerPhoneLine } from "./load-contact";
 import { getCustomer, getLoad, getLocation } from "./queries";
@@ -66,12 +67,12 @@ function splitCityState(value: string): { city: string; state: string } {
 }
 
 function officeBlock(): { name: string; address: string; phone: string } {
+  const issuer = paperworkIssuer(getCompanySettings());
   const settings = withOfficeAddress({
-    ...getCompanySettings(),
-    street: getCompanySettings().street || HASTINGS_OFFICE.street,
-    city: getCompanySettings().city || HASTINGS_OFFICE.city,
-    state: getCompanySettings().state || HASTINGS_OFFICE.state,
-    zip: getCompanySettings().zip || HASTINGS_OFFICE.zip,
+    street: issuer.street || HASTINGS_OFFICE.street,
+    city: issuer.city || HASTINGS_OFFICE.city,
+    state: issuer.state || HASTINGS_OFFICE.state,
+    zip: issuer.zip || HASTINGS_OFFICE.zip,
   });
   const cityState = [settings.city.trim(), settings.state.trim()].filter(Boolean).join(", ");
   const address = [settings.street.trim(), [cityState, settings.zip.trim()].filter(Boolean).join(" ")]
@@ -80,7 +81,7 @@ function officeBlock(): { name: string; address: string; phone: string } {
   return {
     name: paperworkCompanyName(getCompanyProfile().company_name),
     address,
-    phone: settings.dispatcher_phone.trim() || "402-302-0097",
+    phone: issuer.phone.trim() || "402-302-0097",
   };
 }
 

@@ -5,6 +5,7 @@ import { getLoad, getLocation, listLocations } from "./queries";
 import { parseStopPaperwork } from "./rate-con-paperwork";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
+import { paperworkIssuer, paperworkOfficeEmail } from "./carrier-identity";
 import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, getDocumentDefaults, getDocumentFont, withOfficeAddress } from "./settings";
 import { listStops } from "./stops";
 import type { LoadView } from "./types";
@@ -216,23 +217,17 @@ export function saveLoadBolDraft(loadId: number, draft: BolDraft): void {
 }
 
 function carrierBlock(): { name: string; address: string; phone: string } {
-  const settings = withOfficeAddress({
-    ...getCompanySettings(),
-    street: getCompanySettings().street || HASTINGS_OFFICE.street,
-    city: getCompanySettings().city || HASTINGS_OFFICE.city,
-    state: getCompanySettings().state || HASTINGS_OFFICE.state,
-    zip: getCompanySettings().zip || HASTINGS_OFFICE.zip,
-  });
+  const issuer = paperworkIssuer(getCompanySettings());
   const office = withOfficeAddress({
-    street: settings.street,
-    city: settings.city,
-    state: settings.state,
-    zip: settings.zip,
+    street: issuer.street || HASTINGS_OFFICE.street,
+    city: issuer.city || HASTINGS_OFFICE.city,
+    state: issuer.state || HASTINGS_OFFICE.state,
+    zip: issuer.zip || HASTINGS_OFFICE.zip,
   });
   return {
     name: BOL_PAPERWORK_NAME,
     address: formatItsAddress(office),
-    phone: settings.dispatcher_phone.trim() || "402-302-0097",
+    phone: issuer.phone.trim() || "402-302-0097",
   };
 }
 
@@ -350,7 +345,7 @@ function drawItsBol(doc: PDFKit.PDFDocument, model: BolModel, pageCount = 1): vo
   const tagCtx = {
     orgName: company.company_name,
     userName: company.dispatcher_name,
-    userEmail: company.dispatcher_email,
+    userEmail: paperworkOfficeEmail(company.dispatcher_email),
     userPhone: company.dispatcher_phone,
     loadId: model.loadNumber,
   };

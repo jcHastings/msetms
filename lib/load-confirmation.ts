@@ -18,6 +18,7 @@ import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { expandDocumentTags } from "./document-tags";
+import { isMsExpressLegalName, looksLikeMsLoadsName, paperworkIssuer, paperworkOfficeEmail } from "./carrier-identity";
 import { companyLogoPath, formatCompanyAddress, getCompanySettings, getDocumentDefaults } from "./settings";
 import { assignedLoadName } from "./owner-operator-shared";
 import { isOwnerOperator, type CompanyProfile, type LoadView } from "./types";
@@ -124,7 +125,7 @@ function isBlockedPaperName(value: string, driverName = ""): boolean {
   const text = value.trim();
   if (!text) return true;
   if (BLOCKED_CONTACT_NAME.test(text)) return true;
-  if (/m\s*&\s*s\s+loads|ms\s*express/i.test(text)) return true;
+  if (looksLikeMsLoadsName(text) || isMsExpressLegalName(text) || /ms\s*express/i.test(text)) return true;
   if (driverName && normalizePersonKey(text) === normalizePersonKey(driverName)) return true;
   if (looksLikeCityZip(text)) return true;
   return false;
@@ -571,6 +572,18 @@ export function buildConfirmationModel(
       "delivery",
       packet,
     );
+  const issuer = paperworkIssuer(company);
+  const safeCompany = {
+    ...company,
+    company_name: issuer.name,
+    street: issuer.street,
+    city: issuer.city,
+    state: issuer.state,
+    zip: issuer.zip,
+    dispatcher_email: paperworkOfficeEmail(company.dispatcher_email),
+    usdot: issuer.usdot,
+    mc: issuer.mc,
+  };
   const style = isOwnerOperator(load.driver_type) ? "owner_operator" : "company_driver";
   const notes = [
     load.public_notes,
@@ -604,7 +617,7 @@ export function buildConfirmationModel(
   return {
     packet,
     style,
-    company,
+    company: safeCompany,
     loadNumber: load.load_number,
     shipDate: formatMdY(load.pickup_start),
     todayDate: formatMdY(new Date().toISOString()),
@@ -836,7 +849,13 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
   const nameY = 96;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(INK);
   doc.text(model.company.company_name || "MS Express", left, nameY, { width: nameWidth, lineBreak: false });
-  const address = formatCompanyAddress(getCompanySettings());
+  const address = formatCompanyAddress({
+    ...getCompanySettings(),
+    street: model.company.street,
+    city: model.company.city,
+    state: model.company.state,
+    zip: model.company.zip,
+  });
   if (address) {
     doc.font("Helvetica-Bold").fontSize(8).fillColor(INK).text(address, left, nameY + 16, {
       width: nameWidth,

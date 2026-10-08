@@ -237,7 +237,7 @@ const bol: BolModel = {
       classCode: "",
     },
   ],
-  carrierName: "M & S Loads LLC - MS Express",
+  carrierName: "M&S Loads DBA MS Express",
   carrierAddress: "600 E 39th St, Hastings, NE, 68901",
   carrierPhone: "402-302-0097",
 };
