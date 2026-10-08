@@ -6,6 +6,7 @@ import { parseStopPaperwork } from "./rate-con-paperwork";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
 import { expandDocumentTags, pdfFontName, scaledFontSize } from "./document-tags";
 import { paperworkIssuer, paperworkOfficeEmail } from "./carrier-identity";
+import { paperworkCompanyName } from "./invoice";
 import { HASTINGS_OFFICE, companyLogoPath, getCompanySettings, getDocumentDefaults, getDocumentFont, withOfficeAddress } from "./settings";
 import { listStops } from "./stops";
 import type { LoadView } from "./types";
@@ -225,7 +226,7 @@ function carrierBlock(): { name: string; address: string; phone: string } {
     zip: issuer.zip || HASTINGS_OFFICE.zip,
   });
   return {
-    name: BOL_PAPERWORK_NAME,
+    name: paperworkCompanyName(getCompanySettings().company_name),
     address: formatItsAddress(office),
     phone: issuer.phone.trim() || "402-302-0097",
   };

@@ -19,6 +19,8 @@ import {
   invoiceIssuerWarning,
   isBrokerageMc,
   MS_EXPRESS_CARRIER,
+  MS_EXPRESS_LEGAL_NAME,
+  normalizeCarrierName,
   paperworkIssuer,
   usableArEmail,
 } from "./carrier-identity";
@@ -82,16 +84,15 @@ export function paperworkCompanyName(name: string): string {
   return invoiceIssuerLegalName(name);
 }
 
+/** Customer is the carrier only when the whole name matches the company, MS Express, or the DBA name. */
 export function isCompanyCustomerName(customerName: string, companyName: string): boolean {
-  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const customer = norm(customerName);
+  const customer = normalizeCarrierName(customerName);
   if (!customer) return false;
-  if (customer.includes("msloads") || customer.includes("mandsloads") || customer.includes("msexpress")) {
-    return true;
-  }
-  const company = norm(companyName).replace(/llc$/, "");
-  const customerCore = customer.replace(/llc$/, "");
-  return Boolean(company) && (customerCore === company || customerCore.includes(company) || company.includes(customerCore));
+  return (
+    customer === normalizeCarrierName(companyName) ||
+    customer === normalizeCarrierName(MS_EXPRESS_CARRIER.name) ||
+    customer === normalizeCarrierName(MS_EXPRESS_LEGAL_NAME)
+  );
 }
 
 function invoiceLineFromPayItem(item: { category: string; notes: string; total: number | null; qty: number | null; rate: number | null }): TmsInvoiceLine {

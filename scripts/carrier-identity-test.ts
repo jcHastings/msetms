@@ -17,7 +17,7 @@ async function main() {
   const { closeDb, getDb } = await import("../lib/db");
   const settings = await import("../lib/settings");
   const queries = await import("../lib/queries");
-  const { buildTmsInvoice, paperworkCompanyName, renderTmsInvoicePdf } = await import("../lib/invoice");
+  const { buildTmsInvoice, isCompanyCustomerName, paperworkCompanyName, renderTmsInvoicePdf } = await import("../lib/invoice");
   const identity = await import("../lib/carrier-identity");
   const loadMail = await import("../lib/load-mail");
   const { extractText } = await import("unpdf");
@@ -39,11 +39,11 @@ async function main() {
   assert.equal(paperworkCompanyName("M&S Loads LLC - MS Express"), "MS Express");
   assert.equal(paperworkCompanyName("MS Express"), "MS Express");
   assert.equal(paperworkCompanyName("M&S Loads DBA MS Express"), "M&S Loads DBA MS Express");
-  assert.equal(paperworkCompanyName("  m&s   loads   dba   ms   express  "), "M&S Loads DBA MS Express");
-  assert.equal(paperworkCompanyName("M AND S LOADS DBA MS EXPRESS"), "M&S Loads DBA MS Express");
-  assert.equal(paperworkCompanyName("M and S Loads DBA MS Express"), "M&S Loads DBA MS Express");
-  assert.equal(paperworkCompanyName("M & S Loads DBA MS Express"), "M&S Loads DBA MS Express");
-  assert.equal(paperworkCompanyName("M& S Loads DBA MS Express"), "M&S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("  m&s   loads   dba   ms   express  "), "m&s   loads   dba   ms   express");
+  assert.equal(paperworkCompanyName("M AND S LOADS DBA MS EXPRESS"), "M AND S LOADS DBA MS EXPRESS");
+  assert.equal(paperworkCompanyName("M and S Loads DBA MS Express"), "M and S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M & S Loads DBA MS Express"), "M & S Loads DBA MS Express");
+  assert.equal(paperworkCompanyName("M& S Loads DBA MS Express"), "M& S Loads DBA MS Express");
   assert.equal(paperworkCompanyName("Other Carrier"), "Other Carrier");
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/mail-shared.ts"), "utf8"), /ar@msloads\.com/);
   assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "lib/db.ts"), "utf8"), /street = '600 E 39th St'/);
@@ -208,12 +208,33 @@ async function main() {
     "M& S Loads DBA MS Express",
   ];
   for (const company_name of acceptNames) {
+    const compact = company_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    assert.equal(compact.includes("msloads") || compact.includes("mandsloads"), true);
+    assert.equal(identity.looksLikeMsLoadsName(company_name), false, company_name);
     const gaps = identity.invoiceIssuerProblems({ ...allowedIdentity, company_name });
+    assert.equal(gaps.includes("company_name"), false, company_name);
     assert.deepEqual(gaps, [], `accepted name should not block: ${company_name}`);
-    assert.equal(identity.invoiceIssuerLegalName(company_name), "M&S Loads DBA MS Express");
+    identity.assertInvoiceIssuerReady({ ...allowedIdentity, company_name });
+    assert.equal(identity.invoiceIssuerLegalName(company_name), company_name.trim());
+    assert.equal(paperworkCompanyName(company_name), company_name.trim());
     assert.equal(identity.isMsExpressLegalName(company_name), true);
-    assert.equal(identity.looksLikeMsLoadsName(company_name), false);
   }
+  assert.equal(identity.looksLikeMsLoadsName("M&S Loads"), true);
+  assert.equal(identity.looksLikeMsLoadsName("M&S Loads LLC"), true);
+  assert.ok(identity.invoiceIssuerProblems({ ...allowedIdentity, company_name: "M&S Loads" }).includes("company_name"));
+  assert.ok(identity.invoiceIssuerProblems({ ...allowedIdentity, company_name: "M&S Loads LLC" }).includes("company_name"));
+  assert.throws(() => identity.assertInvoiceIssuerReady({ ...allowedIdentity, company_name: "M&S Loads" }), /M&S Loads/);
+  assert.throws(() => identity.assertInvoiceIssuerReady({ ...allowedIdentity, company_name: "M&S Loads LLC" }), /M&S Loads/);
+  assert.equal(isCompanyCustomerName("Express", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("DBA", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("Express Logistics", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"), false);
+  assert.equal(isCompanyCustomerName("M&S Loads LLC", "MS Express"), false);
+  assert.equal(isCompanyCustomerName("MS Express", "Kayco"), true);
+  assert.equal(isCompanyCustomerName("M&S Loads", "M&S Loads"), true);
+  assert.equal(isCompanyCustomerName("M & S Loads", "M&S Loads"), true);
+  assert.equal(isCompanyCustomerName("M&S Loads DBA MS Express", "MS Express"), true);
+  assert.equal(isCompanyCustomerName("M and S Loads DBA MS Express", "Other Carrier"), true);
   assert.deepEqual(
     identity.invoiceIssuerProblems({ ...allowedIdentity, company_name: "MS Express" }),
     [],
@@ -314,6 +335,108 @@ async function main() {
   assert.match(legalText, /ar@msloads\.com/);
   assert.doesNotMatch(legalText, /jc@msloads\.com|970613|Nanuet|Deerfield Beach/);
   await loadMail.sendCustomerInvoiceMail(loadId, async () => {});
+
+  const storedDba = "M & S Loads DBA MS Express";
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    company_name: storedDba,
+  });
+  const storedInvoice = buildTmsInvoice(queries.getLoad(loadId)!);
+  assert.equal(storedInvoice.companyLegalName, storedDba);
+  assert.equal(storedInvoice.issuerWarning, "");
+  const storedPdf = await renderTmsInvoicePdf(storedInvoice);
+  const storedText = String((await extractText(new Uint8Array(storedPdf), { mergePages: true })).text ?? "");
+  assert.match(storedText, /M & S Loads DBA MS Express/);
+  const { generateBolPdf } = await import("../lib/bol");
+  const bol = await generateBolPdf(loadId, null, { persistDraft: false });
+  const bolText = String((await extractText(new Uint8Array(bol.buffer), { mergePages: true })).text ?? "");
+  assert.match(bolText, /M & S Loads DBA MS Express/);
+  assert.equal(bol.model.carrierName, storedDba);
+  const { listDefaultedDocuments } = await import("../lib/load-documents");
+  const confirmation = listDefaultedDocuments(loadId).find((row) => row.key === "carrier_confirmation");
+  assert.ok(confirmation?.source.includes(storedDba));
+  await loadMail.sendCustomerInvoiceMail(loadId, async () => {});
+  const autoId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: day,
+    pickup_end: day,
+    delivery_start: day,
+    delivery_end: day,
+    weight: 40000,
+    commodity: "Frozen beef",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    trailer_id: null,
+    load_number: "MSE-AUTO",
+    oo_pay: null,
+  } as Parameters<typeof queries.createLoad>[0]);
+  getDb().prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(autoId);
+  const { addAttachment: addAutoPod } = await import("../lib/files");
+  addAutoPod({
+    loadId: autoId,
+    kind: "pod",
+    originalName: "auto-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const autoSent = await deliverAutoInvoice(autoId, async () => {});
+  assert.equal(autoSent.sent, true, autoSent.skipped);
+  settings.updateCompanyContact({
+    ...settings.getCompanySettings(),
+    company_name: "M&S Loads LLC",
+  });
+  const autoBlockedId = queries.createLoad({
+    customer_id: customerId,
+    origin: "Hastings, NE",
+    destination: "Bayonne, NJ",
+    pickup_start: day,
+    pickup_end: day,
+    delivery_start: day,
+    delivery_end: day,
+    weight: 40000,
+    commodity: "Frozen beef",
+    rate: 900,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: null,
+    trailer_number: "",
+    status: "available",
+    truck_id: null,
+    driver_id: null,
+    trailer_id: null,
+    load_number: "MSE-AUTO-BLOCK",
+    oo_pay: null,
+  } as Parameters<typeof queries.createLoad>[0]);
+  getDb().prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(autoBlockedId);
+  addAutoPod({
+    loadId: autoBlockedId,
+    kind: "pod",
+    originalName: "auto-block-pod.pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const autoBlocked = await deliverAutoInvoice(autoBlockedId, async () => {
+    throw new Error("auto invoice must not send");
+  });
+  assert.equal(autoBlocked.sent, false);
+  assert.match(autoBlocked.skipped, /M&S Loads/);
+  await assert.rejects(() => loadMail.sendCustomerInvoiceMail(autoBlockedId, async () => {}), /M&S Loads/);
 
   settings.updateCompanyContact({
     ...settings.getCompanySettings(),

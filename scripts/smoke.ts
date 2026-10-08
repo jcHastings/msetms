@@ -9047,7 +9047,8 @@ DISPATCH CONFIRMATION
   assert.match(bolText, /Description of the goods/);
   assert.match(bolText, /Weight in LBS/);
   assert.match(bolText, /NMFC/);
-  assert.match(bolText, /M&S Loads DBA MS Express/);
+  assert.match(bolText, /MS Express/);
+  assert.doesNotMatch(bolText, /M & S Loads LLC - MS Express/);
   assert.match(bolText, /Transportation Company/);
   assert.match(bolText, /3rd Party Billing/);
   assert.match(bolText, /Emergency Response Phone/);
@@ -16743,7 +16744,11 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(tmsInvoiceModel.companyLegalName, /M&S Loads/);
   assert.match(tmsInvoiceModel.date, /^\d{2}\/\d{2}\/\d{2}$/);
   assert.doesNotMatch(tmsInvoiceModel.date, /\d{4}-\d{2}-\d{2}/);
-  assert.ok(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"));
+  assert.equal(isCompanyCustomerName("M & S Loads LLC.", "M&S Loads"), false);
+  assert.equal(isCompanyCustomerName("Express", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("DBA", "M&S Loads DBA MS Express"), false);
+  assert.equal(isCompanyCustomerName("MS Express", "M&S Loads"), true);
+  assert.equal(isCompanyCustomerName("M&S Loads DBA MS Express", "MS Express"), true);
   assert.doesNotMatch(tmsInvoiceModel.customerStreet, /600 E 39th|100 Fleet Way/);
   assert.doesNotMatch(tmsInvoiceModel.customerCityStateZip, /Hastings/);
   assert.doesNotMatch(tmsInvoiceModel.customerPhone, /402-302-0097/);

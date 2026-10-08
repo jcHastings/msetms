@@ -101,10 +101,10 @@ export function usableArEmail(value: string | null | undefined): string {
   return email;
 }
 
-/** Printed carrier on invoices. Never a brokerage M&S Loads name. */
+/** Printed carrier on invoices. An accepted DBA name stays as stored. A brokerage name becomes MS Express. */
 export function invoiceIssuerLegalName(name: string | null | undefined): string {
   const trimmed = String(name ?? "").trim();
-  if (isMsExpressLegalName(trimmed)) return MS_EXPRESS_LEGAL_NAME;
+  if (isMsExpressLegalName(trimmed)) return trimmed;
   if (!trimmed || looksLikeMsLoadsName(trimmed)) return MS_EXPRESS_CARRIER.name;
   return trimmed;
 }

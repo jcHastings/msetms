@@ -1194,7 +1194,7 @@ async function main() {
       const stored = queries.getLoad(accepted.id)!;
       check(c.checks, "legal name send stored", "sent", stored.qbo_invoice_id ? "sent" : "missing");
       const model = buildTmsInvoice(stored);
-      check(c.checks, "PDF legal name", "M&S Loads DBA MS Express", model.companyLegalName);
+      check(c.checks, "PDF legal name", "M and S Loads DBA MS Express", model.companyLegalName);
       check(c.checks, "USDOT stays 3062879", "yes", (model.companyDocket ?? "").includes("3062879") ? "yes" : model.companyDocket ?? "");
       check(c.checks, "MC stays 056299", "yes", (model.companyDocket ?? "").includes("056299") ? "yes" : model.companyDocket ?? "");
       check(c.checks, "no issuer warning", "", model.issuerWarning ?? "");
