@@ -2114,8 +2114,13 @@ export async function previewLoadsImportAction(
     const pasted = String(formData.get("report_text") ?? "").trim();
     const file = formData.get("file");
     const { previewLoadsFromText, previewLoadsFromXlsx } = await import("./load-import");
+    const { resolveExportSnapshot } = await import("./its-import-shared");
     let rows: LoadImportPreviewRow[] = [];
+    let sourceName = "";
+    let exportSnapshot: string | null = null;
     if (file instanceof File && file.size > 0) {
+      sourceName = file.name;
+      exportSnapshot = resolveExportSnapshot({ fileName: file.name, fileMtimeMs: file.lastModified });
       const name = file.name.toLowerCase();
       if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
         const { fileToBuffer } = await import("./files");
@@ -2141,6 +2146,8 @@ export async function previewLoadsImportAction(
       rows,
       count: rows.length,
       sampleNumbers: rows.slice(0, 8).map((row) => row.load_number),
+      sourceName,
+      exportSnapshot,
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Load preview failed." };
@@ -2160,14 +2167,20 @@ export async function confirmLoadsImportAction(
       : [];
     if (rows.length === 0) return { ok: false, error: "Preview the sheet first, then import." };
     const { applyLoadImport } = await import("./load-import");
-    const result = applyLoadImport(rows);
+    const { resolveExportSnapshot } = await import("./its-import-shared");
+    const sourceName = String(formData.get("source_name") ?? "");
+    const postedSnapshot = String(formData.get("export_snapshot") ?? "").trim();
+    const snapshot = postedSnapshot || resolveExportSnapshot({ fileName: sourceName });
+    const result = applyLoadImport(rows, { snapshot, apply: true });
     refresh();
     return {
       ok: true,
       ...result,
       count: rows.length,
       sampleNumbers: rows.slice(0, 8).map((row) => row.load_number),
-      message: `Imported loads: created ${result.created}, updated ${result.updated}${
+      sourceName,
+      exportSnapshot: snapshot,
+      message: `Imported loads: created ${result.created}, updated ${result.updated}, unchanged ${result.unchanged}${
         result.skipped ? `, skipped ${result.skipped}` : ""
       }.`,
     };
