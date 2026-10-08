@@ -53,7 +53,7 @@ async function withCookies<T>(cookieHeader: string, fn: () => Promise<T>): Promi
     mutableCookies: jar,
     userspaceMutableCookies: jar,
   };
-  return workAsyncStorage.run({ route: "/" }, () => workUnitAsyncStorage.run(unit, fn));
+  return workAsyncStorage.run({ route: "/", incrementalCache: {} }, () => workUnitAsyncStorage.run(unit, fn));
 }
 
 async function pdfText(bytes: Buffer): Promise<string> {
@@ -78,6 +78,8 @@ async function main(): Promise<void> {
   const relays = await import("../lib/relay-store");
   const confirmationRoute = await import("../app/api/loads/[id]/confirmation/route");
   const attachmentRoute = await import("../app/api/attachments/[id]/route");
+  const driverActions = await import("../lib/driver-actions");
+  const driverLoadRoute = await import("../app/api/driver/v1/loads/[id]/route");
 
   assert.deepEqual(
     [...driverDocs.DRIVER_DOWNLOAD_KINDS],
@@ -356,6 +358,141 @@ async function main(): Promise<void> {
     assert.equal(res.status, 200, label);
     assert.equal(res.bytes.subarray(0, 4).toString(), "%PDF", label);
   }
+
+  const assignedCaller = drivers.find((caller) => caller.name === "assigned cookie");
+  const assignedToken = drivers.find((caller) => caller.name === "assigned token");
+  const unassignedCaller = drivers.find((caller) => caller.name === "unassigned cookie");
+  assert.ok(assignedCaller && assignedCaller.mode === "cookie");
+  assert.ok(assignedToken && assignedToken.mode === "token");
+  assert.ok(unassignedCaller && unassignedCaller.mode === "cookie");
+  const assignedDriver = queries.getDriver(assignedId);
+  assert.ok(assignedDriver);
+
+  function storeAs(kind: string, name: string, marker: string, uploadedBy: string): StoredFile {
+    const saved = files.addAttachment({
+      loadId,
+      kind: kind as "bol",
+      originalName: name,
+      buffer: Buffer.from(`%PDF-1.4\n${marker}\n`),
+      mimeType: "application/pdf",
+      uploadedBy,
+    });
+    return { id: saved.id, kind, name, marker };
+  }
+
+  const ownUnclassified = storeAs("unclassified", "own-needs-type.pdf", "HOTFIX-OWN-unclassified", assignedDriver.name);
+  const ownBilling = storeAs("carrier_invoice", "own-billing.pdf", "HOTFIX-OWN-carrier_invoice", assignedDriver.name);
+  const ownRetype = storeAs("unclassified", "own-retype.pdf", "HOTFIX-OWN-retype", assignedDriver.name);
+  const routeSentinel = storeAs("unclassified", "route-needs-type.pdf", "HOTFIX-OWN-sentinel", "driver");
+  const officeUnclassified = denied.find((file) => file.kind === "unclassified" && file.name === "needs-type.pdf");
+  const officeBilling = denied.find((file) => file.kind === "carrier_invoice");
+  assert.ok(officeUnclassified);
+  assert.ok(officeBilling);
+
+  for (const file of [ownUnclassified, ownBilling, routeSentinel]) {
+    for (const caller of [assignedCaller, assignedToken]) {
+      const res = await call(caller, `/api/attachments/${file.id}`);
+      const label = `${caller.name} own ${file.kind} ${file.name}`;
+      assert.equal(res.status, 200, label);
+      assert.match(res.bytes.toString("utf8"), new RegExp(file.marker), label);
+    }
+    const hidden = await call(unassignedCaller, `/api/attachments/${file.id}`);
+    assert.equal(hidden.status, 404, `unassigned own ${file.name}`);
+  }
+  for (const file of [officeUnclassified, officeBilling]) {
+    const res = await call(assignedCaller, `/api/attachments/${file.id}`);
+    assert.equal(res.status, 404, `office ${file.kind} stays closed`);
+    assert.doesNotMatch(res.bytes.toString("utf8"), /HOTFIX-/, `office ${file.kind}`);
+  }
+
+  const pageSource = fs.readFileSync(path.join(process.cwd(), "app/driver/loads/[id]/page.tsx"), "utf8");
+  assert.match(pageSource, /driverMaySeeAttachment\(file, driver\)/);
+  const visibleIds = files
+    .listAttachments(loadId)
+    .filter((file) => driverDocs.driverMaySeeAttachment(file, assignedDriver))
+    .map((file) => file.id)
+    .sort((a, b) => a - b);
+  const detailResponse = await driverLoadRoute.GET(
+    new Request(`http://localhost/api/driver/v1/loads/${loadId}`, {
+      headers: { Authorization: `Bearer ${assignedToken.token}` },
+    }),
+    { params: Promise.resolve({ id: String(loadId) }) },
+  );
+  assert.equal(detailResponse.status, 200, "driver load JSON");
+  const detail = (await detailResponse.json()) as { attachments: Array<{ id: number }> };
+  const jsonIds = detail.attachments.map((file) => file.id).sort((a, b) => a - b);
+  assert.deepEqual(jsonIds, visibleIds, "JSON list matches the driver page filter");
+  assert.ok(jsonIds.includes(ownUnclassified.id));
+  assert.ok(jsonIds.includes(ownBilling.id));
+  assert.ok(jsonIds.includes(routeSentinel.id));
+  assert.ok(!jsonIds.includes(officeUnclassified.id));
+  assert.ok(!jsonIds.includes(officeBilling.id));
+  for (const file of files.listAttachments(loadId)) {
+    const res = await call(assignedCaller, `/api/attachments/${file.id}`);
+    const listed = visibleIds.includes(file.id);
+    assert.equal(res.status, listed ? 200 : 404, `${listed ? "listed" : "hidden"} ${file.kind} ${file.original_name}`);
+    assert.equal(jsonIds.includes(file.id), listed);
+  }
+
+  async function classify(attachmentId: number, kind: string) {
+    const form = new FormData();
+    form.set("attachment_id", String(attachmentId));
+    form.set("kind", kind);
+    return withCookies(assignedCaller.cookie, () => driverActions.driverClassifyAction(form));
+  }
+
+  function podStamp(): { outcome: string; recorded: string } {
+    const load = queries.getLoad(loadId);
+    assert.ok(load);
+    return { outcome: load.pod_outcome, recorded: load.pod_recorded_at };
+  }
+
+  const podBefore = podStamp();
+  const blockedRetypes = [
+    denied.find((file) => file.kind === "rate_con"),
+    denied.find((file) => file.kind === "invoice"),
+    denied.find((file) => file.kind === "other" && file.name === "plain-other.pdf"),
+    officeUnclassified,
+    officeBilling,
+  ];
+  for (const file of blockedRetypes) {
+    assert.ok(file);
+    const result = await classify(file.id, "pod");
+    assert.equal(result.ok, false, `re-type ${file.kind} ${file.name}`);
+    assert.equal(files.getAttachment(file.id)?.kind, file.kind, `kind unchanged ${file.name}`);
+  }
+  const billingAttempt = await classify(ownUnclassified.id, "carrier_invoice");
+  assert.equal(billingAttempt.ok, false, "new kind must be on the download allow-list");
+  assert.equal(files.getAttachment(ownUnclassified.id)?.kind, "unclassified");
+  const podAfterReject = podStamp();
+  assert.equal(podAfterReject.outcome, podBefore.outcome);
+  assert.equal(podAfterReject.recorded, podBefore.recorded);
+
+  const retyped = await classify(ownRetype.id, "pod");
+  assert.equal(retyped.ok, true, "own unclassified upload can become pod");
+  assert.equal(files.getAttachment(ownRetype.id)?.kind, "pod");
+  const podAfter = podStamp();
+  assert.equal(podAfter.outcome, "photo");
+  assert.notEqual(podAfter.recorded, "");
+  const opened = await call(assignedCaller, `/api/attachments/${ownRetype.id}`);
+  assert.equal(opened.status, 200);
+
+  queries.setDriverActive(assignedId, false);
+  const deadSession = await withCookies(assignedCaller.cookie, () => driverSession.getSignedInDriver());
+  assert.equal(deadSession, null, "deactivated driver cookie is not a session");
+  for (const urlPath of [`/api/attachments/${allowed[0]!.id}`, `/api/loads/${loadId}/confirmation`]) {
+    const res = await call(assignedCaller, urlPath);
+    assert.ok(res.status === 401 || res.status === 302 || res.status === 303 || res.status === 307, urlPath);
+  }
+  const deadToken = await call(assignedToken, `/api/attachments/${allowed[0]!.id}`);
+  assert.equal(deadToken.status, 401, "deactivated driver app token");
+  const deadDetail = await driverLoadRoute.GET(
+    new Request(`http://localhost/api/driver/v1/loads/${loadId}`, {
+      headers: { Authorization: `Bearer ${assignedToken.token}` },
+    }),
+    { params: Promise.resolve({ id: String(loadId) }) },
+  );
+  assert.equal(deadDetail.status, 401, "deactivated driver load JSON");
 
   console.log("driver access hotfix tests passed");
 }

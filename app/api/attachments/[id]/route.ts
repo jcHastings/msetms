@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
 import { driverFromCookieOrBearer } from "@/lib/driver-api";
-import { driverMayDownloadAttachment } from "@/lib/driver-docs";
+import { driverMaySeeAttachment } from "@/lib/driver-docs";
 import { getAttachment, getAttachmentPath, sanitizeName } from "@/lib/files";
 import { isCustomerRateDocument } from "@/lib/load-documents-shared";
 import { getLoad } from "@/lib/queries";
@@ -45,7 +45,7 @@ export async function GET(
     if (driver && isCustomerRateDocument(attachment)) {
       return new Response("Not found", { status: 404 });
     }
-    if (!driverMayDownloadAttachment(attachment)) {
+    if (!driverMaySeeAttachment(attachment, driver)) {
       return new Response("Not found", { status: 404 });
     }
   }
