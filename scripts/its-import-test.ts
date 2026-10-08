@@ -400,6 +400,42 @@ async function main(): Promise<void> {
   assert.equal(inbox.length, 1);
   assert.match(inbox[0]?.title ?? "", /unmatched driver/);
 
+  const openKey = "its-import:1008201:unmatched_driver";
+  const nobody = sheet([loadRow({ "Load #": "1008201", Status: "Invoiced", "Carrier/Driver": "Nobody Home" })]);
+  db.prepare("UPDATE exception_states SET status = 'open', updated_at = ? WHERE exception_key = ?").run("2026-01-15T12:00:00.000Z", openKey);
+  const openBefore = db.prepare("SELECT status, reason, until, updated_at FROM exception_states WHERE exception_key = ?").get(openKey) as {
+    status: string;
+    reason: string;
+    until: string;
+    updated_at: string;
+  };
+  const sameOpen = its.importItsRecords(nobody, { apply: true, snapshot: FRESH });
+  assert.equal(sameOpen.unchanged, 1);
+  const openAfter = db.prepare("SELECT status, reason, until, updated_at FROM exception_states WHERE exception_key = ?").get(openKey) as typeof openBefore;
+  assert.deepEqual(openAfter, openBefore);
+  db.prepare(
+    "UPDATE exception_states SET status = 'resolved', reason = 'office cleared', until = '', updated_at = '2026-02-02T00:00:00.000Z' WHERE exception_key = ?",
+  ).run(openKey);
+  its.importItsRecords(nobody, { apply: true, snapshot: FRESH });
+  const resolvedRow = db.prepare("SELECT status, reason, until, updated_at FROM exception_states WHERE exception_key = ?").get(openKey) as typeof openBefore;
+  assert.deepEqual(resolvedRow, {
+    status: "resolved",
+    reason: "office cleared",
+    until: "",
+    updated_at: "2026-02-02T00:00:00.000Z",
+  });
+  db.prepare(
+    "UPDATE exception_states SET status = 'snoozed', reason = 'office snoozed', until = '2026-12-01', updated_at = '2026-03-03T00:00:00.000Z' WHERE exception_key = ?",
+  ).run(openKey);
+  its.importItsRecords(nobody, { apply: true, snapshot: FRESH });
+  const snoozedRow = db.prepare("SELECT status, reason, until, updated_at FROM exception_states WHERE exception_key = ?").get(openKey) as typeof openBefore;
+  assert.deepEqual(snoozedRow, {
+    status: "snoozed",
+    reason: "office snoozed",
+    until: "2026-12-01",
+    updated_at: "2026-03-03T00:00:00.000Z",
+  });
+
   const rated = its.importItsRecords(
     sheet([loadRow({ "Load #": "1008301", Status: "Invoiced", "Total Billing Rate": "1,850.50" })]),
     { apply: true, snapshot: FRESH },
@@ -887,12 +923,29 @@ async function main(): Promise<void> {
   assert.deepEqual(staleRate.rate_filled_loads, ["1009401"]);
   assert.ok(staleRate.skipped_tms_newer_loads.includes("1009401"));
   assert.match(its.formatItsImportText(staleRate), /rate filled on TMS-newer loads: 1\n {2}1009401/);
+  const rateUpdates = (loadNumber: string) =>
+    db
+      .prepare(
+        "SELECT action, field, old_value, new_value FROM load_audit WHERE load_number = ? AND action = 'update' AND field = 'rate' ORDER BY id",
+      )
+      .all(loadNumber) as Array<{ action: string; field: string; old_value: string; new_value: string }>;
+  assert.deepEqual(rateUpdates("1009401"), [{ action: "update", field: "rate", old_value: "", new_value: "1850.5" }]);
+  assert.deepEqual(rateUpdates("1009402"), []);
   const staleRateAgain = its.importItsRecords(
     sheet([loadRow({ "Load #": "1009401", Status: "On Route", "Total Billing Rate": "1,850.50" })]),
     { apply: true, snapshot: STALE },
   );
   assert.equal(staleRateAgain.rate_filled, 0);
   assert.equal(loadField("1009401", "rate"), 1850.5);
+  assert.deepEqual(rateUpdates("1009401"), [{ action: "update", field: "rate", old_value: "", new_value: "1850.5" }]);
+  officeLoad({ loadNumber: "1009403", status: "delivered", rate: null, updatedAt: "2026-10-05T15:00:00.000Z" });
+  const staleRateDry = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009403", Status: "On Route", "Total Billing Rate": "1,850.50" })]),
+    { apply: false, snapshot: STALE },
+  );
+  assert.equal(staleRateDry.rate_filled, 1);
+  assert.equal(loadField("1009403", "rate"), null);
+  assert.deepEqual(rateUpdates("1009403"), []);
 
   const msTrailers = its.importItsRecords(
     sheet([
@@ -1050,6 +1103,161 @@ async function main(): Promise<void> {
   assert.equal(loadStatus("1006224"), "completed");
   assert.equal(loadStatus("1006225"), "delivered");
   assert.equal(duplicateAgain.skipped_tms_newer_loads.includes("1006225"), false);
+
+  const shapeId = loadId("1006224")!;
+  db.prepare(
+    `UPDATE loads
+     SET status = 'delivered',
+         pickup_start = '2026-09-23T08:00:00',
+         pickup_end = '2026-09-23T17:00:00',
+         delivery_start = '2026-09-25T08:00:00',
+         delivery_end = '2026-09-25T17:00:00',
+         updated_at = '2026-09-01T00:00:00.000Z'
+     WHERE id = ?`,
+  ).run(shapeId);
+  db.prepare("DELETE FROM load_stops WHERE load_id = ?").run(shapeId);
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at)
+     VALUES (?, 1, 'pickup', 'Westside Foods', '1 Dock St', 'Kansas City', 'MO', '64101', '', '2026-09-23T08:00:00', '2026-09-23T17:00:00', '', '')`,
+  ).run(shapeId);
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at)
+     VALUES (?, 1, 'delivery', 'Avenel DC', '2 Dock St', 'Avenel', 'NJ', '07001', '', '2026-09-25T08:00:00', '2026-09-25T17:00:00', '', '')`,
+  ).run(shapeId);
+  const shapeDir = fs.mkdtempSync(path.join(os.tmpdir(), "its-6224-"));
+  const julyFile = path.join(shapeDir, "All Loads shipped between 2026-07-01 and 2026-08-31.csv");
+  const septemberShape = path.join(shapeDir, "All Loads shipped between 2026-09-01 and 2026-09-25.csv");
+  fs.writeFileSync(
+    julyFile,
+    csvDocument([
+      loadRow({
+        "Load #": "1006224",
+        Status: "Invoiced",
+        "Ship Date": "8/22/2026",
+        "Del Date": "8/24/2026",
+        Shipper: "Alpha Foods, Beta Cold, Gamma DC",
+        "Shipper City": "Omaha, Des Moines, Chicago",
+        "Shipper St.": "NE, IA, IL",
+      }),
+    ]),
+  );
+  fs.writeFileSync(
+    septemberShape,
+    csvDocument([
+      loadRow({
+        "Load #": "1006224",
+        Status: "Delivered",
+        "Ship Date": "9/23/2026",
+        "Del Date": "9/25/2026",
+      }),
+    ]),
+  );
+  fs.utimesSync(julyFile, new Date("2026-10-02T18:00:00.000Z"), new Date("2026-10-02T18:00:00.000Z"));
+  fs.utimesSync(septemberShape, new Date("2026-09-24T18:00:00.000Z"), new Date("2026-09-24T18:00:00.000Z"));
+  const shape = its.runItsImportFiles([septemberShape, julyFile], { apply: true });
+  assert.equal(shape.conflicts.find((conflict) => conflict.load_number === "1006224")?.chosen_file, path.basename(julyFile));
+  assert.equal(loadStatus("1006224"), "completed");
+  assert.equal(loadField("1006224", "pickup_start"), "2026-09-23T08:00:00");
+  assert.equal(loadField("1006224", "pickup_end"), "2026-09-23T17:00:00");
+  assert.equal(loadField("1006224", "delivery_start"), "2026-09-25T08:00:00");
+  assert.equal(loadField("1006224", "delivery_end"), "2026-09-25T17:00:00");
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ? AND kind = 'pickup'", shapeId), 1);
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ? AND kind = 'delivery'", shapeId), 1);
+  const shapePickup = db.prepare("SELECT name, window_start, window_end FROM load_stops WHERE load_id = ? AND kind = 'pickup'").get(shapeId) as {
+    name: string;
+    window_start: string;
+    window_end: string;
+  };
+  const shapeDelivery = db.prepare("SELECT name, window_start, window_end FROM load_stops WHERE load_id = ? AND kind = 'delivery'").get(shapeId) as {
+    name: string;
+    window_start: string;
+    window_end: string;
+  };
+  assert.equal(shapePickup.name, "Westside Foods");
+  assert.equal(shapePickup.window_start, "2026-09-23T08:00:00");
+  assert.equal(shapePickup.window_end, "2026-09-23T17:00:00");
+  assert.equal(shapeDelivery.name, "Avenel DC");
+  assert.equal(shapeDelivery.window_start, "2026-09-25T08:00:00");
+  assert.equal(shapeDelivery.window_end, "2026-09-25T17:00:00");
+  assert.equal(
+    shape.diff_sample.some(
+      (diff) =>
+        diff.load_number === "1006224" &&
+        (diff.field === "pickup_start" || diff.field === "pickup_end" || diff.field === "delivery_start" || diff.field === "delivery_end"),
+    ),
+    false,
+  );
+  const shapeConflict = db.prepare("SELECT status, reason FROM exception_states WHERE exception_key = 'its-import:1006224:duplicate-conflict'").get() as {
+    status: string;
+    reason: string;
+  };
+  assert.equal(shapeConflict.status, "open");
+  assert.match(shapeConflict.reason, /2026-08-22/);
+  assert.match(shapeConflict.reason, /2026-09-23/);
+  assert.match(shapeConflict.reason, /3 pickups/);
+  assert.match(shapeConflict.reason, /1 pickups/);
+  assert.match(shapeConflict.reason, /All Loads shipped between 2026-07-01 and 2026-08-31\.csv/);
+  assert.match(shapeConflict.reason, /All Loads shipped between 2026-09-01 and 2026-09-25\.csv/);
+
+  const blankId = officeLoad({ loadNumber: "1006226", status: "delivered", updatedAt: "2026-08-01T00:00:00.000Z" });
+  db.prepare("UPDATE loads SET pickup_start = '', pickup_end = '2026-09-23T17:00:00' WHERE id = ?").run(blankId);
+  its.importItsRecords(
+    sheet([loadRow({ "Load #": "1006226", Status: "Delivered", "Ship Date": "8/22/2026", "Del Date": "8/24/2026" })]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006226", "pickup_start"), "2026-08-22T08:00:00");
+  assert.equal(loadField("1006226", "pickup_end"), "2026-09-23T17:00:00");
+  assert.equal(loadField("1006226", "delivery_start"), "2026-09-22T08:00:00");
+  assert.equal(loadField("1006226", "delivery_end"), "2026-09-22T17:00:00");
+
+  officeLoad({ loadNumber: "1006093", status: "completed", updatedAt: "2026-08-01T00:00:00.000Z" });
+  db.prepare("UPDATE loads SET trailer_number = '1919', trailer_id = NULL WHERE load_number = '1006093'").run();
+  const trailerDry = its.importItsRecords(sheet([loadRow({ "Load #": "1006093", Status: "Invoiced", Trailer: "1919" })]), {
+    apply: false,
+    snapshot: FRESH,
+    createInactiveUnits: true,
+  });
+  assert.equal(trailerDry.inactive_created.trailers.some((plan) => plan.name === "MS1919"), false);
+  assert.equal(
+    trailerDry.exception_items.some((item) => item.load_number === "1006093" && item.issue === "unmatched_trailer"),
+    true,
+  );
+  const trailerApply = its.importItsRecords(sheet([loadRow({ "Load #": "1006093", Status: "Invoiced", Trailer: "1919" })]), {
+    apply: true,
+    snapshot: FRESH,
+    createInactiveUnits: true,
+  });
+  assert.equal(trailerApply.inactive_created.trailers.some((plan) => plan.name === "MS1919"), false);
+  assert.equal(queries.listTrailers().some((trailer) => trailer.unit_number === "MS1919"), false);
+  assert.equal(loadField("1006093", "trailer_number"), "1919");
+  assert.equal(loadField("1006093", "trailer_id"), null);
+  const trailerException = db
+    .prepare("SELECT status, reason FROM exception_states WHERE exception_key = 'its-import:1006093:unmatched_trailer'")
+    .get() as { status: string; reason: string };
+  assert.equal(trailerException.status, "open");
+  assert.equal(
+    trailerException.reason,
+    'No TMS trailer matches "1919". It only appears on existing completed loads, so no inactive trailer was created.',
+  );
+  const openTrailerId = officeLoad({ loadNumber: "1006095", status: "in_transit", updatedAt: "2026-08-01T00:00:00.000Z" });
+  db.prepare("UPDATE loads SET trailer_number = '1918', trailer_id = NULL WHERE id = ?").run(openTrailerId);
+  const linkedNew = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1006094", Status: "Invoiced", Trailer: "1918" }),
+      loadRow({ "Load #": "1006095", Status: "On Route", Trailer: "1918" }),
+    ]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  const ms1918 = queries.listTrailers().find((trailer) => trailer.unit_number === "MS1918");
+  assert.ok(ms1918);
+  assert.equal(ms1918?.active, 0);
+  assert.equal(loadField("1006094", "trailer_id"), ms1918?.id);
+  assert.equal(loadField("1006094", "trailer_number"), "MS1918");
+  assert.equal(loadField("1006095", "trailer_id"), ms1918?.id);
+  assert.equal(loadField("1006095", "trailer_number"), "1918");
+  assert.equal(linkedNew.inactive_created.trailers.some((plan) => plan.name === "MS1918"), true);
+  assert.equal(loadField("1006093", "trailer_number"), "1919");
+  assert.equal(loadField("1006093", "trailer_id"), null);
 
   const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
   const { strToU8, unzipSync, zipSync } = await import("fflate");

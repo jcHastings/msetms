@@ -45,6 +45,7 @@ export const ITS_IMPORT_ISSUES = {
   unmapped_status: "ITS import — unmapped status",
   unparsable_row: "ITS import — unparsable row",
   stop_parse_uncertain: "ITS import — stop parse uncertain",
+  "duplicate-conflict": "ITS import — duplicate conflict",
 } as const;
 
 export type ItsImportIssue = keyof typeof ITS_IMPORT_ISSUES;

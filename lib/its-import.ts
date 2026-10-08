@@ -102,7 +102,7 @@ export type ItsFileSnapshot = {
   source: ExportSnapshotSource;
 };
 
-type ImportRow = LoadImportValues & { snapshot?: string | null };
+type ImportRow = LoadImportValues & { snapshot?: string | null; duplicate_conflict?: string };
 
 type StopFill = {
   id: number;
@@ -386,12 +386,19 @@ export function importItsValues(
     if (existing && exportIsStale(existing.updated_at, snapshot)) {
       const rate = rateFill(existing, row, options);
       if (rate) {
-        if (options.apply) patchLoad(existing.id, [rate]);
+        if (options.apply) {
+          patchLoad(existing.id, [rate]);
+          recordLoadChanges(existing.id, "update", [{ field: rate.field, oldValue: rate.from, newValue: rate.to }]);
+        }
         summary.rate_filled += 1;
         summary.rate_filled_loads.push(row.load_number);
         if (summary.diff_sample.length < DIFF_SAMPLE_LIMIT) {
           summary.diff_sample.push({ load_number: row.load_number, field: rate.field, from: rate.from, to: rate.to });
         }
+      }
+      if (row.duplicate_conflict) {
+        noteException(summary, row.load_number, "duplicate-conflict", row.duplicate_conflict, year);
+        if (options.apply) writeException(itsImportExceptionKey(row.load_number, "duplicate-conflict"), "open", row.duplicate_conflict);
       }
       summary.skipped_tms_newer += 1;
       summary.skipped_tms_newer_loads.push(row.load_number);
@@ -442,6 +449,9 @@ export function importItsValues(
         issue: "stop_parse_uncertain",
         detail: row.stop_parse_detail || "Stop names, cities, and states do not line up.",
       });
+    }
+    if (row.duplicate_conflict) {
+      issues.push({ issue: "duplicate-conflict", detail: row.duplicate_conflict });
     }
     if (trailer.via === "ms_alias") {
       summary.alias_matches.push({ load_number: row.load_number, its: row.trailer_unit.trim(), tms_unit: trailer.tmsUnit });
@@ -579,6 +589,9 @@ function collapseTaggedRows(tagged: TaggedRow[]): {
           .map((row) => ({ file: row.source_file, snapshot: row.snapshot ?? null, status: row.raw_status || row.status })),
       });
     }
+    if (list.length > 1 && duplicateRowsDisagree(list)) {
+      chosen.duplicate_conflict = duplicateConflictDetail(list);
+    }
     if (chosen.date_problems.length > 0) {
       problems.push({ load_number: loadNumber, detail: chosen.date_problems.join("; ") });
       continue;
@@ -586,6 +599,21 @@ function collapseTaggedRows(tagged: TaggedRow[]): {
     rows.push(chosen);
   }
   return { rows, problems, conflicts };
+}
+
+function duplicateRowsDisagree(list: TaggedRow[]): boolean {
+  const ships = new Set(list.map((row) => row.ship_date));
+  const counts = new Set(list.map((row) => row.pickups.length + row.deliveries.length));
+  return ships.size > 1 || counts.size > 1;
+}
+
+function duplicateConflictDetail(list: TaggedRow[]): string {
+  const described = list.map((row) => {
+    const ship = row.ship_date || "(blank)";
+    const status = row.raw_status || row.status;
+    return `${row.source_file} @ ${row.snapshot ?? "(none)"} ship ${ship}, ${row.pickups.length} pickups, ${row.deliveries.length} deliveries, status ${status}`;
+  });
+  return `Duplicate rows disagree. ${described.join("; ")}`;
 }
 
 function snapshotComesLater(candidate: string | null | undefined, current: string | null | undefined): boolean {
@@ -611,6 +639,7 @@ function plannedInactiveKeys(
   drivers: Array<{ id: number; name: string; company_name?: string | null; active?: number | boolean | null }>,
 ): { trucks: Set<string>; trailers: Set<string>; drivers: Set<string> } {
   const planned = { trucks: new Set<string>(), trailers: new Set<string>(), drivers: new Set<string>() };
+  const trailerOnOpenLoad = new Set<string>();
   if (!options.createInactiveUnits) return planned;
   for (const row of rows) {
     if (row.date_problems?.length) continue;
@@ -623,13 +652,15 @@ function plannedInactiveKeys(
     }
     if ((!existing || existing.trailer_id == null) && row.trailer_unit.trim()) {
       if (matchItsUnit(trailers, row.trailer_unit, { msAlias: options.msTrailerAlias }).via === "unmatched") {
-        planned.trailers.add(normalizeUnitKey(inactiveTrailerUnit(row.trailer_unit)));
+        const key = normalizeUnitKey(inactiveTrailerUnit(row.trailer_unit));
+        if (!existing || existing.status !== "completed") trailerOnOpenLoad.add(key);
       }
     }
     if ((!existing || existing.driver_id == null) && row.driver_name.trim()) {
       if (matchItsDriver(drivers, row.driver_name).via === "unmatched") planned.drivers.add(normalizePersonName(row.driver_name));
     }
   }
+  for (const key of trailerOnOpenLoad) planned.trailers.add(key);
   return planned;
 }
 
@@ -653,6 +684,13 @@ function resolveUnit(
   if (match.via === "unmatched" && options.createInactiveUnits && raw.trim() && link) {
     const display = kind === "trailer" ? inactiveTrailerUnit(raw) : raw.trim();
     const plans = kind === "truck" ? summary.inactive_created.trucks : summary.inactive_created.trailers;
+    if (kind === "trailer" && !planned.has(normalizeUnitKey(display))) {
+      issues.push({
+        issue: "unmatched_trailer",
+        detail: `No TMS trailer matches "${raw.trim()}". It only appears on existing completed loads, so no inactive trailer was created.`,
+      });
+      return match;
+    }
     noteInactivePlan(plans, display, loadNumber, normalizeUnitKey);
     if (options.apply) {
       const created = kind === "truck" ? createInactiveTruck(raw.trim()) : createInactiveTrailer(display);
@@ -736,17 +774,8 @@ function planUpdate(
     changes.push(change("customer_id", "customer", current.customer_id, customerId));
   }
   const stopFills = row.stops_uncertain ? [] : blankStopFills(readStops(current.id), plannedStops(row));
-  if (row.ship_date && calendarDay(current.pickup_start) !== row.ship_date) {
-    const [start, end] = windowForDate(row.ship_date);
-    changes.push(change("pickup_start", "pickup_start", current.pickup_start, start));
-    changes.push(change("pickup_end", "pickup_end", current.pickup_end, end));
-  }
-  const deliveryDay = row.del_date || row.ship_date;
-  if (deliveryDay && calendarDay(current.delivery_start) !== deliveryDay) {
-    const [start, end] = windowForDate(deliveryDay);
-    changes.push(change("delivery_start", "delivery_start", current.delivery_start, start));
-    changes.push(change("delivery_end", "delivery_end", current.delivery_end, end));
-  }
+  fillBlankWindow(changes, current.pickup_start, current.pickup_end, row.ship_date, "pickup_start", "pickup_end");
+  fillBlankWindow(changes, current.delivery_start, current.delivery_end, row.del_date || row.ship_date, "delivery_start", "delivery_end");
   if (row.notes && row.notes !== (current.notes ?? "")) {
     changes.push(change("notes", "notes", current.notes ?? "", row.notes));
   }
@@ -799,9 +828,6 @@ function noteSlot(
   if (decision.id === currentId) return;
   const column = kind === "truck" ? "truck_id" : kind === "trailer" ? "trailer_id" : "driver_id";
   changes.push(change(column, kind, currentId, decision.id));
-  if (kind === "trailer" && decision.id != null && (current.trailer_number ?? "") !== match.tmsUnit && match.tmsUnit) {
-    changes.push(change("trailer_number", "trailer_number", current.trailer_number ?? "", match.tmsUnit));
-  }
 }
 
 function decideSlot(currentId: number | null, match: UnitMatch): { id: number | null; reassign: boolean } {
@@ -816,6 +842,20 @@ function decideSlot(currentId: number | null, match: UnitMatch): { id: number | 
   if (match.id === currentId) return { id: currentId, reassign: false };
   if (!match.active) return { id: currentId, reassign: false };
   return { id: match.id, reassign: true };
+}
+
+function fillBlankWindow(
+  changes: Change[],
+  currentStart: string,
+  currentEnd: string,
+  day: string,
+  startColumn: "pickup_start" | "delivery_start",
+  endColumn: "pickup_end" | "delivery_end",
+): void {
+  if (!day) return;
+  const [start, end] = windowForDate(day);
+  if (!text(currentStart)) changes.push(change(startColumn, startColumn, currentStart, start));
+  if (!text(currentEnd)) changes.push(change(endColumn, endColumn, currentEnd, end));
 }
 
 function rateFill(current: { rate: number | null }, row: LoadImportValues, options: ItsImportOptions): Change | null {
@@ -1077,17 +1117,28 @@ function createInactiveDriver(name: string): { id: number; name: string; company
 }
 
 function writeException(key: string, status: "open" | "resolved", reason: string): void {
+  const nextReason = reason.trim();
+  const existing = getDb()
+    .prepare("SELECT status, reason, updated_at FROM exception_states WHERE exception_key = ?")
+    .get(key) as { status: string; reason: string; updated_at: string } | undefined;
+  if (!existing) {
+    getDb()
+      .prepare(
+        `INSERT INTO exception_states (exception_key, status, reason, until, updated_at)
+         VALUES (?, ?, ?, '', ?)`,
+      )
+      .run(key, status, nextReason, new Date().toISOString());
+    return;
+  }
+  if (existing.status === "resolved" || existing.status === "snoozed") return;
+  if (existing.status === status && existing.reason === nextReason) return;
+  if (status === "open" && existing.status === "open") {
+    getDb().prepare("UPDATE exception_states SET reason = ? WHERE exception_key = ?").run(nextReason, key);
+    return;
+  }
   getDb()
-    .prepare(
-      `INSERT INTO exception_states (exception_key, status, reason, until, updated_at)
-       VALUES (?, ?, ?, '', ?)
-       ON CONFLICT(exception_key) DO UPDATE SET
-         status = excluded.status,
-         reason = excluded.reason,
-         until = excluded.until,
-         updated_at = excluded.updated_at`,
-    )
-    .run(key, status, reason.trim(), new Date().toISOString());
+    .prepare("UPDATE exception_states SET status = ?, reason = ?, until = '', updated_at = ? WHERE exception_key = ?")
+    .run(status, nextReason, new Date().toISOString(), key);
 }
 
 function syncExceptions(loadNumber: string, issues: Array<{ issue: ItsImportIssue; detail: string }>, apply: boolean): void {
@@ -1102,7 +1153,9 @@ function syncExceptions(loadNumber: string, issues: Array<{ issue: ItsImportIssu
     const row = getDb().prepare("SELECT status FROM exception_states WHERE exception_key = ?").get(key) as
       | { status: string }
       | undefined;
-    if (row && row.status !== "resolved") writeException(key, "resolved", "Cleared by a later ITS import.");
+    if (row && row.status !== "resolved" && row.status !== "snoozed") {
+      writeException(key, "resolved", "Cleared by a later ITS import.");
+    }
   }
 }
 
