@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { PDFDocument } from "pdf-lib";
 import {
+  brokerageIdentityVisible,
   documentIssuedByBrokerage,
   findBrokerageSpans,
   findMoneySpans,
@@ -273,16 +274,24 @@ function fontFamily(styles: Record<string, TextStyle>, fontName: string): string
 function widthFractions(item: PlacedItem, from: number, to: number, styles: Record<string, TextStyle>): [number, number] {
   const full = item.str;
   const len = Math.max(1, full.length);
-  const localFrom = Math.max(0, from - item.start);
-  const localTo = Math.min(full.length, to - item.start);
-  if (full.trim().length <= 12) return [0, 1];
+  const localFrom = Math.max(0, Math.min(full.length, from - item.start));
+  const localTo = Math.max(localFrom, Math.min(full.length, to - item.start));
+  const comparable = full.trim().replace(/\s+/g, "");
+  const covered = full.slice(localFrom, localTo).replace(/\s+/g, "");
+  if (comparable.length > 0 && covered.length / comparable.length >= 0.7) return [0, 1];
   const size = Math.max(8, Math.hypot(item.transform[2] || 0, item.transform[3] || 0) || item.height || 12);
   measureCtx.font = `${size}px ${fontFamily(styles, item.fontName)}`;
   const total = measureCtx.measureText(full).width;
   if (!(total > 0)) return [localFrom / len, localTo / len];
-  const left = measureCtx.measureText(full.slice(0, localFrom)).width / total;
-  const right = measureCtx.measureText(full.slice(0, localTo)).width / total;
-  return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, right))];
+  const widthAt = (index: number) => measureCtx.measureText(full.slice(0, index)).width;
+  let gapStart = localFrom;
+  while (gapStart > 0 && /\s/.test(full[gapStart - 1] ?? "")) gapStart -= 1;
+  let gapEnd = localTo;
+  while (gapEnd < full.length && /\s/.test(full[gapEnd] ?? "")) gapEnd += 1;
+  const pad = size * 0.15;
+  const left = Math.max(widthAt(gapStart), widthAt(localFrom) - pad);
+  const right = Math.min(widthAt(gapEnd), widthAt(localTo) + pad);
+  return [Math.max(0, Math.min(1, left / total)), Math.max(0, Math.min(1, Math.max(left, right) / total))];
 }
 
 function requirementValue(text: string): boolean {
@@ -306,7 +315,7 @@ function paintSpans(
   items: PlacedItem[],
   spans: MoneySpan[],
   styles: Record<string, TextStyle>,
-  options?: { skipRequirementItems?: boolean },
+  options?: { skipRequirementItems?: boolean; previousBaseline?: number },
 ): PaintBox[] {
   const boxes: PaintBox[] = [];
   for (const item of items) {
@@ -320,21 +329,25 @@ function paintSpans(
       const y = item.transform[5];
       const width = item.width;
       const height = Math.max(item.height || 0, Math.abs(item.transform[3] || 0), 8);
-      const padX = height * 0.5;
+      const wholeItem = f0 === 0 && f1 === 1;
+      const padX = wholeItem ? height * 0.15 : 0;
       const below = Math.max(1, height * 0.18);
-      const above = Math.max(0.8, height * 0.06);
+      let topPdf = y + height;
+      const previousBaseline = options?.previousBaseline;
+      if (previousBaseline != null && previousBaseline > y + 2) {
+        topPdf = Math.min(topPdf, (y + height + previousBaseline) / 2);
+      }
       const x0 = x + width * f0 - padX;
       const x1 = x + width * f1 + padX;
       const p0 = viewport.convertToViewportPoint(x0, y - below);
-      const p1 = viewport.convertToViewportPoint(x1, y + height + above);
-      const left = Math.min(p0[0], p1[0]) - 1;
-      const top = Math.min(p0[1], p1[1]) - 1;
-      const boxW = Math.abs(p0[0] - p1[0]) + 2;
-      const boxH = Math.abs(p0[1] - p1[1]) + 2;
-      const viewportPad = Math.max(4, padX * (RENDER_SCALE / 2));
+      const p1 = viewport.convertToViewportPoint(x1, topPdf);
+      const left = Math.min(p0[0], p1[0]);
+      const top = Math.min(p0[1], p1[1]);
+      const boxW = Math.abs(p0[0] - p1[0]) + 1;
+      const boxH = Math.abs(p0[1] - p1[1]) + 1;
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
-      boxes.push({ left, top, w: boxW, h: boxH, pad: viewportPad });
+      boxes.push({ left, top, w: boxW, h: boxH, pad: 4 });
     }
   }
   return boxes;
@@ -461,20 +474,21 @@ function paintOcrMoney(
   return painted;
 }
 
-function digitTouchesBox(word: OcrWord, box: PaintBox, originX: number, originY: number): boolean {
-  if (!/^[^A-Za-z]*\d[^A-Za-z]*$/.test(word.text)) return false;
+function digitTouchSide(word: OcrWord, box: PaintBox, originX: number, originY: number): "left" | "right" | null {
+  if (!/^[^A-Za-z]*\d[^A-Za-z]*$/.test(word.text)) return null;
   const x0 = originX + word.x0;
   const x1 = originX + word.x1;
   const cx = (x0 + x1) / 2;
   const cy = originY + (word.y0 + word.y1) / 2;
-  // Digits centered on the line above or below belong to that line.
   const lineSlack = Math.max(3, box.h * 0.3);
-  if (cy < box.top - lineSlack || cy > box.top + box.h + lineSlack) return false;
+  if (cy < box.top - lineSlack || cy > box.top + box.h + lineSlack) return null;
   const edge = 4;
-  if (cx < box.left - edge || cx > box.left + box.w + edge) return false;
+  if (cx < box.left - edge || cx > box.left + box.w + edge) return null;
   const inset = 6;
-  const buried = x0 >= box.left + inset && x1 <= box.left + box.w - inset;
-  return !buried;
+  if (x0 >= box.left + inset && x1 <= box.left + box.w - inset) return null;
+  const distLeft = Math.abs(cx - box.left);
+  const distRight = Math.abs(cx - (box.left + box.w));
+  return distLeft <= distRight ? "left" : "right";
 }
 
 async function widenBoxes(
@@ -485,20 +499,23 @@ async function widenBoxes(
   let leak = false;
   for (const box of boxes) {
     if (box.w < 4 || box.h < 4) continue;
-    let touching = await boxEdgeDigits(canvas, box);
-    if (!touching) continue;
-    const grow = Math.max(6, box.pad);
-    box.left -= grow;
-    box.w += grow * 2;
+    let sides = await boxEdgeSides(canvas, box);
+    if (!sides.size) continue;
+    const grow = Math.max(4, box.pad);
+    if (sides.has("left")) {
+      box.left -= grow;
+      box.w += grow;
+    }
+    if (sides.has("right")) box.w += grow;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(box.left, box.top, box.w, box.h);
-    touching = await boxEdgeDigits(canvas, box);
-    if (touching) leak = true;
+    sides = await boxEdgeSides(canvas, box);
+    if (sides.size) leak = true;
   }
   return leak;
 }
 
-async function boxEdgeDigits(canvas: Canvas, box: PaintBox): Promise<boolean> {
+async function boxEdgeSides(canvas: Canvas, box: PaintBox): Promise<Set<"left" | "right">> {
   const bandX = 12;
   const bandY = 2;
   const x = Math.max(0, Math.floor(box.left - bandX));
@@ -510,10 +527,15 @@ async function boxEdgeDigits(canvas: Canvas, box: PaintBox): Promise<boolean> {
   sliceCtx.fillStyle = "#ffffff";
   sliceCtx.fillRect(0, 0, slice.width, slice.height);
   sliceCtx.drawImage(canvas, x, y, w, h, 8, 8, w, h);
-  if (darkRatio(slice) < 0.008) return false;
+  if (darkRatio(slice) < 0.008) return new Set();
   const ocr = await ocrWords(slice.toBuffer("image/png"));
-  if (!ocr) return false;
-  return ocr.words.some((word) => digitTouchesBox(word, box, x - 8, y - 8));
+  const sides = new Set<"left" | "right">();
+  if (!ocr) return sides;
+  for (const word of ocr.words) {
+    const side = digitTouchSide(word, box, x - 8, y - 8);
+    if (side) sides.add(side);
+  }
+  return sides;
 }
 
 async function imageOnlyPdf(pages: Array<{ png: Buffer; width: number; height: number }>): Promise<Buffer> {
@@ -606,7 +628,13 @@ export function ocrDollarLeak(ocrText: string, sourceText: string): string | nul
   return null;
 }
 
-async function verifyDriverCopy(pdf: Buffer, pagePngs: Buffer[], forbidden: string[], sourceText: string): Promise<string> {
+async function verifyDriverCopy(
+  pdf: Buffer,
+  pagePngs: Buffer[],
+  forbidden: string[],
+  sourceText: string,
+  checkIdentity = false,
+): Promise<string> {
   const problems: string[] = [];
   let text = "";
   try {
@@ -625,6 +653,7 @@ async function verifyDriverCopy(pdf: Buffer, pagePngs: Buffer[], forbidden: stri
     const ocr = await ocrWords(png);
     const leak = ocr ? ocrDollarLeak(ocr.text, sourceText) : null;
     if (leak) problems.push(`OCR still sees a dollar amount (${leak})`);
+    if (checkIdentity && ocr && brokerageIdentityVisible(ocr.text)) problems.push("brokerage identity visible");
   }
   if (!problems.length) return "ok";
   return `failed: ${problems.join("; ")}`;
@@ -674,19 +703,52 @@ function columnBrokerageSpans(
   return spans;
 }
 
+function lineFontSize(line: { items: PlacedItem[] }): number {
+  const sizes = line.items
+    .map((item) => Math.abs(item.transform[3] || item.height || 0))
+    .filter((size) => size > 0);
+  return sizes.length ? Math.max(...sizes) : 11;
+}
+
+function medianNumber(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
 function letterheadLineIndexes(lines: PagePlan["lines"], pageHeight: number): Set<number> {
-  const anchors = lines.flatMap((line) => {
-    const y = lineBaseline(line);
-    if (!lineAnchorsBrokerageLetterhead(line.text) || y < pageHeight * 0.58) return [];
-    return [{ y }];
+  const rows = lines.map((line, index) => {
+    const xs = line.items.map((item) => item.transform[4]).filter((value) => Number.isFinite(value));
+    return {
+      index,
+      y: lineBaseline(line),
+      x: xs.length ? Math.min(...xs) : 0,
+      size: lineFontSize(line),
+      text: line.text,
+    };
   });
+  const anchors = rows.filter((row) => lineAnchorsBrokerageLetterhead(row.text) && row.y >= pageHeight * 0.4);
   const indexes = new Set<number>();
   if (!anchors.length) return indexes;
-  lines.forEach((line, index) => {
-    const y = lineBaseline(line);
-    if (y < pageHeight * 0.58) return;
-    if (anchors.some((anchor) => Math.abs(anchor.y - y) <= 30)) indexes.add(index);
-  });
+  const first = anchors.reduce((best, row) => (row.y > best.y ? row : best));
+  const column = rows
+    .filter((row) => Math.abs(row.x - first.x) <= 80 && row.y <= first.y + 1)
+    .sort((a, b) => b.y - a.y);
+  const gaps: number[] = [];
+  let previous: (typeof column)[number] | null = null;
+  for (const row of column) {
+    if (row.y > first.y + 0.5) continue;
+    if (/carrier\s+information|^\s*carrier\b/i.test(row.text)) break;
+    if (previous) {
+      const gap = previous.y - row.y;
+      const font = Math.max(previous.size, row.size, 8);
+      const typical = gaps.length ? medianNumber(gaps) : font * 1.15;
+      if (gap > Math.max(typical, font) * 1.5 + 0.75) break;
+      gaps.push(gap);
+    }
+    indexes.add(row.index);
+    previous = row;
+  }
   return indexes;
 }
 
@@ -815,6 +877,7 @@ async function rasterPages(
       const boxes: PaintBox[] = [];
       for (let index = 0; index < plan.lines.length; index += 1) {
         const line = plan.lines[index];
+        const previousBaseline = index > 0 ? lineBaseline(plan.lines[index - 1] ?? { items: [] }) : undefined;
         boxes.push(
           ...paintSpans(
             paint,
@@ -822,6 +885,7 @@ async function rasterPages(
             line.items,
             findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
             plan.styles,
+            { previousBaseline },
           ),
         );
         if (!brokerage) continue;
@@ -832,7 +896,7 @@ async function rasterPages(
             line.items,
             columnBrokerageSpans(line, letterhead.has(index)),
             plan.styles,
-            { skipRequirementItems: true },
+            { skipRequirementItems: true, previousBaseline },
           ),
         );
       }
@@ -947,10 +1011,11 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   }
   let verification = "failed: not checked";
   try {
-    verification = await verifyDriverCopy(pdf, raster.pngs, forbidden, sourceText);
+    verification = await verifyDriverCopy(pdf, raster.pngs, forbidden, sourceText, documentIssuedByBrokerage(sourceText));
   } catch (error) {
     verification = `failed: ${error instanceof Error ? error.message : "verification threw"}`;
   }
+  if (/brokerage identity visible/i.test(verification)) reasons.push("brokerage identity visible");
   if (!verification.startsWith("ok")) reasons.push("Verification did not pass.");
   const hold = reasons.length > 0;
   return {

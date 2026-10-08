@@ -35,6 +35,9 @@ const READY = [
   "p-invoice-terms.pdf",
   "q-percent.pdf",
   "r-third-party.pdf",
+  "s-ascend-header.pdf",
+  "u-tonu-label.pdf",
+  "v-msexpress-office.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -56,6 +59,10 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("p-")) return ["$800.00"];
   if (name.startsWith("q-")) return ["$100 fine", "$640.00"];
   if (name.startsWith("r-")) return ["$900.00"];
+  if (name.startsWith("s-")) return ["$900.00", "(845) 555-0162", "billing@msloads.com"];
+  if (name.startsWith("t-")) return ["$500.00"];
+  if (name.startsWith("u-")) return ["$75", "$2,150.00"];
+  if (name.startsWith("v-")) return ["$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -164,6 +171,23 @@ async function main(): Promise<void> {
   );
   assert.equal(money.documentIssuedByBrokerage("ACME FREIGHT\nCarrier: M&S Loads\nPhone: 402-302-0097"), false);
   assert.equal(money.documentIssuedByBrokerage("RATE CONFIRMATION\nBroker: M&S Loads LLC\nCarrier: Other Trucking"), true);
+  assert.equal(
+    money.documentIssuedByBrokerage("228 East Route 59 Unit 190\nNanuet, NY 10954\nDocket: MC970613\nPhone: (845) 555-0162"),
+    true,
+  );
+  assert.equal(
+    money.documentIssuedByBrokerage("M&S Loads\n600 E 39th St · Hastings, NE 68901\nMC 056299\n402-302-0097"),
+    false,
+  );
+  assert.doesNotMatch(money.maskBrokerage("228 East Route 59 Unit 190"), /Unit|190|Route 59/);
+  assert.equal(money.brokerageIdentityVisible("Nanuet"), true);
+  assert.equal(money.brokerageIdentityVisible("Route 59"), true);
+  assert.equal(money.brokerageIdentityVisible("970613"), true);
+  assert.equal(money.brokerageIdentityVisible("billing@msloads.com"), true);
+  assert.equal(money.brokerageIdentityVisible("Deerfield Beach"), true);
+  assert.equal(money.brokerageIdentityVisible("M&S Loads LLC"), true);
+  assert.equal(money.brokerageIdentityVisible("M & S LOADS LLC"), true);
+  assert.equal(money.brokerageIdentityVisible("Hastings Packing and M&S Loads"), false);
   assert.match(money.maskBrokerage("M&S Loads DBA MS Express"), /M&S Loads DBA MS Express/);
   assert.doesNotMatch(money.maskBrokerage("M&S Loads LLC"), /M&S/);
   assert.doesNotMatch(money.maskBrokerage("MC-970613"), /970613/);
@@ -217,6 +241,7 @@ async function main(): Promise<void> {
     { name: "f-form-field.pdf", file: path.join(FIXTURE_DIR, "f-form-field.pdf"), ready: false },
     { name: "k-invoice.pdf", file: path.join(FIXTURE_DIR, "k-invoice.pdf"), ready: false },
     { name: "l-customer-confirmation.pdf", file: path.join(FIXTURE_DIR, "l-customer-confirmation.pdf"), ready: false },
+    { name: "t-identity-guard.pdf", file: path.join(FIXTURE_DIR, "t-identity-guard.pdf"), ready: false },
     { name: "cb-logistics-106361.pdf", file: CB_FIXTURE, ready: true },
   ];
 
@@ -238,6 +263,7 @@ async function main(): Promise<void> {
     if (item.name.startsWith("f-")) assert.match(built.reason, /annotation or form field/);
     if (item.name.startsWith("k-")) assert.match(built.reason, /invoice/i);
     if (item.name.startsWith("l-")) assert.match(built.reason, /customer confirmation/i);
+    if (item.name.startsWith("t-")) assert.match(built.reason, /brokerage identity visible/i);
     const raw = built.pdf.toString("latin1");
     assert.equal(raw.includes("SECRET-BROKER-META"), false, item.name);
     assert.doesNotMatch(raw, /\/Annots\s*\[\s*[^\s\]]/, item.name);
@@ -295,6 +321,22 @@ async function main(): Promise<void> {
       const seen = await ocrPng(built.pagePngs[0]);
       assert.match(seen, /M\s*&\s*S\s+Loads|M&S/i, seen.slice(0, 500));
       assert.match(seen, /402/, seen.slice(0, 500));
+    }
+    if (item.name.startsWith("s-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /Nanuet|970613|845|Maria|Lopez|billing@msloads|Route\s*59|Unit\s*190|M\s*&\s*S\s+LOADS/i, seen.slice(0, 900));
+      assert.match(seen, /Packing|Hast/i, seen.slice(0, 900));
+    }
+    if (item.name.startsWith("u-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.match(seen, /TONU/i, seen.slice(0, 500));
+    }
+    if (item.name.startsWith("v-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.match(seen, /MSEXPRESSLOGO/i, seen.slice(0, 700));
+      assert.match(seen, /dispatch|dbspatch|@/i, seen.slice(0, 700));
+      assert.match(seen, /402/, seen.slice(0, 700));
+      assert.match(seen, /M\s*&\s*S|Hast/i, seen.slice(0, 700));
     }
   }
 

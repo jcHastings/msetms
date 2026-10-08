@@ -298,6 +298,80 @@ async function main(): Promise<void> {
     doc.text("Line haul: $900.00");
   });
 
+  const ascendLogo = createCanvas(360, 52);
+  const ascendCtx = ascendLogo.getContext("2d");
+  ascendCtx.fillStyle = "#ffffff";
+  ascendCtx.fillRect(0, 0, 360, 52);
+  ascendCtx.fillStyle = "#111111";
+  ascendCtx.font = "bold 26px sans-serif";
+  ascendCtx.fillText("M & S LOADS LLC", 8, 34);
+
+  await writePdf("s-ascend-header.pdf", "SECRET-BROKER-META-ASCEND", (doc) => {
+    doc.image(ascendLogo.toBuffer("image/png"), 48, 36, { width: 180, height: 26 });
+    doc.fontSize(11);
+    doc.text("228 East Route 59 Unit 190", 48, 72);
+    doc.text("Nanuet, NY 10954", 48, 86);
+    doc.text("Docket: MC970613", 48, 100);
+    doc.text("Phone: (845) 555-0162", 48, 118);
+    doc.text("Carrier Information", 48, 168);
+    doc.text("Carrier: MS Express", 48, 186);
+    doc.text("Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901", 48, 210);
+    doc.text("Line haul: $900.00", 48, 236);
+    doc.text("Questions for Maria Lopez (M & S LOADS LLC.)", 48, 640);
+    doc.text("Send billing to billing@msloads.com", 48, 658);
+  });
+
+  const leftover = createCanvas(280, 48);
+  const leftoverCtx = leftover.getContext("2d");
+  leftoverCtx.fillStyle = "#ffffff";
+  leftoverCtx.fillRect(0, 0, 280, 48);
+  leftoverCtx.fillStyle = "#111111";
+  leftoverCtx.font = "bold 32px sans-serif";
+  leftoverCtx.fillText("Nanuet", 8, 34);
+
+  await writePdf("t-identity-guard.pdf", "SECRET-BROKER-META-GUARD", (doc) => {
+    doc.fontSize(11);
+    doc.text("228 East Route 59 Unit 190", 48, 72);
+    doc.text("Nanuet, NY 10954", 48, 88);
+    doc.text("Docket: MC970613", 48, 104);
+    doc.text("Carrier: MS Express", 48, 150);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 172);
+    doc.text("Line haul: $500.00", 48, 200);
+    doc.image(leftover.toBuffer("image/png"), 48, 480, { width: 140, height: 24 });
+  });
+
+  await writePdf("u-tonu-label.pdf", "SECRET-BROKER-META-TONU-LABEL", (doc) => {
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 72);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 110);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 130);
+    doc.text("• TONU: $75", 48, 200);
+    doc.text("Line haul: $2,150.00", 48, 220);
+  });
+
+  const officeLogo = createCanvas(320, 48);
+  const officeCtx = officeLogo.getContext("2d");
+  officeCtx.fillStyle = "#ffffff";
+  officeCtx.fillRect(0, 0, 320, 48);
+  officeCtx.fillStyle = "#111111";
+  officeCtx.font = "bold 24px sans-serif";
+  officeCtx.fillText("MSEXPRESSLOGO", 8, 32);
+
+  await writePdf("v-msexpress-office.pdf", "SECRET-BROKER-META-OFFICE", (doc) => {
+    doc.image(officeLogo.toBuffer("image/png"), 48, 36, { width: 180, height: 28 });
+    doc.fontSize(14).text("M&S Loads", 250, 48);
+    doc.fontSize(11);
+    doc.text("600 E 39th St · Hastings, NE 68901", 48, 84);
+    doc.text("MC 056299", 48, 100);
+    doc.text("402-302-0097", 48, 116);
+    doc.text("dispatch@msloads.com", 48, 132);
+    doc.fontSize(16).text("RATE CONFIRMATION", 48, 170);
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express", 48, 200);
+    doc.text("Pickup: Omaha Cold, Omaha, NE 68102", 48, 220);
+    doc.text("Line haul: $900.00", 48, 248);
+  });
+
   const scan = createCanvas(1224, 1584);
   const ctx = scan.getContext("2d");
   ctx.fillStyle = "#ffffff";
