@@ -19,7 +19,7 @@ export async function GET(
     driverId: driver?.id ?? null,
   });
   if (!access.ok) {
-    return new Response(access.status === 403 ? "Forbidden" : "Not found", { status: access.status });
+    return new Response("Not found", { status: access.status === 403 ? 404 : access.status });
   }
   const page = Number.parseInt(rawPage, 10);
   const buffer = readRateConRedactionPage(access.row, page);

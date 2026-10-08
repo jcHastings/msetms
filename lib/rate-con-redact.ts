@@ -108,6 +108,7 @@ type PdfPage = {
   getAnnotations: (params?: { intent?: string }) => Promise<unknown[]>;
   getOperatorList: (params?: { intent?: string; annotationMode?: number }) => Promise<PdfOperatorList>;
   render: (params: Record<string, unknown>) => { promise: Promise<void> };
+  commonObjs?: Iterable<[string, unknown]>;
 };
 
 let pdfjsPromise: Promise<PdfjsModule> | null = null;
@@ -222,6 +223,7 @@ async function openPdf(buffer: Buffer): Promise<{ pdfjs: PdfjsModule; doc: PdfDo
     standardFontDataUrl: paths.standardFontDataUrl,
     useSystemFonts: false,
     disableFontFace: true,
+    fontExtraProperties: true,
     verbosity: 0,
     isEvalSupported: false,
   });
@@ -273,21 +275,102 @@ function fontFamily(styles: Record<string, TextStyle>, fontName: string): string
   return family.includes(" ") ? `"${family}"` : family;
 }
 
-function widthFractions(item: PlacedItem, from: number, to: number, styles: Record<string, TextStyle>): [number, number] {
+type GlyphFont = {
+  widthOf: (char: string) => number | null;
+};
+
+/** pdfjs fills font widths while painting. Keys match each text item's fontName. */
+function glyphFonts(page: PdfPage): Map<string, GlyphFont> {
+  const fonts = new Map<string, GlyphFont>();
+  if (!page.commonObjs) return fonts;
+  for (const [id, data] of page.commonObjs) {
+    if (!data || typeof data !== "object" || !("widths" in data)) continue;
+    const row = data as { widths?: unknown; defaultWidth?: unknown };
+    const table = row.widths;
+    if (!table || (typeof table !== "object" && !(table instanceof Map))) continue;
+    const fallback = typeof row.defaultWidth === "number" && row.defaultWidth > 0 ? row.defaultWidth : 0;
+    fonts.set(id, {
+      widthOf(char: string) {
+        const code = char.codePointAt(0);
+        if (code == null) return null;
+        const value = table instanceof Map ? table.get(code) : (table as Record<number, number>)[code];
+        if (typeof value === "number" && value > 0) return value;
+        return fallback > 0 ? fallback : null;
+      },
+    });
+  }
+  return fonts;
+}
+
+/**
+ * Pull a `$` that sits against the amount (optional spaces between) into the
+ * covered range. A glued neighbor such as `/Each` stays outside: the edge
+ * remains the inter-letter gap, and a space keeps the inter-word gap.
+ */
+function coverTouchingDollar(full: string, from: number, to: number): [number, number] {
+  let start = from;
+  let end = to;
+  let cursor = start;
+  while (cursor > 0 && /\s/.test(full[cursor - 1] ?? "")) cursor -= 1;
+  if (cursor > 0 && full[cursor - 1] === "$") start = cursor - 1;
+  cursor = end;
+  while (cursor < full.length && /\s/.test(full[cursor] ?? "")) cursor += 1;
+  if (cursor < full.length && full[cursor] === "$") end = cursor + 1;
+  return [start, end];
+}
+
+function widthFractions(
+  item: PlacedItem,
+  from: number,
+  to: number,
+  styles: Record<string, TextStyle>,
+  fonts: Map<string, GlyphFont>,
+): [number, number, number, number] {
   const full = item.str;
   const len = Math.max(1, full.length);
-  const localFrom = Math.max(0, Math.min(full.length, from - item.start));
-  const localTo = Math.max(localFrom, Math.min(full.length, to - item.start));
-  const comparable = full.trim().replace(/\s+/g, "");
-  const covered = full.slice(localFrom, localTo).replace(/\s+/g, "");
-  if (comparable.length > 0 && covered.length / comparable.length >= 0.7) return [0, 1];
+  let localFrom = Math.max(0, Math.min(full.length, from - item.start));
+  let localTo = Math.max(localFrom, Math.min(full.length, to - item.start));
+  [localFrom, localTo] = coverTouchingDollar(full, localFrom, localTo);
+  const prev = full[localFrom - 1];
+  const next = full[localTo];
+  const slopLeft = prev != null && /\s/.test(prev) ? 0.4 : 0;
+  const slopRight = next != null && /\s/.test(next) ? 0.4 : 0;
+  const font = fonts.get(item.fontName);
+  if (font && full.length > 0) {
+    const units: number[] = [];
+    let measured = true;
+    for (const char of full) {
+      const width = font.widthOf(char);
+      if (width == null || width <= 0) {
+        measured = false;
+        break;
+      }
+      units.push(width);
+    }
+    const total = measured ? units.reduce((sum, width) => sum + width, 0) : 0;
+    if (total > 0) {
+      let leftUnits = 0;
+      let rightUnits = 0;
+      let index = 0;
+      for (const char of full) {
+        if (index === localFrom) leftUnits = rightUnits;
+        if (index === localTo) break;
+        rightUnits += units[index] ?? 0;
+        index += char.length;
+      }
+      if (index < localTo) rightUnits = total;
+      const left = leftUnits / total;
+      const right = rightUnits / total;
+      return [Math.max(0, Math.min(1, left)), Math.max(left, Math.min(1, right)), slopLeft, slopRight];
+    }
+  }
   const size = Math.max(8, Math.hypot(item.transform[2] || 0, item.transform[3] || 0) || item.height || 12);
   measureCtx.font = `${size}px ${fontFamily(styles, item.fontName)}`;
   const total = measureCtx.measureText(full).width;
-  if (!(total > 0)) return [localFrom / len, localTo / len];
+  if (!(total > 0)) return [localFrom / len, localTo / len, slopLeft, slopRight];
   const left = measureCtx.measureText(full.slice(0, localFrom)).width / total;
   const right = measureCtx.measureText(full.slice(0, localTo)).width / total;
-  return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, Math.max(left, right)))];
+  return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, Math.max(left, right))), slopLeft, slopRight];
 }
 
 function requirementValue(text: string): boolean {
@@ -302,79 +385,6 @@ function requirementValue(text: string): boolean {
   return false;
 }
 
-type InkCanvas = {
-  width: number;
-  height: number;
-  getContext: (kind: "2d") => {
-    getImageData: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray };
-  } | null;
-};
-
-function columnHasInk(data: Uint8ClampedArray, bandWidth: number, bandHeight: number, x: number): boolean {
-  if (x < 0 || x >= bandWidth) return false;
-  for (let y = 0; y < bandHeight; y += 1) {
-    const index = (y * bandWidth + x) * 4;
-    if (data[index] < 248 || data[index + 1] < 248 || data[index + 2] < 248) return true;
-  }
-  return false;
-}
-
-/** Grow a partial box through leftover glyph ink, and stop before the next word. */
-function tunePartialBox(
-  canvas: InkCanvas,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-  maxPx: number,
-): { left: number; width: number } {
-  const ctx = canvas.getContext("2d");
-  if (!ctx || maxPx < 1 || width < 1 || height < 1) return { left, width };
-  const x0 = Math.max(0, Math.floor(left) - maxPx);
-  const x1 = Math.min(canvas.width, Math.ceil(left + width) + maxPx);
-  const y0 = Math.max(0, Math.floor(top) + 1);
-  const y1 = Math.min(canvas.height, Math.ceil(top + height) - 1);
-  const bandW = Math.max(1, x1 - x0);
-  const bandH = Math.max(1, y1 - y0);
-  const data = ctx.getImageData(x0, y0, bandW, bandH).data;
-  const ink = (x: number) => columnHasInk(data, bandW, bandH, x - x0);
-  let newLeft = Math.floor(left);
-  let grown = 0;
-  while (grown < maxPx && newLeft > 0 && ink(newLeft - 1)) {
-    newLeft -= 1;
-    grown += 1;
-  }
-  let newRight = Math.ceil(left + width);
-  let wordGap = false;
-  const gapNeed = Math.max(3, Math.round(maxPx * 0.25));
-  for (let distance = gapNeed; distance <= maxPx; distance += 1) {
-    const x = newRight - distance;
-    if (x <= 0) break;
-    let run = true;
-    for (let offset = 0; offset < gapNeed; offset += 1) {
-      if (ink(x + offset)) {
-        run = false;
-        break;
-      }
-    }
-    if (!run) continue;
-    let edge = x + gapNeed - 1;
-    while (edge < newRight && !ink(edge)) edge += 1;
-    newRight = edge;
-    wordGap = true;
-    break;
-  }
-  if (!wordGap) {
-    let used = 0;
-    while (used < maxPx && newRight < canvas.width && ink(newRight)) {
-      newRight += 1;
-      used += 1;
-    }
-  }
-  if (newRight < newLeft + 1) newRight = newLeft + 1;
-  return { left: newLeft, width: newRight - newLeft };
-}
-
 function paintSpans(
   ctx: {
     fillStyle: string;
@@ -384,7 +394,8 @@ function paintSpans(
   items: PlacedItem[],
   spans: MoneySpan[],
   styles: Record<string, TextStyle>,
-  options?: { skipRequirementItems?: boolean; previousBaseline?: number; canvas?: InkCanvas },
+  fonts: Map<string, GlyphFont>,
+  options?: { skipRequirementItems?: boolean; previousBaseline?: number },
 ): PaintBox[] {
   const boxes: PaintBox[] = [];
   for (const item of items) {
@@ -393,32 +404,25 @@ function paintSpans(
       const from = Math.max(span.start, item.start);
       const to = Math.min(span.end, item.end);
       if (to <= from) continue;
-      const [f0, f1] = widthFractions(item, from, to, styles);
+      const [f0, f1, slopLeft, slopRight] = widthFractions(item, from, to, styles, fonts);
       const x = item.transform[4];
       const y = item.transform[5];
       const width = item.width;
       const height = Math.max(item.height || 0, Math.abs(item.transform[3] || 0), 8);
-      const wholeItem = f0 === 0 && f1 === 1;
-      const padX = wholeItem ? height * 0.15 : 0;
       const below = Math.max(1, height * 0.18);
       let topPdf = y + height;
       const previousBaseline = options?.previousBaseline;
       if (previousBaseline != null && previousBaseline > y + 2) {
         topPdf = Math.min(topPdf, (y + height + previousBaseline) / 2);
       }
-      const x0 = x + width * f0 - padX;
-      const x1 = x + width * f1 + padX;
+      const x0 = Math.max(x, Math.min(x + width, x + width * f0 - slopLeft));
+      const x1 = Math.max(x0, Math.min(x + width, x + width * f1 + slopRight));
       const p0 = viewport.convertToViewportPoint(x0, y - below);
       const p1 = viewport.convertToViewportPoint(x1, topPdf);
-      let left = Math.min(p0[0], p1[0]);
+      const left = Math.min(p0[0], p1[0]);
       const top = Math.min(p0[1], p1[1]);
-      let boxW = Math.abs(p0[0] - p1[0]);
+      const boxW = Math.abs(p0[0] - p1[0]);
       const boxH = Math.abs(p0[1] - p1[1]) + 1;
-      if (!wholeItem && options?.canvas) {
-        const tuned = tunePartialBox(options.canvas, left, top, boxW, boxH, Math.max(2, Math.round(height * RENDER_SCALE * 0.6)));
-        left = tuned.left;
-        boxW = tuned.width;
-      }
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
       boxes.push({ left, top, w: boxW, h: boxH, pad: 4 });
@@ -946,6 +950,7 @@ async function rasterPages(
       }).promise;
       if (plan.textChars >= 80 && darkRatio(canvas) < 0.0015) blank = true;
       const paint = ctx as { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void };
+      const fonts = glyphFonts(entry.page);
       const letterhead = brokerage ? letterheadLineIndexes(plan.lines, natural.height) : new Set<number>();
       if (brokerage && pngs.length === 0) {
         if (await coverHeaderLogos(entry.page, opened.pdfjs, paint, viewport, natural.width, natural.height)) {
@@ -963,14 +968,14 @@ async function rasterPages(
             line.items,
             findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
             plan.styles,
-            { previousBaseline, canvas },
+            fonts,
+            { previousBaseline },
           ),
         );
         if (carrierOffice) {
           boxes.push(
-            ...paintSpans(paint, viewport, line.items, findBareMsLoadsSpans(line.text), plan.styles, {
+            ...paintSpans(paint, viewport, line.items, findBareMsLoadsSpans(line.text), plan.styles, fonts, {
               previousBaseline,
-              canvas,
             }),
           );
         }
@@ -982,7 +987,8 @@ async function rasterPages(
             line.items,
             columnBrokerageSpans(line, letterhead.has(index)),
             plan.styles,
-            { skipRequirementItems: true, previousBaseline, canvas },
+            fonts,
+            { skipRequirementItems: true, previousBaseline },
           ),
         );
       }

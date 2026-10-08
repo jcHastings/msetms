@@ -23,7 +23,7 @@ import {
 import { getFuelTransaction, listFuelTransactions } from "./fuel-store";
 import type { FuelTransactionView } from "./fuel";
 import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
-import { isCustomerRateDocument } from "./load-documents-shared";
+import { isCustomerRateDocument, isDriverFacingAttachment } from "./load-documents-shared";
 import { listDriverRateConRedactions } from "./rate-con-redact-store";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
 import { DRIVER_PASSWORD_NOT_RECOGNIZED, findDriverIdByLoginEmail } from "./driver-password";
@@ -390,7 +390,7 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
 function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
   const attachments = listAttachments(load.id)
     .filter((file) => !isCustomerRateDocument(file))
-    .filter((file) => file.kind !== "rate_con" && file.kind !== "invoice")
+    .filter((file) => isDriverFacingAttachment(file))
     .map(toAttachmentDto);
   const rate_confirmations = listDriverRateConRedactions(load.id).map((row) => ({
     id: row.id,

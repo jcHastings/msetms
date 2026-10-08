@@ -352,6 +352,7 @@ export function findBrokerageSpans(line: string, context: BrokerageSpanContext =
     /M\s+and\s+S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
     /MC\s*-?\s*970613/gi,
     /\b970613\b/g,
+    /\b10954\b/g,
     /[A-Z0-9._%+-]+@msloads\.com\b/gi,
   ];
   for (const pattern of patterns) {

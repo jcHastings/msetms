@@ -39,6 +39,7 @@ const READY = [
   "u-tonu-label.pdf",
   "v-msexpress-office.pdf",
   "w-times-sliver.pdf",
+  "x-glyph-edges.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -64,7 +65,8 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("t-")) return ["$500.00"];
   if (name.startsWith("u-")) return ["$75", "$2,150.00"];
   if (name.startsWith("v-")) return ["$900.00"];
-  if (name.startsWith("w-")) return ["$100,000", "$250", "$900.00"];
+  if (name.startsWith("w-")) return ["$100,000", "$250", "$100", "$900.00"];
+  if (name.startsWith("x-")) return ["$100,000", "$250", "$100", "$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -352,11 +354,34 @@ async function main(): Promise<void> {
       assert.match(seen, /Hast|39th/i, seen.slice(0, 700));
       assert.match(seen, /DBA/i, seen.slice(0, 700));
       assert.doesNotMatch(seen, /M\s*&\s*S\s+Loads(?!\s+DBA)/i, seen.slice(0, 700));
+      const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+      const frameImage = await loadImage(built.pagePngs[0]);
+      const frameCanvas = createCanvas(frameImage.width, frameImage.height);
+      const frameCtx = frameCanvas.getContext("2d");
+      frameCtx.drawImage(frameImage, 0, 0);
+      const frameX = Math.round(248 * 2);
+      const frame = frameCtx.getImageData(frameX - 1, 80, 3, 50).data;
+      let frameInk = 0;
+      for (let i = 0; i < frame.length; i += 4) {
+        if (frame[i] < 80 && frame[i + 1] < 80 && frame[i + 2] < 80) frameInk += 1;
+      }
+      assert.ok(frameInk > 20, `header frame covered beside M&S Loads (${frameInk})`);
     }
     if (item.name.startsWith("w-")) {
       const seen = await ocrPng(built.pagePngs[0]);
       assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
       assert.match(seen, /\bof\b/i, seen.slice(0, 800));
+      assert.match(seen, /Each/, seen.slice(0, 800));
+      assert.match(seen, /each/, seen.slice(0, 800));
+    }
+    if (item.name.startsWith("x-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 1200));
+      assert.doesNotMatch(seen, /10954/, seen.slice(0, 1200));
+      assert.match(seen, /\bby\b/, seen.slice(0, 1200));
+      assert.match(seen, /\bof\b/i, seen.slice(0, 1200));
+      assert.match(seen, /Each/, seen.slice(0, 1200));
+      assert.match(seen, /each/, seen.slice(0, 1200));
     }
   }
 
@@ -501,7 +526,53 @@ async function main(): Promise<void> {
   const foreign = await redactionRoute.GET(new Request(`http://localhost/api/rate-con-redactions/${otherCopy!.id}`), {
     params: Promise.resolve({ id: String(otherCopy!.id) }),
   });
-  assert.equal(foreign.status, 403);
+  assert.equal(foreign.status, 404);
+
+  const samplePdf = fs.readFileSync(path.join(FIXTURE_DIR, "a-tql-like.pdf"));
+  const bol = files.addAttachment({
+    loadId: loadA,
+    kind: "bol",
+    originalName: "signed-bol.pdf",
+    buffer: samplePdf,
+    mimeType: "application/pdf",
+    uploadedBy: "dispatcher",
+  });
+  const needsType = files.addAttachment({
+    loadId: loadA,
+    kind: "unclassified",
+    originalName: "needs-type.pdf",
+    buffer: samplePdf,
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  const carrierBill = files.addAttachment({
+    loadId: loadA,
+    kind: "carrier_invoice",
+    originalName: "carrier-bill.pdf",
+    buffer: samplePdf,
+    mimeType: "application/pdf",
+    uploadedBy: "driver",
+  });
+  process.env.TMS_SCRIPT_DRIVER_ID = String(driverA);
+  assert.equal(
+    await statusOf(attachmentRoute.GET, `http://localhost/api/attachments/${bol.id}`, { id: String(bol.id) }),
+    200,
+  );
+  assert.equal(
+    await statusOf(attachmentRoute.GET, `http://localhost/api/attachments/${needsType.id}`, { id: String(needsType.id) }),
+    404,
+  );
+  assert.equal(
+    await statusOf(attachmentRoute.GET, `http://localhost/api/attachments/${carrierBill.id}`, { id: String(carrierBill.id) }),
+    404,
+  );
+  delete process.env.TMS_SCRIPT_DRIVER_ID;
+  process.env.TMS_SCRIPT_ACTOR_ROLE = "admin";
+  const officeNeedsType = await attachmentRoute.GET(new Request(`http://localhost/api/attachments/${needsType.id}`), {
+    params: Promise.resolve({ id: String(needsType.id) }),
+  });
+  assert.equal(officeNeedsType.status, 200);
+  delete process.env.TMS_SCRIPT_ACTOR_ROLE;
   delete process.env.TMS_SCRIPT_DRIVER_ID;
 
   const anonCopy = await redactionRoute.GET(new Request(`http://localhost/api/rate-con-redactions/${released!.id}`), {
@@ -538,6 +609,8 @@ async function main(): Promise<void> {
     customer_name: string;
   };
   assert.equal(body.attachments.some((file) => file.id === original.id || file.kind === "rate_con"), false);
+  assert.equal(body.attachments.some((file) => file.kind === "unclassified" || file.kind === "carrier_invoice"), false);
+  assert.equal(body.attachments.some((file) => file.id === bol.id && file.kind === "bol"), true);
   assert.equal(JSON.stringify(body.attachments).includes("broker-rate-con"), false);
   assert.equal(body.rate_confirmations.some((row) => row.id === released!.id), true);
   assert.equal(body.rate_confirmations.some((row) => row.id === held!.id), false);
