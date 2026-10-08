@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { runWithAuditActor } from "./audit";
 import { getDb } from "./db";
+import { driverMaySeeAttachment } from "./driver-docs";
 import { driverAssignedTrailerLocation } from "./driver-trailer";
 import {
   DriverOpsError,
@@ -380,9 +381,9 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
 }
 
 function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
+  const driver = getDriver(driverId);
   const attachments = listAttachments(load.id)
-    .filter((file) => !isCustomerRateDocument(file))
-    .filter((file) => file.kind !== "rate_con" && file.kind !== "invoice")
+    .filter((file) => driver != null && driverMaySeeAttachment(file, driver))
     .map(toAttachmentDto);
   return {
     ...toLoadSummary(load, driverId),

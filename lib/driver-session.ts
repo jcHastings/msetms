@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getDriver } from "./queries";
+import { getDriver, isDriverLoginEligible } from "./queries";
 import { createSignedSessionToken, readSignedSessionToken } from "./session-token";
 import type { DriverWithTruck } from "./types";
 
@@ -22,7 +22,9 @@ function scriptDriver(): DriverWithTruck | null {
   if (!raw) return null;
   const id = Number.parseInt(raw, 10);
   if (!id) return null;
-  return getDriver(id);
+  const driver = getDriver(id);
+  if (!driver || !isDriverLoginEligible(driver)) return null;
+  return driver;
 }
 
 export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
@@ -50,7 +52,7 @@ export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
     return null;
   }
   const driver = getDriver(id);
-  if (!driver) {
+  if (!driver || !isDriverLoginEligible(driver)) {
     await clearDriverSessionBestEffort();
     return null;
   }
