@@ -3,9 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { PDFDocument } from "pdf-lib";
-import { findMoneySpans, textHasExtractableMoney, type MoneySpan } from "./rate-con-redact-money";
+import {
+  documentIssuedByBrokerage,
+  findBrokerageSpans,
+  findMoneySpans,
+  textHasExtractableMoney,
+  type MoneySpan,
+} from "./rate-con-redact-money";
 import { getAttachment, getAttachmentPath } from "./files";
 import {
   getRateConRedactionBySource,
@@ -33,7 +39,10 @@ type PdfTextItem = {
   width: number;
   height: number;
   transform: number[];
+  fontName: string;
 };
+
+type TextStyle = { fontFamily?: string };
 
 type PlacedItem = PdfTextItem & { start: number; end: number };
 
@@ -43,7 +52,12 @@ type PagePlan = {
   amounts: number;
   lowConfidence: boolean;
   lines: Array<{ text: string; items: PlacedItem[] }>;
+  styles: Record<string, TextStyle>;
 };
+
+type PaintBox = { left: number; top: number; w: number; h: number; pad: number };
+
+type PageSize = { width: number; height: number };
 
 const RENDER_SCALE = 2;
 
@@ -74,7 +88,7 @@ type PdfPage = {
     transform: number[];
     convertToViewportPoint: (x: number, y: number) => number[];
   };
-  getTextContent: () => Promise<{ items: unknown[] }>;
+  getTextContent: () => Promise<{ items: unknown[]; styles?: Record<string, TextStyle> }>;
   getAnnotations: (params?: { intent?: string }) => Promise<unknown[]>;
   render: (params: Record<string, unknown>) => { promise: Promise<void> };
 };
@@ -97,7 +111,15 @@ function asTextItem(value: unknown): PdfTextItem | null {
   if (!value || typeof value !== "object" || !("str" in value)) return null;
   const item = value as PdfTextItem;
   if (typeof item.str !== "string") return null;
+  if (typeof item.fontName !== "string") item.fontName = "";
   return item;
+}
+
+export function officeOnlyPageReason(text: string): string {
+  if (/\bINVOICE\b/i.test(text)) return "Page 1 is an invoice.";
+  if (/customer\s+confirmation/i.test(text)) return "Page 1 is a customer confirmation.";
+  if (/bill\s+of\s+lading/i.test(text)) return "Page 1 is a bill of lading.";
+  return "";
 }
 
 function annotationPlain(value: unknown): string {
@@ -169,8 +191,8 @@ async function planPage(page: PdfPage): Promise<PagePlan> {
   let amounts = 0;
   let zeroWidth = 0;
   let measured = 0;
-  for (const line of lines) {
-    amounts += findMoneySpans(line.text).length;
+  for (let index = 0; index < lines.length; index += 1) {
+    amounts += findMoneySpans(lines[index].text, lines[index - 1]?.text ?? "").length;
   }
   for (const item of items) {
     if (!item.str.trim()) continue;
@@ -185,7 +207,31 @@ async function planPage(page: PdfPage): Promise<PagePlan> {
     amounts,
     lowConfidence: measured > 0 && zeroWidth / measured > 0.5,
     lines,
+    styles: textContent.styles ?? {},
   };
+}
+
+const measureCanvas = createCanvas(8, 8);
+const measureCtx = measureCanvas.getContext("2d");
+
+function fontFamily(styles: Record<string, TextStyle>, fontName: string): string {
+  const family = styles[fontName]?.fontFamily?.trim() || "sans-serif";
+  return family.includes(" ") ? `"${family}"` : family;
+}
+
+function widthFractions(item: PlacedItem, from: number, to: number, styles: Record<string, TextStyle>): [number, number] {
+  const full = item.str;
+  const len = Math.max(1, full.length);
+  const localFrom = Math.max(0, from - item.start);
+  const localTo = Math.min(full.length, to - item.start);
+  if (full.trim().length <= 12) return [0, 1];
+  const size = Math.max(8, Math.hypot(item.transform[2] || 0, item.transform[3] || 0) || item.height || 12);
+  measureCtx.font = `${size}px ${fontFamily(styles, item.fontName)}`;
+  const total = measureCtx.measureText(full).width;
+  if (!(total > 0)) return [localFrom / len, localTo / len];
+  const left = measureCtx.measureText(full.slice(0, localFrom)).width / total;
+  const right = measureCtx.measureText(full.slice(0, localTo)).width / total;
+  return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, right))];
 }
 
 function paintSpans(
@@ -196,40 +242,35 @@ function paintSpans(
   viewport: { convertToViewportPoint: (x: number, y: number) => number[] },
   items: PlacedItem[],
   spans: MoneySpan[],
-): void {
+  styles: Record<string, TextStyle>,
+): PaintBox[] {
+  const boxes: PaintBox[] = [];
   for (const item of items) {
-    const len = Math.max(1, item.end - item.start);
     for (const span of spans) {
       const from = Math.max(span.start, item.start);
       const to = Math.min(span.end, item.end);
       if (to <= from) continue;
-      const overlap = (to - from) / len;
-      let f0 = (from - item.start) / len;
-      let f1 = (to - item.start) / len;
-      if (overlap >= 0.85) {
-        f0 = 0;
-        f1 = 1;
-      } else {
-        const pad = 1 / len;
-        f0 = Math.max(0, f0 - pad);
-        f1 = Math.min(1, f1 + pad * 1.6);
-      }
+      const [f0, f1] = widthFractions(item, from, to, styles);
       const x = item.transform[4];
       const y = item.transform[5];
       const width = item.width;
       const height = Math.max(item.height || 0, Math.abs(item.transform[3] || 0), 8);
-      const x0 = x + width * f0;
-      const x1 = x + width * f1;
-      const p0 = viewport.convertToViewportPoint(x0, y - height * 0.25);
-      const p1 = viewport.convertToViewportPoint(x1, y + height * 0.95);
-      const left = Math.min(p0[0], p1[0]) - 2;
-      const top = Math.min(p0[1], p1[1]) - 2;
-      const boxW = Math.abs(p0[0] - p1[0]) + 8;
-      const boxH = Math.abs(p0[1] - p1[1]) + 6;
+      const pad = height * 0.5;
+      const x0 = x + width * f0 - pad;
+      const x1 = x + width * f1 + pad;
+      const p0 = viewport.convertToViewportPoint(x0, y - height * 0.25 - pad);
+      const p1 = viewport.convertToViewportPoint(x1, y + height * 0.95 + pad);
+      const left = Math.min(p0[0], p1[0]) - 1;
+      const top = Math.min(p0[1], p1[1]) - 1;
+      const boxW = Math.abs(p0[0] - p1[0]) + 2;
+      const boxH = Math.abs(p0[1] - p1[1]) + 2;
+      const viewportPad = Math.max(4, Math.abs(p0[1] - p1[1]) * 0.08);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
+      boxes.push({ left, top, w: boxW, h: boxH, pad: viewportPad });
     }
   }
+  return boxes;
 }
 
 function darkRatio(canvas: { width: number; height: number; getContext: (kind: "2d") => { getImageData: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray } } | null }): number {
@@ -255,15 +296,18 @@ type OcrBlock = {
   }>;
 };
 
-let ocrUnavailable = false;
-let ocrWorker: {
+type OcrEngine = {
   recognize: (
     image: Buffer,
     options?: Record<string, unknown>,
     output?: { text?: boolean; blocks?: boolean },
   ) => Promise<{ data: { text?: string; blocks?: OcrBlock[] | null } }>;
   terminate: () => Promise<unknown>;
-} | null = null;
+  setParameters: (params: Record<string, string>) => Promise<unknown>;
+};
+
+let ocrUnavailable = false;
+let ocrWorker: OcrEngine | null = null;
 
 async function ocrWords(png: Buffer): Promise<{ text: string; words: OcrWord[] } | null> {
   if (ocrUnavailable || png.length < 32) return null;
@@ -272,7 +316,9 @@ async function ocrWords(png: Buffer): Promise<{ text: string; words: OcrWord[] }
       const { createWorker } = await import("tesseract.js");
       ocrWorker = (await createWorker("eng", 1, {
         cachePath: path.join(os.tmpdir(), "tms-tesseract"),
-      })) as unknown as NonNullable<typeof ocrWorker>;
+      })) as unknown as OcrEngine;
+      // tesseract.js defaults to PSM 6 (one uniform block), which skips table cells.
+      await ocrWorker.setParameters({ tessedit_pageseg_mode: "11" });
     }
     const recognized = await ocrWorker.recognize(png, {}, { text: true, blocks: true });
     const words: OcrWord[] = [];
@@ -312,8 +358,11 @@ function paintOcrMoney(
     if (!last || Math.abs(anchor - word.y0) > 10) lines.push([word]);
     else last.push(word);
   }
+  const lineTexts = lines.map((lineWords) => lineWords.map((word) => word.text).join(" "));
+  const brokerage = documentIssuedByBrokerage(lineTexts.join("\n"));
   let painted = 0;
-  for (const lineWords of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const lineWords = lines[index];
     let text = "";
     const placed: Array<OcrWord & { start: number; end: number }> = [];
     for (const word of lineWords) {
@@ -322,7 +371,11 @@ function paintOcrMoney(
       text += word.text;
       placed.push({ ...word, start, end: text.length });
     }
-    for (const span of findMoneySpans(text)) {
+    const spans = [
+      ...findMoneySpans(text, lineTexts[index - 1] ?? ""),
+      ...(brokerage ? findBrokerageSpans(text) : []),
+    ];
+    for (const span of spans) {
       for (const word of placed) {
         if (span.start >= word.end || span.end <= word.start) continue;
         ctx.fillStyle = "#ffffff";
@@ -334,12 +387,78 @@ function paintOcrMoney(
   return painted;
 }
 
-async function imageOnlyPdf(pagePngs: Buffer[]): Promise<Buffer> {
+function digitTouchesBox(word: OcrWord, box: PaintBox, originX: number, originY: number): boolean {
+  if (!/^[^A-Za-z]*\d[^A-Za-z]*$/.test(word.text)) return false;
+  const x0 = originX + word.x0;
+  const x1 = originX + word.x1;
+  const y0 = originY + word.y0;
+  const y1 = originY + word.y1;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const edge = 4;
+  const onBox =
+    cx >= box.left - edge &&
+    cx <= box.left + box.w + edge &&
+    cy >= box.top - edge &&
+    cy <= box.top + box.h + edge;
+  if (!onBox) return false;
+  const inset = 6;
+  const buried =
+    x0 >= box.left + inset &&
+    x1 <= box.left + box.w - inset &&
+    y0 >= box.top + inset &&
+    y1 <= box.top + box.h - inset;
+  return !buried;
+}
+
+async function widenBoxes(
+  canvas: Canvas,
+  ctx: { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void },
+  boxes: PaintBox[],
+): Promise<boolean> {
+  let leak = false;
+  for (const box of boxes) {
+    if (box.w < 4 || box.h < 4) continue;
+    let touching = await boxEdgeDigits(canvas, box);
+    if (!touching) continue;
+    const grow = Math.max(6, box.pad);
+    box.left -= grow;
+    box.top -= grow;
+    box.w += grow * 2;
+    box.h += grow * 2;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(box.left, box.top, box.w, box.h);
+    touching = await boxEdgeDigits(canvas, box);
+    if (touching) leak = true;
+  }
+  return leak;
+}
+
+async function boxEdgeDigits(canvas: Canvas, box: PaintBox): Promise<boolean> {
+  const band = 10;
+  const x = Math.max(0, Math.floor(box.left - band));
+  const y = Math.max(0, Math.floor(box.top - band));
+  const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(box.w + band * 2)));
+  const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(box.h + band * 2)));
+  const slice = createCanvas(w + 16, h + 16);
+  const sliceCtx = slice.getContext("2d");
+  sliceCtx.fillStyle = "#ffffff";
+  sliceCtx.fillRect(0, 0, slice.width, slice.height);
+  sliceCtx.drawImage(canvas, x, y, w, h, 8, 8, w, h);
+  if (darkRatio(slice) < 0.008) return false;
+  const ocr = await ocrWords(slice.toBuffer("image/png"));
+  if (!ocr) return false;
+  return ocr.words.some((word) => digitTouchesBox(word, box, x - 8, y - 8));
+}
+
+async function imageOnlyPdf(pages: Array<{ png: Buffer; width: number; height: number }>): Promise<Buffer> {
   const doc = await PDFDocument.create();
-  for (const png of pagePngs) {
-    const image = await doc.embedPng(png);
-    const page = doc.addPage([612, 792]);
-    page.drawImage(image, { x: 0, y: 0, width: 612, height: 792 });
+  for (const source of pages) {
+    const image = await doc.embedPng(source.png);
+    const width = source.width > 1 ? source.width : image.width;
+    const height = source.height > 1 ? source.height : image.height;
+    const page = doc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
   }
   doc.setTitle("");
   doc.setAuthor("");
@@ -401,6 +520,14 @@ function ocrDollarLeak(ocrText: string, sourceText: string): string | null {
       if (sourceHasDollarAmount(sourceText, compact) || sourceText.includes(hit[1])) return hit[1];
     }
   }
+  // Same amounts without the "$" (unit-price columns, OCR dropping the sign).
+  const ocrTokens = new Set(ocrText.split(/\s+/).map((token) => token.replace(/[^\d.]/g, "")).filter(Boolean));
+  for (const hit of sourceText.matchAll(/\$\s*(\d[\d,]*(?:\.\d{2})?)/g)) {
+    const compact = hit[1].replace(/,/g, "");
+    const whole = compact.split(".")[0];
+    if (compact.replace(/\D/g, "").replace(/^0+/, "").length < 3) continue;
+    if (ocrTokens.has(compact) || (whole.length >= 3 && (ocrTokens.has(whole) || ocrTokens.has(`${whole}.00`)))) return compact;
+  }
   return null;
 }
 
@@ -443,31 +570,50 @@ function failed(reason: string): DriverRateConBuild {
 
 async function rasterPages(
   buffer: Buffer,
-): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean } | null> {
+): Promise<{ pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; pageSizes: PageSize[] } | null> {
   const opened = await openPdf(buffer);
   try {
-    const pngs: Buffer[] = [];
-    const plans: PagePlan[] = [];
-    let blank = false;
+    const prepared: Array<{ page: PdfPage; plan: PagePlan }> = [];
     for (let number = 1; number <= opened.doc.numPages; number += 1) {
       const page = await opened.doc.getPage(number);
-      const plan = await planPage(page);
+      prepared.push({ page, plan: await planPage(page) });
+    }
+    const brokerage = documentIssuedByBrokerage(
+      prepared.flatMap((entry) => entry.plan.lines.map((line) => line.text)).join("\n"),
+    );
+    const pngs: Buffer[] = [];
+    const plans: PagePlan[] = [];
+    const pageSizes: PageSize[] = [];
+    let blank = false;
+    let edgeLeak = false;
+    for (const entry of prepared) {
+      const plan = entry.plan;
       plans.push(plan);
-      const viewport = page.getViewport({ scale: RENDER_SCALE });
+      const natural = entry.page.getViewport({ scale: 1 });
+      pageSizes.push({ width: natural.width, height: natural.height });
+      const viewport = entry.page.getViewport({ scale: RENDER_SCALE });
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const ctx = canvas.getContext("2d");
-      await page.render({
+      await entry.page.render({
         canvas: canvas as unknown as HTMLCanvasElement,
         viewport,
         annotationMode: opened.pdfjs.AnnotationMode.DISABLE,
       }).promise;
       if (plan.textChars >= 80 && darkRatio(canvas) < 0.0015) blank = true;
-      for (const line of plan.lines) {
-        paintSpans(ctx as { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void }, viewport, line.items, findMoneySpans(line.text));
+      const paint = ctx as { fillStyle: string; fillRect: (x: number, y: number, w: number, h: number) => void };
+      const boxes: PaintBox[] = [];
+      for (let index = 0; index < plan.lines.length; index += 1) {
+        const line = plan.lines[index];
+        const spans = [
+          ...findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
+          ...(brokerage ? findBrokerageSpans(line.text) : []),
+        ];
+        boxes.push(...paintSpans(paint, viewport, line.items, spans, plan.styles));
       }
+      if (await widenBoxes(canvas, paint, boxes)) edgeLeak = true;
       pngs.push(canvas.toBuffer("image/png"));
     }
-    return { pngs, plans, blank };
+    return { pngs, plans, blank, edgeLeak, pageSizes };
   } finally {
     await opened.destroy();
   }
@@ -488,7 +634,9 @@ async function paintOcrOnPng(png: Buffer): Promise<{ png: Buffer; amounts: numbe
 
 async function fromImage(buffer: Buffer): Promise<DriverRateConBuild> {
   const painted = await paintOcrOnPng(buffer);
-  const pdf = await imageOnlyPdf([painted.png]);
+  const { loadImage } = await import("@napi-rs/canvas");
+  const decoded = await loadImage(painted.png);
+  const pdf = await imageOnlyPdf([{ png: painted.png, width: decoded.width, height: decoded.height }]);
   const verification = await verifyDriverCopy(pdf, [painted.png], [], "");
   return {
     status: "needs_review",
@@ -514,7 +662,7 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   if (!buffer.subarray(0, 5).toString("latin1").includes("%PDF")) {
     return failed("This file is not a PDF. Office review.");
   }
-  let raster: { pngs: Buffer[]; plans: PagePlan[]; blank: boolean } | null = null;
+  let raster: { pngs: Buffer[]; plans: PagePlan[]; blank: boolean; edgeLeak: boolean; pageSizes: PageSize[] } | null = null;
   try {
     raster = await rasterPages(buffer);
   } catch (error) {
@@ -540,11 +688,17 @@ export async function buildDriverRateCon(buffer: Buffer, mime = "application/pdf
   if (annotationOnly) reasons.push("Text was only in an annotation or form field.");
   if (raster.plans.some((plan) => plan.lowConfidence) || raster.blank) reasons.push("Low extraction confidence.");
   if (!scanned && amounts < 1) reasons.push("No dollar amount found.");
+  const pageOne = raster.plans[0]?.lines.map((line) => line.text).join("\n") ?? "";
+  const officeOnly = officeOnlyPageReason(pageOne);
+  if (officeOnly) reasons.push(officeOnly);
+  if (raster.edgeLeak) reasons.push("A redaction box still touches a digit.");
   const sourceText = raster.plans.flatMap((plan) => plan.lines.map((line) => line.text)).join("\n");
-  const forbidden = raster.plans.flatMap((plan) => plan.lines.flatMap((line) => findMoneySpans(line.text).map((span) => span.text)));
+  const forbidden = raster.plans.flatMap((plan) =>
+    plan.lines.flatMap((line, index) => findMoneySpans(line.text, plan.lines[index - 1]?.text ?? "").map((span) => span.text)),
+  );
   let pdf: Buffer;
   try {
-    pdf = await imageOnlyPdf(raster.pngs);
+    pdf = await imageOnlyPdf(raster.pngs.map((png, index) => ({ png, ...raster.pageSizes[index] })));
   } catch (error) {
     return failed(error instanceof Error ? error.message : "Could not write the driver copy.");
   }

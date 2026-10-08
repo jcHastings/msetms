@@ -132,6 +132,82 @@ async function main(): Promise<void> {
     doc.text("Line haul: $640.00");
   });
 
+  await writePdf("h-ms-brokerage.pdf", "SECRET-BROKER-META-BROKER", (doc) => {
+    doc.fontSize(14).text("M&S Loads LLC");
+    doc.fontSize(11);
+    doc.text("MC-970613");
+    doc.text("228 East Route 59 #190, Nanuet, NY 10954");
+    doc.text("sam.broker@msloads.com  (845) 555-0170");
+    doc.moveDown(0.6);
+    doc.fontSize(16).text("LOAD CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express");
+    doc.text("Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901");
+    doc.text("Deliver: Westside Foods, 355 Food Center Dr, Bronx, NY 10474");
+    doc.text("Weight: 40,000 lbs");
+    doc.text("Temp: 34°F");
+    doc.moveDown(0.4);
+    doc.text("Pay Items");
+    doc.text("Flat Rate 1 1,850.00 $ 1,850.00");
+    doc.text("Fuel 1 186.50 $ 186.50");
+    doc.text("Detention 2 hrs free then $50/hr");
+    doc.moveDown(0.4);
+    doc.text("Quick pay");
+    doc.text("1.5%");
+    doc.moveDown(1);
+    doc.text("Esti Katz  esti.katz@msloads.com  (845) 555-0171");
+    doc.text("Deerfield Beach, FL 33441");
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const doc = new PDFDocumentKit({ size: "LETTER", margin: 48, info: { Title: "SECRET-BROKER-META-PARA" } });
+    const stream = fs.createWriteStream(path.join(outDir, "i-proportional.pdf"));
+    doc.pipe(stream);
+    doc.font("Times-Roman").fontSize(12);
+    doc.text("RATE CONFIRMATION");
+    doc.moveDown(0.4);
+    doc.text(
+      "Carrier MS Express must arrive at Hastings Packing with the trailer sealed, confirm the PO 778210, hold 34°F, and accept a $15 fee when the scale ticket is missing plus $250/Each for extra pallets before the receiver will sign.",
+      { width: 500 },
+    );
+    doc.moveDown(0.4);
+    doc.text("Line haul: $900.00");
+    doc.end();
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const doc = new PDFDocumentKit({ size: "A4", margin: 48, info: { Title: "SECRET-BROKER-META-A4" } });
+    const stream = fs.createWriteStream(path.join(outDir, "j-a4.pdf"));
+    doc.pipe(stream);
+    doc.fontSize(16).text("RATE CONFIRMATION");
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express");
+    doc.text("Pickup: Dallas Cold, 400 Commerce St, Dallas, TX 75201");
+    doc.text("Deliver: Omaha Cold, 12 Market St, Omaha, NE 68102");
+    doc.text("Line haul: $900.00");
+    doc.end();
+    stream.on("finish", () => resolve());
+    stream.on("error", reject);
+  });
+
+  await writePdf("k-invoice.pdf", "SECRET-BROKER-META-INVOICE", (doc) => {
+    doc.fontSize(16).text("INVOICE");
+    doc.fontSize(11);
+    doc.text("Bill to: Heartland Foods");
+    doc.text("Carrier: MS Express");
+    doc.text("Rate: $4,200.00");
+  });
+
+  await writePdf("l-customer-confirmation.pdf", "SECRET-BROKER-META-CUST", (doc) => {
+    doc.fontSize(16).text("Customer Confirmation");
+    doc.fontSize(11);
+    doc.text("Carrier: MS Express");
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901");
+    doc.text("Total: $3,100.00");
+  });
+
   const scan = createCanvas(1224, 1584);
   const ctx = scan.getContext("2d");
   ctx.fillStyle = "#ffffff";

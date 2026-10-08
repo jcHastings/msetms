@@ -18,7 +18,7 @@ delete process.env.TMS_SCRIPT_DRIVER_ID;
 
 const FIXTURE_DIR = path.join(process.cwd(), "scripts/fixtures/rate-con-redact");
 const CB_FIXTURE = path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.pdf");
-const ARTIFACTS = "/opt/cursor/artifacts/rate-con";
+const ARTIFACTS = process.env.RATE_CON_ARTIFACTS || fs.mkdtempSync(path.join(os.tmpdir(), "rate-con-artifacts-"));
 
 const READY = [
   "a-tql-like.pdf",
@@ -26,6 +26,9 @@ const READY = [
   "c-echo-like.pdf",
   "d-ms-loads.pdf",
   "g-false-positives.pdf",
+  "h-ms-brokerage.pdf",
+  "i-proportional.pdf",
+  "j-a4.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -36,7 +39,44 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("e-")) return ["$999.00"];
   if (name.startsWith("f-")) return ["$2,400.00"];
   if (name.startsWith("g-")) return ["$640.00"];
+  if (name.startsWith("h-")) return ["1,850.00", "$ 1,850.00", "186.50", "$50/hr", "1.5%"];
+  if (name.startsWith("i-")) return ["$15 fee", "$250/Each", "$900.00"];
+  if (name.startsWith("j-")) return ["$900.00"];
+  if (name.startsWith("k-")) return ["$4,200.00"];
+  if (name.startsWith("l-")) return ["$3,100.00"];
   return ["$100", "3,500.00"];
+}
+
+async function pdfPageSize(buffer: Buffer): Promise<{ width: number; height: number }> {
+  const { createRequire } = await import("node:module");
+  const { pathToFileURL } = await import("node:url");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const require = createRequire(import.meta.url);
+  const root = path.dirname(require.resolve("pdfjs-dist/package.json"));
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(root, "legacy/build/pdf.worker.mjs")).href;
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    standardFontDataUrl: pathToFileURL(path.join(root, "standard_fonts") + path.sep).href,
+    disableFontFace: true,
+    verbosity: 0,
+  });
+  try {
+    const doc = await task.promise;
+    const page = await doc.getPage(1);
+    const view = page.getViewport({ scale: 1 });
+    return { width: view.width, height: view.height };
+  } finally {
+    await task.destroy();
+  }
+}
+
+async function ocrPng(png: Buffer): Promise<string> {
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng", 1, { cachePath: path.join(os.tmpdir(), "tms-tesseract") });
+  await worker.setParameters({ tessedit_pageseg_mode: "11" });
+  const recognized = await worker.recognize(png);
+  await worker.terminate();
+  return String(recognized.data.text ?? "");
 }
 
 async function renderOriginalPng(buffer: Buffer): Promise<Buffer | null> {
@@ -95,10 +135,36 @@ async function main(): Promise<void> {
   assert.match(money.maskMoney("Quick pay fee 2%"), /^Quick pay fee █+$/);
   assert.doesNotMatch(money.maskMoney("Flat 3,500.00"), /3,500/);
   assert.match(money.maskMoney("$100 fine for missing"), /^█+ fine for missing$/);
+  assert.doesNotMatch(money.maskMoney("Flat Rate 1 1,850.00 $ 1,850.00"), /1,850/);
+  assert.match(money.maskMoney("Flat Rate 1 1,850.00 $ 1,850.00"), /Flat Rate 1 /);
+  assert.doesNotMatch(money.maskMoney("Fuel 1 186.50 $ 186.50"), /186\.50/);
+  assert.match(money.maskMoney("Detention 2 hrs free then $50/hr"), /Detention 2 hrs free then /);
+  assert.doesNotMatch(money.maskMoney("Detention 2 hrs free then $50/hr"), /\$50/);
+  assert.equal(money.maskMoney("1.5%"), "1.5%");
+  assert.doesNotMatch(money.maskMoney("1.5%", "Quick pay"), /1\.5/);
+  assert.match(money.maskMoney("Appointment 10.30 Rate: 100.00"), /10\.30/);
+  assert.doesNotMatch(money.maskMoney("Appointment 10.30 Rate: 100.00"), /100\.00/);
+  assert.equal(money.documentIssuedByBrokerage("M&S Loads DBA MS Express"), false);
+  assert.equal(money.documentIssuedByBrokerage("M&S Loads LLC\nCarrier: MS Express"), true);
+  assert.match(money.maskBrokerage("M&S Loads DBA MS Express"), /M&S Loads DBA MS Express/);
+  assert.doesNotMatch(money.maskBrokerage("M&S Loads LLC"), /M&S/);
+  assert.doesNotMatch(money.maskBrokerage("MC-970613"), /970613/);
+  assert.doesNotMatch(money.maskBrokerage("228 East Route 59 #190, Nanuet, NY 10954"), /Nanuet|Route 59|10954/);
+  assert.doesNotMatch(money.maskBrokerage("Deerfield Beach, FL 33441"), /Deerfield|33441/);
+  assert.doesNotMatch(money.maskBrokerage("Esti Katz  esti.katz@msloads.com  (845) 555-0170"), /Esti|msloads|845/);
+  assert.match(money.maskBrokerage("ar@msloads.com"), /ar@msloads\.com/);
+  assert.equal(
+    money.maskBrokerage("Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901"),
+    "Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901",
+  );
   assert.equal(money.textHasExtractableMoney("Temp 34°F PO 123456.00 at 10.30"), false);
   assert.equal(money.textHasExtractableMoney("Total $2,150.00"), true);
 
-  const { buildDriverRateCon, redactStoredRateCon, shutdownDriverRateConOcr } = await import("../lib/rate-con-redact");
+  const { buildDriverRateCon, officeOnlyPageReason, redactStoredRateCon, shutdownDriverRateConOcr } = await import("../lib/rate-con-redact");
+  assert.match(officeOnlyPageReason("INVOICE\nTotal $1"), /invoice/i);
+  assert.match(officeOnlyPageReason("Customer Confirmation"), /customer confirmation/i);
+  assert.match(officeOnlyPageReason("Bill of Lading"), /bill of lading/i);
+  assert.equal(officeOnlyPageReason("RATE CONFIRMATION"), "");
   const { extractText } = await import("unpdf");
   fs.mkdirSync(ARTIFACTS, { recursive: true });
 
@@ -106,6 +172,8 @@ async function main(): Promise<void> {
     ...READY.map((name) => ({ name, file: path.join(FIXTURE_DIR, name), ready: true })),
     { name: "e-scanned.pdf", file: path.join(FIXTURE_DIR, "e-scanned.pdf"), ready: false },
     { name: "f-form-field.pdf", file: path.join(FIXTURE_DIR, "f-form-field.pdf"), ready: false },
+    { name: "k-invoice.pdf", file: path.join(FIXTURE_DIR, "k-invoice.pdf"), ready: false },
+    { name: "l-customer-confirmation.pdf", file: path.join(FIXTURE_DIR, "l-customer-confirmation.pdf"), ready: false },
     { name: "cb-logistics-106361.pdf", file: CB_FIXTURE, ready: true },
   ];
 
@@ -125,6 +193,8 @@ async function main(): Promise<void> {
     }
     if (item.name.startsWith("e-")) assert.match(built.reason, /Scanned or image-only/);
     if (item.name.startsWith("f-")) assert.match(built.reason, /annotation or form field/);
+    if (item.name.startsWith("k-")) assert.match(built.reason, /invoice/i);
+    if (item.name.startsWith("l-")) assert.match(built.reason, /customer confirmation/i);
     const raw = built.pdf.toString("latin1");
     assert.equal(raw.includes("SECRET-BROKER-META"), false, item.name);
     assert.doesNotMatch(raw, /\/Annots\s*\[\s*[^\s\]]/, item.name);
@@ -142,6 +212,21 @@ async function main(): Promise<void> {
     if (before) fs.writeFileSync(path.join(ARTIFACTS, `${stem}-original.png`), before);
     fs.writeFileSync(path.join(ARTIFACTS, `${stem}-driver.png`), built.pagePngs[0]);
     if (built.pagePngs[1]) fs.writeFileSync(path.join(ARTIFACTS, `${stem}-driver-p2.png`), built.pagePngs[1]);
+    if (item.name.startsWith("j-") || item.name.startsWith("a-")) {
+      const size = await pdfPageSize(built.pdf);
+      if (item.name.startsWith("j-")) {
+        assert.ok(Math.abs(size.width - 595.28) < 2, `A4 width ${size.width}`);
+        assert.ok(Math.abs(size.height - 841.89) < 2, `A4 height ${size.height}`);
+      } else {
+        assert.ok(Math.abs(size.width - 612) < 2, `letter width ${size.width}`);
+        assert.ok(Math.abs(size.height - 792) < 2, `letter height ${size.height}`);
+      }
+    }
+    if (item.name.startsWith("h-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /970613|Nanuet|Deerfield|msloads\.com|Esti|M\s*&\s*S/i, seen.slice(0, 400));
+      assert.match(seen, /Hastings|Packing|Bronx|Westside/i, seen.slice(0, 400));
+    }
   }
 
   const queries = await import("../lib/queries");
