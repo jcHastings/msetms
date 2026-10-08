@@ -121,9 +121,14 @@ async function main() {
   assert.doesNotMatch(cameraBody, /visibility\s*:\s*hidden/);
   assert.match(cameraBody, /opacity:\s*0\.02/);
   assert.match(cameraBody, /min-height:\s*44px/);
-  assert.match(cameraBody, /pointer-events:\s*none/);
+  assert.doesNotMatch(cameraBody, /pointer-events\s*:\s*none/);
+  assert.doesNotMatch(cameraBody, /appearance\s*:\s*none/);
   const triggerRule = css.slice(css.indexOf(".driver-photo-trigger {"), css.indexOf(".driver-photo-trigger-primary"));
   assert.doesNotMatch(triggerRule, /transform\s*:/);
+  assert.match(triggerRule, /touch-action:\s*manipulation/);
+  const spanRule = css.slice(css.indexOf(".driver-photo-trigger > span"));
+  const spanBody = spanRule.slice(0, spanRule.indexOf("}"));
+  assert.match(spanBody, /pointer-events:\s*none/);
   assert.equal(CAMERA_ACCEPT, "image/*");
   assert.match(GALLERY_ACCEPT, /image\/heic/);
   assert.match(GALLERY_ACCEPT, /image\/heif/);

@@ -3948,6 +3948,7 @@ html[data-office-viewer="true"] [data-view-only-locked="true"] {
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   z-index: 1;
 }
 
@@ -3995,11 +3996,9 @@ input.driver-photo-input[type="file"] {
   opacity: 0.02;
   overflow: visible;
   clip: auto;
-  appearance: none;
   background: transparent;
   color: transparent;
   font-size: 16px;
-  pointer-events: none;
   z-index: 0;
 }
 
@@ -4015,8 +4014,10 @@ input.driver-photo-input.driver-photo-input-hold[type="file"] {
   z-index: 0;
 }
 
+/* iOS 18 Safari activates a label only when the tap hits the label itself. A child span swallows the tap and the camera never opens, so nothing is uploaded. */
 .driver-photo-trigger > span {
   position: relative;
+  pointer-events: none;
 }
 
 .driver-photo-help,
