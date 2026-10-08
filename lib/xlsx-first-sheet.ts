@@ -42,6 +42,32 @@ export function recordsFromLoadWorkbook(buffer: Uint8Array): Array<Record<string
   return merged;
 }
 
+/** dcterms:modified, then dcterms:created, from docProps/core.xml. */
+export function xlsxDocumentTimestamps(buffer: Uint8Array): { modified: string | null; created: string | null } {
+  try {
+    const files = unzipSync(buffer);
+    return timestampsFromCoreXml(readZipText(files, "docProps/core.xml"));
+  } catch {
+    return { modified: null, created: null };
+  }
+}
+
+export function timestampsFromCoreXml(xml: string): { modified: string | null; created: string | null } {
+  return {
+    modified: coreInstant(xml, "modified"),
+    created: coreInstant(xml, "created"),
+  };
+}
+
+function coreInstant(xml: string, tag: "modified" | "created"): string | null {
+  const match = xml.match(new RegExp(`<(?:[A-Za-z0-9]+:)?${tag}\\b[^>]*>([^<]*)</(?:[A-Za-z0-9]+:)?${tag}>`, "i"));
+  const text = match?.[1]?.trim() ?? "";
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 function listSheetPaths(files: Record<string, Uint8Array>): string[] {
   return Object.keys(files)
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name.replaceAll("\\", "/")))
