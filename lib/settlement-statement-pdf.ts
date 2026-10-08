@@ -7,12 +7,17 @@ const NAVY = "#12315c";
 const INK = "#122033";
 const MUTED = "#5c6b7c";
 
+/** Helvetica (WinAnsi) has no arrow, en dash, or em dash. */
+function pdfPlain(value: string): string {
+  return value.replaceAll("→", " to ").replaceAll("–", " - ").replaceAll("—", "-");
+}
+
 function moneyOrBlank(value: number | null): string {
-  return value == null ? "—" : formatStatementMoney(value);
+  return value == null ? "-" : formatStatementMoney(value);
 }
 
 function percentLabel(value: number | null): string {
-  if (value == null || Number.isNaN(value)) return "—";
+  if (value == null || Number.isNaN(value)) return "-";
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
@@ -43,43 +48,48 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
     if (y + needed > 740) addPage();
   };
 
-  doc.font("Helvetica-Bold").fontSize(16).fillColor(NAVY);
-  doc.text(statement.carrierName || "Carrier", left, y, { width: 320, lineBreak: false });
-  doc.font("Helvetica-Bold").fontSize(13).fillColor(INK);
-  doc.text("SETTLEMENT STATEMENT", left, y, { width, align: "right", lineBreak: false });
-  y += 22;
-  doc.font("Helvetica").fontSize(9).fillColor(INK);
-  for (const line of statement.carrierAddress.split("·").map((part) => part.trim()).filter(Boolean)) {
-    doc.text(line, left, y, { width: 320, lineBreak: false });
-    y += 12;
-  }
-  doc.text(statement.usdot ? `USDOT ${statement.usdot}` : "USDOT Not on file", left, y, { width: 320, lineBreak: false });
-  y += 12;
-  doc.text(statement.mcNumber ? `MC ${statement.mcNumber}` : "MC Not on file", left, y, { width: 320, lineBreak: false });
-  y += 12;
-  if (statement.carrierPhone) {
-    doc.text(statement.carrierPhone, left, y, { width: 320, lineBreak: false });
-    y += 12;
-  }
-  if (statement.carrierEmail) {
-    doc.text(statement.carrierEmail, left, y, { width: 320, lineBreak: false });
-    y += 12;
-  }
-  y += 4;
+  doc.font("Helvetica-Bold").fontSize(13).fillColor(NAVY);
+  doc.text("SETTLEMENT STATEMENT", left, y, { width });
+  y = doc.y + 10;
 
-  doc.font("Helvetica").fontSize(9).fillColor(MUTED);
   const meta = [
     ["Statement", statement.statementNumber],
-    ["Week", `${formatMdYDisplay(statement.weekStart)} – ${formatMdYDisplay(statement.weekEnd)}`],
+    ["Week", `${formatMdYDisplay(statement.weekStart)} - ${formatMdYDisplay(statement.weekEnd)}`],
     ["Paid record", statement.paidAt ? formatMdYDisplay(statement.paidAt) : "Not marked paid"],
   ];
-  let metaY = 40;
+  const labelWidth = 92;
   for (const [label, value] of meta) {
-    doc.font("Helvetica").fontSize(8).fillColor(MUTED).text(label, 360, metaY, { width: 70, lineBreak: false });
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(INK).text(value, 430, metaY, { width: 142, align: "right", lineBreak: false });
-    metaY += 14;
+    const rowY = y;
+    doc.font("Helvetica").fontSize(9).fillColor(MUTED);
+    doc.text(label, left, rowY, { width: labelWidth });
+    const labelBottom = doc.y;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(INK);
+    doc.text(pdfPlain(value), left + labelWidth + 8, rowY, { width: width - labelWidth - 8 });
+    y = Math.max(labelBottom, doc.y) + 4;
   }
-  y = Math.max(y, metaY) + 8;
+  y += 10;
+
+  doc.font("Helvetica-Bold").fontSize(16).fillColor(NAVY);
+  doc.text(pdfPlain(statement.carrierName || "Carrier"), left, y, { width });
+  y = doc.y + 4;
+  doc.font("Helvetica").fontSize(9).fillColor(INK);
+  for (const line of statement.carrierAddress.split("·").map((part) => part.trim()).filter(Boolean)) {
+    doc.text(pdfPlain(line), left, y, { width });
+    y = doc.y + 2;
+  }
+  doc.text(statement.usdot ? `USDOT ${statement.usdot}` : "USDOT Not on file", left, y, { width });
+  y = doc.y + 2;
+  doc.text(statement.mcNumber ? `MC ${statement.mcNumber}` : "MC Not on file", left, y, { width });
+  y = doc.y + 2;
+  if (statement.carrierPhone) {
+    doc.text(statement.carrierPhone, left, y, { width });
+    y = doc.y + 2;
+  }
+  if (statement.carrierEmail) {
+    doc.text(statement.carrierEmail, left, y, { width });
+    y = doc.y + 2;
+  }
+  y += 6;
 
   doc.moveTo(left, y).lineTo(left + width, y).strokeColor("#d6dee8").stroke();
   y += 12;
@@ -97,8 +107,8 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   const showPercent = statement.driverKind === "owner_operator";
   y = sectionTitle(doc, left, y, "Loads");
   const loadHeader = showPercent
-    ? ["Load", "Pickup → delivery", "Dates", "Miles", "Linehaul", "OO %"]
-    : ["Load", "Pickup → delivery", "Dates", "Miles", "Linehaul"];
+    ? ["Load", "Pickup to delivery", "Dates", "Miles", "Linehaul", "OO %"]
+    : ["Load", "Pickup to delivery", "Dates", "Miles", "Linehaul"];
   const loadWidths = showPercent ? [70, 160, 100, 50, 80, 72] : [70, 190, 110, 60, 102];
   y = tableHeader(doc, left, y, loadHeader, loadWidths);
   if (!statement.loads.length) {
@@ -106,12 +116,12 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   }
   for (const line of statement.loads) {
     ensure(28);
-    const dates = [formatMdYDisplay(line.pickup), formatMdYDisplay(line.delivery)].filter((part) => part !== "—").join(" – ");
+    const dates = [formatMdYDisplay(line.pickup), formatMdYDisplay(line.delivery)].filter((part) => part !== "—").join(" - ");
     const cells = [
       line.loadNumber,
-      line.lane,
-      dates || "—",
-      line.miles != null ? String(Math.round(line.miles * 10) / 10) : "—",
+      pdfPlain(line.lane),
+      dates || "-",
+      line.miles != null ? String(Math.round(line.miles * 10) / 10) : "-",
       moneyOrBlank(line.linehaul),
     ];
     if (showPercent) cells.push(percentLabel(line.ooPercent));
@@ -125,7 +135,7 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   if (!statement.extras.length) y = emptyLine(doc, left, y, "No extra pay stored for this week.");
   for (const line of statement.extras) {
     ensure(22);
-    y = tableRow(doc, left, y, [line.loadNumber, line.label, formatStatementMoney(line.amount)], [80, 352, 100]);
+    y = tableRow(doc, left, y, [pdfPlain(line.loadNumber), pdfPlain(line.label), formatStatementMoney(line.amount)], [80, 352, 100]);
   }
 
   y += 8;
@@ -142,7 +152,7 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
       doc,
       left,
       y,
-      [line.categoryLabel, line.loadNumber || "—", line.status === "paid" ? "Paid" : "Approved", formatStatementMoney(line.amount)],
+      [pdfPlain(line.categoryLabel), pdfPlain(line.loadNumber || "-"), line.status === "paid" ? "Paid" : "Approved", formatStatementMoney(line.amount)],
       [140, 180, 112, 100],
     );
   }
@@ -154,7 +164,7 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   if (!statement.deductions.length) y = emptyLine(doc, left, y, "No deductions on this statement.");
   for (const line of statement.deductions) {
     ensure(22);
-    y = tableRow(doc, left, y, [line.name, line.detail, formatStatementMoney(line.amount)], [180, 252, 100]);
+    y = tableRow(doc, left, y, [pdfPlain(line.name), pdfPlain(line.detail), formatStatementMoney(line.amount)], [180, 252, 100]);
   }
 
   y += 14;
@@ -203,7 +213,7 @@ function tableRow(doc: PDFKit.PDFDocument, x: number, y: number, cells: string[]
   let cursor = x;
   doc.font("Helvetica").fontSize(8).fillColor("#122033");
   cells.forEach((cell, index) => {
-    doc.text(cell, cursor, y, { width: widths[index] - 6, lineBreak: false, ellipsis: true });
+    doc.text(pdfPlain(cell), cursor, y, { width: widths[index] - 6, lineBreak: false, ellipsis: true });
     cursor += widths[index];
   });
   return y + 14;

@@ -44,7 +44,7 @@ export default async function DriverPayPage({
             <Link
               key={item.from}
               href={`/driver/pay?week=${item.from}`}
-              className={`hit-target inline-flex items-center rounded-full px-3 text-sm font-semibold ${current ? "bg-white text-slate-900" : "bg-slate-800 text-slate-100"}`}
+              className="pay-week-chip"
               aria-current={current ? "page" : undefined}
             >
               {formatMdYDisplay(item.from)}

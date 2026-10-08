@@ -30,8 +30,24 @@ export function SettlementDocument({
   return (
     <article className={sheetClass} data-settlement-statement="" aria-labelledby="statement-title">
       <header className="statement-header">
+        <p className="statement-kicker">Settlement statement</p>
+        <dl className="statement-meta">
+          <div>
+            <dt>Statement</dt>
+            <dd>{statement.statementNumber}</dd>
+          </div>
+          <div>
+            <dt>Week</dt>
+            <dd>
+              {formatMdYDisplay(statement.weekStart)} – {formatMdYDisplay(statement.weekEnd)}
+            </dd>
+          </div>
+          <div>
+            <dt>Paid record</dt>
+            <dd>{statement.paidAt ? formatMdYDisplay(statement.paidAt) : "Not marked paid"}</dd>
+          </div>
+        </dl>
         <div>
-          <p className="statement-kicker">Settlement statement</p>
           {statement.identityBlock ? (
             <p
               id="statement-title"
@@ -54,22 +70,6 @@ export function SettlementDocument({
             </>
           )}
         </div>
-        <dl className="statement-meta">
-          <div>
-            <dt>Statement</dt>
-            <dd>{statement.statementNumber}</dd>
-          </div>
-          <div>
-            <dt>Week</dt>
-            <dd>
-              {formatMdYDisplay(statement.weekStart)} – {formatMdYDisplay(statement.weekEnd)}
-            </dd>
-          </div>
-          <div>
-            <dt>Paid record</dt>
-            <dd>{statement.paidAt ? formatMdYDisplay(statement.paidAt) : "Not marked paid"}</dd>
-          </div>
-        </dl>
       </header>
 
       <section className="statement-who" aria-label="Driver">
@@ -83,7 +83,41 @@ export function SettlementDocument({
         {statement.loads.length === 0 ? (
           <p className="statement-empty">No loads in this week.</p>
         ) : (
-          <div className="statement-table-wrap">
+          <>
+          <ul className="statement-loads-cards">
+            {statement.loads.map((line) => (
+              <li key={line.loadId} className="statement-load-card">
+                <p className="statement-load-id">{line.loadNumber}</p>
+                <p className="statement-load-lane">{line.lane}</p>
+                <dl>
+                  <div>
+                    <dt>Dates</dt>
+                    <dd>
+                      {formatMdYDisplay(line.pickup)} – {formatMdYDisplay(line.delivery)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Miles</dt>
+                    <dd>{milesLabel(line.miles)}</dd>
+                  </div>
+                  <div>
+                    <dt>Linehaul</dt>
+                    <dd>
+                      {line.linehaul == null ? "—" : formatStatementMoney(line.linehaul)}
+                      <span className="statement-basis">{line.basis}</span>
+                    </dd>
+                  </div>
+                  {showPercent ? (
+                    <div>
+                      <dt>OO %</dt>
+                      <dd>{percentLabel(line.ooPercent)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <div className="statement-table-wrap statement-loads-table">
             <table className="statement-table">
               <thead>
                 <tr>
@@ -114,6 +148,7 @@ export function SettlementDocument({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 

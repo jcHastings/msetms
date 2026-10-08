@@ -221,7 +221,7 @@ export function assertInvoiceIssuerReady(input: CompanyIdentityInput): void {
 }
 
 export const STATEMENT_IDENTITY_BLOCK_MESSAGE =
-  "Set the company name to MS Express in Settings > Company first.";
+  "Set the company name to M&S Loads DBA MS Express (or MS Express) in Settings > Company first.";
 
 const STATEMENT_LETTERHEAD_GAPS = new Set<InvoiceIssuerGap>([
   "company_name",

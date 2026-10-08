@@ -388,6 +388,14 @@ async function main() {
   assert.match(expressStatement?.carrierAddress ?? "", /NE/);
   const expressPdf = await pdf.renderSettlementPdf(expressStatement!);
   const expressText = String((await extractText(new Uint8Array(expressPdf), { mergePages: true })).text ?? "");
+  const expressFlat = expressText.replace(/\s+/g, " ");
+  assert.match(expressFlat, /SETTLEMENT STATEMENT/);
+  assert.match(expressFlat, /Pickup to delivery/);
+  assert.match(expressFlat, /Omaha, NE to Hastings, NE/);
+  assert.doesNotMatch(expressFlat, /→/);
+  const titleAt = expressFlat.indexOf("SETTLEMENT STATEMENT");
+  const numberAt = expressFlat.indexOf(expressStatement?.statementNumber ?? "SS-");
+  assert.ok(titleAt >= 0 && numberAt > titleAt, "statement number follows the title");
   assert.match(expressText, /MS Express/);
   assert.match(expressText, /USDOT 3062879/);
   assert.match(expressText, /MC 056299/);
@@ -438,9 +446,9 @@ async function main() {
     mc: "056299",
   };
   const blockedProfiles = [
-    { company_name: "M&S Loads", expect: /Set the company name to MS Express/ },
-    { company_name: "M & S Loads", expect: /Set the company name to MS Express/ },
-    { company_name: "M&S Loads LLC DBA MS Express", expect: /Set the company name to MS Express/ },
+    { company_name: "M&S Loads", expect: /M&S Loads DBA MS Express \(or MS Express\)/ },
+    { company_name: "M & S Loads", expect: /M&S Loads DBA MS Express \(or MS Express\)/ },
+    { company_name: "M&S Loads LLC DBA MS Express", expect: /M&S Loads DBA MS Express \(or MS Express\)/ },
     { mc: "MC-970613", expect: /MC-970613/ },
     { ar_email: "jc@msloads.com", expect: /jc@msloads\.com/ },
     {
@@ -474,6 +482,8 @@ async function main() {
   const payPage = fs.readFileSync(path.join(process.cwd(), "app/driver/pay/page.tsx"), "utf8");
   assert.match(payPage, /getSignedInDriver\(/);
   assert.match(payPage, /buildSettlement\(driver\.id/);
+  assert.match(payPage, /pay-week-chip/);
+  assert.doesNotMatch(payPage, /bg-white text-slate/);
   assert.doesNotMatch(payPage, /searchParams\.get\(\s*["']driver/);
   assert.doesNotMatch(payPage, /query\.driver/);
 
