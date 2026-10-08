@@ -44,15 +44,18 @@ export const ITS_IMPORT_ISSUES = {
   ambiguous_driver: "ITS import — ambiguous driver",
   unmapped_status: "ITS import — unmapped status",
   unparsable_row: "ITS import — unparsable row",
+  stop_parse_uncertain: "ITS import — stop parse uncertain",
 } as const;
 
 export type ItsImportIssue = keyof typeof ITS_IMPORT_ISSUES;
 
 export type UnitMatch = {
   id: number | null;
-  via: "blank" | "exact" | "ms_alias" | "unmatched" | "ambiguous";
+  via: "blank" | "exact" | "company" | "ms_alias" | "created" | "unmatched" | "ambiguous";
   detail: string;
   tmsUnit: string;
+  /** False for a newly created inactive record and for an existing inactive record. */
+  active: boolean;
 };
 
 export function itsImportExceptionKey(loadNumber: string, issue: string): string {
@@ -93,37 +96,50 @@ export function normalizeUnitKey(value: string): string {
  * Trailer alias (flag, default on): ITS trailer "NNNN" matches TMS trailer "MSNNNN"
  * only when exactly one trailer normalizes to that unit. Digits-only fuzzy matching is not used.
  */
+function unitActive(asset: { active?: number | boolean | null }): boolean {
+  if (asset.active == null) return true;
+  return asset.active !== 0 && asset.active !== false;
+}
+
+function unitResult(
+  asset: { id: number; unit_number?: string; name?: string; active?: number | boolean | null },
+  via: UnitMatch["via"],
+  detail: string,
+): UnitMatch {
+  return {
+    id: asset.id,
+    via,
+    detail,
+    tmsUnit: asset.unit_number ?? asset.name ?? "",
+    active: unitActive(asset),
+  };
+}
+
 export function matchItsUnit(
-  assets: Array<{ id: number; unit_number: string }>,
+  assets: Array<{ id: number; unit_number: string; active?: number | boolean | null }>,
   raw: string,
   options?: { msAlias?: boolean },
 ): UnitMatch {
-  if (isUnassignedAsset(raw)) return { id: null, via: "blank", detail: "", tmsUnit: "" };
+  if (isUnassignedAsset(raw)) return { id: null, via: "blank", detail: "", tmsUnit: "", active: false };
   const wanted = normalizeUnitKey(raw);
   const exact = assets.filter((asset) => normalizeUnitKey(asset.unit_number) === wanted);
-  if (exact.length === 1) {
-    return { id: exact[0]!.id, via: "exact", detail: "", tmsUnit: exact[0]!.unit_number };
-  }
+  if (exact.length === 1) return unitResult(exact[0]!, "exact", "");
   if (exact.length > 1) {
     return {
       id: null,
       via: "ambiguous",
       detail: exact.map((asset) => asset.unit_number).join(", "),
       tmsUnit: "",
+      active: false,
     };
   }
   if (!options?.msAlias || !/^\d+$/.test(raw.trim())) {
-    return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "" };
+    return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "", active: false };
   }
   const aliasKey = normalizeUnitKey(`MS${raw.trim()}`);
   const alias = assets.filter((asset) => normalizeUnitKey(asset.unit_number) === aliasKey);
   if (alias.length === 1) {
-    return {
-      id: alias[0]!.id,
-      via: "ms_alias",
-      detail: `${raw.trim()} → ${alias[0]!.unit_number}`,
-      tmsUnit: alias[0]!.unit_number,
-    };
+    return unitResult(alias[0]!, "ms_alias", `${raw.trim()} → ${alias[0]!.unit_number}`);
   }
   if (alias.length > 1) {
     return {
@@ -131,20 +147,36 @@ export function matchItsUnit(
       via: "ambiguous",
       detail: alias.map((asset) => asset.unit_number).join(", "),
       tmsUnit: "",
+      active: false,
     };
   }
-  return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "" };
+  return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "", active: false };
 }
 
-export function matchItsDriver(
-  drivers: Array<{ id: number; name: string }>,
-  raw: string,
-): UnitMatch {
-  if (isUnassignedAsset(raw)) return { id: null, via: "blank", detail: "", tmsUnit: "" };
+export type ItsDriverRecord = {
+  id: number;
+  name: string;
+  company_name?: string | null;
+  active?: number | boolean | null;
+};
+
+/**
+ * Exact normalized driver name, or exact normalized owner-operator company name.
+ * "3K3B Trucking LLC" matches the driver whose company name is that string.
+ */
+export function matchItsDriver(drivers: ItsDriverRecord[], raw: string): UnitMatch {
+  if (isUnassignedAsset(raw)) return { id: null, via: "blank", detail: "", tmsUnit: "", active: false };
   const wanted = normalizePersonName(raw);
-  const matches = drivers.filter((driver) => normalizePersonName(driver.name) === wanted);
+  const byName = drivers.filter((driver) => normalizePersonName(driver.name) === wanted);
+  const byCompany = drivers.filter((driver) => {
+    const company = normalizePersonName(driver.company_name ?? "");
+    return company.length > 0 && company === wanted && normalizePersonName(driver.name) !== wanted;
+  });
+  const matches = [...byName, ...byCompany.filter((driver) => !byName.some((named) => named.id === driver.id))];
   if (matches.length === 1) {
-    return { id: matches[0]!.id, via: "exact", detail: "", tmsUnit: matches[0]!.name };
+    const driver = matches[0]!;
+    const via = byName.some((named) => named.id === driver.id) ? "exact" : "company";
+    return unitResult({ ...driver, unit_number: driver.name }, via, via === "company" ? driver.company_name ?? "" : "");
   }
   if (matches.length > 1) {
     return {
@@ -152,9 +184,28 @@ export function matchItsDriver(
       via: "ambiguous",
       detail: matches.map((driver) => driver.name).join(", "),
       tmsUnit: "",
+      active: false,
     };
   }
-  return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "" };
+  return { id: null, via: "unmatched", detail: raw.trim(), tmsUnit: "", active: false };
+}
+
+/** Digits-only ITS trailers are stored as MS plus those digits: 1520 becomes MS1520. */
+export function inactiveTrailerUnit(raw: string): string {
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return `MS${trimmed}`;
+  return trimmed;
+}
+
+/** LLC, Inc, Holdings, Trucking, Transport(s), Logistics. Dots are ignored. */
+export function looksLikeCompanyName(name: string): boolean {
+  const tokens = name
+    .toLowerCase()
+    .replace(/\./g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const markers = new Set(["llc", "inc", "holdings", "trucking", "transport", "transports", "logistics"]);
+  return tokens.some((token) => markers.has(token));
 }
 
 /** End of the "shipped between … and YYYY-MM-DD" day, when the file name has that range. */
@@ -164,16 +215,41 @@ export function snapshotFromExportName(fileName: string): string | null {
   return `${match[2]}T23:59:59.999Z`;
 }
 
+export type ExportSnapshotSource = "override" | "xlsx-modified" | "xlsx-created" | "mtime" | "file-name" | "none";
+
+export function parseSnapshotInstant(value: string | null | undefined): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 /**
- * Snapshot is the earlier of the file modified time and the end date in the file name.
- * A 9/29 export copied later still snapshots at the end of 9/29.
+ * Real pull time, not the ship-date range.
+ * --snapshot override, then xlsx core.xml modified, then created, then file mtime,
+ * then the end date in the file name.
  */
-export function resolveExportSnapshot(input: { fileName?: string; fileMtimeMs?: number | null }): string | null {
-  const fromName = input.fileName ? snapshotFromExportName(input.fileName) : null;
+export function resolveExportSnapshot(input: {
+  fileName?: string;
+  fileMtimeMs?: number | null;
+  docModified?: string | null;
+  docCreated?: string | null;
+  override?: string | null;
+}): { snapshot: string | null; source: ExportSnapshotSource } {
+  const override = parseSnapshotInstant(input.override);
+  if (override) return { snapshot: override, source: "override" };
+  const modified = parseSnapshotInstant(input.docModified);
+  if (modified) return { snapshot: modified, source: "xlsx-modified" };
+  const created = parseSnapshotInstant(input.docCreated);
+  if (created) return { snapshot: created, source: "xlsx-created" };
   const mtime = input.fileMtimeMs;
-  const fromMtime = mtime != null && Number.isFinite(mtime) && mtime > 0 ? new Date(mtime).toISOString() : null;
-  if (fromName && fromMtime) return fromName < fromMtime ? fromName : fromMtime;
-  return fromName ?? fromMtime;
+  if (mtime != null && Number.isFinite(mtime) && mtime > 0) {
+    return { snapshot: new Date(mtime).toISOString(), source: "mtime" };
+  }
+  const fromName = input.fileName ? snapshotFromExportName(input.fileName) : null;
+  if (fromName) return { snapshot: fromName, source: "file-name" };
+  return { snapshot: null, source: "none" };
 }
 
 export function exportIsStale(updatedAt: string, snapshot: string | null): boolean {
@@ -191,4 +267,4 @@ export function calendarDay(value: string): string {
 }
 
 export const ITS_IMPORT_USAGE =
-  "npx tsx scripts/its-import.ts [--db <path>] [--dry-run | --apply] [--no-ms-trailer-alias] [--no-import-rate] [--create-inactive-units] <export.xlsx|csv> [more files...]";
+  "npx tsx scripts/its-import.ts [--db <path>] [--dry-run | --apply] [--snapshot <ISO>] [--no-ms-trailer-alias] [--no-import-rate] [--create-inactive-units] <export.xlsx|csv> [more files...]";

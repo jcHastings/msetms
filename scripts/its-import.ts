@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { ITS_IMPORT_USAGE } from "../lib/its-import-shared";
+import { ITS_IMPORT_USAGE, parseSnapshotInstant } from "../lib/its-import-shared";
 
 type Flags = {
   db?: string;
@@ -14,6 +14,7 @@ type Flags = {
   msTrailerAlias: boolean;
   importRate: boolean;
   createInactiveUnits: boolean;
+  snapshot?: string;
   files: string[];
   help: boolean;
 };
@@ -62,6 +63,13 @@ function parseArgs(argv: string[]): Flags {
       flags.createInactiveUnits = true;
       continue;
     }
+    if (arg === "--snapshot") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) throw new Error("--snapshot needs an ISO time.");
+      flags.snapshot = value;
+      index += 1;
+      continue;
+    }
     if (arg === "--db") {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) {
@@ -82,6 +90,7 @@ function printUsage(): void {
   console.log("Default is --dry-run. --apply writes. ms-trailer-alias and import-rate default on.");
   console.log("create-inactive-units defaults off. A blank or Assign Later truck, trailer, or driver is left as-is.");
   console.log("With --create-inactive-units, a dry-run lists each inactive truck, driver, and trailer it would create, with a load count.");
+  console.log("--snapshot <ISO> overrides each file's pull time. Otherwise the xlsx modified time, then created, then file mtime, then the file-name range.");
 }
 
 async function main(): Promise<void> {
@@ -101,9 +110,18 @@ async function main(): Promise<void> {
     }
   }
   if (flags.db) process.env.TMS_DB_PATH = path.resolve(flags.db);
+  let snapshot: string | null = null;
+  if (flags.snapshot) {
+    snapshot = parseSnapshotInstant(flags.snapshot);
+    if (!snapshot) {
+      console.error("--snapshot needs an ISO time.");
+      process.exit(2);
+    }
+  }
   const { formatItsImportText, runItsImportFiles } = await import("../lib/its-import");
   const summary = runItsImportFiles(flags.files.map((filePath) => path.resolve(filePath)), {
     apply: flags.apply,
+    snapshot,
     msTrailerAlias: flags.msTrailerAlias,
     importRate: flags.importRate,
     createInactiveUnits: flags.createInactiveUnits,

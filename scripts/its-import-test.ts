@@ -69,13 +69,92 @@ async function main(): Promise<void> {
   assert.equal(status.lookupItsStatus("not a status"), null);
   assert.match(status.itsStatusMapMarkdown(), /\| on route \| in_transit \|/);
   assert.equal(status.mapImportedLoadStatus("On Route"), "in_transit");
-  assert.equal(
+  assert.deepEqual(
     shared.resolveExportSnapshot({
       fileName: "All Loads shipped between 2026-09-01 and 2026-09-29.xlsx",
       fileMtimeMs: Date.parse("2026-10-07T15:00:00.000Z"),
     }),
+    { snapshot: "2026-10-07T15:00:00.000Z", source: "mtime" },
+  );
+  assert.equal(
+    shared.resolveExportSnapshot({
+      fileName: "All Loads shipped between 2026-09-01 and 2026-09-29.xlsx",
+      fileMtimeMs: Date.parse("2026-10-07T15:00:00.000Z"),
+      docModified: "2026-10-03T18:22:11Z",
+    }).source,
+    "xlsx-modified",
+  );
+  assert.equal(
+    shared.resolveExportSnapshot({
+      docCreated: "2026-09-29T15:04:00Z",
+      fileName: "All Loads shipped between 2026-09-01 and 2026-09-29.xlsx",
+    }).source,
+    "xlsx-created",
+  );
+  assert.equal(
+    shared.resolveExportSnapshot({
+      override: "2026-08-01T00:00:00Z",
+      docModified: "2026-10-03T18:22:11Z",
+    }).source,
+    "override",
+  );
+  assert.equal(
+    shared.resolveExportSnapshot({ fileName: "All Loads shipped between 2026-09-01 and 2026-09-29.xlsx" }).snapshot,
     STALE,
   );
+  assert.equal(shared.inactiveTrailerUnit("1520"), "MS1520");
+  assert.equal(shared.looksLikeCompanyName("3K3B Trucking LLC"), true);
+  assert.equal(shared.looksLikeCompanyName("Lumig Transports LLC"), true);
+  assert.equal(shared.looksLikeCompanyName("Steve Eller"), false);
+  const companyDriver = shared.matchItsDriver(
+    [{ id: 4, name: "Steve Eller", company_name: "3K3B Trucking LLC", active: 1 }],
+    "3K3B Trucking LLC",
+  );
+  assert.equal(companyDriver.via, "company");
+  assert.equal(companyDriver.id, 4);
+  const uncertain = status.mapLoadRecord({
+    "Load #": "1006185",
+    Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+    "Consignee City": "Bronx, Reading, Newark",
+    "Consignee St.": "NY, PA",
+  });
+  assert.equal(uncertain.stops_uncertain, true);
+  assert.equal(uncertain.deliveries.length, 3);
+  assert.equal(uncertain.deliveries[0]?.name, "May's");
+  assert.equal(uncertain.deliveries[1]?.name, "Bozzuto's");
+  assert.equal(uncertain.deliveries[2]?.name, "Elite Cold Storage, LLC");
+  assert.equal(uncertain.deliveries.some((stop) => stop.name === "LLC" || stop.name === "Inc"), false);
+  assert.equal(uncertain.deliveries[0]?.city, "Bronx");
+  assert.equal(uncertain.deliveries[1]?.city, "Reading");
+  assert.equal(uncertain.deliveries[2]?.city, "Newark");
+  assert.equal(uncertain.deliveries[0]?.state, "NY");
+  assert.equal(uncertain.deliveries[1]?.state, "PA");
+  assert.equal(uncertain.deliveries[2]?.state, "");
+  assert.deepEqual(status.splitImportList("NY, CO", "plain"), ["NY", "CO"]);
+  assert.deepEqual(status.splitImportList("Elite Cold Storage, LLC, Foo, Inc., Bar, L.L.C."), [
+    "Elite Cold Storage, LLC",
+    "Foo, Inc.",
+    "Bar, L.L.C.",
+  ]);
+  assert.equal(status.decodeHtmlEntities("May&#039;s &amp; Bozzuto&#039;s"), "May's & Bozzuto's");
+  const carried = status.mapLoadRecord({
+    "Load #": "1006186",
+    Consignee: "Elite Cold Storage, LLC, May&#039;s",
+    "Consignee City": "Bronx, Reading",
+    "Consignee St.": "NY",
+  });
+  assert.equal(carried.stops_uncertain, false);
+  assert.equal(carried.deliveries.map((stop) => stop.name).join("|"), "Elite Cold Storage, LLC|May's");
+  assert.equal(carried.deliveries.map((stop) => `${stop.city} ${stop.state}`).join("|"), "Bronx NY|Reading NY");
+  const ampersand = status.mapLoadRecord({
+    "Load #": "1006187",
+    Consignee: "A &amp; B Cold Storage, LLC",
+    "Consignee City": "Bronx",
+    "Consignee St.": "NY",
+  });
+  assert.equal(ampersand.deliveries.length, 1);
+  assert.equal(ampersand.deliveries[0]?.name, "A & B Cold Storage, LLC");
+  assert.equal(ampersand.stops_uncertain, false);
   assert.equal(shared.matchItsUnit([{ id: 1, unit_number: "MS1514" }], "1514", { msAlias: true }).via, "ms_alias");
   assert.equal(shared.matchItsUnit([{ id: 1, unit_number: "MS1514" }], "1514", { msAlias: false }).via, "unmatched");
   assert.equal(
@@ -143,7 +222,18 @@ async function main(): Promise<void> {
     pin: "1111",
     truck_id: null,
     status: "available",
-    driver_type: "company_driver",
+    driver_type: "owner_operator",
+    company_name: "3K3B Trucking LLC",
+  });
+  const ceferino = queries.createDriver({
+    name: "Chris Ceferino",
+    phone: "555-0102",
+    license: "NE2",
+    pin: "2222",
+    truck_id: null,
+    status: "available",
+    driver_type: "owner_operator",
+    company_name: "Lumig Transports LLC",
   });
 
   const counts = () => ({
@@ -209,9 +299,16 @@ async function main(): Promise<void> {
     trailerId: trailer1523.id,
     updatedAt: "2026-10-05T15:00:00.000Z",
   });
-  for (const loadNumber of ["1006234", "1006239", "1006240"]) {
+  for (const loadNumber of ["1006234", "1006239"]) {
     officeLoad({ loadNumber, status: "in_transit", truckId: truck32, updatedAt: "2026-10-05T15:00:00.000Z" });
   }
+  officeLoad({
+    loadNumber: "1006240",
+    status: "in_transit",
+    truckId: truck32,
+    driverId: eller,
+    updatedAt: "2026-10-05T15:00:00.000Z",
+  });
   officeLoad({
     loadNumber: "1006241",
     status: "at_delivery",
@@ -228,6 +325,7 @@ async function main(): Promise<void> {
     loadRow({ "Load #": "1006241", Status: "Dispatched", Truck: "41" }),
   ]), { apply: true, snapshot: STALE });
   assert.deepEqual(stale.skipped_tms_newer_loads.sort(), ["1006230", "1006234", "1006239", "1006240", "1006241"]);
+  assert.equal(stale.rate_filled, 0);
   assert.equal(stale.added, 0);
   assert.equal(stale.updated, 0);
   assert.equal(loadStatus("1006230"), "delivered");
@@ -363,11 +461,11 @@ async function main(): Promise<void> {
   assert.deepEqual(seecharan?.loads, ["1008410", "1008411", "1008412"]);
   assert.deepEqual(weston?.loads, ["1008413"]);
   assert.equal(planned.inactive_created.drivers.some((plan) => plan.name === "Steve Eller"), false);
-  assert.deepEqual(planned.inactive_created.trailers.find((plan) => plan.name === "9")?.loads, ["1008410"]);
+  assert.deepEqual(planned.inactive_created.trailers.find((plan) => plan.name === "MS9")?.loads, ["1008410"]);
   const plannedText = its.formatItsImportText(planned);
   assert.match(plannedText, /inactive trucks that would be created:\n {2}21: 1 load\n {2}35: 2 loads\n {2}2001: 1 load/);
   assert.match(plannedText, /inactive drivers that would be created:\n {2}David Seecharan: 3 loads\n {2}Weston Gates Holdings Inc: 1 load/);
-  assert.match(plannedText, /inactive trailers that would be created:\n {2}9: 1 load/);
+  assert.match(plannedText, /inactive trailers that would be created:\n {2}MS9: 1 load/);
   assert.doesNotMatch(plannedText, /Steve Eller/);
   assert.doesNotMatch(plannedText, /^ {2}32: /m);
 
@@ -382,6 +480,7 @@ async function main(): Promise<void> {
   assert.deepEqual(createdPair.inactive_created.drivers.find((plan) => plan.name === "Former One")?.loads, ["1008420", "1008421"]);
   assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "2000").length, 1);
   assert.equal(queries.listDrivers().filter((driver) => driver.name === "Former One").length, 1);
+  assert.equal(queries.listDrivers().find((driver) => driver.name === "Former One")?.driver_type, "company_driver");
   assert.match(its.formatItsImportText(createdPair), /inactive trucks created:\n {2}2000: 2 loads/);
 
   const truck32Status = queries.getTruck(truck32)?.status;
@@ -401,6 +500,8 @@ async function main(): Promise<void> {
   assert.ok(former);
   assert.equal(former?.active, 0);
   assert.equal(former?.status, "off_duty");
+  assert.equal(former?.driver_type, "owner_operator");
+  assert.equal(former?.company_name, "Weston Gates Holdings Inc");
   assert.equal(loadField("1008402", "driver_id"), former?.id);
   assert.equal(inactiveOn.exception_items.some((item) => item.load_number === "1008402"), false);
   assert.equal(queries.getTruck(truck32)?.status, truck32Status);
@@ -439,7 +540,8 @@ async function main(): Promise<void> {
     departed_at: string;
   };
   assert.equal(stopAfter.id, stopBefore.id);
-  assert.equal(stopAfter.city, "Newark");
+  assert.equal(stopAfter.city, "Avenel");
+  assert.equal(loadField("1008101", "destination"), "Avenel, NJ");
   assert.equal(stopAfter.arrived_at, "2026-09-22T15:04:00.000Z");
   assert.equal(stopAfter.departed_at, "2026-09-22T16:10:00.000Z");
   assert.equal(loadField("1008101", "qbo_sent_at"), "2026-09-25T00:00:00.000Z");
@@ -504,6 +606,509 @@ async function main(): Promise<void> {
     encoding: "utf8",
   });
   assert.match(help, /npx tsx scripts\/its-import\.ts \[--db <path>\] \[--dry-run \| --apply\]/);
+  assert.match(help, /--snapshot/);
+
+  const companyKeep = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006240",
+        Status: "On Route",
+        Truck: "32",
+        "Carrier/Driver": "  3K3B   Trucking LLC ",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(loadField("1006240", "driver_id"), eller);
+  assert.equal(loadField("1006240", "truck_id"), truck32);
+  assert.equal(loadStatus("1006240"), "in_transit");
+  assert.equal(queries.listDrivers().some((driver) => driver.name === "3K3B Trucking LLC"), false);
+  assert.equal(companyKeep.reassignments.some((row) => row.load_number === "1006240"), false);
+  assert.equal(companyKeep.inactive_created.drivers.some((plan) => /3k3b/i.test(plan.name)), false);
+
+  const lumigLoads = Array.from({ length: 14 }, (_item, index) => `10093${String(index + 1).padStart(2, "0")}`);
+  for (const loadNumber of lumigLoads) {
+    officeLoad({
+      loadNumber,
+      status: "in_transit",
+      driverId: eller,
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+  }
+  const lumigRows = lumigLoads.map((loadNumber, index) =>
+    loadRow({
+      "Load #": loadNumber,
+      Status: "On Route",
+      "Carrier/Driver": index === 13 ? "  Lumig   Transports LLC " : "Lumig Transports LLC",
+    }),
+  );
+  const reassigned = its.importItsRecords(sheet(lumigRows), { apply: true, snapshot: FRESH });
+  assert.equal(reassigned.reassignments.length, lumigLoads.length);
+  assert.equal(reassigned.diff_sample.length <= 12, true);
+  for (const loadNumber of lumigLoads) {
+    assert.equal(loadField(loadNumber, "driver_id"), ceferino);
+    const row = reassigned.reassignments.find((item) => item.load_number === loadNumber);
+    assert.equal(row?.kind, "driver");
+    assert.equal(row?.from_label, "Steve Eller");
+    assert.equal(row?.to_label, "Chris Ceferino");
+    assert.match(row?.its ?? "", /Lumig\s+Transports LLC/);
+  }
+  const reassignedText = its.formatItsImportText(reassigned);
+  for (const loadNumber of lumigLoads) {
+    assert.match(reassignedText, new RegExp(`${loadNumber} driver: Steve Eller → Chris Ceferino`));
+  }
+  assert.doesNotMatch(reassignedText, /more reassignment|truncated|\.\.\./);
+  const reassignedJson = JSON.parse(JSON.stringify(reassigned)) as { reassignments: unknown[] };
+  assert.equal(reassignedJson.reassignments.length, lumigLoads.length);
+
+  officeLoad({
+    loadNumber: "1009320",
+    status: "in_transit",
+    driverId: eller,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const refused = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009320", Status: "On Route", "Carrier/Driver": "Acme Trucking LLC" })]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(loadField("1009320", "driver_id"), eller);
+  assert.equal(queries.listDrivers().some((driver) => driver.name === "Acme Trucking LLC"), false);
+  assert.equal(refused.inactive_created.drivers.some((plan) => plan.name === "Acme Trucking LLC"), false);
+  assert.equal(refused.reassignments.some((row) => row.load_number === "1009320"), false);
+  assert.equal(refused.exception_items.some((item) => item.load_number === "1009320" && item.issue === "unmatched_driver"), true);
+
+  const acme = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009321", Status: "Invoiced", "Carrier/Driver": "Acme Logistics" })]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  const acmeDriver = queries.listDrivers().find((driver) => driver.name === "Acme Logistics");
+  assert.ok(acmeDriver);
+  assert.equal(acmeDriver?.driver_type, "owner_operator");
+  assert.equal(acmeDriver?.company_name, "Acme Logistics");
+  assert.equal(acmeDriver?.active, 0);
+  assert.equal(acmeDriver?.status, "off_duty");
+  assert.equal(acmeDriver?.division, "MSE");
+  assert.equal(loadField("1009321", "driver_id"), acmeDriver?.id);
+  assert.deepEqual(acme.inactive_created.drivers.find((plan) => plan.name === "Acme Logistics")?.loads, ["1009321"]);
+
+  const parked = queries.createDriver({
+    name: "Parked Hauler",
+    phone: "",
+    license: "",
+    pin: "",
+    truck_id: null,
+    status: "off_duty",
+    active: 0,
+    driver_type: "company_driver",
+  });
+  officeLoad({
+    loadNumber: "1009322",
+    status: "in_transit",
+    driverId: eller,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const parkedImport = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009322", Status: "On Route", "Carrier/Driver": "Parked Hauler" })]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(loadField("1009322", "driver_id"), eller);
+  assert.equal(parkedImport.reassignments.some((row) => row.load_number === "1009322"), false);
+  assert.equal(parked, queries.listDrivers().find((driver) => driver.name === "Parked Hauler")?.id);
+
+  const bronxId = officeLoad({
+    loadNumber: "1006185",
+    status: "in_transit",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  db.prepare("UPDATE loads SET origin = ?, destination = ? WHERE id = ?").run("Kansas City, MO", "Bronx, NY", bronxId);
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at)
+     VALUES (?, 1, 'delivery', 'May''s', '', 'Bronx', 'NY', '', '', '2026-09-22T08:00:00', '2026-09-22T17:00:00', '2026-09-22T15:00:00.000Z', '')`,
+  ).run(bronxId);
+  const bronxStopsBefore = scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", bronxId);
+  const switched = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006185",
+        Status: "On Route",
+        Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+        "Consignee City": "Bronx, Reading, Newark",
+        "Consignee St.": "NY, PA",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006185", "destination"), "Bronx, NY");
+  assert.equal(loadField("1006185", "origin"), "Kansas City, MO");
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", bronxId), bronxStopsBefore);
+  const bronxStop = db.prepare("SELECT name, city, state, arrived_at FROM load_stops WHERE load_id = ? AND kind = 'delivery'").get(bronxId) as {
+    name: string;
+    city: string;
+    state: string;
+    arrived_at: string;
+  };
+  assert.equal(bronxStop.name, "May's");
+  assert.equal(bronxStop.city, "Bronx");
+  assert.equal(bronxStop.state, "NY");
+  assert.equal(bronxStop.arrived_at, "2026-09-22T15:00:00.000Z");
+  assert.equal(switched.exception_items.some((item) => item.load_number === "1006185" && item.issue === "stop_parse_uncertain"), true);
+
+  const blankCityId = loadId("1008101")!;
+  const stopCountBefore = scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", blankCityId);
+  db.prepare("UPDATE load_stops SET city = '' WHERE load_id = ? AND kind = 'delivery'").run(blankCityId);
+  const filled = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1008101", Status: "Invoiced", Trailer: "1514", "Consignee City": "Newark", "WSF PO": "PO-CHANGED" })]),
+    { apply: true, snapshot: FRESH },
+  );
+  const filledStop = db.prepare("SELECT id, name, city, state, arrived_at FROM load_stops WHERE load_id = ? AND kind = 'delivery'").get(blankCityId) as {
+    id: number;
+    name: string;
+    city: string;
+    state: string;
+    arrived_at: string;
+  };
+  assert.equal(filledStop.city, "Newark");
+  assert.equal(filledStop.state, "NJ");
+  assert.equal(filledStop.name, "Avenel DC");
+  assert.equal(filledStop.arrived_at, "2026-09-22T15:04:00.000Z");
+  assert.equal(loadField("1008101", "destination"), "Avenel, NJ");
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", blankCityId), stopCountBefore);
+  assert.equal(filled.updated >= 1, true);
+  const keepState = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1008101",
+        Status: "Invoiced",
+        Trailer: "1514",
+        "Consignee City": "",
+        "Consignee St.": "",
+        "WSF PO": "PO-CHANGED",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  const keptStop = db.prepare("SELECT city, state FROM load_stops WHERE id = ?").get(filledStop.id) as { city: string; state: string };
+  assert.equal(keptStop.city, "Newark");
+  assert.equal(keptStop.state, "NJ");
+  assert.equal(keepState.reassignments.length, 0);
+
+  const uncertainNew = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006190",
+        Status: "Invoiced",
+        Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+        "Consignee City": "Bronx, Reading, Newark",
+        "Consignee St.": "NY, PA",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(uncertainNew.added, 1);
+  const newStops = db.prepare("SELECT name, city, state FROM load_stops WHERE load_id = ? AND kind = 'delivery' ORDER BY sequence, id").all(loadId("1006190")) as Array<{
+    name: string;
+    city: string;
+    state: string;
+  }>;
+  assert.deepEqual(
+    newStops.map((stop) => `${stop.name}|${stop.city}|${stop.state}`),
+    ["May's|Bronx|NY", "Bozzuto's|Reading|PA", "Elite Cold Storage, LLC|Newark|"],
+  );
+  assert.equal(newStops.some((stop) => stop.name === "LLC" || stop.name === "Inc"), false);
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM exception_states WHERE exception_key = 'its-import:1006190:stop_parse_uncertain'"), 1);
+  const uncertainAgain = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006190",
+        Status: "Invoiced",
+        Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+        "Consignee City": "Bronx, Reading, Newark",
+        "Consignee St.": "NY, PA",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(uncertainAgain.added, 0);
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM exception_states WHERE exception_key = 'its-import:1006190:stop_parse_uncertain'"), 1);
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ? AND kind = 'delivery'", loadId("1006190")), 3);
+
+  const carriedApply = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006191",
+        Status: "Invoiced",
+        Consignee: "Elite Cold Storage, LLC, May&#039;s",
+        "Consignee City": "Bronx, Reading",
+        "Consignee St.": "NY",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(carriedApply.exception_items.some((item) => item.load_number === "1006191" && item.issue === "stop_parse_uncertain"), false);
+  const carriedStops = db.prepare("SELECT name, city, state FROM load_stops WHERE load_id = ? AND kind = 'delivery' ORDER BY sequence, id").all(loadId("1006191")) as Array<{
+    name: string;
+    city: string;
+    state: string;
+  }>;
+  assert.deepEqual(
+    carriedStops.map((stop) => `${stop.name}|${stop.city}|${stop.state}`),
+    ["Elite Cold Storage, LLC|Bronx|NY", "May's|Reading|NY"],
+  );
+
+  const decoded = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006192",
+        Status: "Invoiced",
+        Consignee: "A &amp; B Cold Storage, LLC",
+        "Consignee City": "Bronx",
+        "Consignee St.": "NY",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(decoded.added, 1);
+  const decodedStop = db.prepare("SELECT name FROM load_stops WHERE load_id = ? AND kind = 'delivery'").get(loadId("1006192")) as { name: string };
+  assert.equal(decodedStop.name, "A & B Cold Storage, LLC");
+
+  officeLoad({ loadNumber: "1009401", status: "delivered", rate: null, updatedAt: "2026-10-05T15:00:00.000Z" });
+  officeLoad({ loadNumber: "1009402", status: "delivered", rate: 2200, updatedAt: "2026-10-05T15:00:00.000Z" });
+  const staleRate = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1009401", Status: "On Route", Truck: "41", "Total Billing Rate": "1,850.50" }),
+      loadRow({ "Load #": "1009402", Status: "On Route", "Total Billing Rate": "900" }),
+    ]),
+    { apply: true, snapshot: STALE },
+  );
+  assert.equal(loadField("1009401", "rate"), 1850.5);
+  assert.equal(loadStatus("1009401"), "delivered");
+  assert.equal(loadField("1009401", "truck_id"), null);
+  assert.equal(loadField("1009402", "rate"), 2200);
+  assert.deepEqual(staleRate.rate_filled_loads, ["1009401"]);
+  assert.ok(staleRate.skipped_tms_newer_loads.includes("1009401"));
+  assert.match(its.formatItsImportText(staleRate), /rate filled on TMS-newer loads: 1\n {2}1009401/);
+  const staleRateAgain = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009401", Status: "On Route", "Total Billing Rate": "1,850.50" })]),
+    { apply: true, snapshot: STALE },
+  );
+  assert.equal(staleRateAgain.rate_filled, 0);
+  assert.equal(loadField("1009401", "rate"), 1850.5);
+
+  const msTrailers = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1003601", Status: "Invoiced", Trailer: "1520" }),
+      loadRow({ "Load #": "1003602", Status: "Invoiced", Trailer: "2204" }),
+      loadRow({ "Load #": "1003603", Status: "Invoiced", Trailer: "1510" }),
+      loadRow({ "Load #": "1003604", Status: "Invoiced", Trailer: "1513" }),
+      loadRow({ "Load #": "1003605", Status: "Invoiced", Trailer: "1520" }),
+    ]),
+    { apply: false, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.deepEqual(msTrailers.inactive_created.trailers.find((plan) => plan.name === "MS1520")?.loads, ["1003601", "1003605"]);
+  assert.equal(msTrailers.inactive_created.trailers.some((plan) => plan.name === "1520"), false);
+  for (const unit of ["MS2204", "MS1510", "MS1513"]) {
+    assert.equal(msTrailers.inactive_created.trailers.some((plan) => plan.name === unit), true);
+  }
+  const msApplied = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1003601", Status: "Invoiced", Trailer: "1520" }),
+      loadRow({ "Load #": "1003602", Status: "Invoiced", Trailer: "2204" }),
+      loadRow({ "Load #": "1003603", Status: "Invoiced", Trailer: "1510" }),
+      loadRow({ "Load #": "1003604", Status: "Invoiced", Trailer: "1513" }),
+      loadRow({ "Load #": "1003605", Status: "Invoiced", Trailer: "1520" }),
+    ]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.deepEqual(msApplied.inactive_created.trailers.find((plan) => plan.name === "MS1520")?.loads, ["1003601", "1003605"]);
+  const ms1520 = queries.listTrailers().find((trailer) => trailer.unit_number === "MS1520");
+  assert.ok(ms1520);
+  assert.equal(ms1520?.active, 0);
+  assert.equal(ms1520?.status, "out_of_service");
+  assert.equal(loadField("1003601", "trailer_id"), ms1520?.id);
+  assert.equal(loadField("1003605", "trailer_id"), ms1520?.id);
+  assert.equal(msApplied.alias_matches.some((item) => item.load_number === "1003605" && item.its === "1520" && item.tms_unit === "MS1520"), true);
+  for (const unit of ["MS2204", "MS1510", "MS1513"]) {
+    assert.equal(queries.listTrailers().filter((trailer) => trailer.unit_number === unit).length, 1);
+  }
+  queries.createTrailer({ unit_number: "MS-1520", type: "reefer", status: "available" });
+  const msAmbiguous = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1003606", Status: "Invoiced", Trailer: "1520" })]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(loadField("1003606", "trailer_id"), null);
+  assert.equal(msAmbiguous.exception_items.some((item) => item.load_number === "1003606" && item.issue === "ambiguous_trailer"), true);
+
+  const activeAlias = queries.createTrailer({ unit_number: "MS1700", type: "reefer", status: "available" });
+  officeLoad({
+    loadNumber: "1009701",
+    status: "in_transit",
+    trailerId: trailer1523.id,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const aliasMove = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009701", Status: "On Route", Trailer: "1700" })]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1009701", "trailer_id"), activeAlias);
+  assert.equal(aliasMove.reassignments.some((row) => row.load_number === "1009701" && row.kind === "trailer" && row.to_label === "MS1700" && row.its === "1700"), true);
+  queries.createTrailer({ unit_number: "MS1800", type: "reefer", status: "out_of_service", active: 0 });
+  officeLoad({
+    loadNumber: "1009702",
+    status: "in_transit",
+    trailerId: trailer1523.id,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const inactiveAlias = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1009702", Status: "On Route", Trailer: "1800" })]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(loadField("1009702", "trailer_id"), trailer1523.id);
+  assert.equal(inactiveAlias.reassignments.some((row) => row.load_number === "1009702"), false);
+
+  officeLoad({
+    loadNumber: "1003500",
+    status: "in_transit",
+    truckId: truck32,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  officeLoad({
+    loadNumber: "1003599",
+    status: "in_transit",
+    truckId: truck32,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const countDir = fs.mkdtempSync(path.join(os.tmpdir(), "its-counts-"));
+  const countFileA = path.join(countDir, "loads-a.csv");
+  const countFileB = path.join(countDir, "loads-b.csv");
+  const countLoadsA = ["1003501", "1003502", "1003503", "1003500"];
+  const countLoadsB = ["1003504", "1003505", "1003506", "1003599"];
+  fs.writeFileSync(
+    countFileA,
+    csvDocument([...countLoadsA.map((loadNumber) => loadRow({ "Load #": loadNumber, Status: "Invoiced", Truck: "35" })), loadRow({ "Load #": "1003599", Status: "Invoiced", Truck: "99" })]),
+  );
+  fs.writeFileSync(
+    countFileB,
+    csvDocument(countLoadsB.filter((loadNumber) => loadNumber !== "1003599").map((loadNumber) => loadRow({ "Load #": loadNumber, Status: "Invoiced", Truck: "35" }))),
+  );
+  const countDry = its.runItsImportFiles([countFileA, countFileB], { apply: false, createInactiveUnits: true });
+  const countApply = its.runItsImportFiles([countFileA, countFileB], { apply: true, createInactiveUnits: true });
+  const dry35 = countDry.inactive_created.trucks.find((plan) => plan.name === "35")?.loads ?? [];
+  const apply35 = countApply.inactive_created.trucks.find((plan) => plan.name === "35")?.loads ?? [];
+  assert.deepEqual(dry35, ["1003501", "1003502", "1003503", "1003504", "1003505", "1003506"]);
+  assert.deepEqual(apply35, dry35);
+  assert.equal(loadField("1003500", "truck_id"), truck32);
+  assert.equal(loadField("1003599", "truck_id"), truck32);
+  assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "35").length, 1);
+  assert.equal(queries.listTrucks().some((truck) => truck.unit_number === "99"), false);
+  assert.equal(countApply.exception_items.some((item) => item.load_number === "1003599" && item.issue === "unmatched_truck"), true);
+  assert.equal(countApply.reassignments.some((row) => row.load_number === "1003500" || row.load_number === "1003599"), false);
+
+  officeLoad({
+    loadNumber: "1006224",
+    status: "completed",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const dupDir = fs.mkdtempSync(path.join(os.tmpdir(), "its-dup-"));
+  const augustFile = path.join(dupDir, "All Loads shipped between 2026-08-01 and 2026-08-22.csv");
+  const septemberFile = path.join(dupDir, "All Loads shipped between 2026-09-01 and 2026-09-23.csv");
+  fs.writeFileSync(
+    augustFile,
+    csvDocument([
+      loadRow({ "Load #": "1006224", Status: "Completed", "Ship Date": "8/20/2026", "Del Date": "8/22/2026" }),
+      loadRow({ "Load #": "1006225", Status: "Completed", "Ship Date": "8/20/2026", "Del Date": "8/22/2026" }),
+    ]),
+  );
+  fs.writeFileSync(
+    septemberFile,
+    csvDocument([
+      loadRow({ "Load #": "1006224", Status: "Delivered", "Ship Date": "9/20/2026", "Del Date": "9/23/2026" }),
+      loadRow({ "Load #": "1006225", Status: "Delivered", "Ship Date": "9/20/2026", "Del Date": "9/23/2026" }),
+    ]),
+  );
+  fs.utimesSync(augustFile, new Date("2026-08-22T18:00:00.000Z"), new Date("2026-08-22T18:00:00.000Z"));
+  fs.utimesSync(septemberFile, new Date("2026-09-23T18:00:00.000Z"), new Date("2026-09-23T18:00:00.000Z"));
+  const duplicate = its.runItsImportFiles([septemberFile, augustFile], { apply: true });
+  assert.equal(loadStatus("1006224"), "completed");
+  assert.equal(loadStatus("1006225"), "delivered");
+  assert.equal(loadField("1006225", "updated_at"), "2026-09-23T18:00:00.000Z");
+  const conflict6224 = duplicate.conflicts.find((conflict) => conflict.load_number === "1006224");
+  const conflict6225 = duplicate.conflicts.find((conflict) => conflict.load_number === "1006225");
+  assert.equal(conflict6224?.chosen_file, path.basename(septemberFile));
+  assert.equal(conflict6224?.chosen_snapshot, "2026-09-23T18:00:00.000Z");
+  assert.equal(conflict6224?.chosen_status, "Delivered");
+  assert.equal(conflict6224?.others[0]?.status, "Completed");
+  assert.equal(conflict6224?.others[0]?.file, path.basename(augustFile));
+  assert.equal(conflict6225?.chosen_status, "Delivered");
+  const duplicateText = its.formatItsImportText(duplicate);
+  assert.match(duplicateText, /1006224: chose/);
+  assert.match(duplicateText, /Completed/);
+  assert.match(duplicateText, /Delivered/);
+  assert.match(duplicateText, /1006225: chose/);
+  const duplicateAgain = its.runItsImportFiles([septemberFile, augustFile], { apply: true });
+  assert.equal(duplicateAgain.added, 0);
+  assert.equal(duplicateAgain.updated, 0);
+  assert.equal(loadStatus("1006224"), "completed");
+  assert.equal(loadStatus("1006225"), "delivered");
+  assert.equal(duplicateAgain.skipped_tms_newer_loads.includes("1006225"), false);
+
+  const { buildXlsxFromGrid } = await import("../lib/xlsx-first-sheet");
+  const { strToU8, unzipSync, zipSync } = await import("fflate");
+  const xlsxDir = fs.mkdtempSync(path.join(os.tmpdir(), "its-xlsx-"));
+  const xlsxPath = path.join(xlsxDir, "All Loads shipped between 2026-09-01 and 2026-09-29.xlsx");
+  const headerRow = [...shared.ITS_ALL_LOADS_HEADERS];
+  const dataRow = headerRow.map((header) => {
+    if (header === "Load #") return "1009901";
+    if (header === "Status") return "Invoiced";
+    if (header === "Ship Date") return "9/20/2026";
+    if (header === "Del Date") return "9/22/2026";
+    if (header === "Customer") return "M & S Loads LLC.";
+    if (header === "Shipper") return "Westside Foods";
+    if (header === "Shipper City") return "Kansas City";
+    if (header === "Shipper St.") return "MO";
+    if (header === "Consignee") return "Avenel DC";
+    if (header === "Consignee City") return "Avenel";
+    if (header === "Consignee St.") return "NJ";
+    return "";
+  });
+  const stamped = stampCore(buildXlsxFromGrid([headerRow, dataRow]), "2026-10-03T18:22:11Z", "", strToU8, unzipSync, zipSync);
+  fs.writeFileSync(xlsxPath, stamped);
+  fs.utimesSync(xlsxPath, new Date("2026-10-07T15:00:00.000Z"), new Date("2026-10-07T15:00:00.000Z"));
+  const xlsxRun = its.runItsImportFiles([xlsxPath], { apply: true });
+  assert.equal(xlsxRun.file_snapshots[0]?.source, "xlsx-modified");
+  assert.equal(xlsxRun.file_snapshots[0]?.snapshot, "2026-10-03T18:22:11.000Z");
+  assert.match(its.formatItsImportText(xlsxRun), /2026-10-03T18:22:11.000Z \(xlsx-modified\)/);
+  assert.equal(loadField("1009901", "updated_at"), "2026-10-03T18:22:11.000Z");
+  const xlsxAgain = its.runItsImportFiles([xlsxPath], { apply: true });
+  assert.equal(xlsxAgain.unchanged, 1);
+  assert.equal(xlsxAgain.skipped_tms_newer, 0);
+  const createdOnly = path.join(xlsxDir, "created-only.xlsx");
+  const createdRow = dataRow.map((value, index) => (headerRow[index] === "Load #" ? "1009902" : value));
+  fs.writeFileSync(createdOnly, stampCore(buildXlsxFromGrid([headerRow, createdRow]), "", "2026-09-29T15:04:00Z", strToU8, unzipSync, zipSync));
+  fs.utimesSync(createdOnly, new Date("2026-10-07T15:00:00.000Z"), new Date("2026-10-07T15:00:00.000Z"));
+  const createdRun = its.runItsImportFiles([createdOnly], { apply: false });
+  assert.equal(createdRun.file_snapshots[0]?.source, "xlsx-created");
+  assert.equal(createdRun.file_snapshots[0]?.snapshot, "2026-09-29T15:04:00.000Z");
+  const overrideRun = its.runItsImportFiles([xlsxPath], { apply: false, snapshot: "2026-01-15T00:00:00Z" });
+  assert.equal(overrideRun.file_snapshots[0]?.source, "override");
+  assert.equal(overrideRun.file_snapshots[0]?.snapshot, "2026-01-15T00:00:00.000Z");
+  assert.match(its.formatItsImportText(overrideRun), /2026-01-15T00:00:00.000Z \(override\)/);
+  const cliSnapshot = execFileSync(
+    path.join(process.cwd(), "node_modules", ".bin", "tsx"),
+    ["scripts/its-import.ts", "--db", dbPath, "--dry-run", "--snapshot", "2026-01-15T00:00:00Z", csvPath],
+    { encoding: "utf8" },
+  );
+  assert.match(cliSnapshot, /2026-01-15T00:00:00.000Z \(override\)/);
+  let snapshotExit = 0;
+  try {
+    execFileSync(
+      path.join(process.cwd(), "node_modules", ".bin", "tsx"),
+      ["scripts/its-import.ts", "--db", dbPath, "--snapshot", "yesterday", csvPath],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    snapshotExit = (error as { status?: number }).status ?? 0;
+  }
+  assert.equal(snapshotExit, 2);
 
   assert.equal(calls.qbo, 0);
   assert.equal(calls.mail, 0);
@@ -521,6 +1126,23 @@ async function main(): Promise<void> {
   fs.rmSync(`${dbPath}-shm`, { force: true });
   globalThis.fetch = originalFetch;
   console.log("its-import tests passed");
+}
+
+function stampCore(
+  buffer: Uint8Array,
+  modified: string,
+  created: string,
+  strToU8: (text: string) => Uint8Array,
+  unzipSync: (data: Uint8Array) => Record<string, Uint8Array>,
+  zipSync: (files: Record<string, Uint8Array>) => Uint8Array,
+): Uint8Array {
+  const files = unzipSync(buffer);
+  files["docProps/core.xml"] = strToU8(`<?xml version="1.0" encoding="UTF-8"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+${created ? `<dcterms:created xsi:type="dcterms:W3CDTF">${created}</dcterms:created>` : ""}
+${modified ? `<dcterms:modified xsi:type="dcterms:W3CDTF">${modified}</dcterms:modified>` : ""}
+</cp:coreProperties>`);
+  return zipSync(files);
 }
 
 function csvDocument(lines: string[]): string {

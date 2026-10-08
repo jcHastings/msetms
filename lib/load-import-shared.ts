@@ -165,6 +165,9 @@ export type LoadImportValues = {
   date_problems: string[];
   pickups: ImportedStop[];
   deliveries: ImportedStop[];
+  /** True when names, cities, and states could not be paired without guessing. */
+  stops_uncertain: boolean;
+  stop_parse_detail: string;
 };
 
 export type LoadImportPreviewRow = LoadImportValues & {
@@ -199,8 +202,29 @@ export function asImportText(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Number.isInteger(value) ? String(value) : String(value);
   }
-  const raw = String(value).trim();
+  const raw = decodeHtmlEntities(String(value).trim());
   return raw === "-" ? "" : raw;
+}
+
+/** &#039; &amp; &quot; and the other named and numeric entities ITS leaves in cells. */
+export function decodeHtmlEntities(value: string): string {
+  const named: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+  return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (entity, body: string) => {
+    if (body.startsWith("#")) {
+      const hex = body[1] === "x" || body[1] === "X";
+      const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return entity;
+      return String.fromCodePoint(code);
+    }
+    return named[body.toLowerCase()] ?? entity;
+  });
 }
 
 export function isUnassignedAsset(value: string): boolean {
@@ -231,11 +255,99 @@ export function parseBillingRate(value: unknown): number | null {
   return Math.round(amount * 100) / 100;
 }
 
-export function splitImportList(value: string): string[] {
-  return value
+/**
+ * Commas inside a company suffix stay with the company.
+ * "Elite Cold Storage, LLC" is one name. "May's, Bozzuto's" is two.
+ * Suffixes: LLC, L.L.C., Inc, Inc., Co, Corp, Ltd, LP, LLP, PLLC, PC, and the long forms.
+ */
+const COMPANY_SUFFIX =
+  /^(l\.?\s*l\.?\s*c\.?|llc|inc\.?|incorporated|co\.?|corp\.?|corporation|ltd\.?|limited|l\.?\s*p\.?|lp|l\.?\s*l\.?\s*p\.?|llp|p\.?\s*l\.?\s*l\.?\s*c\.?|pllc|p\.?\s*c\.?|pc)$/i;
+
+/**
+ * Names keep a comma that belongs to a company suffix.
+ * Cities, states, streets, zips, and phones split on every comma so "NY, CO" stays two states.
+ */
+export function splitImportList(value: string, mode: "name" | "plain" = "name"): string[] {
+  const parts = value
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
+  if (mode === "plain") return parts;
+  const merged: string[] = [];
+  for (const part of parts) {
+    if (merged.length > 0 && COMPANY_SUFFIX.test(part)) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]}, ${part}`;
+      continue;
+    }
+    merged.push(part);
+  }
+  return merged;
+}
+
+/**
+ * Pair one ITS lane (shipper or consignee).
+ *
+ * State rule, after the suffix-aware split:
+ * - No states: every stop state stays blank. Certain.
+ * - State count equals the stop count (max of names and cities): pair by index. Certain.
+ * - Exactly one state and more than one stop: that state is the whole lane. ITS writes a
+ *   repeated state once. Certain. This is the only carry-forward.
+ * - Any other state count (for example 3 cities and 2 states): do not carry the previous
+ *   state into the gap. Pair the states that are present and leave the rest blank.
+ *   The parse is uncertain.
+ * - Names and cities of different non-zero lengths are uncertain. A name is not copied
+ *   onto later stops. A missing name or city stays blank.
+ */
+export function parseLaneStops(
+  kind: "pickup" | "delivery",
+  nameText: string,
+  cityText: string,
+  stateText: string,
+  streetText = "",
+  zipText = "",
+  phoneText = "",
+): { stops: ImportedStop[]; uncertain: boolean; detail: string } {
+  const names = splitImportList(nameText, "name");
+  const cities = splitImportList(cityText, "plain");
+  const states = splitImportList(stateText, "plain");
+  const streets = splitImportList(streetText, "plain");
+  const zips = splitImportList(zipText, "plain");
+  const phones = splitImportList(phoneText, "plain");
+  const stopCount = Math.max(names.length, cities.length);
+  if (stopCount === 0) {
+    const detail = states.length > 0 ? `${kind} has states but no names or cities.` : "";
+    return { stops: [], uncertain: states.length > 0, detail };
+  }
+  const details: string[] = [];
+  let uncertain = false;
+  if (names.length > 0 && cities.length > 0 && names.length !== cities.length) {
+    uncertain = true;
+    details.push(`${kind} names (${names.length}) and cities (${cities.length}) do not line up`);
+  }
+  let pairedStates: string[];
+  if (states.length === 0) {
+    pairedStates = Array.from({ length: stopCount }, () => "");
+  } else if (states.length === stopCount) {
+    pairedStates = states;
+  } else if (states.length === 1) {
+    pairedStates = Array.from({ length: stopCount }, () => states[0] ?? "");
+  } else {
+    uncertain = true;
+    details.push(
+      `${kind} states (${states.length}) and cities (${cities.length}) do not line up; missing states were not carried forward`,
+    );
+    pairedStates = Array.from({ length: stopCount }, (_, index) => states[index] ?? "");
+  }
+  const stops = Array.from({ length: stopCount }, (_, index) => ({
+    kind,
+    name: names[index] ?? "",
+    city: cities[index] ?? "",
+    state: pairedStates[index] ?? "",
+    street: streets[index] ?? "",
+    zip: zips[index] ?? "",
+    phone: phones[index] ?? "",
+  }));
+  return { stops, uncertain, detail: details.join("; ") };
 }
 
 export function zipImportedStops(
@@ -251,7 +363,7 @@ export function zipImportedStops(
   if (count === 0) return [];
   return Array.from({ length: count }, (_, index) => ({
     kind,
-    name: names[index] || names[0] || "",
+    name: names[index] || "",
     city: cities[index] || "",
     state: states[index] || "",
     street: streets[index] || "",
@@ -331,24 +443,25 @@ export function buildLoadImportPreview(
 
 export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues {
   const get = (...aliases: string[]) => asImportText(pickRaw(record, aliases));
-  const pickups = zipImportedStops(
+  const pickups = parseLaneStops(
     "pickup",
-    splitImportList(get("shipper")),
-    splitImportList(get("shipper city")),
-    splitImportList(get("shipper st", "shipper st.", "shipper state")),
-    splitImportList(get("shipper street", "shipper address", "shipper addr", "shipper address 1", "pickup street", "pickup address")),
-    splitImportList(get("shipper zip", "shipper zip code", "shipper postal", "pickup zip")),
-    splitImportList(get("shipper phone", "shipper phone #", "shipper tel", "pickup phone")),
+    get("shipper"),
+    get("shipper city"),
+    get("shipper st", "shipper st.", "shipper state"),
+    get("shipper street", "shipper address", "shipper addr", "shipper address 1", "pickup street", "pickup address"),
+    get("shipper zip", "shipper zip code", "shipper postal", "pickup zip"),
+    get("shipper phone", "shipper phone #", "shipper tel", "pickup phone"),
   );
-  const deliveries = zipImportedStops(
+  const deliveries = parseLaneStops(
     "delivery",
-    splitImportList(get("consignee")),
-    splitImportList(get("consignee city")),
-    splitImportList(get("consignee st", "consignee st.", "consignee state")),
-    splitImportList(get("consignee street", "consignee address", "consignee addr", "consignee address 1", "delivery street", "delivery address")),
-    splitImportList(get("consignee zip", "consignee zip code", "consignee postal", "delivery zip")),
-    splitImportList(get("consignee phone", "consignee phone #", "consignee tel", "delivery phone")),
+    get("consignee"),
+    get("consignee city"),
+    get("consignee st", "consignee st.", "consignee state"),
+    get("consignee street", "consignee address", "consignee addr", "consignee address 1", "delivery street", "delivery address"),
+    get("consignee zip", "consignee zip code", "consignee postal", "delivery zip"),
+    get("consignee phone", "consignee phone #", "consignee tel", "delivery phone"),
   );
+  const stopDetails = [pickups.detail, deliveries.detail].filter(Boolean);
   const notes = NOTE_COLUMNS.map((column) => {
     const value = get(column);
     return value ? `${column}: ${value}` : "";
@@ -380,8 +493,10 @@ export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues
     equipment_specified: Boolean(equipmentText),
     notes,
     date_problems: dateProblems,
-    pickups,
-    deliveries,
+    pickups: pickups.stops,
+    deliveries: deliveries.stops,
+    stops_uncertain: pickups.uncertain || deliveries.uncertain,
+    stop_parse_detail: stopDetails.join("; "),
   };
 }
 

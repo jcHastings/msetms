@@ -2120,16 +2120,29 @@ export async function previewLoadsImportAction(
     let exportSnapshot: string | null = null;
     if (file instanceof File && file.size > 0) {
       sourceName = file.name;
-      exportSnapshot = resolveExportSnapshot({ fileName: file.name, fileMtimeMs: file.lastModified });
+      const { fileToBuffer } = await import("./files");
+      const buffer = new Uint8Array(await fileToBuffer(file));
       const name = file.name.toLowerCase();
+      let docModified: string | null = null;
+      let docCreated: string | null = null;
       if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-        const { fileToBuffer } = await import("./files");
-        rows = previewLoadsFromXlsx(new Uint8Array(await fileToBuffer(file)));
+        if (name.endsWith(".xlsx")) {
+          const { xlsxDocumentTimestamps } = await import("./xlsx-first-sheet");
+          const stamps = xlsxDocumentTimestamps(buffer);
+          docModified = stamps.modified;
+          docCreated = stamps.created;
+        }
+        rows = previewLoadsFromXlsx(buffer);
       } else {
         const { decodeCsvBuffer } = await import("./location-csv");
-        const { fileToBuffer } = await import("./files");
-        rows = previewLoadsFromText(decodeCsvBuffer(await fileToBuffer(file)));
+        rows = previewLoadsFromText(decodeCsvBuffer(buffer));
       }
+      exportSnapshot = resolveExportSnapshot({
+        fileName: file.name,
+        fileMtimeMs: file.lastModified,
+        docModified,
+        docCreated,
+      }).snapshot;
     } else if (pasted) {
       rows = previewLoadsFromText(pasted);
     } else {
@@ -2170,7 +2183,7 @@ export async function confirmLoadsImportAction(
     const { resolveExportSnapshot } = await import("./its-import-shared");
     const sourceName = String(formData.get("source_name") ?? "");
     const postedSnapshot = String(formData.get("export_snapshot") ?? "").trim();
-    const snapshot = postedSnapshot || resolveExportSnapshot({ fileName: sourceName });
+    const snapshot = postedSnapshot || resolveExportSnapshot({ fileName: sourceName }).snapshot;
     const result = applyLoadImport(rows, { snapshot, apply: true });
     refresh();
     return {
