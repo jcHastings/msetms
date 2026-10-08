@@ -622,6 +622,63 @@ async function main(): Promise<void> {
   });
   retargetSpaceGlyph(path.join(outDir, "ae-tab-space.pdf"));
 
+  const sans = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf";
+  if (!fs.existsSync(sans)) throw new Error("Need Liberation Sans for the long-line fixture.");
+  await writePdf("ah-long-amount.pdf", "SECRET-BROKER-META-LONGAMT", (doc) => {
+    doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    doc.font(sans).fontSize(11);
+    const phrase = "max of $125. Layovers Max of $150";
+    // Long enough that a raw glyph-width sum sits short of the last digit, still inside the page.
+    let lead = "Notes say the truck rolls east past the gate and the dock. ";
+    while (doc.widthOfString(`${lead}${phrase}`) < 500) lead += "roll ";
+    while (doc.widthOfString(`${lead}${phrase}`) > 530) lead = lead.slice(0, -1);
+    const line = `${lead}${phrase}`;
+    doc.text(line, 36, 188, { lineBreak: false, width: Math.ceil(doc.widthOfString(line)) + 12 });
+    doc.font("Times-Roman").fontSize(12).text("Line haul: $900.00", 48, 230);
+  });
+
+  await writePdf("ai-fuel-helvetica.pdf", "SECRET-BROKER-META-FUELHV", (doc) => {
+    doc.font("Helvetica").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    doc.text("Fuel: $150.00", 48, 180);
+    doc.text("Line haul: $900.00", 48, 210);
+  });
+
+  await writePdf("aj-draw-order.pdf", "SECRET-BROKER-META-DRAWORDER", (doc) => {
+    doc.font("Helvetica").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 90);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 112);
+    const font = (doc as unknown as { _font: { id: string; encode: (text: string) => [string[], unknown] }; page: { height: number } })._font;
+    const pageHeight = (doc as unknown as { page: { height: number } }).page.height;
+    const content = doc as unknown as { addContent: (value: string) => void };
+    // More than 80 glyphs sit off the page, so they are drawn but not in the text items.
+    // The money line is then past the 80-glyph match window and has to be found by position.
+    const decoy = "x".repeat(120);
+    const money = "WILL PAY $2.00 PER MILE TO RELOCATE";
+    const yMoney = pageHeight - 180 - 12;
+    content.addContent("q");
+    content.addContent(`1 0 0 -1 0 ${pageHeight} cm`);
+    content.addContent("BT");
+    content.addContent(`/${font.id} 10 Tf`);
+    content.addContent("0 Tc");
+    content.addContent("1 0 0 1 48 -108 Tm");
+    content.addContent(`<${font.encode(decoy)[0].join("")}> Tj`);
+    content.addContent("ET");
+    content.addContent("BT");
+    content.addContent(`/${font.id} 12 Tf`);
+    content.addContent(`1 0 0 1 48 ${yMoney.toFixed(2)} Tm`);
+    content.addContent(`<${font.encode(money)[0].join("")}> Tj`);
+    content.addContent("ET");
+    content.addContent("Q");
+    doc.fillColor("#000000").fontSize(12).text("Line haul: $900.00", 48, 240);
+  });
+
   console.log(`Wrote fixtures in ${outDir}`);
 }
 
