@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     driverId: driver?.id ?? null,
   });
   if (!access.ok) {
-    return new Response(access.status === 403 ? "Forbidden" : "Not found", { status: access.status });
+    return new Response("Not found", { status: access.status === 403 ? 404 : access.status });
   }
   const buffer = readRateConRedactionPdf(access.row);
   if (!buffer) return new Response("Not found", { status: 404 });

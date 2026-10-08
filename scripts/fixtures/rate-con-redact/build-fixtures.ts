@@ -359,6 +359,9 @@ async function main(): Promise<void> {
 
   await writePdf("v-msexpress-office.pdf", "SECRET-BROKER-META-OFFICE", (doc) => {
     doc.image(officeLogo.toBuffer("image/png"), 48, 36, { width: 180, height: 28 });
+    doc.save();
+    doc.lineWidth(1.25).moveTo(248, 36).lineTo(248, 68).stroke();
+    doc.restore();
     doc.fontSize(14).text("M&S Loads", 250, 48);
     doc.fontSize(11);
     doc.text("600 E 39th St · Hastings, NE 68901", 48, 84);
@@ -379,7 +382,23 @@ async function main(): Promise<void> {
     doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 132);
     doc.text("Driver must carry at least $100,000 of cargo insurance.", 48, 180);
     doc.text("Accessorial fines- $250/Each when late.", 48, 204);
-    doc.text("Line haul: $900.00", 48, 232);
+    doc.text("Driver is fined $100/each for a missed scan.", 48, 228);
+    doc.text("Line haul: $900.00", 48, 256);
+  });
+
+  await writePdf("x-glyph-edges.pdf", "SECRET-BROKER-META-GLYPH", (doc) => {
+    doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 48);
+    doc.fontSize(12);
+    doc.text("228 East Route 59 Unit 190, Nanuet, NY 10954", 48, 78);
+    doc.text("10954", 48, 96);
+    doc.text("Docket: MC970613", 48, 114);
+    doc.text("Carrier: MS Express", 48, 156);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 176);
+    doc.text("Sign only if appropriate by M&S Loads LLC.", 48, 214);
+    doc.text("Driver must carry at least $100,000 of cargo insurance.", 48, 238);
+    doc.text("Accessorial fines- $250/Each when late.", 48, 262);
+    doc.text("Driver is fined $100/each for a missed scan.", 48, 286);
+    doc.text("Line haul: $900.00", 48, 320);
   });
 
   const scan = createCanvas(1224, 1584);
