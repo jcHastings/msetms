@@ -6652,11 +6652,10 @@ DISPATCH CONFIRMATION
   const officeLeftover = leftoverPersonAfterBareAttn(officeUnpdfHeader);
   assert.ok(officeLeftover, "office unpdf header must keep a leftover person after bare Attn:");
   assert.equal(ownPaperworkName(officeLeftover, officeUnpdfHeader), true);
-  const livePdfCandidates = ["/workspace/mse1065/broker-ratecon.pdf"];
-  let livePdfPath = livePdfCandidates.find((candidate) => fs.existsSync(candidate));
-  if (!livePdfPath) {
+  const livePdfPath = path.join(process.cwd(), "scripts/fixtures/cb-logistics-106361.pdf");
+  if (!fs.existsSync(livePdfPath)) {
     const { writeCb106361Pdf } = await import("./build-cb-106361-pdf");
-    livePdfPath = await writeCb106361Pdf();
+    await writeCb106361Pdf(livePdfPath);
   }
   const livePdfBytes = fs.readFileSync(livePdfPath);
   const liveExtract = await extractCbLiveText(livePdfBytes, "application/pdf", path.basename(livePdfPath));
@@ -18404,7 +18403,7 @@ DISPATCH CONFIRMATION
   assert.match(driverLoadPage, /id="bol"/);
   assert.match(driverLoadPage, /data-driver-trailer-tab/);
   assert.match(driverLoadPage, /packet=internal/);
-  assert.match(driverLoadPage, /isCustomerRateDocument/);
+  assert.match(driverLoadPage, /driverMaySeeAttachment/);
   assert.match(
     fs.readFileSync(path.join(process.cwd(), "components/driver-doc-classify.tsx"), "utf8"),
     /isCustomerRateDocument/,

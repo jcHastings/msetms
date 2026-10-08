@@ -23,7 +23,7 @@ import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/l
 import { DriverDocClassify } from "@/components/driver-doc-classify";
 import { DriverAssistSheet } from "@/components/driver-assist-sheet";
 import { driverFacingStopPo } from "@/lib/load-confirmation";
-import { isCustomerRateDocument } from "@/lib/load-documents-shared";
+import { driverMaySeeAttachment } from "@/lib/driver-docs";
 import { isClosedStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export default async function DriverLoadPage({
   const reefer = await getLatestReeferForLoad(load.id);
   const reeferSnap = (await getReeferSnapshots()).readings.find((row) => row.loadId === load.id);
   const hos = await getHosForDriver(driver.id);
-  const attachments = listAttachments(load.id).filter((file) => !isCustomerRateDocument(file));
+  const attachments = listAttachments(load.id).filter((file) => driverMaySeeAttachment(file, driver));
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
   const stops = ensureDefaultStops(load.id);

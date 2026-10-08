@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { runWithAuditActor } from "./audit";
 import { getDb } from "./db";
+import { driverMaySeeAttachment } from "./driver-docs";
 import { driverAssignedTrailerLocation } from "./driver-trailer";
 import {
   DriverOpsError,
@@ -380,9 +381,9 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
 }
 
 function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
+  const driver = getDriver(driverId);
   const attachments = listAttachments(load.id)
-    .filter((file) => !isCustomerRateDocument(file))
-    .filter((file) => file.kind !== "rate_con" && file.kind !== "invoice")
+    .filter((file) => driver != null && driverMaySeeAttachment(file, driver))
     .map(toAttachmentDto);
   return {
     ...toLoadSummary(load, driverId),
@@ -474,6 +475,14 @@ export function driverFromApiToken(token: string): DriverWithTruck | null {
   const driver = getDriver(row.driver_id);
   if (!driver || !isDriverLoginEligible(driver)) return null;
   return driver;
+}
+
+/** Portal cookie, or the driver-app bearer token when one is sent. A bad token does not fall through to the cookie. */
+export async function driverFromCookieOrBearer(request: Request): Promise<DriverWithTruck | null> {
+  const token = bearerToken(request);
+  if (token) return driverFromApiToken(token);
+  const { getSignedInDriver } = await import("./driver-session");
+  return getSignedInDriver();
 }
 
 export function requireDriverApiAuth(request: Request): DriverWithTruck {
