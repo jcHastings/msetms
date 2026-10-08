@@ -334,6 +334,56 @@ async function main(): Promise<void> {
   assert.equal(inactiveOff.exception_items.some((item) => item.issue === "unmatched_truck"), true);
   assert.equal(inactiveOff.exception_items.some((item) => item.issue === "unmatched_driver"), true);
 
+  const beforePlan = counts();
+  const planned = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1008410", Status: "Invoiced", Truck: "35", Trailer: "9", "Carrier/Driver": "David Seecharan" }),
+      loadRow({ "Load #": "1008411", Status: "Invoiced", Truck: "35", "Carrier/Driver": "david   seecharan" }),
+      loadRow({ "Load #": "1008412", Status: "Invoiced", Truck: "2001", "Carrier/Driver": "David Seecharan" }),
+      loadRow({ "Load #": "1008413", Status: "Invoiced", Truck: "21", "Carrier/Driver": "Weston Gates Holdings Inc" }),
+      loadRow({ "Load #": "1008414", Status: "On Route", Truck: "32", "Carrier/Driver": "Steve Eller" }),
+    ]),
+    { apply: false, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.equal(planned.mode, "dry-run");
+  assert.equal(planned.added, 5);
+  assert.deepEqual(counts(), beforePlan);
+  assert.equal(loadId("1008410"), null);
+  assert.equal(queries.listTrucks().some((truck) => ["35", "2001", "21"].includes(truck.unit_number)), false);
+  assert.equal(queries.listDrivers().some((driver) => driver.name === "David Seecharan" || driver.name === "Weston Gates Holdings Inc"), false);
+  const truck35 = planned.inactive_created.trucks.find((plan) => plan.name === "35");
+  const truck2001 = planned.inactive_created.trucks.find((plan) => plan.name === "2001");
+  const truck21 = planned.inactive_created.trucks.find((plan) => plan.name === "21");
+  const seecharan = planned.inactive_created.drivers.find((plan) => plan.name === "David Seecharan");
+  const weston = planned.inactive_created.drivers.find((plan) => plan.name === "Weston Gates Holdings Inc");
+  assert.deepEqual(truck35?.loads, ["1008410", "1008411"]);
+  assert.deepEqual(truck2001?.loads, ["1008412"]);
+  assert.deepEqual(truck21?.loads, ["1008413"]);
+  assert.equal(planned.inactive_created.trucks.some((plan) => plan.name === "32"), false);
+  assert.deepEqual(seecharan?.loads, ["1008410", "1008411", "1008412"]);
+  assert.deepEqual(weston?.loads, ["1008413"]);
+  assert.equal(planned.inactive_created.drivers.some((plan) => plan.name === "Steve Eller"), false);
+  assert.deepEqual(planned.inactive_created.trailers.find((plan) => plan.name === "9")?.loads, ["1008410"]);
+  const plannedText = its.formatItsImportText(planned);
+  assert.match(plannedText, /inactive trucks that would be created:\n {2}21: 1 load\n {2}35: 2 loads\n {2}2001: 1 load/);
+  assert.match(plannedText, /inactive drivers that would be created:\n {2}David Seecharan: 3 loads\n {2}Weston Gates Holdings Inc: 1 load/);
+  assert.match(plannedText, /inactive trailers that would be created:\n {2}9: 1 load/);
+  assert.doesNotMatch(plannedText, /Steve Eller/);
+  assert.doesNotMatch(plannedText, /^ {2}32: /m);
+
+  const createdPair = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1008420", Status: "Invoiced", Truck: "2000", "Carrier/Driver": "Former One" }),
+      loadRow({ "Load #": "1008421", Status: "Invoiced", Truck: "2000", "Carrier/Driver": "former   one" }),
+    ]),
+    { apply: true, snapshot: FRESH, createInactiveUnits: true },
+  );
+  assert.deepEqual(createdPair.inactive_created.trucks.find((plan) => plan.name === "2000")?.loads, ["1008420", "1008421"]);
+  assert.deepEqual(createdPair.inactive_created.drivers.find((plan) => plan.name === "Former One")?.loads, ["1008420", "1008421"]);
+  assert.equal(queries.listTrucks().filter((truck) => truck.unit_number === "2000").length, 1);
+  assert.equal(queries.listDrivers().filter((driver) => driver.name === "Former One").length, 1);
+  assert.match(its.formatItsImportText(createdPair), /inactive trucks created:\n {2}2000: 2 loads/);
+
   const truck32Status = queries.getTruck(truck32)?.status;
   const inactiveOn = its.importItsRecords(
     sheet([

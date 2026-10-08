@@ -16,6 +16,8 @@ import {
   itsImportExceptionKey,
   matchItsDriver,
   matchItsUnit,
+  normalizePersonName,
+  normalizeUnitKey,
   resolveExportSnapshot,
   type ItsImportIssue,
   type UnitMatch,
@@ -70,6 +72,11 @@ export type ItsYearCounts = {
   skipped_tms_newer: number;
 };
 
+export type ItsInactivePlan = {
+  name: string;
+  loads: string[];
+};
+
 export type ItsImportSummary = {
   mode: "dry-run" | "apply";
   files: string[];
@@ -84,7 +91,7 @@ export type ItsImportSummary = {
   alias_matches: Array<{ load_number: string; its: string; tms_unit: string }>;
   skipped_tms_newer_loads: string[];
   exception_items: Array<{ load_number: string; issue: string; detail: string }>;
-  inactive_created: { trucks: string[]; trailers: string[]; drivers: string[] };
+  inactive_created: { trucks: ItsInactivePlan[]; trailers: ItsInactivePlan[]; drivers: ItsInactivePlan[] };
   flags: {
     ms_trailer_alias: boolean;
     import_rate: boolean;
@@ -190,7 +197,29 @@ export function formatItsImportText(summary: ItsImportSummary): string {
   if (summary.skipped_tms_newer_loads.length) {
     lines.push(`skipped: TMS newer loads: ${summary.skipped_tms_newer_loads.slice(0, 20).join(", ")}`);
   }
+  if (summary.flags.create_inactive_units) {
+    const tense = summary.mode === "dry-run" ? "that would be created" : "created";
+    lines.push(...formatInactivePlans(`inactive trucks ${tense}:`, summary.inactive_created.trucks));
+    lines.push(...formatInactivePlans(`inactive drivers ${tense}:`, summary.inactive_created.drivers));
+    lines.push(...formatInactivePlans(`inactive trailers ${tense}:`, summary.inactive_created.trailers));
+  }
   return lines.join("\n");
+}
+
+function formatInactivePlans(title: string, plans: ItsInactivePlan[]): string[] {
+  const lines = [title];
+  const sorted = [...plans].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }),
+  );
+  if (sorted.length === 0) {
+    lines.push("  (none)");
+    return lines;
+  }
+  for (const plan of sorted) {
+    const count = plan.loads.length;
+    lines.push(`  ${plan.name}: ${count} load${count === 1 ? "" : "s"}`);
+  }
+  return lines;
 }
 
 export function readItsExportFile(filePath: string): Array<Record<string, unknown>> {
@@ -280,9 +309,9 @@ export function importItsValues(
     }
 
     const issues: Array<{ issue: ItsImportIssue; detail: string }> = [];
-      const truck = resolveUnit("truck", trucks, row.truck_unit, false, options, summary, issues);
-    const trailer = resolveUnit("trailer", trailers, row.trailer_unit, options.msTrailerAlias, options, summary, issues);
-    const driver = resolveDriver(drivers, row.driver_name, options, summary, issues);
+    const truck = resolveUnit("truck", trucks, row.truck_unit, row.load_number, false, options, summary, issues);
+    const trailer = resolveUnit("trailer", trailers, row.trailer_unit, row.load_number, options.msTrailerAlias, options, summary, issues);
+    const driver = resolveDriver(drivers, row.driver_name, row.load_number, options, summary, issues);
     if (!row.status_mapped && row.raw_status.trim()) {
       issues.push({ issue: "unmapped_status", detail: `Unmapped ITS status "${row.raw_status.trim()}".` });
     }
@@ -371,9 +400,9 @@ function mergeSummary(target: ItsImportSummary, part: ItsImportSummary): void {
   target.skipped_tms_newer_loads.push(...part.skipped_tms_newer_loads);
   target.exception_items.push(...part.exception_items);
   target.alias_matches.push(...part.alias_matches);
-  target.inactive_created.trucks.push(...part.inactive_created.trucks);
-  target.inactive_created.trailers.push(...part.inactive_created.trailers);
-  target.inactive_created.drivers.push(...part.inactive_created.drivers);
+  mergeInactivePlans(target.inactive_created.trucks, part.inactive_created.trucks, normalizeUnitKey);
+  mergeInactivePlans(target.inactive_created.trailers, part.inactive_created.trailers, normalizeUnitKey);
+  mergeInactivePlans(target.inactive_created.drivers, part.inactive_created.drivers, normalizePersonName);
   for (const snapshot of part.snapshots) {
     if (!target.snapshots.includes(snapshot)) target.snapshots.push(snapshot);
   }
@@ -395,21 +424,26 @@ function resolveUnit(
   kind: "truck" | "trailer",
   assets: Array<{ id: number; unit_number: string }>,
   raw: string,
+  loadNumber: string,
   msAlias: boolean,
   options: ItsImportOptions,
   summary: ItsImportSummary,
   issues: Array<{ issue: ItsImportIssue; detail: string }>,
 ): UnitMatch {
   let match = matchItsUnit(assets, raw, { msAlias });
+  if (options.createInactiveUnits && raw.trim() && (match.via === "exact" || match.via === "ms_alias")) {
+    const plans = kind === "truck" ? summary.inactive_created.trucks : summary.inactive_created.trailers;
+    attachInactiveLoad(plans, raw.trim(), loadNumber, normalizeUnitKey);
+  }
   if (match.via === "unmatched" && options.createInactiveUnits && raw.trim()) {
     const unitNumber = raw.trim();
+    const plans = kind === "truck" ? summary.inactive_created.trucks : summary.inactive_created.trailers;
+    noteInactivePlan(plans, unitNumber, loadNumber, normalizeUnitKey);
     if (options.apply) {
       const created = kind === "truck" ? createInactiveTruck(unitNumber) : createInactiveTrailer(unitNumber);
       assets.push(created);
       match = { id: created.id, via: "exact", detail: "", tmsUnit: created.unit_number };
     }
-    if (kind === "truck") summary.inactive_created.trucks.push(unitNumber);
-    else summary.inactive_created.trailers.push(unitNumber);
     return match;
   }
   if (match.via === "unmatched") {
@@ -429,19 +463,23 @@ function resolveUnit(
 function resolveDriver(
   drivers: Array<{ id: number; name: string }>,
   raw: string,
+  loadNumber: string,
   options: ItsImportOptions,
   summary: ItsImportSummary,
   issues: Array<{ issue: ItsImportIssue; detail: string }>,
 ): UnitMatch {
   let match = matchItsDriver(drivers, raw);
+  if (options.createInactiveUnits && raw.trim() && (match.via === "exact" || match.via === "ms_alias")) {
+    attachInactiveLoad(summary.inactive_created.drivers, raw.trim(), loadNumber, normalizePersonName);
+  }
   if (match.via === "unmatched" && options.createInactiveUnits && raw.trim()) {
     const name = raw.trim();
+    noteInactivePlan(summary.inactive_created.drivers, name, loadNumber, normalizePersonName);
     if (options.apply) {
       const created = createInactiveDriver(name);
       drivers.push(created);
       match = { id: created.id, via: "exact", detail: "", tmsUnit: created.name };
     }
-    summary.inactive_created.drivers.push(name);
     return match;
   }
   if (match.via === "unmatched") {
@@ -817,6 +855,43 @@ function syncExceptions(loadNumber: string, issues: Array<{ issue: ItsImportIssu
       | { status: string }
       | undefined;
     if (row && row.status !== "resolved") writeException(key, "resolved", "Cleared by a later ITS import.");
+  }
+}
+
+function attachInactiveLoad(
+  plans: ItsInactivePlan[],
+  name: string,
+  loadNumber: string,
+  normalize: (value: string) => string,
+): void {
+  const key = normalize(name);
+  const found = plans.find((plan) => normalize(plan.name) === key);
+  if (!found || found.loads.includes(loadNumber)) return;
+  found.loads.push(loadNumber);
+}
+
+function noteInactivePlan(
+  plans: ItsInactivePlan[],
+  name: string,
+  loadNumber: string,
+  normalize: (value: string) => string,
+): void {
+  const key = normalize(name);
+  const found = plans.find((plan) => normalize(plan.name) === key);
+  if (!found) {
+    plans.push({ name, loads: [loadNumber] });
+    return;
+  }
+  if (!found.loads.includes(loadNumber)) found.loads.push(loadNumber);
+}
+
+function mergeInactivePlans(
+  target: ItsInactivePlan[],
+  part: ItsInactivePlan[],
+  normalize: (value: string) => string,
+): void {
+  for (const plan of part) {
+    for (const loadNumber of plan.loads) noteInactivePlan(target, plan.name, loadNumber, normalize);
   }
 }
 

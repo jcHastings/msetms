@@ -81,6 +81,7 @@ function printUsage(): void {
   console.log(ITS_IMPORT_USAGE);
   console.log("Default is --dry-run. --apply writes. ms-trailer-alias and import-rate default on.");
   console.log("create-inactive-units defaults off. A blank or Assign Later truck, trailer, or driver is left as-is.");
+  console.log("With --create-inactive-units, a dry-run lists each inactive truck, driver, and trailer it would create, with a load count.");
 }
 
 async function main(): Promise<void> {
