@@ -294,6 +294,8 @@ export function brokerageIdentityVisible(text: string): boolean {
     /billing@msloads/i.test(withoutLegalName) ||
     /deerfield\s+beach/i.test(withoutLegalName) ||
     /m\s*&\s*s\s+loads(?!\s+dba)/i.test(withoutLegalName) ||
+    /\bm\s*&\s*s\b/i.test(withoutLegalName) ||
+    /msloads\.com/i.test(withoutLegalName) ||
     /brokerage\s*&\s*logistics/i.test(withoutLegalName) ||
     /845[\s.-]*694[\s.-]*6059/.test(withoutLegalName) ||
     /unit\s*190/i.test(withoutLegalName) ||
@@ -350,6 +352,8 @@ export function findBrokerageSpans(line: string, context: BrokerageSpanContext =
   const patterns = [
     /M\s*&\s*S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
     /M\s+and\s+S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi,
+    /M\s*(?:&|and)\s*S\s+Rate\s+Confirmation/gi,
+    /msloads\.com/gi,
     /MC\s*-?\s*970613/gi,
     /\b970613\b/g,
     /\b10954\b/g,
@@ -358,7 +362,8 @@ export function findBrokerageSpans(line: string, context: BrokerageSpanContext =
   for (const pattern of patterns) {
     for (const range of collect(pattern, line)) {
       const text = line.slice(range.start, range.end);
-      if (/^ar@msloads\.com$/i.test(text)) continue;
+      const around = line.slice(Math.max(0, range.start - 3), range.end);
+      if (/^ar@msloads\.com$/i.test(text) || /ar@msloads\.com$/i.test(around)) continue;
       pushSpan(spans, line, range.start, range.end);
     }
   }

@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     driverId,
   });
   if (!access.ok) {
-    return driverApiError(access.status, access.status === 403 ? "Forbidden" : "Not found", access.status === 403 ? "FORBIDDEN" : "NOT_FOUND");
+    return driverApiError(404, "Not found", "NOT_FOUND");
   }
   if (access.row.load_id !== loadId) {
     return driverApiError(404, "Not found", "NOT_FOUND");

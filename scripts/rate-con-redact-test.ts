@@ -40,6 +40,8 @@ const READY = [
   "v-msexpress-office.pdf",
   "w-times-sliver.pdf",
   "x-glyph-edges.pdf",
+  "y-ascend-subset.pdf",
+  "z-tql-cap.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -67,6 +69,8 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("v-")) return ["$900.00"];
   if (name.startsWith("w-")) return ["$100,000", "$250", "$100", "$900.00"];
   if (name.startsWith("x-")) return ["$100,000", "$250", "$100", "$900.00"];
+  if (name.startsWith("y-")) return ["$30", "$900.00", "MSLOADS.COM"];
+  if (name.startsWith("z-")) return ["$30", "$150", "$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -197,6 +201,8 @@ async function main(): Promise<void> {
   assert.equal(money.brokerageIdentityVisible("845.694.6059"), true);
   assert.equal(money.brokerageIdentityVisible("Unit 190"), true);
   assert.equal(money.brokerageIdentityVisible("Nanuet, NY 10954"), true);
+  assert.equal(money.brokerageIdentityVisible("M & S Rate Confirmation"), true);
+  assert.equal(money.brokerageIdentityVisible("MSLOADS.COM"), true);
   assert.equal(money.brokerageIdentityVisible("M&S Loads DBA MS Express"), false);
   assert.equal(money.brokerageIdentityVisible("Carrier: M&S Loads DBA MS Express"), false);
   assert.equal(money.documentIsMsExpressCarrier("M&S Loads\n600 E 39th St · Hastings, NE 68901\n402-302-0097"), true);
@@ -224,6 +230,9 @@ async function main(): Promise<void> {
   assert.doesNotMatch(money.maskBrokerage("Maria Lopez (M & S LOADS LLC.)"), /Maria|Lopez|LOADS|[().]/);
   assert.doesNotMatch(money.maskBrokerage("Esti Katz  esti.katz@msloads.com  (845) 555-0170"), /Esti|msloads|845/);
   assert.match(money.maskBrokerage("ar@msloads.com"), /ar@msloads\.com/);
+  assert.doesNotMatch(money.maskBrokerage("M & S Rate Confirmation"), /M\s*&\s*S|Rate/);
+  assert.doesNotMatch(money.maskBrokerage("EMAILED TO BILLING@MSLOADS.COM We"), /msloads/i);
+  assert.match(money.maskBrokerage("EMAILED TO BILLING@MSLOADS.COM We"), /\bWe\b/);
   assert.equal(
     money.maskBrokerage("Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901"),
     "Pickup: Hastings Packing, 100 Packer Rd, Hastings, NE 68901",
@@ -382,6 +391,23 @@ async function main(): Promise<void> {
       assert.match(seen, /\bof\b/i, seen.slice(0, 1200));
       assert.match(seen, /Each/, seen.slice(0, 1200));
       assert.match(seen, /each/, seen.slice(0, 1200));
+    }
+    if (item.name.startsWith("y-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 1400));
+      assert.doesNotMatch(seen, /M\s*&\s*S/i, seen.slice(0, 1400));
+      assert.doesNotMatch(seen, /LLC\./, seen.slice(0, 1400));
+      assert.doesNotMatch(seen, /msloads/i, seen.slice(0, 1400));
+      assert.doesNotMatch(seen, /ads/i, seen.slice(0, 1400));
+      assert.match(seen, /\bThe\b/, seen.slice(0, 1400));
+      assert.match(seen, /\bby\b/, seen.slice(0, 1400));
+      assert.match(seen, /\bto\b/i, seen.slice(0, 1400));
+      assert.match(seen, /\binform\b/i, seen.slice(0, 1400));
+    }
+    if (item.name.startsWith("z-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
+      assert.match(seen, /thereafter,\s*cap/i, seen.slice(0, 800));
     }
   }
 
@@ -589,7 +615,7 @@ async function main(): Promise<void> {
   const apiOther = await apiRoute.GET(new Request("http://localhost/api/driver/v1/rate", { headers: { authorization: `Bearer ${tokenA}` } }), {
     params: Promise.resolve({ id: String(loadB), redactionId: String(otherCopy!.id) }),
   });
-  assert.equal(apiOther.status, 403);
+  assert.equal(apiOther.status, 404);
   const apiHeld = await apiRoute.GET(new Request("http://localhost/api/driver/v1/rate", { headers: { authorization: `Bearer ${tokenA}` } }), {
     params: Promise.resolve({ id: String(loadA), redactionId: String(held!.id) }),
   });
