@@ -281,16 +281,40 @@ export function documentIssuedByBrokerage(text: string): boolean {
   });
 }
 
-/** OCR of a driver copy still shows brokerage letterhead or footer identity. */
+/**
+ * OCR of a driver copy still shows brokerage letterhead or footer identity.
+ * "M&S Loads DBA MS Express" is the carrier legal name and does not count.
+ */
 export function brokerageIdentityVisible(text: string): boolean {
+  const withoutLegalName = text.replace(/m\s*&\s*s\s+loads\s+dba\s+ms\s+express/gi, " ");
   return (
-    /\bnanuet\b/i.test(text) ||
-    /route\s*59/i.test(text) ||
-    /\b970613\b/.test(text) ||
-    /billing@msloads/i.test(text) ||
-    /deerfield\s+beach/i.test(text) ||
-    /m\s*&\s*s\s+loads\s+llc/i.test(text)
+    /\bnanuet\b/i.test(withoutLegalName) ||
+    /route\s*59/i.test(withoutLegalName) ||
+    /\b970613\b/.test(withoutLegalName) ||
+    /billing@msloads/i.test(withoutLegalName) ||
+    /deerfield\s+beach/i.test(withoutLegalName) ||
+    /m\s*&\s*s\s+loads(?!\s+dba)/i.test(withoutLegalName) ||
+    /brokerage\s*&\s*logistics/i.test(withoutLegalName) ||
+    /845[\s.-]*694[\s.-]*6059/.test(withoutLegalName) ||
+    /unit\s*190/i.test(withoutLegalName) ||
+    /\b10954\b/.test(withoutLegalName)
   );
+}
+
+/** True for an MS Express confirmation that uses the Hastings office, not the brokerage letterhead. */
+export function documentIsMsExpressCarrier(text: string): boolean {
+  return headerIsMsExpressOffice(headerLinesOf(text));
+}
+
+/** Bare "M&S Loads" on a carrier confirmation. The "DBA MS Express" legal name stays. */
+export function findBareMsLoadsSpans(line: string): MoneySpan[] {
+  const spans: MoneySpan[] = [];
+  for (const range of collect(/M\s*(?:&|and)\s*S\s+Loads(?:\s+LLC)?(?!\s+DBA\b)/gi, line)) {
+    pushSpan(spans, line, range.start, range.end);
+  }
+  const merged = mergeSpans(spans);
+  for (const span of merged) span.text = line.slice(span.start, span.end);
+  return merged;
 }
 
 /** A line that marks the brokerage letterhead: issuer name or office address, not a Carrier: row. */
@@ -344,19 +368,12 @@ export function findBrokerageSpans(line: string, context: BrokerageSpanContext =
       pushSpan(spans, line, range.start, range.end);
     }
   }
-  const footerNameBefore =
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*(?=\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC)/gi;
-  for (const match of line.matchAll(footerNameBefore)) {
-    const name = match[1];
-    if (!name || match.index == null) continue;
-    pushSpan(spans, line, match.index, match.index + name.length);
-  }
-  const footerNameAfter = /\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC\.?\s*\)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/gi;
-  for (const match of line.matchAll(footerNameAfter)) {
-    const name = match[1];
-    if (!name || match.index == null) continue;
-    const start = match.index + match[0].length - name.length;
-    pushSpan(spans, line, start, start + name.length);
+  const footerGroups = [
+    /[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s*\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC\.?\s*\)\.?/gi,
+    /\(\s*M\s*(?:&|and)\s*S\s+Loads\s+LLC\.?\s*\)\.?\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}/gi,
+  ];
+  for (const pattern of footerGroups) {
+    for (const range of collect(pattern, line)) pushSpan(spans, line, range.start, range.end);
   }
   const coverPhones = context.letterhead || addressMatched || /@msloads\.com/i.test(line);
   if (coverPhones) {

@@ -38,6 +38,7 @@ const READY = [
   "s-ascend-header.pdf",
   "u-tonu-label.pdf",
   "v-msexpress-office.pdf",
+  "w-times-sliver.pdf",
 ];
 
 function absentAmounts(name: string): string[] {
@@ -63,6 +64,7 @@ function absentAmounts(name: string): string[] {
   if (name.startsWith("t-")) return ["$500.00"];
   if (name.startsWith("u-")) return ["$75", "$2,150.00"];
   if (name.startsWith("v-")) return ["$900.00"];
+  if (name.startsWith("w-")) return ["$100,000", "$250", "$900.00"];
   return ["$100", "3,500.00"];
 }
 
@@ -187,7 +189,18 @@ async function main(): Promise<void> {
   assert.equal(money.brokerageIdentityVisible("Deerfield Beach"), true);
   assert.equal(money.brokerageIdentityVisible("M&S Loads LLC"), true);
   assert.equal(money.brokerageIdentityVisible("M & S LOADS LLC"), true);
-  assert.equal(money.brokerageIdentityVisible("Hastings Packing and M&S Loads"), false);
+  assert.equal(money.brokerageIdentityVisible("M & S Loads"), true);
+  assert.equal(money.brokerageIdentityVisible("brokerage & logistics"), true);
+  assert.equal(money.brokerageIdentityVisible("845-694-6059"), true);
+  assert.equal(money.brokerageIdentityVisible("845.694.6059"), true);
+  assert.equal(money.brokerageIdentityVisible("Unit 190"), true);
+  assert.equal(money.brokerageIdentityVisible("Nanuet, NY 10954"), true);
+  assert.equal(money.brokerageIdentityVisible("M&S Loads DBA MS Express"), false);
+  assert.equal(money.brokerageIdentityVisible("Carrier: M&S Loads DBA MS Express"), false);
+  assert.equal(money.documentIsMsExpressCarrier("M&S Loads\n600 E 39th St · Hastings, NE 68901\n402-302-0097"), true);
+  assert.equal(money.documentIsMsExpressCarrier("228 East Route 59 Unit 190\nNanuet, NY 10954"), false);
+  assert.equal(money.findBareMsLoadsSpans("M&S Loads DBA MS Express").length, 0);
+  assert.equal(money.findBareMsLoadsSpans("M&S Loads").length, 1);
   assert.match(money.maskBrokerage("M&S Loads DBA MS Express"), /M&S Loads DBA MS Express/);
   assert.doesNotMatch(money.maskBrokerage("M&S Loads LLC"), /M&S/);
   assert.doesNotMatch(money.maskBrokerage("MC-970613"), /970613/);
@@ -206,7 +219,7 @@ async function main(): Promise<void> {
   assert.match(money.maskBrokerage("Phone: 402-302-0097", { letterhead: true }), /402-302-0097/);
   assert.equal(money.maskBrokerage("Phone: (531) 555-0144"), "Phone: (531) 555-0144");
   assert.equal(money.maskBrokerage("Esti Katz"), "Esti Katz");
-  assert.doesNotMatch(money.maskBrokerage("Maria Lopez (M & S LOADS LLC.)"), /Maria|Lopez|LOADS/);
+  assert.doesNotMatch(money.maskBrokerage("Maria Lopez (M & S LOADS LLC.)"), /Maria|Lopez|LOADS|[().]/);
   assert.doesNotMatch(money.maskBrokerage("Esti Katz  esti.katz@msloads.com  (845) 555-0170"), /Esti|msloads|845/);
   assert.match(money.maskBrokerage("ar@msloads.com"), /ar@msloads\.com/);
   assert.equal(
@@ -336,7 +349,14 @@ async function main(): Promise<void> {
       assert.match(seen, /MSEXPRESSLOGO/i, seen.slice(0, 700));
       assert.match(seen, /dispatch|dbspatch|@/i, seen.slice(0, 700));
       assert.match(seen, /402/, seen.slice(0, 700));
-      assert.match(seen, /M\s*&\s*S|Hast/i, seen.slice(0, 700));
+      assert.match(seen, /Hast|39th/i, seen.slice(0, 700));
+      assert.match(seen, /DBA/i, seen.slice(0, 700));
+      assert.doesNotMatch(seen, /M\s*&\s*S\s+Loads(?!\s+DBA)/i, seen.slice(0, 700));
+    }
+    if (item.name.startsWith("w-")) {
+      const seen = await ocrPng(built.pagePngs[0]);
+      assert.doesNotMatch(seen, /\$/, seen.slice(0, 800));
+      assert.match(seen, /\bof\b/i, seen.slice(0, 800));
     }
   }
 

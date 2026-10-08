@@ -367,9 +367,19 @@ async function main(): Promise<void> {
     doc.text("dispatch@msloads.com", 48, 132);
     doc.fontSize(16).text("RATE CONFIRMATION", 48, 170);
     doc.fontSize(11);
-    doc.text("Carrier: MS Express", 48, 200);
+    doc.text("Carrier: M&S Loads DBA MS Express", 48, 200);
     doc.text("Pickup: Omaha Cold, Omaha, NE 68102", 48, 220);
     doc.text("Line haul: $900.00", 48, 248);
+  });
+
+  await writePdf("w-times-sliver.pdf", "SECRET-BROKER-META-TIMES", (doc) => {
+    doc.font("Times-Roman").fontSize(16).text("RATE CONFIRMATION", 48, 72);
+    doc.fontSize(12);
+    doc.text("Carrier: MS Express", 48, 110);
+    doc.text("Pickup: Hastings Packing, Hastings, NE 68901", 48, 132);
+    doc.text("Driver must carry at least $100,000 of cargo insurance.", 48, 180);
+    doc.text("Accessorial fines- $250/Each when late.", 48, 204);
+    doc.text("Line haul: $900.00", 48, 232);
   });
 
   const scan = createCanvas(1224, 1584);

@@ -7,7 +7,9 @@ import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { PDFDocument } from "pdf-lib";
 import {
   brokerageIdentityVisible,
+  documentIsMsExpressCarrier,
   documentIssuedByBrokerage,
+  findBareMsLoadsSpans,
   findBrokerageSpans,
   findMoneySpans,
   lineAnchorsBrokerageLetterhead,
@@ -283,15 +285,9 @@ function widthFractions(item: PlacedItem, from: number, to: number, styles: Reco
   measureCtx.font = `${size}px ${fontFamily(styles, item.fontName)}`;
   const total = measureCtx.measureText(full).width;
   if (!(total > 0)) return [localFrom / len, localTo / len];
-  const widthAt = (index: number) => measureCtx.measureText(full.slice(0, index)).width;
-  let gapStart = localFrom;
-  while (gapStart > 0 && /\s/.test(full[gapStart - 1] ?? "")) gapStart -= 1;
-  let gapEnd = localTo;
-  while (gapEnd < full.length && /\s/.test(full[gapEnd] ?? "")) gapEnd += 1;
-  const pad = size * 0.15;
-  const left = Math.max(widthAt(gapStart), widthAt(localFrom) - pad);
-  const right = Math.min(widthAt(gapEnd), widthAt(localTo) + pad);
-  return [Math.max(0, Math.min(1, left / total)), Math.max(0, Math.min(1, Math.max(left, right) / total))];
+  const left = measureCtx.measureText(full.slice(0, localFrom)).width / total;
+  const right = measureCtx.measureText(full.slice(0, localTo)).width / total;
+  return [Math.max(0, Math.min(1, left)), Math.max(0, Math.min(1, Math.max(left, right)))];
 }
 
 function requirementValue(text: string): boolean {
@@ -306,6 +302,79 @@ function requirementValue(text: string): boolean {
   return false;
 }
 
+type InkCanvas = {
+  width: number;
+  height: number;
+  getContext: (kind: "2d") => {
+    getImageData: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray };
+  } | null;
+};
+
+function columnHasInk(data: Uint8ClampedArray, bandWidth: number, bandHeight: number, x: number): boolean {
+  if (x < 0 || x >= bandWidth) return false;
+  for (let y = 0; y < bandHeight; y += 1) {
+    const index = (y * bandWidth + x) * 4;
+    if (data[index] < 248 || data[index + 1] < 248 || data[index + 2] < 248) return true;
+  }
+  return false;
+}
+
+/** Grow a partial box through leftover glyph ink, and stop before the next word. */
+function tunePartialBox(
+  canvas: InkCanvas,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  maxPx: number,
+): { left: number; width: number } {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || maxPx < 1 || width < 1 || height < 1) return { left, width };
+  const x0 = Math.max(0, Math.floor(left) - maxPx);
+  const x1 = Math.min(canvas.width, Math.ceil(left + width) + maxPx);
+  const y0 = Math.max(0, Math.floor(top) + 1);
+  const y1 = Math.min(canvas.height, Math.ceil(top + height) - 1);
+  const bandW = Math.max(1, x1 - x0);
+  const bandH = Math.max(1, y1 - y0);
+  const data = ctx.getImageData(x0, y0, bandW, bandH).data;
+  const ink = (x: number) => columnHasInk(data, bandW, bandH, x - x0);
+  let newLeft = Math.floor(left);
+  let grown = 0;
+  while (grown < maxPx && newLeft > 0 && ink(newLeft - 1)) {
+    newLeft -= 1;
+    grown += 1;
+  }
+  let newRight = Math.ceil(left + width);
+  let wordGap = false;
+  const gapNeed = Math.max(3, Math.round(maxPx * 0.25));
+  for (let distance = gapNeed; distance <= maxPx; distance += 1) {
+    const x = newRight - distance;
+    if (x <= 0) break;
+    let run = true;
+    for (let offset = 0; offset < gapNeed; offset += 1) {
+      if (ink(x + offset)) {
+        run = false;
+        break;
+      }
+    }
+    if (!run) continue;
+    let edge = x + gapNeed - 1;
+    while (edge < newRight && !ink(edge)) edge += 1;
+    newRight = edge;
+    wordGap = true;
+    break;
+  }
+  if (!wordGap) {
+    let used = 0;
+    while (used < maxPx && newRight < canvas.width && ink(newRight)) {
+      newRight += 1;
+      used += 1;
+    }
+  }
+  if (newRight < newLeft + 1) newRight = newLeft + 1;
+  return { left: newLeft, width: newRight - newLeft };
+}
+
 function paintSpans(
   ctx: {
     fillStyle: string;
@@ -315,7 +384,7 @@ function paintSpans(
   items: PlacedItem[],
   spans: MoneySpan[],
   styles: Record<string, TextStyle>,
-  options?: { skipRequirementItems?: boolean; previousBaseline?: number },
+  options?: { skipRequirementItems?: boolean; previousBaseline?: number; canvas?: InkCanvas },
 ): PaintBox[] {
   const boxes: PaintBox[] = [];
   for (const item of items) {
@@ -341,10 +410,15 @@ function paintSpans(
       const x1 = x + width * f1 + padX;
       const p0 = viewport.convertToViewportPoint(x0, y - below);
       const p1 = viewport.convertToViewportPoint(x1, topPdf);
-      const left = Math.min(p0[0], p1[0]);
+      let left = Math.min(p0[0], p1[0]);
       const top = Math.min(p0[1], p1[1]);
-      const boxW = Math.abs(p0[0] - p1[0]) + 1;
+      let boxW = Math.abs(p0[0] - p1[0]);
       const boxH = Math.abs(p0[1] - p1[1]) + 1;
+      if (!wholeItem && options?.canvas) {
+        const tuned = tunePartialBox(options.canvas, left, top, boxW, boxH, Math.max(2, Math.round(height * RENDER_SCALE * 0.6)));
+        left = tuned.left;
+        boxW = tuned.width;
+      }
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(left, top, boxW, boxH);
       boxes.push({ left, top, w: boxW, h: boxH, pad: 4 });
@@ -389,7 +463,7 @@ type OcrEngine = {
 let ocrUnavailable = false;
 let ocrWorker: OcrEngine | null = null;
 
-async function ocrWords(png: Buffer): Promise<{ text: string; words: OcrWord[] } | null> {
+async function ocrWords(png: Buffer, mode: "3" | "11" = "11"): Promise<{ text: string; words: OcrWord[] } | null> {
   if (ocrUnavailable || png.length < 32) return null;
   try {
     if (!ocrWorker) {
@@ -397,10 +471,10 @@ async function ocrWords(png: Buffer): Promise<{ text: string; words: OcrWord[] }
       ocrWorker = (await createWorker("eng", 1, {
         cachePath: path.join(os.tmpdir(), "tms-tesseract"),
       })) as unknown as OcrEngine;
-      // tesseract.js defaults to PSM 6 (one uniform block), which skips table cells.
-      await ocrWorker.setParameters({ tessedit_pageseg_mode: "11" });
     }
-    const recognized = await ocrWorker.recognize(png, {}, { text: true, blocks: true });
+    // PSM 11 reads sparse table cells. PSM 3 is the automatic page pass used by the identity guard.
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: mode });
+    const recognized = await ocrWorker.recognize(png, {}, { text: true, blocks: mode === "11" });
     const words: OcrWord[] = [];
     for (const block of recognized.data.blocks ?? []) {
       for (const paragraph of block.paragraphs ?? []) {
@@ -650,10 +724,14 @@ async function verifyDriverCopy(
     if (secret.length >= 5 && latin.includes(secret)) problems.push(`plaintext amount left in the file (${secret})`);
   }
   for (const png of pagePngs) {
-    const ocr = await ocrWords(png);
+    const ocr = await ocrWords(png, "11");
     const leak = ocr ? ocrDollarLeak(ocr.text, sourceText) : null;
     if (leak) problems.push(`OCR still sees a dollar amount (${leak})`);
-    if (checkIdentity && ocr && brokerageIdentityVisible(ocr.text)) problems.push("brokerage identity visible");
+    if (checkIdentity) {
+      const psm3 = await ocrWords(png, "3");
+      const identityText = `${ocr?.text ?? ""}\n${psm3?.text ?? ""}`;
+      if (brokerageIdentityVisible(identityText)) problems.push("brokerage identity visible");
+    }
   }
   if (!problems.length) return "ok";
   return `failed: ${problems.join("; ")}`;
@@ -844,9 +922,9 @@ async function rasterPages(
       const page = await opened.doc.getPage(number);
       prepared.push({ page, plan: await planPage(page) });
     }
-    const brokerage = documentIssuedByBrokerage(
-      prepared.flatMap((entry) => entry.plan.lines.map((line) => line.text)).join("\n"),
-    );
+    const pageText = prepared.flatMap((entry) => entry.plan.lines.map((line) => line.text)).join("\n");
+    const brokerage = documentIssuedByBrokerage(pageText);
+    const carrierOffice = documentIsMsExpressCarrier(pageText);
     const pngs: Buffer[] = [];
     const plans: PagePlan[] = [];
     const pageSizes: PageSize[] = [];
@@ -885,9 +963,17 @@ async function rasterPages(
             line.items,
             findMoneySpans(line.text, plan.lines[index - 1]?.text ?? ""),
             plan.styles,
-            { previousBaseline },
+            { previousBaseline, canvas },
           ),
         );
+        if (carrierOffice) {
+          boxes.push(
+            ...paintSpans(paint, viewport, line.items, findBareMsLoadsSpans(line.text), plan.styles, {
+              previousBaseline,
+              canvas,
+            }),
+          );
+        }
         if (!brokerage) continue;
         boxes.push(
           ...paintSpans(
@@ -896,7 +982,7 @@ async function rasterPages(
             line.items,
             columnBrokerageSpans(line, letterhead.has(index)),
             plan.styles,
-            { skipRequirementItems: true, previousBaseline },
+            { skipRequirementItems: true, previousBaseline, canvas },
           ),
         );
       }
