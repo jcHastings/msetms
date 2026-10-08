@@ -7,11 +7,11 @@ import { parseOptionalInt } from "./format";
 import { publicLoginFailureDetail, recordLoginAttemptFromRequest } from "./login-audit";
 import { authenticateDriverByEmail } from "./queries";
 import { clearDriverSession, requireDriver, setDriverSession } from "./driver-session";
-import { isDriverUploadKind } from "./driver-docs";
+import { driverMayRetypeAttachment, isDriverUploadKind } from "./driver-docs";
 import { acknowledgeDispatch } from "./dispatch-ack";
 import { submitDriverReimbursement } from "./reimbursements";
 import { performDriverProgress, performDriverStopCheck, performDriverUpload, podDeliveryFromForm } from "./driver-ops";
-import { type ActionResult } from "./types";
+import { type ActionResult, type AttachmentKind } from "./types";
 
 function refresh(): void {
   revalidatePath("/", "layout");
@@ -131,20 +131,26 @@ export async function driverClassifyAction(formData: FormData): Promise<ActionRe
       const driver = await requireDriver();
       const attachmentId = parseOptionalInt(formData.get("attachment_id"));
       if (!attachmentId) throw new Error("File is missing.");
-      const kind = String(formData.get("kind") ?? "");
-      if (!isDriverUploadKind(kind)) {
-        throw new Error("Pick a document type.");
-      }
+      const kind = String(formData.get("kind") ?? "").trim();
       const { getAttachment, updateAttachmentKind } = await import("./files");
       const file = getAttachment(attachmentId);
       if (!file) throw new Error("File is missing.");
-      const { getLoad } = await import("./queries");
+      const { getLoad, listDrivers } = await import("./queries");
       const load = getLoad(file.load_id);
       const { driverAssignedToLoad } = await import("./relay-store");
       if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
         throw new Error("This load is not on your dispatch.");
       }
-      updateAttachmentKind(attachmentId, kind);
+      if (
+        !driverMayRetypeAttachment(
+          file,
+          kind,
+          listDrivers().map((row) => row.name),
+        )
+      ) {
+        throw new Error("This file can't be re-typed.");
+      }
+      updateAttachmentKind(attachmentId, kind as AttachmentKind);
       if (kind === "pod") {
         const { recordPodDelivery } = await import("./pod-delivery");
         recordPodDelivery(load.id, { outcome: "photo", reason: "", note: "" });

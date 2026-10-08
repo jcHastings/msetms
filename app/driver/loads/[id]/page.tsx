@@ -23,7 +23,7 @@ import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "@/l
 import { DriverDocClassify } from "@/components/driver-doc-classify";
 import { DriverAssistSheet } from "@/components/driver-assist-sheet";
 import { driverFacingStopPo } from "@/lib/load-confirmation";
-import { isCustomerRateDocument } from "@/lib/load-documents-shared";
+import { driverMaySeeAttachment } from "@/lib/driver-docs";
 import { isClosedStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export default async function DriverLoadPage({
   const reefer = await getLatestReeferForLoad(load.id);
   const reeferSnap = (await getReeferSnapshots()).readings.find((row) => row.loadId === load.id);
   const hos = await getHosForDriver(driver.id);
-  const attachments = listAttachments(load.id).filter((file) => !isCustomerRateDocument(file));
+  const attachments = listAttachments(load.id).filter((file) => driverMaySeeAttachment(file, driver));
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
   const stops = ensureDefaultStops(load.id);
@@ -70,7 +70,7 @@ export default async function DriverLoadPage({
           <h1 className="font-mono text-2xl font-semibold text-white">{load.load_number}</h1>
           <LoadStatusBadge status={load.status} />
         </div>
-        <DriverAssistSheet className="min-h-10 px-3 text-sm" />
+        <DriverAssistSheet truckDocs={false} className="min-h-10 px-3 text-sm" />
       </div>
       {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
       {(() => {
@@ -116,16 +116,6 @@ export default async function DriverLoadPage({
           ))}
         {attachments.every((file) => file.kind !== "bol") ? <span id="bol" className="sr-only">BOL</span> : null}
       </div>
-
-      <section id="cab-docs" className="mt-5 rounded-2xl bg-slate-900 px-4 py-4 ring-1 ring-white/10">
-        <h2 className="text-base font-semibold text-white">Cab docs</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-300">
-          Registration, DOT, and insurance for the truck and trailer on this load.
-        </p>
-        <div className="mt-3">
-          <DriverAssistSheet label="Open cab docs" className="min-h-12" />
-        </div>
-      </section>
 
       <section className="driver-sheet mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <Row label="Pickup" value={pickupWhen} />

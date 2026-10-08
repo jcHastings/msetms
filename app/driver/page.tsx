@@ -70,6 +70,7 @@ export default async function DriverHomePage() {
         const trailerHref = driverTrailerPageHref(current);
         const items = [
           { href: "/driver/dispatch", label: "Dispatch", featured: true },
+          { href: "/driver/truck-docs", label: "Truck documents", wide: true },
           { href: current ? `${loadHref}#upload` : "/driver/dispatch", label: "Upload", disabled: !current },
           {
             href: current ? `/api/loads/${current.id}/confirmation?packet=internal` : "/driver/dispatch",
