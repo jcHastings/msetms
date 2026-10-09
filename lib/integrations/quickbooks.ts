@@ -1002,6 +1002,50 @@ async function qboGet<T>(pathname: string, context: string): Promise<T> {
   return qboRequest<T>(`${apiBase()}${pathname}?minorversion=${MINOR_VERSION}`, { method: "GET" }, context);
 }
 
+function isQboNotFound(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "status" in error && (error as { status: number }).status === 404);
+}
+
+/** Connected company id. Empty when QuickBooks is not connected. */
+export function connectedQuickbooksRealmId(): string {
+  return resolveRealmId() ?? "";
+}
+
+/**
+ * Read one Payment. GET only. A missing payment is `{ deleted: true }` (void/delete reopen).
+ * Never creates or updates a QuickBooks entity.
+ */
+export async function readQboPayment(
+  id: string,
+): Promise<{ deleted: true } | { deleted: false; payment: Record<string, unknown> }> {
+  const clean = id.trim();
+  if (!/^[A-Za-z0-9-]+$/.test(clean)) throw new Error("Invalid QuickBooks payment id.");
+  try {
+    const body = await qboGet<{ Payment?: Record<string, unknown> }>(
+      `/payment/${encodeURIComponent(clean)}`,
+      "payment read",
+    );
+    if (!body.Payment) return { deleted: true };
+    return { deleted: false, payment: body.Payment };
+  } catch (error) {
+    if (isQboNotFound(error)) return { deleted: true };
+    throw error;
+  }
+}
+
+/**
+ * Change-data capture for Payment only. GET only.
+ * `changedSince` is the previous CDC `time` or an ISO timestamp within 30 days.
+ */
+export async function readQboPaymentCdc(changedSince: string): Promise<unknown> {
+  const since = changedSince.trim();
+  if (!since || since.length > 40 || /[^0-9A-Za-z:+.\-Z]/.test(since)) {
+    throw new Error("Invalid QuickBooks change cursor.");
+  }
+  const url = `${apiBase()}/cdc?entities=Payment&changedSince=${encodeURIComponent(since)}&minorversion=${MINOR_VERSION}`;
+  return qboRequest<unknown>(url, { method: "GET" }, "payment cdc");
+}
+
 async function qboPost<T>(pathname: string, body: unknown, context: string): Promise<T> {
   return qboRequest<T>(
     `${apiBase()}${pathname}?minorversion=${MINOR_VERSION}`,

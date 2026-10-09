@@ -513,6 +513,12 @@ export type Load = {
   master_suffix: string;
   is_master: number;
   invoice_paid: number;
+  /** Sum of QuickBooks payments applied to this load. Excess stays unapplied. */
+  invoice_paid_amount: number;
+  /** QuickBooks Payment.TxnDate (YYYY-MM-DD) of the latest applied payment. */
+  invoice_paid_at: string;
+  /** QuickBooks Payment.Id of the latest applied payment. */
+  qbo_payment_id: string;
   dispatcher_id: number | null;
   docs_requested: number;
   docs_requested_at: string;

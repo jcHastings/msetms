@@ -30,7 +30,8 @@ The TMS reads these QuickBooks records, and only these:
 - Products and services (items), so a pay line can be matched to a QuickBooks item.
 - Accounts, so a vendor bill can be posted to an expense account.
 - Payment terms, so a customer's terms can be matched to a QuickBooks term.
-- Invoices, including the invoice id, document number, total, and balance. Comparing the balance with the total tells us whether a payment has already been applied. The TMS does not download a separate payments list, and it does not create payments.
+- Invoices, including the invoice id, document number, total, and balance. Comparing the balance with the total tells us whether a payment has already been applied.
+- Payments, read through an Intuit webhook and a read-only change poll, so a customer payment updates the load's paid amount and date. The TMS does not create payments.
 
 The TMS writes these QuickBooks records:
 

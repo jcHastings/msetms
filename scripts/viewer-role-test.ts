@@ -397,6 +397,7 @@ async function main(): Promise<void> {
   const allowedWriteRoutes = new Set([
     "app/api/mike/route.ts",
     "app/api/integrations/samsara/webhook/route.ts",
+    "app/api/integrations/quickbooks/webhook/route.ts",
     "app/api/driver/v1/auth/login/route.ts",
     "app/api/driver/v1/auth/logout/route.ts",
     "app/api/paystubs/upload/route.ts",
@@ -486,6 +487,9 @@ async function main(): Promise<void> {
   const webhook = read("app/api/integrations/samsara/webhook/route.ts");
   assert.match(webhook, /x-samsara-signature/);
   assert.doesNotMatch(webhook, /getSignedInDispatcher|canWrite/);
+  const qboWebhook = read("app/api/integrations/quickbooks/webhook/route.ts");
+  assert.match(qboWebhook, /intuit-signature/);
+  assert.doesNotMatch(qboWebhook, /getSignedInDispatcher|canWrite/);
   const feedRefresh = read("app/api/internal/feeds/refresh/route.ts");
   assert.match(feedRefresh, /authorizeCronRequest/);
   assert.doesNotMatch(feedRefresh, /getSignedInDispatcher|canWrite/);
