@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { LoadMapCanvas } from "@/components/load-map-canvas";
 import { mapsBrowserKey } from "@/lib/load-map";
-import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { trailerShareView } from "@/lib/trailer-share";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +14,7 @@ export default async function TrailerSharePage({
   const { token } = await params;
   const preview = trailerShareView(token);
   if (!preview.found) notFound();
-  if (!preview.expired) {
-    try {
-      await getReeferSnapshots();
-    } catch {
-      // Keep stored pings if live Orbcomm is down.
-    }
-  }
-  const view = trailerShareView(token);
+  const view = preview;
   if (!view.found) notFound();
 
   if (view.expired) {

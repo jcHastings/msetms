@@ -62,12 +62,74 @@ export function defaultSearchCriteria(): LoadSearchCriteria {
   };
 }
 
-export function criteriaFromSearchParams(params: { q?: string | string[] | null }): LoadSearchCriteria {
-  const raw = Array.isArray(params.q) ? params.q[0] : params.q;
+function firstParam(value: string | string[] | null | undefined): string {
+  return String(Array.isArray(value) ? value[0] : value ?? "").trim();
+}
+
+function flagOn(value: string | string[] | null | undefined): boolean {
+  const text = firstParam(value).toLowerCase();
+  return text === "1" || text === "true" || text === "on";
+}
+
+export type SearchParamInput = {
+  q?: string | string[] | null;
+  archived?: string | string[] | null;
+  includeArchived?: string | string[] | null;
+  live?: string | string[] | null;
+  cancelled?: string | string[] | null;
+  status?: string | string[] | null;
+  originState?: string | string[] | null;
+  destState?: string | string[] | null;
+  dateFrom?: string | string[] | null;
+  dateTo?: string | string[] | null;
+  customerId?: string | string[] | null;
+  driverId?: string | string[] | null;
+  truckId?: string | string[] | null;
+  trailerId?: string | string[] | null;
+};
+
+function optionalParamId(value: string | string[] | null | undefined): number | null {
+  const parsed = Number.parseInt(firstParam(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function criteriaFromSearchParams(params: SearchParamInput): LoadSearchCriteria {
+  const defaults = defaultSearchCriteria();
   return {
-    ...defaultSearchCriteria(),
-    q: String(raw ?? "").trim(),
+    ...defaults,
+    q: firstParam(params.q),
+    originState: firstParam(params.originState).toUpperCase(),
+    destState: firstParam(params.destState).toUpperCase(),
+    dateFrom: firstParam(params.dateFrom),
+    dateTo: firstParam(params.dateTo),
+    customerId: optionalParamId(params.customerId),
+    driverId: optionalParamId(params.driverId),
+    truckId: optionalParamId(params.truckId),
+    trailerId: optionalParamId(params.trailerId),
+    status: firstParam(params.status),
+    includeLive: firstParam(params.live) === "0" ? false : defaults.includeLive,
+    includeArchived: flagOn(params.archived) || flagOn(params.includeArchived),
+    includeCancelled: flagOn(params.cancelled),
   };
+}
+
+/** Shareable search URL. `archived=1` is the Include archived switch. */
+export function searchShareQuery(criteria: LoadSearchCriteria): string {
+  const params = new URLSearchParams();
+  if (criteria.q.trim()) params.set("q", criteria.q.trim());
+  if (criteria.includeArchived) params.set("archived", "1");
+  if (!criteria.includeLive) params.set("live", "0");
+  if (criteria.includeCancelled) params.set("cancelled", "1");
+  if (criteria.status) params.set("status", criteria.status);
+  if (criteria.originState) params.set("originState", criteria.originState);
+  if (criteria.destState) params.set("destState", criteria.destState);
+  if (criteria.dateFrom) params.set("dateFrom", criteria.dateFrom);
+  if (criteria.dateTo) params.set("dateTo", criteria.dateTo);
+  if (criteria.customerId) params.set("customerId", String(criteria.customerId));
+  if (criteria.driverId) params.set("driverId", String(criteria.driverId));
+  if (criteria.truckId) params.set("truckId", String(criteria.truckId));
+  if (criteria.trailerId) params.set("trailerId", String(criteria.trailerId));
+  return params.toString();
 }
 
 function ymd(date: Date): string {

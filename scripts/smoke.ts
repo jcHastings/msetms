@@ -63,6 +63,8 @@ async function main() {
   const { isDeskNavActive, shouldPrefetchDeskNav } = await import("../lib/desk-nav-shared");
   assert.equal(shouldPrefetchDeskNav("/claims"), false);
   assert.equal(shouldPrefetchDeskNav("/accounting/quickbooks"), false);
+  assert.equal(shouldPrefetchDeskNav("/board"), false);
+  assert.equal(shouldPrefetchDeskNav("/desk"), false);
   assert.equal(shouldPrefetchDeskNav("/accounting/commissions"), true);
   assert.equal(isDeskNavActive("/claims", "/claims"), true);
   assert.equal(isDeskNavActive("/claims", "/reports"), false);
@@ -210,7 +212,8 @@ async function main() {
     false,
   );
   assert.match(boardUi, /data-load-search|BoardFilterRow|haystack/);
-  assert.match(boardUi, /listLoads\(listFiltersForBoardStatus/);
+  assert.match(boardUi, /listFiltersForBoardStatus/);
+  assert.match(boardUi, /excludeArchived/);
   assert.match(boardUi, /getSignedInDispatcher/);
   assert.match(boardUi, /BoardWhenCell/);
   assert.match(boardUi, /formatBoardDateTime/);
@@ -222,7 +225,9 @@ async function main() {
   assert.match(boardUi, /board-edit-cell/);
   assert.match(boardUi, /board-end-stack/);
   assert.match(boardUi, /data-board-end-stack/);
-  assert.match(boardUi, /Promise\.all\(\[getReeferSnapshots\(\), getSamsaraFleet\(\)\]\)/);
+  assert.match(boardUi, /readStoredReeferSnapshots\(\)/);
+  assert.match(boardUi, /readStoredSamsaraFleet\(\)/);
+  assert.doesNotMatch(boardUi, /getReeferSnapshots\(\)|getSamsaraFleet\(\)/);
   assert.match(boardUi, /<Suspense/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/orbcomm/page.tsx"), "utf8"), /redirect\("\/fleet\/orbcomm"\)/);
   assert.match(fs.readFileSync(path.join(process.cwd(), "app/board/loading.tsx"), "utf8"), /data-board-loading/);
@@ -1288,9 +1293,9 @@ async function main() {
   assert.match(mapLibSource, /geocodeAddress/);
   assert.doesNotMatch(mapLibSource, /demo-112|32\.7767/);
   const fleetMapSource = fs.readFileSync(path.join(process.cwd(), "lib/fleet-map.ts"), "utf8");
-  assert.match(fleetMapSource, /getSamsaraFleet/);
+  assert.match(fleetMapSource, /readStoredSamsaraFleet/);
   assert.match(fleetMapSource, /persistedTruckLocation/);
-  assert.match(fleetMapSource, /getReeferSnapshots/);
+  assert.match(fleetMapSource, /readStoredReeferSnapshots/);
   assert.match(fleetMapSource, /persistedTrailerLocation/);
   assert.match(fleetMapSource, /active !== 0/);
   assert.match(fleetMapSource, /type === "reefer"/);
@@ -13908,14 +13913,23 @@ DISPATCH CONFIRMATION
   assert.ok(LOAD_STATUSES.includes("at_pickup"));
   assert.ok(LOAD_STATUSES.includes("completed"));
   const liveOnly = queries.searchLoads({ includeLive: true, includeArchived: false, includeCancelled: false });
+  const { isArchivedLoad } = await import("../lib/working-loads-shared");
+  const { archiveCutoff } = await import("../lib/working-loads");
+  const searchCutoff = archiveCutoff();
   assert.ok(
     liveOnly.every(
       (load) =>
-        (ACTIVE_LOAD_STATUSES as readonly string[]).includes(load.status) || load.status === "accounting",
+        (ACTIVE_LOAD_STATUSES as readonly string[]).includes(load.status) ||
+        load.status === "accounting" ||
+        ((load.status === "delivered" || load.status === "completed") && !isArchivedLoad(load, searchCutoff)),
     ),
   );
   assert.ok(liveOnly.some((load) => load.load_number === "MSE-1045"));
-  assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), false, "delivered is archived");
+  assert.equal(liveOnly.some((load) => load.load_number === "MSE-1047"), true, "recent delivered stays in search");
+  assert.equal(isArchivedLoad(
+    queries.getLoad(queries.listLoads({ status: "all" }).find((load) => load.load_number === "MSE-1047")!.id)!,
+    searchCutoff,
+  ), false);
   assert.ok(
     queries
       .searchLoads({ includeLive: true, includeArchived: false, q: "MSE-1047" })
@@ -18653,7 +18667,7 @@ DISPATCH CONFIRMATION
     const { buildOrbcommFleetMap } = await import("../lib/fleet-map");
     orbcomm.resetOrbcommCacheForTests();
     const staleMap = await buildOrbcommFleetMap();
-    assert.match(staleMap.sourceNote, /Last message 08\/27\/26 — live Orbcomm did not update/);
+    assert.doesNotMatch(staleMap.sourceNote ?? "", /timed out/i);
     assert.equal(staleMap.statusRows?.some((row) => row.trailer === "LIVE-R1" && row.messageAt === "2026-08-27T14:10:00.000Z"), true);
     assert.equal(staleMap.title, "Orbcomm");
   } finally {

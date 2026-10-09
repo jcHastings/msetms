@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import { isSamsaraTokenSet, loadRuntimeEnv } from "./env";
 import {
   formatDurationMs,
-  getSamsaraFleet,
+  readStoredSamsaraFleet,
   hosForAssignedTruck,
   type HosClock,
   type SamsaraFleetResult,
@@ -16,6 +16,7 @@ import { listDrivers, listLocations, listTrailers, listTrucks, persistedTruckLoc
 import { resolveReeferSpec } from "./reefer-shared";
 import { complianceWindows, getCompanySettings, getWorkflowSettings } from "./settings";
 import { listPickupStops } from "./stops";
+import { loadsChangeStamp, readResultCache, writeResultCache } from "./working-loads";
 import type { ComplianceWindows } from "./settings-shared";
 import type { Driver, LoadView, Trailer, Truck, TruckWithDriver } from "./types";
 import { LOAD_STATUSES, statusNeedsAssets } from "./types";
@@ -168,7 +169,7 @@ export async function loadAssignSuggestionFleet(
     return { fleet: persistedSuggestionFleet("Samsara is not connected."), timedOut: false };
   }
   const raced = await fleetWithinBudget(
-    () => getSamsaraFleet(),
+    () => Promise.resolve(readStoredSamsaraFleet()),
     budgetMs,
     () => persistedSuggestionFleet("Samsara did not answer in time."),
   );
@@ -520,11 +521,15 @@ export function suggestAssignmentsForBoard(input: {
   now?: Date;
   timedOut?: boolean;
 }): Map<number, AssignSuggestion[]> {
+  const now = input.now ?? new Date();
+  const cacheKey = `${loadsChangeStamp()}|${input.loads.map((load) => load.id).join(",")}|${input.fleet.fetchedAt}|${Math.floor(now.getTime() / 60_000)}`;
+  const cached = readResultCache<Map<number, AssignSuggestion[]>>("assign", cacheKey);
+  if (cached) return cached;
   const trucks = input.trucks ?? listTrucks();
   const drivers = input.drivers ?? listDrivers();
   const trailers = input.trailers ?? listTrailers();
   const locations = listLocations();
-  const pickupByLoad = new Map(listPickupStops().map((stop) => [stop.load_id, stop]));
+  const pickupByLoad = new Map(listPickupStops(input.loads.map((load) => load.id)).map((stop) => [stop.load_id, stop]));
   const otherLoads = listOverlapLoads();
   const windows = complianceWindows();
   const workflow = getWorkflowSettings();
@@ -562,5 +567,5 @@ export function suggestAssignmentsForBoard(input: {
       }),
     );
   }
-  return suggestions;
+  return writeResultCache("assign", cacheKey, suggestions);
 }

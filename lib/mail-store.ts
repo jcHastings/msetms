@@ -30,6 +30,22 @@ export function listSentMail(loadId: number): SentMailRow[] {
     .all(loadId) as Array<Record<string, unknown>>).map(asSentMail);
 }
 
+export function loadIdsWithSentMail(loadIds: number[], kind: LoadMailKind): Set<number> {
+  const found = new Set<number>();
+  const unique = [...new Set(loadIds.filter((id) => Number.isFinite(id) && id > 0))];
+  for (let index = 0; index < unique.length; index += 400) {
+    const chunk = unique.slice(index, index + 400);
+    const rows = getDb()
+      .prepare(
+        `SELECT DISTINCT load_id FROM sent_mail
+         WHERE kind = ? AND load_id IN (${chunk.map(() => "?").join(", ")})`,
+      )
+      .all(kind, ...chunk) as Array<{ load_id: number }>;
+    for (const row of rows) found.add(Number(row.load_id));
+  }
+  return found;
+}
+
 export function lastSentMail(loadId: number, kind: LoadMailKind): SentMailRow | null {
   const row = getDb()
     .prepare(

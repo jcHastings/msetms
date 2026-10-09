@@ -90,6 +90,15 @@ import {
   type SavedReport,
   type SearchColumnKey,
 } from "./search";
+import { isArchivedLoad } from "./working-loads-shared";
+import {
+  archiveCutoff,
+  exceptionScopeParams,
+  exceptionScopeSql,
+  notArchivedSql,
+  workingDeskParams,
+  workingDeskSql,
+} from "./working-loads";
 
 const BUSY_STATUSES = ACTIVE_LOAD_STATUSES.filter((status) => statusNeedsAssets(status));
 const BUSY_STATUS_SQL = BUSY_STATUSES.map(() => "?").join(", ");
@@ -1602,13 +1611,27 @@ export type LoadFilters = {
   q?: string;
   dispatcherId?: number;
   masterOnly?: boolean;
+  /** Hide delivered/completed loads older than the working window. */
+  excludeArchived?: boolean;
+  /** Active loads plus delivered/completed inside the working window. */
+  workingScope?: boolean;
+  /** Exception inbox: working window, open delivered loads, unpaid invoiced history. */
+  exceptionScope?: boolean;
+  limit?: number;
+  offset?: number;
 };
 
-export function listLoads(filters: LoadFilters = {}): LoadView[] {
+function buildLoadFilter(filters: LoadFilters, now = new Date()): { where: string; params: Array<string | number> } {
   const clauses: string[] = [];
   const params: Array<string | number> = [];
 
-  if (filters.status === "active" || !filters.status) {
+  if (filters.exceptionScope) {
+    clauses.push(exceptionScopeSql());
+    params.push(...exceptionScopeParams(now));
+  } else if (filters.workingScope) {
+    clauses.push(workingDeskSql());
+    params.push(...workingDeskParams(now));
+  } else if (filters.status === "active" || !filters.status) {
     clauses.push(`loads.status IN (${ACTIVE_LOAD_STATUSES.map(() => "?").join(", ")})`);
     params.push(...ACTIVE_LOAD_STATUSES);
   } else if (filters.status === "planning") {
@@ -1622,6 +1645,11 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   } else if (filters.status !== "all") {
     clauses.push("loads.status = ?");
     params.push(filters.status);
+  }
+
+  if (filters.excludeArchived) {
+    clauses.push(notArchivedSql());
+    params.push(archiveCutoff(now));
   }
 
   if (filters.dispatcherId != null) {
@@ -1651,11 +1679,10 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return (
-    getDb()
-      .prepare(
-        `${LOAD_SELECT} ${where}
-       ORDER BY CASE loads.status
+  return { where, params };
+}
+
+const LOAD_LIST_ORDER = `ORDER BY CASE loads.status
          WHEN 'in_transit' THEN 0
          WHEN 'picked_up' THEN 0
          WHEN 'at_delivery' THEN 0
@@ -1669,10 +1696,25 @@ export function listLoads(filters: LoadFilters = {}): LoadView[] {
          WHEN 'delivered' THEN 5
          WHEN 'completed' THEN 5
          ELSE 6
-       END, loads.pickup_start ASC`,
-      )
-      .all(...params) as LoadView[]
-  ).flatMap((row) => {
+       END, loads.pickup_start ASC`;
+
+export function countLoads(filters: LoadFilters = {}, now = new Date()): number {
+  const { where, params } = buildLoadFilter(filters, now);
+  const row = getDb().prepare(`SELECT COUNT(*) AS n FROM loads JOIN customers ON customers.id = loads.customer_id ${where}`).get(
+    ...params,
+  ) as { n: number };
+  return Number(row?.n ?? 0);
+}
+
+export function listLoads(filters: LoadFilters = {}, now = new Date()): LoadView[] {
+  const { where, params } = buildLoadFilter(filters, now);
+  const limit = filters.limit != null && filters.limit > 0 ? Math.floor(filters.limit) : 0;
+  const offset = limit ? Math.max(0, Math.floor(filters.offset ?? 0)) : 0;
+  const page = limit ? ` LIMIT ? OFFSET ?` : "";
+  const rows = getDb()
+    .prepare(`${LOAD_SELECT} ${where} ${LOAD_LIST_ORDER}${page}`)
+    .all(...params, ...(limit ? [limit, offset] : [])) as LoadView[];
+  return rows.flatMap((row) => {
     const load = asLoadView(row);
     return load ? [load] : [];
   });
@@ -1687,10 +1729,10 @@ function searchStatuses(criteria: LoadSearchCriteria): string[] {
     return [criteria.status];
   }
   const statuses: string[] = [];
-  if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES, "accounting");
+  if (criteria.includeLive) statuses.push(...ACTIVE_LOAD_STATUSES, "accounting", ...ARCHIVED_LOAD_STATUSES);
   if (criteria.includeArchived) statuses.push(...ARCHIVED_LOAD_STATUSES, "accounting");
   if (criteria.includeCancelled) statuses.push("cancelled");
-  return statuses;
+  return [...new Set(statuses)];
 }
 
 export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[] {
@@ -1741,6 +1783,11 @@ export function searchLoads(input: Partial<LoadSearchCriteria> = {}): LoadView[]
     clauses.push("loads.is_sample = 0");
   }
 
+  if (!criteria.includeArchived) {
+    clauses.push(notArchivedSql());
+    params.push(archiveCutoff());
+  }
+
   const where = `WHERE ${clauses.join(" AND ")}`;
   const rows = getDb()
     .prepare(
@@ -1788,6 +1835,7 @@ function withExactLoadNumber(rows: LoadView[], criteria: LoadSearchCriteria): Lo
     .get(key) as LoadView | undefined;
   const exact = asLoadView(row);
   if (!exact || !passesSearchFacet(exact, criteria)) return rows;
+  if (!criteria.includeArchived && isArchivedLoad(exact, archiveCutoff())) return rows;
   return [exact, ...rows];
 }
 

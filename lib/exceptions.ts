@@ -8,13 +8,15 @@ import { complianceWindows, getCompanySettings } from "./settings";
 import { formatDateTime } from "./format";
 import { resolveInvoiceCustomerEmail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
-import { lastSentMail } from "./mail-store";
+import { loadIdsWithSentMail } from "./mail-store";
+import { loadsChangeStamp, readResultCache, writeResultCache } from "./working-loads";
 import { matchLocationForStop } from "./locations";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import type { LoadStop } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
 import { itsImportIssueCode, itsImportIssueTitle, itsImportLoadNumber } from "./its-import-shared";
 import {
+  isActiveLoadStatus,
   isBillableStatus,
   isClosedStatus,
   isRollingStatus,
@@ -641,8 +643,16 @@ function unassignedExceptions(load: LoadView, now: Date): InboxException[] {
 }
 
 export function listExceptionInbox(now = new Date()): ExceptionInbox {
-  const active = listLoads({ status: "active" });
-  const delivered = listLoads({ status: "all" }).filter((load) => isBillableStatus(load.status));
+  const key = `${loadsChangeStamp()}|${Math.floor(now.getTime() / 60_000)}`;
+  const cached = readResultCache<ExceptionInbox>("exceptions", key);
+  if (cached) return cached;
+  return writeResultCache("exceptions", key, computeExceptionInbox(now));
+}
+
+function computeExceptionInbox(now: Date): ExceptionInbox {
+  const scoped = listLoads({ exceptionScope: true }, now);
+  const active = scoped.filter((load) => isActiveLoadStatus(load.status));
+  const delivered = scoped.filter((load) => isBillableStatus(load.status));
   const pods = loadIdsWithPod();
   const readings = latestReadingByLoad();
   const rateCons = loadIdsWithRateCon();
@@ -670,6 +680,9 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
   }
 
+  const invoiceIds = delivered.filter((load) => load.tms_invoice_number).map((load) => load.id);
+  const invoiceSent = loadIdsWithSentMail(invoiceIds, "customer_invoice");
+
   for (const load of delivered) {
     const podAlert = missingPodAlert(load, pods.has(load.id));
     if (podAlert.show) {
@@ -679,7 +692,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
     if (
       load.tms_invoice_number &&
       !isUsableEmail(resolveInvoiceCustomerEmail(load)) &&
-      !lastSentMail(load.id, "customer_invoice")
+      !invoiceSent.has(load.id)
     ) {
       items.push(
         withLoad(
@@ -694,7 +707,7 @@ export function listExceptionInbox(now = new Date()): ExceptionInbox {
   }
 
   items.push(...itsImportInboxItems());
-  attachWorkbenchSchedule(items, [...active, ...delivered], ctx.stops);
+  attachWorkbenchSchedule(items, scoped, ctx.stops);
 
   items.sort((a, b) => {
     const severity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];

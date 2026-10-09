@@ -15,10 +15,10 @@ import { listFleetDocuments } from "@/lib/files";
 import { driverOption, truckFormValues } from "@/lib/fleet-form-shared";
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
 import {
-  getHosForTruck,
-  getLocationForTruck,
-  getSamsaraDriverForTruck,
-  getSamsaraFleet,
+  driverForTruck,
+  hosForAssignedTruck,
+  locationForTruck,
+  readStoredSamsaraFleet,
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
@@ -44,11 +44,11 @@ export default async function EditTruckPage({
 }) {
   const truck = getTruck(Number.parseInt((await params).id, 10));
   if (!truck) notFound();
-  const [fleet, location, hos, samsaraDriver, dvir, safety] = await Promise.all([
-    getSamsaraFleet(),
-    getLocationForTruck(truck.id),
-    getHosForTruck(truck.id),
-    getSamsaraDriverForTruck(truck.id),
+  const fleet = readStoredSamsaraFleet();
+  const location = locationForTruck(fleet, truck.id);
+  const hos = hosForAssignedTruck(fleet, truck);
+  const samsaraDriver = driverForTruck(fleet, truck.id);
+  const [dvir, safety] = await Promise.all([
     getOpenDvirDefectsForTruck(truck),
     listTruckSamsaraSafety(truck.samsara_vehicle_id),
   ]);

@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { DriverKindBadge } from "@/components/status-badge";
 import { driverComplianceAlerts, failedDrugTestAlertsByDriver } from "@/lib/compliance";
 import { canDeleteFleet, canEditFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { getSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
+import { readStoredSamsaraFleet, truckUnitForDriver } from "@/lib/integrations/samsara";
 import { assignedFleetAssetIds, listDrivers, listDrugTests, listTrucks } from "@/lib/queries";
 import { fleetDivisionOf, formatCdlEndorsements, isOwnerOperator } from "@/lib/types";
 import { complianceWindows } from "@/lib/settings";
@@ -30,7 +30,7 @@ export default async function DriversPage({
   const directory = pageFleetRows(filterDrivers(listDrivers(), q), params.page);
   const drivers = directory.rows;
   const trucks = listTrucks();
-  const fleet = await getSamsaraFleet();
+  const fleet = readStoredSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
   const canEdit = canEditFleet(dispatcher?.role ?? "");

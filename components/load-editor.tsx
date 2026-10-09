@@ -33,6 +33,8 @@ import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
 import { laneAverageSnapshot } from "@/lib/lane-average";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
+import { archiveCutoff } from "@/lib/working-loads";
+import { isArchivedLoad } from "@/lib/working-loads-shared";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
@@ -164,6 +166,11 @@ export async function LoadEditor({
               <div className="flex items-center gap-3">
                 <CopyTripNumber value={load.load_number} />
                 <LoadStatusBadge status={load.status} />
+                {isArchivedLoad(load, archiveCutoff()) ? (
+                  <span className="status-pill" data-archived-badge="">
+                    Archived
+                  </span>
+                ) : null}
                 <DispatchAckStatus ack={dispatchAck} />
                 {(() => {
                   const criticalItems = listExceptionInbox().items;

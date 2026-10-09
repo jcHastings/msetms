@@ -1,7 +1,26 @@
 /** Client-safe sidebar active-state rules. No db, env, or secrets. */
 
 const EXACT_NAV_HREFS = new Set(["/", "/control", "/accounting", "/fleet", "/reports"]);
-const SKIP_PREFETCH_HREFS = new Set(["/claims", "/accounting/quickbooks"]);
+const SKIP_PREFETCH_HREFS = new Set([
+  "/",
+  "/board",
+  "/control",
+  "/desk",
+  "/search",
+  "/locations",
+  "/audit",
+  "/fleet",
+  "/fleet/samsara",
+  "/fleet/orbcomm",
+  "/fleet/trucks",
+  "/fleet/drivers",
+  "/accounting",
+  "/reports",
+  "/fuel",
+  "/safety",
+  "/claims",
+  "/accounting/quickbooks",
+]);
 
 /** Heavy or integration pages: skip Link prefetch so a failed preload cannot strand client nav. */
 export function shouldPrefetchDeskNav(href: string): boolean {

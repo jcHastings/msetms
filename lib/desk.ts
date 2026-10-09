@@ -6,6 +6,7 @@ import {
   type InboxException,
 } from "./exceptions";
 import { getLoad, listLoads } from "./queries";
+import { showsSampleData } from "./settings";
 import type { LoadView } from "./types";
 
 export type ExceptionState = {
@@ -197,8 +198,14 @@ export function dailyRecap(): {
 } {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  const loads = listLoads({ status: "all" }).filter((load) => new Date(load.updated_at) >= start);
-  const delivered = loads.filter((load) => load.status === "delivered" || load.status === "completed");
+  const sample = showsSampleData() ? "" : " AND is_sample = 0";
+  const delivered = getDb()
+    .prepare(
+      `SELECT delivery_end FROM loads
+       WHERE updated_at >= ?
+         AND status IN ('delivered', 'completed')${sample}`,
+    )
+    .all(start.toISOString()) as Array<{ delivery_end: string }>;
   const late = delivered.filter((load) => new Date(load.delivery_end).getTime() < Date.now() - 60_000).length;
   const claims = (
     getDb().prepare("SELECT COUNT(*) as count FROM claims WHERE created_at >= ?").get(start.toISOString()) as {
@@ -258,17 +265,19 @@ export function onTimeReport(): Array<LoadView & { onTime: boolean }> {
 }
 
 export function revenueByCustomer(): Array<{ customer: string; loads: number; revenue: number }> {
-  const map = new Map<string, { loads: number; revenue: number }>();
-  for (const load of listLoads({ status: "all" })) {
-    if (load.status === "cancelled") continue;
-    const current = map.get(load.customer_name) ?? { loads: 0, revenue: 0 };
-    current.loads += 1;
-    current.revenue += load.rate ?? 0;
-    map.set(load.customer_name, current);
-  }
-  return [...map.entries()]
-    .map(([customer, value]) => ({ customer, ...value }))
-    .sort((a, b) => b.revenue - a.revenue);
+  const sample = showsSampleData() ? "" : " AND loads.is_sample = 0";
+  return getDb()
+    .prepare(
+      `SELECT customers.name AS customer,
+              COUNT(*) AS loads,
+              IFNULL(SUM(loads.rate), 0) AS revenue
+       FROM loads
+       JOIN customers ON customers.id = loads.customer_id
+       WHERE loads.status != 'cancelled'${sample}
+       GROUP BY customers.name
+       ORDER BY revenue DESC, customers.name`,
+    )
+    .all() as Array<{ customer: string; loads: number; revenue: number }>;
 }
 
 export function requiredDocumentsForLoad(load: LoadView): Array<{ kind: string; label: string; required: boolean }> {

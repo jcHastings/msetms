@@ -10,7 +10,7 @@ import { HosBadge, LocationBadge } from "@/components/fleet-badges";
 import { formatDateTime, formatMdYDisplay } from "@/lib/format";
 import { listNeedCover } from "@/lib/need-cover";
 import {
-  getSamsaraFleet,
+  readStoredSamsaraFleet,
   hosForLoad,
   locationForLoad,
   samsaraGpsEmptyState,
@@ -61,7 +61,7 @@ export default async function DashboardPage({
   const needsUnit = needsUnitAll.slice(0, 12);
   const moving = listMovingLoads();
   const movingRelayLabels = extraRelayLabelsByLoad(moving);
-  const fleet = await getSamsaraFleet();
+  const fleet = readStoredSamsaraFleet();
   const trucks = listTrucks();
   const drivers = listDrivers();
   const availableTrucks = trucks.filter((truck) => truck.status === "available");

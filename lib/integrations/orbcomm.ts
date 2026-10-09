@@ -107,9 +107,11 @@ export type MappedTrailer = {
 };
 
 type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult; saved: number };
+type OrbcommTokenCache = { token: string; expiresAt: number };
 let cache: CacheEntry | null = null;
 let inflight: Promise<ReeferSnapshotResult> | null = null;
 let lastReeferSaved = 0;
+let tokenCache: OrbcommTokenCache | null = null;
 
 class OrbcommHttpError extends Error {
   status: number;
@@ -123,6 +125,7 @@ class OrbcommHttpError extends Error {
 export function resetOrbcommCacheForTests(): void {
   cache = null;
   inflight = null;
+  tokenCache = null;
 }
 
 export function latestReeferForTrailer(trailer: {
@@ -227,6 +230,19 @@ export function toReeferStatus(reading: ReeferReading | null, fallbackSetpoint?:
     alarm: reading.alarm,
     recordedAt: reading.recorded_at,
     source: reading.source === "orbcomm" ? "orbcomm" : "demo",
+  };
+}
+
+/** Page render. Last feed snapshot already in the database. Does not call Orbcomm. */
+export function readStoredReeferSnapshots(): ReeferSnapshotResult {
+  if (cache) return cache.result;
+  if (!isOrbcommConfigured()) return demoSnapshotResult();
+  const stored = listStoredOrbcommSnapshots();
+  return {
+    mode: "orbcomm",
+    credentialsSet: true,
+    fetchedAt: stored[0]?.recordedAt || new Date().toISOString(),
+    readings: stored,
   };
 }
 
@@ -426,7 +442,7 @@ function toSnapshot(row: ReeferReading): ReeferSnapshot {
 }
 
 function mappingLoads(): MappedLoad[] {
-  return listLoads({ status: "all" }).map((load) => ({
+  return listLoads({ workingScope: true }).map((load) => ({
     id: load.id,
     truck_id: load.truck_id,
     trailer_id: load.trailer_id,
@@ -467,7 +483,34 @@ function accessTokenFromOrbcommBody(body: Record<string, unknown>): string | und
   );
 }
 
+function orbcommTokenExpiryMs(body: Record<string, unknown>): number {
+  const data =
+    body.data && typeof body.data === "object" && !Array.isArray(body.data)
+      ? (body.data as Record<string, unknown>)
+      : {};
+  const raw =
+    data.expiresIn ??
+    data.expires_in ??
+    data.expiry ??
+    data.expiration ??
+    data.expiresAt ??
+    body.expiresIn ??
+    body.expires_in ??
+    body.expiresAt;
+  const now = Date.now();
+  const numeric = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isFinite(numeric) && numeric > 1e12) return numeric - 60_000;
+  if (Number.isFinite(numeric) && numeric > 1e9) return numeric * 1000 - 60_000;
+  if (Number.isFinite(numeric) && numeric > 30) return now + numeric * 1000 - 60_000;
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) return parsed - 60_000;
+  }
+  return now + 30 * 60_000;
+}
+
 async function generateOrbcommToken(signal?: AbortSignal): Promise<string> {
+  if (tokenCache && tokenCache.expiresAt > Date.now()) return tokenCache.token;
   const userName = getOrbcommUsername();
   const password = getOrbcommPassword();
   if (!userName || !password) throw new Error("Orbcomm credentials are not set.");
@@ -496,6 +539,7 @@ async function generateOrbcommToken(signal?: AbortSignal): Promise<string> {
   if (!token) {
     throw new Error("Orbcomm token response did not include an access token.");
   }
+  tokenCache = { token, expiresAt: orbcommTokenExpiryMs(body) };
   return token;
 }
 
@@ -606,6 +650,7 @@ async function tryFetchAssetStatus(
       const parsed = await postAssetStatus(token, assetNames, signal);
       if (parsed.length) return { assets: parsed };
     } catch (error) {
+      if (error instanceof OrbcommHttpError && error.status === 401) tokenCache = null;
       lastError = error;
     }
   }

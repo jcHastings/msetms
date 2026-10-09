@@ -3,7 +3,9 @@ import { driverLogoutAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { driverShouldAcknowledge } from "@/lib/dispatch-ack";
 import { formatDateTime } from "@/lib/format";
-import { formatDurationMs, getHosForDriver } from "@/lib/integrations/samsara";
+import { formatDurationMs, hosForDriver, readStoredSamsaraFleet } from "@/lib/integrations/samsara";
+import { archiveCutoff } from "@/lib/working-loads";
+import { isArchivedLoad } from "@/lib/working-loads-shared";
 import { listLoadsForDriver } from "@/lib/queries";
 import { DriverAckState } from "@/components/driver-got-it";
 import { DriverDestinations } from "@/components/driver-destinations";
@@ -18,10 +20,11 @@ export default async function DriverHomePage() {
   const driver = await getSignedInDriver();
   if (!driver) redirect("/driver/login");
   const active = listLoadsForDriver(driver.id).filter((load) => isActiveLoadStatus(load.status));
+  const cutoff = archiveCutoff();
   const delivered = listLoadsForDriver(driver.id).filter(
-    (load) => load.status === "delivered" || load.status === "completed",
+    (load) => (load.status === "delivered" || load.status === "completed") && !isArchivedLoad(load, cutoff),
   );
-  const hos = await getHosForDriver(driver.id);
+  const hos = hosForDriver(readStoredSamsaraFleet(), driver.id);
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-16 pt-6">

@@ -23,17 +23,18 @@ import { laneAveragesForBoard } from "@/lib/lane-average";
 import { orbcommMapPinFromReading } from "@/lib/fleet-map-shared";
 import {
   getDemoReeferForLoad,
-  getReeferSnapshots,
+  readStoredReeferSnapshots,
   snapshotToReading,
   snapshotToTrailerLocation,
 } from "@/lib/integrations/orbcomm";
 import {
-  getSamsaraFleet,
   hosForLoad,
   locationForLoad,
+  readStoredSamsaraFleet,
   samsaraGpsEmptyState,
   samsaraHosEmptyState,
 } from "@/lib/integrations/samsara";
+import { refreshFeedsNowAction } from "@/lib/feed-refresh-actions";
 import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
@@ -46,8 +47,10 @@ import {
   listAssignableDrivers,
   listAssignableTrailers,
   listAssignableTrucks,
+  countLoads,
   listLoads,
 } from "@/lib/queries";
+import { ALL_LOADS_PAGE_SIZE, ARCHIVED_EMPTY_HINT } from "@/lib/working-loads-shared";
 import { suggestAssignmentsForBoard } from "@/lib/assign-suggestions";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
@@ -62,22 +65,34 @@ export const dynamic = "force-dynamic";
 export default async function BoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string; tab?: string }>;
+  searchParams: Promise<{ status?: string; date?: string; q?: string; open?: string; tab?: string; archived?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const status = params.status ?? "active";
   const date = params.date ?? "";
+  const includeArchived = status === "all" && (params.archived === "1" || params.archived === "true");
+  const requestedPage = Math.max(1, Number.parseInt(String(params.page ?? "1"), 10) || 1);
   const openId = parseOpenLoadId(params.open);
   const openTab = params.tab;
-  const current = { status, date };
+  const current = { status, date, ...(includeArchived ? { archived: "1" } : {}) };
   const dispatcher = await getSignedInDispatcher();
   if (!dispatcher) {
     redirect("/login");
   }
+  const filters = {
+    ...listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher.id }),
+    excludeArchived: !includeArchived,
+  };
+  const total = status === "all" ? countLoads(filters) : 0;
+  const pageCount = status === "all" ? Math.max(1, Math.ceil(total / ALL_LOADS_PAGE_SIZE)) : 1;
+  const page = Math.min(requestedPage, pageCount);
   const loads = sortMasterFamilies(
-    listLoads(listFiltersForBoardStatus(status, { date, dispatcherId: dispatcher.id })).filter(
-      (load) => status === "accounting" || loadShowsOnDispatchBoard(load.status),
-    ),
+    listLoads({
+      ...filters,
+      ...(status === "all"
+        ? { limit: ALL_LOADS_PAGE_SIZE, offset: (page - 1) * ALL_LOADS_PAGE_SIZE }
+        : {}),
+    }).filter((load) => status === "accounting" || loadShowsOnDispatchBoard(load.status)),
   );
   const assignableTrucks = listAssignableTrucks();
   const assignableTrailers = listAssignableTrailers();
@@ -91,16 +106,31 @@ export default async function BoardPage({
       <PageHeader
         title="Dispatch board"
         actions={
-          write ? (
-            <Link href="/loads/new" className="btn btn-primary">
-              New load
-            </Link>
-          ) : null
+          <>
+            {write ? (
+              <form action={refreshFeedsNowAction}>
+                <button className="btn btn-secondary" type="submit">
+                  Refresh now
+                </button>
+              </form>
+            ) : null}
+            {write ? (
+              <Link href="/loads/new" className="btn btn-primary">
+                New load
+              </Link>
+            ) : null}
+          </>
         }
       />
       <div className="card overflow-hidden">
         <div className="px-3 pt-2">
-          <BoardToolbar status={status} date={date} />
+          <BoardToolbar
+            status={status}
+            date={date}
+            includeArchived={includeArchived}
+            page={page}
+            pageCount={pageCount}
+          />
         </div>
         <Suspense fallback={<div className="h-72" data-board-loading="" />}>
           <BoardLiveSection
@@ -111,6 +141,7 @@ export default async function BoardPage({
             assignableDrivers={assignableDrivers}
             relayLabels={relayLabels}
             write={write}
+            archivedHint={status === "all" && !includeArchived}
           />
         </Suspense>
       </div>
@@ -194,20 +225,23 @@ async function BoardLiveSection({
   assignableDrivers,
   relayLabels,
   write,
+  archivedHint = false,
 }: {
   loads: ReturnType<typeof listLoads>;
-  current: { status: string; date: string };
+  current: { status: string; date: string; archived?: string };
   assignableTrucks: ReturnType<typeof listAssignableTrucks>;
   assignableTrailers: ReturnType<typeof listAssignableTrailers>;
   assignableDrivers: ReturnType<typeof listAssignableDrivers>;
   relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
   write: boolean;
+  archivedHint?: boolean;
 }) {
   const failedDrivers = failedDrugTestDriverIds();
   const ooPercent = defaultOoPercent();
   const windows = complianceWindows();
   const laneAvgs = laneAveragesForBoard(loads);
-  const [reefers, fleet] = await Promise.all([getReeferSnapshots(), getSamsaraFleet()]);
+  const reefers = readStoredReeferSnapshots();
+  const fleet = readStoredSamsaraFleet();
   const ackRules = dispatchAckRules();
   const lateByLoad = new Map<number, { label: string; reason: string }>();
   for (const item of listExceptionInbox().items) {
@@ -238,7 +272,10 @@ async function BoardLiveSection({
         </p>
       ) : null}
       {loads.length === 0 ? (
-          <p className="px-5 py-10 text-sm text-slate-500">No loads match these filters.</p>
+          <p className="px-5 py-10 text-sm text-slate-500">
+            No loads match these filters.
+            {archivedHint ? <span className="mt-2 block">{ARCHIVED_EMPTY_HINT}</span> : null}
+          </p>
         ) : (
           <div className="board-scroll" data-board-packed="" data-board-phone-stack="">
             <table className="table-grid table-grid-board table-zones" data-dispatch-board="" data-table-zones="board">

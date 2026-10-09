@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { getSignedInDriver } from "@/lib/driver-session";
 import { presentDispatchAck } from "@/lib/dispatch-ack";
 import { formatDateTime } from "@/lib/format";
-import { getLatestReeferForLoad } from "@/lib/integrations/orbcomm";
+import { getDemoReeferForLoad, readStoredReeferSnapshots, snapshotToReading } from "@/lib/integrations/orbcomm";
+import { archiveCutoff } from "@/lib/working-loads";
+import { isArchivedLoad } from "@/lib/working-loads-shared";
 import { listLoadsForDriver } from "@/lib/queries";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
@@ -19,12 +21,15 @@ export default async function DriverDispatchPage() {
   const driver = await getSignedInDriver();
   if (!driver) redirect("/driver/login");
   const active = listLoadsForDriver(driver.id).filter((load) => isActiveLoadStatus(load.status));
+  const cutoff = archiveCutoff();
   const delivered = listLoadsForDriver(driver.id).filter(
-    (load) => load.status === "delivered" || load.status === "completed",
+    (load) => (load.status === "delivered" || load.status === "completed") && !isArchivedLoad(load, cutoff),
   );
+  const reefers = readStoredReeferSnapshots();
   const reeferByLoad = new Map<number, ReeferReading | null>();
   for (const load of active) {
-    reeferByLoad.set(load.id, await getLatestReeferForLoad(load.id));
+    const snap = reefers.readings.find((row) => row.loadId === load.id);
+    reeferByLoad.set(load.id, snap ? snapshotToReading(snap) : getDemoReeferForLoad(load.id));
   }
 
   return (

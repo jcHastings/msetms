@@ -14,13 +14,13 @@ import {
   type FleetStatusRow,
   type OrbcommReeferPinStatus,
 } from "./fleet-map-shared";
-import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
+import { latestReeferForTrailer, readStoredReeferSnapshots, type ReeferSnapshot } from "./integrations/orbcomm";
 import { directoryTrailerLocation } from "./trailer-location";
 import { latestTrailerShareLink, trailerSharePath } from "./trailer-share";
 import {
   driverForTruck,
   formatSamsaraStatusHos,
-  getSamsaraFleet,
+  readStoredSamsaraFleet,
   hosForAssignedTruck,
   locationForTruck,
 } from "./integrations/samsara";
@@ -89,10 +89,7 @@ function addPin(pins: FleetMapPin[], usedIds: Set<number>, pin: FleetMapPin, id:
   pins.push(pin);
 }
 
-function snapshotForTrailer(
-  trailer: Trailer,
-  readings: Awaited<ReturnType<typeof getReeferSnapshots>>["readings"],
-) {
+function snapshotForTrailer(trailer: Trailer, readings: ReeferSnapshot[]) {
   return (
     readings.find(
       (reading) =>
@@ -175,9 +172,9 @@ function orbcommTrailerPin(input: {
 
 export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
   const trucks = activeTrucks();
-  const loads = listLoads({ status: "all" });
+  const loads = listLoads({ workingScope: true });
   const truckById = new Map(trucks.map((truck) => [truck.id, truck]));
-  const fleet = await getSamsaraFleet();
+  const fleet = readStoredSamsaraFleet();
   const usedTruckIds = new Set<number>();
   const pins: FleetMapPin[] = [];
 
@@ -289,13 +286,13 @@ export async function buildSamsaraFleetMap(): Promise<FleetMapModel> {
 
 export async function buildOrbcommFleetMap(): Promise<FleetMapModel> {
   const trailers = activeReefers();
-  const loads = listLoads({ status: "all" });
+  const loads = listLoads({ workingScope: true });
   const usedTrailerIds = new Set<number>();
   const pins: FleetMapPin[] = [];
   const configured = isOrbcommConfigured();
   const snapshots = configured
-    ? await getReeferSnapshots()
-    : { readings: [] as Awaited<ReturnType<typeof getReeferSnapshots>>["readings"], note: undefined as string | undefined };
+    ? readStoredReeferSnapshots()
+    : { readings: [] as ReturnType<typeof readStoredReeferSnapshots>["readings"], note: undefined as string | undefined };
 
   for (const snapshot of snapshots.readings) {
     if (snapshot.source !== "orbcomm") continue;

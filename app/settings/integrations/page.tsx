@@ -6,9 +6,10 @@ import { SettingsBack } from "@/components/settings-nav";
 import { formatDateTime } from "@/lib/format";
 import { isOrbcommConfigured, isQuickbooksConfigured, isTwilioConfigured, isWhatsAppConfigured } from "@/lib/env";
 import { SMS_STATUS_CONNECTED, SMS_STATUS_MISSING } from "@/lib/whatsapp-shared";
-import { getReeferSnapshots } from "@/lib/integrations/orbcomm";
+import { refreshFeedsNowAction } from "@/lib/feed-refresh-actions";
+import { readStoredReeferSnapshots } from "@/lib/integrations/orbcomm";
 import { getQuickbooksStatus } from "@/lib/integrations/quickbooks";
-import { formatDurationMs, getSamsaraFleet, isSamsaraConfigured } from "@/lib/integrations/samsara";
+import { formatDurationMs, isSamsaraConfigured, readStoredSamsaraFleet } from "@/lib/integrations/samsara";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +17,23 @@ export default async function IntegrationsSettingsPage() {
   const samsaraTokenSet = isSamsaraConfigured();
   const orbcommSet = isOrbcommConfigured();
   const qboSet = isQuickbooksConfigured();
-  const fleet = await getSamsaraFleet();
-  const reefers = await getReeferSnapshots();
+  const fleet = readStoredSamsaraFleet();
+  const reefers = readStoredReeferSnapshots();
   const qbo = await getQuickbooksStatus();
 
   return (
     <SettingsAdminGate>
       <SettingsBack />
-      <PageHeader title="Integrations" />
+      <PageHeader
+        title="Integrations"
+        actions={
+          <form action={refreshFeedsNowAction}>
+            <button className="btn btn-secondary" type="submit">
+              Refresh now
+            </button>
+          </form>
+        }
+      />
 
       <section className="card p-6">
         <h2 className="text-sm font-semibold">Texting</h2>

@@ -136,6 +136,9 @@ const STATE_NAME_TO_ABBR: Record<string, string> = {
 };
 
 const STATE_ABBRS = new Set<string>([...Object.values(STATE_NAME_TO_ABBR), "dc"]);
+const STATE_NAME_RES = Object.entries(STATE_NAME_TO_ABBR).map(
+  ([name, abbr]) => [new RegExp(`\\b${name}\\b`, "g"), abbr] as const,
+);
 
 export function normalizeCityKey(value: string): string {
   let text = value
@@ -144,8 +147,9 @@ export function normalizeCityKey(value: string): string {
     .replace(/\bst\.?\s+/g, "st ")
     .replace(/\s+/g, " ")
     .trim();
-  for (const [name, abbr] of Object.entries(STATE_NAME_TO_ABBR)) {
-    text = text.replace(new RegExp(`\\b${name}\\b`, "g"), abbr);
+  for (const [re, abbr] of STATE_NAME_RES) {
+    re.lastIndex = 0;
+    text = text.replace(re, abbr);
   }
   return text.replace(/\s+/g, " ").trim();
 }
@@ -163,8 +167,10 @@ function stateTokenFromKey(key: string): string {
 
 /** Same city (and state when both sides have one). Never "Brooklyn Park" → "Brooklyn". */
 export function cityKeysEquivalent(asked: string, candidate: string): boolean {
-  const a = normalizeCityKey(asked);
-  const c = normalizeCityKey(candidate);
+  return equivalentNormalized(normalizeCityKey(asked), normalizeCityKey(candidate));
+}
+
+function equivalentNormalized(a: string, c: string): boolean {
   if (!a || !c) return false;
   if (a === c) return true;
   const aCity = cityTokensWithoutState(a);
@@ -174,6 +180,42 @@ export function cityKeysEquivalent(asked: string, candidate: string): boolean {
   const cState = stateTokenFromKey(c);
   if (aState && cState && aState !== cState) return false;
   return true;
+}
+
+type IndexedCity = { city: CityCenter; norms: string[] };
+
+const INDEXED_CITIES: IndexedCity[] = US_CITY_CENTERS.map((city) => ({
+  city,
+  norms: [city.label, city.city, `${city.city} ${city.state}`, ...city.aliases].map((name) => normalizeCityKey(name)),
+}));
+
+const EXACT_CITY = new Map<string, CityCenter>();
+const CITIES_BY_TOKEN = new Map<string, IndexedCity[]>();
+for (const entry of INDEXED_CITIES) {
+  for (const norm of entry.norms) {
+    if (norm && !EXACT_CITY.has(norm)) EXACT_CITY.set(norm, entry.city);
+    const token = cityTokensWithoutState(norm);
+    if (!token) continue;
+    const list = CITIES_BY_TOKEN.get(token) ?? [];
+    if (!list.includes(entry)) list.push(entry);
+    CITIES_BY_TOKEN.set(token, list);
+  }
+}
+
+const knownCityCache = new Map<string, { label: string; lat: number; lng: number } | null>();
+
+function findKnownCity(key: string): { label: string; lat: number; lng: number } | null {
+  const cached = knownCityCache.get(key);
+  if (cached !== undefined) return cached;
+  const exact = EXACT_CITY.get(key);
+  const city =
+    exact ??
+    (CITIES_BY_TOKEN.get(cityTokensWithoutState(key)) ?? []).find((entry) =>
+      entry.norms.some((norm) => equivalentNormalized(key, norm)),
+    )?.city;
+  const found = city ? { label: city.label, lat: city.lat, lng: city.lng } : null;
+  knownCityCache.set(key, found);
+  return found;
 }
 
 export function isClosestCityQuestion(question: string): boolean {
@@ -232,11 +274,8 @@ export function findCityCenter(
   const key = normalizeCityKey(asked);
   if (!key) return null;
 
-  const known = US_CITY_CENTERS.find((city) => {
-    const names = [city.label, city.city, `${city.city} ${city.state}`, ...city.aliases];
-    return names.some((name) => cityKeysEquivalent(key, name));
-  });
-  if (known) return { label: known.label, lat: known.lat, lng: known.lng };
+  const known = findKnownCity(key);
+  if (known) return known;
 
   const saved = locations.find((location) => {
     if (location.lat == null || location.lng == null) return false;

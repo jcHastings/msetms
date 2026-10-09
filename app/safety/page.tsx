@@ -6,7 +6,7 @@ import { AccessDenied } from "@/components/access-denied";
 import { PageHeader } from "@/components/page-header";
 import { canViewFleet, getPageAccess } from "@/lib/dispatcher-session";
 import { SAMSARA_TOKEN_MISSING_MESSAGE } from "@/lib/fleet-import-shared";
-import { getSamsaraFleet } from "@/lib/integrations/samsara";
+import { readStoredSamsaraFleet } from "@/lib/integrations/samsara";
 import { listSamsaraDvirFlags } from "@/lib/integrations/samsara-webhook";
 import { formatDateTime, formatMdYDisplay } from "@/lib/format";
 import { listDrivers } from "@/lib/queries";
@@ -31,7 +31,7 @@ export default async function SafetyPage() {
     return <AccessDenied message="Safety is for Administrator and Standard." />;
   }
   const settings = getCompanySettings();
-  const fleet = await getSamsaraFleet();
+  const fleet = readStoredSamsaraFleet();
   const board = buildSafetyBoard({
     drivers: listDrivers(),
     windowDays: complianceWindows().driverDays,

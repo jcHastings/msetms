@@ -14,7 +14,22 @@ export const dynamic = "force-dynamic";
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ open?: string; q?: string }>;
+  searchParams: Promise<{
+    open?: string;
+    q?: string;
+    archived?: string;
+    live?: string;
+    cancelled?: string;
+    status?: string;
+    originState?: string;
+    destState?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    customerId?: string;
+    driverId?: string;
+    truckId?: string;
+    trailerId?: string;
+  }>;
 }) {
   const params = await searchParams;
   const openId = parseOpenLoadId(params.open);

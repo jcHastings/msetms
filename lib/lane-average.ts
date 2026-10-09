@@ -43,6 +43,7 @@ type LocationCoordRow = LaneLocationHint & { id: number };
 
 type FleetLaneCache = {
   stamp: string;
+  at: number;
   rows: ResolvedFleetLaneRate[];
   hints: LaneLocationHint[];
   byId: Map<number, LaneLatLng>;
@@ -108,9 +109,14 @@ function resolveLoadEnd(
   locationId: number | null | undefined,
   byId: Map<number, LaneLatLng>,
   hints: LaneLocationHint[],
+  points?: Map<string, LaneLatLng | null>,
 ): LaneLatLng | null {
   if (locationId != null && byId.has(locationId)) return byId.get(locationId) ?? null;
-  return resolveLanePoint(text, hints);
+  const key = text.trim();
+  if (points?.has(key)) return points.get(key) ?? null;
+  const point = resolveLanePoint(key, hints);
+  points?.set(key, point);
+  return point;
 }
 
 function resolveLoadEnds(
@@ -122,9 +128,10 @@ function resolveLoadEnds(
   },
   byId: Map<number, LaneLatLng>,
   hints: LaneLocationHint[],
+  points?: Map<string, LaneLatLng | null>,
 ): { pickup: LaneLatLng; delivery: LaneLatLng } | null {
-  const pickup = resolveLoadEnd(load.origin, load.shipper_location_id, byId, hints);
-  const delivery = resolveLoadEnd(load.destination, load.consignee_location_id, byId, hints);
+  const pickup = resolveLoadEnd(load.origin, load.shipper_location_id, byId, hints, points);
+  const delivery = resolveLoadEnd(load.destination, load.consignee_location_id, byId, hints, points);
   if (!pickup || !delivery) return null;
   return { pickup, delivery };
 }
@@ -160,9 +167,10 @@ function resolveFleetRows(
   byId: Map<number, LaneLatLng>,
   hints: LaneLocationHint[],
 ): ResolvedFleetLaneRate[] {
+  const points = new Map<string, LaneLatLng | null>();
   const resolved: ResolvedFleetLaneRate[] = [];
   for (const row of rows) {
-    const ends = resolveLoadEnds(row, byId, hints);
+    const ends = resolveLoadEnds(row, byId, hints, points);
     if (!ends) continue;
     resolved.push({ ...row, pickup: ends.pickup, delivery: ends.delivery });
   }
@@ -176,14 +184,14 @@ export function getResolvedFleetLaneRates(): {
   byId: Map<number, LaneLatLng>;
 } {
   const stamp = fleetLaneStamp();
-  if (fleetLaneCache && fleetLaneCache.stamp === stamp) {
+  if (fleetLaneCache && fleetLaneCache.stamp === stamp && Date.now() - fleetLaneCache.at < 60_000) {
     return { rows: fleetLaneCache.rows, hints: fleetLaneCache.hints, byId: fleetLaneCache.byId };
   }
   const locations = listLaneLocationRows();
   const hints = locations;
   const byId = coordsByLocationId(locations);
   const rows = resolveFleetRows(listFleetLaneRates(), byId, hints);
-  fleetLaneCache = { stamp, rows, hints, byId };
+  fleetLaneCache = { stamp, at: Date.now(), rows, hints, byId };
   return { rows, hints, byId };
 }
 

@@ -91,9 +91,7 @@ export function getSamsaraStillPanel(load: LoadView): SamsaraStillPanel {
 }
 
 export function loadsForSamsaraStill(truckId: number): LoadView[] {
-  return listLoads({ status: "all" }).filter(
-    (load) => load.truck_id === truckId && load.status !== "cancelled",
-  );
+  return listLoads({ workingScope: true }).filter((load) => load.truck_id === truckId);
 }
 
 export async function fetchSamsaraStillForLoad(input: {

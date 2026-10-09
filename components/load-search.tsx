@@ -19,12 +19,14 @@ import {
   monthDateRange,
   parseSavedColumns,
   parseSavedFilters,
+  searchShareQuery,
   weekDateRange,
   type LoadSearchCriteria,
   type SavedReport,
   type SearchColumnKey,
 } from "@/lib/search";
 import { assignedLoadName } from "@/lib/owner-operator-shared";
+import { ARCHIVED_EMPTY_HINT } from "@/lib/working-loads-shared";
 import { LOAD_STATUSES, labelForLoadStatus, type ActionResult, type Customer, type DriverWithTruck, type LoadView, type Trailer, type Truck } from "@/lib/types";
 
 type Props = {
@@ -54,9 +56,12 @@ export function LoadSearch({
   const [results, setResults] = useState<LoadView[]>(initialResults);
   const [searched, setSearched] = useState(Boolean(seed.q.trim()));
   const searchedRef = useRef(Boolean(seed.q.trim()));
+  const restoredRef = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
-    if (seed.q.trim() || searchedRef.current) return;
+    if (restoredRef.current || seed.q.trim() || seed.includeArchived || searchedRef.current) return;
+    restoredRef.current = true;
     try {
       const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
       if (!raw) return;
@@ -66,14 +71,18 @@ export function LoadSearch({
         results?: LoadView[];
         searched?: boolean;
       };
-      if (saved.criteria) setCriteria(saved.criteria);
+      if (saved.criteria) {
+        setCriteria(saved.criteria);
+        const query = searchShareQuery(saved.criteria);
+        router.replace(query ? `/search?${query}` : "/search", { scroll: false });
+      }
       if (saved.columns?.length) setColumns(saved.columns);
       if (saved.results) setResults(saved.results);
       if (saved.searched) setSearched(true);
     } catch {
       // ignore a bad saved search
     }
-  }, [seed.q]);
+  }, [seed.q, seed.includeArchived, router]);
 
   useEffect(() => {
     try {
@@ -88,7 +97,6 @@ export function LoadSearch({
   const [reportName, setReportName] = useState("");
   const [selectedReport, setSelectedReport] = useState("");
   const [saveState, saveAction, savePending] = useActionState(saveSearchReportAction, null);
-  const router = useRouter();
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
@@ -101,7 +109,12 @@ export function LoadSearch({
   const visible = useMemo(() => new Set(columns), [columns]);
 
   function patch(next: Partial<LoadSearchCriteria>) {
-    setCriteria((current) => ({ ...current, ...next }));
+    setCriteria((current) => {
+      const merged = { ...current, ...next };
+      const query = searchShareQuery(merged);
+      router.replace(query ? `/search?${query}` : "/search", { scroll: false });
+      return merged;
+    });
   }
 
   function applyReport(id: string) {
@@ -131,6 +144,8 @@ export function LoadSearch({
           const next = criteriaFromForm(event.currentTarget);
           searchedRef.current = true;
           setCriteria(next);
+          const query = searchShareQuery(next);
+          router.replace(query ? `/search?${query}` : "/search", { scroll: false });
           setSearched(true);
           setSearching(true);
           void runSearch(next)
@@ -338,14 +353,17 @@ export function LoadSearch({
             />
             Live
           </label>
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2" htmlFor="include-archived">
             <input
+              id="include-archived"
               type="checkbox"
+              role="switch"
               name="includeArchived"
+              aria-checked={criteria.includeArchived}
               checked={criteria.includeArchived}
               onChange={(event) => patch({ includeArchived: event.target.checked })}
             />
-            Archived
+            Include archived
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -442,7 +460,10 @@ export function LoadSearch({
           </button>
         </div>
         {results.length === 0 ? (
-          <p className="p-6 text-sm text-slate-600">No loads match these criteria.</p>
+          <p className="p-6 text-sm text-slate-600">
+            No loads match these criteria.
+            {!criteria.includeArchived ? <span className="mt-2 block">{ARCHIVED_EMPTY_HINT}</span> : null}
+          </p>
         ) : (
           <table className="table-grid">
             <thead>

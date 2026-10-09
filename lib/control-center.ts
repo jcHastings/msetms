@@ -4,9 +4,7 @@ import {
 } from "./control-center-shared";
 import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
 import { coordsForStop } from "./geofence";
-import { logSwallowedIntegrationError } from "./integration-log";
-import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
-import { getSamsaraFleet } from "./integrations/samsara";
+import { latestReeferForTrailer } from "./integrations/orbcomm";
 import {
   listLoads,
   listTrailers,
@@ -15,7 +13,7 @@ import {
   persistedTruckLocation,
 } from "./queries";
 import { listStops } from "./stops";
-import { isActiveLoadStatus, isClosedStatus, labelForLoadStatus, type LoadView, type Trailer, type Truck } from "./types";
+import { isClosedStatus, labelForLoadStatus, type LoadView, type Trailer, type Truck } from "./types";
 
 export type ControlCenterModel = {
   orders: ControlCenterItem[];
@@ -186,21 +184,9 @@ function truckItem(truck: Truck, busy: Set<number>): ControlCenterItem {
 }
 
 export async function buildControlCenter(): Promise<ControlCenterModel> {
-  const loads = listLoads({ status: "all" }).filter(
-    (load) => isActiveLoadStatus(load.status) || load.status === "available",
-  );
+  const loads = listLoads({ status: "active" });
   const trailers = listTrailers().filter((trailer) => trailer.active !== 0);
   const trucks = listTrucks().filter((truck) => truck.active !== 0);
-  try {
-    await getSamsaraFleet();
-  } catch (error) {
-    logSwallowedIntegrationError("samsara", error);
-  }
-  try {
-    await getReeferSnapshots();
-  } catch (error) {
-    logSwallowedIntegrationError("orbcomm", error);
-  }
   const busyTrailers = assignedTrailerIds(loads);
   const busyTrucks = assignedTruckIds(loads);
   const orders = loads.map((load) => orderItem(load, trucks, trailers));

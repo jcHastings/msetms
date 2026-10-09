@@ -98,12 +98,29 @@ export function listStops(loadId: number, options?: { geofence?: boolean }): Loa
     .map((stop) => hydrateStopFromLocations(stop, locations));
 }
 
+function chunkStopIds(ids: number[], size = 400): number[][] {
+  const chunks: number[][] = [];
+  for (let index = 0; index < ids.length; index += size) chunks.push(ids.slice(index, index + size));
+  return chunks;
+}
+
 /** First pickup on each load. Does not run geofence writes. */
-export function listPickupStops(): LoadStop[] {
+export function listPickupStops(loadIds?: number[]): LoadStop[] {
+  const ids = loadIds ? [...new Set(loadIds.filter((id) => Number.isFinite(id)))] : null;
+  if (ids && ids.length === 0) return [];
   const locations = listLocations();
-  const rows = getDb()
-    .prepare("SELECT * FROM load_stops WHERE kind = 'pickup' ORDER BY load_id, sequence, id")
-    .all() as Array<Record<string, unknown>>;
+  const rows: Array<Record<string, unknown>> = [];
+  const chunks = ids ? chunkStopIds(ids) : [[]];
+  for (const chunk of chunks) {
+    const where = chunk.length
+      ? `WHERE kind = 'pickup' AND load_id IN (${chunk.map(() => "?").join(", ")})`
+      : "WHERE kind = 'pickup'";
+    rows.push(
+      ...(getDb()
+        .prepare(`SELECT * FROM load_stops ${where} ORDER BY load_id, sequence, id`)
+        .all(...chunk) as Array<Record<string, unknown>>),
+    );
+  }
   const first = new Map<number, LoadStop>();
   for (const row of rows) {
     const stop = hydrateStopFromLocations(asStop(row), locations);

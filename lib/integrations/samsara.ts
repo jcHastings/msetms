@@ -149,6 +149,24 @@ export async function listSamsaraVehicles(): Promise<
   }
 }
 
+/** Page render. In-memory feed cache, otherwise GPS already saved on the trucks. */
+export function readStoredSamsaraFleet(): SamsaraFleetResult {
+  if (cache) return cache.result;
+  if (!isSamsaraTokenSet()) return demoFleet();
+  const trucks = listTrucks();
+  return {
+    mode: "samsara",
+    tokenSet: true,
+    fetchedAt: new Date().toISOString(),
+    locations: trucks.flatMap((truck) => {
+      const row = persistedTruckLocation(truck);
+      return row ? [row] : [];
+    }),
+    hos: [],
+    truckDrivers: [],
+  };
+}
+
 export async function getSamsaraFleet(): Promise<SamsaraFleetResult> {
   await loadRuntimeEnv();
   const now = Date.now();
@@ -347,7 +365,7 @@ async function loadSamsaraFleet(signal?: AbortSignal): Promise<SamsaraFleetResul
         vin: truck.vin,
         plate: truck.plate,
       })),
-      loads: listLoads({ status: "all" }).map((load) => ({
+      loads: listLoads({ workingScope: true }).map((load) => ({
         id: load.id,
         truck_id: load.truck_id,
       })),
@@ -386,7 +404,7 @@ async function loadSamsaraFleet(signal?: AbortSignal): Promise<SamsaraFleetResul
         name: driver.name,
         samsara_driver_id: driver.samsara_driver_id,
       })),
-      loads: listLoads({ status: "all" }).map((load) => ({
+      loads: listLoads({ workingScope: true }).map((load) => ({
         id: load.id,
         driver_id: load.driver_id,
       })),
@@ -410,7 +428,7 @@ function timedOutFleet(): SamsaraFleetResult {
 function demoFleet(): SamsaraFleetResult {
   const trucks = listTrucks();
   const drivers = listDrivers();
-  const loads = listLoads({ status: "all" });
+  const loads = listLoads({ workingScope: true });
   const locations = demoLocations().flatMap((demo) => {
     const truck = trucks.find((item) => item.unit_number === demo.unitNumber);
     if (!truck) return [];

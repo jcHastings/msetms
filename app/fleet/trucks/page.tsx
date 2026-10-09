@@ -11,7 +11,7 @@ import { SamsaraTruckImport } from "@/components/samsara-truck-import";
 import { truckComplianceAlerts } from "@/lib/compliance";
 import { canDeleteFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import {
-  getSamsaraFleet,
+  readStoredSamsaraFleet,
   driverForTruck,
   hosForAssignedTruck,
   locationForTruck,
@@ -40,7 +40,7 @@ export default async function TrucksPage({
   const windows = complianceWindows();
   const directory = pageFleetRows(filterTrucks(listTrucks(), q), params.page);
   const trucks = directory.rows;
-  const fleet = await getSamsaraFleet();
+  const fleet = readStoredSamsaraFleet();
   const dispatcher = await getSignedInDispatcher();
   const canDelete = canDeleteFleet(dispatcher?.role ?? "");
   const assignedIds = assignedFleetAssetIds("truck");
