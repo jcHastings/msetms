@@ -66,17 +66,26 @@ export function exceptionScopeParams(now = new Date()): string[] {
 
 /** Cheap change token for result caches. Same idea as fleetLaneStamp. */
 export function loadsChangeStamp(): string {
-  const row = getDb()
+  const db = getDb();
+  const row = db
     .prepare(
       `SELECT
          (SELECT COUNT(*) || ':' || IFNULL(MAX(updated_at), '') FROM loads) AS loads,
          (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM load_stops) AS stops,
          (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM attachments) AS files,
          (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM sent_mail) AS mail,
-         (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM exception_states) AS exceptions`,
+         (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM exception_states) AS exceptions,
+         total_changes() AS changes`,
     )
-    .get() as { loads: string; stops: string; files: string; mail: string; exceptions: string };
-  return `loads:${row.loads}|stops:${row.stops}|files:${row.files}|mail:${row.mail}|ex:${row.exceptions}`;
+    .get() as {
+    loads: string;
+    stops: string;
+    files: string;
+    mail: string;
+    exceptions: string;
+    changes: number;
+  };
+  return `loads:${row.loads}|stops:${row.stops}|files:${row.files}|mail:${row.mail}|ex:${row.exceptions}|chg:${Number(row.changes)}`;
 }
 
 type CacheSlot<T> = { key: string; at: number; value: T };
