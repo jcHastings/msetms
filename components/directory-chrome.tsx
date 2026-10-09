@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { directoryHref } from "@/lib/directory-page";
 
@@ -7,12 +8,14 @@ export function DirectorySearch({
   label,
   placeholder,
   extra,
+  children,
 }: {
   action: string;
   q: string;
   label: string;
   placeholder: string;
   extra?: Record<string, string>;
+  children?: ReactNode;
 }) {
   return (
     <form className="load-list-search px-4 pt-3" method="get" action={action} data-directory-search="">
@@ -33,6 +36,7 @@ export function DirectorySearch({
           Clear
         </Link>
       ) : null}
+      {children}
     </form>
   );
 }

@@ -23,6 +23,7 @@ import {
   persistedTrailerLocation,
   persistedTruckLocation,
 } from "./queries";
+import { ACTIVE_LOCATION_SQL } from "./locations";
 import { geocodeAddress } from "./places";
 import { buildRelayMapPoints, type RelayCoordSource } from "./relay-map";
 import { listRelays } from "./relay-store";
@@ -75,7 +76,8 @@ function locationCoordSources(): RelayCoordSource[] {
     .prepare(
       `SELECT name, city, state, latitude AS lat, longitude AS lng
        FROM locations
-       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+         AND ${ACTIVE_LOCATION_SQL}`,
     )
     .all() as RelayCoordSource[];
 }

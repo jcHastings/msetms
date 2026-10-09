@@ -190,6 +190,10 @@ export type Location = {
   country: string | null;
   /** Set when a dispatcher accepts a Google place. Empty means not verified. */
   verified_at: string | null;
+  /** Timestamp when this row was merged away. Null on live locations. */
+  archived_at: string | null;
+  /** Keeper location id when this row was merged. Null on live locations. */
+  merged_into: number | null;
   /** Samsara address id when this location has been mirrored. Null until a sync lands. */
   samsara_address_id: string | null;
   samsara_address_error: string;

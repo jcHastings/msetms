@@ -80,7 +80,7 @@ import {
   type FleetDivision,
 } from "./types";
 import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
-import { extractStateCode, locationPlaceKey } from "./locations";
+import { ACTIVE_LOCATION_SQL, extractStateCode, isArchivedLocation, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
 import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
@@ -174,7 +174,7 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
 
 export function listLocations(role?: "shipper" | "receiver"): Location[] {
   const rows = getDb()
-    .prepare("SELECT * FROM locations ORDER BY name COLLATE NOCASE")
+    .prepare(`SELECT * FROM locations WHERE ${ACTIVE_LOCATION_SQL} ORDER BY name COLLATE NOCASE`)
     .all() as Location[];
   if (!role) return rows;
   return rows.filter((location) => location.role === "both" || location.role === role);
@@ -207,7 +207,8 @@ export function searchLocationPickerRows(query: string, limit = 50): LocationPic
     .prepare(
       `SELECT id, name, street, city, state, zip, verified_at
        FROM locations
-       WHERE name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ?
+       WHERE ${ACTIVE_LOCATION_SQL}
+         AND (name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ?)
        ORDER BY name COLLATE NOCASE
        LIMIT ?`,
     )
@@ -222,13 +223,21 @@ export type LocationDirectoryPage = {
   pageCount: number;
 };
 
-export function searchLocationsDirectory(input: { q?: string; page?: number; pageSize?: number } = {}): LocationDirectoryPage {
+export function searchLocationsDirectory(
+  input: { q?: string; page?: number; pageSize?: number; includeArchived?: boolean } = {},
+): LocationDirectoryPage {
   const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize ?? 25)));
   const needle = String(input.q ?? "").replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
-  const filterSql = needle
-    ? `WHERE name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ? OR IFNULL(phone, '') LIKE ?`
-    : "";
-  const filterParams = needle ? Array<string>(6).fill(`%${needle}%`) : [];
+  const clauses: string[] = [];
+  const filterParams: string[] = [];
+  if (!input.includeArchived) clauses.push(ACTIVE_LOCATION_SQL);
+  if (needle) {
+    clauses.push(
+      "(name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ? OR IFNULL(phone, '') LIKE ?)",
+    );
+    filterParams.push(...Array<string>(6).fill(`%${needle}%`));
+  }
+  const filterSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const db = getDb();
   const total =
     Number((db.prepare(`SELECT COUNT(*) AS count FROM locations ${filterSql}`).get(...filterParams) as { count: number }).count) ||
@@ -256,7 +265,11 @@ export function findDuplicateLocation(input: {
   const placeId = String(input.google_place_id ?? "").trim();
   if (placeId) {
     const byPlace = getDb()
-      .prepare("SELECT * FROM locations WHERE google_place_id = ? AND google_place_id != '' LIMIT 1")
+      .prepare(
+        `SELECT * FROM locations
+         WHERE google_place_id = ? AND google_place_id != '' AND ${ACTIVE_LOCATION_SQL}
+         LIMIT 1`,
+      )
       .get(placeId) as Location | undefined;
     if (byPlace) return byPlace;
   }
@@ -283,6 +296,7 @@ export function findLocationByNameAddress(
   return (
     candidates.find(
       (location) =>
+        !isArchivedLocation(location) &&
         locationMatchKey(location.name, location.street, location.city, location.state, location.zip) === key,
     ) ?? null
   );

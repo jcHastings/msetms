@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { isArchivedLocation } from "./locations";
 import {
   compareLaneAverage,
   laneEndsWithinRadius,
@@ -39,7 +40,7 @@ type LoadLaneInput = {
   consignee_location_id?: number | null;
 };
 
-type LocationCoordRow = LaneLocationHint & { id: number };
+type LocationCoordRow = LaneLocationHint & { id: number; archived_at: string | null };
 
 type FleetLaneCache = {
   stamp: string;
@@ -54,11 +55,15 @@ let fleetLaneCache: FleetLaneCache | null = null;
 function listLaneLocationRows(): LocationCoordRow[] {
   return getDb()
     .prepare(
-      `SELECT id, name, city, state, latitude AS lat, longitude AS lng
+      `SELECT id, name, city, state, latitude AS lat, longitude AS lng, archived_at
        FROM locations
        WHERE latitude IS NOT NULL AND longitude IS NOT NULL`,
     )
     .all() as LocationCoordRow[];
+}
+
+function laneLocationHints(rows: LocationCoordRow[]): LaneLocationHint[] {
+  return rows.filter((row) => !isArchivedLocation(row));
 }
 
 export function listFleetLaneRates(): FleetLaneRateRow[] {
@@ -188,7 +193,7 @@ export function getResolvedFleetLaneRates(): {
     return { rows: fleetLaneCache.rows, hints: fleetLaneCache.hints, byId: fleetLaneCache.byId };
   }
   const locations = listLaneLocationRows();
-  const hints = locations;
+  const hints = laneLocationHints(locations);
   const byId = coordsByLocationId(locations);
   const rows = resolveFleetRows(listFleetLaneRates(), byId, hints);
   fleetLaneCache = { stamp, at: Date.now(), rows, hints, byId };
@@ -212,7 +217,7 @@ function samplesInRadius(
 function radiusContext(rows?: FleetLaneRateRow[]) {
   if (!rows) return getResolvedFleetLaneRates();
   const locations = listLaneLocationRows();
-  const hints = locations;
+  const hints = laneLocationHints(locations);
   const byId = coordsByLocationId(locations);
   return { rows: resolveFleetRows(rows, byId, hints), hints, byId };
 }
