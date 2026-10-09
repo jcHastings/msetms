@@ -1,0 +1,13 @@
+[Unit]
+Description=MS Express TMS: pull Orbcomm, Samsara fleet GPS, and the route feed
+After=network-online.target msetms.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=msetms
+Group=msetms
+EnvironmentFile=/etc/msetms/msetms.env
+ExecStart=/usr/local/sbin/msetms-feed-refresh
+Nice=10
+IOSchedulingClass=idle

@@ -1,70 +1,119 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LOAD_STATUSES, labelForLoadStatus } from "@/lib/types";
-
+import Link from "next/link";
+import { useBoardFilter } from "@/components/board-filter";
+import { isLoadListTab, LOAD_LIST_TABS, parseLoadListTab } from "@/lib/load-list-shared";
 type Props = {
   status: string;
   date: string;
-  q: string;
+  includeArchived?: boolean;
+  page?: number;
+  pageCount?: number;
 };
 
-export function BoardToolbar({ status, date, q }: Props) {
-  const router = useRouter();
+function allLoadsQuery(input: { date: string; includeArchived: boolean; page?: number }): string {
+  const params = new URLSearchParams();
+  params.set("status", "all");
+  if (input.date) params.set("date", input.date);
+  if (input.includeArchived) params.set("archived", "1");
+  if (input.page && input.page > 1) params.set("page", String(input.page));
+  return `/board?${params.toString()}`;
+}
 
-  function update(next: Partial<Props>) {
+export function BoardToolbar({
+  status,
+  date,
+  includeArchived = false,
+  page = 1,
+  pageCount = 1,
+}: Props) {
+  const { q, setQ } = useBoardFilter();
+  const currentTab = isLoadListTab(status) ? status : parseLoadListTab(status);
+
+  function tabHref(value: string) {
     const params = new URLSearchParams();
-    const merged = { status, date, q, ...next };
-    if (merged.status && merged.status !== "active") params.set("status", merged.status);
-    if (merged.date) params.set("date", merged.date);
-    if (merged.q) params.set("q", merged.q);
+    if (value !== "active") params.set("status", value);
+    if (date) params.set("date", date);
+    if (value === "all" && includeArchived) params.set("archived", "1");
     const query = params.toString();
-    router.push(query ? `/board?${query}` : "/board");
+    return query ? `/board?${query}` : "/board";
   }
 
   return (
-    <form
-      className="card mb-4 flex flex-wrap items-end gap-3 px-4 py-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        update({
-          status: String(form.get("status") ?? "active"),
-          date: String(form.get("date") ?? ""),
-          q: String(form.get("q") ?? ""),
-        });
-      }}
-    >
-      <div className="field min-w-44 flex-1">
-        <label htmlFor="q">Search</label>
-        <input id="q" name="q" defaultValue={q} placeholder="Load #, customer, city, commodity" />
+    <div className="mb-3" data-load-list-chrome="">
+      <div className="load-list-tabs" role="tablist" aria-label="Load Manager tabs">
+        {LOAD_LIST_TABS.map((tab) => (
+          <Link
+            key={tab.value}
+            href={tabHref(tab.value)}
+            className={`load-tab ${currentTab === tab.value ? "load-tab-active" : ""}`}
+            aria-label={tab.label}
+            aria-current={currentTab === tab.value ? "page" : undefined}
+          >
+            <span className="load-tab-full">{tab.label}</span>
+            <span className="load-tab-short" aria-hidden="true">
+              {tab.short}
+            </span>
+          </Link>
+        ))}
       </div>
-      <div className="field w-44">
-        <label htmlFor="status">Status</label>
-        <select id="status" name="status" defaultValue={status}>
-          <option value="active">Active</option>
-          <option value="all">All</option>
-          {LOAD_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {labelForLoadStatus(value)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field w-44">
-        <label htmlFor="date">Pickup date</label>
-        <input id="date" name="date" type="date" defaultValue={date} />
-      </div>
-      <button className="btn btn-secondary" type="submit">
-        Filter
-      </button>
-      <button
-        className="btn btn-ghost"
-        type="button"
-        onClick={() => router.push("/board")}
-      >
-        Clear
-      </button>
-    </form>
+      <form className="load-list-search" data-view-only-allow="" onSubmit={(event) => event.preventDefault()}>
+        <div className="field min-w-56 flex-1">
+          <label htmlFor="load-list-q">Search loads on this tab</label>
+          <input
+            id="load-list-q"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            placeholder="Load #, customer, city, or reference"
+          />
+        </div>
+        <div className="field w-44">
+          <label htmlFor="date">Pickup date</label>
+          <input
+            id="date"
+            name="date"
+            type="date"
+            defaultValue={date}
+            onChange={(event) => {
+              const params = new URLSearchParams();
+              if (status !== "active") params.set("status", status);
+              if (event.target.value) params.set("date", event.target.value);
+              if (currentTab === "all" && includeArchived) params.set("archived", "1");
+              window.location.href = params.toString() ? `/board?${params}` : "/board";
+            }}
+          />
+        </div>
+        {currentTab === "all" ? (
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm" htmlFor="include-archived">
+              <input
+                id="include-archived"
+                type="checkbox"
+                role="switch"
+                aria-checked={includeArchived}
+                checked={includeArchived}
+                onChange={() => {
+                  window.location.href = allLoadsQuery({ date, includeArchived: !includeArchived, page: 1 });
+                }}
+              />
+              Include archived
+            </label>
+            {pageCount > 1 ? (
+              <nav className="flex items-center gap-2 text-sm" aria-label="All Loads pages">
+                {page > 1 ? (
+                  <Link href={allLoadsQuery({ date, includeArchived, page: page - 1 })}>Previous</Link>
+                ) : null}
+                <span>
+                  Page {page} of {pageCount}
+                </span>
+                {page < pageCount ? (
+                  <Link href={allLoadsQuery({ date, includeArchived, page: page + 1 })}>Next</Link>
+                ) : null}
+              </nav>
+            ) : null}
+          </div>
+        ) : null}
+      </form>
+    </div>
   );
 }
