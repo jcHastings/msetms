@@ -148,6 +148,18 @@ export function formatMdYDisplay(iso: string): string {
   return `${month}/${day}/${year}`;
 }
 
+export function formatAgo(iso: string, now = Date.now()): string {
+  const ms = Date.parse(String(iso ?? "").trim());
+  if (!Number.isFinite(ms)) return "";
+  const minutes = Math.max(0, Math.round((now - ms) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return minutes === 1 ? "1 min ago" : `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+}
+
 export function formatDateTime(iso: string): string {
   try {
     const raw = String(iso ?? "").trim();

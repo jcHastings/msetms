@@ -98,6 +98,14 @@ function listFenceStops(loadId: number): StopFenceRow[] {
     .all(loadId) as StopFenceRow[];
 }
 
+type LocationDirectory = { rows?: ReturnType<typeof listLocations> };
+
+function locationsOnce(directory?: LocationDirectory): ReturnType<typeof listLocations> {
+  if (!directory) return listLocations();
+  if (!directory.rows) directory.rows = listLocations();
+  return directory.rows;
+}
+
 export function coordsForStop(
   stop: {
     id?: number;
@@ -109,6 +117,7 @@ export function coordsForStop(
     zip?: string;
   },
   extra?: Map<number, GpsPoint>,
+  directory?: LocationDirectory,
 ): GpsPoint | null {
   const extraPoint = stop.id != null ? extra?.get(stop.id) : undefined;
   if (extraPoint) return extraPoint;
@@ -120,7 +129,7 @@ export function coordsForStop(
       }
     }
   }
-  const matched = matchLocationForStop(listLocations(), {
+  const matched = matchLocationForStop(locationsOnce(directory), {
     name: stop.name ?? "",
     street: stop.street ?? "",
     city: stop.city ?? "",
@@ -145,17 +154,24 @@ export function applyGeofenceArrivals(
   loadId: number,
   now = new Date(),
   extraCoords?: Map<number, GpsPoint>,
+  onlyPing?: GpsPing,
 ): number {
-  const pings = gpsPingsForLoad(loadId);
-  if (!pings.length) return 0;
   const stops = listFenceStops(loadId);
+  if (!stops.length) return 0;
+  if (stops.every((stop) => String(stop.arrived_at ?? "").trim() && String(stop.departed_at ?? "").trim())) {
+    return 0;
+  }
+  const pings = onlyPing ? [onlyPing] : gpsPingsForLoad(loadId);
+  if (!pings.length) return 0;
+  const directory: LocationDirectory = {};
   let stamped = 0;
   const fallback = now.toISOString();
   for (const stop of stops) {
-    const dest = coordsForStop(stop, extraCoords);
-    if (!dest) continue;
     let arrived = String(stop.arrived_at ?? "").trim();
     let departed = String(stop.departed_at ?? "").trim();
+    if (arrived && departed) continue;
+    const dest = coordsForStop(stop, extraCoords, directory);
+    if (!dest) continue;
     for (const ping of pings) {
       const at = ping.recordedAt || fallback;
       const inside = milesBetween(ping, dest) <= GEOFENCE_MILES;
@@ -167,6 +183,7 @@ export function applyGeofenceArrivals(
         if (stampIfEmpty(stop.id, "departed_at", at)) stamped += 1;
         departed = at;
       }
+      if (arrived && departed) break;
     }
   }
   if (stamped > 0) applyWorkflowAfterGeofence(loadId);
@@ -211,11 +228,15 @@ export function stillInsideGeofenceAt(
   return milesBetween(sample, dest) <= GEOFENCE_MILES;
 }
 
-export function applyGeofenceArrivalsForTruck(truckId: number, now = new Date()): number {
+/** Live GPS. Closed loads keep their stamps; pass onlyPing so this save does not replay truck_gps_readings. */
+export function applyGeofenceArrivalsForTruck(truckId: number, now = new Date(), onlyPing?: GpsPing): number {
   const loads = getDb()
-    .prepare("SELECT id FROM loads WHERE truck_id = ? AND status != 'cancelled'")
+    .prepare(
+      `SELECT id FROM loads
+       WHERE truck_id = ? AND status NOT IN ('delivered', 'completed', 'accounting', 'cancelled')`,
+    )
     .all(truckId) as Array<{ id: number }>;
   let stamped = 0;
-  for (const load of loads) stamped += applyGeofenceArrivals(load.id, now);
+  for (const load of loads) stamped += applyGeofenceArrivals(load.id, now, undefined, onlyPing);
   return stamped;
 }

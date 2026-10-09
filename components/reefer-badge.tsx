@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/lib/format";
+import { formatAgo, formatDateTime } from "@/lib/format";
 import { labelForReeferMode, type ReeferMode } from "@/lib/reefer-shared";
 import type { ReeferReading, ReeferStatus } from "@/lib/types";
 
@@ -47,6 +47,11 @@ export function ReeferBadge({
   return (
     <div className="leading-tight text-xs tabular-nums" title={title}>
       <div>{bits.join(" · ") || "—"}</div>
+      {status?.recordedAt && formatAgo(status.recordedAt) ? (
+        <div className="text-slate-500" data-reefer-last-update="">
+          Last update {formatAgo(status.recordedAt)}
+        </div>
+      ) : null}
       {status?.alarm ? <div className="text-rose-700">{status.alarm}</div> : null}
     </div>
   );

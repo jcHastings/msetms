@@ -400,6 +400,7 @@ async function main(): Promise<void> {
     "app/api/driver/v1/auth/login/route.ts",
     "app/api/driver/v1/auth/logout/route.ts",
     "app/api/paystubs/upload/route.ts",
+    "app/api/internal/feeds/refresh/route.ts",
   ]);
 
   const routeFiles = walkRouteFiles(path.join(ROOT, "app/api"));
@@ -485,6 +486,9 @@ async function main(): Promise<void> {
   const webhook = read("app/api/integrations/samsara/webhook/route.ts");
   assert.match(webhook, /x-samsara-signature/);
   assert.doesNotMatch(webhook, /getSignedInDispatcher|canWrite/);
+  const feedRefresh = read("app/api/internal/feeds/refresh/route.ts");
+  assert.match(feedRefresh, /authorizeCronRequest/);
+  assert.doesNotMatch(feedRefresh, /getSignedInDispatcher|canWrite/);
 
   const driverProgress = await import("../app/api/driver/v1/loads/[id]/progress/route");
   const driverDenied = await driverProgress.POST(new Request("http://localhost/api/driver/v1/loads/1/progress", { method: "POST" }), {

@@ -1,0 +1,16 @@
+[Unit]
+Description=MS Express TMS: feed freshness pings (Orbcomm, Samsara, GPS, fuel, QuickBooks file)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=msetms
+Group=msetms
+EnvironmentFile=/etc/msetms/msetms.env
+Environment=TMS_DATA_DIR=/srv/msetms/shared/data
+Environment=TMS_DB_PATH=/srv/msetms/shared/data/tms.db
+Environment=TZ=America/New_York
+ExecStart=/usr/local/sbin/msetms-feed-freshness
+Nice=10
+IOSchedulingClass=idle

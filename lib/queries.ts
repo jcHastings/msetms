@@ -1026,8 +1026,14 @@ export function saveTruckGps(
     recordedAt: input.recordedAt,
     source: input.source,
   });
+  if (input.latitude == null || input.longitude == null) return;
+  if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) return;
   const { applyGeofenceArrivalsForTruck } = require("./geofence") as typeof import("./geofence");
-  applyGeofenceArrivalsForTruck(id);
+  applyGeofenceArrivalsForTruck(id, new Date(), {
+    latitude: input.latitude,
+    longitude: input.longitude,
+    recordedAt: input.recordedAt,
+  });
 }
 
 export function recordTruckGpsReading(
@@ -2224,6 +2230,18 @@ export function saveSamsaraRouteMirror(
       }
     | undefined;
   if (!current) return;
+  const routeId = patch.routeId !== undefined ? patch.routeId : (current.samsara_route_id ?? "");
+  const status = patch.status !== undefined ? patch.status : (current.samsara_route_status ?? "");
+  const eta = patch.eta !== undefined ? patch.eta : (current.samsara_route_eta ?? "");
+  const note = patch.note !== undefined ? patch.note : (current.samsara_route_note ?? "");
+  if (
+    routeId === (current.samsara_route_id ?? "") &&
+    status === (current.samsara_route_status ?? "") &&
+    eta === (current.samsara_route_eta ?? "") &&
+    note === (current.samsara_route_note ?? "")
+  ) {
+    return;
+  }
   getDb()
     .prepare(
       `UPDATE loads SET
@@ -2235,10 +2253,10 @@ export function saveSamsaraRouteMirror(
        WHERE id = ?`,
     )
     .run(
-      patch.routeId !== undefined ? patch.routeId : (current.samsara_route_id ?? ""),
-      patch.status !== undefined ? patch.status : (current.samsara_route_status ?? ""),
-      patch.eta !== undefined ? patch.eta : (current.samsara_route_eta ?? ""),
-      patch.note !== undefined ? patch.note : (current.samsara_route_note ?? ""),
+      routeId,
+      status,
+      eta,
+      note,
       patch.syncedAt !== undefined ? patch.syncedAt : (current.samsara_route_synced_at ?? ""),
       loadId,
     );
