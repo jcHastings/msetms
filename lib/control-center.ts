@@ -4,6 +4,7 @@ import {
 } from "./control-center-shared";
 import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
 import { coordsForStop } from "./geofence";
+import { logSwallowedIntegrationError } from "./integration-log";
 import { getReeferSnapshots, latestReeferForTrailer } from "./integrations/orbcomm";
 import { getSamsaraFleet } from "./integrations/samsara";
 import {
@@ -192,13 +193,13 @@ export async function buildControlCenter(): Promise<ControlCenterModel> {
   const trucks = listTrucks().filter((truck) => truck.active !== 0);
   try {
     await getSamsaraFleet();
-  } catch {
-    /* persisted truck GPS is enough */
+  } catch (error) {
+    logSwallowedIntegrationError("samsara", error);
   }
   try {
     await getReeferSnapshots();
-  } catch {
-    /* persisted trailer GPS is enough */
+  } catch (error) {
+    logSwallowedIntegrationError("orbcomm", error);
   }
   const busyTrailers = assignedTrailerIds(loads);
   const busyTrucks = assignedTruckIds(loads);

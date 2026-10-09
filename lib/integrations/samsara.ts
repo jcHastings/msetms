@@ -27,6 +27,7 @@ import {
   saveTruckOdometer,
 } from "../queries";
 import { ENGINE_HOUR_HISTORY_TYPES, extractSamsaraEngineHourPoints } from "../engine-hours";
+import { logSwallowedIntegrationError } from "../integration-log";
 
 export { SAMSARA_ID_MISSING_MESSAGE };
 
@@ -82,9 +83,10 @@ export type SamsaraFleetResult = {
   truckDrivers: SamsaraTruckDriver[];
 };
 
-type CacheEntry = { expiresAt: number; result: SamsaraFleetResult };
+type CacheEntry = { expiresAt: number; result: SamsaraFleetResult; saved: number };
 let cache: CacheEntry | null = null;
 let inflight: Promise<SamsaraFleetResult> | null = null;
+let lastGpsSaved = 0;
 
 class SamsaraHttpError extends Error {
   status: number;
@@ -136,11 +138,13 @@ export async function listSamsaraVehicles(): Promise<
       const stats = await fetchAllPages("/fleet/vehicles/stats", "gps");
       vehicles = unionActiveSamsaraVehicles(vehicles, parseSamsaraVehicles(stats));
       vehicles = mergeSamsaraGpsOntoVehicles(vehicles, stats);
-    } catch {
+    } catch (error) {
+      logSwallowedIntegrationError("samsara", error);
       vehicles = keepActiveSamsaraVehicles(vehicles);
     }
     return { ok: true, vehicles: keepActiveSamsaraVehicles(vehicles) };
   } catch (error) {
+    logSwallowedIntegrationError("samsara", error);
     return { ok: false, error: publicSamsaraImportError(error) };
   }
 }
@@ -160,13 +164,20 @@ async function refreshSamsaraFleetCache(): Promise<SamsaraFleetResult> {
   if (inflight) return inflight;
   inflight = loadSamsaraFleet()
     .then((result) => {
-      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result };
+      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result, saved: lastGpsSaved };
       return result;
     })
     .finally(() => {
       inflight = null;
     });
   return inflight;
+}
+
+/** Ignore the page cache and wait for a live fleet/GPS pull. `saved` is truck GPS rows written. */
+export async function forceRefreshSamsaraFleet(): Promise<{ result: SamsaraFleetResult; saved: number }> {
+  cache = null;
+  const result = await refreshSamsaraFleetCache();
+  return { result, saved: lastGpsSaved };
 }
 
 export function isLiveSamsaraGps(location: VehicleLocation | null | undefined): location is VehicleLocation {
@@ -297,6 +308,7 @@ export async function getHosForDriver(driverId: number): Promise<HosClock | null
 }
 
 async function loadSamsaraFleet(): Promise<SamsaraFleetResult> {
+  lastGpsSaved = 0;
   const demo = demoFleet();
   if (!isSamsaraTokenSet()) return demo;
 
@@ -670,6 +682,7 @@ export function mapVehicleLocations(input: {
 }
 
 function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
+  let saved = 0;
   for (const location of locations) {
     if (location.source !== "samsara" || location.truckId == null) continue;
     if (location.latitude == null && location.longitude == null && !location.address.trim()) continue;
@@ -683,7 +696,9 @@ function persistLiveGps(locations: VehicleLocation[]): VehicleLocation[] {
       headingDeg: location.headingDeg,
       engineOn: location.engineOn,
     });
+    saved += 1;
   }
+  lastGpsSaved = saved;
   return locations;
 }
 
@@ -1180,8 +1195,8 @@ export async function hydrateSamsaraEngineHourWindow(input: {
         });
         fetched += 1;
       }
-    } catch {
-      // Fail soft: week hours stay blank for this truck.
+    } catch (error) {
+      logSwallowedIntegrationError("samsara", error);
     }
   }
   return { fetched, skipped };
@@ -1205,6 +1220,7 @@ async function fetchFleetPages(
   try {
     return { items: await fetchAllPages(pathname, types) };
   } catch (error) {
+    logSwallowedIntegrationError("samsara", error);
     return { items: [], error: publicSamsaraError(error) };
   }
 }

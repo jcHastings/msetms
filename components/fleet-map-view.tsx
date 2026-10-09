@@ -10,7 +10,7 @@ import {
   type OrbcommReeferPinStatus,
 } from "@/lib/fleet-map-shared";
 import { OrbcommStatusPanel } from "@/components/orbcomm-status-panel";
-import { formatDateTime, shortPlaceLabel } from "@/lib/format";
+import { formatAgo, formatDateTime, shortPlaceLabel } from "@/lib/format";
 
 function formatTruckMiles(miles: number | null): string {
   if (miles == null || Number.isNaN(miles)) return "—";
@@ -24,6 +24,19 @@ const REEFER_PIN_LABEL: Record<OrbcommReeferPinStatus, string> = {
   unknown: "No status",
 };
 
+function newestRecordedAt(pins: Array<{ recordedAt?: string }>): string {
+  let best = "";
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const pin of pins) {
+    const ms = Date.parse(String(pin.recordedAt ?? ""));
+    if (Number.isFinite(ms) && ms > bestMs) {
+      bestMs = ms;
+      best = String(pin.recordedAt);
+    }
+  }
+  return best;
+}
+
 function messageTime(iso: string | undefined): string {
   const raw = String(iso ?? "").trim();
   if (!raw) return "";
@@ -32,9 +45,15 @@ function messageTime(iso: string | undefined): string {
 }
 
 export function FleetMapView({ model, apiKey }: { model: FleetMapModel; apiKey: string }) {
+  const lastUpdate = newestRecordedAt(model.pins);
   return (
     <>
       <PageHeader title={model.title} />
+      {lastUpdate ? (
+        <p className="mb-3 text-xs text-slate-500" data-fleet-last-update="">
+          Last update {formatAgo(lastUpdate)}
+        </p>
+      ) : null}
       {model.title === "Orbcomm" && /live Orbcomm did not update/i.test(model.sourceNote) ? (
         <p className="mb-3 text-sm text-slate-600" data-orbcomm-live-note="">
           {model.sourceNote}

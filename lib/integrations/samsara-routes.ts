@@ -1,4 +1,5 @@
 import { getSamsaraApiToken, isSamsaraTokenSet, loadRuntimeEnv } from "../env";
+import { logSwallowedIntegrationError } from "../integration-log";
 import {
   getDriver,
   getLoad,
@@ -70,8 +71,8 @@ export function resetSamsaraRouteForTests(): void {
 export async function mirrorSamsaraRouteQuiet(loadId: number): Promise<void> {
   try {
     await syncSamsaraRouteForLoad(loadId);
-  } catch {
-    // Assign already saved. A Samsara miss must not fail Save or assign.
+  } catch (error) {
+    logSwallowedIntegrationError("samsara-routes", error);
   }
 }
 
@@ -81,7 +82,8 @@ export async function syncSamsaraRouteForLoad(
 ): Promise<SamsaraRouteSyncResult> {
   try {
     return await syncInner(loadId, deps);
-  } catch {
+  } catch (error) {
+    logSwallowedIntegrationError("samsara-routes", error);
     remember(loadId, { note: SAMSARA_ROUTE_MESSAGES.request });
     return { ok: true, mirrored: false, message: SAMSARA_ROUTE_MESSAGES.request };
   }
@@ -176,7 +178,8 @@ async function readProgress(load: LoadView, deps: SamsaraRouteDeps): Promise<Sam
     });
     const fresh = getLoad(load.id) ?? load;
     return cardFromLoad(fresh);
-  } catch {
+  } catch (error) {
+    logSwallowedIntegrationError("samsara-routes", error);
     return stored;
   }
 }
@@ -404,13 +407,12 @@ async function readRoute(
   return { auth: false, progress: parseRouteProgress(data ?? response.json) };
 }
 
-async function readAuditFeed(
+async function collectRouteFeed(
   token: string,
-  load: LoadView,
   fetchImpl: FetchImpl,
-): Promise<SamsaraRouteProgress | null> {
+): Promise<{ entries: unknown[]; error?: string }> {
   let after = readStoredFeedCursor();
-  let matched: SamsaraRouteProgress | null = null;
+  const entries: unknown[] = [];
   for (let page = 0; page < FEED_PAGES; page += 1) {
     const params = new URLSearchParams();
     params.set("expand", "route");
@@ -422,39 +424,84 @@ async function readAuditFeed(
       undefined,
       fetchImpl,
     );
-    if (response.status === 401 || response.status === 403) return matched;
-    if (response.status < 200 || response.status >= 300) return matched;
-    for (const entry of readFeedEntries(response.json)) {
-      const route = feedRoute(entry);
-      const progress = parseRouteProgress(route);
-      if (!progress) continue;
-      const loadNumber = readExternalValue(route);
-      const loadId = loadNumber ? findLoadIdByNumber(loadNumber) : null;
-      const sameRoute = Boolean(progress.routeId) && progress.routeId === String(load.samsara_route_id ?? "").trim();
-      const sameLoad = loadNumber === load.load_number || loadId === load.id || sameRoute;
-      if (loadId && loadId !== load.id && (progress.routeId || progress.status || progress.eta)) {
-        remember(loadId, {
-          routeId: progress.routeId || undefined,
-          status: progress.status || undefined,
-          eta: progress.eta || undefined,
-          syncedAt: new Date().toISOString(),
-        });
-      }
-      if (sameLoad) {
-        const prev = matched as SamsaraRouteProgress | null;
-        matched = {
-          routeId: progress.routeId || prev?.routeId || "",
-          status: progress.status || prev?.status || "",
-          eta: progress.eta || prev?.eta || "",
-        };
-      }
+    if (response.status === 401 || response.status === 403 || response.status === 429 || response.status >= 500) {
+      logSwallowedIntegrationError("samsara-routes", { status: response.status });
     }
+    if (response.status === 401 || response.status === 403) return { entries, error: `HTTP ${response.status}` };
+    if (response.status < 200 || response.status >= 300) {
+      return { entries, error: response.status ? `HTTP ${response.status}` : "error" };
+    }
+    entries.push(...readFeedEntries(response.json));
     const cursor = readFeedCursor(response.json);
     if (cursor.endCursor) {
       after = cursor.endCursor;
       writeStoredFeedCursor(cursor.endCursor);
     }
     if (!cursor.hasNextPage) break;
+  }
+  return { entries };
+}
+
+function rememberFeedProgress(route: unknown): number | null {
+  const progress = parseRouteProgress(route);
+  if (!progress || !(progress.routeId || progress.status || progress.eta)) return null;
+  const loadNumber = readExternalValue(route);
+  const loadId = loadNumber ? findLoadIdByNumber(loadNumber) : null;
+  if (!loadId) return null;
+  remember(loadId, {
+    routeId: progress.routeId || undefined,
+    status: progress.status || undefined,
+    eta: progress.eta || undefined,
+    syncedAt: new Date().toISOString(),
+  });
+  return loadId;
+}
+
+/** One audit-feed walk, the same pull a load page does, applied to every load in the feed. */
+export async function pullSamsaraRouteFeed(): Promise<{ saved: number; error?: string }> {
+  await loadRuntimeEnv();
+  const token = await resolveToken({});
+  if (!token) return { saved: 0 };
+  const feed = await collectRouteFeed(token, fetch);
+  const seen = new Set<number>();
+  for (const entry of feed.entries) {
+    const loadId = rememberFeedProgress(feedRoute(entry));
+    if (loadId) seen.add(loadId);
+  }
+  return { saved: seen.size, error: feed.error };
+}
+
+async function readAuditFeed(
+  token: string,
+  load: LoadView,
+  fetchImpl: FetchImpl,
+): Promise<SamsaraRouteProgress | null> {
+  const feed = await collectRouteFeed(token, fetchImpl);
+  let matched: SamsaraRouteProgress | null = null;
+  for (const entry of feed.entries) {
+    const route = feedRoute(entry);
+    const progress = parseRouteProgress(route);
+    if (!progress) continue;
+    const loadNumber = readExternalValue(route);
+    const loadId = loadNumber ? findLoadIdByNumber(loadNumber) : null;
+    const sameRoute = Boolean(progress.routeId) && progress.routeId === String(load.samsara_route_id ?? "").trim();
+    const sameLoad = loadNumber === load.load_number || loadId === load.id || sameRoute;
+    if (loadId && loadId !== load.id && (progress.routeId || progress.status || progress.eta)) {
+      remember(loadId, {
+        routeId: progress.routeId || undefined,
+        status: progress.status || undefined,
+        eta: progress.eta || undefined,
+        syncedAt: new Date().toISOString(),
+      });
+    }
+    if (sameLoad) {
+      const prev = matched as SamsaraRouteProgress | null;
+      matched = {
+        routeId: progress.routeId || prev?.routeId || "",
+        status: progress.status || prev?.status || "",
+        eta: progress.eta || prev?.eta || "",
+      };
+    }
   }
   return matched;
 }
@@ -512,7 +559,8 @@ async function samsaraRequest(
       }
     }
     return { status: response.status, json };
-  } catch {
+  } catch (error) {
+    logSwallowedIntegrationError("samsara-routes", error);
     return { status: 0, json: null };
   }
 }

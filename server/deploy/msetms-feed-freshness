@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Read-only freshness pings. HC_* URLs come from the environment. Unset URLs stay quiet.
+set -euo pipefail
+NODE="/usr/local/bin/node"
+if [[ ! -x "$NODE" ]]; then
+  NODE="$(command -v node)"
+fi
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+exec "$NODE" "$here/msetms-feed-freshness.mjs"

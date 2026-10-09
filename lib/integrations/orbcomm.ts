@@ -6,6 +6,7 @@ import {
   getOrbcommUsername,
   isOrbcommConfigured,
 } from "../env";
+import { logSwallowedIntegrationError } from "../integration-log";
 import {
   ORBCOMM_CREDS_OR_CSV_MESSAGE,
   orbcommAssetFromUnknown,
@@ -37,6 +38,8 @@ export type ReeferSnapshot = {
   address: string;
   source: "demo" | "orbcomm";
   recordedAt: string;
+  /** False when recordedAt was filled in locally because Orbcomm sent no message time. */
+  messageTimeKnown?: boolean;
   speedMph?: number | null;
   headingDeg?: number | null;
 };
@@ -103,9 +106,10 @@ export type MappedTrailer = {
   orbcomm_asset_id: string;
 };
 
-type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult };
+type CacheEntry = { expiresAt: number; result: ReeferSnapshotResult; saved: number };
 let cache: CacheEntry | null = null;
 let inflight: Promise<ReeferSnapshotResult> | null = null;
+let lastReeferSaved = 0;
 
 class OrbcommHttpError extends Error {
   status: number;
@@ -240,7 +244,7 @@ async function refreshReeferSnapshotCache(): Promise<ReeferSnapshotResult> {
   if (inflight) return inflight;
   inflight = loadReeferSnapshots()
     .then((result) => {
-      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result };
+      cache = { expiresAt: Date.now() + CACHE_TTL_MS, result, saved: lastReeferSaved };
       return result;
     })
     .finally(() => {
@@ -249,7 +253,15 @@ async function refreshReeferSnapshotCache(): Promise<ReeferSnapshotResult> {
   return inflight;
 }
 
+/** Ignore the page cache and wait for a live Orbcomm pull. `saved` is rows inserted after dedupe. */
+export async function forceRefreshReeferSnapshots(): Promise<{ result: ReeferSnapshotResult; saved: number }> {
+  cache = null;
+  const result = await refreshReeferSnapshotCache();
+  return { result, saved: lastReeferSaved };
+}
+
 async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
+  lastReeferSaved = 0;
   const demo = demoSnapshotResult();
   if (!isOrbcommConfigured()) return demo;
 
@@ -265,7 +277,7 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
         assets: live.assets,
       });
       if (readings.length > 0) {
-        persistLiveReeferReadings(readings, trailers);
+        lastReeferSaved = persistLiveReeferReadings(readings, trailers);
         return {
           mode: "orbcomm",
           credentialsSet: true,
@@ -284,6 +296,7 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
       readings: stored,
     };
   } catch (error) {
+    logSwallowedIntegrationError("orbcomm", error);
     const stored = listStoredOrbcommSnapshots();
     return {
       mode: "orbcomm",
@@ -475,6 +488,7 @@ export async function listOrbcommFleetAssets(): Promise<
     }
     return { ok: true, assets };
   } catch (error) {
+    logSwallowedIntegrationError("orbcomm", error);
     return { ok: false, error: publicOrbcommImportError(error) };
   }
 }
@@ -527,8 +541,10 @@ async function postAssetStatus(token: string, assetNames: string[]): Promise<Orb
   if (!response.ok) throw new OrbcommHttpError(response.status);
   const body = (await response.json()) as Record<string, unknown>;
   const code = typeof body.code === "number" ? body.code : Number(body.code);
-  if (code === 1008 || code === 1007) return [];
-  if (code && code !== 1000 && code !== 200) return [];
+  if (Number.isFinite(code) && code !== 0 && code !== 1000 && code !== 200) {
+    console.error(`orbcomm: code ${code}`);
+    return [];
+  }
   return normalizeOrbcommPayload(body);
 }
 
@@ -856,6 +872,7 @@ export function mapOrbcommReadingsToLoads(input: {
       address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
+      messageTimeKnown: Boolean(asset.recordedAt),
       speedMph: asset.speedMph ?? null,
       headingDeg: asset.headingDeg ?? null,
     });
@@ -906,6 +923,7 @@ export function snapshotsFromLiveAssets(input: {
       address: asset.address ?? "",
       source: "orbcomm",
       recordedAt: asset.recordedAt || new Date().toISOString(),
+      messageTimeKnown: Boolean(asset.recordedAt),
       speedMph: asset.speedMph ?? null,
       headingDeg: asset.headingDeg ?? null,
     });
@@ -1037,12 +1055,105 @@ function lastLiveFailNote(readings: ReeferSnapshot[]): string {
   return `Last message ${formatMdYDisplay(new Date(Math.max(...newest)).toISOString())} — live Orbcomm did not update.`;
 }
 
-function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedTrailer[]): void {
+const REEFER_TEMP_EPS = 0.05;
+const REEFER_COORD_EPS = 0.0001;
+
+function closeEnough(left: number | null | undefined, right: number | null | undefined, epsilon: number): boolean {
+  if (left == null && right == null) return true;
+  if (left == null || right == null || !Number.isFinite(left) || !Number.isFinite(right)) return false;
+  return Math.abs(left - right) <= epsilon;
+}
+
+/** Same setpoint, return, supply, mode, and location as the last stored row. */
+export function sameReeferSample(
+  next: {
+    setpointF: number | null;
+    returnAirF: number | null;
+    supplyAirF: number | null;
+    operatingMode: string;
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+  },
+  last: Pick<
+    ReeferReading,
+    "setpoint_f" | "return_air_f" | "supply_air_f" | "operating_mode" | "latitude" | "longitude" | "address"
+  >,
+): boolean {
+  return (
+    closeEnough(next.setpointF, last.setpoint_f, REEFER_TEMP_EPS) &&
+    closeEnough(next.returnAirF, last.return_air_f, REEFER_TEMP_EPS) &&
+    closeEnough(next.supplyAirF, last.supply_air_f, REEFER_TEMP_EPS) &&
+    (next.operatingMode ?? "").trim() === (last.operating_mode ?? "").trim() &&
+    closeEnough(next.latitude, last.latitude, REEFER_COORD_EPS) &&
+    closeEnough(next.longitude, last.longitude, REEFER_COORD_EPS) &&
+    (next.address ?? "").trim() === (last.address ?? "").trim()
+  );
+}
+
+/** Skip when the sample matches the last row and Orbcomm's message time is not newer. */
+export function shouldSkipUnchangedReefer(
+  next: {
+    setpointF: number | null;
+    returnAirF: number | null;
+    supplyAirF: number | null;
+    operatingMode: string;
+    latitude: number | null;
+    longitude: number | null;
+    address: string;
+    recordedAt: string;
+    messageTimeKnown?: boolean;
+  },
+  last: ReeferReading | null,
+): boolean {
+  if (!last) return false;
+  if (!sameReeferSample(next, last)) return false;
+  if (!next.messageTimeKnown) return true;
+  const nextMs = Date.parse(next.recordedAt);
+  const lastMs = Date.parse(last.recorded_at);
+  if (!Number.isFinite(nextMs) || !Number.isFinite(lastMs)) return true;
+  return nextMs <= lastMs;
+}
+
+/** Positive whole days, or null when TMS_REEFER_RETENTION_DAYS is unset. Unset does not delete rows. */
+export function reeferRetentionDays(): number | null {
+  const raw = String(process.env.TMS_REEFER_RETENTION_DAYS ?? "").trim();
+  if (!/^[1-9]\d*$/.test(raw)) return null;
+  const days = Number(raw);
+  if (!Number.isSafeInteger(days) || days <= 0) return null;
+  return days;
+}
+
+export function pruneOrbcommReadingsIfEnabled(now = Date.now()): number {
+  const days = reeferRetentionDays();
+  if (days == null) return 0;
+  const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+  const result = getDb()
+    .prepare(`DELETE FROM reefer_readings WHERE source = 'orbcomm' AND recorded_at < ?`)
+    .run(cutoff);
+  return result.changes;
+}
+
+function lastOrbcommReading(trailerId: string): ReeferReading | null {
+  return (
+    (getDb()
+      .prepare(
+        `SELECT * FROM reefer_readings
+         WHERE source = 'orbcomm' AND trailer_id = ?
+         ORDER BY recorded_at DESC, id DESC
+         LIMIT 1`,
+      )
+      .get(trailerId) as ReeferReading | undefined) ?? null
+  );
+}
+
+export function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedTrailer[]): number {
   const exists = getDb().prepare(
     `SELECT id FROM reefer_readings
      WHERE source = 'orbcomm' AND recorded_at = ? AND trailer_id = ?
      LIMIT 1`,
   );
+  let saved = 0;
   for (const reading of readings) {
     if (reading.source !== "orbcomm") continue;
     const trailer = trailers.find(
@@ -1053,6 +1164,7 @@ function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedT
     const trailerId = trailer?.unit_number || reading.trailerId;
     if (!trailerId || !reading.recordedAt) continue;
     if (exists.get(reading.recordedAt, trailerId)) continue;
+    if (shouldSkipUnchangedReefer(reading, lastOrbcommReading(trailerId))) continue;
     insertReeferReading({
       load_id: reading.loadId,
       truck_id: reading.truckId,
@@ -1072,7 +1184,10 @@ function persistLiveReeferReadings(readings: ReeferSnapshot[], trailers: MappedT
       speed_mph: reading.speedMph ?? null,
       heading_deg: reading.headingDeg ?? null,
     });
+    saved += 1;
   }
+  pruneOrbcommReadingsIfEnabled();
+  return saved;
 }
 
 export function insertReeferReading(input: Omit<ReeferReading, "id">): void {
