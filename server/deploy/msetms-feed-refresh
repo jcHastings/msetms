@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # POST the loopback feed refresh. TMS_CRON_TOKEN comes from the environment.
-# Do not enable xtrace. Do not print the token.
+# The bearer token is written to a header file and passed as `curl -H @file`.
+# Do not put the token on the curl command line. Do not enable xtrace. Do not print the token.
 set -euo pipefail
 if [[ -z "${TMS_CRON_TOKEN:-}" ]]; then
   echo "msetms-feed-refresh: TMS_CRON_TOKEN is unset" >&2
   exit 1
 fi
-exec curl --silent --show-error --fail-with-body --max-time 110 \
+hdr=$(mktemp)
+chmod 600 "$hdr"
+trap 'rm -f "$hdr"' EXIT
+printf 'Authorization: Bearer %s\n' "$TMS_CRON_TOKEN" > "$hdr"
+curl --silent --show-error --fail-with-body --max-time 110 \
   -X POST \
-  -H "Authorization: Bearer ${TMS_CRON_TOKEN}" \
+  -H @"$hdr" \
   -H "Accept: application/json" \
   "http://127.0.0.1:3000/api/internal/feeds/refresh"

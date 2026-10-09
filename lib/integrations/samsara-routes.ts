@@ -44,6 +44,7 @@ export {
 const SAMSARA_BASE = "https://api.samsara.com";
 const FETCH_TIMEOUT_MS = 8_000;
 const FEED_PAGES = 3;
+const FEED_LIMIT = 100;
 const PROGRESS_TTL_MS = 25_000;
 
 type FetchImpl = typeof fetch;
@@ -410,12 +411,15 @@ async function readRoute(
 async function collectRouteFeed(
   token: string,
   fetchImpl: FetchImpl,
+  signal?: AbortSignal,
 ): Promise<{ entries: unknown[]; error?: string }> {
   let after = readStoredFeedCursor();
   const entries: unknown[] = [];
   for (let page = 0; page < FEED_PAGES; page += 1) {
+    if (signal?.aborted) return { entries, error: "timeout" };
     const params = new URLSearchParams();
     params.set("expand", "route");
+    params.set("limit", String(FEED_LIMIT));
     if (after) params.set("after", after);
     const response = await samsaraRequest(
       token,
@@ -423,7 +427,9 @@ async function collectRouteFeed(
       `/fleet/routes/audit-logs/feed?${params.toString()}`,
       undefined,
       fetchImpl,
+      signal,
     );
+    if (signal?.aborted) return { entries, error: "timeout" };
     if (response.status === 401 || response.status === 403 || response.status === 429 || response.status >= 500) {
       logSwallowedIntegrationError("samsara-routes", { status: response.status });
     }
@@ -457,16 +463,25 @@ function rememberFeedProgress(route: unknown): number | null {
   return loadId;
 }
 
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 /** One audit-feed walk, the same pull a load page does, applied to every load in the feed. */
-export async function pullSamsaraRouteFeed(): Promise<{ saved: number; error?: string }> {
+export async function pullSamsaraRouteFeed(signal?: AbortSignal): Promise<{ saved: number; error?: string }> {
   await loadRuntimeEnv();
   const token = await resolveToken({});
   if (!token) return { saved: 0 };
-  const feed = await collectRouteFeed(token, fetch);
+  if (signal?.aborted) return { saved: 0, error: "timeout" };
+  const feed = await collectRouteFeed(token, fetch, signal);
   const seen = new Set<number>();
-  for (const entry of feed.entries) {
-    const loadId = rememberFeedProgress(feedRoute(entry));
+  for (let index = 0; index < feed.entries.length; index += 1) {
+    if (signal?.aborted) return { saved: seen.size, error: feed.error || "timeout" };
+    const loadId = rememberFeedProgress(feedRoute(feed.entries[index]));
     if (loadId) seen.add(loadId);
+    if (index % 40 === 39) await yieldEventLoop();
   }
   return { saved: seen.size, error: feed.error };
 }
@@ -536,8 +551,10 @@ async function samsaraRequest(
   path: string,
   body: unknown,
   fetchImpl: FetchImpl,
+  signal?: AbortSignal,
 ): Promise<{ status: number; json: unknown }> {
   try {
+    const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
     const response = await fetchImpl(`${SAMSARA_BASE}${path}`, {
       method,
       headers: {
@@ -547,7 +564,7 @@ async function samsaraRequest(
       },
       body: body ? JSON.stringify(body) : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const text = await response.text();
     let json: unknown = null;

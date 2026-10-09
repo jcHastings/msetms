@@ -103,7 +103,7 @@ export function applyWorkflowAfterGeofence(loadId: number): void {
   const settings = getWorkflowSettings();
   const load = getLoad(loadId);
   if (!load) return;
-  const stops = listStops(loadId);
+  const stops = listStops(loadId, { geofence: false });
   const pickups = stops.filter((stop) => stop.kind === "pickup");
   const deliveries = stops.filter((stop) => stop.kind === "delivery");
   const firstPickup = pickups[0];

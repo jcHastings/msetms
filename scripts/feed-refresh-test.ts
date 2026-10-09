@@ -150,8 +150,11 @@ async function main() {
   assert.match(freshService, /User=msetms/);
   assert.match(freshService, /TMS_DB_PATH=\/srv\/msetms\/shared\/data\/tms\.db/);
   assert.match(refreshBin, /http:\/\/127\.0\.0\.1:3000\/api\/internal\/feeds\/refresh/);
+  assert.match(refreshBin, /-H @"\$hdr"/);
   assert.doesNotMatch(refreshBin, /set -x/);
   assert.doesNotMatch(refreshBin, /echo\s+["']?\$\{?TMS_CRON_TOKEN/);
+  assert.doesNotMatch(refreshBin, /Authorization: Bearer \$\{TMS_CRON_TOKEN\}/);
+  assert.doesNotMatch(refreshBin.slice(refreshBin.indexOf("\ncurl ")), /TMS_CRON_TOKEN/);
   assert.equal(healthcheckTarget("http://example.test/abc", false), "");
   assert.equal(healthcheckTarget("https://hc-ping.com/uuid", true), "https://hc-ping.com/uuid/fail");
   assert.equal(qboRefreshPath({ TMS_DATA_DIR: "/srv/msetms/shared/data" }), "/srv/msetms/shared/data/qbo-refresh.json");
@@ -404,9 +407,136 @@ async function main() {
   const bodies = [await forbidden.json(), await unauthorized.json(), await off.json()] as Array<{ error?: string }>;
   for (const body of bodies) assert.doesNotMatch(JSON.stringify(body), /cron-test-token/);
 
+  const perfPath = path.join(os.tmpdir(), `tms-feed-perf-${Date.now()}-${process.pid}.db`);
+  process.env.TMS_DB_PATH = perfPath;
+  process.env.TMS_SKIP_SEED = "1";
+  process.env.SAMSARA_API_TOKEN = "synthetic-fleet-token";
+  const perfDb = await import("../lib/db");
+  perfDb.closeDb();
+  const database = perfDb.getDb();
+  const stamp = "2026-10-01T12:00:00.000Z";
+  database.prepare("INSERT INTO customers (name, created_at, updated_at) VALUES ('Perf', ?, ?)").run(stamp, stamp);
+  const customerId = Number(
+    (database.prepare("SELECT id FROM customers ORDER BY id DESC LIMIT 1").get() as { id: number }).id,
+  );
+  const insTruck = database.prepare(
+    `INSERT INTO trucks (unit_number, type, capacity_lbs, status, samsara_vehicle_id, created_at, updated_at)
+     VALUES (?, 'sleeper', 45000, 'available', ?, ?, ?)`,
+  );
+  const insLoad = database.prepare(
+    `INSERT INTO loads (load_number, customer_id, origin, destination, pickup_start, pickup_end, delivery_start, delivery_end, status, truck_id, created_at, updated_at)
+     VALUES (?, ?, 'A', 'B', ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insStop = database.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, city, state)
+     VALUES (?, ?, ?, ?, 'Hastings', 'NE')`,
+  );
+  const insLoc = database.prepare(
+    `INSERT INTO locations (name, street, city, state, zip, phone, notes, role, created_at, updated_at)
+     VALUES (?, '', 'Hastings', 'NE', '', '', '', 'both', ?, ?)`,
+  );
+  const insPing = database.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, ?, ?, ?, '', 'samsara')`,
+  );
+  const trucks = 40;
+  const loadsPerTruck = 30;
+  const pingCount = 250;
+  database.exec("BEGIN");
+  for (let i = 0; i < 600; i += 1) insLoc.run(`Warehouse ${i} Cold Storage`, stamp, stamp);
+  for (let t = 0; t < trucks; t += 1) {
+    const truckId = Number(insTruck.run(`P${t}`, `veh-${t}`, stamp, stamp).lastInsertRowid);
+    for (let p = 0; p < pingCount; p += 1) {
+      insPing.run(truckId, new Date(Date.UTC(2024, 0, 1, 0, p)).toISOString(), 41 + (p % 10) * 0.01, -96);
+    }
+    for (let l = 0; l < loadsPerTruck; l += 1) {
+      const loadId = Number(
+        insLoad.run(
+          `PERF-${t}-${l}`,
+          customerId,
+          stamp,
+          stamp,
+          stamp,
+          stamp,
+          l < 2 ? "in_transit" : "delivered",
+          truckId,
+          stamp,
+          stamp,
+        ).lastInsertRowid,
+      );
+      for (let s = 0; s < 4; s += 1) {
+        insStop.run(loadId, s, s % 2 ? "delivery" : "pickup", `Dock ${t}-${l}-${s} Cold`);
+      }
+    }
+  }
+  database.exec("COMMIT");
+
+  const fleetVehicles = Array.from({ length: 400 }, (_, index) => ({
+    id: `veh-${index}`,
+    name: `Unit ${index}`,
+    gps: [
+      {
+        latitude: 41.25,
+        longitude: -96.1,
+        speedMilesPerHour: 12,
+        time: "2026-10-09T12:00:00.000Z",
+        reverseGeo: { formattedLocation: "Omaha, NE" },
+      },
+    ],
+    engineStates: [{ value: "On" }],
+    obdOdometerMeters: [{ value: 160934, time: "2026-10-09T12:00:00.000Z" }],
+  }));
+  const routeEntries = Array.from({ length: 1500 }, (_, index) => ({
+    route: {
+      id: `route-${index}`,
+      externalIds: { msetms: index < 3 ? `PERF-0-${index}` : `HIST-${index}` },
+      stops: [
+        { id: "1", state: "departed" },
+        { id: "2", state: "en route", eta: "2026-10-09T18:00:00.000Z" },
+      ],
+    },
+  }));
+  const previousFetch = globalThis.fetch;
+  let overlap: { busy?: boolean } | null = null;
+  const { refreshIntegrationFeeds } = await import("../lib/feed-refresh");
+  const samsara = await import("../lib/integrations/samsara");
+  samsara.resetSamsaraCacheForTests();
+  globalThis.fetch = async (input) => {
+    const href = input instanceof URL ? input.href : String(input);
+    if (href.includes("/fleet/vehicles/stats") && !overlap) {
+      overlap = await refreshIntegrationFeeds();
+    }
+    let body: unknown = { code: 1000, accessToken: "synthetic", data: [] };
+    if (href.includes("/fleet/routes/audit-logs/feed")) {
+      body = { data: routeEntries, pagination: { endCursor: "feed-end", hasNextPage: false } };
+    } else if (href.includes("/fleet/vehicles/stats") || href.includes("/fleet/vehicles?")) {
+      body = { data: fleetVehicles, pagination: { hasNextPage: false, endCursor: "" } };
+    } else if (href.includes("/fleet/hos/clocks")) {
+      body = { data: [], pagination: { hasNextPage: false } };
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+  const started = Date.now();
+  const summary = await refreshIntegrationFeeds();
+  const elapsed = Date.now() - started;
+  globalThis.fetch = previousFetch;
+  delete process.env.SAMSARA_API_TOKEN;
+  assert.equal(overlap?.busy, true);
+  assert.equal(summary.busy, undefined);
+  assert.ok(summary.saved.fleet >= trucks, `fleet saved ${summary.saved.fleet}`);
+  assert.ok(summary.saved.routes >= 1, `routes saved ${summary.saved.routes}`);
+  assert.ok(elapsed < 2000, `large samsara refresh took ${elapsed}ms`);
+  assert.ok(!summary.errors.some((error) => error.startsWith("fleet:") || error.startsWith("routes:")));
+
   db.closeDb();
   fs.rmSync(scratch, { force: true });
   fs.rmSync(dbPath, { force: true });
+  fs.rmSync(perfPath, { force: true });
+  fs.rmSync(`${perfPath}-wal`, { force: true });
+  fs.rmSync(`${perfPath}-shm`, { force: true });
   console.log("feed-refresh-test ok");
 }
 

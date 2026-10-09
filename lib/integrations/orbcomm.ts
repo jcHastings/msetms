@@ -254,20 +254,52 @@ async function refreshReeferSnapshotCache(): Promise<ReeferSnapshotResult> {
 }
 
 /** Ignore the page cache and wait for a live Orbcomm pull. `saved` is rows inserted after dedupe. */
-export async function forceRefreshReeferSnapshots(): Promise<{ result: ReeferSnapshotResult; saved: number }> {
+export async function forceRefreshReeferSnapshots(
+  signal?: AbortSignal,
+): Promise<{ result: ReeferSnapshotResult; saved: number }> {
   cache = null;
-  const result = await refreshReeferSnapshotCache();
+  const result = await loadReeferSnapshots(signal);
+  cache = { expiresAt: Date.now() + CACHE_TTL_MS, result, saved: lastReeferSaved };
   return { result, saved: lastReeferSaved };
 }
 
-async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
+function orbcommSignal(parent?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  return parent ? AbortSignal.any([parent, timeout]) : timeout;
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+async function persistReeferReadingsInBatches(
+  readings: ReeferSnapshot[],
+  trailers: MappedTrailer[],
+  signal?: AbortSignal,
+): Promise<number> {
+  const size = 40;
+  let saved = 0;
+  for (let index = 0; index < readings.length; index += size) {
+    if (signal?.aborted) break;
+    saved += persistLiveReeferReadings(readings.slice(index, index + size), trailers);
+    await yieldEventLoop();
+  }
+  return saved;
+}
+
+async function loadReeferSnapshots(signal?: AbortSignal): Promise<ReeferSnapshotResult> {
   lastReeferSaved = 0;
   const demo = demoSnapshotResult();
   if (!isOrbcommConfigured()) return demo;
+  if (signal?.aborted) {
+    return { ...demo, mode: "orbcomm", credentialsSet: true, error: "timeout", readings: [] };
+  }
 
   try {
-    const token = await generateOrbcommToken();
-    const live = await tryFetchAssetStatus(token);
+    const token = await generateOrbcommToken(signal);
+    const live = await tryFetchAssetStatus(token, signal);
     if (live.assets.length > 0) {
       const trailers = mappingTrailers();
       const readings = snapshotsFromLiveAssets({
@@ -277,7 +309,16 @@ async function loadReeferSnapshots(): Promise<ReeferSnapshotResult> {
         assets: live.assets,
       });
       if (readings.length > 0) {
-        lastReeferSaved = persistLiveReeferReadings(readings, trailers);
+        lastReeferSaved = await persistReeferReadingsInBatches(readings, trailers, signal);
+        if (signal?.aborted) {
+          return {
+            mode: "orbcomm",
+            credentialsSet: true,
+            fetchedAt: new Date().toISOString(),
+            error: "timeout",
+            readings,
+          };
+        }
         return {
           mode: "orbcomm",
           credentialsSet: true,
@@ -426,7 +467,7 @@ function accessTokenFromOrbcommBody(body: Record<string, unknown>): string | und
   );
 }
 
-async function generateOrbcommToken(): Promise<string> {
+async function generateOrbcommToken(signal?: AbortSignal): Promise<string> {
   const userName = getOrbcommUsername();
   const password = getOrbcommPassword();
   if (!userName || !password) throw new Error("Orbcomm credentials are not set.");
@@ -445,7 +486,7 @@ async function generateOrbcommToken(): Promise<string> {
       ...(orgKey ? { orgKey } : {}),
     }),
     cache: "no-store",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: orbcommSignal(signal),
   });
 
   if (!response.ok) throw new OrbcommHttpError(response.status);
@@ -521,7 +562,11 @@ function liveAssetNameLists(): string[][] {
   return [combined, ids, units].filter((list) => list.length > 0);
 }
 
-async function postAssetStatus(token: string, assetNames: string[]): Promise<OrbcommAssetReading[]> {
+async function postAssetStatus(
+  token: string,
+  assetNames: string[],
+  signal?: AbortSignal,
+): Promise<OrbcommAssetReading[]> {
   const url = new URL("/SynB2BGatewayService/api/getAssetStatus", getOrbcommApiBase());
   const response = await fetch(url, {
     method: "POST",
@@ -536,7 +581,7 @@ async function postAssetStatus(token: string, assetNames: string[]): Promise<Orb
       watermark: null,
     }),
     cache: "no-store",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: orbcommSignal(signal),
   });
   if (!response.ok) throw new OrbcommHttpError(response.status);
   const body = (await response.json()) as Record<string, unknown>;
@@ -548,13 +593,17 @@ async function postAssetStatus(token: string, assetNames: string[]): Promise<Orb
   return normalizeOrbcommPayload(body);
 }
 
-async function tryFetchAssetStatus(token: string): Promise<{ assets: OrbcommAssetReading[] }> {
+async function tryFetchAssetStatus(
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ assets: OrbcommAssetReading[] }> {
   const attempts = liveAssetNameLists();
   if (attempts.length === 0) return { assets: [] };
   let lastError: unknown = null;
   for (const assetNames of attempts) {
+    if (signal?.aborted) break;
     try {
-      const parsed = await postAssetStatus(token, assetNames);
+      const parsed = await postAssetStatus(token, assetNames, signal);
       if (parsed.length) return { assets: parsed };
     } catch (error) {
       lastError = error;

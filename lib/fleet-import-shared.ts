@@ -1018,10 +1018,13 @@ export function mergeSamsaraGpsOntoVehicles(
   vehicles: SamsaraVehicleInput[],
   stats: Array<{ id?: string; name?: string; gps?: Record<string, unknown> }>,
 ): SamsaraVehicleInput[] {
+  const statsById = new Map<string, (typeof stats)[number]>();
+  for (const item of stats) {
+    const key = canonicalFleetKey(String(item.id ?? ""));
+    if (key && !statsById.has(key)) statsById.set(key, item);
+  }
   return vehicles.map((vehicle) => {
-    const row = stats.find(
-      (item) => canonicalFleetKey(String(item.id ?? "")) === canonicalFleetKey(vehicle.id),
-    );
+    const row = statsById.get(canonicalFleetKey(vehicle.id));
     if (!row) return vehicle;
     const gps = (row.gps ?? {}) as Record<string, unknown>;
     const reverse = (gps.reverseGeo ?? {}) as Record<string, unknown>;
