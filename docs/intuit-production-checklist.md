@@ -4,7 +4,7 @@ Checked October 7, 2026 for the MS Express TMS QuickBooks Online connection. Pag
 
 Official Intuit doc pages at `developer.intuit.com` returned only the developer-portal shell (“Compiling and pre-filling your Intuit info...”) on this date, so their article body could not be quoted. Rows below cite the Intuit page URL anyway, plus the Intuit Developer Support answers and the published description of Intuit’s production questionnaire that did return text.
 
-This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.accounting`). It does not use the Payments API or the Payroll API.
+This app uses the QuickBooks Online Accounting API only (`com.intuit.quickbooks.accounting`). It does not use the Payments API or the Payroll API. Customer payments are read from QuickBooks through an Intuit webhook and a read-only change poll; the TMS does not create payments.
 
 ## Requirements
 

@@ -63,6 +63,7 @@ import {
   resolveLoadDriverEmail,
 } from "@/lib/load-mail";
 import { dispatchAckRules, presentDispatchAck } from "@/lib/dispatch-ack";
+import { invoicePaidLabel } from "@/lib/accounting-aging";
 import { formatDateTime, toOfficeDateTime } from "@/lib/format";
 import { getSamsaraStillPanel } from "@/lib/integrations/samsara-still";
 import { formatLoadSummary } from "@/lib/load-summary";
@@ -139,7 +140,8 @@ export async function LoadEditor({
       return null;
     }
   })();
-  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
+  const company = getCompanySettings();
+  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(company));
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
@@ -176,6 +178,9 @@ export async function LoadEditor({
                   <span className="text-sm text-slate-600">
                     QB invoice # {load.qbo_doc_number || load.qbo_invoice_number || load.qbo_invoice_id}
                   </span>
+                ) : null}
+                {load.invoice_paid || (load.invoice_paid_amount ?? 0) > 0 ? (
+                  <span className="text-sm text-slate-600">{invoicePaidLabel(load, company.currency)}</span>
                 ) : null}
                 {canEditLoads(role) || canAccessAccounting(role) ? (
                   <SendToAccountingControls

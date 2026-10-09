@@ -160,6 +160,9 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     parent_load_id: row.parent_load_id ?? null,
     master_suffix: row.master_suffix || "",
     is_master: row.is_master ? 1 : 0,
+    invoice_paid_amount: Number(row.invoice_paid_amount) || 0,
+    invoice_paid_at: row.invoice_paid_at || "",
+    qbo_payment_id: row.qbo_payment_id || "",
   };
 }
 

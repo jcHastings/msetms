@@ -327,6 +327,9 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "watched", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "cloned_from_id", "INTEGER");
   ensureColumn(db, "loads", "invoice_paid", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "invoice_paid_amount", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "invoice_paid_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_payment_id", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "dispatcher_id", "INTEGER");
   ensureColumn(db, "loads", "docs_requested", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "loads", "docs_requested_at", "TEXT NOT NULL DEFAULT ''");
@@ -334,6 +337,46 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "accounting_desk", "TEXT NOT NULL DEFAULT 'operations'");
   ensureColumn(db, "loads", "accounting_return_status", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "accounting_sent_at", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS qbo_payments (
+      qbo_payment_id TEXT PRIMARY KEY,
+      txn_date TEXT NOT NULL DEFAULT '',
+      total_amt REAL NOT NULL DEFAULT 0,
+      unapplied_amt REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'applied',
+      last_updated TEXT NOT NULL DEFAULT '',
+      notified_key TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS qbo_payment_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qbo_payment_id TEXT NOT NULL,
+      qbo_invoice_id TEXT NOT NULL,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      line_amount REAL NOT NULL DEFAULT 0,
+      applied_amount REAL NOT NULL DEFAULT 0,
+      unapplied_amount REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_qbo_payment_applications_payment
+      ON qbo_payment_applications(qbo_payment_id);
+    CREATE INDEX IF NOT EXISTS idx_qbo_payment_applications_load
+      ON qbo_payment_applications(load_id);
+    CREATE TABLE IF NOT EXISTS qbo_payment_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qbo_payment_id TEXT NOT NULL,
+      qbo_invoice_id TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      updated_at TEXT NOT NULL,
+      UNIQUE (qbo_payment_id, qbo_invoice_id)
+    );
+    CREATE TABLE IF NOT EXISTS qbo_sync_cursors (
+      entity TEXT PRIMARY KEY,
+      changed_since TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS qbo_item_maps (
       category TEXT PRIMARY KEY,
