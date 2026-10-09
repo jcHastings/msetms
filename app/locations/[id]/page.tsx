@@ -8,6 +8,7 @@ import { SamsaraAddressSync } from "@/components/samsara-address-sync";
 import { deleteLocationFormAction, updateLocationAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getGoogleMapsBrowserKey } from "@/lib/env";
+import { ARCHIVED_MERGE_LEAD, isArchivedLocation } from "@/lib/locations";
 import { getLocation } from "@/lib/queries";
 import { canDeleteLocations } from "@/lib/settings-shared";
 
@@ -28,6 +29,9 @@ export default async function EditLocationPage({
 
   const location = getLocation(Number.parseInt((await params).id, 10));
   if (!location) notFound();
+  const keeperId = Number(location.merged_into);
+  const keeper =
+    isArchivedLocation(location) && Number.isFinite(keeperId) && keeperId > 0 ? getLocation(keeperId) : null;
   const boundAction = updateLocationAction.bind(null, location.id);
   const canDelete = canDeleteLocations(dispatcher.role);
 
@@ -41,6 +45,23 @@ export default async function EditLocationPage({
           </Link>
         }
       />
+      {isArchivedLocation(location) ? (
+        <p
+          className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          data-archived-location-note=""
+        >
+          {keeper ? (
+            <>
+              {ARCHIVED_MERGE_LEAD}{" "}
+              <Link href={`/locations/${keeper.id}`} className="font-semibold underline">
+                {keeper.name}
+              </Link>
+            </>
+          ) : (
+            "Archived"
+          )}
+        </p>
+      ) : null}
       <LocationForm
         location={location}
         action={boundAction}

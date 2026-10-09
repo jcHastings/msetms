@@ -6,6 +6,7 @@ import { LocationVerifyBadge } from "@/components/location-verify-badge";
 import {
   filterLocationsForPicker,
   formatLocationAddress,
+  isArchivedLocation,
   type LocationPickerRow,
 } from "@/lib/locations";
 import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
@@ -123,7 +124,10 @@ export function LocationPicker({
   async function pickPlace(placeId: string) {
     try {
       const place = await placeDetailsAction(placeId);
-      const matchedId = matchLocationForPlace(catalogRows, place);
+      const matchedId = matchLocationForPlace(
+        catalogRows.filter((row) => !isArchivedLocation(row)),
+        place,
+      );
       if (matchedId != null) {
         pick(String(matchedId));
         return;

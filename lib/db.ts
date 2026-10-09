@@ -1200,6 +1200,7 @@ export function migrate(db: Database): void {
 
   migrateDriverApiIdempotencyKey(db);
   migrateFacilityAndCompanyDocs(db);
+  migrateLocationArchive(db);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1912,6 +1913,15 @@ function migrateFacilityAndCompanyDocs(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_company_documents_slot ON company_documents(division, slot, status, id);
   `);
+}
+
+/**
+ * Prod already stores these on merged duplicate locations. Scratch and test
+ * databases add the same nullable columns when they are missing.
+ */
+function migrateLocationArchive(db: Database): void {
+  ensureColumn(db, "locations", "archived_at", "TEXT");
+  ensureColumn(db, "locations", "merged_into", "INTEGER");
 }
 
 function ensureColumn(

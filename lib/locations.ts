@@ -31,6 +31,20 @@ export type LocationInput = {
   verified_at?: string | null;
 };
 
+/** Live rows leave this null. Merged duplicates store a timestamp. */
+export function isArchivedLocation(location: { archived_at?: string | null }): boolean {
+  return String(location.archived_at ?? "").trim() !== "";
+}
+
+/** SQL predicate for locations that still belong in lists, search, and pickers. */
+export const ACTIVE_LOCATION_SQL = "IFNULL(archived_at, '') = ''";
+
+export const ARCHIVED_MERGE_LEAD = "Archived, merged into";
+
+export function archivedMergeNote(keeperName: string): string {
+  return `${ARCHIVED_MERGE_LEAD} ${keeperName}`;
+}
+
 export function normalizeLocationPart(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -100,6 +114,7 @@ export function formatStopRowAddress(
 
 export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip"> & {
   verified_at?: string | null;
+  archived_at?: string | null;
 };
 
 export function locationSearchHaystack(location: LocationPickerRow): string {
@@ -133,6 +148,7 @@ export function filterLocationsForPicker<T extends LocationPickerRow>(
   if (!locationQueryTokens(query).length) return [];
   const matched: T[] = [];
   for (const location of locations) {
+    if (isArchivedLocation(location)) continue;
     if (!locationMatchesQuery(location, query)) continue;
     matched.push(location);
     if (matched.length >= limit) break;
