@@ -7,7 +7,7 @@ import {
   shouldReplaceStoredTerms,
 } from "./document-copy";
 import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
-import { Database } from "./sqlite";
+import { Database, SQLITE_BUSY_TIMEOUT_MS } from "./sqlite";
 import { appleDevDriverFixtureEnabled, ensureAppleDevDriverLogin } from "./driver-login-fixture";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
@@ -40,6 +40,7 @@ export function getDb(): Database {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   db.pragma("foreign_keys = ON");
   migrate(db);
 

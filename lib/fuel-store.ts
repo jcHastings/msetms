@@ -317,10 +317,63 @@ export function rematchUnmatchedFuelTransactions(): number {
   return rematchFuelTransactionDrivers({ unmatchedOnly: true });
 }
 
+const defaultFuelImportPostSaveSteps = {
+  applyParsedFuelDriverNames,
+  rematchUnmatchedFuelTransactions,
+  autoMatchPendingFuelReceipts,
+};
+
+const fuelImportPostSaveSteps = { ...defaultFuelImportPostSaveSteps };
+
+/** Tests replace one follow-up step. Pass null to restore the real function. */
+export function setFuelImportPostSaveStepForTests(
+  step: keyof typeof defaultFuelImportPostSaveSteps,
+  fn: (() => void) | null,
+): void {
+  if (step === "applyParsedFuelDriverNames") {
+    fuelImportPostSaveSteps.applyParsedFuelDriverNames = fn
+      ? () => {
+          fn();
+          return 0;
+        }
+      : defaultFuelImportPostSaveSteps.applyParsedFuelDriverNames;
+    return;
+  }
+  if (step === "rematchUnmatchedFuelTransactions") {
+    fuelImportPostSaveSteps.rematchUnmatchedFuelTransactions = fn
+      ? () => {
+          fn();
+          return 0;
+        }
+      : defaultFuelImportPostSaveSteps.rematchUnmatchedFuelTransactions;
+    return;
+  }
+  fuelImportPostSaveSteps.autoMatchPendingFuelReceipts = fn
+    ? () => {
+        fn();
+        return { matched: 0 };
+      }
+    : defaultFuelImportPostSaveSteps.autoMatchPendingFuelReceipts;
+}
+
+function fuelImportFollowUpWarning(error: unknown): string {
+  const detail =
+    error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : "Fuel import follow-up failed.";
+  return `Saved, but a follow-up step failed: ${detail}`;
+}
+
 export function importFuelFromText(
   text: string,
   sourceFile: string,
-): { created: number; skipped: number; unmatched: number; errors: FuelCsvRowError[] } {
+): {
+  created: number;
+  skipped: number;
+  unmatched: number;
+  errors: FuelCsvRowError[];
+  warning?: string;
+} {
   storeFuelImportSource(sourceFile, text);
   const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
@@ -373,10 +426,16 @@ export function importFuelFromText(
       else unmatched += 1;
     }
   })();
-  applyParsedFuelDriverNames(parsed.rows);
-  rematchUnmatchedFuelTransactions();
-  autoMatchPendingFuelReceipts();
-  return { created, skipped, unmatched, errors: parsed.errors };
+  let warning: string | undefined;
+  try {
+    fuelImportPostSaveSteps.applyParsedFuelDriverNames(parsed.rows);
+    fuelImportPostSaveSteps.rematchUnmatchedFuelTransactions();
+    fuelImportPostSaveSteps.autoMatchPendingFuelReceipts();
+  } catch (error) {
+    console.error("Fuel import saved, but a follow-up step failed.", error);
+    warning = fuelImportFollowUpWarning(error);
+  }
+  return { created, skipped, unmatched, errors: parsed.errors, ...(warning ? { warning } : {}) };
 }
 
 export function importFuelFromCsv(text: string, sourceFile: string) {

@@ -27,6 +27,9 @@ export type Statement = {
 
 type BoundValue = string | number | bigint | null | Uint8Array;
 
+/** Wait this long for a brief lock (Litestream checkpoint) before SQLITE_BUSY. */
+export const SQLITE_BUSY_TIMEOUT_MS = 5000;
+
 function jsonSafe(value: unknown): unknown {
   if (typeof value === "bigint") return Number(value);
   return value;
@@ -59,7 +62,10 @@ export class Database {
   constructor(filename: string) {
     this.#db = new DatabaseSync(filename, {
       enableForeignKeyConstraints: true,
+      // Honored on Node 22.16+. Earlier 22.x ignores it and leaves busy_timeout at 0.
+      timeout: SQLITE_BUSY_TIMEOUT_MS,
     });
+    this.#db.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   }
 
   exec(sql: string): void {

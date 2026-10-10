@@ -11,7 +11,7 @@ Auth (either):
 - Office dispatcher session cookie (`tms_dispatcher_id`) with Administrator or Standard (`canUploadFuel`)
 - `Authorization: Bearer $TMS_FUEL_IMPORT_TOKEN` when that env is set (staging bot)
 
-Response: `{ ok, created, skipped, unmatched, errors }` or `{ ok: false, error }`.
+Response: `{ ok, created, skipped, unmatched, errors }` or `{ ok: false, error }`. A follow-up step that fails after the rows are saved still returns 200 and adds `warning`.
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/fuel/import \
