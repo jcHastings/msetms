@@ -106,6 +106,8 @@ export type FuelImportResult = {
   skipped?: number;
   unmatched?: number;
   errors?: FuelCsvRowError[];
+  /** Set when rows were saved but a follow-up step failed. The import still succeeded. */
+  warning?: string;
 };
 
 /** Sheet / FleetOne already named a driver — Unassigned is only for blank rows. */
