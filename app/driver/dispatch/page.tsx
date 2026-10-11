@@ -7,6 +7,7 @@ import { getDemoReeferForLoad, readStoredReeferSnapshots, snapshotToReading } fr
 import { archiveCutoff } from "@/lib/working-loads";
 import { isArchivedLoad } from "@/lib/working-loads-shared";
 import { listLoadsForDriver } from "@/lib/queries";
+import { driverSwapLegView } from "@/lib/driver-leg";
 import { relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { DriverAckState } from "@/components/driver-got-it";
@@ -66,16 +67,40 @@ export default async function DriverDispatchPage() {
                           Dispatch asked for documents
                         </div>
                       ) : null}
-                      <div className="mt-2 text-lg font-medium text-white">
-                        {load.origin} → {load.destination}
-                      </div>
                       {(() => {
                         const leg = relayForDriver(load.id, driver.id);
-                        return leg ? (
-                          <div className="mt-1 text-sm font-medium text-slate-300">
-                            Your leg: {formatRelayLane(leg.pickup, leg.delivery)}
-                          </div>
-                        ) : null;
+                        const swapLeg = driverSwapLegView({
+                          driverId: driver.id,
+                          origin: load.origin,
+                          destination: load.destination,
+                          trailerNumber: load.trailer_number || load.trailer_unit || "",
+                          truckUnit: load.truck_unit || "",
+                          relay: leg,
+                        });
+                        if (swapLeg) {
+                          return (
+                            <div className="mt-2 text-lg font-medium text-white">
+                              {swapLeg.lane}
+                              <div className="mt-1 text-sm font-medium text-slate-300">
+                                Swap {swapLeg.swapPoint}
+                                {swapLeg.swapAt ? ` · ${formatDateTime(swapLeg.swapAt)}` : ""}
+                                {swapLeg.trailer ? ` · Trailer ${swapLeg.trailer}` : ""}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <>
+                            <div className="mt-2 text-lg font-medium text-white">
+                              {load.origin} → {load.destination}
+                            </div>
+                            {leg ? (
+                              <div className="mt-1 text-sm font-medium text-slate-300">
+                                Your leg: {formatRelayLane(leg.pickup, leg.delivery)}
+                              </div>
+                            ) : null}
+                          </>
+                        );
                       })()}
                       <div className="mt-2 text-sm text-slate-400">{load.customer_name}</div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-300">
@@ -134,9 +159,21 @@ export default async function DriverDispatchPage() {
                       <div className="font-mono text-lg font-semibold text-white">{load.load_number}</div>
                       <LoadStatusBadge status={load.status} />
                     </div>
-                    <div className="mt-2 text-lg font-medium text-white">
-                      {load.origin} → {load.destination}
-                    </div>
+                    {(() => {
+                      const swapLeg = driverSwapLegView({
+                        driverId: driver.id,
+                        origin: load.origin,
+                        destination: load.destination,
+                        trailerNumber: load.trailer_number || load.trailer_unit || "",
+                        truckUnit: load.truck_unit || "",
+                        relay: relayForDriver(load.id, driver.id),
+                      });
+                      return (
+                        <div className="mt-2 text-lg font-medium text-white">
+                          {swapLeg?.lane || `${load.origin} → ${load.destination}`}
+                        </div>
+                      );
+                    })()}
                     <div className="mt-2 text-sm text-slate-400">{load.customer_name}</div>
                   </Link>
                 </li>

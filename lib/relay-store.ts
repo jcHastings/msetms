@@ -390,6 +390,7 @@ export function addRelay(loadId: number, input: RelayInput): number {
 export function updateRelay(id: number, input: RelayInput): void {
   const existing = getRelay(id);
   if (!existing) throw new Error("Relay is missing.");
+  if (existing.swap_id) throw new Error("Edit the swap on the load. This handoff is linked to another load.");
   const { pickup, delivery } = resolveRelayPlaces(existing.load_id, input, existing.pickup);
   const pin = resolveRelayPin(input, existing);
   const { fromDriverId, driverId } = resolveRelayDrivers(input, existing.load_id);
@@ -455,6 +456,7 @@ export function updateRelay(id: number, input: RelayInput): void {
 export function updateRelayAssignment(id: number, patch: RelayAssignmentPatch): void {
   const existing = getRelay(id);
   if (!existing) throw new Error("Relay is missing.");
+  if (existing.swap_id) throw new Error("Edit the swap on the load. This handoff is linked to another load.");
   const next = {
     from_driver_id: patch.from_driver_id !== undefined ? optionalId(patch.from_driver_id) : existing.from_driver_id,
     from_truck_id: patch.from_truck_id !== undefined ? optionalId(patch.from_truck_id) : existing.from_truck_id,
@@ -499,6 +501,7 @@ export function updateRelayAssignment(id: number, patch: RelayAssignmentPatch): 
 export function deleteRelay(id: number): void {
   const existing = getRelay(id);
   if (!existing) throw new Error("Relay is missing.");
+  if (existing.swap_id) throw new Error("Remove the swap. This handoff is linked to another load.");
   getDb().prepare("DELETE FROM load_relays WHERE id = ?").run(id);
   resequence(existing.load_id);
   recordLoadAudit({

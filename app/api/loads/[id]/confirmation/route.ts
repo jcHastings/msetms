@@ -22,13 +22,15 @@ export async function GET(
 
   const wantInternal = new URL(request.url).searchParams.get("packet") === "internal";
   const packet = dispatcher && !wantInternal ? "customer" : "internal";
-  const driverId = Number.parseInt(new URL(request.url).searchParams.get("driver") ?? "", 10);
+  const requestedDriver = Number.parseInt(new URL(request.url).searchParams.get("driver") ?? "", 10);
+  // A signed-in driver always gets their own leg. Dispatch can still pass ?driver=.
+  const driverId = driver ? driver.id : Number.isFinite(requestedDriver) ? requestedDriver : undefined;
   // Single-tenant local desk: leftover driver-app cookies must not 404 a
   // dispatcher download for a load they just created (often still unassigned).
   try {
     const model = buildConfirmationForLoad(load.id, {
       packet,
-      driverId: Number.isFinite(driverId) ? driverId : undefined,
+      driverId,
     });
     const pdf = await renderConfirmationPdf(model);
     const suffix = packet === "internal" ? "-driver-packet" : "-customer-confirmation";
