@@ -12,6 +12,7 @@ import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
 import { LoadPayItems } from "@/components/load-pay-items";
 import { LoadRelaysPanel } from "@/components/load-relays-panel";
+import { LoadSwapPanel } from "@/components/load-swap-panel";
 import { LoadRoutingGuide } from "@/components/load-routing-guide";
 import { LoadStopsMap } from "@/components/load-stops-map";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
@@ -50,7 +51,7 @@ import { latestLoadShareLink, loadSharePath } from "@/lib/load-share";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
-import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
+import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials, isAdminRole } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured, loadRuntimeEnv } from "@/lib/env";
 import { listExceptionInbox, loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
@@ -75,6 +76,7 @@ import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { mapsBrowserKey } from "@/lib/load-map";
 import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks, locationsForIds } from "@/lib/queries";
+import { getLoadSwap } from "@/lib/load-swap";
 import { listRelays } from "@/lib/relay-store";
 import { invoiceIssuerProblems, invoiceIssuerWarning } from "@/lib/carrier-identity";
 import { equipmentOptions, getCompanySettings, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
@@ -281,6 +283,15 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="assets">
+          <LoadSwapPanel
+            loadId={load.id}
+            loadNumber={load.load_number}
+            swap={getLoadSwap(load.id)}
+            canOverrideMiles={isAdminRole(role)}
+            locations={locations}
+            mapsApiKey={mapsBrowserKey()}
+            readOnly={readOnly}
+          />
           <LoadRelaysPanel
             loadId={load.id}
             relays={relays}

@@ -14,6 +14,7 @@ import { resolveLoadCustomerPhoneLine } from "./load-contact";
 import { getCustomer, getLoad, getLocation, getTrailer, listLocations } from "./queries";
 import { listStops, stopTypeNumber, type LoadStop } from "./stops";
 import { locationRuleLabels } from "./location-rules-shared";
+import { driverSwapLegView, type DriverLegView } from "./driver-leg";
 import { formatInternalRelayLines, formatRelayLane } from "./relays";
 import { listRelays, relayForDriver } from "./relay-store";
 import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./reefer-shared";
@@ -89,6 +90,8 @@ export type ConfirmationModel = {
   reeferSetpoint: string;
   reeferMode: string;
   locale?: DriverMessageLocale;
+  /** Driver packet for a swap leg. Hides rates, percents, and the other driver's lane. */
+  hidePay?: boolean;
 };
 
 const BLOCKED_CONTACT_NAME =
@@ -656,6 +659,46 @@ export function buildConfirmationModel(
   };
 }
 
+function swapMeetStop(base: ConfirmationStop, swap: DriverLegView): ConfirmationStop {
+  return {
+    ...base,
+    title: "Swap",
+    name: swap.swapPoint,
+    address: swap.swapPoint,
+    phone: "",
+    date: swap.swapAt,
+    hoursLabel: "",
+    hours: "",
+    appointment: swap.swapAt,
+    extra: "",
+    description: "",
+    poNumber: "",
+    confirmationNumber: "",
+    puNumber: "",
+  };
+}
+
+/** A driver's confirmation shows their lane, the meet, and their trailer. Rates stay off the page. */
+function applyDriverSwapLeg(model: ConfirmationModel, swap: DriverLegView): ConfirmationModel {
+  const meet = swapMeetStop(model.shipper, swap);
+  const ownStops = model.stops.filter((stop) =>
+    swap.role === "pickup" ? /^Shipper\b/i.test(stop.title) : /^Consignee\b/i.test(stop.title),
+  );
+  const stops = swap.role === "pickup" ? [...ownStops, meet] : [meet, ...ownStops];
+  return {
+    ...model,
+    hidePay: true,
+    agreedAmount: null,
+    customerRate: null,
+    customerRateLines: [],
+    trailerNumber: swap.trailer || model.trailerNumber,
+    truckNumber: swap.truck || model.truckNumber,
+    shipper: swap.role === "pickup" ? model.shipper : meet,
+    consignee: swap.role === "pickup" ? meet : model.consignee,
+    stops: stops.length ? stops : [swap.role === "pickup" ? model.shipper : model.consignee],
+  };
+}
+
 export function buildConfirmationForLoad(
   loadId: number,
   options: { packet?: "customer" | "internal"; driverId?: number; locale?: DriverMessageLocale } = {},
@@ -668,27 +711,48 @@ export function buildConfirmationForLoad(
   if (packet !== "internal") return { ...model, locale: "en" };
   const relays = listRelays(load.id);
   const yours = options.driverId ? relayForDriver(load.id, options.driverId) : null;
-  const lines = [
-    yours
-      ? locale === "es"
-        ? `Su tramo: ${formatRelayLane(yours.pickup, yours.delivery)}`
-        : `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}`
-      : "",
-    formatInternalRelayLines(relays),
-  ].filter(Boolean);
+  const swapLeg = options.driverId
+    ? driverSwapLegView({
+        driverId: options.driverId,
+        origin: load.origin,
+        destination: load.destination,
+        trailerNumber: load.trailer_number || load.trailer_unit || "",
+        truckUnit: load.truck_unit || "",
+        relay: yours,
+      })
+    : null;
+  const scoped = swapLeg ? applyDriverSwapLeg(model, swapLeg) : model;
+  const lines = swapLeg
+    ? [
+        locale === "es" ? `Su tramo: ${swapLeg.lane}` : `Your leg: ${swapLeg.lane}`,
+        swapLeg.swapPoint
+          ? locale === "es"
+            ? `Intercambio: ${swapLeg.swapPoint}${swapLeg.swapAt ? ` · ${swapLeg.swapAt}` : ""}`
+            : `Swap: ${swapLeg.swapPoint}${swapLeg.swapAt ? ` · ${swapLeg.swapAt}` : ""}`
+          : "",
+        swapLeg.trailer ? (locale === "es" ? `Remolque: ${swapLeg.trailer}` : `Trailer: ${swapLeg.trailer}`) : "",
+      ].filter(Boolean)
+    : [
+        yours
+          ? locale === "es"
+            ? `Su tramo: ${formatRelayLane(yours.pickup, yours.delivery)}`
+            : `Your leg: ${formatRelayLane(yours.pickup, yours.delivery)}`
+          : "",
+        formatInternalRelayLines(relays),
+      ].filter(Boolean);
   if (locale === "es") {
     const translateTitle = (title: string) =>
       title.replace(/\bShipper\b/g, "Remitente").replace(/\bConsignee\b/g, "Consignatario");
     return {
-      ...model,
+      ...scoped,
       locale,
       internalLegs: lines.join("\n"),
-      shipper: { ...model.shipper, title: translateTitle(model.shipper.title) },
-      consignee: { ...model.consignee, title: translateTitle(model.consignee.title) },
-      stops: model.stops.map((stop) => ({ ...stop, title: translateTitle(stop.title) })),
+      shipper: { ...scoped.shipper, title: translateTitle(scoped.shipper.title) },
+      consignee: { ...scoped.consignee, title: translateTitle(scoped.consignee.title) },
+      stops: scoped.stops.map((stop) => ({ ...stop, title: translateTitle(stop.title) })),
     };
   }
-  return { ...model, internalLegs: lines.join("\n"), locale };
+  return { ...scoped, internalLegs: lines.join("\n"), locale };
 }
 
 export function applyBlindConfirmation(model: ConfirmationModel): ConfirmationModel {
@@ -886,12 +950,15 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
       y = drawPartyRow(doc, left, y + 6, width, [["Equipment", model.equipment]]);
     }
   } else if (model.style === "owner_operator") {
-    y = drawPartyRow(doc, left, y, width, [
+    const party: Array<[string, string]> = [
       [confirmLabel(model, "Carrier", "Transportista"), model.carrierName],
       [confirmLabel(model, "Phone #", "Teléfono"), model.carrierPhone],
       [confirmLabel(model, "Equipment", "Equipo"), model.equipment],
-      [confirmLabel(model, "Agreed Amount", "Monto acordado"), formatUsd(model.agreedAmount)],
-    ]);
+    ];
+    if (!model.hidePay) {
+      party.push([confirmLabel(model, "Agreed Amount", "Monto acordado"), formatUsd(model.agreedAmount)]);
+    }
+    y = drawPartyRow(doc, left, y, width, party);
   } else {
     y = drawPartyRow(doc, left, y, width, [
       [confirmLabel(model, "Driver", "Conductor"), model.driverName],
@@ -933,7 +1000,7 @@ function drawConfirmation(doc: PDFKit.PDFDocument, model: ConfirmationModel): vo
     y = drawFlowingText(doc, model.internalLegs, left, y, width, pageLimit, addContentPage) + 8;
   }
 
-  if (model.packet === "internal" && model.style === "owner_operator") {
+  if (model.packet === "internal" && model.style === "owner_operator" && !model.hidePay) {
     ensureSpace(72);
     doc.font("Helvetica-Bold").fontSize(11).fillColor(INK).text("Carrier Pay:", left, y, { lineBreak: false });
     y += 16;

@@ -15,6 +15,7 @@ export type LoadPayItem = {
   notes: string;
   created_at: string;
   paid_at?: string;
+  leg?: string;
 };
 
 export function listPayItems(loadId: number, side?: PayItemSide): LoadPayItem[] {
@@ -39,6 +40,7 @@ export function addPayItem(
     qty: number | null;
     total: number | null;
     notes: string;
+    leg?: string;
   },
 ): number {
   const load = getDb().prepare("SELECT id FROM loads WHERE id = ?").get(loadId) as { id: number } | undefined;
@@ -52,8 +54,8 @@ export function addPayItem(
   const result = getDb()
     .prepare(
       `INSERT INTO load_pay_items (
-        load_id, side, bill_to, payee, category, rate, qty, total, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        load_id, side, bill_to, payee, category, rate, qty, total, notes, leg, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       loadId,
@@ -65,6 +67,7 @@ export function addPayItem(
       qty,
       total,
       input.notes.trim(),
+      normalizePayLeg(input.leg),
       new Date().toISOString(),
     );
   syncCustomerRateFromPayItems(loadId);
@@ -98,6 +101,13 @@ export const INVOICE_INCLUDES_LUMPER = true;
 /** Customer income lines that belong on the customer invoice (TMS PDF and QuickBooks use the same rule). */
 export function customerInvoiceBillableItems(loadId: number): LoadPayItem[] {
   return customerInvoicePayItems(loadId).filter((item) => INVOICE_INCLUDES_LUMPER || item.category !== "lumper");
+}
+
+export function normalizePayLeg(value: string | null | undefined): "" | "pickup" | "delivery" {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "pickup" || raw === "1" || raw === "from") return "pickup";
+  if (raw === "delivery" || raw === "2" || raw === "to") return "delivery";
+  return "";
 }
 
 function roundMoney(value: number): number {

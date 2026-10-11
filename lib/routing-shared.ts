@@ -118,6 +118,84 @@ function segmentChordMiles(a: RouteLatLng, b: RouteLatLng): number {
   return 3958.8 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+/** Miles from the saved route to the nearest point. Farther than this is off the loaded route. */
+export const SWAP_OFF_ROUTE_MILES = 5;
+
+export type RouteSplitAtPoint = {
+  fromMiles: number;
+  toMiles: number;
+  fromPoints: RouteLatLng[];
+  toPoints: RouteLatLng[];
+  offsetMiles: number;
+  offRoute: boolean;
+};
+
+function projectOntoSegment(
+  a: RouteLatLng,
+  b: RouteLatLng,
+  target: RouteLatLng,
+): { point: RouteLatLng; fraction: number } {
+  const abLat = b.lat - a.lat;
+  const abLng = b.lng - a.lng;
+  const denom = abLat * abLat + abLng * abLng;
+  if (denom <= 0) return { point: a, fraction: 0 };
+  const raw = ((target.lat - a.lat) * abLat + (target.lng - a.lng) * abLng) / denom;
+  const fraction = Math.max(0, Math.min(1, raw));
+  return {
+    point: { lat: a.lat + abLat * fraction, lng: a.lng + abLng * fraction },
+    fraction,
+  };
+}
+
+function roundRouteMile(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Split a saved driving polyline at the point nearest the swap.
+ * Distances scale to the stored loaded miles. The offset to a point off the line is not added.
+ */
+export function splitRouteAtPoint(
+  points: RouteLatLng[],
+  target: RouteLatLng,
+  totalMiles: number,
+): RouteSplitAtPoint | null {
+  if (points.length < 2 || !(totalMiles > 0) || !Number.isFinite(target.lat) || !Number.isFinite(target.lng)) {
+    return null;
+  }
+  let chord = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestAlong = 0;
+  let bestPoint = points[0];
+  let bestIndex = 1;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const length = segmentChordMiles(start, end);
+    const projected = projectOntoSegment(start, end, target);
+    const distance = segmentChordMiles(projected.point, target);
+    const along = chord + projected.fraction * length;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestAlong = along;
+      bestPoint = projected.point;
+      bestIndex = index;
+    }
+    chord += length;
+  }
+  if (!(chord > 0)) return null;
+  const fromMiles = roundRouteMile(totalMiles * (bestAlong / chord));
+  const toMiles = roundRouteMile(Math.max(0, totalMiles - fromMiles));
+  return {
+    fromMiles,
+    toMiles,
+    fromPoints: [...points.slice(0, bestIndex), bestPoint],
+    toPoints: [bestPoint, ...points.slice(bestIndex)],
+    offsetMiles: roundRouteMile(bestDistance),
+    offRoute: bestDistance > SWAP_OFF_ROUTE_MILES,
+  };
+}
+
 /**
  * Walk a Google Directions polyline and assign each step to the state that point is in.
  * Scales to the official driving total. A 2–3 point air hop across states returns [].
