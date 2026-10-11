@@ -25,7 +25,7 @@ export function SettlementDocument({
   deductionEditor?: ReactNode;
   removeOneOff?: (id: number) => ReactNode;
 }) {
-  const showPercent = statement.driverKind === "owner_operator";
+  const showPercent = variant !== "driver" && statement.driverKind === "owner_operator";
   const sheetClass = variant === "driver" ? "statement-sheet driver-sheet" : "statement-sheet card";
   return (
     <article className={sheetClass} data-settlement-statement="" aria-labelledby="statement-title">
@@ -86,8 +86,11 @@ export function SettlementDocument({
           <>
           <ul className="statement-loads-cards">
             {statement.loads.map((line) => (
-              <li key={line.loadId} className="statement-load-card">
-                <p className="statement-load-id">{line.loadNumber}</p>
+              <li key={`${line.loadId}-${line.leg || "load"}`} className="statement-load-card">
+                <p className="statement-load-id">
+                  {line.loadNumber}
+                  {line.legLabel ? ` · ${line.legLabel}` : ""}
+                </p>
                 <p className="statement-load-lane">{line.lane}</p>
                 <dl>
                   <div>
@@ -104,7 +107,7 @@ export function SettlementDocument({
                     <dt>Linehaul</dt>
                     <dd>
                       {line.linehaul == null ? "—" : formatStatementMoney(line.linehaul)}
-                      <span className="statement-basis">{line.basis}</span>
+                      {variant !== "driver" ? <span className="statement-basis">{line.basis}</span> : null}
                     </dd>
                   </div>
                   {showPercent ? (
@@ -131,8 +134,11 @@ export function SettlementDocument({
               </thead>
               <tbody>
                 {statement.loads.map((line) => (
-                  <tr key={line.loadId}>
-                    <th scope="row">{line.loadNumber}</th>
+                  <tr key={`${line.loadId}-${line.leg || "load"}`}>
+                    <th scope="row">
+                      {line.loadNumber}
+                      {line.legLabel ? ` · ${line.legLabel}` : ""}
+                    </th>
                     <td>{line.lane}</td>
                     <td>
                       {formatMdYDisplay(line.pickup)} – {formatMdYDisplay(line.delivery)}
@@ -140,7 +146,7 @@ export function SettlementDocument({
                     <td>{milesLabel(line.miles)}</td>
                     <td>
                       {line.linehaul == null ? "—" : formatStatementMoney(line.linehaul)}
-                      <span className="statement-basis">{line.basis}</span>
+                      {variant !== "driver" ? <span className="statement-basis">{line.basis}</span> : null}
                     </td>
                     {showPercent ? <td>{percentLabel(line.ooPercent)}</td> : null}
                   </tr>

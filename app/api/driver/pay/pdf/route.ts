@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if (!statement) return new Response("Not found", { status: 404 });
   let pdf: Buffer;
   try {
-    pdf = await renderSettlementPdf(statement);
+    pdf = await renderSettlementPdf(statement, "driver");
   } catch (error) {
     if (error instanceof StatementIdentityError) {
       return new Response(error.message, { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });

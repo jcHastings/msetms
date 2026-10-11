@@ -41,6 +41,7 @@ import {
   canEmailInvoice,
   canLogCheckCall,
   canSendSms,
+  isAdminRole,
 } from "./settings-shared";
 import {
   composeSignInCodeEmail,
@@ -67,6 +68,13 @@ import {
 import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
 import { markPayItemPaid } from "./pay-items";
 import { createClaim, setExceptionState, setHandoffNote, writeAudit } from "./desk";
+import {
+  createLoadSwap,
+  deleteLoadSwap,
+  findSwapPartnerId,
+  previewLoadSwap,
+  setSwapLegMiles,
+} from "./load-swap";
 import { refreshRelayLegMilesQuiet } from "./relay-routing";
 import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay, updateRelayAssignment } from "./relay-store";
 import type { RelayAssignmentPatch } from "./relays";
@@ -454,6 +462,118 @@ export async function moveRelayAction(formData: FormData): Promise<void> {
     if (!id || (direction !== 1 && direction !== -1)) throw new Error("Relay is missing.");
     moveRelay(id, direction);
     refresh();
+  });
+}
+
+function parseSwapPoint(formData: FormData) {
+  const coords = parseCoordPair(formData.get("swap_lat"), formData.get("swap_lng"));
+  return {
+    address: requiredString(formData.get("swap_address") ?? formData.get("handoff"), "Swap point"),
+    lat: coords.lat,
+    lng: coords.lng,
+    placeId: String(formData.get("swap_place_id") ?? "").trim() || null,
+    locationId: parseOptionalInt(formData.get("location_id")),
+  };
+}
+
+export type SwapPreviewResult =
+  | {
+      ok: true;
+      loads: Array<{
+        loadNumber: string;
+        fromMiles: number | null;
+        toMiles: number | null;
+        source: string;
+        offRoute: boolean;
+      }>;
+    }
+  | { ok: false; error: string };
+
+export async function previewLoadSwapAction(formData: FormData): Promise<SwapPreviewResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const otherId = findSwapPartnerId(loadId, String(formData.get("other_load_number") ?? ""));
+      const preview = await previewLoadSwap({ loadAId: loadId, loadBId: otherId, point: parseSwapPoint(formData) });
+      return {
+        ok: true,
+        loads: [preview.loadA, preview.loadB].map((row) => ({
+          loadNumber: row.loadNumber,
+          fromMiles: row.fromMiles,
+          toMiles: row.toMiles,
+          source: row.source,
+          offRoute: row.offRoute,
+        })),
+      };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+    }
+  });
+}
+
+export async function createLoadSwapAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const actor = await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const otherId = findSwapPartnerId(loadId, String(formData.get("other_load_number") ?? ""));
+      const swapAtRaw = String(formData.get("swap_at") ?? "").trim();
+      if (!swapAtRaw) throw new Error("Enter the swap date and time.");
+      await createLoadSwap({
+        loadAId: loadId,
+        loadBId: otherId,
+        point: parseSwapPoint(formData),
+        swapAt: fromOfficeDateTime(swapAtRaw),
+        notes: String(formData.get("notes") ?? "").trim(),
+        createdBy: actor.name,
+        detentionLegA: String(formData.get("detention_leg_a") ?? ""),
+        detentionLegB: String(formData.get("detention_leg_b") ?? ""),
+      });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
+}
+
+export async function deleteLoadSwapAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const swapId = parseOptionalInt(formData.get("swap_id"));
+      if (!swapId) throw new Error("Swap is missing.");
+      deleteLoadSwap(swapId);
+      refresh();
+      return { ok: true, id: swapId };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
+}
+
+export async function overrideSwapMilesAction(formData: FormData): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const actor = await requireLoadEditor();
+      if (!isAdminRole(actor.role)) throw new Error("Only an administrator can override leg miles.");
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const fromMiles = parseOptionalFloat(formData.get("from_miles"));
+      const toMiles = parseOptionalFloat(formData.get("to_miles"));
+      if (!loadId || fromMiles == null || toMiles == null) throw new Error("Enter loaded miles for both legs.");
+      setSwapLegMiles({ loadId, fromMiles, toMiles, role: actor.role });
+      refresh();
+      return { ok: true, id: loadId };
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
   });
 }
 

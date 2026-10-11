@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { truckLegsForLoad, type TruckLegMiles } from "./load-swap";
 import { extractStateCode } from "./locations";
 import { getDriver, getTruck } from "./queries";
 import {
@@ -57,6 +58,7 @@ export type IftaQuarterEstimate = {
   waypoints: IftaWaypointReview[];
   drivers: IftaAssetMiles[];
   trucks: IftaAssetMiles[];
+  truckLegs: TruckLegMiles[];
   fuelGallons: number;
   fuelAmount: number;
   loadedMiles: number;
@@ -103,6 +105,17 @@ export function listIftaQuarterChoices(now = new Date()): IftaQuarter[] {
     }
   }
   return choices;
+}
+
+function mergeStateMiles(rows: RouteStateMile[]): RouteStateMile[] {
+  const map = new Map<string, RouteStateMile>();
+  for (const row of rows) {
+    const current = map.get(row.state) ?? { state: row.state, name: row.name, miles: 0 };
+    current.miles = Math.round((current.miles + row.miles) * 10) / 10;
+    if (!current.name) current.name = row.name;
+    map.set(row.state, current);
+  }
+  return [...map.values()];
 }
 
 function addAssetMiles(
@@ -191,6 +204,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
   const waypoints: IftaWaypointReview[] = [];
   const drivers = new Map<number, IftaAssetMiles>();
   const trucks = new Map<number, IftaAssetMiles>();
+  const truckLegs: TruckLegMiles[] = [];
   let loadsWithMiles = 0;
   let loadsWithoutMiles = 0;
   let loadedMiles = 0;
@@ -202,24 +216,33 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     const emptyStates = emptyStateMilesFromLoad(load);
     const loaded = guide.totalMiles ?? (loadedStates.length ? loadedStates.reduce((sum, row) => sum + row.miles, 0) : 0);
     const empty = officialEmptyMiles(load.empty_miles, load.empty_source) ?? 0;
-    if (loadedStates.length === 0 && empty <= 0 && loaded <= 0) {
+    const swapLegs = truckLegsForLoad(load.id);
+    if (!swapLegs && loadedStates.length === 0 && empty <= 0 && loaded <= 0) {
+      loadsWithoutMiles += 1;
+      continue;
+    }
+    const countedLoaded = swapLegs ? swapLegs.reduce((sum, leg) => sum + leg.miles, 0) : loaded;
+    const countedStates = swapLegs?.some((leg) => leg.states.length)
+      ? mergeStateMiles(swapLegs.flatMap((leg) => leg.states))
+      : loadedStates;
+    if (swapLegs && countedLoaded <= 0 && empty <= 0 && countedStates.length === 0) {
       loadsWithoutMiles += 1;
       continue;
     }
     loadsWithMiles += 1;
-    loadedMiles += loaded;
+    loadedMiles += countedLoaded;
     emptyMiles += empty;
     waypoints.push({
       loadId: load.id,
       loadNumber: load.load_number,
       lane: `${load.origin} → ${load.destination}`,
       emptyLane: load.empty_from && load.empty_to ? `${load.empty_from} → ${load.empty_to}` : "",
-      loaded: Math.round(loaded * 10) / 10,
+      loaded: Math.round(countedLoaded * 10) / 10,
       empty: Math.round(empty * 10) / 10,
-      states: loadedStates,
+      states: countedStates,
       emptyStates,
     });
-    for (const row of loadedStates) {
+    for (const row of countedStates) {
       const current = mileMap.get(row.state) ?? {
         state: row.state,
         name: row.name,
@@ -246,8 +269,21 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
       if (!current.name) current.name = row.name;
       mileMap.set(row.state, current);
     }
-    addAssetMiles(drivers, load.driver_id, getDriver(load.driver_id ?? 0)?.name ?? "Unassigned", loaded, empty);
-    addAssetMiles(trucks, load.truck_id, getTruck(load.truck_id ?? 0)?.unit_number ?? "Unassigned", loaded, empty);
+    if (swapLegs) {
+      for (const leg of swapLegs) {
+        truckLegs.push(leg);
+        addAssetMiles(drivers, leg.driverId, getDriver(leg.driverId ?? 0)?.name ?? "Unassigned", leg.miles, 0);
+        addAssetMiles(trucks, leg.truckId, getTruck(leg.truckId ?? 0)?.unit_number ?? "Unassigned", leg.miles, 0);
+      }
+      const pickup = swapLegs.find((leg) => leg.leg === "1") ?? swapLegs[0];
+      if (pickup && empty > 0) {
+        addAssetMiles(drivers, pickup.driverId, getDriver(pickup.driverId ?? 0)?.name ?? "Unassigned", 0, empty);
+        addAssetMiles(trucks, pickup.truckId, getTruck(pickup.truckId ?? 0)?.unit_number ?? "Unassigned", 0, empty);
+      }
+    } else {
+      addAssetMiles(drivers, load.driver_id, getDriver(load.driver_id ?? 0)?.name ?? "Unassigned", loaded, empty);
+      addAssetMiles(trucks, load.truck_id, getTruck(load.truck_id ?? 0)?.unit_number ?? "Unassigned", loaded, empty);
+    }
   }
 
   const fuelByState = [...fuelMap.values()].sort((a, b) => a.state.localeCompare(b.state));
@@ -270,6 +306,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     waypoints,
     drivers: finishAssets(drivers),
     trucks: finishAssets(trucks),
+    truckLegs,
     fuelGallons: Math.round(fuelByState.reduce((sum, row) => sum + row.gallons, 0) * 1000) / 1000,
     fuelAmount: Math.round(fuelByState.reduce((sum, row) => sum + row.amount, 0) * 100) / 100,
     loadedMiles: Math.round(loadedMiles * 10) / 10,
