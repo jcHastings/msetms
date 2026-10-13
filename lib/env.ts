@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse } from "dotenv";
 import { MAIL_FROM_DEFAULT } from "./mail-shared";
+import { GROSS_TRUCKING_INCOME, normalizeMatchName } from "./qbo-production-map";
 import { samsaraAddressTagIds } from "./samsara-address-shared";
 
 function existsInDir(dir: string, name: string): boolean {
@@ -353,14 +354,29 @@ export function getQuickbooksBillExpenseAccountId(): string | undefined {
   return readSecret("QBO_BILL_EXPENSE_ACCOUNT_ID");
 }
 
+export type DetentionIncomeSetting = {
+  id: string;
+  name: string;
+  /**
+   * Unset, blank, or Gross Trucking Income: post detention on the Line Haul item.
+   * Any other value selects the Detention item, and only when that account is income.
+   */
+  useLineHaul: boolean;
+};
+
 /**
- * Detention's income account. A numeric value is a QuickBooks account id. Anything else is the
- * fully qualified name. Blank uses "Detention Income".
+ * Where detention posts.
+ * Unset, blank, or "Gross Trucking Income" uses the Line Haul item on Gross Trucking Income.
+ * Any other value is an account id or a fully qualified name. That account must already be income,
+ * and the Detention item must sit on it. A non-income account is refused.
  */
-export function getQuickbooksDetentionIncomeAccount(): { id: string; name: string } {
-  const value = (readSecret("QBO_DETENTION_INCOME_ACCOUNT") ?? "").trim() || "Detention Income";
-  if (/^\d+$/.test(value)) return { id: value, name: "" };
-  return { id: "", name: value };
+export function getQuickbooksDetentionIncomeAccount(): DetentionIncomeSetting {
+  const value = (readSecret("QBO_DETENTION_INCOME_ACCOUNT") ?? "").trim();
+  if (!value || normalizeMatchName(value) === normalizeMatchName(GROSS_TRUCKING_INCOME)) {
+    return { id: "", name: GROSS_TRUCKING_INCOME, useLineHaul: true };
+  }
+  if (/^\d+$/.test(value)) return { id: value, name: "", useLineHaul: false };
+  return { id: "", name: value, useLineHaul: false };
 }
 
 /**

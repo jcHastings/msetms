@@ -25,15 +25,18 @@ import { labelForPayCategory } from "../load-page-shared";
 import {
   accountProblem,
   billAccountName,
+  customerUnmatchedMessage,
   DEFAULT_LOAD_PAY_ACCOUNT,
   forbiddenAccountMessage,
   GROSS_TRUCKING_INCOME,
   INVOICE_RULES,
   itemMissingMessage,
+  LINE_HAUL_ITEM,
   MANAGEMENT_GROUP_CUSTOMER_ID,
   MANAGEMENT_GROUP_MESSAGE,
   MS_EXPRESS_CUSTOMER_ID,
   MS_EXPRESS_CUSTOMER_MESSAGE,
+  normalizeMatchName,
   NOT_BILLED_ON_INVOICE,
   notBilledMessage,
   type BillSplitLine,
@@ -49,7 +52,14 @@ const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const QBO_SCOPE = "com.intuit.quickbooks.accounting";
-const LINE_HAUL_ITEM_NAME = "Line Haul";
+const LINE_HAUL_ITEM_NAME = LINE_HAUL_ITEM;
+/** Own QuickBooks lines that share the Line Haul item. The description keeps this wording. */
+const QBO_LINE_LABEL: Record<string, string> = {
+  detention: "Detention",
+  fuel_surcharge: "Fuel surcharge",
+  layover: "Layover",
+  tonu: "TONU",
+};
 /** QuickBooks CustomerMemo limit. */
 export const QBO_CUSTOMER_MEMO_MAX = 1000;
 /** QuickBooks Transaction.DocNumber max. A longer load number is refused, never truncated. */
@@ -146,12 +156,14 @@ type CatalogItem = { id: string; name: string; incomeAccountId: string };
 let accountsById: Map<string, ResolvedAccount> | null = null;
 let accountsByName: Map<string, ResolvedAccount> | null = null;
 let itemIdByName: Map<string, string> | null = null;
+const classByNormalizedName = new Map<string, QboClassRef>();
 
-/** Drop cached account and item ids. The next send reads the company again. */
+/** Drop cached account, item, and class ids. The next send reads the company again. */
 export function clearQboCatalogCache(): void {
   accountsById = null;
   accountsByName = null;
   itemIdByName = null;
+  classByNormalizedName.clear();
 }
 
 export function resetQuickbooksForTests(): void {
@@ -196,7 +208,8 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 
 /**
  * Same lines as the TMS invoice PDF: Flat Rate pay items (or the load rate as Line Haul), then customer extras.
- * Lumper is one amount, shared with the PDF. Fuel surcharge is only a manual pay line (its own item, never Line Haul).
+ * Lumper is one amount, shared with the PDF. Fuel surcharge, layover, TONU, and detention stay on their own
+ * lines. Those charges use the Line Haul item unless detention is switched to its own income account.
  * A cancelled load can only bill its TONU lines.
  */
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
@@ -216,10 +229,11 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
     const qty = item.qty ?? 1;
     const perUnit =
       item.rate != null && qty > 0 && qty !== 1 && Math.abs(roundMoney(item.rate * qty) - amount) < 0.005;
+    const label = QBO_LINE_LABEL[item.category];
     return {
       category: item.category,
       name: labelForPayCategory(item.category),
-      description: [load.load_number, item.payee, item.notes].filter(Boolean).join(" · "),
+      description: [load.load_number, label, item.payee, item.notes].filter(Boolean).join(" · "),
       amount,
       qty: perUnit ? qty : 1,
       unitPrice: perUnit ? (item.rate as number) : amount,
@@ -608,8 +622,10 @@ async function createOrUpdateLiveInvoice(
   const docNumber = loadNumberAsDocNumber(load.load_number);
   const customerId = await resolveQboCustomer(load);
   const salesTerm = await resolveSalesTermRef(load);
+  // Resolve items before any class create so a blocked line posts nothing.
+  const items = await resolveInvoiceItems(preview.lines);
   const classRef = await classRefForLoad(load);
-  const linePayload = await resolveInvoiceLines(preview.lines, classRef);
+  const linePayload = invoiceLinesFromItems(preview.lines, items, classRef);
   const payload: Record<string, unknown> = {
     TxnDate: preview.txnDate,
     DocNumber: docNumber,
@@ -711,23 +727,19 @@ async function resolveQboCustomer(load: LoadView): Promise<string> {
     throw new Error(MANAGEMENT_GROUP_MESSAGE);
   }
   if (stored) return stored;
-  const displayName = (mapped?.name || load.customer_name).trim() || "this customer";
-  const found = await qboQuery<{ Customer?: Array<{ Id?: string; DisplayName?: string }> }>(
-    `select Id, DisplayName from Customer where DisplayName = '${escapeQboString(displayName)}'`,
-    "customer query",
-  );
-  const rows = (found.QueryResponse?.Customer ?? []).filter((row) => String(row.Id ?? "").trim());
-  if (rows.length > 1) {
+  const displayName = (mapped?.name || load.customer_name).trim().replace(/\s+/g, " ") || "this customer";
+  const key = normalizeMatchName(displayName);
+  const rows = await pageQboRows<{ Id?: string; DisplayName?: string }>("Customer", "customer query");
+  const matches = rows.filter((row) => normalizeMatchName(String(row.DisplayName ?? "")) === key);
+  if (matches.length > 1) {
     throw new Error(
-      `More than one QuickBooks customer is named "${displayName}". Pick one in Map Customers. Nothing was sent.`,
+      `More than one QuickBooks customer matches "${displayName}". Pick one in Map Customers. Nothing was sent.`,
     );
   }
-  const id = String(rows[0]?.Id ?? "").trim();
+  const id = String(matches[0]?.Id ?? "").trim();
   if (!id) {
     if (load.customer_id) markCustomerNeedsQbo(load.customer_id);
-    throw new Error(
-      `Map this customer first: ${displayName}. Accounting → QuickBooks → Map Customers. Several TMS customers can share one QuickBooks customer.`,
-    );
+    throw new Error(customerUnmatchedMessage(displayName));
   }
   if (load.customer_id) markCustomerQboMapped(load.customer_id, id);
   return id;
@@ -740,27 +752,32 @@ function refuseUnbilledLines(lines: QboInvoiceLine[]): void {
   }
 }
 
-async function resolveInvoiceLines(
+async function resolveInvoiceItems(lines: QboInvoiceLine[]): Promise<CatalogItem[]> {
+  const items: CatalogItem[] = [];
+  for (const line of lines) items.push(await resolveInvoiceItem(line));
+  return items;
+}
+
+function invoiceLinesFromItems(
   lines: QboInvoiceLine[],
+  items: CatalogItem[],
   classRef?: { value: string; name: string },
-): Promise<Array<Record<string, unknown>>> {
-  const payload = [];
-  for (const line of lines) {
-    const item = await resolveInvoiceItem(line);
+): Array<Record<string, unknown>> {
+  return lines.map((line, index) => {
+    const item = items[index];
     const detail: Record<string, unknown> = {
       ItemRef: { value: item.id, name: item.name },
       Qty: line.qty,
       UnitPrice: line.unitPrice,
     };
     if (classRef) detail.ClassRef = { value: classRef.value, name: classRef.name };
-    payload.push({
+    return {
       Amount: line.amount,
       DetailType: "SalesItemLineDetail",
       Description: line.description,
       SalesItemLineDetail: detail,
-    });
-  }
-  return payload;
+    };
+  });
 }
 
 /**
@@ -787,21 +804,43 @@ async function resolveInvoiceItem(line: Pick<QboInvoiceLine, "category" | "name"
   return item;
 }
 
-/** Detention prefers the configured income account. A missing account falls back to Gross Trucking Income. */
+function lineHaulDetentionRule(rule: InvoiceRule): InvoiceRule {
+  return { ...rule, itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" };
+}
+
+/**
+ * Unset, blank, or Gross Trucking Income posts detention on the Line Haul item.
+ * Any other setting uses the Detention item, and only when that account is income.
+ */
 async function detentionInvoiceRule(rule: InvoiceRule): Promise<InvoiceRule> {
   const setting = getQuickbooksDetentionIncomeAccount();
-  const preferred = setting.id ? await accountById(setting.id) : await accountByName(setting.name);
-  if (preferred) return { ...rule, accountName: preferred.fullyQualifiedName };
+  if (setting.useLineHaul) return lineHaulDetentionRule(rule);
+  const account = setting.id ? await accountById(setting.id) : await accountByName(setting.name);
   const label = setting.id ? `id ${setting.id}` : `"${setting.name}"`;
-  console.warn(
-    `[qbo] Detention income account ${label} is not in this company. Detention will post to ${GROSS_TRUCKING_INCOME}.`,
-  );
-  return { ...rule, accountName: GROSS_TRUCKING_INCOME };
+  if (!account) {
+    throw new Error(
+      `Detention income account ${label} is not in this company. Set QBO_DETENTION_INCOME_ACCOUNT to an income account, or leave it blank to post detention on ${GROSS_TRUCKING_INCOME}. Nothing was sent.`,
+    );
+  }
+  if (account.fullyQualifiedName === GROSS_TRUCKING_INCOME) return lineHaulDetentionRule(rule);
+  const income = account.accountType === "Income" || account.classification === "Revenue";
+  if (!income) {
+    throw new Error(
+      `Detention cannot post to "${account.fullyQualifiedName}" because that account is not income. Nothing was sent.`,
+    );
+  }
+  return { ...rule, itemName: "Detention", accountName: account.fullyQualifiedName, kind: "income" };
 }
 
 type QboClassRef = { value: string; name: string };
 
-/** Driver name becomes the invoice class. No driver means no class. A missing class is created only when allowed. */
+/**
+ * Driver name becomes the invoice class. No driver means no class.
+ * A missing class is created only when QBO_CLASS_AUTO_CREATE is on.
+ * That flag works in production. The default there is off. Sandbox defaults to on.
+ * One class per driver name: an existing class with the same name (any case, collapsed spaces) is reused.
+ * The created name is the exact trimmed TMS driver name.
+ */
 async function classRefForLoad(load: LoadView): Promise<QboClassRef | undefined> {
   const name = String(load.driver_name ?? "").trim();
   if (!name) return undefined;
@@ -816,22 +855,51 @@ async function classRefForLoad(load: LoadView): Promise<QboClassRef | undefined>
   const id = String(created.Class?.Id ?? "").trim();
   if (!id) throw new Error(`QuickBooks did not return a class id for "${name}". Nothing was sent.`);
   const createdName = String(created.Class?.Name || name).trim();
+  const ref = { value: id, name: createdName };
+  classByNormalizedName.set(normalizeMatchName(name), ref);
+  classByNormalizedName.set(normalizeMatchName(createdName), ref);
   console.warn(`[qbo] Created QuickBooks class "${createdName}" for the load driver.`);
-  return { value: id, name: createdName };
+  return ref;
 }
 
 async function findClassByName(name: string): Promise<QboClassRef | undefined> {
-  const found = await qboQuery<{ Class?: Array<{ Id?: string; Name?: string }> }>(
-    `select Id, Name from Class where Name = '${escapeQboString(name)}'`,
-    "class query",
-  );
-  const rows = (found.QueryResponse?.Class ?? []).filter((row) => String(row.Id ?? "").trim());
-  if (rows.length > 1) {
-    throw new Error(`More than one QuickBooks class is named "${name}". Nothing was sent.`);
+  const key = normalizeMatchName(name);
+  const cached = classByNormalizedName.get(key);
+  if (cached) return cached;
+  const rows = await pageQboRows<{ Id?: string; Name?: string }>("Class", "class query");
+  const matches = rows.filter((row) => normalizeMatchName(String(row.Name ?? "")) === key);
+  if (matches.length > 1) {
+    throw new Error(`More than one QuickBooks class matches "${name}". Nothing was sent.`);
   }
-  const id = String(rows[0]?.Id ?? "").trim();
+  const id = String(matches[0]?.Id ?? "").trim();
   if (!id) return undefined;
-  return { value: id, name: String(rows[0]?.Name || name).trim() };
+  const ref = { value: id, name: String(matches[0]?.Name || name).trim() };
+  classByNormalizedName.set(key, ref);
+  return ref;
+}
+
+const QBO_PAGE_SIZE = 1000;
+
+async function pageQboRows<T extends { Id?: string }>(entity: "Customer" | "Class", context: string): Promise<T[]> {
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  for (let start = 1; start <= 20000; start += QBO_PAGE_SIZE) {
+    const result = await qboQuery<Record<string, T[] | undefined>>(
+      `select * from ${entity} startposition ${start} maxresults ${QBO_PAGE_SIZE}`,
+      context,
+    );
+    const page = result.QueryResponse?.[entity] ?? [];
+    let added = 0;
+    for (const row of page) {
+      const id = String(row.Id ?? "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      rows.push(row);
+      added += 1;
+    }
+    if (page.length < QBO_PAGE_SIZE || added === 0) break;
+  }
+  return rows;
 }
 
 function escapeQboString(value: string): string {

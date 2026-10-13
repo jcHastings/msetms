@@ -5,9 +5,23 @@
  */
 
 export const GROSS_TRUCKING_INCOME = "Gross Trucking Income";
-export const DEFAULT_DETENTION_INCOME_ACCOUNT = "Detention Income";
+export const LINE_HAUL_ITEM = "Line Haul";
 export const LUMPER_COGS_ACCOUNT = "Lumper";
 export const DEFAULT_LOAD_PAY_ACCOUNT = "Owner Operators:Owner Operators COL";
+
+/** Washout stays unposted while the QuickBooks item sits on a cost account. */
+export const WASHOUT_COST_ACCOUNT_MESSAGE =
+  "Trailer Washout is mapped to a cost account in QuickBooks. Ask the bookkeeper to point the item to Gross Trucking Income, then resend. Nothing was sent.";
+
+/** Trim, collapse internal whitespace, and compare without case. */
+export function normalizeMatchName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function customerUnmatchedMessage(customerName: string): string {
+  const name = customerName.trim().replace(/\s+/g, " ") || "this customer";
+  return `No QuickBooks customer matches "${name}". Pick an existing customer in Accounting → QuickBooks → Map Customers, or create "${name}" in QuickBooks yourself, then send again. Nothing was sent.`;
+}
 
 /** TMS customer 317 is MS Express. It is never a QuickBooks customer. */
 export const MS_EXPRESS_CUSTOMER_ID = 317;
@@ -37,15 +51,16 @@ export const NOT_BILLED_ON_INVOICE: Record<string, string> = {
 };
 
 export const INVOICE_RULES: Record<string, InvoiceRule> = {
-  flat_rate: { category: "flat_rate", itemName: "Line Haul", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
-  detention: { category: "detention", itemName: "Detention", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
+  flat_rate: { category: "flat_rate", itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" },
+  // Default. QBO_DETENTION_INCOME_ACCOUNT can switch this to the Detention item on an income account.
+  detention: { category: "detention", itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" },
   extra_stop: { category: "extra_stop", itemName: "Picks and Drops", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
-  layover: { category: "layover", itemName: "Layover", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
-  tonu: { category: "tonu", itemName: "TONU", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
+  layover: { category: "layover", itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" },
+  tonu: { category: "tonu", itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" },
   washout: { category: "washout", itemName: "Trailer Washout", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
   fuel_surcharge: {
     category: "fuel_surcharge",
-    itemName: "Fuel Surcharge",
+    itemName: LINE_HAUL_ITEM,
     accountName: GROSS_TRUCKING_INCOME,
     kind: "income",
   },
@@ -89,9 +104,6 @@ export function notBilledMessage(label: string): string {
 }
 
 export function itemMissingMessage(rule: InvoiceRule): string {
-  if (rule.category === "fuel_surcharge") {
-    return `Fuel Surcharge is not in QuickBooks. Create a Fuel Surcharge item on "${GROSS_TRUCKING_INCOME}", then send again. Nothing was sent.`;
-  }
   return `Map pay item "${rule.itemName}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`;
 }
 
@@ -114,11 +126,8 @@ export function itemAccountMismatch(itemName: string, currentAccount: string, ex
   if (category === "lumper") {
     return `QuickBooks item "Lumper" is on "${current}". The bookkeeper must repoint the Lumper item to the Lumper COGS account ("${expectedAccount}"). Nothing was sent.`;
   }
-  if (category === "fuel_surcharge") {
-    return `QuickBooks item "Fuel Surcharge" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
-  }
   if (category === "detention") {
-    return `QuickBooks item "Detention" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
+    return `QuickBooks item "${itemName}" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
   }
   return `QuickBooks item "${itemName}" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
 }
@@ -130,17 +139,32 @@ export type ResolvedAccount = {
   classification: string;
 };
 
+function isIncomeAccount(account: ResolvedAccount | undefined): boolean {
+  if (!account) return false;
+  return account.accountType === "Income" || account.classification === "Revenue";
+}
+
 /** Empty string when the account matches the rule. Otherwise the office message. */
 export function accountProblem(rule: InvoiceRule, itemName: string, account: ResolvedAccount | undefined): string {
   const current = account?.fullyQualifiedName ?? "";
   const forbidden = forbiddenAccountMessage(current) || forbiddenAccountMessage(rule.accountName);
   if (forbidden) return forbidden;
+  if (rule.category === "washout") {
+    if (isIncomeAccount(account) && current === rule.accountName) return "";
+    if (!isIncomeAccount(account)) return WASHOUT_COST_ACCOUNT_MESSAGE;
+    return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
+  }
+  if (rule.category === "detention" && account && !isIncomeAccount(account)) {
+    return `Detention cannot post to "${current}" because that account is not income. Nothing was sent.`;
+  }
   if (!account || current !== rule.accountName) {
     return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
   }
-  const income = account.accountType === "Income" || account.classification === "Revenue";
   const cogs = account.accountType === "Cost of Goods Sold";
-  if (rule.kind === "income" && !income) {
+  if (rule.kind === "income" && !isIncomeAccount(account)) {
+    if (rule.category === "detention") {
+      return `Detention cannot post to "${current}" because that account is not income. Nothing was sent.`;
+    }
     return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
   }
   if (rule.kind === "cogs" && !cogs) {
