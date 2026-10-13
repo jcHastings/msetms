@@ -1,16 +1,17 @@
 import { cronTokenFromEnv } from "./cron-auth";
 import { integrationErrorCode, integrationErrorCodeFromText } from "./integration-log";
 import { forceRefreshReeferSnapshots } from "./integrations/orbcomm";
+import { syncQboPaymentsFromCdc } from "./integrations/qbo-payments";
 import { pullSamsaraRouteFeed } from "./integrations/samsara-routes";
 import { forceRefreshSamsaraFleet } from "./integrations/samsara";
 
-/** Each feed stops on its own. Three of these still fit under the timer's 110s curl cap. */
+/** Each feed stops on its own. Four of these still fit under the timer's 110s curl cap. */
 const FEED_DEADLINE_MS = 20_000;
 
 export type FeedRefreshSummary = {
   ok: boolean;
   busy?: boolean;
-  saved: { orbcomm: number; fleet: number; routes: number };
+  saved: { orbcomm: number; fleet: number; routes: number; payments: number };
   errors: string[];
 };
 
@@ -29,7 +30,7 @@ let refreshRunning = false;
  */
 export async function refreshIntegrationFeeds(): Promise<FeedRefreshSummary> {
   if (refreshRunning) {
-    return { ok: true, busy: true, saved: { orbcomm: 0, fleet: 0, routes: 0 }, errors: [] };
+    return { ok: true, busy: true, saved: { orbcomm: 0, fleet: 0, routes: 0, payments: 0 }, errors: [] };
   }
   refreshRunning = true;
   try {
@@ -40,7 +41,7 @@ export async function refreshIntegrationFeeds(): Promise<FeedRefreshSummary> {
 }
 
 async function runIsolatedFeeds(): Promise<FeedRefreshSummary> {
-  const saved = { orbcomm: 0, fleet: 0, routes: 0 };
+  const saved = { orbcomm: 0, fleet: 0, routes: 0, payments: 0 };
   const errors: string[] = [];
 
   const orbcommSignal = AbortSignal.timeout(FEED_DEADLINE_MS);
@@ -71,6 +72,16 @@ async function runIsolatedFeeds(): Promise<FeedRefreshSummary> {
     if (error) errors.push(error);
   } catch (error) {
     errors.push(`routes: ${integrationErrorCode(error)}`);
+  }
+
+  const paymentSignal = AbortSignal.timeout(FEED_DEADLINE_MS);
+  try {
+    const payments = await syncQboPaymentsFromCdc();
+    saved.payments = payments.saved;
+    const error = labeled("payments", paymentSignal.aborted ? "timeout" : payments.error);
+    if (error) errors.push(error);
+  } catch (error) {
+    errors.push(`payments: ${integrationErrorCode(error)}`);
   }
 
   return { ok: errors.length === 0, saved, errors };

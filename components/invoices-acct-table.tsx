@@ -20,6 +20,7 @@ export type InvoiceAcctRow = {
   dueDate: string;
   totalLabel: string;
   balanceLabel: string;
+  paidHistory: string;
   qboInvoiceLine: string;
   qboPaymentsLine: string;
   alreadySent: boolean;
@@ -140,7 +141,7 @@ function InvoiceAcctRowView({
                     <a className="acct-link" href={`/api/loads/${row.id}/invoice`}>
                       View Invoice as PDF
                     </a>
-                    <div>View Payment History: {row.paid ? "Payment recorded" : "No payments recorded"}</div>
+                    <div>View Payment History: {row.paidHistory}</div>
                   </div>
                   <InvoiceSendPostGroup row={row} />
                 </div>

@@ -25,8 +25,10 @@ import { InvoicesAcctTable, type InvoiceAcctRow } from "@/components/invoices-ac
 import {
   addDaysIso,
   invoiceAnchorIso,
+  invoicePaidLabel,
   paymentTermsDays,
   qboInvoiceExportStatus,
+  receivableBalance,
 } from "@/lib/accounting-aging";
 import {
   defaultPayPeriod,
@@ -200,6 +202,7 @@ function toInvoiceAcctRow(
   const settings = getCompanySettings();
   const tax = taxOnAmount(row.rate);
   const total = (row.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
+  const settled = receivableBalance(total, row);
   const invoiceIso = invoiceAnchorIso(row);
   const terms = getCustomer(row.customer_id)?.payment_terms ?? "";
   const dueIso = invoiceIso ? addDaysIso(invoiceIso, paymentTermsDays(terms)) : "";
@@ -222,12 +225,18 @@ function toInvoiceAcctRow(
     invoiceDate: billed && invoiceIso ? formatMdYFull(invoiceIso) : "Unsent",
     dueDate: dueIso ? formatMdYFull(dueIso) : "Not Available",
     totalLabel: formatMoney(total, settings.currency),
-    balanceLabel: formatMoney(row.paid ? 0 : total, settings.currency),
+    balanceLabel: formatMoney(settled.balance, settings.currency),
+    paidHistory:
+      (row.invoice_paid_amount ?? 0) > 0
+        ? invoicePaidLabel(row, settings.currency)
+        : row.paid
+          ? "Payment recorded"
+          : "No payments recorded",
     qboInvoiceLine: qbo.invoiceLine,
     qboPaymentsLine: qbo.paymentsLine,
     alreadySent: qbo.sent,
     sendLabel: qbo.sent ? "Send again to QuickBooks" : qboConnected ? "Send to QuickBooks" : "Record demo invoice",
-    paid: row.paid,
+    paid: settled.balance <= 0.009 && (Boolean(row.paid) || settled.paid > 0),
     email: resolveInvoiceCustomerEmail(row),
     lastInvoiceSent: (() => {
       const sent = lastSentMail(row.id, "customer_invoice");
@@ -456,7 +465,7 @@ function ReconcileTab({ q, branch, branches }: { q: string; branch: string; bran
                     </Link>
                   </td>
                   <td>{load.customer_name}</td>
-                  <td>{load.invoice_paid ? "Paid" : "Open"}</td>
+                  <td>{invoicePaidLabel(load)}</td>
                   <td>{formatMoney(invoiceTotal)}</td>
                   <td>{formatMoney(billTotal + expense)}</td>
                   <td>{formatMoney(invoiceTotal - billTotal - expense)}</td>

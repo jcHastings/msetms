@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   } catch (error) {
     logSwallowedIntegrationError("feed-refresh", error);
     return Response.json(
-      { ok: false, saved: { orbcomm: 0, fleet: 0, routes: 0 }, errors: ["feed-refresh: error"] },
+      { ok: false, saved: { orbcomm: 0, fleet: 0, routes: 0, payments: 0 }, errors: ["feed-refresh: error"] },
       { status: 500 },
     );
   }

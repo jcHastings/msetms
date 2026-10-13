@@ -14,6 +14,7 @@ import { matchLocationForStop } from "./locations";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import type { LoadStop } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
+import { listOpenQboPaymentExceptions } from "./integrations/qbo-payments";
 import { itsImportIssueCode, itsImportIssueTitle, itsImportLoadNumber } from "./its-import-shared";
 import {
   isActiveLoadStatus,
@@ -45,6 +46,7 @@ export const EXCEPTION_KINDS = [
   "samsara",
   "dispatch_ack",
   "its_import",
+  "qbo_payment",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -139,6 +141,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   samsara: 9,
   dispatch_ack: 10,
   its_import: 11,
+  qbo_payment: 12,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -707,6 +710,7 @@ function computeExceptionInbox(now: Date): ExceptionInbox {
   }
 
   items.push(...itsImportInboxItems());
+  items.push(...qboPaymentInboxItems());
   attachWorkbenchSchedule(items, scoped, ctx.stops);
 
   items.sort((a, b) => {
@@ -751,6 +755,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "No ack";
     case "its_import":
       return "ITS import";
+    case "qbo_payment":
+      return "QBO payment";
   }
 }
 
@@ -814,6 +820,22 @@ function itsImportInboxItems(): InboxException[] {
       demo: false,
     };
   });
+}
+
+function qboPaymentInboxItems(): InboxException[] {
+  return listOpenQboPaymentExceptions().map((row) => ({
+    id: `qbo-payment:${row.qbo_payment_id}:${row.qbo_invoice_id}`,
+    loadId: 0,
+    loadNumber: row.qbo_invoice_id === "*" ? `QBO ${row.qbo_payment_id}` : `QBO invoice ${row.qbo_invoice_id}`,
+    customerName: "",
+    origin: "",
+    destination: "",
+    kind: "qbo_payment" as const,
+    severity: "HIGH" as const,
+    title: "Unmatched QuickBooks payment",
+    detail: row.detail,
+    demo: false,
+  }));
 }
 
 function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSamsaraInboxFlags>): InboxException[] {

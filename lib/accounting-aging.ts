@@ -72,28 +72,80 @@ export function agingAmounts(balance: number, daysPastDue: number): {
   return { current: 0, aging0to29: 0, aging30: balance };
 }
 
+function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100) / 100;
+}
+
+export function loadInvoiceTotal(load: Pick<LoadView, "rate">): number {
+  const settings = getCompanySettings();
+  const tax = taxOnAmount(load.rate);
+  return roundMoney((load.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0));
+}
+
+/** Paid amount and remaining balance. A recorded QuickBooks amount wins over the old paid flag. */
+export function receivableBalance(
+  total: number,
+  load: { paid?: boolean; invoice_paid?: number; invoice_paid_amount?: number | null },
+): { paid: number; balance: number } {
+  const totalCents = roundMoney(total);
+  const recorded = roundMoney(Number(load.invoice_paid_amount) || 0);
+  if (recorded > 0) {
+    const paid = Math.min(totalCents, recorded);
+    return { paid, balance: roundMoney(Math.max(0, totalCents - recorded)) };
+  }
+  if (load.paid || load.invoice_paid) return { paid: totalCents, balance: 0 };
+  return { paid: 0, balance: totalCents };
+}
+
+export function invoicePaidLabel(
+  load: {
+    invoice_paid?: number;
+    paid?: boolean;
+    invoice_paid_amount?: number | null;
+    invoice_paid_at?: string | null;
+    qbo_payment_id?: string | null;
+  },
+  currency = getCompanySettings().currency,
+): string {
+  const amount = roundMoney(Number(load.invoice_paid_amount) || 0);
+  const when = String(load.invoice_paid_at ?? "").trim();
+  const date = when ? formatMdYFull(when) : "";
+  const paymentId = String(load.qbo_payment_id ?? "").trim();
+  const idBit = paymentId ? ` · QBO ${paymentId}` : "";
+  if (amount > 0) {
+    const money = formatMoney(amount, currency);
+    const dated = date && date !== "—" ? `${money} on ${date}` : money;
+    const word = load.paid || load.invoice_paid ? "Paid" : "Partial";
+    return `${word} ${dated}${idBit}`;
+  }
+  return load.paid || load.invoice_paid ? "Paid" : "Open";
+}
+
 export function qboInvoiceExportStatus(load: {
   qbo_invoice_id: string;
   qbo_sent_at: string;
   invoice_paid?: number;
   paid?: boolean;
+  invoice_paid_amount?: number | null;
+  invoice_paid_at?: string | null;
+  qbo_payment_id?: string | null;
 }): { sent: boolean; invoiceLine: string; paymentsLine: string } {
   if (!load.qbo_invoice_id) {
     return { sent: false, invoiceLine: "Unsent", paymentsLine: "" };
   }
   const when = load.qbo_sent_at ? formatAccountingDateTime(load.qbo_sent_at) : "";
   const recorded = load.paid || load.invoice_paid ? 1 : 0;
+  const amount = roundMoney(Number(load.invoice_paid_amount) || 0);
   return {
     sent: true,
     invoiceLine: when ? `Invoice Exported: ${when}` : "Invoice Exported",
-    paymentsLine: `Payments Exported: 0/${recorded}`,
+    paymentsLine: amount > 0 ? invoicePaidLabel(load) : `Payments Exported: 0/${recorded}`,
   };
 }
 
 function receivableTotal(load: LoadView): number {
-  const settings = getCompanySettings();
-  const tax = taxOnAmount(load.rate);
-  return (load.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
+  return loadInvoiceTotal(load);
 }
 
 export function listArReportRows(): ArApReportRow[] {
@@ -103,8 +155,9 @@ export function listArReportRows(): ArApReportRow[] {
     const invoiceIso = invoiceAnchorIso(load);
     const dueIso = invoiceIso ? addDaysIso(invoiceIso, paymentTermsDays(terms)) : "";
     const total = receivableTotal(load);
-    const paid = load.paid ? total : 0;
-    const balance = load.paid ? 0 : total;
+    const settled = receivableBalance(total, load);
+    const paid = settled.paid;
+    const balance = settled.balance;
     const days = dueIso ? Math.max(0, daysPastDueOn(dueIso)) : 0;
     const buckets = agingAmounts(balance, dueIso ? daysPastDueOn(dueIso) : 0);
     return {

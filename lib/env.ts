@@ -353,6 +353,17 @@ export function getQuickbooksBillExpenseAccountId(): string | undefined {
   return readSecret("QBO_BILL_EXPENSE_ACCOUNT_ID");
 }
 
+/** Intuit webhook verifier. HMAC key for the `intuit-signature` header. Never logged. */
+export function getQuickbooksWebhookVerifier(): string | undefined {
+  return readSecret("QBO_WEBHOOK_VERIFIER");
+}
+
+/** Off unless set to 1, true, yes, or on. Sends payment mail to company_profile.ar_email. */
+export function qboPaymentArEmailEnabled(): boolean {
+  const value = (readSecret("QBO_PAYMENT_AR_EMAIL") ?? "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
 export function isQuickbooksOAuthReady(): boolean {
   return Boolean(getQuickbooksClientId() && getQuickbooksClientSecret());
 }
