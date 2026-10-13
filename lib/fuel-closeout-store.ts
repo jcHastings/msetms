@@ -20,7 +20,7 @@ import {
   samsaraMilesSourceStatus,
   type MilesReading,
 } from "./miles-source";
-import { listTruckEngineHourReadings } from "./queries";
+import { listDrivers, listLoads, listTruckEngineHourReadings } from "./queries";
 
 export type FiledFuelCloseout = {
   weekStartYmd: string;
@@ -73,8 +73,10 @@ export function buildLiveFuelCloseout(input?: {
   const weekStartYmd = parseFuelWeekStart(input?.weekStartYmd, now);
   const rows = input?.rows ?? listFuelTransactions().map(asTx);
   const window = milesWindowForWeek(weekStartYmd);
-  const miles = input?.miles ?? milesFromSamsaraOdometer(window);
-  const hours = input?.hours ?? engineHoursFromReadings(window);
+  const loads = listLoads({ status: "all" });
+  const drivers = listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
+  const miles = input?.miles ?? milesFromSamsaraOdometer(window, { rows, loads, drivers });
+  const hours = input?.hours ?? engineHoursFromReadings(window, { rows, loads, drivers });
   const idleFuel =
     input?.idleFuel ??
     weekIdleFuelQuotes(
@@ -92,7 +94,7 @@ export function buildLiveFuelCloseout(input?: {
     input?.prior ??
     {
       rows,
-      miles: milesFromSamsaraOdometer(milesWindowForWeek(priorStart)),
+      miles: milesFromSamsaraOdometer(milesWindowForWeek(priorStart), { rows, loads, drivers }),
     };
   return buildFuelCloseout({
     weekStartYmd,
@@ -102,6 +104,8 @@ export function buildLiveFuelCloseout(input?: {
     hours,
     idleFuel,
     prior,
+    loads,
+    drivers,
     milesSource: persistedSamsaraMilesSource().status(),
     engineHoursSource: samsaraEngineHoursSourceStatus({
       tokenSet: isSamsaraConfigured(),

@@ -1,7 +1,8 @@
-import { normalizeUnit } from "./fuel";
+import { fuelTruckDriverLabel, normalizeUnit, type FuelLabelRow, type FuelMatchLoad } from "./fuel";
+import { listFuelTransactions } from "./fuel-store";
 import {
-  isDriverLoginEligible,
   listDrivers,
+  listLoads,
   listTruckEngineHourReadings,
   listTrucks,
   TRUCK_ENGINE_HOUR_STATS,
@@ -205,16 +206,6 @@ export function extractSamsaraEngineHourPoints(vehicle: Record<string, unknown>)
   return out;
 }
 
-function truckForDriver(
-  driver: { id: number; truck_id?: number | null; truck_unit?: string | null },
-  trucks: Array<{ id: number; unit_number: string; assigned_driver_id?: number | null }>,
-) {
-  return (
-    (driver.truck_id ? trucks.find((truck) => truck.id === driver.truck_id) : undefined) ??
-    trucks.find((truck) => truck.assigned_driver_id === driver.id)
-  );
-}
-
 export function engineHoursForSubject(
   subject: { key: string; driverId: number | null; unit: string },
   rows: EngineHourSubject[],
@@ -235,19 +226,16 @@ export function engineHoursFromReadings(
   window: { fromIso: string; toIso: string },
   input?: {
     trucks?: Array<{ id: number; unit_number: string; assigned_driver_id?: number | null; samsara_vehicle_id?: string }>;
-    drivers?: Array<{
-      id: number;
-      name: string;
-      truck_id?: number | null;
-      truck_unit?: string | null;
-      active: number;
-      termination_date?: string | null;
-    }>;
+    drivers?: Array<{ id: number; name: string }>;
     readings?: TruckEngineHourReading[];
+    rows?: FuelLabelRow[];
+    loads?: FuelMatchLoad[];
   },
 ): EngineHourSubject[] {
   const trucks = input?.trucks ?? listTrucks();
-  const drivers = (input?.drivers ?? listDrivers()).filter((driver) => isDriverLoginEligible(driver));
+  const drivers = input?.drivers ?? listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
+  const rows = input?.rows ?? listFuelTransactions();
+  const loads = input?.loads ?? listLoads({ status: "all" });
   const readings = input?.readings ?? listTruckEngineHourReadings();
   const byTruck = new Map<number, TruckEngineHourReading[]>();
   for (const row of readings) {
@@ -255,38 +243,26 @@ export function engineHoursFromReadings(
     list.push(row);
     byTruck.set(row.truck_id, list);
   }
-  const usedTrucks = new Set<number>();
   const out: EngineHourSubject[] = [];
 
-  for (const driver of drivers) {
-    const truck = truckForDriver(driver, trucks);
-    const unit = truck?.unit_number || driver.truck_unit || "";
-    const series = truck ? (byTruck.get(truck.id) ?? []) : [];
-    const idleHours = truck ? cumulativeDeltaHours(series, window.fromIso, window.toIso, IDLE_HOURS_STAT) : null;
-    const engine = truck ? engineHoursDelta(series, window.fromIso, window.toIso) : { hours: null, stat: null };
-    if (truck) usedTrucks.add(truck.id);
-    out.push({
-      subjectKey: `d:${driver.id}`,
-      driverId: driver.id,
-      driverName: driver.name,
-      unit,
-      truckId: truck?.id ?? null,
-      idleHours,
-      engineHours: engine.hours,
-      engineStat: engine.stat,
-    });
-  }
-
   for (const truck of trucks) {
-    if (usedTrucks.has(truck.id)) continue;
     const series = byTruck.get(truck.id) ?? [];
     const idleHours = cumulativeDeltaHours(series, window.fromIso, window.toIso, IDLE_HOURS_STAT);
     const engine = engineHoursDelta(series, window.fromIso, window.toIso);
     if (idleHours == null && engine.hours == null) continue;
+    const label = fuelTruckDriverLabel({
+      truckId: truck.id,
+      unit: truck.unit_number,
+      fromIso: window.fromIso,
+      toIso: window.toIso,
+      rows,
+      loads,
+      drivers,
+    });
     out.push({
-      subjectKey: `u:${normalizeUnit(truck.unit_number)}`,
-      driverId: truck.assigned_driver_id ?? null,
-      driverName: "Unassigned",
+      subjectKey: label.driverId != null ? `d:${label.driverId}` : `u:${normalizeUnit(truck.unit_number)}`,
+      driverId: label.driverId,
+      driverName: label.driverName,
       unit: truck.unit_number,
       truckId: truck.id,
       idleHours,

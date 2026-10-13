@@ -118,7 +118,12 @@ export default async function FuelPage({
         idleFuelCost={closeout.fleet.idleFuelCost}
       />
       <IdleFuelEstimate board={idleBoard} />
-      <FuelAuditStrip report={scoreFuelAudit(listFuelTransactions(), fuelAuditWindowForWeek(week))} />
+      <FuelAuditStrip
+        report={scoreFuelAudit(listFuelTransactions(), fuelAuditWindowForWeek(week), undefined, {
+          loads: listLoads({ status: "all" }),
+          drivers: drivers.map((driver) => ({ id: driver.id, name: driver.name })),
+        })}
+      />
       <FuelCloseoutStrip report={closeout} />
       <FuelWeekStrip
         stats={weekView.stats}

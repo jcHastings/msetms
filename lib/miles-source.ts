@@ -1,7 +1,8 @@
 import { odometerDeltaMiles } from "./fuel-mpg";
-import { addYmdDays, localWeekRange, normalizeUnit } from "./fuel";
+import { addYmdDays, fuelTruckDriverLabel, localWeekRange, normalizeUnit, type FuelLabelRow, type FuelMatchLoad } from "./fuel";
+import { listFuelTransactions } from "./fuel-store";
 import { isSamsaraConfigured } from "./integrations/samsara";
-import { isDriverLoginEligible, listDrivers, listTruckOdometerReadings, listTrucks } from "./queries";
+import { listDrivers, listLoads, listTruckOdometerReadings, listTrucks } from "./queries";
 
 /** Weekly miles come from Samsara odometer deltas. There is no Ascend miles path. */
 export const MILES_SOURCE_ID = "samsara" as const;
@@ -123,33 +124,20 @@ export function createFixtureMilesSource(readings: MilesReading[], status?: Part
   };
 }
 
-function truckForDriver(
-  driver: { id: number; truck_id?: number | null; truck_unit?: string | null },
-  trucks: Array<{ id: number; unit_number: string; assigned_driver_id?: number | null }>,
-) {
-  return (
-    (driver.truck_id ? trucks.find((truck) => truck.id === driver.truck_id) : undefined) ??
-    trucks.find((truck) => truck.assigned_driver_id === driver.id)
-  );
-}
-
 export function milesFromSamsaraOdometer(
   window: MilesWindow,
   input?: {
     trucks?: Array<{ id: number; unit_number: string; assigned_driver_id?: number | null }>;
-    drivers?: Array<{
-      id: number;
-      name: string;
-      truck_id?: number | null;
-      truck_unit?: string | null;
-      active: number;
-      termination_date?: string | null;
-    }>;
+    drivers?: Array<{ id: number; name: string }>;
     readings?: Array<{ id: number; truck_id: number; recorded_at: string; miles: number; source: string }>;
+    rows?: FuelLabelRow[];
+    loads?: FuelMatchLoad[];
   },
 ): MilesReading[] {
   const trucks = input?.trucks ?? listTrucks();
-  const drivers = (input?.drivers ?? listDrivers()).filter((driver) => isDriverLoginEligible(driver));
+  const drivers = input?.drivers ?? listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
+  const rows = input?.rows ?? listFuelTransactions();
+  const loads = input?.loads ?? listLoads({ status: "all" });
   const readings = (input?.readings ?? listTruckOdometerReadings()).filter((row) => row.source === "samsara");
   const byTruck = new Map<number, typeof readings>();
   for (const row of readings) {
@@ -157,46 +145,29 @@ export function milesFromSamsaraOdometer(
     list.push(row);
     byTruck.set(row.truck_id, list);
   }
-  const usedTrucks = new Set<number>();
   const out: MilesReading[] = [];
 
-  for (const driver of drivers) {
-    const truck = truckForDriver(driver, trucks);
-    const unit = truck?.unit_number || driver.truck_unit || "";
-    const delta = truck
-      ? odometerDeltaMiles(byTruck.get(truck.id) ?? [], window.fromIso, window.toIso)
-      : null;
-    if (truck) usedTrucks.add(truck.id);
-    out.push({
-      subjectKey: `d:${driver.id}`,
-      driverId: driver.id,
-      driverName: driver.name,
-      unit,
-      truckId: truck?.id ?? null,
-      miles: delta,
-      source: delta != null ? MILES_SOURCE_ID : "missing",
-      note:
-        delta != null
-          ? "Samsara odometer delta"
-          : truck
-            ? "No Samsara odometer pair in this week"
-            : "No truck mapped for Samsara odometer",
-    });
-  }
-
   for (const truck of trucks) {
-    if (usedTrucks.has(truck.id)) continue;
     const delta = odometerDeltaMiles(byTruck.get(truck.id) ?? [], window.fromIso, window.toIso);
     if (delta == null) continue;
+    const label = fuelTruckDriverLabel({
+      truckId: truck.id,
+      unit: truck.unit_number,
+      fromIso: window.fromIso,
+      toIso: window.toIso,
+      rows,
+      loads,
+      drivers,
+    });
     out.push({
-      subjectKey: `u:${normalizeUnit(truck.unit_number)}`,
-      driverId: truck.assigned_driver_id ?? null,
-      driverName: "Unassigned",
+      subjectKey: label.driverId != null ? `d:${label.driverId}` : `u:${normalizeUnit(truck.unit_number)}`,
+      driverId: label.driverId,
+      driverName: label.driverName,
       unit: truck.unit_number,
       truckId: truck.id,
       miles: delta,
       source: MILES_SOURCE_ID,
-      note: "Samsara odometer delta (unit, no eligible driver)",
+      note: label.driverId != null ? "Samsara odometer delta" : "Samsara odometer delta (no fuel or load driver)",
     });
   }
 

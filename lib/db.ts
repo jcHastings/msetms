@@ -970,6 +970,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "fuel_transactions", "invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "prompt_data", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "fuel_transactions", "load_id", "INTEGER");
+  ensureColumn(db, "fuel_transactions", "driver_source", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "trucks", "prepass_transponder_id", "TEXT NOT NULL DEFAULT ''");
   migrateFuelReceiptsForDriverOrphans(db);
   db.exec(`
