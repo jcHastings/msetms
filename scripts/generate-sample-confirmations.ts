@@ -7,13 +7,34 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const company = {
   company_name: "MS EXPRESS",
-  dispatcher_name: "Ana G",
+  dispatcher_name: "MS Test",
   dispatcher_phone: "402-302-0097",
   dispatcher_fax: "",
   dispatcher_email: "ana@msloads.com",
+  street: "",
+  city: "",
+  state: "",
+  zip: "",
+};
+
+const emptyCustomer = {
+  packet: "internal" as const,
+  customerName: "",
+  customerBilling: "",
+  customerContact: "",
+  customerPhone: "",
+  customerEmail: "",
+  customerReference: "",
+  customerRate: null,
+  customerRateLines: [],
+  headerCompany: "",
+  headerDispatcher: "",
+  headerPhone: "",
+  headerEmail: "",
 };
 
 const ooSample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "owner_operator",
   company,
   loadNumber: "1006149",
@@ -41,6 +62,7 @@ const ooSample: ConfirmationModel = {
     weight: "",
     poNumber: "",
     confirmationNumber: "O341180225",
+    puNumber: "",
     extra: "",
     hoursLabel: "Shipping Hours",
     hours: "",
@@ -59,16 +81,23 @@ const ooSample: ConfirmationModel = {
     weight: "",
     poNumber: "",
     confirmationNumber: "",
+    puNumber: "",
     extra: "Released 1073675, CRLU1221060 SG2-019",
     hoursLabel: "Receiving Hours",
     hours: "",
     appointment: "Yes",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
+  internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
+ooSample.stops = [ooSample.shipper, ooSample.consignee];
 
 const companySample: ConfirmationModel = {
+  ...emptyCustomer,
   style: "company_driver",
   company,
   loadNumber: "1006151",
@@ -96,6 +125,7 @@ const companySample: ConfirmationModel = {
     weight: "",
     poNumber: "49404 286713",
     confirmationNumber: "",
+    puNumber: "",
     extra: "",
     hoursLabel: "Shipping Hours",
     hours: "",
@@ -114,14 +144,20 @@ const companySample: ConfirmationModel = {
     weight: "",
     poNumber: "Omaha 56736 8/24 Conf # 42583",
     confirmationNumber: "",
+    puNumber: "",
     extra: "",
     hoursLabel: "Receiving Hours",
     hours: "",
     appointment: "No",
     description: "",
   },
+  stops: [],
   dispatchNotes: "",
+  internalLegs: "",
+  reeferSetpoint: "",
+  reeferMode: "",
 };
+companySample.stops = [companySample.shipper, companySample.consignee];
 
 async function main(): Promise<void> {
   const oo = await renderConfirmationPdf(ooSample);
