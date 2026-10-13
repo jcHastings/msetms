@@ -257,7 +257,20 @@ export async function refreshLoadRoute(
   }
 }
 
+const routeRefreshInFlight = new Set<number>();
+
 export async function refreshLoadRouteQuiet(loadId: number): Promise<void> {
+  // A double-click or client retry must not stack a second route + empty-miles pass on the same load.
+  if (routeRefreshInFlight.has(loadId)) return;
+  routeRefreshInFlight.add(loadId);
+  try {
+    await refreshLoadRouteQuietInner(loadId);
+  } finally {
+    routeRefreshInFlight.delete(loadId);
+  }
+}
+
+async function refreshLoadRouteQuietInner(loadId: number): Promise<void> {
   try {
     await refreshLoadRoute(loadId, { quiet: true });
   } catch {
