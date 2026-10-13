@@ -8,6 +8,7 @@ import { InvoiceSendPromptHost } from "@/components/invoice-send-prompt";
 import { MikeLauncher } from "@/components/mike-launcher";
 import { NavLinks } from "@/components/nav-links";
 import { OfficeNotificationBell } from "@/components/office-notification-bell";
+import { OfficeSupport } from "@/components/office-support";
 import type { OfficeNotification } from "@/lib/alert-rules-shared";
 import { dispatcherLogoutAction } from "@/lib/dispatcher-actions";
 import type { MikeMessage } from "@/lib/mike-shared";
@@ -105,6 +106,7 @@ export function AppShell({
           </Link>
         </div>
         <NavLinks role={dispatcher.role} />
+        <OfficeSupport />
         <div className="desk-sidebar-user shrink-0 border-t border-white/10 px-3 py-3 text-xs text-slate-400">
           <OfficeNotificationBell items={officeNotifications} />
           <div className="font-medium text-slate-200" title={dispatcher.name}>

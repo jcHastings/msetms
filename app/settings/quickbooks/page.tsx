@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OfficeSupport } from "@/components/office-support";
 import { PageHeader } from "@/components/page-header";
 import { SettingsAdminGate } from "@/components/settings-admin-gate";
 import { SettingsBack } from "@/components/settings-nav";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function QuickbooksSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string; error?: string }>;
+  searchParams: Promise<{ connected?: string; error?: string; disconnected?: string }>;
 }) {
   const params = await searchParams;
   const qbo = await getQuickbooksStatus();
@@ -20,6 +21,14 @@ export default async function QuickbooksSettingsPage({
       <SettingsBack />
       <PageHeader title="QuickBooks Online" />
 
+      {params.disconnected ? (
+        <p
+          className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          data-qbo-disconnected=""
+        >
+          Disconnected from QuickBooks
+        </p>
+      ) : null}
       {params.connected ? (
         <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           QuickBooks is connected.
@@ -62,6 +71,7 @@ export default async function QuickbooksSettingsPage({
           </Link>
         </div>
       </section>
+      <OfficeSupport tone="page" />
     </SettingsAdminGate>
   );
 }
