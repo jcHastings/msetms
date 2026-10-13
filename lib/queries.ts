@@ -172,6 +172,10 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     invoice_paid_amount: Number(row.invoice_paid_amount) || 0,
     invoice_paid_at: row.invoice_paid_at || "",
     qbo_payment_id: row.qbo_payment_id || "",
+    qbo_invoice_total:
+      row.qbo_invoice_total == null || Number.isNaN(Number(row.qbo_invoice_total))
+        ? null
+        : Number(row.qbo_invoice_total),
   };
 }
 
@@ -2428,17 +2432,24 @@ export function markQboInvoice(
     invoiceNumber: string;
     source: "demo" | "quickbooks";
     sentAt: string;
+    /** QuickBooks Invoice.TotalAmt, or the invoice line total when QuickBooks did not return one. */
+    totalAmt?: number | null;
   },
 ): void {
   if (!getLoad(loadId)) throw new Error("Load not found.");
   const docNumber = input.invoiceNumber.trim();
+  const total =
+    input.totalAmt != null && Number.isFinite(input.totalAmt) && input.totalAmt > 0
+      ? Math.round(input.totalAmt * 100) / 100
+      : null;
   getDb()
     .prepare(
       `UPDATE loads
-       SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_doc_number = ?, qbo_sent_at = ?, qbo_source = ?, updated_at = ?
+       SET qbo_invoice_id = ?, qbo_invoice_number = ?, qbo_doc_number = ?, qbo_sent_at = ?, qbo_source = ?,
+           qbo_invoice_total = COALESCE(?, qbo_invoice_total), updated_at = ?
        WHERE id = ?`,
     )
-    .run(input.invoiceId, docNumber, docNumber || null, input.sentAt, input.source, input.sentAt, loadId);
+    .run(input.invoiceId, docNumber, docNumber || null, input.sentAt, input.source, total, input.sentAt, loadId);
 }
 
 export function updateLoadTruckStatus(loadId: number, truckStatus: string): void {

@@ -72,7 +72,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return json({ QueryResponse: {} });
   }
   if (method === "POST" && url.includes("/invoice")) {
-    return json({ Invoice: { Id: "900", DocNumber: body.DocNumber || "1006250", SyncToken: "0" } });
+    const lines = Array.isArray(body?.Line) ? body.Line : [];
+    const totalAmt = Math.round(lines.reduce((sum: number, line: Json) => sum + (Number(line.Amount) || 0), 0) * 100) / 100;
+    return json({ Invoice: { Id: "900", DocNumber: body.DocNumber || "1006250", SyncToken: "0", TotalAmt: totalAmt } });
   }
   if (method === "POST" && url.includes("/bill")) return json({ Bill: { Id: "901" } });
   return json({});
@@ -138,6 +140,8 @@ async function main() {
   );
   assert.equal(sent.invoiceNumber, "QBOMAP1");
   assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "QBOMAP1");
+  assert.equal(queries.getLoad(loadId)?.qbo_invoice_total, 2125);
+  assert.equal(sent.totalAmt, 2125);
   assert.match(String(invoice.body.CustomerMemo.value), /MS Express load QBOMAP1/);
   assert.match(String(invoice.body.CustomerMemo.value), /Hastings, NE to Omaha, NE/);
   assert.doesNotMatch(String(invoice.body.CustomerMemo.value), /→/);

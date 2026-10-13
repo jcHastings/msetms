@@ -29,6 +29,7 @@ import {
   paymentTermsDays,
   qboInvoiceExportStatus,
   receivableBalance,
+  receivableInvoiceTotal,
 } from "@/lib/accounting-aging";
 import {
   defaultPayPeriod,
@@ -46,7 +47,7 @@ import { lastSentMail } from "@/lib/mail-store";
 import { hasQuickbooksSession } from "@/lib/integrations/quickbooks";
 import { customerInvoicePayItems, driverPayItems } from "@/lib/pay-items";
 import { getCustomer } from "@/lib/queries";
-import { getCompanySettings, taxOnAmount } from "@/lib/settings";
+import { getCompanySettings } from "@/lib/settings";
 import { listStops } from "@/lib/stops";
 import { LoadStatusBadge } from "@/components/status-badge";
 import { labelForLoadStatus, type LoadView } from "@/lib/types";
@@ -200,8 +201,7 @@ function toInvoiceAcctRow(
   qboConnected: boolean,
 ): InvoiceAcctRow {
   const settings = getCompanySettings();
-  const tax = taxOnAmount(row.rate);
-  const total = (row.rate ?? 0) + (settings.tax_enabled ? tax.tax : 0);
+  const total = receivableInvoiceTotal(row);
   const settled = receivableBalance(total, row);
   const invoiceIso = invoiceAnchorIso(row);
   const terms = getCustomer(row.customer_id)?.payment_terms ?? "";

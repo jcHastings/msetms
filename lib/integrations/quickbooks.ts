@@ -103,6 +103,8 @@ export type QboSendResult = {
   invoiceNumber: string;
   sentAt: string;
   source: "demo" | "quickbooks";
+  /** Invoice.TotalAmt from QuickBooks, or the sum of the lines we sent. */
+  totalAmt: number;
 };
 
 export type QboStatus = {
@@ -256,6 +258,21 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
     });
   }
   return lines;
+}
+
+/** Sum of every charge line buildInvoiceLines would send, including accessorials. */
+export function qboInvoiceChargeTotal(load: LoadView): number {
+  return roundMoney(buildInvoiceLines(load).reduce((sum, line) => sum + line.amount, 0));
+}
+
+/**
+ * Amount a QuickBooks payment is measured against.
+ * A TotalAmt stored at send wins. Otherwise the current invoice line total.
+ */
+export function qboPaymentBasisTotal(load: LoadView): number {
+  const stored = roundMoney(Number(load.qbo_invoice_total) || 0);
+  if (stored > 0) return stored;
+  return qboInvoiceChargeTotal(load);
 }
 
 function roundMoney(value: number): number {
@@ -427,6 +444,7 @@ export async function sendLoadToQuickbooks(
       invoiceNumber: "",
       sentAt,
       source: "demo",
+      totalAmt: roundMoney(preview.amount),
     };
     markQboInvoice(loadId, result);
     return result;
@@ -444,6 +462,7 @@ export async function sendLoadToQuickbooks(
     invoiceNumber: live.invoiceNumber,
     sentAt,
     source: "quickbooks",
+    totalAmt: live.totalAmt,
   };
   markQboInvoice(loadId, result);
   return result;
@@ -575,10 +594,16 @@ export function loadNumberAsDocNumber(loadNumber: string): string {
  * DocNumber is the TMS load number on create and on every re-send.
  * An invoice that already uses that DocNumber is updated. A second invoice is never created.
  */
+function recordedInvoiceTotal(record: QboInvoiceRecord | undefined, fallback: number): number {
+  const reported = Number(record?.TotalAmt);
+  if (Number.isFinite(reported) && reported > 0) return roundMoney(reported);
+  return roundMoney(fallback);
+}
+
 async function createOrUpdateLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
-): Promise<{ invoiceId: string; invoiceNumber: string }> {
+): Promise<{ invoiceId: string; invoiceNumber: string; totalAmt: number }> {
   refuseUnbilledLines(preview.lines);
   const docNumber = loadNumberAsDocNumber(load.load_number);
   const customerId = await resolveQboCustomer(load);
@@ -599,7 +624,7 @@ async function createOrUpdateLiveInvoice(
   const linkedId = load.qbo_source === "quickbooks" ? load.qbo_invoice_id.trim() : "";
   const existingByNumber = await findInvoiceByDocNumber(docNumber);
   const targetId = String(existingByNumber?.Id ?? "").trim() || linkedId;
-  if (targetId) return updateLiveInvoice(targetId, payload, docNumber);
+  if (targetId) return updateLiveInvoice(targetId, payload, docNumber, preview.amount);
 
   try {
     const created = await qboPost<{ Invoice?: QboInvoiceRecord }>("/invoice", payload, "invoice create");
@@ -608,12 +633,13 @@ async function createOrUpdateLiveInvoice(
     return {
       invoiceId,
       invoiceNumber: String(created.Invoice?.DocNumber || docNumber).trim(),
+      totalAmt: recordedInvoiceTotal(created.Invoice, preview.amount),
     };
   } catch (error) {
     const raced = await findInvoiceByDocNumber(docNumber);
     const racedId = String(raced?.Id ?? "").trim();
     if (!racedId) throw error;
-    return updateLiveInvoice(racedId, payload, docNumber);
+    return updateLiveInvoice(racedId, payload, docNumber, preview.amount);
   }
 }
 
@@ -621,7 +647,8 @@ async function updateLiveInvoice(
   invoiceId: string,
   payload: Record<string, unknown>,
   docNumber: string,
-): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  fallbackTotal: number,
+): Promise<{ invoiceId: string; invoiceNumber: string; totalAmt: number }> {
   let current: QboInvoiceRecord | undefined;
   try {
     current = (await qboGet<{ Invoice?: QboInvoiceRecord }>(`/invoice/${encodeURIComponent(invoiceId)}`, "invoice read")).Invoice;
@@ -646,6 +673,7 @@ async function updateLiveInvoice(
   return {
     invoiceId: updated.Invoice?.Id || current.Id,
     invoiceNumber: String(updated.Invoice?.DocNumber || docNumber).trim(),
+    totalAmt: recordedInvoiceTotal(updated.Invoice ?? current, fallbackTotal),
   };
 }
 
