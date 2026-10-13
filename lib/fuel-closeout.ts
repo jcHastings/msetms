@@ -9,11 +9,13 @@ import {
   type FuelAuditSubject,
 } from "./fuel-audit";
 import {
+  fuelTruckDriverLabel,
   fuelTxListKind,
   fuelWeekSpentTotalsForWeek,
   isFuelUnassignedRow,
   isTruckDieselCategory,
   localWeekRange,
+  type FuelMatchLoad,
   type FuelWeekSpentTotals,
 } from "./fuel";
 import { formatMdYDisplay } from "./format";
@@ -283,6 +285,8 @@ export function buildFuelCloseout(input: {
   idleFuel?: IdleFuelQuote[];
   prior?: { rows: FuelCloseoutTx[]; miles: MilesReading[] };
   thresholds?: FuelCloseoutThresholds;
+  loads?: FuelMatchLoad[];
+  drivers?: Array<{ id: number; name: string }>;
 }): FuelCloseoutReport {
   const thresholds = input.thresholds ?? FUEL_CLOSEOUT_THRESHOLDS;
   const range = localWeekRange(input.weekStartYmd);
@@ -290,7 +294,33 @@ export function buildFuelCloseout(input: {
   const now = input.now ?? new Date();
   const closed = Date.parse(window.toIso) <= now.getTime();
   const weekRows = input.rows.filter((row) => inFuelAuditWindow(row.occurred_at, window));
-  const audit = scoreFuelAudit(input.rows, window);
+  const labelContext = {
+    fromIso: window.fromIso,
+    toIso: window.toIso,
+    rows: input.rows,
+    loads: input.loads ?? [],
+    drivers: input.drivers ?? [],
+  };
+  const subjectFor = (row: FuelCloseoutTx): FuelAuditSubject => {
+    const subject = fuelAuditSubject(row);
+    if (subject.driverId != null || subject.driverName !== "Unassigned" || !labelContext.loads.length) return subject;
+    const label = fuelTruckDriverLabel({
+      truckId: row.truck_id ?? null,
+      unit: subject.unit,
+      ...labelContext,
+    });
+    if (!label.driverId) return subject;
+    return {
+      key: `d:${label.driverId}`,
+      driverId: label.driverId,
+      driverName: label.driverName,
+      unit: subject.unit,
+    };
+  };
+  const audit = scoreFuelAudit(input.rows, window, undefined, {
+    loads: input.loads,
+    drivers: input.drivers,
+  });
   const flagsBySubject = new Map<string, FuelAuditFlag[]>();
   for (const flag of audit.flags) {
     const list = flagsBySubject.get(flag.subjectKey) ?? [];
@@ -300,7 +330,7 @@ export function buildFuelCloseout(input: {
 
   const buckets = new Map<string, { subject: FuelAuditSubject; lines: FuelCloseoutLineItems }>();
   for (const row of weekRows) {
-    const subject = fuelAuditSubject(row);
+    const subject = subjectFor(row);
     const bucket = buckets.get(subject.key) ?? { subject, lines: emptyLines() };
     bucket.subject = mergeSubject(bucket.subject, subject);
     addLine(bucket.lines, row);

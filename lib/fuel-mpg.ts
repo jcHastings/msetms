@@ -1,5 +1,12 @@
 import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
-import { addYmdDays, isTruckDieselCategory, startOfLocalMonth, startOfLocalWeek } from "./fuel";
+import {
+  addYmdDays,
+  fuelLoadOverlapsRange,
+  isTruckDieselCategory,
+  normalizeUnit,
+  startOfLocalMonth,
+  startOfLocalWeek,
+} from "./fuel";
 import { listFuelTransactions } from "./fuel-store";
 import { engineHoursForDriverWindow } from "./engine-hours";
 import { estimateIdleFuelCost, fillsForDriverPrice, paidFleetOnePpg } from "./idle-fuel-cost";
@@ -115,6 +122,37 @@ export function googleMilesForDriverInRange(
   return found ? Math.round(total * 10) / 10 : null;
 }
 
+function truckForDriverFuelOrLoad(
+  driverId: number,
+  trucks: ReturnType<typeof listTrucks>,
+  fuel: ReturnType<typeof listFuelTransactions>,
+  loads: LoadView[],
+  startIso: string,
+  endIso: string,
+) {
+  const fromMs = Date.parse(startIso);
+  const toMs = Date.parse(endIso);
+  const fuelTrucks = new Set<number>();
+  for (const row of fuel) {
+    if (row.driver_id !== driverId) continue;
+    if (row.occurred_at < startIso || row.occurred_at > endIso) continue;
+    const byId = row.truck_id ? trucks.find((truck) => truck.id === row.truck_id) : undefined;
+    const unit = normalizeUnit(row.truck_unit || row.unit_number || "");
+    const byUnit = unit ? trucks.find((truck) => normalizeUnit(truck.unit_number) === unit) : undefined;
+    const truck = byId ?? byUnit;
+    if (truck) fuelTrucks.add(truck.id);
+  }
+  if (fuelTrucks.size === 1) return trucks.find((truck) => truck.id === [...fuelTrucks][0]);
+  const loadTrucks = new Set<number>();
+  for (const load of loads) {
+    if (load.driver_id !== driverId || load.truck_id == null) continue;
+    if (!fuelLoadOverlapsRange(load, fromMs, toMs)) continue;
+    loadTrucks.add(load.truck_id);
+  }
+  if (loadTrucks.size === 1) return trucks.find((truck) => truck.id === [...loadTrucks][0]);
+  return undefined;
+}
+
 export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()): DriverMpgBoard {
   const start = period === "month" ? startOfLocalMonth(now) : startOfLocalWeek(now);
   const startYmd = ymdInTimeZone(start, DISPLAY_TIME_ZONE);
@@ -147,9 +185,7 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
             Number.isFinite(row.gallons),
         )
         .reduce((sum, row) => sum + (row.gallons ?? 0), 0);
-      const truck =
-        (driver.truck_id ? trucks.find((item) => item.id === driver.truck_id) : undefined) ??
-        trucks.find((item) => item.assigned_driver_id === driver.id);
+      const truck = truckForDriverFuelOrLoad(driver.id, trucks, fuel, loads, startIso, endIso);
       const odometerMiles = truck
         ? odometerDeltaMiles(odometerByTruck.get(truck.id) ?? [], startIso, endIso)
         : null;
@@ -167,7 +203,7 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
       return {
         driverId: driver.id,
         driverName: driver.name,
-        truckUnit: truck?.unit_number || driver.truck_unit || "",
+        truckUnit: truck?.unit_number || "",
         gallons,
         miles,
         mpg,

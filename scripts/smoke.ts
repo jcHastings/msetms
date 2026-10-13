@@ -19237,7 +19237,7 @@ DISPATCH CONFIRMATION
     queries.listDrivers(),
     queries.listTrucks(),
   );
-  assert.equal(chrisHowellMatch.driverId, null, "Chris Howell stays unmatched until Assign");
+  assert.equal(chrisHowellMatch.driverId, howellId, "Chris Howell matches Christopher Howell");
   const videoAssign = new FormData();
   videoAssign.set("fuel_id", String(videoAssignId));
   videoAssign.set("driver_id", String(howellId));

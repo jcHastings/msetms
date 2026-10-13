@@ -9,6 +9,7 @@ import {
   type FuelAuditWindowKind,
 } from "./fuel-audit";
 import { listFuelTransactions } from "./fuel-store";
+import { listDrivers, listLoads } from "./queries";
 
 export type MikeFuelAuditQuestion = {
   kind: "fuel_audit";
@@ -77,11 +78,24 @@ export function answerMikeFuelAuditQuestion(
   const parsed = parseMikeFuelAuditQuestion(question);
   if (!parsed) return null;
   const window = resolveFuelAuditWindow(parsed.windowKind, now);
-  const report = scoreFuelAudit(rows ?? listFuelTransactions(), window);
+  const live = rows == null;
+  const report = scoreFuelAudit(
+    rows ?? listFuelTransactions(),
+    window,
+    undefined,
+    live
+      ? { loads: listLoads({ status: "all" }), drivers: listDrivers().map((driver) => ({ id: driver.id, name: driver.name })) }
+      : undefined,
+  );
   return formatMikeFuelAuditReply(report);
 }
 
 export function buildMikeFuelAuditSnapshot(now = new Date()) {
   const window = resolveFuelAuditWindow("week", now);
-  return summarizeFuelAudit(scoreFuelAudit(listFuelTransactions(), window));
+  return summarizeFuelAudit(
+    scoreFuelAudit(listFuelTransactions(), window, undefined, {
+      loads: listLoads({ status: "all" }),
+      drivers: listDrivers().map((driver) => ({ id: driver.id, name: driver.name })),
+    }),
+  );
 }

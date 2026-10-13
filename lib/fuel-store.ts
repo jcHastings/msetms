@@ -87,8 +87,9 @@ export function getFuelTransaction(id: number): FuelTransactionView | null {
 function listFuelMatchLoads(): FuelMatchLoad[] {
   return getDb()
     .prepare(
-      `SELECT truck_id, driver_id, status FROM loads
-       WHERE truck_id IS NOT NULL AND driver_id IS NOT NULL`,
+      `SELECT truck_id, driver_id, status, pickup_start, pickup_end, delivery_start, delivery_end
+       FROM loads
+       WHERE truck_id IS NOT NULL AND driver_id IS NOT NULL AND status != 'cancelled'`,
     )
     .all() as FuelMatchLoad[];
 }
@@ -127,15 +128,17 @@ function applyParsedFuelDriverNames(
     driverIdRaw?: string;
     prompt?: string;
     dedupKey?: string;
+    occurredAt?: string;
   }>,
   unmatchedOnly = false,
 ): number {
   const drivers = listDrivers();
   const trucks = listTrucks();
+  const loads = listFuelMatchLoads();
   const db = getDb();
   const existing = db
     .prepare(
-      `SELECT id, driver_id, truck_id, amount, unit_number, invoice_number, driver_name_raw, category, dedup_key
+      `SELECT id, driver_id, truck_id, amount, unit_number, invoice_number, driver_name_raw, category, dedup_key, driver_source
        FROM fuel_transactions`,
     )
     .all() as Array<{
@@ -148,10 +151,11 @@ function applyParsedFuelDriverNames(
     driver_name_raw: string;
     category: string;
     dedup_key: string;
+    driver_source: string;
   }>;
   const update = db.prepare(
     `UPDATE fuel_transactions
-     SET driver_name_raw = ?, invoice_number = ?, driver_id = ?, truck_id = ?
+     SET driver_name_raw = ?, invoice_number = ?, driver_id = ?, truck_id = ?, driver_source = ?
      WHERE id = ?`,
   );
   let updated = 0;
@@ -163,31 +167,38 @@ function applyParsedFuelDriverNames(
         driverIdRaw: row.driverIdRaw ?? "",
         unitNumber: row.unitNumber,
         prompt: row.prompt ?? "",
+        occurredAt: row.occurredAt,
+        category: row.category,
       },
       drivers,
       trucks,
+      loads,
     );
     for (const hit of existing) {
       if (isMoneyCodeCategory(hit.category)) continue;
+      if (hit.driver_source === "manual") continue;
       if (unmatchedOnly && hit.driver_id) continue;
       if (!parsedFuelRowMatchesExisting(row, hit)) continue;
       const nextName = row.driverName.trim() || hit.driver_name_raw;
       const nextInvoice = row.invoice.trim() || hit.invoice_number;
       const nextDriverId = match.driverId;
       const nextTruckId = match.truckId ?? hit.truck_id;
+      const nextSource = match.driverSource ?? "";
       if (
         nextName === hit.driver_name_raw &&
         nextInvoice === hit.invoice_number &&
         (hit.driver_id ?? null) === nextDriverId &&
-        (hit.truck_id ?? null) === nextTruckId
+        (hit.truck_id ?? null) === nextTruckId &&
+        (hit.driver_source ?? "") === nextSource
       ) {
         continue;
       }
-      update.run(nextName, nextInvoice, nextDriverId, nextTruckId, hit.id);
+      update.run(nextName, nextInvoice, nextDriverId, nextTruckId, nextSource, hit.id);
       hit.driver_name_raw = nextName;
       hit.invoice_number = nextInvoice;
       hit.driver_id = nextDriverId;
       hit.truck_id = nextTruckId;
+      hit.driver_source = nextSource;
       updated += 1;
     }
   }
@@ -255,7 +266,7 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT id, driver_id, truck_id, category, unit_number, driver_name_raw, prompt_data
+      `SELECT id, driver_id, truck_id, category, unit_number, driver_name_raw, prompt_data, occurred_at, driver_source
        FROM fuel_transactions`,
     )
     .all() as Array<{
@@ -266,12 +277,17 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
     unit_number: string;
     driver_name_raw: string;
     prompt_data: string;
+    occurred_at: string;
+    driver_source: string;
   }>;
-  const update = db.prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ? WHERE id = ?");
+  const update = db.prepare(
+    "UPDATE fuel_transactions SET driver_id = ?, truck_id = ?, driver_source = ? WHERE id = ?",
+  );
   db.transaction(() => {
     for (const row of rows) {
       if (unmatchedOnly && row.driver_id) continue;
       if (isMoneyCodeCategory(row.category)) continue;
+      if (row.driver_source === "manual") continue;
       const name = fuelRowDriverName(row);
       const match = matchFuelDriver(
         {
@@ -279,18 +295,31 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
           driverIdRaw: "",
           unitNumber: row.unit_number,
           prompt: row.prompt_data,
+          occurredAt: row.occurred_at,
+          category: row.category,
         },
         drivers,
         trucks,
+        loads,
       );
       let nextDriverId = match.driverId;
-      if (!match.driverId && row.driver_id && !looksLikeTruckOrLoadAssign(row, trucks, drivers, loads)) {
+      let nextSource = match.driverSource ?? "";
+      const legacyManual =
+        !row.driver_source &&
+        row.driver_id &&
+        !looksLikeTruckOrLoadAssign(row, trucks, drivers, loads);
+      if (!match.driverId && legacyManual) {
         nextDriverId = row.driver_id;
+        nextSource = row.driver_source;
       }
       const nextTruckId = match.truckId ?? row.truck_id;
-      if (sameId(row.driver_id, nextDriverId) && sameId(row.truck_id, nextTruckId)) continue;
-      if ((row.driver_id ?? null) === nextDriverId && (row.truck_id ?? null) === nextTruckId) continue;
-      update.run(nextDriverId, nextTruckId, row.id);
+      if (sameId(row.driver_id, nextDriverId) && sameId(row.truck_id, nextTruckId) && (row.driver_source ?? "") === nextSource) {
+        continue;
+      }
+      if ((row.driver_id ?? null) === nextDriverId && (row.truck_id ?? null) === nextTruckId && (row.driver_source ?? "") === nextSource) {
+        continue;
+      }
+      update.run(nextDriverId, nextTruckId, nextSource, row.id);
       updated += 1;
     }
   })();
@@ -378,6 +407,7 @@ export function importFuelFromText(
   const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
   const trucks = listTrucks();
+  const loads = listFuelMatchLoads();
   const db = getDb();
   const existing = new Set(
     (db.prepare("SELECT dedup_key FROM fuel_transactions").all() as Array<{ dedup_key: string }>).map(
@@ -388,8 +418,8 @@ export function importFuelFromText(
     `INSERT INTO fuel_transactions (
       occurred_at, driver_id, truck_id, load_id, location, gallons, price_per_gallon, amount,
       card_last4, source_file, category, unit_number, driver_name_raw, invoice_number,
-      prompt_data, dedup_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      prompt_data, dedup_key, created_at, driver_source
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let created = 0;
   let skipped = parsed.skipped;
@@ -401,7 +431,7 @@ export function importFuelFromText(
         skipped += 1;
         continue;
       }
-      const match = matchFuelDriver(row, drivers, trucks);
+      const match = matchFuelDriver(row, drivers, trucks, loads);
       insert.run(
         row.occurredAt,
         match.driverId,
@@ -420,6 +450,7 @@ export function importFuelFromText(
         row.prompt,
         row.dedupKey,
         nowIso(),
+        match.driverSource ?? "",
       );
       seen.add(row.dedupKey);
       if (match.driverId || fuelHasSheetDriver(row.driverName)) created += 1;
@@ -450,7 +481,9 @@ export function assignFuelTransactionDriver(id: number, driverId: number): void 
   const truckId = row.truck_id ?? driver.truck_id;
   const rawName = row.driver_name_raw.trim() || driver.name;
   getDb()
-    .prepare("UPDATE fuel_transactions SET driver_id = ?, truck_id = ?, driver_name_raw = ? WHERE id = ?")
+    .prepare(
+      "UPDATE fuel_transactions SET driver_id = ?, truck_id = ?, driver_name_raw = ?, driver_source = 'manual' WHERE id = ?",
+    )
     .run(driverId, truckId, rawName, id);
 }
 

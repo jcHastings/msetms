@@ -66,6 +66,8 @@ export type FuelTransaction = {
   prompt_data: string;
   dedup_key: string;
   created_at: string;
+  /** import_name | truck_load | manual. Empty on rows saved before this column. */
+  driver_source?: string;
 };
 
 export type FuelTransactionView = FuelTransaction & {
@@ -389,25 +391,140 @@ export type FuelMatchLoad = {
   truck_id: number | null;
   driver_id: number | null;
   status: string;
+  pickup_start?: string | null;
+  pickup_end?: string | null;
+  delivery_start?: string | null;
+  delivery_end?: string | null;
 };
 
+export type FuelDriverSource = "import_name" | "truck_load" | "manual";
+
+const FUEL_LOAD_SLACK_MS = 86_400_000;
+
+export function fuelLoadBounds(load: FuelMatchLoad): { start: number; end: number } | null {
+  if (load.status === "cancelled") return null;
+  const startRaw = String(load.pickup_start || load.pickup_end || "").trim();
+  const endRaw = String(load.delivery_end || load.delivery_start || load.pickup_end || load.pickup_start || "").trim();
+  if (!startRaw || !endRaw) return null;
+  const start = Date.parse(startRaw);
+  const end = Date.parse(endRaw);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return { start, end: Math.max(start, end) };
+}
+
+/** Pickup through delivery covers this instant, plus or minus one day. */
+export function fuelLoadCoversAt(load: FuelMatchLoad, atMs: number): boolean {
+  if (!load.driver_id || !load.truck_id) return false;
+  const bounds = fuelLoadBounds(load);
+  if (!bounds || !Number.isFinite(atMs)) return false;
+  return atMs >= bounds.start - FUEL_LOAD_SLACK_MS && atMs <= bounds.end + FUEL_LOAD_SLACK_MS;
+}
+
+/** Load span overlaps a report window. The window end is exclusive. */
+export function fuelLoadOverlapsRange(load: FuelMatchLoad, fromMs: number, toMs: number): boolean {
+  if (!load.driver_id || !load.truck_id) return false;
+  const bounds = fuelLoadBounds(load);
+  if (!bounds) return false;
+  return bounds.start < toMs && bounds.end >= fromMs;
+}
+
+export type FuelLabelRow = {
+  occurred_at: string;
+  driver_id: number | null;
+  driver_name?: string | null;
+  truck_id?: number | null;
+  unit_number?: string | null;
+  truck_unit?: string | null;
+};
+
+function distinctPositiveIds(ids: Array<number | null | undefined>): number[] {
+  return [...new Set(ids.filter((id): id is number => Number.isFinite(id) && Number(id) > 0))];
+}
+
+function rowOnTruck(row: FuelLabelRow, truckId: number | null, unit: string): boolean {
+  if (truckId != null && row.truck_id != null && row.truck_id === truckId) return true;
+  const want = normalizeUnit(unit);
+  const got = normalizeUnit(row.truck_unit || row.unit_number || "");
+  return Boolean(want && got && want === got);
+}
+
+/**
+ * Driver label for a truck in a report window.
+ * Fuel rows win, then the driver on that truck's load. Profile truck is never used.
+ */
+export function fuelTruckDriverLabel(input: {
+  truckId: number | null;
+  unit: string;
+  fromIso: string;
+  toIso: string;
+  rows: FuelLabelRow[];
+  loads: FuelMatchLoad[];
+  drivers: Array<{ id: number; name: string }>;
+}): { driverId: number | null; driverName: string } {
+  const fromMs = Date.parse(input.fromIso);
+  const toMs = Date.parse(input.toIso);
+  const fuelIds = distinctPositiveIds(
+    input.rows
+      .filter((row) => {
+        if (!rowOnTruck(row, input.truckId, input.unit)) return false;
+        return row.occurred_at >= input.fromIso && row.occurred_at < input.toIso;
+      })
+      .map((row) => row.driver_id),
+  );
+  const loadIds =
+    input.truckId == null || !Number.isFinite(fromMs) || !Number.isFinite(toMs)
+      ? []
+      : distinctPositiveIds(
+          input.loads
+            .filter((load) => load.truck_id === input.truckId && fuelLoadOverlapsRange(load, fromMs, toMs))
+            .map((load) => load.driver_id),
+        );
+  const driverId = fuelIds.length === 1 ? fuelIds[0]! : fuelIds.length === 0 && loadIds.length === 1 ? loadIds[0]! : null;
+  if (driverId == null) return { driverId: null, driverName: "Unassigned" };
+  const name = input.drivers.find((driver) => driver.id === driverId)?.name?.trim();
+  return { driverId, driverName: name || "Unassigned" };
+}
+
 export function matchFuelDriver(
-  row: Pick<ParsedFuelCsvRow, "driverName" | "driverIdRaw" | "unitNumber" | "prompt">,
+  row: Pick<ParsedFuelCsvRow, "driverName" | "driverIdRaw" | "unitNumber" | "prompt"> & {
+    occurredAt?: string;
+    category?: string;
+  },
   drivers: DriverWithTruck[],
   trucks: TruckWithDriver[],
-  _loads: FuelMatchLoad[] = [],
-): { driverId: number | null; truckId: number | null; unitNumber: string } {
+  loads: FuelMatchLoad[] = [],
+): { driverId: number | null; truckId: number | null; unitNumber: string; driverSource: FuelDriverSource | null } {
   const truck =
     findTruckByUnit(row.unitNumber, trucks) ?? findTruckByUnit(row.prompt ?? "", trucks);
-  const extractedName =
-    extractNProductDriverName(row.driverName) || extractNProductDriverName(row.prompt ?? "");
+  const unitNumber = truck?.unit_number || row.unitNumber.trim() || (row.prompt ?? "").trim();
+  if (isMoneyCodeCategory(row.category ?? "")) {
+    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
+  }
   const byId = findDriverById(row.driverIdRaw, drivers);
-  const byName = findDriverByName(row.driverName, drivers) ?? findDriverByName(extractedName, drivers);
-  const driver = byId ?? byName;
+  if (byId) {
+    return { driverId: byId.id, truckId: truck?.id ?? null, unitNumber, driverSource: "import_name" };
+  }
+  const named =
+    matchDriverName(row.driverName, drivers, { truckId: truck?.id ?? null, occurredAt: row.occurredAt, loads }) ??
+    matchDriverName(row.prompt ?? "", drivers, { truckId: truck?.id ?? null, occurredAt: row.occurredAt, loads });
+  if (named?.ambiguous) {
+    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
+  }
+  if (named?.driver) {
+    return { driverId: named.driver.id, truckId: truck?.id ?? null, unitNumber, driverSource: "import_name" };
+  }
+  const namePresent =
+    normalizedDriverTokens(row.driverName).length > 0 || normalizedDriverTokens(row.prompt ?? "").length > 0;
+  if (namePresent) {
+    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
+  }
+  const loadDriverId = loadDriverForFuel(truck?.id ?? null, row.occurredAt, loads);
+  const loadDriver = loadDriverId == null ? undefined : drivers.find((driver) => driver.id === loadDriverId);
   return {
-    driverId: driver?.id ?? null,
-    truckId: truck?.id ?? driver?.truck_id ?? null,
-    unitNumber: truck?.unit_number || row.unitNumber.trim() || (row.prompt ?? "").trim(),
+    driverId: loadDriver?.id ?? null,
+    truckId: truck?.id ?? null,
+    unitNumber,
+    driverSource: loadDriver ? "truck_load" : null,
   };
 }
 
@@ -935,35 +1052,159 @@ function findDriverById(raw: string, drivers: DriverWithTruck[]): DriverWithTruc
   return drivers.find((driver) => driver.samsara_driver_id && driver.samsara_driver_id.toLowerCase() === value.toLowerCase());
 }
 
-function findDriverByName(raw: string, drivers: DriverWithTruck[]): DriverWithTruck | undefined {
-  const foldedRaw = raw
+type DriverNameParts = { tokens: string[]; first: string; last: string; middles: string[] };
+
+type DriverNameHit = { driver: DriverWithTruck | null; ambiguous: boolean };
+
+function normalizedDriverTokens(raw: string): string[] {
+  let text = String(raw ?? "").replace(/\s+/g, " ").trim();
+  text = text.replace(/^fuel\s+/i, "").trim();
+  if (!text) return [];
+  const extracted = extractNProductDriverName(text);
+  const chosen = extracted || text;
+  return chosen
     .toLowerCase()
     .replace(/[^a-z]+/g, " ")
-    .trim();
-  if (foldedRaw) {
-    const direct = drivers.filter(
-      (driver) => driver.name.toLowerCase().replace(/[^a-z]+/g, " ").trim() === foldedRaw,
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(aliasToken);
+}
+
+function driverNameParts(raw: string): DriverNameParts | null {
+  const tokens = normalizedDriverTokens(raw);
+  if (tokens.length === 0) return null;
+  return {
+    tokens,
+    first: tokens[0] ?? "",
+    last: tokens.length > 1 ? (tokens[tokens.length - 1] ?? "") : "",
+    middles: tokens.slice(1, -1),
+  };
+}
+
+function sameGivenName(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const a = aliasToken(left);
+  const b = aliasToken(right);
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 4 && long.startsWith(short);
+}
+
+function firstLastKey(parts: DriverNameParts): string | null {
+  if (parts.first.length < 2 || parts.last.length < 2) return null;
+  return `${parts.first} ${parts.last}`;
+}
+
+function onlyDriver(hits: DriverWithTruck[]): DriverNameHit | null {
+  if (hits.length === 1) return { driver: hits[0]!, ambiguous: false };
+  if (hits.length > 1) return { driver: null, ambiguous: true };
+  return null;
+}
+
+function loadDriverForFuel(
+  truckId: number | null,
+  occurredAt: string | undefined,
+  loads: FuelMatchLoad[],
+): number | null {
+  if (truckId == null || !occurredAt) return null;
+  const at = Date.parse(occurredAt);
+  if (!Number.isFinite(at)) return null;
+  const ids = distinctPositiveIds(
+    loads.filter((load) => load.truck_id === truckId && fuelLoadCoversAt(load, at)).map((load) => load.driver_id),
+  );
+  return ids.length === 1 ? ids[0]! : null;
+}
+
+function driverOnTruckLoad(
+  driverId: number,
+  truckId: number | null,
+  occurredAt: string | undefined,
+  loads: FuelMatchLoad[],
+): boolean {
+  return loadDriverForFuel(truckId, occurredAt, loads) === driverId
+    || loads.some((load) => {
+      if (truckId == null || load.truck_id !== truckId || load.driver_id !== driverId) return false;
+      const at = occurredAt ? Date.parse(occurredAt) : Number.NaN;
+      return fuelLoadCoversAt(load, at);
+    });
+}
+
+function matchDriverName(
+  raw: string,
+  drivers: DriverWithTruck[],
+  context: { truckId: number | null; occurredAt?: string; loads: FuelMatchLoad[] },
+): DriverNameHit | null {
+  const card = driverNameParts(raw);
+  if (!card) return null;
+  const roster = drivers.map((driver) => ({ driver, parts: driverNameParts(driver.name) })).filter((item) => item.parts);
+  const exactKey = card.tokens.join(" ");
+  const exact = onlyDriver(
+    roster.filter((item) => item.parts!.tokens.join(" ") === exactKey).map((item) => item.driver),
+  );
+  if (exact) return exact;
+
+  const cardLast = firstLastKey(card);
+  if (cardLast) {
+    const byFirstLast = onlyDriver(
+      roster
+        .filter((item) => firstLastKey(item.parts!) === cardLast)
+        .map((item) => item.driver),
     );
-    if (direct.length === 1) return direct[0];
+    if (byFirstLast) return byFirstLast;
   }
-  const keys = nameKeys(raw);
-  if (keys.length === 0) return undefined;
-  const exact = drivers.filter((driver) => nameKeys(driver.name).some((key) => keys.includes(key) && key.includes(" ")));
-  if (exact.length === 1) return exact[0];
-  if (exact.length > 1) return undefined;
-  const folded = keys.map(foldNameKey);
-  const fuzzy = drivers.filter((driver) => nameKeys(driver.name).some((key) => folded.includes(foldNameKey(key)) && key.includes(" ")));
-  if (fuzzy.length === 1) return fuzzy[0];
-  if (fuzzy.length > 1) return undefined;
-  const rawWords = raw.trim().split(/\s+/).filter(Boolean);
-  if (rawWords.length >= 2) return undefined;
-  const last = keys.find((key) => !key.includes(" ") && !key.includes(","));
-  if (!last) return undefined;
-  const lastHits = drivers.filter((driver) => nameKeys(driver.name).includes(last));
-  if (lastHits.length === 1) return lastHits[0];
-  const lastFolded = foldNameKey(last);
-  const lastFuzzy = drivers.filter((driver) => nameKeys(driver.name).some((key) => !key.includes(" ") && foldNameKey(key) === lastFolded));
-  return lastFuzzy.length === 1 ? lastFuzzy[0] : undefined;
+
+  if (card.last.length >= 2 && card.first.length >= 2) {
+    const byNickname = onlyDriver(
+      roster
+        .filter((item) => {
+          const parts = item.parts!;
+          return parts.last.length >= 2 && parts.last === card.last && sameGivenName(card.first, parts.first);
+        })
+        .map((item) => item.driver),
+    );
+    if (byNickname) return byNickname;
+  }
+
+  const initial = card.middles.find((token) => token.length === 1) || (card.last.length === 1 ? card.last : "");
+  if (initial && card.first.length >= 2 && card.tokens.length <= 2) {
+    const byInitial = onlyDriver(
+      roster
+        .filter((item) => {
+          const parts = item.parts!;
+          if (parts.first !== card.first) return false;
+          return parts.middles.some((token) => token.startsWith(initial));
+        })
+        .map((item) => item.driver),
+    );
+    if (byInitial) return byInitial;
+  }
+
+  if (card.tokens.length >= 2 && card.first.length >= 3) {
+    const bySurname = onlyDriver(
+      roster
+        .filter((item) => {
+          const parts = item.parts!;
+          return parts.tokens.length >= 2 && parts.last.length >= 3 && parts.last === card.first && parts.first !== card.first;
+        })
+        .map((item) => item.driver),
+    );
+    if (bySurname) return bySurname;
+  }
+
+  if (card.tokens.length === 1 && card.first.length >= 3) {
+    const hits = roster.filter((item) => sameGivenName(card.first, item.parts!.first)).map((item) => item.driver);
+    if (hits.length > 1) return { driver: null, ambiguous: true };
+    if (hits.length === 1) {
+      const driver = hits[0]!;
+      if (driverOnTruckLoad(driver.id, context.truckId, context.occurredAt, context.loads)) {
+        return { driver, ambiguous: false };
+      }
+      return { driver: null, ambiguous: true };
+    }
+  }
+  return null;
 }
 
 const NAME_ALIASES: Record<string, string> = {
