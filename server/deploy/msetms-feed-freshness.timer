@@ -1,0 +1,10 @@
+[Unit]
+Description=MS Express TMS: feed freshness pings (Orbcomm, Samsara, GPS, fuel, QuickBooks file)
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target

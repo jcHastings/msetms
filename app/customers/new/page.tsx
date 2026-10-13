@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { deskMetadata } from "@/lib/desk-metadata";
+
+export const metadata = deskMetadata("New customer");
 import { CustomerForm } from "@/components/customer-form";
 import { PageHeader } from "@/components/page-header";
 import { createCustomerAction } from "@/lib/actions";
+
+export const dynamic = "force-dynamic";
 
 export default function NewCustomerPage() {
   return (
