@@ -1,5 +1,6 @@
 import { listBills, listReceivables, type Bill } from "./accounting";
 import { formatAccountingDateTime, formatMdYFull, formatMoney } from "./format";
+import { qboPaymentBasisTotal } from "./integrations/quickbooks";
 import { getCustomer, getLoad } from "./queries";
 import { getCompanySettings, taxOnAmount } from "./settings";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
@@ -144,7 +145,18 @@ export function qboInvoiceExportStatus(load: {
   };
 }
 
-function receivableTotal(load: LoadView): number {
+/**
+ * Open balance for a QuickBooks invoice uses the same total payments are capped against.
+ * Loads that were not sent to QuickBooks stay on rate + tax.
+ */
+export function receivableInvoiceTotal(load: LoadView): number {
+  if (load.qbo_source === "quickbooks" && String(load.qbo_invoice_id ?? "").trim()) {
+    try {
+      return qboPaymentBasisTotal(load);
+    } catch {
+      return loadInvoiceTotal(load);
+    }
+  }
   return loadInvoiceTotal(load);
 }
 
@@ -154,7 +166,7 @@ export function listArReportRows(): ArApReportRow[] {
     const terms = customer?.payment_terms ?? "";
     const invoiceIso = invoiceAnchorIso(load);
     const dueIso = invoiceIso ? addDaysIso(invoiceIso, paymentTermsDays(terms)) : "";
-    const total = receivableTotal(load);
+    const total = receivableInvoiceTotal(load);
     const settled = receivableBalance(total, load);
     const paid = settled.paid;
     const balance = settled.balance;

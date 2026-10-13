@@ -2,6 +2,7 @@
  * QuickBooks payment sync. Synthetic ids only. No live Intuit calls.
  * Webhook signature, partial pay, multi-invoice, overpay, demo ignore,
  * unmatched inbox, void/delete, idempotent redelivery, CDC GET.
+ * Accessorials: full pay, partial, overpay, and idempotent re-apply.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -399,6 +400,134 @@ async function main() {
   });
   delete process.env.QBO_PAYMENT_AR_EMAIL;
   assert.deepEqual(sent, ["billing@example.com"]);
+
+  const { addPayItem } = await import("../lib/pay-items");
+  function withAccessorial(number: string, invoiceId: string): number {
+    const id = makeLoad(number, 2500, invoiceId, "quickbooks");
+    addPayItem(id, {
+      side: "income",
+      bill_to: "customer",
+      payee: "",
+      category: "detention",
+      rate: 875,
+      qty: 1,
+      total: 875,
+      notes: "accessorial",
+    });
+    return id;
+  }
+  function appliedSum(paymentId: string): number {
+    return Number(
+      (
+        db.prepare("SELECT COALESCE(SUM(applied_amount), 0) AS amount FROM qbo_payment_applications WHERE qbo_payment_id = ?").get(
+          paymentId,
+        ) as { amount: number }
+      ).amount,
+    );
+  }
+
+  const accessorialFullId = withAccessorial("PAY1101", "inv-acc-full");
+  assert.equal(qbo.qboInvoiceChargeTotal(queries.getLoad(accessorialFullId)!), 3375);
+  assert.equal(queries.getLoad(accessorialFullId)!.qbo_invoice_total, null);
+  const accessorialNotes = noteCount();
+  const accessorialFull = payments.applyQboPayment(
+    payment({
+      id: "1101",
+      totalAmt: 3375,
+      lines: [{ invoiceId: "inv-acc-full", amount: 3375 }],
+    }),
+  );
+  assert.equal(accessorialFull.unappliedAmt, 0);
+  assert.equal(accessorialFull.notified, true);
+  assert.equal(appliedSum("1101"), 3375);
+  const accessorialPaid = queries.getLoad(accessorialFullId)!;
+  assert.equal(accessorialPaid.invoice_paid, 1);
+  assert.equal(accessorialPaid.invoice_paid_amount, 3375);
+  assert.equal(accessorialPaid.qbo_payment_id, "1101");
+  assert.match(aging.invoicePaidLabel(accessorialPaid), /Paid/);
+  const accessorialFullRow = aging.listArReportRows().find((row) => row.loadId === accessorialFullId)!;
+  assert.equal(accessorialFullRow.total, 3375);
+  assert.equal(accessorialFullRow.paid, 3375);
+  assert.equal(accessorialFullRow.balance, 0);
+
+  const accessorialAgain = payments.applyQboPayment(
+    payment({
+      id: "1101",
+      totalAmt: 3375,
+      lines: [{ invoiceId: "inv-acc-full", amount: 3375 }],
+    }),
+  );
+  assert.equal(accessorialAgain.notified, false);
+  assert.equal(queries.getLoad(accessorialFullId)!.invoice_paid, 1);
+  assert.equal(queries.getLoad(accessorialFullId)!.invoice_paid_amount, 3375);
+  assert.equal(appliedSum("1101"), 3375);
+  assert.equal(
+    Number(
+      (db.prepare("SELECT COUNT(*) AS n FROM qbo_payment_applications WHERE qbo_payment_id = '1101'").get() as { n: number }).n,
+    ),
+    1,
+  );
+  assert.equal(noteCount(), accessorialNotes + recipients);
+
+  const accessorialPartialId = withAccessorial("PAY1102", "inv-acc-part");
+  payments.applyQboPayment(
+    payment({
+      id: "1102",
+      totalAmt: 2500,
+      lines: [{ invoiceId: "inv-acc-part", amount: 2500 }],
+    }),
+  );
+  const accessorialPartial = queries.getLoad(accessorialPartialId)!;
+  assert.equal(accessorialPartial.invoice_paid, 0);
+  assert.equal(accessorialPartial.invoice_paid_amount, 2500);
+  const accessorialPartialRow = aging.listArReportRows().find((row) => row.loadId === accessorialPartialId)!;
+  assert.equal(accessorialPartialRow.total, 3375);
+  assert.equal(accessorialPartialRow.paid, 2500);
+  assert.equal(accessorialPartialRow.balance, 875);
+  assert.match(aging.invoicePaidLabel(accessorialPartial), /Partial/);
+  assert.match(
+    (db.prepare("SELECT body FROM user_notifications WHERE body LIKE '%PAY1102%'").get() as { body: string }).body,
+    /Remaining \$875/,
+  );
+
+  const accessorialOverId = withAccessorial("PAY1103", "inv-acc-over");
+  const accessorialOver = payments.applyQboPayment(
+    payment({
+      id: "1103",
+      totalAmt: 4000,
+      lines: [{ invoiceId: "inv-acc-over", amount: 4000 }],
+    }),
+  );
+  assert.equal(queries.getLoad(accessorialOverId)!.invoice_paid, 1);
+  assert.equal(queries.getLoad(accessorialOverId)!.invoice_paid_amount, 3375);
+  assert.equal(accessorialOver.unappliedAmt, 625);
+  assert.equal(appliedSum("1103"), 3375);
+  const accessorialOverRow = aging.listArReportRows().find((row) => row.loadId === accessorialOverId)!;
+  assert.equal(accessorialOverRow.balance, 0);
+
+  const storedId = makeLoad("PAY1104", 2500, "inv-stored-total", "quickbooks");
+  db.prepare("UPDATE loads SET qbo_invoice_total = 3375 WHERE id = ?").run(storedId);
+  assert.equal(qbo.qboInvoiceChargeTotal(queries.getLoad(storedId)!), 2500);
+  const storedPay = payments.applyQboPayment(
+    payment({
+      id: "1104",
+      totalAmt: 3375,
+      lines: [{ invoiceId: "inv-stored-total", amount: 3375 }],
+    }),
+  );
+  assert.equal(storedPay.unappliedAmt, 0);
+  assert.equal(appliedSum("1104"), 3375);
+  assert.equal(queries.getLoad(storedId)!.invoice_paid, 1);
+  assert.equal(queries.getLoad(storedId)!.invoice_paid_amount, 3375);
+  const storedAgain = payments.applyQboPayment(
+    payment({
+      id: "1104",
+      totalAmt: 3375,
+      lines: [{ invoiceId: "inv-stored-total", amount: 3375 }],
+    }),
+  );
+  assert.equal(storedAgain.notified, false);
+  assert.equal(queries.getLoad(storedId)!.invoice_paid_amount, 3375);
 
   const route = fs.readFileSync(path.join(process.cwd(), "app/api/integrations/quickbooks/webhook/route.ts"), "utf8");
   assert.match(route, /intuit-signature/);

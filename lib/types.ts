@@ -495,6 +495,8 @@ export type Load = {
   qbo_doc_number: string | null;
   qbo_sent_at: string;
   qbo_source: "demo" | "quickbooks" | "";
+  /** QuickBooks Invoice.TotalAmt saved at send. Null until a send stores it. */
+  qbo_invoice_total: number | null;
   status_reason: string;
   cancel_reason: string;
   cover_by: string;

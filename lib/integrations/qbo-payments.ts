@@ -11,6 +11,7 @@ import { canAccessAccounting } from "../settings-shared";
 import {
   connectedQuickbooksRealmId,
   hasQuickbooksSession,
+  qboPaymentBasisTotal,
   readQboPayment,
   readQboPaymentCdc,
 } from "./quickbooks";
@@ -307,10 +308,23 @@ type LoadPaidState = {
   total: number;
 };
 
+/**
+ * Cap and paid check use the QuickBooks invoice total: TotalAmt stored at send,
+ * otherwise every charge line from the invoice builder (rate plus accessorials).
+ * Rate + tax alone is not the invoice.
+ */
+function paymentCapTotal(load: NonNullable<ReturnType<typeof getLoad>>): number {
+  try {
+    return qboPaymentBasisTotal(load);
+  } catch {
+    return loadInvoiceTotal(load);
+  }
+}
+
 function recomputeLoad(loadId: number): LoadPaidState | null {
   const load = getLoad(loadId);
   if (!load) return null;
-  const total = loadInvoiceTotal(load);
+  const total = paymentCapTotal(load);
   const sumRow = getDb()
     .prepare(
       `SELECT COALESCE(SUM(a.applied_amount), 0) AS amount
@@ -436,7 +450,7 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
         continue;
       }
       const load = getLoad(loads[0]);
-      const total = load ? loadInvoiceTotal(load) : 0;
+      const total = load ? paymentCapTotal(load) : 0;
       const room = roundMoney(Math.max(0, total - appliedByOthers(loads[0], snapshot.id)));
       const applied = roundMoney(Math.min(line.amount, room));
       const excess = roundMoney(line.amount - applied);

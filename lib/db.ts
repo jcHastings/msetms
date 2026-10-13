@@ -256,6 +256,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "qbo_doc_number", "TEXT");
   ensureColumn(db, "loads", "qbo_sent_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "qbo_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "qbo_invoice_total", "REAL");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ifta_reports (
