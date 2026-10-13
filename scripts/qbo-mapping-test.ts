@@ -131,7 +131,11 @@ async function main() {
   assert.equal(invoice.body.CustomerRef.value, "58");
   assert.equal(invoice.body.DocNumber, "QBOMAP1", "DocNumber is the TMS load number");
   assert.equal(invoice.body.ARAccountRef, undefined);
-  assert.equal(invoice.body.ClassRef, undefined);
+  assert.equal(invoice.body.ClassRef, undefined, "a load with no driver has no class");
+  assert.ok(
+    invoice.body.Line.every((line: Json) => line.SalesItemLineDetail.ClassRef === undefined),
+    "lines have no class when the load has no driver",
+  );
   assert.equal(sent.invoiceNumber, "QBOMAP1");
   assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "QBOMAP1");
   assert.match(String(invoice.body.CustomerMemo.value), /MS Express load QBOMAP1/);
@@ -231,6 +235,72 @@ async function main() {
   await assert.rejects(() => qbo.sendLoadToQuickbooks(dupLoad, { confirmResend: true }), /Intuit ref tid-test-123/);
   console.error = quiet;
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "no write after a failed read");
+
+  const { accountProblem, forbiddenAccountMessage, INVOICE_RULES } = await import("../lib/qbo-production-map");
+  const { getQuickbooksDetentionIncomeAccount, qboClassAutoCreateEnabled } = await import("../lib/env");
+  assert.equal(INVOICE_RULES.fuel_surcharge.itemName, "Fuel Surcharge");
+  assert.equal(INVOICE_RULES.fuel_surcharge.accountName, "Gross Trucking Income");
+  assert.equal(INVOICE_RULES.fuel_surcharge.kind, "income");
+  assert.equal(INVOICE_RULES.lumper.accountName, "Lumper");
+  assert.equal(INVOICE_RULES.lumper.kind, "cogs");
+  assert.equal(INVOICE_RULES.layover.accountName, "Gross Trucking Income");
+  assert.equal(INVOICE_RULES.tonu.accountName, "Gross Trucking Income");
+  assert.equal(INVOICE_RULES.detention.itemName, "Detention");
+  assert.match(forbiddenAccountMessage("Uncategorized Income"), /uncategorized/);
+  assert.match(forbiddenAccountMessage("Office:Miscellaneous"), /miscellaneous/);
+  assert.equal(forbiddenAccountMessage("Gross Trucking Income"), "");
+  assert.match(
+    accountProblem(INVOICE_RULES.flat_rate, "Line Haul", {
+      id: "407",
+      fullyQualifiedName: "Uncategorized Income",
+      accountType: "Income",
+      classification: "Revenue",
+    }),
+    /uncategorized/i,
+  );
+  assert.equal(getQuickbooksDetentionIncomeAccount().name, "Detention Income");
+  process.env.QBO_DETENTION_INCOME_ACCOUNT = "88";
+  assert.deepEqual(getQuickbooksDetentionIncomeAccount(), { id: "88", name: "" });
+  delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
+  assert.equal(qboClassAutoCreateEnabled(), true, "sandbox defaults class auto-create on");
+  process.env.QBO_CLASS_AUTO_CREATE = "off";
+  assert.equal(qboClassAutoCreateEnabled(), false);
+  delete process.env.QBO_CLASS_AUTO_CREATE;
+  const savedSandbox = process.env.QBO_SANDBOX;
+  process.env.QBO_SANDBOX = "false";
+  assert.equal(qboClassAutoCreateEnabled(), false, "production defaults class auto-create off");
+  process.env.QBO_CLASS_AUTO_CREATE = "1";
+  assert.equal(qboClassAutoCreateEnabled(), true, "an explicit setting overrides production");
+  delete process.env.QBO_CLASS_AUTO_CREATE;
+  process.env.QBO_SANDBOX = savedSandbox;
+
+  const freight = ITEMS.find((item) => item.Id === "21");
+  assert.ok(freight);
+  const savedIncome = freight.IncomeAccountRef;
+  ACCOUNTS.push({
+    Id: "407",
+    Name: "Uncategorized Income",
+    FullyQualifiedName: "Uncategorized Income",
+    AccountType: "Income",
+    Classification: "Revenue",
+    Active: true,
+  });
+  freight.IncomeAccountRef = { value: "407", name: "Uncategorized Income" };
+  qbo.clearQboCatalogCache();
+  const forbiddenLoad = queries.createLoad({
+    customer_id: customerId, origin: "Hastings, NE", destination: "Omaha, NE",
+    pickup_start: day, pickup_end: day, delivery_start: day, delivery_end: day,
+    weight: 1000, commodity: "Frozen beef", rate: 700, notes: "", special_instructions: "", appointment_notes: "",
+    reference_number: "", po_number: "", reefer_setpoint_f: null, trailer_number: "", status: "available",
+    truck_id: null, driver_id: null, trailer_id: null, load_number: "QBOMAP4", oo_pay: null,
+  } as Parameters<typeof queries.createLoad>[0]);
+  db.prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(forbiddenLoad);
+  calls.length = 0;
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(forbiddenLoad), /uncategorized/i);
+  assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "a forbidden account is not posted");
+  freight.IncomeAccountRef = savedIncome;
+  ACCOUNTS.pop();
+  qbo.clearQboCatalogCache();
 
   // Disconnect revokes the refresh token at Intuit, then deletes the local token file.
   calls.length = 0;

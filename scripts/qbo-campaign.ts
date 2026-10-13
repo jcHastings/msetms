@@ -10,7 +10,7 @@
  * Live sandbox (later): pushes each case to the QuickBooks SANDBOX and reads it back through the API.
  * Refuses unless QBO_SANDBOX is on, the API host is sandbox-quickbooks.api.intuit.com, the realm is
  * 9341458445928351 (Sandbox Company US 5710), and CompanyInfo says "Sandbox Company". Creates only fixtures named
- * "MSETMS Test …". Never touches a production QuickBooks company. Never writes the source DB.
+ * "MSETMS Test …". A missing driver class may be created when class auto-create is on. Never creates a customer, vendor, account, or item. Never touches a production QuickBooks company. Never writes the source DB.
  *   tsx scripts/qbo-campaign.ts --live --db /tmp/tms-copy.db --token-file /srv/msetms/shared/data/qbo-refresh.json \
  *     [--cleanup] [--out report.md]
  */
@@ -136,6 +136,7 @@ const fake = {
     acct("702", "Fuel Expense Override", "Expense", "Expense"),
   ],
   items: new Map<string, FakeItem>(),
+  classes: new Map<string, { Id: string; Name: string }>(),
   customers: [
     { Id: "58", DisplayName: "M & S Loads LLC." },
     { Id: "77", DisplayName: "Exact Broker LLC" },
@@ -201,6 +202,10 @@ function fakeQbo(url: URL, method: string, body: Json | undefined): Response {
       const name = eq("DisplayName");
       return ok({ QueryResponse: { Vendor: fake.vendors.filter((v) => !name || v.DisplayName === name) } });
     }
+    if (/from Class/i.test(q)) {
+      const name = eq("Name");
+      return ok({ QueryResponse: { Class: [...fake.classes.values()].filter((row) => !name || row.Name === name) } });
+    }
     return ok({ QueryResponse: {} });
   }
   const get = tail.match(/^\/(invoice|bill|item|companyinfo)\/([^/]+)$/);
@@ -248,6 +253,16 @@ function fakeQbo(url: URL, method: string, body: Json | undefined): Response {
     const created = { ...body, DocNumber: doc, Id, SyncToken: "0", TotalAmt: total, Balance: total };
     fake.invoices.set(Id, created);
     return ok({ Invoice: created });
+  }
+  if (method === "POST" && tail === "/class" && body) {
+    const name = String(body.Name ?? "").trim();
+    if (!name) return qboError(400, "Class name required");
+    const existing = [...fake.classes.values()].find((row) => row.Name === name);
+    if (existing) return ok({ Class: existing });
+    const Id = String(fake.nextId++);
+    const created = { Id, Name: name };
+    fake.classes.set(Id, created);
+    return ok({ Class: created });
   }
   if (method === "POST" && tail === "/bill" && body) {
     const total = Math.round((body.Line ?? []).reduce((s: number, l: Json) => s + l.Amount, 0) * 100) / 100;
@@ -333,7 +348,7 @@ async function main() {
     tonu: { item: "TONU", income: "Gross Trucking Income" },
     washout: { item: "Trailer Washout", income: "Gross Trucking Income" },
     extra_stop: { item: "Picks and Drops", income: "Gross Trucking Income" },
-    fuel_surcharge: { item: "Fuel Surcharge", income: "Fuel Surcharge Income" },
+    fuel_surcharge: { item: "Fuel Surcharge", income: "Gross Trucking Income" },
     misc: { item: "Adjustment", income: "Gross Trucking Income" },
     lumper: { item: "Lumper", income: "Lumper" },
   } as const;
@@ -423,15 +438,12 @@ async function main() {
 
   const applyFixedChart = () => {
     if (LIVE) return;
-    if (!fake.accounts.some((row) => row.FullyQualifiedName === "Fuel Surcharge Income")) {
-      fake.accounts.push(acct("421", "Fuel Surcharge Income", "Income", "Revenue"));
-    }
     putItem("105", "Lumper", "408");
     putItem("106", "Trailer Washout", "401");
     putItem("107", "Layover", "401");
     putItem("108", "TONU", "401");
     putItem("109", "Adjustment", "401");
-    putItem("110", "Fuel Surcharge", "421");
+    putItem("110", "Fuel Surcharge", "401");
     itemId.flat_rate = "101";
     itemId.detention = "102";
     itemId.extra_stop = "103";
@@ -449,7 +461,7 @@ async function main() {
     incomeId.washout = "401";
     incomeId.misc = "401";
     incomeId.lumper = "408";
-    incomeId.fuel_surcharge = "421";
+    incomeId.fuel_surcharge = "401";
     qbo.clearQboCatalogCache();
   };
   db.prepare("UPDATE customers SET qbo_customer_id = ?, qbo_status = 'mapped', payment_terms = '' WHERE id IN (9, 531)").run(customerQboId);
@@ -559,9 +571,17 @@ async function main() {
     const readTerm = read.SalesTermRef?.value ? String(read.SalesTermRef.value) : "none sent";
     check(c.checks, "terms (sent)", exp.termsId ?? "none sent", sentTerm);
     if (exp.termsId) check(c.checks, "terms (read back)", exp.termsId, readTerm);
-    const sentClass = sentBody?.ClassRef?.value ? String(sentBody.ClassRef.value) : "none";
-    const readClass = read.ClassRef?.value ? String(read.ClassRef.value) : "none";
-    check(c.checks, "class (no TMS class source)", "none/none", `${sentClass}/${readClass}`);
+    const driver = String(load.driver_name ?? "").trim();
+    const sentClass = sentBody?.ClassRef?.name ? String(sentBody.ClassRef.name) : "none";
+    const readClass = read.ClassRef?.name ? String(read.ClassRef.name) : "none";
+    const lineClasses = lines.map((l) => String(l.SalesItemLineDetail?.ClassRef?.name ?? "none"));
+    if (!driver) {
+      check(c.checks, "class (no driver)", "none/none", `${sentClass}/${readClass}`);
+      check(c.checks, "line class (no driver)", "none", lineClasses.every((name) => name === "none") ? "none" : lineClasses.join(","));
+    } else {
+      check(c.checks, "class (driver)", `${driver}/${driver}`, `${sentClass}/${readClass}`);
+      check(c.checks, "line class (driver)", driver, lineClasses.every((name) => name === driver) ? driver : lineClasses.join(","));
+    }
     check(c.checks, "txn date", exp.txnDate ?? "2026-09-14", String(read.TxnDate));
     const doc = String(read.DocNumber ?? "");
     const stored = String(load.qbo_doc_number ?? "");
@@ -636,17 +656,13 @@ async function main() {
         /QuickBooks item "Trailer Washout" is on "Cost of Goods Sold"\. It must be on "Gross Trucking Income"/,
       );
     });
-    await runCase("C26", "Fuel Surcharge missing, then on Gross Trucking Income, both block", async (c) => {
+    await runCase("C26", "Fuel Surcharge missing, or on the wrong account, both block", async (c) => {
       const missing = makeLoad({ rate: 1000, pay: [{ category: "fuel_surcharge", rate: 40, total: 40 }] });
       await expectBlocked(c, () => qbo.sendLoadToQuickbooks(missing.id), /Fuel Surcharge is not in QuickBooks/);
-      putItem("110", "Fuel Surcharge", "401");
+      putItem("110", "Fuel Surcharge", "420");
       qbo.clearQboCatalogCache();
       const wrong = makeLoad({ rate: 1000, pay: [{ category: "fuel_surcharge", rate: 40, total: 40 }] });
-      await expectBlocked(
-        c,
-        () => qbo.sendLoadToQuickbooks(wrong.id),
-        /It must be on its own income account "Fuel Surcharge Income", not Gross Trucking Income/,
-      );
+      await expectBlocked(c, () => qbo.sendLoadToQuickbooks(wrong.id), /It must be on "Gross Trucking Income"/);
       fake.items.delete("110");
       qbo.clearQboCatalogCache();
     });
@@ -747,10 +763,57 @@ async function main() {
       check(c.checks, "shorter vendor name is its own match", "63", String(shortRead.VendorRef?.value));
       check(c.checks, "no customer or vendor create", "0", String(calls.filter((x) => x.method === "POST" && /\/(customer|vendor)\?/.test(x.url)).length));
     });
-    await runCase("C34", "Invoices do not set ClassRef", async (c) => {
-      const { id } = makeLoad({ rate: 800 });
+    await runCase("C34", "Driver name is the class; a missing class is created only when auto-create is on", async (c) => {
+      const plain = makeLoad({ rate: 800 });
+      await qbo.sendLoadToQuickbooks(plain.id);
+      await expectInvoice(c, plain.id, { lines: [{ cat: "flat_rate", amount: 800 }] });
+      const driverId = queries.createDriver({
+        name: "Cole Brennan",
+        phone: "402-555-0191",
+        license: "T-1",
+        truck_id: null,
+        status: "available",
+        driver_type: "company",
+      });
+      const { id } = makeLoad({ rate: 820 });
+      db.prepare("UPDATE loads SET driver_id = ? WHERE id = ?").run(driverId, id);
+      const before = calls.filter((x) => x.method === "POST" && /\/class\?/.test(x.url)).length;
       await qbo.sendLoadToQuickbooks(id);
-      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 800 }] });
+      const created = calls.filter((x) => x.method === "POST" && /\/class\?/.test(x.url)).slice(before);
+      check(c.checks, "one class create", "1", String(created.length));
+      check(c.checks, "class name", "Cole Brennan", String(created[0]?.body?.Name ?? ""));
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 820 }] });
+      const againMark = calls.filter((x) => x.method === "POST" && /\/class\?/.test(x.url)).length;
+      await qbo.sendLoadToQuickbooks(id, { confirmResend: true });
+      check(
+        c.checks,
+        "re-send does not create another class",
+        "0",
+        String(calls.filter((x) => x.method === "POST" && /\/class\?/.test(x.url)).length - againMark),
+      );
+      process.env.QBO_CLASS_AUTO_CREATE = "0";
+      try {
+        const otherId = queries.createDriver({
+          name: "Riley Booker",
+          phone: "402-555-0192",
+          license: "T-2",
+          truck_id: null,
+          status: "available",
+          driver_type: "company",
+        });
+        const blocked = makeLoad({ rate: 830 });
+        db.prepare("UPDATE loads SET driver_id = ? WHERE id = ?").run(otherId, blocked.id);
+        const mark = calls.length;
+        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /Class auto-create is off/);
+        check(
+          c.checks,
+          "no class create while auto-create is off",
+          "0",
+          String(calls.slice(mark).filter((x) => x.method === "POST" && /\/class\?/.test(x.url)).length),
+        );
+      } finally {
+        delete process.env.QBO_CLASS_AUTO_CREATE;
+      }
     });
     await runCase("C35", "Invoices do not set ARAccountRef", async (c) => {
       const { id } = makeLoad({ rate: 810 });
@@ -1214,6 +1277,78 @@ async function main() {
       restore();
     }
   });
+
+  if (!LIVE) {
+    await runCase("C37", "Detention uses Detention Income when that account exists, otherwise Gross Trucking Income", async (c) => {
+      const warnings: string[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(" "));
+      };
+      try {
+        const fallback = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
+        await qbo.sendLoadToQuickbooks(fallback.id);
+        await expectInvoice(c, fallback.id, {
+          lines: [
+            { cat: "flat_rate", amount: 1000 },
+            { cat: "detention", amount: 50 },
+          ],
+        });
+        check(
+          c.checks,
+          "fallback notice",
+          "logged",
+          warnings.some((line) => /Detention income account/.test(line) && /Gross Trucking Income/.test(line)) ? "logged" : warnings.join(" | ") || "none",
+        );
+        fake.accounts.push(acct("430", "Detention Income", "Income", "Revenue"));
+        qbo.clearQboCatalogCache();
+        warnings.length = 0;
+        const wrong = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
+        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(wrong.id), /It must be on "Detention Income"/);
+        putItem("102", "Detention", "430");
+        incomeId.detention = "430";
+        qbo.clearQboCatalogCache();
+        warnings.length = 0;
+        const own = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
+        await qbo.sendLoadToQuickbooks(own.id);
+        await expectInvoice(c, own.id, {
+          lines: [
+            { cat: "flat_rate", amount: 1000 },
+            { cat: "detention", amount: 50 },
+          ],
+        });
+        check(
+          c.checks,
+          "no fallback once the account exists",
+          "none",
+          warnings.some((line) => /Detention income account/.test(line)) ? warnings.join(" | ") : "none",
+        );
+      } finally {
+        console.warn = originalWarn;
+        putItem("102", "Detention", "401");
+        incomeId.detention = "401";
+        fake.accounts = fake.accounts.filter((row) => row.Id !== "430");
+        qbo.clearQboCatalogCache();
+      }
+    });
+    await runCase("C38", "Accounts named uncategorized or miscellaneous are refused", async (c) => {
+      try {
+        putItem("101", "Line Haul", "407");
+        qbo.clearQboCatalogCache();
+        const uncategorized = makeLoad({ rate: 900 });
+        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(uncategorized.id), /uncategorized/i);
+        fake.accounts.push(acct("432", "Miscellaneous", "Income", "Revenue"));
+        putItem("101", "Line Haul", "432");
+        qbo.clearQboCatalogCache();
+        const miscellaneous = makeLoad({ rate: 910 });
+        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(miscellaneous.id), /miscellaneous/i);
+      } finally {
+        putItem("101", "Line Haul", "401");
+        fake.accounts = fake.accounts.filter((row) => row.Id !== "432");
+        qbo.clearQboCatalogCache();
+      }
+    });
+  }
   void resyncLoad;
 
   const creates = calls.filter((call) => call.method === "POST" && /\/(customer|vendor|item|account)\?/.test(call.url));

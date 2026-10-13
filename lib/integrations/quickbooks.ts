@@ -5,11 +5,13 @@ import {
   getQuickbooksClientId,
   getQuickbooksBillExpenseAccountId,
   getQuickbooksClientSecret,
+  getQuickbooksDetentionIncomeAccount,
   getQuickbooksEnvironment,
   getQuickbooksRealmId,
   getQuickbooksRedirectUri,
   getQuickbooksRefreshToken,
   isQuickbooksOAuthReady,
+  qboClassAutoCreateEnabled,
 } from "../env";
 import { getDbPath } from "../db";
 import {
@@ -24,6 +26,8 @@ import {
   accountProblem,
   billAccountName,
   DEFAULT_LOAD_PAY_ACCOUNT,
+  forbiddenAccountMessage,
+  GROSS_TRUCKING_INCOME,
   INVOICE_RULES,
   itemMissingMessage,
   MANAGEMENT_GROUP_CUSTOMER_ID,
@@ -33,6 +37,7 @@ import {
   NOT_BILLED_ON_INVOICE,
   notBilledMessage,
   type BillSplitLine,
+  type InvoiceRule,
   type ResolvedAccount,
 } from "../qbo-production-map";
 import { customerInvoiceBillableItems, resolveCustomerLumper } from "../pay-items";
@@ -348,11 +353,23 @@ async function resolveBillVendor(
 }
 
 async function accountIdByName(name: string): Promise<string> {
+  const named = forbiddenAccountMessage(name);
+  if (named) throw new Error(named);
   const account = await accountByName(name);
   if (!account) {
     throw new Error(`QuickBooks account "${name}" is not in this company. Nothing was sent.`);
   }
+  const resolved = forbiddenAccountMessage(account.fullyQualifiedName);
+  if (resolved) throw new Error(resolved);
   return account.id;
+}
+
+/** A raw account id is refused when its name contains uncategorized or miscellaneous. An unknown id is left to QuickBooks. */
+async function refuseForbiddenAccountId(accountId: string): Promise<void> {
+  const account = await accountById(accountId);
+  if (!account) return;
+  const forbidden = forbiddenAccountMessage(account.fullyQualifiedName);
+  if (forbidden) throw new Error(forbidden);
 }
 
 async function singleBillLine(
@@ -361,6 +378,7 @@ async function singleBillLine(
   memo: string,
 ): Promise<Record<string, unknown>> {
   const accountId = vendorExpenseId || getQuickbooksBillExpenseAccountId()?.trim() || (await accountIdByName(DEFAULT_LOAD_PAY_ACCOUNT));
+  await refuseForbiddenAccountId(accountId);
   return {
     Amount: roundMoney(bill.amount),
     DetailType: "AccountBasedExpenseLineDetail",
@@ -565,7 +583,8 @@ async function createOrUpdateLiveInvoice(
   const docNumber = loadNumberAsDocNumber(load.load_number);
   const customerId = await resolveQboCustomer(load);
   const salesTerm = await resolveSalesTermRef(load);
-  const linePayload = await resolveInvoiceLines(preview.lines);
+  const classRef = await classRefForLoad(load);
+  const linePayload = await resolveInvoiceLines(preview.lines, classRef);
   const payload: Record<string, unknown> = {
     TxnDate: preview.txnDate,
     DocNumber: docNumber,
@@ -574,6 +593,7 @@ async function createOrUpdateLiveInvoice(
     CustomerMemo: { value: preview.memo.slice(0, QBO_CUSTOMER_MEMO_MAX) },
     Line: linePayload,
   };
+  if (classRef) payload.ClassRef = { value: classRef.value, name: classRef.name };
   if (salesTerm) payload.SalesTermRef = salesTerm;
 
   const linkedId = load.qbo_source === "quickbooks" ? load.qbo_invoice_id.trim() : "";
@@ -692,19 +712,24 @@ function refuseUnbilledLines(lines: QboInvoiceLine[]): void {
   }
 }
 
-async function resolveInvoiceLines(lines: QboInvoiceLine[]): Promise<Array<Record<string, unknown>>> {
+async function resolveInvoiceLines(
+  lines: QboInvoiceLine[],
+  classRef?: { value: string; name: string },
+): Promise<Array<Record<string, unknown>>> {
   const payload = [];
   for (const line of lines) {
     const item = await resolveInvoiceItem(line);
+    const detail: Record<string, unknown> = {
+      ItemRef: { value: item.id, name: item.name },
+      Qty: line.qty,
+      UnitPrice: line.unitPrice,
+    };
+    if (classRef) detail.ClassRef = { value: classRef.value, name: classRef.name };
     payload.push({
       Amount: line.amount,
       DetailType: "SalesItemLineDetail",
       Description: line.description,
-      SalesItemLineDetail: {
-        ItemRef: { value: item.id, name: item.name },
-        Qty: line.qty,
-        UnitPrice: line.unitPrice,
-      },
+      SalesItemLineDetail: detail,
     });
   }
   return payload;
@@ -722,15 +747,63 @@ async function resolveInvoiceItem(line: Pick<QboInvoiceLine, "category" | "name"
       `Map pay item "${line.name}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`,
     );
   }
+  const effective = line.category === "detention" ? await detentionInvoiceRule(rule) : rule;
   const { listQboItemMaps } = await import("../accounting-desk");
   const mappedId = listQboItemMaps().find((row) => row.category === line.category)?.qbo_item_id.trim() ?? "";
   let item = mappedId ? await readItemById(mappedId) : null;
-  if (!item) item = await itemByExactName(rule.itemName);
-  if (!item) throw new Error(itemMissingMessage(rule));
+  if (!item) item = await itemByExactName(effective.itemName);
+  if (!item) throw new Error(itemMissingMessage(effective));
   const account = await accountById(item.incomeAccountId);
-  const problem = accountProblem(rule, item.name || rule.itemName, account);
+  const problem = accountProblem(effective, item.name || effective.itemName, account);
   if (problem) throw new Error(problem);
   return item;
+}
+
+/** Detention prefers the configured income account. A missing account falls back to Gross Trucking Income. */
+async function detentionInvoiceRule(rule: InvoiceRule): Promise<InvoiceRule> {
+  const setting = getQuickbooksDetentionIncomeAccount();
+  const preferred = setting.id ? await accountById(setting.id) : await accountByName(setting.name);
+  if (preferred) return { ...rule, accountName: preferred.fullyQualifiedName };
+  const label = setting.id ? `id ${setting.id}` : `"${setting.name}"`;
+  console.warn(
+    `[qbo] Detention income account ${label} is not in this company. Detention will post to ${GROSS_TRUCKING_INCOME}.`,
+  );
+  return { ...rule, accountName: GROSS_TRUCKING_INCOME };
+}
+
+type QboClassRef = { value: string; name: string };
+
+/** Driver name becomes the invoice class. No driver means no class. A missing class is created only when allowed. */
+async function classRefForLoad(load: LoadView): Promise<QboClassRef | undefined> {
+  const name = String(load.driver_name ?? "").trim();
+  if (!name) return undefined;
+  const existing = await findClassByName(name);
+  if (existing) return existing;
+  if (!qboClassAutoCreateEnabled()) {
+    throw new Error(
+      `QuickBooks has no class named "${name}" for this driver. Class auto-create is off, so nothing was sent. Add the class in QuickBooks, or turn on QBO_CLASS_AUTO_CREATE.`,
+    );
+  }
+  const created = await qboPost<{ Class?: { Id?: string; Name?: string } }>("/class", { Name: name }, "class create");
+  const id = String(created.Class?.Id ?? "").trim();
+  if (!id) throw new Error(`QuickBooks did not return a class id for "${name}". Nothing was sent.`);
+  const createdName = String(created.Class?.Name || name).trim();
+  console.warn(`[qbo] Created QuickBooks class "${createdName}" for the load driver.`);
+  return { value: id, name: createdName };
+}
+
+async function findClassByName(name: string): Promise<QboClassRef | undefined> {
+  const found = await qboQuery<{ Class?: Array<{ Id?: string; Name?: string }> }>(
+    `select Id, Name from Class where Name = '${escapeQboString(name)}'`,
+    "class query",
+  );
+  const rows = (found.QueryResponse?.Class ?? []).filter((row) => String(row.Id ?? "").trim());
+  if (rows.length > 1) {
+    throw new Error(`More than one QuickBooks class is named "${name}". Nothing was sent.`);
+  }
+  const id = String(rows[0]?.Id ?? "").trim();
+  if (!id) return undefined;
+  return { value: id, name: String(rows[0]?.Name || name).trim() };
 }
 
 function escapeQboString(value: string): string {

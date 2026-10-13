@@ -1,10 +1,11 @@
 /**
  * Production QuickBooks mapping for MS Express's own company.
  * Names are resolved from the connected company. Nothing here creates a customer, vendor, account, or item.
+ * A driver's QuickBooks class may be created when class auto-create is on.
  */
 
 export const GROSS_TRUCKING_INCOME = "Gross Trucking Income";
-export const FUEL_SURCHARGE_INCOME = "Fuel Surcharge Income";
+export const DEFAULT_DETENTION_INCOME_ACCOUNT = "Detention Income";
 export const LUMPER_COGS_ACCOUNT = "Lumper";
 export const DEFAULT_LOAD_PAY_ACCOUNT = "Owner Operators:Owner Operators COL";
 
@@ -25,7 +26,7 @@ export type InvoiceRule = {
   itemName: string;
   /** Account.FullyQualifiedName the item must already use. */
   accountName: string;
-  kind: "income" | "cogs" | "dedicated";
+  kind: "income" | "cogs";
 };
 
 /** Categories that must not appear on a customer invoice. */
@@ -45,8 +46,8 @@ export const INVOICE_RULES: Record<string, InvoiceRule> = {
   fuel_surcharge: {
     category: "fuel_surcharge",
     itemName: "Fuel Surcharge",
-    accountName: FUEL_SURCHARGE_INCOME,
-    kind: "dedicated",
+    accountName: GROSS_TRUCKING_INCOME,
+    kind: "income",
   },
   lumper: { category: "lumper", itemName: "Lumper", accountName: LUMPER_COGS_ACCOUNT, kind: "cogs" },
   misc: { category: "misc", itemName: "Adjustment", accountName: GROSS_TRUCKING_INCOME, kind: "income" },
@@ -89,9 +90,23 @@ export function notBilledMessage(label: string): string {
 
 export function itemMissingMessage(rule: InvoiceRule): string {
   if (rule.category === "fuel_surcharge") {
-    return `Fuel Surcharge is not in QuickBooks. Create a Fuel Surcharge item on income account "${FUEL_SURCHARGE_INCOME}" (not ${GROSS_TRUCKING_INCOME}), then send again. Nothing was sent.`;
+    return `Fuel Surcharge is not in QuickBooks. Create a Fuel Surcharge item on "${GROSS_TRUCKING_INCOME}", then send again. Nothing was sent.`;
   }
   return `Map pay item "${rule.itemName}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`;
+}
+
+/** Block any post to an account whose name contains these words. Case-insensitive. */
+export function forbiddenAccountMessage(accountName: string): string {
+  const name = accountName.trim();
+  if (!name) return "";
+  const folded = name.toLowerCase();
+  if (folded.includes("uncategorized")) {
+    return `QuickBooks account "${name}" cannot be used because its name contains "uncategorized". Nothing was sent.`;
+  }
+  if (folded.includes("miscellaneous")) {
+    return `QuickBooks account "${name}" cannot be used because its name contains "miscellaneous". Nothing was sent.`;
+  }
+  return "";
 }
 
 export function itemAccountMismatch(itemName: string, currentAccount: string, expectedAccount: string, category: string): string {
@@ -100,7 +115,10 @@ export function itemAccountMismatch(itemName: string, currentAccount: string, ex
     return `QuickBooks item "Lumper" is on "${current}". The bookkeeper must repoint the Lumper item to the Lumper COGS account ("${expectedAccount}"). Nothing was sent.`;
   }
   if (category === "fuel_surcharge") {
-    return `QuickBooks item "Fuel Surcharge" is on "${current}". It must be on its own income account "${expectedAccount}", not ${GROSS_TRUCKING_INCOME}. Nothing was sent.`;
+    return `QuickBooks item "Fuel Surcharge" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
+  }
+  if (category === "detention") {
+    return `QuickBooks item "Detention" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
   }
   return `QuickBooks item "${itemName}" is on "${current}". It must be on "${expectedAccount}". Nothing was sent.`;
 }
@@ -115,18 +133,17 @@ export type ResolvedAccount = {
 /** Empty string when the account matches the rule. Otherwise the office message. */
 export function accountProblem(rule: InvoiceRule, itemName: string, account: ResolvedAccount | undefined): string {
   const current = account?.fullyQualifiedName ?? "";
+  const forbidden = forbiddenAccountMessage(current) || forbiddenAccountMessage(rule.accountName);
+  if (forbidden) return forbidden;
   if (!account || current !== rule.accountName) {
     return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
   }
   const income = account.accountType === "Income" || account.classification === "Revenue";
   const cogs = account.accountType === "Cost of Goods Sold";
-  if ((rule.kind === "income" || rule.kind === "dedicated") && !income) {
+  if (rule.kind === "income" && !income) {
     return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
   }
   if (rule.kind === "cogs" && !cogs) {
-    return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
-  }
-  if (rule.kind === "dedicated" && current === GROSS_TRUCKING_INCOME) {
     return itemAccountMismatch(itemName, current, rule.accountName, rule.category);
   }
   return "";
@@ -137,7 +154,6 @@ export function productionNamesForSandbox5710(): { items: string[]; accounts: st
   const items = [...new Set(Object.values(INVOICE_RULES).map((rule) => rule.itemName)), "Return"];
   const accounts = [
     GROSS_TRUCKING_INCOME,
-    FUEL_SURCHARGE_INCOME,
     LUMPER_COGS_ACCOUNT,
     DEFAULT_LOAD_PAY_ACCOUNT,
     "Owner Operators:Fuel",

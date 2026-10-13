@@ -353,6 +353,27 @@ export function getQuickbooksBillExpenseAccountId(): string | undefined {
   return readSecret("QBO_BILL_EXPENSE_ACCOUNT_ID");
 }
 
+/**
+ * Detention's income account. A numeric value is a QuickBooks account id. Anything else is the
+ * fully qualified name. Blank uses "Detention Income".
+ */
+export function getQuickbooksDetentionIncomeAccount(): { id: string; name: string } {
+  const value = (readSecret("QBO_DETENTION_INCOME_ACCOUNT") ?? "").trim() || "Detention Income";
+  if (/^\d+$/.test(value)) return { id: value, name: "" };
+  return { id: "", name: value };
+}
+
+/**
+ * Create a missing driver class in QuickBooks. Explicit on/off wins.
+ * Otherwise on in the sandbox and off in production.
+ */
+export function qboClassAutoCreateEnabled(): boolean {
+  const value = (readSecret("QBO_CLASS_AUTO_CREATE") ?? "").trim().toLowerCase();
+  if (value === "1" || value === "true" || value === "yes" || value === "on") return true;
+  if (value === "0" || value === "false" || value === "no" || value === "off") return false;
+  return getQuickbooksEnvironment() === "sandbox";
+}
+
 /** Intuit webhook verifier. HMAC key for the `intuit-signature` header. Never logged. */
 export function getQuickbooksWebhookVerifier(): string | undefined {
   return readSecret("QBO_WEBHOOK_VERIFIER");
